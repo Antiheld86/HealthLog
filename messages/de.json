@@ -2951,7 +2951,8 @@
       "valuesBack": "Zurück zu Insights",
       "valuesBackToMetric": "Zurück zu {metric}",
       "scoresBack": "Zurück zu Insights",
-      "ecgDescription": "Einkanal-EKG-Aufzeichnungen deines Geräts, jeweils mit dem Ergebnis des Geräts. HealthLog zeigt die Kurve und die Aufzeichnung – die Kurve wird nicht interpretiert."
+      "ecgDescription": "Einkanal-EKG-Aufzeichnungen deines Geräts, jeweils mit dem Ergebnis des Geräts.",
+      "ecgDisclaimer": "HealthLog zeigt die Kurve und die Aufzeichnung – die Kurve wird nicht interpretiert."
     },
     "units": {
       "steps": "Schritte",
@@ -4738,13 +4739,15 @@
           },
           "fullBackup": {
             "title": "Voll-Backup",
-            "description": "Deine Messwerte, Medikamente, Stimmung, Zyklus, Laborwerte, Krankheitsepisoden, Allergien, Familienanamnese, Nährstoffe, Workouts, dein Gesundheitsprofil und deine eigenen Messgrößen in einer JSON-Datei. Gleiche Form wie die wöchentliche automatische Sicherung. Einige Satzarten sind noch nicht enthalten — das Manifest der Datei nennt, was drinsteht.",
+            "description": "Deine gesamte Akte in einer JSON-Datei.",
             "scopeNote": "Dokumentmetadaten und die KI-Zusammenfassung, falls vorhanden, sind als Klartext enthalten; die Originaldateien der Dokumente sowie GPS-Routen und Einzelmesswerte von Workouts sind es nicht — lade diese separat aus dem Dokumententresor bzw. dem Workout-Export herunter.",
             "encryptToggle": "Mit einer Passphrase verschlüsseln",
             "passphrasePlaceholder": "Passphrase (mind. 12 Zeichen)",
             "passphraseHelp": "Leitet den Archivschlüssel per Argon2id ab und versiegelt ihn mit AES-256-GCM. Speichere die Datei mit der Endung .hlx.",
             "noRecoveryWarning": "Es gibt keine Wiederherstellung — geht diese Passphrase verloren, lässt sich das Archiv nicht mehr öffnen. Bewahre sie sicher auf.",
-            "stepUpNeeded": "Bestätige deinen zweiten Faktor und versuche es erneut."
+            "stepUpNeeded": "Bestätige deinen zweiten Faktor und versuche es erneut.",
+            "detail": "Gleiche Form wie die wöchentliche automatische Sicherung. Einige Satzarten sind noch nicht enthalten — das Manifest der Datei nennt, was drinsteht.",
+            "contents": "Deine Messwerte, Medikamente, Stimmung, Zyklus, Laborwerte, Krankheitsepisoden, Allergien, Familienanamnese, Nährstoffe, Workouts, dein Gesundheitsprofil und deine eigenen Messgrößen in einer JSON-Datei."
           }
         },
         "import": {
@@ -4798,7 +4801,7 @@
           },
           "csv": {
             "title": "CSV-Datei",
-            "description": "Messwerte aus einer Tabelle oder einem Messgerät-Export importieren. Eine Zeile pro Wert.",
+            "description": "Messwerte aus einer Tabelle oder einem Messgerät-Export importieren.",
             "pasteLabel": "CSV einfügen",
             "fileInputLabel": "CSV-Datei zum Importieren auswählen",
             "schemaHint": "Spalten: type, value, unit, measuredAt (mit Zeitzonen-Offset) sowie optional glucoseContext, notes, externalId.",
@@ -4838,11 +4841,12 @@
             "reasonExternalIdTooLong": "Externe ID ist zu lang",
             "reasonUnstableExternalId": "Externe ID ist über Exporte hinweg nicht stabil",
             "reasonDuplicate": "bereits importiert",
-            "reasonUnknown": "übersprungen"
+            "reasonUnknown": "übersprungen",
+            "detail": "Eine Zeile pro Wert."
           },
           "doseHistory": {
             "title": "Einnahmeverlauf",
-            "description": "Ein Einnahmeverlauf, wie ihn ein anderer Medikamenten-Tracker exportiert, direkt gelesen. Eine Datei deckt alle Medikamente darin ab.",
+            "description": "Ein Einnahmeverlauf, wie ihn ein anderer Medikamenten-Tracker exportiert, direkt gelesen.",
             "pasteLabel": "Export einfügen",
             "fileInputLabel": "Datei mit Einnahmeverlauf wählen",
             "uploadFile": "Datei wählen",
@@ -4892,7 +4896,8 @@
               "jsonNotAnArray": "Dieses JSON enthält keine Liste von Dosen.",
               "jsonNoIntakeTime": "Der JSON-Export hält fest, wann eine Dosis fällig war, nicht wann sie genommen wurde, und eine geplante Zeit wird nicht als Einnahmezeit geschrieben. Stattdessen die CSV exportieren, die beides trägt.",
               "tooManyRows": "Diese Datei enthält mehr Zeilen, als ein Import aufnehmen kann. Teilen und in Teilen importieren."
-            }
+            },
+            "detail": "Eine Datei deckt alle Medikamente darin ab."
           }
         },
         "subtitle": "Exportiere deine Daten oder importiere aus einer Sicherung."
@@ -5796,7 +5801,7 @@
       "errorModuleDisabled": "Der Gesundheitsakten-Export ist für dieses Konto ausgeschaltet."
     },
     "globalExcludedInjectionSitesLabel": "Global ausgeschlossene Injektionsstellen",
-    "globalExcludedInjectionSitesHint": "Diese Stellen werden nie angeboten und beim Erfassen einer Dosis abgelehnt.",
+    "globalExcludedInjectionSitesHint": "Nie angeboten und beim Erfassen abgelehnt, auch wenn eine Medikation sie bevorzugt.",
     "sharing": {
       "createTitle": "Neuer Freigabe-Link",
       "createDescription": "Der Link ist schreibgeschützt und zeitlich begrenzt.",
@@ -6089,7 +6094,7 @@
       },
       "export": {
         "title": "Meine Daten herunterladen",
-        "description": "Deine Datensätze als CSV oder JSON, wahlweise mit Passphrase verschlüsselt.",
+        "description": "Deine Datensätze als CSV oder JSON — oder eine vollständige Akte für die Praxis.",
         "openExport": "Export & Backup",
         "openHealthRecord": "Gesundheitsakte"
       },
@@ -7988,7 +7993,8 @@
     "customize": "Laborwerte anpassen",
     "localOcr": {
       "heading": "Scans auf diesem Gerät lesen",
-      "description": "Ermöglicht das Scannen eines Laborbefunds, auch wenn dein KI-Anbieter keine Bilder lesen kann: Das Foto wird auf deinem Gerät gelesen und nur der erkannte Text an deinen Anbieter gesendet. Weniger genau – prüfe jeden Wert vor dem Speichern."
+      "description": "Liest das Foto auf deinem Gerät und sendet nur den erkannten Text an deinen Anbieter.",
+      "detail": "Nützlich, wenn dein KI-Anbieter keine Bilder lesen kann. Weniger genau — prüfe jeden Wert vor dem Speichern."
     },
     "sort": {
       "heading": "Sortierung",

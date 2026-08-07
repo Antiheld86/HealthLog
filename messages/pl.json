@@ -2951,7 +2951,8 @@
       "valuesBack": "Powrót do Insights",
       "valuesBackToMetric": "Powrót do {metric}",
       "scoresBack": "Powrót do Insights",
-      "ecgDescription": "Zapisy EKG jednoodprowadzeniowe z Twojego urządzenia, każdy z wynikiem samego urządzenia. HealthLog pokazuje przebieg i zapis — nie interpretuje krzywej."
+      "ecgDescription": "Zapisy EKG jednoodprowadzeniowe z Twojego urządzenia, każdy z wynikiem samego urządzenia.",
+      "ecgDisclaimer": "HealthLog pokazuje przebieg i zapis — nie interpretuje krzywej."
     },
     "units": {
       "steps": "kroki",
@@ -4738,13 +4739,15 @@
           },
           "fullBackup": {
             "title": "Pełna kopia zapasowa",
-            "description": "Twoje pomiary, leki, nastrój, cykl, wyniki badań, epizody chorobowe, alergie, wywiad rodzinny, składniki odżywcze, treningi, Twój profil zdrowia i własne wskaźniki w jednym pliku JSON. Ten sam kształt co cotygodniowa kopia automatyczna. Niektóre rodzaje wpisów nie są jeszcze przenoszone — manifest pliku wskazuje, co zawiera.",
+            "description": "Cała dokumentacja w jednym pliku JSON.",
             "scopeNote": "Metadane dokumentów oraz podsumowanie AI, jeśli istnieje, są uwzględnione jako czysty tekst; oryginalne pliki dokumentów oraz dane tras GPS/próbek treningów nie są uwzględnione — pobierz je osobno z archiwum dokumentów lub eksportu treningów.",
             "encryptToggle": "Zaszyfruj hasłem-frazą",
             "passphrasePlaceholder": "Hasło-fraza (min. 12 znaków)",
             "passphraseHelp": "Wyprowadza klucz archiwum za pomocą Argon2id i pieczętuje je AES-256-GCM. Zapisz plik z rozszerzeniem .hlx.",
             "noRecoveryWarning": "Nie ma odzyskiwania — jeśli zgubisz tę frazę, archiwum nie da się otworzyć. Przechowuj ją bezpiecznie.",
-            "stepUpNeeded": "Potwierdź drugi składnik i spróbuj ponownie."
+            "stepUpNeeded": "Potwierdź drugi składnik i spróbuj ponownie.",
+            "detail": "Ten sam kształt co cotygodniowa kopia automatyczna. Niektóre rodzaje wpisów nie są jeszcze przenoszone — manifest pliku wskazuje, co zawiera.",
+            "contents": "Twoje pomiary, leki, nastrój, cykl, wyniki badań, epizody chorobowe, alergie, wywiad rodzinny, składniki odżywcze, treningi, Twój profil zdrowia i własne wskaźniki w jednym pliku JSON."
           }
         },
         "import": {
@@ -4798,7 +4801,7 @@
           },
           "csv": {
             "title": "Plik CSV",
-            "description": "Importuj pomiary z arkusza lub eksportu z urządzenia. Jeden wiersz na odczyt.",
+            "description": "Importuj pomiary z arkusza lub eksportu z urządzenia.",
             "pasteLabel": "Wklej CSV",
             "fileInputLabel": "Wybierz plik CSV do zaimportowania",
             "schemaHint": "Kolumny: type, value, unit, measuredAt (z przesunięciem strefy czasowej) oraz opcjonalnie glucoseContext, notes, externalId.",
@@ -4838,11 +4841,12 @@
             "reasonExternalIdTooLong": "identyfikator zewnętrzny jest zbyt długi",
             "reasonUnstableExternalId": "identyfikator zewnętrzny nie jest stabilny między eksportami",
             "reasonDuplicate": "już zaimportowano",
-            "reasonUnknown": "pominięto"
+            "reasonUnknown": "pominięto",
+            "detail": "Jeden wiersz na odczyt."
           },
           "doseHistory": {
             "title": "Historia dawek",
-            "description": "Historia dawek wyeksportowana z innej aplikacji, czytana wprost. Jeden plik obejmuje wszystkie leki, które zawiera.",
+            "description": "Historia dawek wyeksportowana z innej aplikacji, czytana wprost.",
             "pasteLabel": "Wklej eksport",
             "fileInputLabel": "Wybierz plik z historią dawek",
             "uploadFile": "Wybierz plik",
@@ -4892,7 +4896,8 @@
               "jsonNotAnArray": "Ten JSON nie zawiera listy dawek.",
               "jsonNoIntakeTime": "Eksport JSON zapisuje, kiedy dawka była zaplanowana, a nie kiedy została przyjęta, i zaplanowana godzina nie zostanie zapisana jako godzina przyjęcia. Wyeksportuj CSV, który zawiera obie.",
               "tooManyRows": "Ten plik ma więcej wierszy, niż może przyjąć jeden import. Podziel go i zaimportuj części."
-            }
+            },
+            "detail": "Jeden plik obejmuje wszystkie leki, które zawiera."
           }
         },
         "subtitle": "Wyeksportuj dane lub zaimportuj z kopii zapasowej."
@@ -5796,7 +5801,7 @@
       "errorModuleDisabled": "Eksport dokumentacji jest wyłączony dla tego konta."
     },
     "globalExcludedInjectionSitesLabel": "Globalnie wykluczone miejsca iniekcji",
-    "globalExcludedInjectionSitesHint": "Te miejsca nigdy nie są proponowane i są odrzucane przy rejestrowaniu dawki.",
+    "globalExcludedInjectionSitesHint": "Nigdy nieproponowane i odrzucane przy rejestracji, nawet jeśli lek je preferuje.",
     "sharing": {
       "createTitle": "Nowy link udostępniania",
       "createDescription": "Link jest tylko do odczytu i ograniczony czasowo.",
@@ -6089,7 +6094,7 @@
       },
       "export": {
         "title": "Pobierz moje dane",
-        "description": "Twoje rekordy jako CSV lub JSON, opcjonalnie zaszyfrowane hasłem.",
+        "description": "Twoje rekordy jako CSV lub JSON albo pełna dokumentacja dla lekarza.",
         "openExport": "Eksport i kopia zapasowa",
         "openHealthRecord": "Dokumentacja medyczna"
       },
@@ -7988,7 +7993,8 @@
     "customize": "Dostosuj wyniki badań",
     "localOcr": {
       "heading": "Odczytuj skany na tym urządzeniu",
-      "description": "Pozwala zeskanować wynik laboratoryjny nawet wtedy, gdy Twój dostawca AI nie potrafi odczytywać obrazów: zdjęcie jest odczytywane na Twoim urządzeniu, a do dostawcy wysyłany jest tylko wyodrębniony tekst. Mniej dokładne — sprawdź każdą wartość przed zapisaniem."
+      "description": "Odczytuje zdjęcie na Twoim urządzeniu i wysyła do dostawcy tylko rozpoznany tekst.",
+      "detail": "Przydatne, gdy dostawca AI nie odczytuje obrazów. Mniej dokładne — sprawdź każdą wartość przed zapisem."
     },
     "sort": {
       "heading": "Sortowanie",

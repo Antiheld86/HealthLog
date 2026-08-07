@@ -144,6 +144,9 @@ export function LabsSettings() {
             />
           }
         />
+        {/* "Less accurate — review every value" is safety copy, so it reads
+            foreground in the body rather than muted beside the switch. */}
+        <p className="text-sm">{t("labs.localOcr.detail")}</p>
       </SettingsCard>
 
       {/* Biomarker catalog — define / edit / delete. */}

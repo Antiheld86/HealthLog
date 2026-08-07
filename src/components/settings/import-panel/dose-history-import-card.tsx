@@ -216,6 +216,10 @@ export function DoseHistoryImportCard() {
       title={t("settings.sections.export.import.doseHistory.title")}
       description={t("settings.sections.export.import.doseHistory.description")}
     >
+      <p className="text-sm">
+        {t("settings.sections.export.import.doseHistory.detail")}
+      </p>
+
       <div className="space-y-1.5">
         <Label htmlFor={textareaId} className="text-xs">
           {t("settings.sections.export.import.doseHistory.pasteLabel")}

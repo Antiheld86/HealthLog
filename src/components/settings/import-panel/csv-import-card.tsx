@@ -113,6 +113,10 @@ export function CsvImportCard() {
       title={t("settings.sections.export.import.csv.title")}
       description={t("settings.sections.export.import.csv.description")}
     >
+      <p className="text-sm">
+        {t("settings.sections.export.import.csv.detail")}
+      </p>
+
       <div className="space-y-1.5">
         <Label htmlFor={textareaId} className="text-xs">
           {t("settings.sections.export.import.csv.pasteLabel")}

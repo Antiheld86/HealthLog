@@ -7,10 +7,10 @@ import { join } from "node:path";
  * (design standards §3).
  *
  * Scope is deliberately the strings that actually reach a card header's
- * description slot — `<SettingsCardHeader description={t("…")}>` — because
- * that is the slot the rule is about. A hint in a card body is prose and is
- * allowed to be prose; `scripts/measure-description-lengths.mjs` sweeps those
- * for review without gating them.
+ * description slot, whether the prop sits on the header or on a shell that
+ * forwards it. That is the slot the rule is about. A hint in a card BODY is
+ * prose and is allowed to be prose; `scripts/measure-description-lengths.mjs`
+ * sweeps those for review without gating them.
  *
  * Both EN and DE are checked. DE runs 15-25% longer than EN, and a rule that
  * only holds in English produces a slot that wraps to two lines in half the
@@ -46,19 +46,57 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-/** Every `description={t("…")}` inside a `<SettingsCardHeader …>` element. */
+/**
+ * Elements whose `description` prop reaches `SettingsCardHeader`'s slot.
+ *
+ * The first cut of this guard matched `<SettingsCardHeader` only, and only
+ * under three component folders. That left five real card descriptions
+ * invisible to it — one of them the 351-character, three-sentence full-backup
+ * text that the audit's own shortlist had named. Two ways in were missing:
+ * a card header rendered from a folder the walk never entered, and a
+ * description FORWARDED to the header by a shell (`ExportCardShell`,
+ * `ImportCardShell`), where the prop is on the shell's tag rather than the
+ * header's.
+ *
+ * `SubPageShell` is deliberately NOT here. Its description renders as
+ * `<p className="text-foreground text-sm">` — the body tier, where the
+ * standards allow prose. Gating it would enforce a rule §3 does not make for
+ * that tier.
+ */
+const DESCRIPTION_HOSTS = [
+  "SettingsCardHeader",
+  "ExportCardShell",
+  "ImportCardShell",
+];
+
+/** Component roots that can host a card header, directly or via a shell. */
+const ROOTS = [
+  join("src", "components", "settings"),
+  join("src", "components", "admin"),
+  join("src", "components", "measurement-reminders"),
+  join("src", "components", "labs"),
+  join("src", "components", "insights"),
+  join("src", "components", "medications"),
+  join("src", "components", "records"),
+];
+
+/** Every `description={t("…")}` on an element that owns the header's slot. */
 function describedKeys(): Map<string, string[]> {
   const keys = new Map<string, string[]>();
-  for (const dir of ["settings", "admin", "measurement-reminders"]) {
-    for (const file of walk(join(ROOT, "src", "components", dir))) {
+  for (const root of ROOTS) {
+    for (const file of walk(join(ROOT, root))) {
       const source = readFileSync(file, "utf8");
-      const header = /<SettingsCardHeader\b/g;
+      const host = new RegExp(`<(?:${DESCRIPTION_HOSTS.join("|")})\\b`, "g");
       let match: RegExpExecArray | null;
-      while ((match = header.exec(source))) {
+      while ((match = host.exec(source))) {
         // The element ends at the first `/>` or `>` that closes the opening
         // tag; a `description={t("x")}` after that belongs to something else.
-        const end = source.indexOf("/>", match.index);
-        const slice = source.slice(match.index, end === -1 ? undefined : end);
+        const selfClose = source.indexOf("/>", match.index);
+        const childrenOpen = source.indexOf("\n    >", match.index);
+        const end = [selfClose, childrenOpen]
+          .filter((i) => i !== -1)
+          .sort((a, b) => a - b)[0];
+        const slice = source.slice(match.index, end ?? undefined);
         const desc = /description=\{t\(\s*"([^"]+)"/.exec(slice);
         if (!desc) continue;
         const list = keys.get(desc[1]) ?? [];
@@ -96,7 +134,7 @@ describe("card header descriptions — one sentence, ≤120 characters", () => {
 
   it("finds the description slots it is meant to check", () => {
     // A matcher that quietly matches nothing passes every assertion below it.
-    expect(keys.size).toBeGreaterThan(25);
+    expect(keys.size).toBeGreaterThan(35);
   });
 
   for (const locale of ["en", "de"] as const) {

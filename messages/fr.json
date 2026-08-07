@@ -2951,7 +2951,8 @@
       "valuesBack": "Retour aux Insights",
       "valuesBackToMetric": "Retour à {metric}",
       "scoresBack": "Retour aux Insights",
-      "ecgDescription": "Enregistrements ECG à dérivation unique de votre appareil, chacun accompagné du résultat de l'appareil. HealthLog affiche le tracé et l'enregistrement, mais n'interprète pas la courbe."
+      "ecgDescription": "Enregistrements ECG à dérivation unique de votre appareil, chacun accompagné du résultat de l'appareil.",
+      "ecgDisclaimer": "HealthLog affiche le tracé et l'enregistrement, mais n'interprète pas la courbe."
     },
     "units": {
       "steps": "pas",
@@ -4738,13 +4739,15 @@
           },
           "fullBackup": {
             "title": "Sauvegarde complète",
-            "description": "Vos mesures, médicaments, humeur, cycle, analyses, épisodes de maladie, allergies, antécédents familiaux, nutriments, séances, votre profil de santé et vos mesures personnalisées dans un seul fichier JSON. Même format que la sauvegarde automatique hebdomadaire. Certains types d'enregistrement ne sont pas encore inclus : le manifeste du fichier indique ce qu'il contient.",
+            "description": "L'ensemble de votre dossier dans un fichier JSON.",
             "scopeNote": "Les métadonnées des documents et le résumé IA, s'il existe, sont inclus en texte clair ; les fichiers originaux des documents ainsi que les tracés GPS/données d'échantillons des entraînements ne le sont pas — téléchargez-les séparément depuis le coffre de documents ou l'export des entraînements.",
             "encryptToggle": "Chiffrer avec une phrase secrète",
             "passphrasePlaceholder": "Phrase secrète (12 caractères min.)",
             "passphraseHelp": "Dérive la clé de l'archive avec Argon2id et la scelle avec AES-256-GCM. Enregistrez le fichier avec l'extension .hlx.",
             "noRecoveryWarning": "Aucune récupération possible : si vous perdez cette phrase secrète, l'archive ne pourra pas être ouverte. Conservez-la en lieu sûr.",
-            "stepUpNeeded": "Confirmez votre second facteur, puis réessayez."
+            "stepUpNeeded": "Confirmez votre second facteur, puis réessayez.",
+            "detail": "Même format que la sauvegarde automatique hebdomadaire. Certains types d'enregistrement ne sont pas encore inclus : le manifeste du fichier indique ce qu'il contient.",
+            "contents": "Vos mesures, médicaments, humeur, cycle, analyses, épisodes de maladie, allergies, antécédents familiaux, nutriments, séances, votre profil de santé et vos mesures personnalisées dans un seul fichier JSON."
           }
         },
         "import": {
@@ -4798,7 +4801,7 @@
           },
           "csv": {
             "title": "Fichier CSV",
-            "description": "Importez des mesures depuis un tableur ou l'export d'un appareil. Une ligne par relevé.",
+            "description": "Importez des mesures depuis un tableur ou l'export d'un appareil.",
             "pasteLabel": "Coller le CSV",
             "fileInputLabel": "Choisir un fichier CSV à importer",
             "schemaHint": "Colonnes : type, value, unit, measuredAt (avec décalage horaire) et, en option, glucoseContext, notes, externalId.",
@@ -4838,11 +4841,12 @@
             "reasonExternalIdTooLong": "l'identifiant externe est trop long",
             "reasonUnstableExternalId": "l'identifiant externe n'est pas stable d'un export à l'autre",
             "reasonDuplicate": "déjà importée",
-            "reasonUnknown": "ignorée"
+            "reasonUnknown": "ignorée",
+            "detail": "Une ligne par relevé."
           },
           "doseHistory": {
             "title": "Historique des prises",
-            "description": "Un historique de prises exporté depuis une autre application de suivi, lu tel quel. Un fichier couvre tous les médicaments qu'il contient.",
+            "description": "Un historique de prises exporté depuis une autre application de suivi, lu tel quel.",
             "pasteLabel": "Coller l'export",
             "fileInputLabel": "Choisir un fichier d'historique des prises",
             "uploadFile": "Choisir un fichier",
@@ -4892,7 +4896,8 @@
               "jsonNotAnArray": "Ce JSON ne contient aucune liste de prises.",
               "jsonNoIntakeTime": "L'export JSON consigne le moment où une dose était due, pas celui où elle a été prise, et une heure prévue ne sera pas écrite comme si c'était la prise. Exportez le CSV, qui porte les deux.",
               "tooManyRows": "Ce fichier contient plus de lignes qu'un import peut en prendre. Découpez-le et importez les parties."
-            }
+            },
+            "detail": "Un fichier couvre tous les médicaments qu'il contient."
           }
         },
         "subtitle": "Exportez vos données ou importez depuis une sauvegarde."
@@ -5796,7 +5801,7 @@
       "errorModuleDisabled": "L'export du dossier est désactivé pour ce compte."
     },
     "globalExcludedInjectionSitesLabel": "Sites d'injection exclus globalement",
-    "globalExcludedInjectionSitesHint": "Ces sites ne sont jamais proposés et sont refusés à l'enregistrement d'une dose.",
+    "globalExcludedInjectionSitesHint": "Jamais proposés et refusés à l'enregistrement, même si un médicament les privilégie.",
     "sharing": {
       "createTitle": "Nouveau lien de partage",
       "createDescription": "Le lien est en lecture seule et limité dans le temps.",
@@ -6089,7 +6094,7 @@
       },
       "export": {
         "title": "Télécharger mes données",
-        "description": "Vos enregistrements en CSV ou JSON, chiffrés par phrase secrète si vous voulez.",
+        "description": "Vos enregistrements en CSV ou JSON, ou un dossier complet pour votre médecin.",
         "openExport": "Export et sauvegarde",
         "openHealthRecord": "Dossier médical"
       },
@@ -7988,7 +7993,8 @@
     "customize": "Personnaliser les analyses",
     "localOcr": {
       "heading": "Lire les scans sur cet appareil",
-      "description": "Permet de scanner un compte rendu de laboratoire même si votre fournisseur d'IA ne peut pas lire les images : la photo est lue sur votre appareil et seul le texte extrait est envoyé à votre fournisseur. Moins précis — vérifiez chaque valeur avant d'enregistrer."
+      "description": "Lit la photo sur votre appareil et n'envoie que le texte extrait à votre fournisseur.",
+      "detail": "Utile quand votre fournisseur d'IA ne lit pas les images. Moins précis — vérifiez chaque valeur avant d'enregistrer."
     },
     "sort": {
       "heading": "Tri",

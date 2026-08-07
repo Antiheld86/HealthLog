@@ -2951,7 +2951,8 @@
       "valuesBack": "Back to insights",
       "valuesBackToMetric": "Back to {metric}",
       "scoresBack": "Back to insights",
-      "ecgDescription": "Single-lead ECG recordings from your device, each with the device's own result. HealthLog shows the trace and the recording — it does not interpret the waveform."
+      "ecgDescription": "Single-lead ECG recordings from your device, each with the device's own result.",
+      "ecgDisclaimer": "HealthLog shows the trace and the recording — it does not interpret the waveform."
     },
     "units": {
       "steps": "steps",
@@ -4738,13 +4739,15 @@
           },
           "fullBackup": {
             "title": "Full backup",
-            "description": "Your measurements, medications, mood, cycle, labs, illness episodes, allergies, family history, nutrients, workouts, health profile and custom metrics in one JSON file. Same shape as the weekly auto-backup. Some record types are not carried yet — the file's manifest names what is in it.",
+            "description": "Your whole record in one JSON file.",
             "scopeNote": "Document metadata and the AI-generated summary, if one exists, are included as plain text; original document files and workout GPS/sample data are not — download those separately from the vault or the workout export.",
             "encryptToggle": "Encrypt with a passphrase",
             "passphrasePlaceholder": "Passphrase (min. 12 characters)",
             "passphraseHelp": "Derives the archive key with Argon2id and seals it with AES-256-GCM. Save the file with a .hlx extension.",
             "noRecoveryWarning": "There is no recovery — if you lose this passphrase, the archive cannot be opened. Keep it somewhere safe.",
-            "stepUpNeeded": "Confirm your second factor, then try again."
+            "stepUpNeeded": "Confirm your second factor, then try again.",
+            "detail": "Same shape as the weekly auto-backup. Some record types are not carried yet — the file's manifest names what is in it.",
+            "contents": "Your measurements, medications, mood, cycle, labs, illness episodes, allergies, family history, nutrients, workouts, health profile and custom metrics in one JSON file."
           }
         },
         "import": {
@@ -4798,7 +4801,7 @@
           },
           "csv": {
             "title": "CSV file",
-            "description": "Import measurements from a spreadsheet or meter export. One row per reading.",
+            "description": "Import measurements from a spreadsheet or meter export.",
             "pasteLabel": "Paste CSV",
             "fileInputLabel": "Choose a CSV file to import",
             "schemaHint": "Columns: type, value, unit, measuredAt (with timezone offset), and optional glucoseContext, notes, externalId.",
@@ -4838,11 +4841,12 @@
             "reasonExternalIdTooLong": "external ID is too long",
             "reasonUnstableExternalId": "external ID is not stable across exports",
             "reasonDuplicate": "already imported",
-            "reasonUnknown": "skipped"
+            "reasonUnknown": "skipped",
+            "detail": "One row per reading."
           },
           "doseHistory": {
             "title": "Medication dose history",
-            "description": "A dose history exported from another medication tracker, read as it comes. One file covers every medication in it.",
+            "description": "A dose history exported from another medication tracker, read as it comes.",
             "pasteLabel": "Paste the export",
             "fileInputLabel": "Choose a dose-history export file",
             "uploadFile": "Choose file",
@@ -4892,7 +4896,8 @@
               "jsonNotAnArray": "That JSON holds no list of doses.",
               "jsonNoIntakeTime": "The JSON export records when a dose was due but not when it was taken, and a scheduled time will not be written as if it were the take. Export the CSV instead, which carries both.",
               "tooManyRows": "That file holds more rows than one import can take. Split it and import the parts."
-            }
+            },
+            "detail": "One file covers every medication in it."
           }
         },
         "subtitle": "Export your data or import from a backup."
@@ -5796,7 +5801,7 @@
       "errorModuleDisabled": "The health record export is switched off for this account."
     },
     "globalExcludedInjectionSitesLabel": "Globally excluded injection sites",
-    "globalExcludedInjectionSitesHint": "These sites are never offered and are rejected when a dose is logged.",
+    "globalExcludedInjectionSitesHint": "Never offered and rejected when logging a dose, even if a medication prefers them.",
     "sharing": {
       "createTitle": "New share link",
       "createDescription": "The link is read-only and time-boxed.",
@@ -6089,7 +6094,7 @@
       },
       "export": {
         "title": "Download my data",
-        "description": "Your records as CSV or JSON, optionally passphrase-encrypted.",
+        "description": "Your records as CSV or JSON, or a complete health record for your doctor.",
         "openExport": "Export & backup",
         "openHealthRecord": "Health record"
       },
@@ -7988,7 +7993,8 @@
     "customize": "Customize labs",
     "localOcr": {
       "heading": "Read scans on this device",
-      "description": "Lets you scan a lab report even when your AI provider can't read images: the photo is read on your device and only the extracted text is sent to your provider. Less accurate — review every value before saving."
+      "description": "Reads the photo on your device and sends only the extracted text to your provider.",
+      "detail": "Useful when your AI provider cannot read images. Less accurate — review every value before saving."
     },
     "sort": {
       "heading": "Sort order",

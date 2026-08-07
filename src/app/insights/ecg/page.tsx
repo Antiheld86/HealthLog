@@ -76,6 +76,11 @@ export default function InsightsEcgPage() {
       title={t("insights.ecg.sectionTitle")}
       description={t("insights.subPage.ecgDescription")}
     >
+      {/* What the app does and does not claim about a trace. Its own
+          paragraph, so the page explainer above stays one sentence. */}
+      <p className="text-muted-foreground text-sm">
+        {t("insights.subPage.ecgDisclaimer")}
+      </p>
       <EcgSection enabled={isAuthenticated} hideHeading />
     </SubPageShell>
   );

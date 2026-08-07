@@ -2951,7 +2951,8 @@
       "valuesBack": "Torna a Insights",
       "valuesBackToMetric": "Torna a {metric}",
       "scoresBack": "Torna a Insights",
-      "ecgDescription": "Registrazioni ECG a singola derivazione dal tuo dispositivo, ciascuna con il risultato del dispositivo. HealthLog mostra il tracciato e la registrazione, ma non interpreta l'onda."
+      "ecgDescription": "Registrazioni ECG a singola derivazione dal tuo dispositivo, ciascuna con il risultato del dispositivo.",
+      "ecgDisclaimer": "HealthLog mostra il tracciato e la registrazione, ma non interpreta l'onda."
     },
     "units": {
       "steps": "passi",
@@ -4738,13 +4739,15 @@
           },
           "fullBackup": {
             "title": "Backup completo",
-            "description": "Le tue misurazioni, i farmaci, l'umore, il ciclo, le analisi, gli episodi di malattia, le allergie, l'anamnesi familiare, i nutrienti, gli allenamenti, il tuo profilo di salute e le tue metriche personalizzate in un unico file JSON. Stesso formato del backup automatico settimanale. Alcuni tipi di dato non sono ancora inclusi: il manifest del file indica cosa contiene.",
+            "description": "L'intera cartella in un unico file JSON.",
             "scopeNote": "I metadati dei documenti e il riepilogo IA, se presente, sono inclusi in chiaro; i file originali dei documenti e i dati di percorso GPS/campionamento degli allenamenti non lo sono — scaricali separatamente dall'archivio documenti o dall'esportazione degli allenamenti.",
             "encryptToggle": "Cifra con una passphrase",
             "passphrasePlaceholder": "Passphrase (min. 12 caratteri)",
             "passphraseHelp": "Deriva la chiave dell'archivio con Argon2id e lo sigilla con AES-256-GCM. Salva il file con estensione .hlx.",
             "noRecoveryWarning": "Non c'è recupero: se perdi questa passphrase, l'archivio non potrà essere aperto. Conservala in un luogo sicuro.",
-            "stepUpNeeded": "Conferma il secondo fattore e riprova."
+            "stepUpNeeded": "Conferma il secondo fattore e riprova.",
+            "detail": "Stesso formato del backup automatico settimanale. Alcuni tipi di dato non sono ancora inclusi: il manifest del file indica cosa contiene.",
+            "contents": "Le tue misurazioni, i farmaci, l'umore, il ciclo, le analisi, gli episodi di malattia, le allergie, l'anamnesi familiare, i nutrienti, gli allenamenti, il tuo profilo di salute e le tue metriche personalizzate in un unico file JSON."
           }
         },
         "import": {
@@ -4798,7 +4801,7 @@
           },
           "csv": {
             "title": "File CSV",
-            "description": "Importa misurazioni da un foglio di calcolo o dall'esportazione di un dispositivo. Una riga per lettura.",
+            "description": "Importa misurazioni da un foglio di calcolo o dall'esportazione di un dispositivo.",
             "pasteLabel": "Incolla CSV",
             "fileInputLabel": "Scegli un file CSV da importare",
             "schemaHint": "Colonne: type, value, unit, measuredAt (con offset del fuso orario) e, facoltative, glucoseContext, notes, externalId.",
@@ -4838,11 +4841,12 @@
             "reasonExternalIdTooLong": "l'ID esterno è troppo lungo",
             "reasonUnstableExternalId": "l'ID esterno non è stabile tra un export e l'altro",
             "reasonDuplicate": "già importata",
-            "reasonUnknown": "saltata"
+            "reasonUnknown": "saltata",
+            "detail": "Una riga per lettura."
           },
           "doseHistory": {
             "title": "Storico delle assunzioni",
-            "description": "Uno storico di assunzioni esportato da un'altra app di monitoraggio, letto così com'è. Un file copre tutti i farmaci che contiene.",
+            "description": "Uno storico di assunzioni esportato da un'altra app di monitoraggio, letto così com'è.",
             "pasteLabel": "Incolla l'esportazione",
             "fileInputLabel": "Scegli un file con lo storico delle assunzioni",
             "uploadFile": "Scegli file",
@@ -4892,7 +4896,8 @@
               "jsonNotAnArray": "Quel JSON non contiene alcun elenco di dosi.",
               "jsonNoIntakeTime": "L'esportazione JSON registra quando una dose era prevista, non quando è stata assunta, e un orario previsto non verrà scritto come se fosse l'assunzione. Esporta il CSV, che porta entrambi.",
               "tooManyRows": "Quel file contiene più righe di quante un'importazione possa accoglierne. Dividilo e importa le parti."
-            }
+            },
+            "detail": "Un file copre tutti i farmaci che contiene."
           }
         },
         "subtitle": "Esporta i tuoi dati o importa da un backup."
@@ -5796,7 +5801,7 @@
       "errorModuleDisabled": "L'esportazione della cartella è disattivata per questo account."
     },
     "globalExcludedInjectionSitesLabel": "Siti di iniezione esclusi globalmente",
-    "globalExcludedInjectionSitesHint": "Questi siti non vengono mai proposti e sono rifiutati quando registri una dose.",
+    "globalExcludedInjectionSitesHint": "Mai proposti e rifiutati alla registrazione, anche se un farmaco li preferisce.",
     "sharing": {
       "createTitle": "Nuovo link di condivisione",
       "createDescription": "Il link è di sola lettura e a tempo.",
@@ -6089,7 +6094,7 @@
       },
       "export": {
         "title": "Scarica i miei dati",
-        "description": "I tuoi record in CSV o JSON, se vuoi cifrati con una passphrase.",
+        "description": "I tuoi record in CSV o JSON, o una cartella completa per il medico.",
         "openExport": "Esportazione e backup",
         "openHealthRecord": "Fascicolo sanitario"
       },
@@ -7988,7 +7993,8 @@
     "customize": "Personalizza esami",
     "localOcr": {
       "heading": "Leggi le scansioni su questo dispositivo",
-      "description": "Consente di scansionare un referto di laboratorio anche se il tuo provider di IA non può leggere le immagini: la foto viene letta sul tuo dispositivo e al provider viene inviato solo il testo estratto. Meno preciso: controlla ogni valore prima di salvare."
+      "description": "Legge la foto sul tuo dispositivo e invia al provider solo il testo estratto.",
+      "detail": "Utile quando il tuo provider IA non legge le immagini. Meno preciso — controlla ogni valore prima di salvare."
     },
     "sort": {
       "heading": "Ordinamento",

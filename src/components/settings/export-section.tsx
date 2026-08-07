@@ -484,7 +484,16 @@ function FullBackupCard() {
         </Button>
       }
     >
-      {/* v1.28 backup-completeness — the description above lists what's
+      {/* What is in the file, and the shape it has. This used to be the
+          card's description — twelve enumerated record types in a muted
+          `text-xs` meta slot, which is neither the tier nor the length that
+          slot is for. */}
+      <p className="text-sm">
+        {t("settings.sections.export.cards.fullBackup.contents")}{" "}
+        {t("settings.sections.export.cards.fullBackup.detail")}
+      </p>
+
+      {/* v1.28 backup-completeness — the paragraph above lists what's
           included; this line honestly discloses what isn't (document
           binaries, workout GPS/sample series) rather than implying
           "everything" is in the file. Always visible, not gated on the
