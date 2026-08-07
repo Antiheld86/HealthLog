@@ -156,14 +156,11 @@ function ensureTransport(): void {
           event.newValue === null || event.newValue.length === 0
             ? null
             : event.newValue;
-        // A current protocol transition already names this scope. The scope
-        // mirror is its second storage write, not a separate legacy switch.
-        if (
-          transition.phase !== "ready" &&
-          transition.expectedScope === expectedScope
-        ) {
-          return;
-        }
+        // A transition of this browser's own is already in flight and owns the
+        // outcome — including the scope its own reconcile mirrors. See
+        // `isForeignScopeWrite` for what treating that as a foreign switch
+        // cost.
+        if (!isForeignScopeWrite(transition)) return;
         publish({
           id: makeId(),
           phase: "resolving",
@@ -183,6 +180,40 @@ function ensureTransport(): void {
       if (next) applyWire(next);
     };
   }
+}
+
+/**
+ * Whether a write to the scope mirror is a switch this browser did not begin.
+ *
+ * The mirror is watched so that a switch from outside this protocol — another
+ * tab on an older bundle, the referential action behind an account deletion,
+ * an operator — still holds every shell until `/me` reconciles it. It used to
+ * recognise its own by comparing the mirrored scope against `expectedScope`,
+ * and that is too narrow to be true.
+ *
+ * `fetchMe()` mirrors whatever record the server currently reports, and it runs
+ * DURING a switch: `postSwitchWithReconcile` calls it to reconcile a lost
+ * compare-and-set, and a peer tab reloading beside the initiator calls it too.
+ * At that moment the server still reports the record being switched away from,
+ * so the mirrored scope is not the expected one and the write read as foreign.
+ *
+ * What followed was silent. The branch published a NEW transition id, and every
+ * terminal call is keyed on the id its caller was handed —
+ * `commitRecordSessionTransition` and `resolveUnknownRecordSessionTransition`
+ * both open with `if (transition.id !== id) return`. So the commit was dropped
+ * without a trace, `expectedScope` was left naming a record no `/me` would ever
+ * confirm, and `settleRecordSessionTransition` refused every answer the server
+ * gave. Both tabs sat behind the hydration gate until the stored transition
+ * aged past `TRANSITION_MAX_AGE_MS` — thirty seconds, which is where the
+ * intermittent forty-six-second failures in the browser suite came from.
+ *
+ * So a write is foreign only when nothing of this browser's own is in flight.
+ * Ignoring it while held costs nothing: `resolving` already means "held,
+ * outcome unknown, `/me` decides", which is precisely the state this branch
+ * would otherwise install.
+ */
+export function isForeignScopeWrite(current: RecordSessionTransition): boolean {
+  return current.phase === "ready";
 }
 
 function seed(): void {
