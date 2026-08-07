@@ -8844,6 +8844,7 @@
       "saveError": "Lebensstil-Kontext konnte nicht gespeichert werden",
       "loadError": "Lebensstil-Kontext konnte nicht geladen werden",
       "remove": "{kind} entfernen",
+      "removeShort": "Entfernen",
       "removeConfirmTitle": "{kind} entfernen?",
       "removeConfirmDescription": "Der aktuelle Wert gilt danach als nicht erfasst. Der datierte Verlauf bleibt erhalten.",
       "removedToast": "{kind} aus dem aktuellen Lebensstil-Kontext entfernt",

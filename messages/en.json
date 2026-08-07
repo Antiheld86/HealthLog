@@ -8844,6 +8844,7 @@
       "saveError": "Could not save lifestyle context",
       "loadError": "Could not load lifestyle context",
       "remove": "Remove {kind}",
+      "removeShort": "Remove",
       "removeConfirmTitle": "Remove {kind}?",
       "removeConfirmDescription": "The current value will become not recorded. Its dated history will be retained.",
       "removedToast": "{kind} removed from current lifestyle context",

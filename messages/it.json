@@ -8844,6 +8844,7 @@
       "saveError": "Impossibile salvare il contesto dello stile di vita",
       "loadError": "Impossibile caricare il contesto dello stile di vita",
       "remove": "Rimuovi {kind}",
+      "removeShort": "Rimuovi",
       "removeConfirmTitle": "Rimuovere {kind}?",
       "removeConfirmDescription": "Il valore attuale risulterà non registrato. La cronologia datata verrà conservata.",
       "removedToast": "{kind} rimosso dal contesto attuale dello stile di vita",

@@ -8844,6 +8844,7 @@
       "saveError": "Impossible d'enregistrer le contexte du mode de vie",
       "loadError": "Impossible de charger le contexte du mode de vie",
       "remove": "Supprimer : {kind}",
+      "removeShort": "Supprimer",
       "removeConfirmTitle": "Supprimer : {kind} ?",
       "removeConfirmDescription": "La valeur actuelle sera considérée comme non renseignée. Son historique daté sera conservé.",
       "removedToast": "{kind} supprimé du contexte actuel du mode de vie",

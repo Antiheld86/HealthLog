@@ -8844,6 +8844,7 @@
       "saveError": "Nie udało się zapisać kontekstu stylu życia",
       "loadError": "Nie udało się wczytać kontekstu stylu życia",
       "remove": "Usuń: {kind}",
+      "removeShort": "Usuń",
       "removeConfirmTitle": "Usunąć: {kind}?",
       "removeConfirmDescription": "Bieżąca wartość zmieni się na brak danych. Historia z datami zostanie zachowana.",
       "removedToast": "Usunięto {kind} z bieżącego kontekstu stylu życia",

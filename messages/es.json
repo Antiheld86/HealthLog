@@ -8844,6 +8844,7 @@
       "saveError": "No se pudo guardar el contexto del estilo de vida",
       "loadError": "No se pudo cargar el contexto del estilo de vida",
       "remove": "Eliminar {kind}",
+      "removeShort": "Quitar",
       "removeConfirmTitle": "¿Eliminar {kind}?",
       "removeConfirmDescription": "El valor actual pasará a constar como no registrado. Se conservará su historial fechado.",
       "removedToast": "{kind} eliminado del contexto actual del estilo de vida",
