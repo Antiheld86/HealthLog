@@ -104,6 +104,14 @@
 
 ### Fixed
 
+- Closing a document could leave it named in the address bar. Opening a
+  document from a card adds a step to the browser's history so that Back closes
+  it again, and closing it asks the browser to consume that step. The browser
+  can decline, and when it did the sheet closed while the address bar went on
+  naming the document, so a reload or a shared link re-opened the one you had
+  just closed. The close now checks that the step was consumed and tidies the
+  address bar itself when it was not.
+
 - Two tabs of one browser could disagree about which record they were in.
   Switching records moves a session rather than a tab, so a tab left open on
   the record you just left went on reading and writing there until somebody
