@@ -327,9 +327,21 @@ export function resolveCycleVerdict(
   }
 
   const startIdx = findCycleStartIndex(sorted, todayIdx);
-  const cycleStartDate = sorted[startIdx].date;
-  const run = sorted.slice(startIdx, todayIdx + 1);
-  const dayOfCycle = run.length;
+
+  // The day count comes from the logged start when the caller supplied one,
+  // and only falls back to the length of the labelled run when it did not.
+  // The run is bounded by the grid, so counting rows made the answer depend on
+  // how much calendar the caller happened to ask for: the same day reads as
+  // day 11 over a month and day 23 over three. That was latent while every
+  // caller asked for the same ninety days, and stopped being latent when the
+  // month grid started reading its own month. The arcs below stay grid-derived
+  // — they are about what the ring can draw, not about what day it is.
+  const anchoredStart =
+    input.lastPeriodStart && dayDiff(today, input.lastPeriodStart) >= 0
+      ? input.lastPeriodStart
+      : sorted[startIdx].date;
+  const cycleStartDate = anchoredStart;
+  const dayOfCycle = dayDiff(today, anchoredStart) + 1;
 
   // Honest ceiling: once the run overshoots the typical length + grace, the
   // count reflects the engine's open-ended cycle window, not an observed

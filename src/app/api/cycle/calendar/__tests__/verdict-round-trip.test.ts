@@ -467,6 +467,79 @@ describe("GET /api/cycle/calendar carries the resolved verdict", () => {
     });
   });
 
+  /**
+   * D-list edge 15 — the day count under a narrowed `from` window.
+   *
+   * The count used to be the length of the labelled run inside the grid, so a
+   * caller that asked for a shorter span got a smaller number for the same day:
+   * the run was cut off at the window's edge, not at the cycle's start. That was
+   * a latent contract question while every caller asked for the same ninety
+   * days. It stopped being latent when the month grid started reading its own
+   * month, which is a thirty-day window by construction.
+   */
+  describe("under a narrowed window", () => {
+    async function callWindow(
+      from: string,
+      to: string,
+    ): Promise<Record<string, unknown>> {
+      const res = await GET(
+        new NextRequest(
+          `http://localhost/api/cycle/calendar?from=${from}&to=${to}`,
+        ),
+      );
+      const body = JSON.parse(await res.text());
+      return (body.data as Record<string, unknown>).verdict as Record<
+        string,
+        unknown
+      >;
+    }
+
+    it("counts from the logged start, not from the window's edge", async () => {
+      const today = "2026-06-11";
+      const lastStart = "2026-05-20"; // day 23 of the open cycle
+      vi.mocked(prisma.menstrualCycle.findMany).mockResolvedValue(
+        cycleRows([
+          addDays(lastStart, -84),
+          addDays(lastStart, -56),
+          addDays(lastStart, -28),
+          lastStart,
+        ]) as never,
+      );
+      vi.mocked(getSession).mockResolvedValue(session("UTC") as never);
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(`${today}T12:00:00Z`));
+
+      const wide = await callWindow(addDays(today, -90), addDays(today, 180));
+      expect(wide.dayOfCycle).toBe(23);
+
+      // The month the grid would be showing: the cycle start is inside it, but
+      // the window begins after several earlier cycles.
+      const narrow = await callWindow("2026-06-01", "2026-06-30");
+      expect(narrow.dayOfCycle).toBe(23);
+      expect(narrow.cycleStartDate).toBe(lastStart);
+    });
+
+    it("counts correctly when the window excludes the start entirely", async () => {
+      const today = "2026-06-25";
+      const lastStart = "2026-05-20";
+      vi.mocked(prisma.menstrualCycle.findMany).mockResolvedValue(
+        cycleRows([
+          addDays(lastStart, -56),
+          addDays(lastStart, -28),
+          lastStart,
+        ]) as never,
+      );
+      vi.mocked(getSession).mockResolvedValue(session("UTC") as never);
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(`${today}T12:00:00Z`));
+
+      // June only: the cycle opened in May, outside the window entirely.
+      const narrow = await callWindow("2026-06-01", "2026-06-30");
+      expect(narrow.cycleStartDate).toBe(lastStart);
+      expect(narrow.dayOfCycle).toBe(37);
+    });
+  });
+
   it("says INSUFFICIENT_DATA when nothing has been logged", async () => {
     vi.mocked(prisma.menstrualCycle.findMany).mockResolvedValue([] as never);
     vi.mocked(getSession).mockResolvedValue(session("UTC") as never);
