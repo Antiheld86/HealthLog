@@ -650,21 +650,29 @@ test.describe.serial("managed profile browser journey", () => {
       guardians.locator('[data-slot="managed-profile-guardian-invited"]'),
     ).toBeVisible();
 
-    // The roster shows them, pending.
+    // The roster shows them, and shows them as PENDING — which is the release
+    // goal's sentence in the only form a browser can falsify: the invitation
+    // reached the server, came back as a grant that confers nothing yet, and
+    // the panel says which of the two states it is in. Delete the invitation
+    // feature and this line goes red.
     await expect(
       guardians.locator(
         '[data-slot="managed-profile-guardian"][data-guardian-state="PENDING"]',
       ),
     ).toHaveCount(1);
 
-    // And the floor is unchanged, because a pending invitation does not count.
-    // This is the sentence the release goal asks for: stated before the act,
-    // not discovered as a 409 after it.
+    // And the floor is unchanged BECAUSE of that state: the sole-guardian
+    // sentence is still on screen with a second person already invited.
+    //
+    // The `managed-profile-pending-note` line that used to sit here was
+    // removed rather than kept. That node renders unconditionally inside the
+    // invite form, so the assertion passed with the invitation feature deleted
+    // — it proved the copy exists, which is a claim about a string and not
+    // about anything the journey did. The note's own leg lives in
+    // `managed-profile-affordances.test.tsx`, where deleting the node makes it
+    // fail; here it would only have been a second look at the same string.
     await expect(
       guardians.locator('[data-slot="managed-profile-sole-guardian"]'),
-    ).toBeVisible();
-    await expect(
-      guardians.locator('[data-slot="managed-profile-pending-note"]'),
     ).toBeVisible();
   });
 });
