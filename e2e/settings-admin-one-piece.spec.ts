@@ -55,6 +55,27 @@ const SETTINGS_ROUTES = [
   "/settings/about",
 ] as const;
 
+/**
+ * The Layout hub's seven children. They are the routes whose header block
+ * changed MOST — the shell used to hand-roll a `space-y-6` between the
+ * back-link and the title, and `PageHeader`'s documented contract is
+ * `space-y-1.5`. Nothing measured them before, so the step went from 24 px
+ * to 6 px unobserved. 6 px is the standards' own number (§1's PageHeader
+ * row), so the measurement pins it rather than reverting it.
+ */
+const LAYOUT_CHILD_ROUTES = [
+  "/settings/layout/dashboard",
+  "/settings/layout/insights",
+  "/settings/layout/medications",
+  "/settings/layout/mood",
+  "/settings/layout/labs",
+  "/settings/layout/illness",
+  "/settings/layout/vorsorge",
+] as const;
+
+/** The `space-y-1.5` between a back-link and the title it sits above. */
+const BACK_LINK_STEP = 6;
+
 const ADMIN_ROUTES = [
   "/admin",
   "/admin/system-status",
@@ -73,7 +94,7 @@ const ADMIN_ROUTES = [
   "/admin/danger-zone",
 ] as const;
 
-const ROUTES = [...SETTINGS_ROUTES, ...ADMIN_ROUTES];
+const ROUTES = [...SETTINGS_ROUTES, ...LAYOUT_CHILD_ROUTES, ...ADMIN_ROUTES];
 
 /**
  * The card's own gap. `SettingsCard` inherits the `<Card>` contract —
@@ -96,6 +117,12 @@ type HeaderGeometry = {
   /** Rendered line count of the explainer (1 = it stayed on one line). */
   explainerLines: number;
   explainerText: string;
+  /**
+   * Distance from a hub back-link's bottom to the heading's top, or `null`
+   * on a route that has no back-link. A route WITH one has a taller header
+   * by construction, so the two families are compared separately.
+   */
+  backLinkStep: number | null;
 };
 
 async function measureHeader(
@@ -121,6 +148,17 @@ async function measureHeader(
       const mainTop = main.getBoundingClientRect().top;
       const headBox = heading.getBoundingClientRect();
       const explainerBox = explainer?.getBoundingClientRect();
+      // The hub back-link rides above the title inside the same header — and
+      // like the heading it exists twice, because the shell paints the whole
+      // block for both breakpoints. `querySelector` returns the first in
+      // DOCUMENT order, which on a desktop width is the hidden mobile copy;
+      // take the one with a box, the same way the heading is chosen.
+      const backLink = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          'main [data-slot="settings-hub-back-link"]',
+        ),
+      ).find((el) => el.getBoundingClientRect().height > 0);
+      const backLinkBox = backLink?.getBoundingClientRect();
       const style = explainer ? getComputedStyle(explainer) : null;
       const lineHeight = style ? parseFloat(style.lineHeight) : 0;
       return {
@@ -135,6 +173,10 @@ async function measureHeader(
             ? Math.round(explainerBox.height / lineHeight)
             : 0,
         explainerText: explainer?.textContent?.trim() ?? "",
+        backLinkStep:
+          backLinkBox && backLinkBox.height > 0
+            ? headBox.top - backLinkBox.bottom
+            : null,
       };
     },
     { route },
@@ -215,12 +257,33 @@ for (const locale of ["en", "de"] as const) {
         `[${locale}] routes without an <h1>: ${skipped.join(", ") || "none"}`,
       );
       // The sweep has to actually look at something.
-      expect(measured.length).toBeGreaterThan(25);
+      expect(measured.length).toBeGreaterThan(32);
 
-      const tops = measured.map((m) => m.headingTop);
-      const heights = measured.map((m) => m.headerHeight);
+      // Two families, compared separately: a route with a hub back-link
+      // carries an extra row above the title, so it is TALLER by
+      // construction and comparing it against a plain route would report
+      // that structure as drift.
+      const plain = measured.filter((m) => m.backLinkStep === null);
+      const withBackLink = measured.filter((m) => m.backLinkStep !== null);
+      expect(
+        withBackLink.length,
+        "the Layout children were meant to be measured",
+      ).toBe(LAYOUT_CHILD_ROUTES.length);
+
+      const tops = plain.map((m) => m.headingTop);
+      const heights = plain.map((m) => m.headerHeight);
       const spreadTop = Math.max(...tops) - Math.min(...tops);
       const spreadHeight = Math.max(...heights) - Math.min(...heights);
+
+      const childTops = withBackLink.map((m) => m.headingTop);
+      const childSpreadTop = Math.max(...childTops) - Math.min(...childTops);
+      const steps = withBackLink.map((m) => m.backLinkStep!);
+      console.log(
+        `[${locale}] back-link routes: heading top ${Math.min(...childTops).toFixed(1)}…${Math.max(...childTops).toFixed(1)} ` +
+          `(spread ${childSpreadTop.toFixed(1)}px); back-link→title step ${[
+            ...new Set(steps.map((v) => v.toFixed(1))),
+          ].join(", ")}px`,
+      );
 
       // Attached so a failure reports WHICH route moved, not just that one did.
       console.log(
@@ -247,6 +310,20 @@ for (const locale of ["en", "de"] as const) {
         spreadTop,
         "heading top drifts between routes",
       ).toBeLessThanOrEqual(TOLERANCE);
+      expect(
+        childSpreadTop,
+        "heading top drifts between the Layout children",
+      ).toBeLessThanOrEqual(TOLERANCE);
+
+      // The back-link step is `PageHeader`'s documented `space-y-1.5`. The
+      // shell used to hand-roll `space-y-6` here; 6 px is the standards'
+      // number, and this is what stops it drifting back to 24.
+      for (const measurement of withBackLink) {
+        expect(
+          Math.abs(measurement.backLinkStep! - BACK_LINK_STEP),
+          `${measurement.route}: back-link→title step is ${measurement.backLinkStep!.toFixed(1)}px, not ${BACK_LINK_STEP}px`,
+        ).toBeLessThanOrEqual(TOLERANCE);
+      }
 
       // The header's HEIGHT can only be constant where every explainer fits on
       // one line, and on a 393 px phone most one-sentence explainers do not —
