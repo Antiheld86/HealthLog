@@ -4046,6 +4046,13 @@ model MoodEntry {
   /// whole-record by design and carries no per-domain scope. That is
   /// deliberate, not an oversight: withholding part of a record from a
   /// delegate would be a new capability, not a field select.
+  ///
+  /// None of these reaches the health score, and that too is a decision. The
+  /// WELLBEING pillar reads PHQ-9, GAD-7 and WHO-5 and cites the papers its
+  /// thresholds come from; a daily self-rated slider is a different kind of
+  /// evidence, and averaging the two would weaken the line that makes the
+  /// score worth showing to a doctor. The reasoning is written out at
+  /// `src/lib/analytics/score/wellbeing.ts`.
   moodA1        Int?      @map("mood_a1") // 0-10, pleasantness
   stressA2      Int?      @map("stress_a2") // 0-10, inverse-oriented
   energyA3      Int?      @map("energy_a3") // 0-10
