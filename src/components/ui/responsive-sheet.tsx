@@ -220,7 +220,10 @@ export function ResponsiveSheet({
           <div
             data-slot="responsive-sheet-body"
             className={cn(
-              "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4",
+              // Vertical-only scroll port — see the note on the Dialog
+              // branch's body below for why `overflow-y-auto` alone does not
+              // say that.
+              "flex min-h-0 flex-1 flex-col gap-4 overflow-x-clip overflow-y-auto p-4",
               bodyClassName,
             )}
           >
@@ -304,7 +307,20 @@ export function ResponsiveSheet({
         <div
           data-slot="responsive-sheet-body"
           className={cn(
-            "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto",
+            // `overflow-x-clip` states the invariant the surrounding comment
+            // already claims: this body scrolls VERTICALLY. `overflow-y-auto`
+            // alone does not say that — CSS promotes the other axis from
+            // `visible` to `auto`, so any child wider than the port turned the
+            // whole form into a sideways-pannable surface. That is how the
+            // date/time row and `<SheetSection>`'s deliberate 4 px hover bleed
+            // (`-mx-1 w-[calc(100%+0.5rem)]`) both produced a horizontal
+            // scrollbar on the desktop dialog. `clip` is not `visible`, so the
+            // promotion does not happen and the vertical scroll is kept.
+            //
+            // Content that genuinely needs to scroll sideways (a wide table)
+            // owns its own `overflow-x-auto` wrapper — that is the correct
+            // place for it, and it still works inside a clipped port.
+            "flex min-h-0 flex-1 flex-col gap-4 overflow-x-clip overflow-y-auto",
             bodyClassName,
           )}
         >

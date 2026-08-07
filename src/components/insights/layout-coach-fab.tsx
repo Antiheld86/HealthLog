@@ -122,27 +122,20 @@ export function LayoutCoachFab() {
     },
   });
 
-  // v1.22 (M4) — surface a due/surfaced Coach reminder on the FAB. Additive:
-  // the dot also lights when the daily sweep has flipped a "remind me" reminder
-  // to due, independent of the nudge seen-stamp (resolving the reminder in the
-  // ledger clears it). Same cheap, gated, stale-while-revalidate read shape.
-  const { data: dueReminders } = useQuery({
-    queryKey: queryKeys.coachReminders("due,surfaced"),
-    queryFn: async () => {
-      const data = await apiGet<{ reminders?: unknown[] } | undefined>(
-        "/api/coach/reminders?status=due,surfaced",
-      );
-      return data?.reminders ?? [];
-    },
-    enabled: coachAvailable && !onCoachPage,
-    staleTime: 5 * 60 * 1000,
-  });
-  const hasDueReminders = (dueReminders?.length ?? 0) > 0;
-
   const nudgedAt = status?.nudgedAt ?? null;
+  // ONE source for the dot: an assistant message the user has not opened yet.
+  //
+  // v1.22 added a second arm — a separate "any due reminder?" query — and that
+  // is the arm that produced a badge over an empty Coach. The sweep flipped a
+  // reminder to `due` without writing anything into a conversation, so the dot
+  // promised a message that did not exist; opening the Coach showed the empty
+  // state and did not clear the dot either, because only resolving the reminder
+  // in Settings could. The sweep now writes the reminder into the thread as a
+  // real assistant message (`coach-reminder-sweep.ts`), which the nudge status
+  // already reports — so the reminder still lights the dot, through the message
+  // it actually wrote, and opening the Coach clears it like any other.
   const unread = isNudgeUnread(status, seenStamp);
-  // The visual dot lights for either an unread nudge OR a due reminder.
-  const showDot = unread || hasDueReminders;
+  const showDot = unread;
 
   // The unread dot is visual-only (`aria-hidden`) and the swapped
   // `aria-label` is not announced on mutation — a screen-reader user

@@ -228,26 +228,21 @@ export function HealthProfileFactsManager() {
                   ))}
                 </SelectContent>
               </Select>
-              <div className="space-y-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="min-h-11 w-full sm:min-h-9"
-                  disabled={disabled || !dirty || !value}
-                  onClick={() => save.mutate({ kind, value, current })}
-                >
-                  {save.isPending && save.variables?.kind === kind && (
-                    <Loader2
-                      className="size-4 animate-spin motion-reduce:animate-none"
-                      aria-hidden
-                    />
-                  )}
-                  {t("records.profileFacts.save")}
-                </Button>
+              {/* One action row per entry (UI-STANDARDS §11 + the action-row
+                  rule): right-aligned, primary last, the quiet destructive
+                  beside it. Two full-width stacked blocks — a grey disabled
+                  slab over a red-outlined one — carried the same visual weight
+                  as the field they belong to and ran into each other when
+                  scanned, which is what "Save" directly above "Remove smoking
+                  status" read as. */}
+              <div className="flex items-center justify-end gap-2 pt-1">
                 {current ? (
                   <ConfirmButton
-                    label={t("records.profileFacts.remove", {
+                    // Short label inside the row; the full phrase stays the
+                    // accessible name, because "Remove" on its own is
+                    // ambiguous once three of them are on screen.
+                    label={t("records.profileFacts.removeShort")}
+                    ariaLabel={t("records.profileFacts.remove", {
                       kind: t(KIND_LABEL[kind]),
                     })}
                     title={t("records.profileFacts.removeConfirmTitle", {
@@ -262,12 +257,28 @@ export function HealthProfileFactsManager() {
                       remove.isPending && remove.variables?.id === current.id
                     }
                     disabled={disabled}
+                    variant="ghost"
                     size="sm"
-                    className="text-destructive min-h-11 w-full sm:min-h-9"
+                    className="text-destructive min-h-11 sm:min-h-9"
                     icon={<Trash2 className="size-4" aria-hidden />}
                     slot={`health-profile-fact-remove-${kind}`}
                   />
                 ) : null}
+                <Button
+                  type="button"
+                  size="sm"
+                  className="min-h-11 sm:min-h-9"
+                  disabled={disabled || !dirty || !value}
+                  onClick={() => save.mutate({ kind, value, current })}
+                >
+                  {save.isPending && save.variables?.kind === kind && (
+                    <Loader2
+                      className="size-4 animate-spin motion-reduce:animate-none"
+                      aria-hidden
+                    />
+                  )}
+                  {t("records.profileFacts.save")}
+                </Button>
               </div>
             </div>
           );

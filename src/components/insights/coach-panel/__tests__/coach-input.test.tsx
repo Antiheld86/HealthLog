@@ -267,11 +267,15 @@ describe("<CoachInput>", () => {
     expect(controls?.[0]).not.toMatch(/\bjustify-between\b/);
     expect(controls?.[0]).toMatch(/\bshrink-0\b/);
 
-    // And the row itself is a row at every width, bottom-aligned so the send
-    // button stays beside the last line as the textarea grows.
+    // And the row itself is a row at every width. The textarea is centred in
+    // it — bottom-aligning a one-line textarea against a 44 px tap target left
+    // the placeholder sitting visibly low in the pill — while the controls
+    // keep their own bottom alignment, so the send button stays beside the
+    // LAST line as the textarea grows rather than drifting to the middle.
     const shell = html.match(/<div[^>]*class="[^"]*\bflex-row\b[^"]*"[^>]*>/);
-    expect(shell?.[0]).toMatch(/\bitems-end\b/);
+    expect(shell?.[0]).toMatch(/\bitems-center\b/);
     expect(shell?.[0]).not.toMatch(/\bflex-col\b/);
+    expect(controls?.[0]).toMatch(/\bself-end\b/);
   });
 
   it("sizes the hub actions trigger to the 44px tap-target floor on phones", () => {
