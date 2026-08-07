@@ -32,7 +32,10 @@ import type { MeasurementType, PrismaClient } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { getAgeFromDateOfBirth } from "@/lib/analytics/pulse-targets";
 import { toProfileSex } from "@/lib/profile/sex";
-import { clampDerivedLowerBound } from "@/lib/measurements/value-domain";
+import {
+  clampDerivedLowerBound,
+  isPlausibleMetricValue,
+} from "@/lib/measurements/value-domain";
 import type { ProfileSex } from "@/lib/profile/sex";
 import {
   probeRollupCoverage,
@@ -209,6 +212,39 @@ export function buildBaselineBand(
   };
 }
 
+/**
+ * Group raw readings into per-day means, keeping only the values that sit
+ * inside the metric's own plausibility domain.
+ *
+ * Pure, and exported because this is the arithmetic the band rests on: a
+ * single stored value the application itself declares impossible drags the
+ * day's mean with it, the median then carries it into the band, and the
+ * personal "usual range" reads in the tens of thousands. Filtering here rather
+ * than at the edge of the card keeps the number wrong in exactly one place —
+ * nowhere — instead of right on one surface and wrong on the next.
+ *
+ * A day whose every reading is implausible produces no point at all. That is
+ * the honest outcome: the day contributed no measurement, and an absent day is
+ * something the coverage floor already knows how to report.
+ */
+export function dayMeansFromRows(
+  rows: readonly { value: number; measuredAt: Date }[],
+  type: MeasurementType,
+): DayMeanPoint[] {
+  const byDay = new Map<string, { sum: number; count: number }>();
+  for (const row of rows) {
+    if (!isPlausibleMetricValue(type, row.value)) continue;
+    const day = row.measuredAt.toISOString().slice(0, 10);
+    const acc = byDay.get(day) ?? { sum: 0, count: 0 };
+    acc.sum += row.value;
+    acc.count += 1;
+    byDay.set(day, acc);
+  }
+  return [...byDay.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([day, acc]) => ({ day, mean: acc.sum / acc.count }));
+}
+
 // ── reads ────────────────────────────────────────────────────────────
 
 /**
@@ -237,11 +273,19 @@ export async function readDayMeanSeries(
       resolved.granularity === "DAY" &&
       resolved.rows.length > 0
     ) {
-      const points = resolved.rows.map((row) => ({
-        day: row.bucketStart.toISOString().slice(0, 10),
-        mean: row.mean,
-      }));
-      return { points, source: "DAY" };
+      // A bucket mean is only as good as the rows it averaged. The rollup
+      // writer aggregates whatever is stored, so a reading outside the
+      // metric's plausibility domain rides straight through into the bucket
+      // and from there into the band. Drop those buckets on the same rule the
+      // live read applies to its rows, so the two paths agree about what
+      // counts as a measurement.
+      const points = resolved.rows
+        .filter((row) => isPlausibleMetricValue(type, row.mean))
+        .map((row) => ({
+          day: row.bucketStart.toISOString().slice(0, 10),
+          mean: row.mean,
+        }));
+      if (points.length > 0) return { points, source: "DAY" };
     }
     // Coverage probe said "has buckets" but the window resolved to a
     // coarser tier or zero DAY rows → fall through to the live read so
@@ -264,17 +308,10 @@ export async function readDayMeanSeries(
   if (rows.length === 0) {
     return { points: [], source: "none" };
   }
-  const byDay = new Map<string, { sum: number; count: number }>();
-  for (const row of rows) {
-    const day = row.measuredAt.toISOString().slice(0, 10);
-    const acc = byDay.get(day) ?? { sum: 0, count: 0 };
-    acc.sum += row.value;
-    acc.count += 1;
-    byDay.set(day, acc);
+  const points = dayMeansFromRows(rows, type);
+  if (points.length === 0) {
+    return { points: [], source: "none" };
   }
-  const points: DayMeanPoint[] = [...byDay.entries()]
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([day, acc]) => ({ day, mean: acc.sum / acc.count }));
   return { points, source: "live" };
 }
 

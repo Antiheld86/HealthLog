@@ -37,6 +37,7 @@ function deviation(
     high: 62,
     outside,
     direction: outside ? "above" : "in",
+    daysAgo: 0,
   };
 }
 

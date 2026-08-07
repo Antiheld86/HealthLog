@@ -82,6 +82,36 @@ export function isNonNegativeMetric(type: string | null | undefined): boolean {
 }
 
 /**
+ * True when the value sits inside the metric's declared plausibility domain —
+ * the same `VALUE_RANGES` band every interactive, import, MCP and Telegram
+ * write path validates against before storing a reading.
+ *
+ * The derivation layer needs the question answered too, and for the opposite
+ * direction. A stored value outside the domain is one the application has
+ * already declared impossible, so it is not a reading: it is a provider glitch,
+ * a unit-decode slip, or a row from a writer that never had the gate. Folding
+ * it into a mean or a median makes the statistic say something the data never
+ * did — a personal pulse band in the tens of thousands, and a "your pulse is
+ * above your usual range" line built on a number no heart has ever produced.
+ * A statistic that quietly digests an impossible input is worse than one that
+ * declines to, because it looks like an answer.
+ *
+ * Unknown types and non-finite values answer `false`-safe in opposite ways on
+ * purpose: an absent range is an absent fact, so the value passes; a NaN is
+ * never an input to anything.
+ */
+export function isPlausibleMetricValue(
+  type: string | null | undefined,
+  value: number,
+): boolean {
+  if (!Number.isFinite(value)) return false;
+  if (!type) return true;
+  const range = VALUE_RANGES[type];
+  if (range === undefined) return true;
+  return value >= range.min && value <= range.max;
+}
+
+/**
  * True when EVERY named metric forbids negative values (and at least one was
  * named). Used by the chart, which can paint several series in one axis: a
  * single signed series keeps the full downward padding for all of them.

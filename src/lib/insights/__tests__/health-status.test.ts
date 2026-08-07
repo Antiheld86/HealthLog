@@ -7,6 +7,7 @@ import type { ChangepointSignal } from "@/lib/insights/derived/changepoint";
 function vital(
   outside: boolean,
   direction: VitalDeviation["direction"],
+  daysAgo = 0,
 ): VitalDeviation {
   return {
     type: "RESTING_HEART_RATE",
@@ -16,6 +17,7 @@ function vital(
     high: 65,
     outside,
     direction,
+    daysAgo,
   };
 }
 
