@@ -2,9 +2,67 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { openApiPaths } from "@/lib/openapi/routes";
+
 const root = process.cwd();
 
+/** Every `route.ts` under the API tree. */
+async function apiRouteFiles(): Promise<string[]> {
+  const entries = await readdir(path.join(root, "src/app/api"), {
+    recursive: true,
+  });
+  return entries
+    .filter((entry) => entry.endsWith("route.ts"))
+    .map((entry) => path.join("src/app/api", entry));
+}
+
+/** The published path a route file serves, or null when it is unpublished. */
+function publishedPathFor(file: string): string | null {
+  const apiPath = file
+    .replace(/^src\/app/, "")
+    .replace(/\/route\.ts$/, "")
+    .replace(/\[([^\]]+)\]/g, "{$1}");
+  return apiPath in openApiPaths ? apiPath : null;
+}
+
 describe("managed-profile contract", () => {
+  it("publishes the last-Guardian refusal on every published route that emits it", async () => {
+    // The failure this catches is the one the release audit found: the floor
+    // is enforced on four surfaces and was DESCRIBED on the one route that
+    // cannot reach it, while two routes that answer it every time said only
+    // "that access had already ended". Emitters are discovered from the route
+    // sources, so a fifth one cannot ship undescribed.
+    const files = await apiRouteFiles();
+    expect(files.length).toBeGreaterThan(100);
+
+    const emitters: string[] = [];
+    for (const file of files) {
+      const source = await readFile(path.join(root, file), "utf8");
+      if (!source.includes("LastManagedGuardianError")) continue;
+      if (!source.includes("managed_profile.guardian.required")) continue;
+      emitters.push(file);
+    }
+    // Non-zero, and known: the two grant routes. The lifecycle surfaces that
+    // also raise it (account deletion, the data wipe) answer through their own
+    // envelopes and are not in this spec.
+    expect(emitters).toContain("src/app/api/account/grants/[id]/route.ts");
+    expect(emitters).toContain(
+      "src/app/api/account/grants/[id]/renounce/route.ts",
+    );
+
+    const silent = emitters.filter((file) => {
+      const apiPath = publishedPathFor(file);
+      if (apiPath === null) return false;
+      return !JSON.stringify(openApiPaths[apiPath]).includes(
+        "managed_profile.guardian.required",
+      );
+    });
+    expect(
+      silent,
+      "published routes that emit the last-Guardian refusal without publishing it",
+    ).toEqual([]);
+  });
+
   it("requires a cookie-backed fresh MFA proof for creation", async () => {
     const source = await readFile(
       path.join(root, "src/app/api/managed-profiles/route.ts"),

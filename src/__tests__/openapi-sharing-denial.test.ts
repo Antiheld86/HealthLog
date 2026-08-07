@@ -45,6 +45,14 @@
  * - Comments are stripped before matching. `.../guardians/route.ts` names both
  *   fence helpers in a docblock explaining why it uses neither, and counting
  *   prose would classify an actor surface as delegable.
+ * - It covers the PUBLISHED surface, which is not the whole delegable surface.
+ *   116 route modules resolve the fence; 90 of them are in the OpenAPI document
+ *   and 26 have never been (mood entries, the record-settings tree, the
+ *   medication intake tree, several insight reads). That gap predates this
+ *   release and is not closed here — "frozen" means the published contract is
+ *   complete and consistent, not that every delegable route is described. What
+ *   this guard does guarantee is that one of those 26 cannot be published
+ *   without its refusal, because publishing it puts it in scope on the next run.
  */
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -254,6 +262,65 @@ describe("the sharing refusal every delegable path publishes", () => {
       ),
     );
     expect(overreaching.map(name)).toEqual([]);
+  });
+
+  it("draws only from the reviewed delegable allowlists", () => {
+    // Containment, not equality, and per FILE rather than per verb — which is
+    // how `sharing-surface-guard.test.ts` keys its lists, because the
+    // declaration a human reviewed is "this module may act on another record",
+    // with the verb-level detail in the entry's prose beside it.
+    //
+    // What this closes: the guard above recomputes the delegable set from the
+    // route sources, so a route that started resolving the fence would be
+    // discovered and dressed with a refusal automatically — published as
+    // delegable without anybody deciding it should be. Held to the reviewed
+    // lists, that becomes two failures instead of a silent contract change.
+    const guard = readFileSync(
+      join(ROOT, "src/__tests__/sharing-surface-guard.test.ts"),
+      "utf8",
+    );
+    const allowlist = (name: string): string[] => {
+      const start = guard.indexOf(`const ${name}`);
+      expect(
+        start,
+        `${name} is missing from the surface guard`,
+      ).toBeGreaterThan(-1);
+      const block = guard.slice(start, guard.indexOf("\n};", start));
+      const keys = [...block.matchAll(/^ {2}"(app\/[^"]+)":/gm)].map(
+        (match) => match[1],
+      );
+      // A block that matched nothing would make the union vacuous and the
+      // containment below unfalsifiable.
+      expect(keys.length, name).toBeGreaterThan(0);
+      return keys;
+    };
+
+    const reviewed = new Set([
+      ...allowlist("DELEGABLE_ROUTES"),
+      ...allowlist("DELEGABLE_MANAGE_ROUTES"),
+      ...allowlist("GUARDIAN_ROUTES"),
+    ]);
+    expect(reviewed.size).toBeGreaterThan(50);
+
+    const contributing = new Set(
+      fenced.map((operation) =>
+        routeModulePath(operation.path)
+          .slice(join(ROOT, "src/").length)
+          .replaceAll("\\", "/"),
+      ),
+    );
+    expect(contributing.size).toBeGreaterThan(50);
+
+    const unreviewed = [...contributing].filter((file) => !reviewed.has(file));
+    if (unreviewed.length > 0) {
+      throw new Error(
+        `${unreviewed.length} published operation(s) resolve the record fence from a module the surface guard has not reviewed:\n` +
+          unreviewed.map((file) => `  ❌ src/${file}`).join("\n") +
+          "\n\nA module becomes delegable by decision, not by discovery: add it " +
+          "to the matching list in sharing-surface-guard.test.ts with the " +
+          "reason, or take the fence back out.",
+      );
+    }
   });
 
   it("carries the refusal into the generated document", () => {

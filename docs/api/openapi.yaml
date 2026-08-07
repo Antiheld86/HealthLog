@@ -12888,7 +12888,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "409":
-          description: That access had already ended.
+          description: "Two refusals share this status. `meta.errorCode: sharing.revoke.already_ended` — that access had already
+            ended, and nothing changed. `meta.errorCode: managed_profile.guardian.required` — the grant is the last
+            active Guardian grant on a managed profile, and ending it would leave a record with nobody able to open it.
+            The floor is real and this is one of the four routes that enforce it; the way past it is to invite another
+            Guardian and wait for them to accept, or to delete the profile."
           content:
             application/json:
               schema:
@@ -12925,7 +12929,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "409":
-          description: That access had already ended.
+          description: "Two refusals share this status. `meta.errorCode: sharing.renounce.already_ended` — that access had already
+            ended, and nothing changed. `meta.errorCode: managed_profile.guardian.required` — the caller is the last
+            active Guardian of a managed profile, so handing this access back would strand the record. Invite somebody
+            and wait for them to accept, or delete the profile; a Guardian may not simply walk away from a record that
+            has no self."
           content:
             application/json:
               schema:
@@ -13210,9 +13218,11 @@ paths:
           description: "The record would be left with nobody looking after it (`meta.errorCode:
             managed_profile.guardian.required`). **Not reachable through this route today**, and published anyway rather
             than silently: the caller must already be one active Guardian and the target is never the caller, so an
-            active target is always a second one — and two is never the one the floor refuses. The same code IS emitted
-            by the renounce route, by Guardian account deletion and by a data wipe, so a shared client resolver keeps
-            this arm. It is documented here so that a change making it reachable is a change somebody notices."
+            active target is always a second one — and two is never the one the floor refuses. The routes that DO emit
+            this code are `DELETE /api/account/grants/{id}` (the owner withdrawing the last Guardian grant), `POST
+            /api/account/grants/{id}/renounce` (a Guardian handing their own access back), Guardian account deletion and
+            a data wipe — a client resolves the code the same way wherever it arrives, which is why this arm stays. It
+            is documented here so that a change making it reachable through this route is a change somebody notices."
           content:
             application/json:
               schema:
