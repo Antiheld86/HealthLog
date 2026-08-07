@@ -19,7 +19,14 @@ function row(
   analyte: string,
   value: number,
   day: string,
-  opts: { unit?: string; low?: number | null; high?: number | null } = {},
+  opts: {
+    unit?: string;
+    low?: number | null;
+    high?: number | null;
+    sourceLow?: number | null;
+    sourceHigh?: number | null;
+    sourceText?: string | null;
+  } = {},
 ): LabChangeRow {
   return {
     analyte,
@@ -27,6 +34,9 @@ function row(
     value,
     referenceLow: opts.low ?? null,
     referenceHigh: opts.high ?? null,
+    sourceReferenceLow: opts.sourceLow ?? null,
+    sourceReferenceHigh: opts.sourceHigh ?? null,
+    sourceReferenceText: opts.sourceText ?? null,
     takenAt: new Date(`${day}T08:00:00.000Z`),
   };
 }

@@ -143,6 +143,12 @@ export const PUT = apiHandler(
     // historical columns the serialiser ignores. Reject the attempt with a
     // 422 rather than silently no-op, so the client never believes an edit
     // landed. Edit such fields on the Biomarker itself instead.
+    //
+    // `sourceReference*` is deliberately NOT on that list. The catalog band is
+    // a property of the marker; the source window is a property of THIS
+    // reading — it is what one report printed beside one value — so it is
+    // editable on a linked row and there is nothing on the biomarker to edit
+    // it on instead.
     const isLinked = existing.biomarkerId !== null;
     if (
       isLinked &&
@@ -194,6 +200,15 @@ export const PUT = apiHandler(
     if (d.unit !== undefined) data.unit = d.unit;
     if (d.referenceLow !== undefined) data.referenceLow = d.referenceLow;
     if (d.referenceHigh !== undefined) data.referenceHigh = d.referenceHigh;
+    if (d.sourceReferenceLow !== undefined) {
+      data.sourceReferenceLow = d.sourceReferenceLow;
+    }
+    if (d.sourceReferenceHigh !== undefined) {
+      data.sourceReferenceHigh = d.sourceReferenceHigh;
+    }
+    if (d.sourceReferenceText !== undefined) {
+      data.sourceReferenceText = d.sourceReferenceText;
+    }
     if (d.takenAt !== undefined) data.takenAt = d.takenAt;
 
     // Inverted-range guard for a PARTIAL bound update. The schema-level
@@ -211,6 +226,20 @@ export const PUT = apiHandler(
       return apiError("referenceLow must not exceed referenceHigh", 422, {
         errorCode: "labs.update.referenceRangeInvalid",
       });
+    }
+    // The same partial-update hole exists on the source window, and closes the
+    // same way.
+    if (
+      isInvertedRange(
+        effectiveBound(d.sourceReferenceLow, existing.sourceReferenceLow),
+        effectiveBound(d.sourceReferenceHigh, existing.sourceReferenceHigh),
+      )
+    ) {
+      return apiError(
+        "sourceReferenceLow must not exceed sourceReferenceHigh",
+        422,
+        { errorCode: "labs.update.sourceReferenceRangeInvalid" },
+      );
     }
     if (d.note !== undefined) {
       data.noteEncrypted = d.note ? encryptNoteToBytes(d.note) : null;
@@ -239,6 +268,9 @@ export const PUT = apiHandler(
             panel: existing.panel,
             referenceLow: existing.referenceLow,
             referenceHigh: existing.referenceHigh,
+            sourceReferenceLow: existing.sourceReferenceLow,
+            sourceReferenceHigh: existing.sourceReferenceHigh,
+            sourceReferenceText: existing.sourceReferenceText,
             takenAt: existing.takenAt,
           },
           after: {
@@ -249,6 +281,9 @@ export const PUT = apiHandler(
             panel: updated.panel,
             referenceLow: updated.referenceLow,
             referenceHigh: updated.referenceHigh,
+            sourceReferenceLow: updated.sourceReferenceLow,
+            sourceReferenceHigh: updated.sourceReferenceHigh,
+            sourceReferenceText: updated.sourceReferenceText,
             takenAt: updated.takenAt,
           },
           redacted: d.note !== undefined ? ["note"] : [],
