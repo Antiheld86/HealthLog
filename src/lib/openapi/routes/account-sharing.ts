@@ -107,6 +107,39 @@ const endedGrantView = grantView
       "A grant that has just been ended, plus what the cleanup did. Nothing is deleted: the row survives as the consent record and DELETE names the act, not the storage.",
   });
 
+/**
+ * v1.37.0 — one Guardian of a managed profile, as the roster publishes them.
+ *
+ * Deliberately narrower than {@link grantView}, and the narrowing is the
+ * privacy decision rather than an omission. `access` and `scope` are constants
+ * for a Guardian grant (MANAGE, whole record) and publishing a constant invites
+ * a client to branch on it; `lastUsedAt`, `revokedAt` and `revokedBy` describe
+ * a history this list is not about; and the party block is the same
+ * `{ id, username, displayName }` one sharing party already sees of another,
+ * with no e-mail.
+ */
+const managedProfileGuardian = z
+  .object({
+    grantId: z
+      .string()
+      .describe(
+        "The grant row. This is the value `DELETE /api/managed-profiles/{id}/guardians/{grantId}` takes.",
+      ),
+    account: grantParty,
+    state: z
+      .enum(["PENDING", "ACTIVE"])
+      .describe(
+        "PENDING means the invitation has been sent and not yet accepted. A PENDING Guardian does NOT count toward the last-Guardian floor: the server counts accepted, unexpired MANAGE grants, so inviting somebody and then trying to leave is still refused until they accept. Say so before the act rather than letting it arrive as a 409.",
+      ),
+    invitedAt: z.string(),
+    acceptedAt: z.string().nullable(),
+  })
+  .meta({
+    id: "ManagedProfileGuardian",
+    description:
+      "One person who looks after a managed profile. Ended grants — revoked or expired — are absent rather than listed with a state: the question is who looks after this record now.",
+  });
+
 const grantListResponse = z
   .object({
     given: z.array(grantView),
@@ -548,6 +581,36 @@ export const accountSharingPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
         "409": {
           description: "That access had already ended.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+  },
+  "/api/managed-profiles/{id}/guardians": {
+    get: {
+      tags: ["Account sharing"],
+      summary: "Who looks after a managed profile",
+      description:
+        "The live Guardians of one managed profile — every unexpired, unrevoked MANAGE grant on it, PENDING and ACTIVE alike. Cookie transport only, by the same structural argument as the rest of this family: it resolves through the session and never falls through to the Bearer branch. A fresh second factor is NOT required, unlike every act on the same profile: this is a read, and it discloses nothing about a party the caller cannot already read on their own sharing panel. An ACTOR surface — the profile is named in the path and the caller acts as themselves, so it answers from the Guardian's own account rather than only while switched into the record. Anyone who is not an active Guardian of THIS profile gets the same 404 as an unknown id, including a READ, WRITE or MANAGE delegate of an ordinary record: the refusal is not an enumeration oracle. Count the ACTIVE rows to know whether removing a Guardian is possible — a PENDING invitation does not satisfy the last-Guardian floor.",
+      requestParams: {
+        path: z.object({ id: z.string() }),
+      },
+      responses: {
+        ...stdResponses,
+        "200": {
+          description: "The profile's live Guardians, oldest invitation first.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.array(managedProfileGuardian),
+                "ManagedProfileGuardianListEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description:
+            "No such managed profile, or the caller is not one of its Guardians (`meta.errorCode: managed_profile.not_found`). The two are byte-identical.",
           content: { "application/json": { schema: errorEnvelope } },
         },
       },

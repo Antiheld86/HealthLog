@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 import {
   apiHandler,
   MFA_STEP_UP_MAX_AGE_SECONDS,
+  requireCookieAuth,
   requireFreshMfa,
 } from "@/lib/api-handler";
 import {
@@ -14,11 +15,56 @@ import {
 } from "@/lib/api-response";
 import { prisma } from "@/lib/db";
 import { annotate } from "@/lib/logging/context";
+import { listManagedProfileGuardians } from "@/lib/managed-profiles/guardian-list";
 import { ManagedProfileLifecycleError } from "@/lib/managed-profiles/lifecycle";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { GrantError, inviteManagedProfileGuardian } from "@/lib/sharing/grants";
 
 type RouteParams = { params: Promise<{ id: string }> };
+
+/**
+ * Who looks after this profile.
+ *
+ * The read the panel needs before it can offer to remove anybody, and the one
+ * the last-Guardian floor is counted from before the click rather than
+ * discovered as a 409 after it.
+ *
+ * Cookie-only, like every endpoint in this family, and for the same structural
+ * reason: `requireCookieAuth` resolves through `getSession()` and never falls
+ * through to the Bearer branch. Fresh MFA is deliberately NOT required — this
+ * is a read, and it discloses nothing the caller cannot already read on their
+ * own sharing panel about a party to a grant they hold. The gate belongs to the
+ * acts, not to looking.
+ *
+ * An actor surface: the profile is named by the URL, and the caller acts as
+ * themselves. `requireRecordAuth` / `requireGuardianAuth` would make the roster
+ * answerable only while switched INTO the profile, which is backwards for a
+ * panel whose whole purpose is to work from the Guardian's own account.
+ */
+export const GET = apiHandler(
+  async (_request: NextRequest, { params }: RouteParams) => {
+    const { user } = await requireCookieAuth();
+    const { id } = await params;
+
+    const guardians = await listManagedProfileGuardians({
+      profileId: id,
+      callerId: user.id,
+    });
+    // One refusal for "no such account", "not a managed profile" and "you are
+    // not a Guardian of it", so the route is not an enumeration oracle.
+    if (guardians === null) {
+      return apiError("Managed profile not found", 404, {
+        errorCode: "managed_profile.not_found",
+      });
+    }
+
+    annotate({
+      action: { name: "managed_profile.guardian.list" },
+      meta: { profile_id: id, guardian_count: guardians.length },
+    });
+    return apiSuccess(guardians);
+  },
+);
 
 const INVITE_LIMIT = 10;
 const INVITE_WINDOW_MS = 60 * 60 * 1000;
