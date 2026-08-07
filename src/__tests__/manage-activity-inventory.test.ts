@@ -111,6 +111,18 @@ interface ModuleFacts {
   /** Does the module reach the record resolver at ANY level. */
   delegatesRecord: boolean;
   /**
+   * Every level the module passes to `requireRecordAuth`, in source order.
+   *
+   * Recorded so the inclusion rule's LEVEL axis has something that can
+   * falsify it. `delegatesRecord` used to be set only for `"manage"`, and the
+   * legs below could not tell the corrected rule from the old one: every
+   * assertion about coverage passed either way, because a manage-only sweep
+   * still finds every manage action. The leg that separates them asks whether
+   * the walked set STRICTLY EXCEEDS the manage-only one, and it needs the
+   * levels to ask.
+   */
+  recordLevels: string[];
+  /**
    * Every action the module hands to `auditLog("…")`, awaited or not.
    *
    * v1.37.0 — this used to keep only the AWAITED calls, on the reasoning that
@@ -190,12 +202,17 @@ export function moduleFacts(source: string, fileName: string): ModuleFacts {
   };
 
   let delegatesRecord = false;
+  const recordLevels: string[] = [];
   const auditActions: string[] = [];
 
   const visit = (node: ts.Node): void => {
     if (ts.isCallExpression(node)) {
       const name = calleeName(node.expression);
-      if (name === RECORD_RESOLVER) delegatesRecord = true;
+      if (name === RECORD_RESOLVER) {
+        delegatesRecord = true;
+        const level = firstStringArg(node);
+        if (level !== null) recordLevels.push(level);
+      }
       if (name === "auditLog") {
         const action = firstStringArg(node);
         if (action !== null) auditActions.push(action);
@@ -205,7 +222,7 @@ export function moduleFacts(source: string, fileName: string): ModuleFacts {
   };
   parsed.forEachChild(visit);
 
-  return { delegatesRecord, auditActions, imports: importPaths };
+  return { delegatesRecord, recordLevels, auditActions, imports: importPaths };
 }
 
 /**
@@ -439,6 +456,30 @@ describe("every delegated action has a sentence of its own", () => {
     expect(found).toContain("src/app/api/mood-entries/route.ts");
     // And the actions themselves were read, not merely looked for.
     expect(actions.length).toBeGreaterThan(60);
+  });
+
+  it("walks strictly more modules than a manage-only sweep would", () => {
+    // The level axis of the inclusion rule, with something that can falsify
+    // it. Every other leg in this file passes under BOTH rules — a manage-only
+    // sweep still finds every manage action, so coverage cannot tell the two
+    // apart. This one can: the corrected rule is "any module that reaches
+    // `requireRecordAuth` at any level", so the walked set must strictly
+    // exceed the subset that names `manage` anywhere.
+    const manageOnly = delegatedModules.filter((file) =>
+      read(file).recordLevels.includes("manage"),
+    );
+    expect(manageOnly.length).toBeGreaterThan(0);
+    expect(delegatedModules.length).toBeGreaterThan(manageOnly.length);
+
+    // A named anchor, so the claim does not rest on a count that could drift
+    // to equality without anybody noticing. The custom-metrics list resolves
+    // `requireRecordAuth("read", …)` and nothing else, so a manage-only filter
+    // drops it — along with the refusal breadcrumbs it and its neighbours file.
+    const anchor = join(API, "custom-metrics/route.ts");
+    expect(read(anchor).recordLevels).toEqual(["read"]);
+    expect(read(anchor).recordLevels).not.toContain("manage");
+    expect(delegatedModules).toContain(anchor);
+    expect(manageOnly).not.toContain(anchor);
   });
 
   it("reaches the actions a route files through what it imports", () => {

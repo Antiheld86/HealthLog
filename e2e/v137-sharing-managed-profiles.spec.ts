@@ -3,9 +3,15 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "./setup/test";
 import {
   E2E_LEVEL_RECORDS,
+  E2E_SCOPE_DELEGATE,
   E2E_SCOPE_RECORDS,
+  GUARDIAN_STORAGE_STATE_PATH,
   SCOPE_DELEGATE_STORAGE_STATE_PATH,
 } from "./setup/test-helpers";
+import {
+  clearGuardianProfiles,
+  refreshGuardianStepUp,
+} from "./setup/managed-profile-fixture";
 
 const DOMAIN_READS = {
   measurements: "/api/measurements",
@@ -520,5 +526,162 @@ test.describe.serial("scoped sharing browser journeys", () => {
       page.off("request", trackCoachRead);
     }
     await leaveRecord(page);
+  });
+});
+
+/**
+ * [J3-managed-profile-lifecycle] — the half of the release goal that had no
+ * browser at all until this plan.
+ *
+ * The routes have shipped with integration coverage since the profile family
+ * landed, and nothing under `src/components` or `src/app` called any of them.
+ * These two tests are the person's side of it: an adult with no managed profile
+ * creates one, finds it in the switcher, enters it, leaves it, invites a second
+ * Guardian and is told — before acting rather than by a refusal afterwards —
+ * that the invitation does not count until it is accepted.
+ *
+ * Its own session jar and its own account, because this is the only account in
+ * the suite with a second factor enrolled: every route here resolves
+ * `requireFreshMfa`, which refuses an unenrolled account outright.
+ */
+test.describe.serial("managed profile browser journey", () => {
+  test.use({ storageState: GUARDIAN_STORAGE_STATE_PATH });
+
+  const PROFILE_NAME = "E2E managed record";
+
+  test.beforeEach(async () => {
+    await clearGuardianProfiles();
+    await refreshGuardianStepUp();
+  });
+
+  test.afterAll(async () => {
+    await clearGuardianProfiles();
+  });
+
+  async function createProfile(page: Page): Promise<void> {
+    await page.goto("/settings/access");
+    const card = page.locator('[data-slot="managed-profile-card"]');
+    await expect(card).toBeVisible();
+    await card.locator('[data-slot="managed-profile-name"]').fill(PROFILE_NAME);
+    await card.locator('[data-slot="managed-profile-create-submit"]').click();
+    await expect(
+      card.locator('[data-slot="managed-profile-created"]'),
+    ).toBeVisible();
+  }
+
+  test("[J3-managed-profile-lifecycle] creates a record with no login and reaches it from the switcher", async ({
+    page,
+  }) => {
+    await createProfile(page);
+
+    // The row appears without a reload, which is the account-payload
+    // invalidation doing its job rather than a lucky refetch.
+    const row = page.locator('[data-slot="managed-profile-row"]');
+    await expect(row).toHaveCount(1);
+    const profileId = await row.getAttribute("data-managed-profile-id");
+    expect(profileId).not.toBeNull();
+
+    // The switcher lists it as a managed record. Asserted on the stable
+    // attribute rather than on the label, so the copy stays free to change.
+    await openSwitcher(page);
+    const entry = page.locator(
+      `[data-slot="account-switcher-entry"][data-account-id="${profileId}"]`,
+    );
+    await expect(entry).toHaveCount(1);
+    await expect(entry).toHaveAttribute("data-record-kind", "managed");
+    await entry.click();
+
+    // Inside it, the banner says which kind of record this is.
+    const banner = page.locator('[data-slot="shared-record-banner"]');
+    await expect(banner).toBeVisible();
+    await expect(banner).toHaveAttribute("data-record-kind", "managed");
+    // The WORDING, not only the attribute, and this is the one place in the
+    // suite where pinning copy is the right call rather than the lazy one: the
+    // claim is that the banner NAMES it as a managed record, and the attribute
+    // is not what a person reads. `recordKindLabel`'s ternary chooses between
+    // two sentences that mean different things, and inverting it left every
+    // attribute assertion green while telling a Guardian they were inside an
+    // ordinary shared record. The pure function is pinned in
+    // `src/components/layout/__tests__/shared-record-banner-label.test.tsx`;
+    // this line proves the rendered banner really calls it.
+    await expect(
+      page.locator('[data-slot="shared-record-banner-context"]'),
+    ).toContainText("Managed profile");
+
+    // And back out, with the record still on the list.
+    //
+    // Leaving ends in a full document reload, and a `goto` issued while that
+    // reload is still in flight is aborted by Chromium — `net::ERR_ABORTED`,
+    // reproducibly at CI's worker count and not at one. The banner being gone
+    // is satisfied by the pre-reload DOM, so it cannot be the thing waited on.
+    // Retrying the navigation is the honest fix: the claim is that the record
+    // survives the round trip, not that the first navigation attempt wins a
+    // race with the app's own.
+    await leaveRecord(page);
+    await expect(async () => {
+      await page.goto("/settings/access");
+      await expect(
+        page.locator(
+          `[data-slot="managed-profile-row"][data-managed-profile-id="${profileId}"]`,
+        ),
+      ).toHaveCount(1);
+    }).toPass({ timeout: 15_000 });
+  });
+
+  test("[J3-managed-profile-lifecycle] states the last-guardian floor before an invitation is accepted", async ({
+    page,
+  }) => {
+    await createProfile(page);
+
+    const guardians = page.locator('[data-slot="managed-profile-guardians"]');
+    await expect(guardians).toBeVisible();
+
+    // One guardian, and it is the creator: no access here can be ended, and
+    // the card says so rather than offering a control that would 404.
+    await expect(
+      guardians.locator('[data-slot="managed-profile-guardian"]'),
+    ).toHaveCount(1);
+    await expect(
+      guardians.locator('[data-slot="managed-profile-guardian-remove"]'),
+    ).toHaveCount(0);
+    await expect(
+      guardians.locator('[data-slot="managed-profile-sole-guardian"]'),
+    ).toBeVisible();
+
+    // Invite a second guardian.
+    await guardians
+      .locator('[data-slot="managed-profile-guardian-identifier"]')
+      .fill(E2E_SCOPE_DELEGATE.username);
+    await guardians
+      .locator('[data-slot="managed-profile-guardian-submit"]')
+      .click();
+    await expect(
+      guardians.locator('[data-slot="managed-profile-guardian-invited"]'),
+    ).toBeVisible();
+
+    // The roster shows them, and shows them as PENDING — which is the release
+    // goal's sentence in the only form a browser can falsify: the invitation
+    // reached the server, came back as a grant that confers nothing yet, and
+    // the panel says which of the two states it is in. Delete the invitation
+    // feature and this line goes red.
+    await expect(
+      guardians.locator(
+        '[data-slot="managed-profile-guardian"][data-guardian-state="PENDING"]',
+      ),
+    ).toHaveCount(1);
+
+    // And the floor is unchanged BECAUSE of that state: the sole-guardian
+    // sentence is still on screen with a second person already invited.
+    //
+    // The `managed-profile-pending-note` line that used to sit here was
+    // removed rather than kept. That node renders unconditionally inside the
+    // invite form, so the assertion passed with the invitation feature deleted
+    // — it proved the copy exists, which is a claim about a string and not
+    // about anything the journey did. The note's own leg lives in
+    // `managed-profile-affordances.test.tsx`, where deleting the node makes it
+    // fail; here it would only have been a second look at the same string.
+    await expect(
+      guardians.locator('[data-slot="managed-profile-sole-guardian"]'),
+    ).toBeVisible();
   });
 });

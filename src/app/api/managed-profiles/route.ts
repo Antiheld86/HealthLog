@@ -6,11 +6,29 @@ import {
   MFA_STEP_UP_MAX_AGE_SECONDS,
   requireFreshMfa,
 } from "@/lib/api-handler";
-import { apiSuccess, returnAllZodIssues, safeJson } from "@/lib/api-response";
+import {
+  apiError,
+  apiSuccess,
+  returnAllZodIssues,
+  safeJson,
+} from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
 import { createManagedProfile } from "@/lib/managed-profiles/create";
 import { annotate } from "@/lib/logging/context";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { isValidTimezone } from "@/lib/tz/format";
+
+/**
+ * The same ceiling its guardian sibling carries, and for the same reason.
+ *
+ * `POST /api/managed-profiles/{id}/guardians` has been rate-limited at ten an
+ * hour since it shipped; this route creates a real account row on every call
+ * and had none. A person cannot mistype their way into a hundred accounts, but
+ * a script can, and the two endpoints of one family answering differently to
+ * the same abuse is the kind of asymmetry nobody notices until it is used.
+ */
+const CREATE_LIMIT = 10;
+const CREATE_WINDOW_MS = 60 * 60 * 1000;
 
 const managedProfileSchema = z
   .object({
@@ -32,6 +50,16 @@ const managedProfileSchema = z
  */
 export const POST = apiHandler(async (request: NextRequest) => {
   const { user } = await requireFreshMfa(MFA_STEP_UP_MAX_AGE_SECONDS);
+  // Before the body is read, exactly as the guardian route does it: the cheap
+  // refusal comes first so a flood costs a bucket lookup rather than a parse.
+  const rateLimit = await checkRateLimit(
+    `managed-profile:create:${user.id}`,
+    CREATE_LIMIT,
+    CREATE_WINDOW_MS,
+  );
+  if (!rateLimit.allowed) {
+    return apiError("Too many profiles created, try again later", 429);
+  }
   const { data: body, error: jsonError } = await safeJson(request, {
     maxBytes: 64 * 1024,
   });

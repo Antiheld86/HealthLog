@@ -227,4 +227,47 @@ describe("the eight release journeys are enumerated", () => {
       expect(journey.claim.length, journey.id).toBeGreaterThan(40);
     }
   });
+
+  /**
+   * v1.37.0 — the ids that are wired to a test title, and only those.
+   *
+   * The enumeration above says eight journeys exist. It says nothing about
+   * whether any of them RAN, which is the same gap between "the suite is
+   * green" and "the suite covers this" that the rest of this file exists to
+   * close. Wiring all eight is the integration plan's item; this list is the
+   * subset already claimed by a spec, and it grows as they land.
+   *
+   * An id on this list whose spec loses the marker fails here rather than
+   * disappearing quietly from a run nobody counted.
+   */
+  const WIRED_JOURNEYS: ReadonlyArray<{ id: string; spec: string }> = [
+    {
+      id: "J3-managed-profile-lifecycle",
+      spec: "e2e/v137-sharing-managed-profiles.spec.ts",
+    },
+  ];
+
+  it("claims only ids the enumeration actually declares", () => {
+    // A wiring entry naming a journey nobody enumerated would be a claim about
+    // nothing, and would make the leg below pass against a marker that means
+    // no more than the string it is.
+    expect(WIRED_JOURNEYS.length).toBeGreaterThan(0);
+    const declared = new Set(V137_E2E_JOURNEYS.map((j) => j.id));
+    for (const { id } of WIRED_JOURNEYS) {
+      expect(declared, id).toContain(id);
+    }
+  });
+
+  it.each(WIRED_JOURNEYS)("$id is carried by a test title", ({ id, spec }) => {
+    const source = readFileSync(join(ROOT, spec), "utf8");
+    // Non-zero proof: the spec really loaded and really has tests, so a path
+    // that stopped existing fails here rather than matching nothing quietly.
+    expect(source.length).toBeGreaterThan(1000);
+    const titles = [...testBodies(source).keys()];
+    expect(titles.length).toBeGreaterThan(1);
+    expect(
+      titles.filter((title) => title.includes(`[${id}]`)).length,
+      `no test title in ${spec} carries [${id}]`,
+    ).toBeGreaterThan(0);
+  });
 });

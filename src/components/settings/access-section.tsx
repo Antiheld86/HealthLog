@@ -3,6 +3,7 @@
 import { GrantInviteCard } from "@/components/settings/access/grant-invite-card";
 import { GrantsGivenCard } from "@/components/settings/access/grants-given-card";
 import { GrantsReceivedCard } from "@/components/settings/access/grants-received-card";
+import { ManagedProfileCard } from "@/components/settings/access/managed-profile-card";
 import { RecordActivityCard } from "@/components/settings/access/record-activity-card";
 
 /**
@@ -15,9 +16,18 @@ import { RecordActivityCard } from "@/components/settings/access/record-activity
  * somebody reads them:
  *
  *   1. Invite — the act.
- *   2. Who has access — the standing state, and the way to end it.
- *   3. What I can open — the same, from the other side.
- *   4. When it was opened — what actually happened.
+ *   2. Records you look after — the other act, and the one that CREATES a
+ *      record rather than opening one that already exists.
+ *   3. Who has access — the standing state, and the way to end it.
+ *   4. What I can open — the same, from the other side.
+ *   5. When it was opened — what actually happened.
+ *
+ * v1.37.0 put the managed-profile card second rather than in a settings area
+ * of its own. A managed profile is a record with no login, reachable only
+ * through the people who look after it — which is the same question this
+ * section already answers twice, from a third side. Splitting it out would
+ * have made "who may open which record" two half-answers on two pages, which
+ * is the settings-IA rule below in miniature.
  *
  * Distinct from Settings → "Health record" → sharing links, which mints a
  * time-boxed read-only link to a REPORT for a clinician. This section is about
@@ -35,6 +45,7 @@ export function AccessSection() {
   return (
     <div className="space-y-4">
       <GrantInviteCard />
+      <ManagedProfileCard />
       <GrantsGivenCard />
       <GrantsReceivedCard />
       <RecordActivityCard />
