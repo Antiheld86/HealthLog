@@ -5,6 +5,7 @@ import {
   closeDocumentSelectionAfterCoachHandoff,
   documentSelectionHistoryState,
   documentSelectionHref,
+  documentSelectionSurvivedClose,
   withoutDocumentSelectionHref,
 } from "../documents-view";
 
@@ -172,5 +173,45 @@ describe("document vault URL selection", () => {
     );
 
     expect(history.href).toBe("/documents?episode=ep-1");
+  });
+
+  // ── The dropped traversal ────────────────────────────────────────────────
+  //
+  // `history.back()` is a request. A traversal asked for while another is
+  // still settling can be dropped, and the browser says nothing: the sheet
+  // closes, React stays consistent, and the address bar keeps naming a
+  // document nobody has open. Reproduced in the browser suite as a closed
+  // sheet whose `?doc=` never cleared; this is the predicate the component
+  // uses to notice it.
+
+  it("reports a selection that survived its own close", () => {
+    expect(
+      documentSelectionSurvivedClose("?episode=ep-1&doc=doc-1", "doc-1"),
+    ).toBe(true);
+  });
+
+  it("reports nothing to do once the traversal landed", () => {
+    expect(documentSelectionSurvivedClose("?episode=ep-1", "doc-1")).toBe(
+      false,
+    );
+  });
+
+  it("leaves a DIFFERENT selection alone", () => {
+    // The traversal landed somewhere that carries its own selection. Stripping
+    // that would close a sheet this close had nothing to do with.
+    expect(
+      documentSelectionSurvivedClose("?episode=ep-1&doc=doc-2", "doc-1"),
+    ).toBe(false);
+  });
+
+  it("strips only the selection when the fallback runs", () => {
+    // What the component does with a true verdict, on the URL shape that
+    // produced it: every unrelated parameter survives.
+    expect(
+      withoutDocumentSelectionHref(
+        "/documents",
+        "episode=ep-1&view=compact&q=MRT&doc=doc-1",
+      ),
+    ).toBe("/documents?episode=ep-1&view=compact&q=MRT");
   });
 });

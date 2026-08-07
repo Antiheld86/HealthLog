@@ -120,6 +120,30 @@ export function withoutDocumentSelectionHref(
   return search ? `${pathname}?${search}` : pathname;
 }
 
+/**
+ * How long to wait before checking that `history.back()` actually happened.
+ *
+ * Long enough for a traversal to commit on a loaded machine, short enough that
+ * a reader who closed the sheet does not see the selection linger in the
+ * address bar. The window is bounded on the other side too: the effect that
+ * arms this cancels it as soon as the sheet re-opens.
+ */
+export const CLOSE_TRAVERSAL_GRACE_MS = 250;
+
+/**
+ * The selection this close was meant to consume is still in the address bar.
+ *
+ * Matched on the id rather than on the presence of `doc`, so a traversal that
+ * landed somewhere carrying a DIFFERENT selection is not mistaken for a
+ * dropped one and stripped.
+ */
+export function documentSelectionSurvivedClose(
+  search: string,
+  documentId: string,
+): boolean {
+  return new URLSearchParams(search).get("doc") === documentId;
+}
+
 export function closeDocumentSelectionHistoryEntry(
   history: {
     readonly state: unknown;
@@ -711,6 +735,33 @@ export function DocumentsView() {
       handedOffDocumentRef.current,
       coachLaunch?.closeIntent,
     );
+
+    // Consuming the pushed entry is a REQUEST to the browser, not a guarantee.
+    //
+    // `history.back()` is queued against the session history, and a traversal
+    // asked for while another is still settling can be dropped — closing the
+    // sheet immediately after pressing the browser's Forward button is exactly
+    // that shape. Nothing raises when it happens: the sheet is closed, React
+    // is consistent, and the URL still names the document. A reload or a
+    // shared link then re-opens the sheet the reader just closed.
+    //
+    // So the request is checked rather than trusted. If the selection is still
+    // in the address bar shortly afterwards, it is removed the synchronous
+    // way. The guard is the document id, so a traversal that landed on some
+    // other selection is left alone, and the cleanup below cancels the check
+    // the moment the sheet re-opens or the parameter changes — which is what
+    // makes re-opening within the window safe.
+    const verify = window.setTimeout(() => {
+      if (!documentSelectionSurvivedClose(window.location.search, docParam)) {
+        return;
+      }
+      window.history.replaceState(
+        null,
+        "",
+        withoutDocumentSelectionHref(pathname, window.location.search),
+      );
+    }, CLOSE_TRAVERSAL_GRACE_MS);
+    return () => window.clearTimeout(verify);
   }, [
     authLoading,
     coachOwnsDocument,
