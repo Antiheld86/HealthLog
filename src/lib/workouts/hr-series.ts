@@ -83,26 +83,54 @@ function median(values: number[]): number {
 }
 
 /**
+ * The session's own length on the wall clock.
+ *
+ * `durationSec` is a denormalised DURATION, and not every source reports
+ * the elapsed one — Strava sends `moving_time` while the row's `endedAt`
+ * is `startedAt + elapsed_time` (`src/lib/strava/client.ts`). A ride with
+ * twenty minutes of stops therefore carries a `durationSec` twenty
+ * minutes shorter than its own span, and a curve folded against it ends
+ * at the moving-time mark with no gap and no marker: the tail of the
+ * session simply is not there. The curve covers the session, so the span
+ * is what it folds over.
+ *
+ * The duration stays the floor. A row whose `endedAt` is not after its
+ * `startedAt` (a manual entry saved with one timestamp, a provider that
+ * shipped an end it could not resolve) has no usable span, and every
+ * source that computes `endedAt` from the duration lands on the same
+ * number either way.
+ */
+export function sessionSpanSec(
+  startedAt: Date,
+  endedAt: Date,
+  durationSec: number,
+): number {
+  const floor = Math.max(0, durationSec);
+  const span = Math.round((endedAt.getTime() - startedAt.getTime()) / 1000);
+  return Number.isFinite(span) && span > floor ? span : floor;
+}
+
+/**
  * Fold raw HR samples into session-grain buckets. Samples outside the
- * session window `[0, durationSec)` are dropped from the curve (they
- * only widen the DB query so a boundary reading still lands in bucket
- * 0 / the last bucket). Empty buckets stay as gaps — no interpolation.
+ * session window `[0, spanSec)` are dropped from the curve (they only
+ * widen the DB query so a boundary reading still lands in bucket 0 / the
+ * last bucket). Empty buckets stay as gaps — no interpolation.
  * Pure; exported for unit testing.
  */
 export function foldHrBuckets(
   samples: readonly RawHrSample[],
   startMs: number,
-  durationSec: number,
+  spanSec: number,
   bucketSec: number,
 ): { points: HrSeriesPoint[]; bucketCount: number; medianDensity: number } {
-  const bucketCount = Math.max(1, Math.ceil(durationSec / bucketSec));
+  const bucketCount = Math.max(1, Math.ceil(spanSec / bucketSec));
   const acc = new Map<
     number,
     { sum: number; min: number; max: number; n: number }
   >();
   for (const s of samples) {
     const rel = (s.tMs - startMs) / 1000;
-    if (rel < 0 || rel >= durationSec) continue;
+    if (rel < 0 || rel >= spanSec) continue;
     const idx = Math.floor(rel / bucketSec);
     const bucket = acc.get(idx);
     if (bucket) {
@@ -171,7 +199,11 @@ export async function buildWorkoutHrSeries(
   const { userId, startedAt, endedAt, durationSec, storedSamples } = input;
   const now = input.now ?? new Date();
   const startMs = startedAt.getTime();
-  const bucketSec = adaptiveBucketSec(durationSec);
+  // Fold over the session's span, not its duration — see `sessionSpanSec`.
+  // The bucket width tracks the span too, so a stop-heavy ride keeps the
+  // same on-screen point density as a continuous one of the same length.
+  const spanSec = sessionSpanSec(startedAt, endedAt, durationSec);
+  const bucketSec = adaptiveBucketSec(spanSec);
 
   // 1. Stored series — the native, highest-fidelity path.
   const stored = parseStoredSamples(storedSamples);
@@ -179,7 +211,7 @@ export async function buildWorkoutHrSeries(
     const { points, medianDensity } = foldHrBuckets(
       stored,
       startMs,
-      durationSec,
+      spanSec,
       bucketSec,
     );
     if (points.length >= 2) {
@@ -222,7 +254,7 @@ export async function buildWorkoutHrSeries(
   const { points, bucketCount, medianDensity } = foldHrBuckets(
     raw,
     startMs,
-    durationSec,
+    spanSec,
     bucketSec,
   );
 

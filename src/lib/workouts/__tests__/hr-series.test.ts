@@ -180,3 +180,74 @@ describe("buildWorkoutHrSeries", () => {
     expect(findMany).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * `durationSec` is a denormalised DURATION, and not every source reports
+ * the elapsed one: Strava sends `moving_time` while the row's `endedAt`
+ * is `startedAt + elapsed_time`. A ride with 20 minutes of stops
+ * therefore carries a `durationSec` 20 minutes shorter than its own
+ * wall-clock span, and folding the curve against it drops every reading
+ * after the moving-time mark — the tail of the session vanishes with no
+ * gap, no marker, nothing that reads as missing.
+ */
+describe("buildWorkoutHrSeries — sessions whose duration is not their span", () => {
+  const SPAN_SEC = 3600;
+  const MOVING_SEC = 2400;
+  const strava = {
+    userId: "u1",
+    startedAt: START,
+    endedAt: new Date(startMs + SPAN_SEC * 1000),
+    durationSec: MOVING_SEC,
+    now: new Date(startMs + SPAN_SEC * 1000 + 1000),
+  };
+
+  it("carries a stored series to the end of the session, not to the moving-time mark", async () => {
+    const stored = Array.from({ length: SPAN_SEC / 15 }, (_, i) =>
+      storedSample(i * 15, 120 + (i % 20)),
+    );
+    const result = await buildWorkoutHrSeries({
+      ...strava,
+      storedSamples: stored,
+    });
+    expect(result).not.toBeNull();
+    const lastTSec = result!.points[result!.points.length - 1].tSec;
+    // The final bucket sits within one bucket width of the session end.
+    expect(lastTSec).toBeGreaterThanOrEqual(SPAN_SEC - result!.bucketSec);
+    expect(lastTSec).toBeLessThan(SPAN_SEC);
+  });
+
+  it("carries a pulse-window series past the moving-time mark too", async () => {
+    const rows = Array.from({ length: SPAN_SEC / 20 }, (_, i) => ({
+      value: 125 + (i % 9),
+      measuredAt: new Date(startMs + i * 20_000),
+      externalId: null,
+    }));
+    findMany.mockResolvedValue(rows);
+    const result = await buildWorkoutHrSeries({
+      ...strava,
+      storedSamples: null,
+    });
+    expect(result).not.toBeNull();
+    expect(result!.source).toBe("pulse_window");
+    const lastTSec = result!.points[result!.points.length - 1].tSec;
+    expect(lastTSec).toBeGreaterThan(MOVING_SEC);
+    // The rows sit 20 s apart, so the final one can miss the very last
+    // bucket; landing within a sample interval of the end is the claim.
+    expect(lastTSec).toBeGreaterThanOrEqual(SPAN_SEC - 20 - result!.bucketSec);
+  });
+
+  it("keeps the duration as the floor when the row carries no usable span", async () => {
+    const stored = Array.from({ length: 40 }, (_, i) =>
+      storedSample(i * 15, 130),
+    );
+    const result = await buildWorkoutHrSeries({
+      ...strava,
+      // A row whose end is not after its start: the span is unusable, so
+      // the denormalised duration has to stay the fold window.
+      endedAt: START,
+      storedSamples: stored,
+    });
+    expect(result).not.toBeNull();
+    expect(result!.bucketSec).toBe(adaptiveBucketSec(MOVING_SEC));
+  });
+});
