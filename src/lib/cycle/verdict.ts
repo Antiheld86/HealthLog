@@ -116,6 +116,21 @@ export interface ResolveCycleVerdictInput {
   /** Already goal- and cold-start-gated fertile window bounds. */
   fertileWindowStart?: string | null;
   fertileWindowEnd?: string | null;
+  /**
+   * The latest LOGGED period start at or before today, or null when the record
+   * holds none. Read straight off the cycle rows, never off the grid.
+   *
+   * The grid's phase labels are gated: the calendar suppresses the whole phase
+   * band while the engine is still learning (fewer than three observed cycles),
+   * because a population-framed phase word off one or two cycles is not earned.
+   * The day count is not that kind of claim — it is the number of days since a
+   * start the person entered themselves — but deriving it from the labelled run
+   * meant the gate took both, and a record with three logged periods rendered an
+   * empty ring under an offer to log a first period. This anchor keeps the count
+   * and the honest overdue judgement available when the labels are withheld;
+   * the phase stays null, which is the part the gate is actually about.
+   */
+  lastPeriodStart?: string | null;
 }
 
 /** Below this many labelled days in the current cycle run, the ring would
@@ -235,6 +250,41 @@ function resolveFertileWindow(
 }
 
 /**
+ * The verdict for a record whose grid carries no phase for today but whose
+ * cycle rows carry a logged period start: count from that start, and apply the
+ * same overdue ceiling. No phase is claimed — that is exactly the claim the
+ * missing labels were withholding. Null when no start precedes today, which is
+ * the one case that really is INSUFFICIENT_DATA.
+ */
+function verdictFromLoggedStart(
+  input: ResolveCycleVerdictInput,
+  fertileWindow: CycleVerdict["fertileWindow"],
+  daysUntilNext: number | null,
+): CycleVerdict | null {
+  const { today, profile, lastPeriodStart } = input;
+  if (!lastPeriodStart) return null;
+  const elapsed = dayDiff(today, lastPeriodStart);
+  if (elapsed < 0) return null;
+
+  const dayOfCycle = elapsed + 1;
+  const typicalLength = typicalCycleLength(profile);
+  const ideal = idealizedSpans(profile);
+  const overdue = dayOfCycle > typicalLength + OVERDUE_GRACE_DAYS;
+
+  return {
+    state: overdue ? "OVERDUE" : "IN_CYCLE",
+    dayOfCycle: overdue ? null : dayOfCycle,
+    cycleLength: ideal.cycleLength,
+    phase: null,
+    spans: ideal.spans,
+    cycleStartDate: lastPeriodStart,
+    overdueDays: overdue ? dayOfCycle - typicalLength : null,
+    daysUntilNext,
+    fertileWindow,
+  };
+}
+
+/**
  * Resolve everything a client needs to render the cycle ring and its caption.
  * The only place in the product that decides any of it.
  */
@@ -259,12 +309,22 @@ export function resolveCycleVerdict(
     fertileWindow,
   };
 
-  if (!todayDay || todayDay.phase == null) return nothingToSay;
+  if (!todayDay || todayDay.phase == null) {
+    return (
+      verdictFromLoggedStart(input, fertileWindow, daysUntilNext) ??
+      nothingToSay
+    );
+  }
 
   // Sort dates ascending and find today's index.
   const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
   const todayIdx = sorted.findIndex((d) => d.date === today);
-  if (todayIdx < 0) return nothingToSay;
+  if (todayIdx < 0) {
+    return (
+      verdictFromLoggedStart(input, fertileWindow, daysUntilNext) ??
+      nothingToSay
+    );
+  }
 
   const startIdx = findCycleStartIndex(sorted, todayIdx);
   const cycleStartDate = sorted[startIdx].date;

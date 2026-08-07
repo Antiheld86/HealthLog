@@ -163,6 +163,60 @@ describe("resolveCycleVerdict — what the record supports", () => {
     expect(v.cycleLength).toBe(8);
   });
 
+  it("counts off the logged start when the grid withholds its phase labels", () => {
+    // What the calendar hands over while the engine is still learning: a grid
+    // with every phase suppressed. The count is not the suppressed claim.
+    const days = [day("2026-06-01", null), day("2026-06-11", null)];
+    const v = resolveCycleVerdict({
+      days,
+      today: "2026-06-11",
+      profile: { typicalCycleLength: 28 },
+      lastPeriodStart: "2026-06-01",
+    });
+    expect(v.state).toBe("IN_CYCLE");
+    expect(v.dayOfCycle).toBe(11);
+    expect(v.cycleStartDate).toBe("2026-06-01");
+    expect(v.phase).toBeNull();
+    expect(v.spans).toHaveLength(4);
+  });
+
+  it("says how late a period is with no phase labels to read", () => {
+    const days = [day("2026-06-11", null)];
+    const v = resolveCycleVerdict({
+      days,
+      today: "2026-06-11",
+      profile: { typicalCycleLength: 28 },
+      lastPeriodStart: "2026-04-22",
+    });
+    expect(v.state).toBe("OVERDUE");
+    expect(v.dayOfCycle).toBeNull();
+    expect(v.overdueDays).toBe(23);
+    expect(v.cycleStartDate).toBe("2026-04-22");
+  });
+
+  it("counts off the logged start when today is absent from the grid", () => {
+    const days = [day("2026-06-01", "MENSTRUAL")];
+    const v = resolveCycleVerdict({
+      days,
+      today: "2026-06-09",
+      lastPeriodStart: "2026-06-01",
+    });
+    expect(v.state).toBe("IN_CYCLE");
+    expect(v.dayOfCycle).toBe(9);
+  });
+
+  it("keeps INSUFFICIENT_DATA when the anchor is ahead of today", () => {
+    // A start dated in the future is not a cycle the person is in.
+    const days = [day("2026-06-02", null)];
+    const v = resolveCycleVerdict({
+      days,
+      today: "2026-06-02",
+      lastPeriodStart: "2026-06-20",
+    });
+    expect(v.state).toBe("INSUFFICIENT_DATA");
+    expect(v.cycleStartDate).toBeNull();
+  });
+
   it("draws the canonical four arcs for a low-data tracker", () => {
     // A two-day first-ever run: the observed-share math would let MENSTRUAL
     // fill nearly the whole circle, so the ring falls back to the profile's

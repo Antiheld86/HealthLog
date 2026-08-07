@@ -401,6 +401,72 @@ describe("GET /api/cycle/calendar carries the resolved verdict", () => {
     });
   });
 
+  /**
+   * The cold-start gate suppresses the PHASE band while the engine is still
+   * learning — a population-framed phase word off one or two cycles is not
+   * earned. The day count is not a guess: it is the number of days since a
+   * start the person logged themselves. Reading it off the phase labels meant
+   * the gate took both, so a record with three logged periods rendered an
+   * empty ring and offered to log a first period.
+   */
+  describe("while the engine is still learning", () => {
+    it("still counts the cycle day off the logged start", async () => {
+      const today = "2026-06-11";
+      const lastStart = addDays(today, -10);
+      // Three starts → two observed lengths → under the three-cycle gate.
+      vi.mocked(prisma.menstrualCycle.findMany).mockResolvedValue(
+        cycleRows([
+          addDays(lastStart, -56),
+          addDays(lastStart, -28),
+          lastStart,
+        ]) as never,
+      );
+      vi.mocked(getSession).mockResolvedValue(session("UTC") as never);
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(`${today}T12:00:00Z`));
+
+      const { body } = await callCalendar();
+      const data = body.data as Record<string, unknown>;
+      // The gate really is on, so the phase below is suppressed rather than absent.
+      expect(data.stillLearning).toBe(true);
+
+      const verdict = data.verdict as Record<string, unknown>;
+      expect(verdict.state).toBe("IN_CYCLE");
+      expect(verdict.dayOfCycle).toBe(11);
+      expect(verdict.cycleStartDate).toBe(lastStart);
+      // No phase claim — that part of the gate stands.
+      expect(verdict.phase).toBeNull();
+      // The ring still draws a full wheel rather than an empty circle.
+      expect(verdict.spans).toHaveLength(4);
+    });
+
+    it("still says how late a period is", async () => {
+      const today = "2026-06-11";
+      const lastStart = addDays(today, -50);
+      vi.mocked(prisma.menstrualCycle.findMany).mockResolvedValue(
+        cycleRows([
+          addDays(lastStart, -56),
+          addDays(lastStart, -28),
+          lastStart,
+        ]) as never,
+      );
+      vi.mocked(getSession).mockResolvedValue(session("UTC") as never);
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date(`${today}T12:00:00Z`));
+
+      const { body } = await callCalendar();
+      const verdict = (body.data as Record<string, unknown>).verdict as Record<
+        string,
+        unknown
+      >;
+
+      // Day 51 against a stated 28-day typical plus 14 days of grace.
+      expect(verdict.state).toBe("OVERDUE");
+      expect(verdict.overdueDays).toBe(23);
+      expect(verdict.cycleStartDate).toBe(lastStart);
+    });
+  });
+
   it("says INSUFFICIENT_DATA when nothing has been logged", async () => {
     vi.mocked(prisma.menstrualCycle.findMany).mockResolvedValue([] as never);
     vi.mocked(getSession).mockResolvedValue(session("UTC") as never);
