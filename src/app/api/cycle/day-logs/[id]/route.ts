@@ -23,7 +23,11 @@ import {
   safeJson,
 } from "@/lib/api-response";
 import { requireCycleEnabled } from "@/lib/cycle/gate";
-import { reanchorAfterRemovedStart } from "@/lib/cycle/cycle-boundaries";
+import {
+  ensureCycleForBleedingDay,
+  removeCycleStartedOn,
+} from "@/lib/cycle/cycle-boundaries";
+import { DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { getOrCreateCycleProfile } from "@/lib/cycle/profile";
 import { replaceSymptomLinks } from "@/lib/cycle/day-log-write";
@@ -158,6 +162,26 @@ export const PATCH = apiHandler(
       include: dayLogSymptomInclude,
     });
 
+    // An edit that turns a day into a first bleeding day opens the cycle it
+    // starts, and an edit that takes the bleeding back off it removes the
+    // cycle that day opened. Both directions go through the same shared
+    // boundary work the capture route and the one-tap start use — a cycle that
+    // could be created here but not undone here is how the record ends up
+    // holding a period nothing on the day says happened.
+    const openedCycleId = await ensureCycleForBleedingDay(
+      user.id,
+      existing.date,
+      user.timezone ?? DEFAULT_TIMEZONE,
+      row,
+    );
+    let removedCycleId: string | null = null;
+    if (!openedCycleId && !stillBleeds(row)) {
+      const removed = await prisma.$transaction((db) =>
+        removeCycleStartedOn(db, user.id, existing.date),
+      );
+      removedCycleId = removed?.cycleId ?? null;
+    }
+
     await auditLog("cycle.day-log.update", {
       userId: user.id,
       ipAddress: getClientIp(request),
@@ -167,6 +191,8 @@ export const PATCH = apiHandler(
       details: {
         dayLogId: id,
         date: existing.date,
+        ...(openedCycleId ? { openedCycleId } : {}),
+        ...(removedCycleId ? { removedCycleId } : {}),
         ...overwriteDetails({
           before: {},
           after: {},
@@ -183,6 +209,10 @@ export const PATCH = apiHandler(
         name: "cycle.day-log.update",
         entity_type: "cycle_day_log",
         entity_id: id,
+      },
+      meta: {
+        opened_cycle: openedCycleId !== null,
+        removed_cycle: removedCycleId !== null,
       },
     });
 
@@ -224,19 +254,7 @@ export const DELETE = apiHandler(
         where: { id },
         data: { deletedAt: new Date(), syncVersion: { increment: 1 } },
       });
-      const openedCycle = await db.menstrualCycle.findFirst({
-        where: { userId: user.id, deletedAt: null, startDate: existing.date },
-        select: { id: true },
-      });
-      if (!openedCycle) return { cycleId: null, reanchored: null };
-      await db.menstrualCycle.update({
-        where: { id: openedCycle.id },
-        data: { deletedAt: new Date(), syncVersion: { increment: 1 } },
-      });
-      return {
-        cycleId: openedCycle.id,
-        reanchored: await reanchorAfterRemovedStart(db, user.id, existing.date),
-      };
+      return removeCycleStartedOn(db, user.id, existing.date);
     });
 
     await auditLog("cycle.day-log.delete", {
@@ -245,8 +263,8 @@ export const DELETE = apiHandler(
       details: {
         dayLogId: id,
         date: existing.date,
-        ...(removed.cycleId ? { removedCycleId: removed.cycleId } : {}),
-        ...(removed.reanchored
+        ...(removed ? { removedCycleId: removed.cycleId } : {}),
+        ...(removed?.reanchored
           ? {
               reanchoredCycleId: removed.reanchored.cycleId,
               ...overwriteDetails({
@@ -271,8 +289,8 @@ export const DELETE = apiHandler(
         entity_id: id,
       },
       meta: {
-        removed_cycle: removed.cycleId !== null,
-        reanchored_prior: removed.reanchored !== null,
+        removed_cycle: removed !== null,
+        reanchored_prior: removed?.reanchored != null,
       },
     });
 
@@ -326,4 +344,16 @@ function readStoredSensitive(row: {
     progesteroneTest: row.progesteroneTest,
     contraceptive: row.contraceptive,
   };
+}
+
+/**
+ * Whether the edited day still records a period. A cleared or downgraded flow,
+ * or one re-flagged as bleeding between periods, no longer anchors a cycle.
+ */
+function stillBleeds(row: {
+  flow: string | null;
+  intermenstrualBleeding: boolean;
+}): boolean {
+  if (row.intermenstrualBleeding) return false;
+  return row.flow !== null && row.flow !== "NONE" && row.flow !== "SPOTTING";
 }
