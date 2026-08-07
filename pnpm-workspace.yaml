@@ -12,6 +12,14 @@ overrides:
   # rate limiter where nothing of ours screens it.
   "ip-address@<10.3.1": "^10.3.1"
   "sharp@<0.35.0": "^0.35.3"
+  # A crafted PDF could run arbitrary JavaScript through the renderer. Our own
+  # copy is pinned past it in `devDependencies`, but a second copy arrives
+  # transitively, and `outputFileTracingIncludes` ships EVERY `pdfjs-dist@*` in
+  # the store into the standalone image — so an unused transitive copy is still
+  # a copy in the runtime image. The range is bounded on both ends deliberately:
+  # `pdf-parse` resolves 5.4.296, which predates the flaw and drives the local
+  # text-extraction path, so it must not be dragged onto a new major.
+  "pdfjs-dist@>=5.6.83 <6.2.108": "6.2.108"
 
 allowBuilds:
   "@prisma/engines": true
