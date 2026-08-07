@@ -19,7 +19,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
-import { useAuth } from "@/hooks/use-auth";
+import { useAccountOnceMounted, useAuth } from "@/hooks/use-auth";
+import { useMounted } from "@/hooks/use-mounted";
 import { useTranslations } from "@/lib/i18n/context";
 import { formatDate } from "@/lib/format";
 import { useAchievementsQuery } from "@/lib/queries/use-achievements-query";
@@ -83,7 +84,12 @@ const RECENT_LIMIT = 3;
  */
 export function RecentAchievementsCard() {
   const { t } = useTranslations();
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
+  // Withheld until mounted for the same reason the skeleton gate below is:
+  // this card paints inside the dashboard's streamed boundary, and a module
+  // gate that reads the account on the hydration render disagrees with the
+  // server, which had none. See `useAccountOnceMounted`.
+  const user = useAccountOnceMounted();
 
   // v1.18.0 — the achievements module gate. When the account has the
   // module turned off the dashboard tile disappears entirely (the data
@@ -101,6 +107,16 @@ export function RecentAchievementsCard() {
   const { data, isPending } = useAchievementsQuery({
     enabled: isAuthenticated && achievementsEnabled,
   });
+
+  // The dashboard is a streamed Suspense boundary and hydrates after the app
+  // shell. `<AchievementUnlockNotifier>` mounts with the shell and shares this
+  // exact cache cell, so by the time this card replays its first render on the
+  // client the payload is often already there — where the server had nothing
+  // and painted the skeleton. Pinning the loading branch to the mount snapshot
+  // keeps the hydration render identical to the server's; the unlocks land on
+  // the re-render right after. See `useMounted`.
+  const mounted = useMounted();
+  const showSkeleton = !mounted || isPending;
 
   const recent = pickRecentUnlocks(data?.achievements ?? [], RECENT_LIMIT);
 
@@ -132,7 +148,7 @@ export function RecentAchievementsCard() {
         }
       />
 
-      {isPending ? (
+      {showSkeleton ? (
         <ul
           data-slot="recent-achievements-skeleton"
           aria-hidden="true"

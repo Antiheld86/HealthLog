@@ -200,9 +200,12 @@ describe("display-transform rounding guard — the bypass freeze", () => {
 
   it("every allowlisted surface still converts its rendered values", () => {
     // The chart formats its own series; anything these files render outside
-    // the chart must come back through the preference hook.
+    // the chart must come back through the preference hook. Either reading of
+    // it counts: a surface that paints inside a streamed page boundary takes
+    // `useUnitDisplayOnceMounted()`, which is the same sugar with the
+    // preference withheld from the hydration render.
     const offenders = RAW_SCALE_SURFACES.filter(
-      (rel) => !read(rel).includes("useUnitDisplay()"),
+      (rel) => !/\buseUnitDisplay(OnceMounted)?\(\)/.test(read(rel)),
     );
     expect(offenders).toEqual([]);
   });

@@ -61,7 +61,15 @@ export function VorsorgeDashboardCard() {
   // the dashboard summary offering what the dedicated page withholds was the
   // tell that this row had never been asked.
   const { canManage } = useRecordCapabilities();
-  const { data: reminders, isLoading } = useMeasurementReminders();
+  const { data: reminders, isError } = useMeasurementReminders();
+
+  // A query's `isLoading` is not a hydration-safe branch: TanStack reports the
+  // optimistic mount fetch on the client's very first render and cannot on the
+  // server, so an `isLoading` gate renders one thing in the streamed HTML and
+  // another in the hydration render — React #418, and the whole streamed
+  // dashboard is discarded. Gate on what both sides can see instead: whether
+  // the cell holds an answer yet.
+  const showLoading = !reminders && !isError;
   const { satisfy } = useMeasurementReminderMutations();
   const [now] = useState(() => Date.now());
   const [capturing, setCapturing] = useState<MeasurementReminder | null>(null);
@@ -102,7 +110,7 @@ export function VorsorgeDashboardCard() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
-        {isLoading ? (
+        {showLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 2 }, (_, i) => (
               <Skeleton key={i} className="h-12 w-full" />

@@ -18,7 +18,17 @@ let mockUser: { modules?: Record<string, boolean> } | null = {};
 
 vi.mock("@/hooks/use-auth", () => ({
   useAuth: () => ({ isAuthenticated: true, user: mockUser }),
+  useAccountOnceMounted: () => mockUser,
 }));
+
+// The card paints its skeleton until it is mounted, because the achievements
+// cell is shared with `<AchievementUnlockNotifier>` in the app shell: on a
+// cold load of the dashboard that cell is often already full by the time this
+// card hydrates, where the server had nothing, and a content branch there is a
+// hydration mismatch that costs the whole streamed page. These cases are about
+// the MOUNTED render, so the flag is stubbed to what it answers from the first
+// client re-render on.
+vi.mock("@/hooks/use-mounted", () => ({ useMounted: () => true }));
 
 let mockData:
   | {

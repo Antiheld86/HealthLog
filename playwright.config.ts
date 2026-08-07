@@ -1,5 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import {
+  SSR_PREFETCH_BASE_URL,
+  SSR_PREFETCH_PORT,
+} from "./e2e/setup/ssr-prefetch-server";
+
 /**
  * Playwright configuration for the HealthLog E2E suite.
  *
@@ -94,28 +99,57 @@ export default defineConfig({
   // to point at an already-running dev server.
   webServer: process.env.E2E_SKIP_WEB_SERVER
     ? undefined
-    : {
-        command: `mkdir -p .next/standalone/.next/static .next/standalone/public && cp -R .next/static/. .next/standalone/.next/static && cp -R public/. .next/standalone/public && PORT=3000 HOSTNAME=127.0.0.1 ${JSON.stringify(process.execPath)} .next/standalone/server.js`,
-        url: "http://localhost:3000/api/version",
-        timeout: 60_000,
-        reuseExistingServer: !process.env.CI,
-        stdout: "ignore",
-        stderr: "pipe",
-        env: {
-          ...process.env,
-          // Native document rendering is fail-soft and outside the browser
-          // suite. Disable it here so queued local thumbnail jobs cannot
-          // crash the shared server inside Skia during unrelated scenarios.
-          NATIVE_CANVAS: "off",
-          // The dashboard RSC wrapper server-prefetches the snapshot into
-          // the first HTML (HydrationBoundary). Playwright's route mocks
-          // only see CLIENT fetches, so an SSR-embedded snapshot would
-          // bypass `mockDashboardSnapshot` and every dashboard spec would
-          // assert against the seeded account instead of its fixture.
-          // Disable the prefetch for the e2e server — the suite keeps the
-          // deterministic client-fetch path; the SSR fast path is
-          // verified by Lighthouse/manual passes.
-          DASHBOARD_SSR_PREFETCH: "false",
+    : [
+        {
+          command: `mkdir -p .next/standalone/.next/static .next/standalone/public && cp -R .next/static/. .next/standalone/.next/static && cp -R public/. .next/standalone/public && PORT=3000 HOSTNAME=127.0.0.1 ${JSON.stringify(process.execPath)} .next/standalone/server.js`,
+          url: "http://localhost:3000/api/version",
+          timeout: 60_000,
+          reuseExistingServer: !process.env.CI,
+          stdout: "ignore",
+          stderr: "pipe",
+          env: {
+            ...process.env,
+            // Native document rendering is fail-soft and outside the browser
+            // suite. Disable it here so queued local thumbnail jobs cannot
+            // crash the shared server inside Skia during unrelated scenarios.
+            NATIVE_CANVAS: "off",
+            // The dashboard RSC wrapper server-prefetches the snapshot into
+            // the first HTML (HydrationBoundary). Playwright's route mocks
+            // only see CLIENT fetches, so an SSR-embedded snapshot would
+            // bypass `mockDashboardSnapshot` and every dashboard spec would
+            // assert against the seeded account instead of its fixture.
+            // Disable the prefetch for the e2e server — the suite keeps the
+            // deterministic client-fetch path.
+            DASHBOARD_SSR_PREFETCH: "false",
+          },
         },
-      },
+        // The SHIPPED configuration, on its own port.
+        //
+        // Every spec above runs against a server with the dashboard's RSC
+        // prefetch disabled, which is the one thing self-hosters never run:
+        // the flag defaults ON. That gap let a React #418 hydration bailout
+        // reach production on `/` for a signed-in account, on both viewports,
+        // on every cold load — the client's first render read query cells the
+        // server never had, so React discarded the streamed dashboard and
+        // rebuilt it. The suite could not see it, because with the prefetch
+        // off both sides paint the same skeleton.
+        //
+        // One extra server on 3100 closes that. Only
+        // `dashboard-ssr-prefetch-hydration.spec.ts` talks to it, and it
+        // asserts the one thing the mocked specs cannot: that the page the
+        // server streamed is the page the browser keeps.
+        {
+          command: `PORT=${SSR_PREFETCH_PORT} HOSTNAME=127.0.0.1 ${JSON.stringify(process.execPath)} .next/standalone/server.js`,
+          url: `${SSR_PREFETCH_BASE_URL}/api/version`,
+          timeout: 60_000,
+          reuseExistingServer: !process.env.CI,
+          stdout: "ignore",
+          stderr: "pipe",
+          env: {
+            ...process.env,
+            NATIVE_CANVAS: "off",
+            DASHBOARD_SSR_PREFETCH: "true",
+          },
+        },
+      ],
 });
