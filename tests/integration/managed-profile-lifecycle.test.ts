@@ -302,26 +302,33 @@ describe("managed profile lifecycle (real Postgres)", () => {
     expect(invited.status).toBe(201);
     const invitation = (await invited.json()).data;
     expect(invitation.acceptedAt).toBeNull();
-    expect(new Date(invitation.expiresAt).getTime()).toBe(
-      invitationExpiry.getTime(),
-    );
+    // The expiry is read off the stored row: the route answers with the entry
+    // the roster publishes, and that entry describes who looks after the
+    // record rather than the terms of one invitation.
+    expect(
+      (
+        await getPrismaClient().accountGrant.findUniqueOrThrow({
+          where: { id: invitation.grantId },
+        })
+      ).expiresAt?.getTime(),
+    ).toBe(invitationExpiry.getTime());
 
     cookieJar.set("healthlog_session", secondGuardian.sessionId);
     const { POST: acceptInvitation } =
       await import("@/app/api/account/grants/[id]/accept/route");
     const accepted = await acceptInvitation(
       new NextRequest(
-        `http://localhost/api/account/grants/${invitation.id}/accept`,
+        `http://localhost/api/account/grants/${invitation.grantId}/accept`,
         {
           method: "POST",
         },
       ),
-      { params: Promise.resolve({ id: invitation.id }) },
+      { params: Promise.resolve({ id: invitation.grantId }) },
     );
     expect(accepted.status).toBe(200);
     expect(
       await getPrismaClient().accountGrant.findUniqueOrThrow({
-        where: { id: invitation.id },
+        where: { id: invitation.grantId },
       }),
     ).toMatchObject({ acceptedAt: expect.any(Date), expiresAt: null });
     await switchSessionTo(secondGuardian.sessionId, profile.id);
@@ -331,15 +338,20 @@ describe("managed profile lifecycle (real Postgres)", () => {
       await import("@/app/api/managed-profiles/[id]/guardians/[grantId]/route");
     const revoked = await revokeGuardian(
       new NextRequest(
-        `http://localhost/api/managed-profiles/${profile.id}/guardians/${invitation.id}`,
+        `http://localhost/api/managed-profiles/${profile.id}/guardians/${invitation.grantId}`,
         { method: "DELETE" },
       ),
-      { params: Promise.resolve({ id: profile.id, grantId: invitation.id }) },
+      {
+        params: Promise.resolve({
+          id: profile.id,
+          grantId: invitation.grantId,
+        }),
+      },
     );
     expect(revoked.status).toBe(200);
     expect(
       await getPrismaClient().accountGrant.findUniqueOrThrow({
-        where: { id: invitation.id },
+        where: { id: invitation.grantId },
       }),
     ).toMatchObject({ revokedBy: "GRANTOR" });
     expect(
@@ -365,8 +377,8 @@ describe("managed profile lifecycle (real Postgres)", () => {
       creator.user.id,
     ]);
     expect(audit.map((entry) => JSON.parse(entry.details ?? "{}"))).toEqual([
-      { grantId: invitation.id },
-      { grantId: invitation.id },
+      { grantId: invitation.grantId },
+      { grantId: invitation.grantId },
     ]);
   });
 
@@ -404,20 +416,20 @@ describe("managed profile lifecycle (real Postgres)", () => {
     const pending = await invite();
     const withdrawn = await revokeGuardian(
       new NextRequest(
-        `http://localhost/api/managed-profiles/${profile.id}/guardians/${pending.id}`,
+        `http://localhost/api/managed-profiles/${profile.id}/guardians/${pending.grantId}`,
         { method: "DELETE" },
       ),
-      { params: Promise.resolve({ id: profile.id, grantId: pending.id }) },
+      { params: Promise.resolve({ id: profile.id, grantId: pending.grantId }) },
     );
     expect(withdrawn.status).toBe(200);
     expect(
       await getPrismaClient().accountGrant.findUniqueOrThrow({
-        where: { id: pending.id },
+        where: { id: pending.grantId },
       }),
     ).toMatchObject({ acceptedAt: null, revokedAt: expect.any(Date) });
 
     const replacement = await invite();
-    expect(replacement.id).not.toBe(pending.id);
+    expect(replacement.grantId).not.toBe(pending.grantId);
     expect(replacement.acceptedAt).toBeNull();
   });
 
