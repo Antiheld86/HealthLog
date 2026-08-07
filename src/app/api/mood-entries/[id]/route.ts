@@ -128,8 +128,13 @@ export const PUT = apiHandler(
       updateData.score = getScoreForMood(data.mood);
       // v1.37 — pleasantness follows the label the same way `score` does, so
       // an entry corrected from "okay" to "bad" cannot keep yesterday's A1.
-      // An explicit `a1` in the same request overrides it below.
-      updateData.moodA1 = deriveA1(data.mood);
+      // Only when the label actually moved, though: the edit dialog sends the
+      // whole entry back on every save, and re-deriving on an unchanged label
+      // would overwrite a value the person set by hand every time they
+      // corrected the timestamp. An explicit `a1` below overrides either way.
+      if (data.mood !== existing.mood) {
+        updateData.moodA1 = deriveA1(data.mood);
+      }
     }
     // v1.37 — level-A values are per-field on this path: omitted keeps the
     // stored value, an explicit number replaces it, an explicit null clears

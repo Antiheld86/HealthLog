@@ -885,11 +885,42 @@
       "iconGroupMisc": "Altro"
     },
     "sectionMoreTags": "Altri tag",
-    "sectionFactors": "Fattori",
     "sectionNoteDetails": "Nota e dettagli",
     "quickTagsHelp": "I tuoi tag frequenti: un tocco",
     "quickTagsExpand": "Altro",
-    "loadError": "Impossibile caricare le voci dell'umore."
+    "loadError": "Impossibile caricare le voci dell'umore.",
+    "sectionLevelA": "Cinque scale",
+    "sectionLevelAHelp": "Facoltativo. Quello che non tocchi resta vuoto.",
+    "dimensionNotAnswered": "non indicato",
+    "dimensionClear": "cancella",
+    "dimensionValueText": "{value} su {max}: da {low} a {high}",
+    "dimension": {
+      "a1": {
+        "label": "Umore",
+        "low": "molto spiacevole",
+        "high": "molto piacevole"
+      },
+      "a2": {
+        "label": "Stress",
+        "low": "completamente rilassato",
+        "high": "estremamente sotto pressione"
+      },
+      "a3": {
+        "label": "Energia",
+        "low": "esausto",
+        "high": "pieno di energia"
+      },
+      "a4": {
+        "label": "Connessione",
+        "low": "isolato",
+        "high": "capito e sostenuto"
+      },
+      "a5": {
+        "label": "Stabilità",
+        "low": "completamente sopraffatto",
+        "high": "pienamente capace di agire"
+      }
+    }
   },
   "medications": {
     "title": "Farmaci",

@@ -4213,6 +4213,16 @@ model MoodTag {
   /// mood *factor* the user scores per entry (e.g. work, social, sleep
   /// quality); the score rides on `MoodEntryTagLink.rating`. Keeps one
   /// taxonomy + one ingestion path for both flavours.
+  ///
+  /// v1.37 — `RATED` is frozen, not removed. The capture sheet stopped
+  /// offering factor ratings when the level-A columns arrived on `MoodEntry`:
+  /// a 1-5 score for "work stress" and a 0-10 stress self-state are different
+  /// questions, and asking both on one entry invites two answers to one
+  /// thing. Nothing was deleted — no tag row, no link, no rating — so every
+  /// existing score keeps rendering, keeps editing and keeps feeding the
+  /// factor crosstab. Re-enabling the offer on the create sheet is a decision
+  /// about what to ask, not a bug fix; do not restore it because it looks
+  /// like an omission.
   kind     String  @default("BINARY") @map("kind") // "BINARY" | "RATED"
   /// v1.12.0 — inclusive lower / upper bound of a RATED factor's scale
   /// (e.g. 1..5, or 1..2 for a Yes/No factor). Ignored for BINARY tags.

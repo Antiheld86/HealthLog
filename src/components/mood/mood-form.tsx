@@ -31,7 +31,6 @@ import {
   MoreHorizontal,
   Plus,
   RotateCcw,
-  SlidersHorizontal,
   StickyNote,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -45,7 +44,14 @@ import {
 import { apiPost } from "@/lib/api/api-fetch";
 import { localizedApiError } from "@/lib/api/localized-error";
 import { SheetSection, SheetSectionCount } from "@/components/ui/sheet-section";
-import { MoodTagPicker, type RatedFactor } from "./mood-tag-picker";
+import { MoodTagPicker } from "./mood-tag-picker";
+import {
+  EMPTY_LEVEL_A,
+  MoodLevelASection,
+  levelACreatePayload,
+  seedA1FromMood,
+  type LevelAState,
+} from "./mood-level-a-fields";
 import { MoodQuickTags } from "./mood-quick-tags";
 import { useRecentTags } from "./recent-tags";
 import { moodFaceIcon } from "./mood-tag-icons";
@@ -114,14 +120,17 @@ export function MoodForm({ onSuccess, onCancel, footerSlot }: MoodFormProps) {
   const { getRadioProps: getMoodRadioProps } = useRovingRadioGroup({
     count: MOOD_LEVELS.length,
     selectedIndex: MOOD_LEVELS.findIndex((l) => l.value === mood),
-    onSelect: (index) => setMood(MOOD_LEVELS[index]!.value),
+    onSelect: (index) => pickMood(MOOD_LEVELS[index]!.value),
   });
+  // v1.37 — the five level-A values. Pleasantness follows the picked face
+  // until the user moves it themselves; the other four start and stay empty
+  // unless somebody answers them.
+  const [levelA, setLevelA] = useState<LevelAState>(EMPTY_LEVEL_A);
+  const [a1Touched, setA1Touched] = useState(false);
+  const [levelAOpen, setLevelAOpen] = useState(false);
   const [tagsInput, setTagsInput] = useState("");
   // v1.8.5 — structured-tag keys picked from the taxonomy catalog.
   const [tagKeys, setTagKeys] = useState<string[]>([]);
-  // v1.12.0 — rated mood factors (FACTOR-kind catalog tags scored on
-  // their own 1..scaleMax scale). Sent as `ratedFactors: [{key,rating}]`.
-  const [ratedFactors, setRatedFactors] = useState<RatedFactor[]>([]);
   // v1.8.5 (C1) — first-class free-text note. The model + API already
   // accepted `note`; the web form was the only surface that couldn't
   // write it.
@@ -142,22 +151,23 @@ export function MoodForm({ onSuccess, onCancel, footerSlot }: MoodFormProps) {
     mood !== "" ||
     tagsInput.trim() !== "" ||
     tagKeys.length > 0 ||
-    ratedFactors.length > 0 ||
+    // A level-A value the user set counts as typed input: Reset must ask
+    // before it discards an answer that took five slider moves.
+    Object.values(levelA).some((v) => v !== null) ||
     note.trim() !== "";
+
+  // v1.37 — picking a face suggests a pleasantness value; the suggestion
+  // stands until the user moves that slider, after which the two are
+  // independent. Moving the slider never changes which face is lit.
+  function pickMood(value: string) {
+    setMood(value);
+    setLevelA((prev) => seedA1FromMood(prev, value, a1Touched));
+  }
 
   function toggleTagKey(key: string) {
     setTagKeys((prev) =>
       prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
     );
-  }
-
-  // v1.12.0 — set or clear a rated factor's score. `rating === null`
-  // removes the factor from the set (re-tapping the active step clears).
-  function rateFactor(key: string, rating: number | null) {
-    setRatedFactors((prev) => {
-      const rest = prev.filter((f) => f.key !== key);
-      return rating === null ? rest : [...rest, { key, rating }];
-    });
   }
 
   // v1.4.27 MB3 — error banner descriptor for the timestamp input.
@@ -171,9 +181,11 @@ export function MoodForm({ onSuccess, onCancel, footerSlot }: MoodFormProps) {
 
   function resetForm() {
     setMood("");
+    setLevelA(EMPTY_LEVEL_A);
+    setA1Touched(false);
+    setLevelAOpen(false);
     setTagsInput("");
     setTagKeys([]);
-    setRatedFactors([]);
     setNote("");
     setMoodLoggedAt(getDefaultMoodLoggedAtValue());
     setError(null);
@@ -209,9 +221,10 @@ export function MoodForm({ onSuccess, onCancel, footerSlot }: MoodFormProps) {
         mood,
         tags: tags.length > 0 ? tags : undefined,
         tagKeys: tagKeys.length > 0 ? tagKeys : undefined,
-        // v1.12.0 — rated factors as a parallel [{key,rating}] array.
-        ratedFactors: ratedFactors.length > 0 ? ratedFactors : undefined,
         note: trimmedNote.length > 0 ? trimmedNote : undefined,
+        // v1.37 — only the values somebody answered. An untouched slider
+        // sends nothing, and the server writes NULL rather than a middle.
+        ...levelACreatePayload(levelA),
         moodLoggedAt: timestamp,
       });
 
@@ -324,7 +337,7 @@ export function MoodForm({ onSuccess, onCancel, footerSlot }: MoodFormProps) {
                 aria-label={t(level.labelKey)}
                 data-slot="mood-face"
                 data-mood={level.value}
-                onClick={() => setMood(level.value)}
+                onClick={() => pickMood(level.value)}
                 {...getMoodRadioProps(index)}
                 // v1.12 — selected-state unified with the tag tiles and
                 // factor steps: `border-primary bg-primary/15 text-primary`
@@ -392,21 +405,20 @@ export function MoodForm({ onSuccess, onCancel, footerSlot }: MoodFormProps) {
             />
           </SheetSection>
 
-          {/* v1.17.0 — "Factors": the FACTOR-kind segmented ratings, kept
-              exactly as the existing segmented control. */}
-          <SheetSection
-            title={t("mood.sectionFactors")}
-            icon={<SlidersHorizontal />}
-            summary={<SheetSectionCount count={ratedFactors.length} />}
-          >
-            <MoodTagPicker
-              selected={tagKeys}
-              onToggle={toggleTagKey}
-              ratedFactors={ratedFactors}
-              onRateFactor={rateFactor}
-              mode="rated"
-            />
-          </SheetSection>
+          {/* v1.37 — the five level-A values, closed by default. The rated
+              factors that used to sit here are no longer offered on a new
+              entry: a 1-5 score for "work stress" and a 0-10 stress
+              self-state are different questions, and asking both invites
+              two answers to one thing. Existing ratings keep working
+              everywhere they already do, including the edit dialog, and no
+              catalogue row was removed. */}
+          <MoodLevelASection
+            value={levelA}
+            onChange={setLevelA}
+            onA1Touched={() => setA1Touched(true)}
+            open={levelAOpen}
+            onOpenChange={setLevelAOpen}
+          />
 
           {/* v1.17.0 — "Note & details": free-text tags, GLP-1 quick-tags,
               and the note field. The badge counts whichever of these carry

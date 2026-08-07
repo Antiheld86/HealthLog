@@ -885,11 +885,42 @@
       "iconGroupMisc": "Sonstiges"
     },
     "sectionMoreTags": "Weitere Tags",
-    "sectionFactors": "Faktoren",
     "sectionNoteDetails": "Notiz & Details",
     "quickTagsHelp": "Häufig genutzte Tags – ein Tipp genügt",
     "quickTagsExpand": "Weitere",
-    "loadError": "Stimmungseinträge konnten nicht geladen werden."
+    "loadError": "Stimmungseinträge konnten nicht geladen werden.",
+    "sectionLevelA": "Fünf Skalen",
+    "sectionLevelAHelp": "Optional. Was du nicht angibst, bleibt leer.",
+    "dimensionNotAnswered": "nicht angegeben",
+    "dimensionClear": "leeren",
+    "dimensionValueText": "{value} von {max}: {low} bis {high}",
+    "dimension": {
+      "a1": {
+        "label": "Stimmung",
+        "low": "sehr unangenehm",
+        "high": "sehr angenehm"
+      },
+      "a2": {
+        "label": "Stress",
+        "low": "vollkommen entspannt",
+        "high": "extrem belastet"
+      },
+      "a3": {
+        "label": "Energie",
+        "low": "erschöpft",
+        "high": "energiegeladen"
+      },
+      "a4": {
+        "label": "Verbundenheit",
+        "low": "isoliert",
+        "high": "verstanden und unterstützt"
+      },
+      "a5": {
+        "label": "Stabilität",
+        "low": "vollständig überfordert",
+        "high": "sehr handlungsfähig"
+      }
+    }
   },
   "medications": {
     "title": "Medikamente",

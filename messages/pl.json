@@ -885,11 +885,42 @@
       "iconGroupMisc": "Inne"
     },
     "sectionMoreTags": "Więcej tagów",
-    "sectionFactors": "Czynniki",
     "sectionNoteDetails": "Notatka i szczegóły",
     "quickTagsHelp": "Twoje częste tagi — jedno dotknięcie",
     "quickTagsExpand": "Więcej",
-    "loadError": "Nie udało się załadować wpisów nastroju."
+    "loadError": "Nie udało się załadować wpisów nastroju.",
+    "sectionLevelA": "Pięć skal",
+    "sectionLevelAHelp": "Opcjonalne. To, czego nie ruszysz, zostaje puste.",
+    "dimensionNotAnswered": "nie podano",
+    "dimensionClear": "wyczyść",
+    "dimensionValueText": "{value} z {max}: od {low} do {high}",
+    "dimension": {
+      "a1": {
+        "label": "Nastrój",
+        "low": "bardzo nieprzyjemnie",
+        "high": "bardzo przyjemnie"
+      },
+      "a2": {
+        "label": "Stres",
+        "low": "całkowicie odprężony",
+        "high": "skrajnie obciążony"
+      },
+      "a3": {
+        "label": "Energia",
+        "low": "wyczerpany",
+        "high": "pełen energii"
+      },
+      "a4": {
+        "label": "Więź",
+        "low": "odizolowany",
+        "high": "rozumiany i wspierany"
+      },
+      "a5": {
+        "label": "Stabilność",
+        "low": "całkowicie przytłoczony",
+        "high": "w pełni zdolny do działania"
+      }
+    }
   },
   "medications": {
     "title": "Leki",

@@ -885,11 +885,42 @@
       "iconGroupMisc": "Autres"
     },
     "sectionMoreTags": "Plus de tags",
-    "sectionFactors": "Facteurs",
     "sectionNoteDetails": "Note et détails",
     "quickTagsHelp": "Vos tags fréquents — en un geste",
     "quickTagsExpand": "Plus",
-    "loadError": "Impossible de charger vos entrées d'humeur."
+    "loadError": "Impossible de charger vos entrées d'humeur.",
+    "sectionLevelA": "Cinq échelles",
+    "sectionLevelAHelp": "Facultatif. Ce que vous ne touchez pas reste vide.",
+    "dimensionNotAnswered": "non renseigné",
+    "dimensionClear": "effacer",
+    "dimensionValueText": "{value} sur {max} : {low} à {high}",
+    "dimension": {
+      "a1": {
+        "label": "Humeur",
+        "low": "très désagréable",
+        "high": "très agréable"
+      },
+      "a2": {
+        "label": "Stress",
+        "low": "parfaitement détendu",
+        "high": "extrêmement tendu"
+      },
+      "a3": {
+        "label": "Énergie",
+        "low": "épuisé",
+        "high": "plein d'énergie"
+      },
+      "a4": {
+        "label": "Lien social",
+        "low": "isolé",
+        "high": "compris et soutenu"
+      },
+      "a5": {
+        "label": "Stabilité",
+        "low": "complètement dépassé",
+        "high": "pleinement capable d'agir"
+      }
+    }
   },
   "medications": {
     "title": "Médicaments",

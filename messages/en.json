@@ -885,11 +885,42 @@
       "iconGroupMisc": "Other"
     },
     "sectionMoreTags": "More tags",
-    "sectionFactors": "Factors",
     "sectionNoteDetails": "Note & details",
     "quickTagsHelp": "Your frequent tags — one tap",
     "quickTagsExpand": "More",
-    "loadError": "Could not load your mood entries."
+    "loadError": "Could not load your mood entries.",
+    "sectionLevelA": "Five scales",
+    "sectionLevelAHelp": "Optional. Anything you leave alone stays empty.",
+    "dimensionNotAnswered": "not recorded",
+    "dimensionClear": "clear",
+    "dimensionValueText": "{value} of {max}: {low} to {high}",
+    "dimension": {
+      "a1": {
+        "label": "Mood",
+        "low": "very unpleasant",
+        "high": "very pleasant"
+      },
+      "a2": {
+        "label": "Stress",
+        "low": "completely relaxed",
+        "high": "extremely strained"
+      },
+      "a3": {
+        "label": "Energy",
+        "low": "drained",
+        "high": "full of energy"
+      },
+      "a4": {
+        "label": "Connectedness",
+        "low": "isolated",
+        "high": "understood and supported"
+      },
+      "a5": {
+        "label": "Stability",
+        "low": "completely overwhelmed",
+        "high": "fully able to act"
+      }
+    }
   },
   "medications": {
     "title": "Medications",

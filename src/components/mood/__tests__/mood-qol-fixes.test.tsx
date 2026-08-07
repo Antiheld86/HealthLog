@@ -85,7 +85,10 @@ describe("MoodForm — Reset confirm when dirty (v1.11.5)", () => {
     expect(formSrc).toMatch(/const isDirty =\s*\n?\s*mood !== ""/);
     expect(formSrc).toContain('tagsInput.trim() !== ""');
     expect(formSrc).toContain("tagKeys.length > 0");
-    expect(formSrc).toContain("ratedFactors.length > 0");
+    // v1.37 — a level-A value the user set is typed input too. The rated
+    // factors this line used to name are no longer captured here; see the
+    // level-A describe below.
+    expect(formSrc).toContain("Object.values(levelA).some((v) => v !== null)");
     expect(formSrc).toContain('note.trim() !== ""');
     // The `isDirty` expression itself must not read `moodLoggedAt`.
     const isDirtyExpr = formSrc.slice(
@@ -115,31 +118,38 @@ describe("MoodForm — Reset confirm when dirty (v1.11.5)", () => {
   });
 });
 
-describe("MoodForm — rated factors (v1.12.0)", () => {
-  it("lifts a ratedFactors set and threads it to the tag picker", () => {
-    expect(formSrc).toContain("const [ratedFactors, setRatedFactors]");
-    expect(formSrc).toMatch(
-      /function rateFactor\(key: string, rating: number \| null\)/,
-    );
-    // The picker receives both the binary toggle and the factor rate
-    // callbacks so it can render BINARY chips and RATED controls.
-    expect(formSrc).toMatch(
-      /<MoodTagPicker[\s\S]*ratedFactors=\{ratedFactors\}[\s\S]*onRateFactor=\{rateFactor\}/,
-    );
-  });
-
-  it("sends ratedFactors as a parallel array on POST (omitted when empty)", () => {
-    expect(formSrc).toContain(
-      "ratedFactors: ratedFactors.length > 0 ? ratedFactors : undefined,",
-    );
+describe("MoodForm — level A replaces the factor ratings (v1.37)", () => {
+  it("no longer offers a factor rating on a new entry", () => {
+    // A 1-5 score for "work stress" and a 0-10 stress self-state are two
+    // answers to one question. The create sheet asks the second one only.
+    // Nothing was deleted: the catalogue rows, the stored ratings and the
+    // edit dialog below all still work, which the next describe pins.
+    expect(formSrc).not.toContain("onRateFactor=");
+    expect(formSrc).not.toContain('mode="rated"');
+    expect(formSrc).not.toContain("ratedFactors");
     // The binary structured-tag contract stays byte-identical.
+    expect(formSrc).toContain('mode="binary"');
     expect(formSrc).toContain(
       "tagKeys: tagKeys.length > 0 ? tagKeys : undefined,",
     );
   });
+
+  it("offers the five level-A sliders and sends only the answered ones", () => {
+    expect(formSrc).toContain("<MoodLevelASection");
+    expect(formSrc).toContain("...levelACreatePayload(levelA)");
+    // Picking a face seeds pleasantness; moving that slider ends the seeding.
+    expect(formSrc).toMatch(
+      /function pickMood\(value: string\) \{[\s\S]*seedA1FromMood\(prev, value, a1Touched\)/,
+    );
+    expect(formSrc).toContain("onA1Touched={() => setA1Touched(true)}");
+    // Nothing here defaults a value: the state starts empty and stays empty.
+    expect(formSrc).toContain("useState<LevelAState>(EMPTY_LEVEL_A)");
+  });
 });
 
 describe("MoodList — rated factor editing", () => {
+  // Unchanged by v1.37 on purpose: the create sheet stopped asking, and an
+  // entry that already carries a rating must still be correctable.
   it("hydrates, renders, and submits the entry's current ratedFactors", () => {
     expect(listSrc).toContain("ratedFactors: RatedFactor[];");
     expect(listSrc).toContain(
@@ -153,6 +163,18 @@ describe("MoodList — rated factor editing", () => {
       /<MoodTagPicker[\s\S]*ratedFactors=\{editRatedFactors\}[\s\S]*onRateFactor=\{rateEditFactor\}/,
     );
     expect(listSrc).toContain("ratedFactors: editRatedFactors,");
+  });
+});
+
+describe("MoodList — level A on the edit path (v1.37)", () => {
+  it("seeds the five values from the entry and sends them back, nulls included", () => {
+    // What the capture sheet writes, this dialog has to show. A value visible
+    // in a trend and nowhere else is a value the person cannot correct.
+    expect(listSrc).toContain("levelA: levelAFromEntry(entry)");
+    expect(listSrc).toContain("setEditLevelA(seed.levelA)");
+    expect(listSrc).toContain("<MoodLevelASection");
+    // Nulls travel: this path replaces, so a cleared value has to be stated.
+    expect(listSrc).toContain("...levelAUpdatePayload(levelA)");
   });
 });
 
