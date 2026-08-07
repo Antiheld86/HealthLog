@@ -3641,7 +3641,15 @@
         "statLabel": "Wie das berechnet wurde",
         "explainerLabel": "Wie das berechnet wurde"
       },
-      "inTargetTitle": "Im Zielbereich"
+      "inTargetTitle": "Im Zielbereich",
+      "dimensions": {
+        "title": "Fünf Skalen",
+        "none": "Für diese fünf Skalen ist noch nichts erfasst.",
+        "window": "{days} Tage",
+        "noneInWindow": "nichts im Zeitraum",
+        "higherIsMore": "höher = {anchor}",
+        "notRecorded": "Nicht erfasst: {list}."
+      }
     },
     "derived": {
       "coverage": {

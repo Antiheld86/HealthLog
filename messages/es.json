@@ -3641,7 +3641,15 @@
         "statLabel": "Cómo se calculó esto",
         "explainerLabel": "Cómo se calculó esto"
       },
-      "inTargetTitle": "En tu rango"
+      "inTargetTitle": "En tu rango",
+      "dimensions": {
+        "title": "Cinco escalas",
+        "none": "Todavía no hay nada registrado en estas cinco escalas.",
+        "window": "{days} días",
+        "noneInWindow": "nada en este periodo",
+        "higherIsMore": "más alto = {anchor}",
+        "notRecorded": "Sin registrar: {list}."
+      }
     },
     "derived": {
       "coverage": {

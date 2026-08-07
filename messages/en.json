@@ -3641,7 +3641,15 @@
         "statLabel": "How this was computed",
         "explainerLabel": "How this was computed"
       },
-      "inTargetTitle": "In your range"
+      "inTargetTitle": "In your range",
+      "dimensions": {
+        "title": "Five scales",
+        "none": "Nothing recorded for these five scales yet.",
+        "window": "{days} days",
+        "noneInWindow": "nothing in this range",
+        "higherIsMore": "higher = {anchor}",
+        "notRecorded": "Not recorded: {list}."
+      }
     },
     "derived": {
       "coverage": {
