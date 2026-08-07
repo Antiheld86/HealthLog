@@ -111,7 +111,7 @@ export function SecuritySessionsCard({
           />
         </div>
       </button>
-      <div id={regionId} hidden={!open} className="space-y-4 pl-7">
+      <div id={regionId} hidden={!open} className="space-y-4">
         <p className="text-muted-foreground text-xs">
           {t("settings.security.sessionsDescription")}
         </p>

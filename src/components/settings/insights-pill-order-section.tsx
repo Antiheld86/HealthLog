@@ -257,7 +257,6 @@ export function InsightsPillOrderSection({ id }: { id?: string }) {
       id={id}
       data-slot="insights-pill-order-section"
       aria-labelledby="insights-pill-order-title"
-      className="space-y-4"
     >
       <SettingsCardHeader
         icon={ListOrdered}

@@ -62,6 +62,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -400,24 +401,21 @@ export function VorsorgeSection({
   return (
     <section aria-labelledby="vorsorge-section-title" className="space-y-4">
       {variant === "page" ? (
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1
-              id="vorsorge-section-title"
-              data-tour-id="vorsorge-hero"
-              className="text-2xl font-bold tracking-tight"
-            >
+        <PageHeader
+          titleId="vorsorge-section-title"
+          title={
+            <span data-tour-id="vorsorge-hero">
               {t("measurementReminders.sectionTitle")}
-            </h1>
-            <p className="text-muted-foreground text-xs sm:text-sm">
-              {t("measurementReminders.sectionDescription")}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {wrenchButton}
-            {addButton}
-          </div>
-        </div>
+            </span>
+          }
+          description={t("measurementReminders.sectionDescription")}
+          actions={
+            <>
+              {wrenchButton}
+              {addButton}
+            </>
+          }
+        />
       ) : (
         <SettingsCardHeader
           icon={CalendarClock}

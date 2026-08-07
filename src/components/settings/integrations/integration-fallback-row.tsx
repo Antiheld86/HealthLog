@@ -95,7 +95,7 @@ export function IntegrationFallbackRow({
           />
         }
       />
-      <p className="text-muted-foreground mt-4 pl-7 text-xs">{meta}</p>
+      <p className="text-muted-foreground text-xs">{meta}</p>
     </SettingsCard>
   );
 }

@@ -81,7 +81,7 @@ export function UmamiSection() {
         status={configured ? <ConfiguredBadge /> : null}
       />
 
-      <div className="mt-4 space-y-3 pl-7">
+      <div className="space-y-3">
         <SettingsToggle
           label={t("admin.umamiEnabled")}
           icon={Activity}
@@ -131,7 +131,7 @@ export function UmamiSection() {
         </div>
       </div>
 
-      <div className="mt-4 flex justify-end gap-2">
+      <div className="flex justify-end gap-2">
         <Button
           size="sm"
           variant="outline"

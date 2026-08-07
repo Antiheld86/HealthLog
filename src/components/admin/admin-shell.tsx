@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/ui/page-header";
 import { SUB_SHELL_GRID_FLOOR } from "@/components/layout/shell-metrics";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
@@ -253,21 +254,15 @@ export function AdminShell({ active, children }: AdminShellProps) {
       ? t("admin.subtitle")
       : t(`admin.section.${activeSlug}.subtitle`);
 
+  // Same two-copy heading as the Settings shell (mobile above the chip strip,
+  // desktop inside the grid row) and the same primitive, so the two consoles
+  // cannot drift a step apart again.
   const headingBlock = (mobile = false) => (
-    <div>
-      {mobile ? (
-        <div
-          role="heading"
-          aria-level={1}
-          className="text-2xl font-bold tracking-tight"
-        >
-          {headingTitle}
-        </div>
-      ) : (
-        <h1 className="text-2xl font-bold tracking-tight">{headingTitle}</h1>
-      )}
-      <p className="text-muted-foreground text-sm">{headingSubtitle}</p>
-    </div>
+    <PageHeader
+      headingAs={mobile ? "div" : "h1"}
+      title={headingTitle}
+      description={headingSubtitle}
+    />
   );
 
   // v1.4.25 W8 — AuthShell wraps the page in `px-4 py-6 md:px-6`

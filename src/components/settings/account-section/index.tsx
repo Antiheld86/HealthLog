@@ -362,12 +362,8 @@ export function AccountSection() {
       <AvatarSection />
 
       <SettingsCard>
-        <SettingsCardHeader
-          icon={User}
-          title={t("settings.profile")}
-          className="mb-4"
-        />
-        <form onSubmit={handleSaveProfile} className="space-y-4 pl-7">
+        <SettingsCardHeader icon={User} title={t("settings.profile")} />
+        <form onSubmit={handleSaveProfile} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="username">{t("settings.username")}</Label>

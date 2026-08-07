@@ -114,7 +114,7 @@ export function AiServerKeySection() {
         }
       />
 
-      <div className="mt-4 space-y-4 pl-7">
+      <div className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="admin-ai-server-key-input">
             {t("admin.aiServerKey.keyLabel")}

@@ -74,7 +74,7 @@ export function FailingJobsCard({
           title={t("admin.failingJobs.title")}
           description={t("admin.failingJobs.description")}
         />
-        <p className="text-muted-foreground mt-4 pl-7 text-sm">
+        <p className="text-muted-foreground text-sm">
           {t("admin.failingJobs.unavailable")}
         </p>
       </SettingsCard>
@@ -91,12 +91,12 @@ export function FailingJobsCard({
       {failingJobs.queues.length === 0 ? (
         <p
           data-testid="failing-jobs-none"
-          className="text-muted-foreground mt-4 pl-7 text-sm"
+          className="text-muted-foreground text-sm"
         >
           {t("admin.failingJobs.none", { hours: failingJobs.windowHours })}
         </p>
       ) : (
-        <ul data-testid="failing-jobs-list" className="mt-4 space-y-3 pl-7">
+        <ul data-testid="failing-jobs-list" className="space-y-3">
           {failingJobs.queues.map((queue) => (
             <li key={queue.queue} className="text-sm">
               <p className="text-foreground font-medium">
@@ -146,7 +146,7 @@ export function SystemStatusSection() {
             // branches below it are a load error and a spinner, so the
             // marker cannot stand for a section still waiting on the read.
             data-slot="system-status-grid"
-            className="mt-4 grid gap-4 pl-7 sm:grid-cols-2 lg:grid-cols-4"
+            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
           >
             <StatusItem
               icon={Database}
@@ -275,7 +275,7 @@ export function SystemStatusSection() {
           // full page reload to recover.
           <div
             role="alert"
-            className="text-destructive bg-destructive/10 border-destructive/30 mt-4 flex flex-col items-start gap-2 rounded-md border px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
+            className="text-destructive bg-destructive/10 border-destructive/30 flex flex-col items-start gap-2 rounded-md border px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
           >
             <span>{t("admin.systemStatusLoadError")}</span>
             <Button
@@ -296,7 +296,7 @@ export function SystemStatusSection() {
             </Button>
           </div>
         ) : (
-          <div className="mt-4 flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <Loader2 className="text-muted-foreground h-4 w-4 animate-spin motion-reduce:animate-none" />
             <span className="text-muted-foreground text-sm">
               {t("admin.loadingStatus")}

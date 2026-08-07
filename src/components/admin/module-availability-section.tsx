@@ -94,7 +94,7 @@ export function ModuleAvailabilitySection() {
         title={t("admin.modules.title")}
         description={t("admin.modules.description")}
       />
-      <div className="mt-4 space-y-4 pl-7">
+      <div className="space-y-4">
         {MODULE_KEYS
           // A module switched off in code (pending a rebuild) is hard-off
           // server-wide; drop its row so the operator toggle can't mislead.

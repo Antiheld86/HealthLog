@@ -47,9 +47,13 @@ export interface SettingsCardHeaderProps {
    *  after the title (e.g. a tag chip + experimental badge). The title
    *  row wraps so the accessories reflow below on a narrow viewport. */
   titleAccessory?: React.ReactNode;
-  /** Optional short description rendered as muted text below the
-   *  title row. Either a string (paragraph) or arbitrary node
-   *  (links, badges, extra sub-notes, etc.). */
+  /** Optional description rendered as muted text below the title row.
+   *  Exactly ONE sentence, guideline ≤ 120 characters (design standards
+   *  §3). A node is accepted so the sentence can carry an inline link,
+   *  not so it can carry a second paragraph — the slot owns no vertical
+   *  rhythm, so a stack of `<p>`s collapses into one run and reads
+   *  broken. Multi-sentence prose goes in the body as
+   *  `<p className="text-sm">` (foreground). */
   description?: React.ReactNode;
   /** Optional right-aligned status surface — typically an
    *  `<IntegrationStatusPill>` or a wrapper around badges. */
@@ -88,10 +92,11 @@ export function SettingsCardHeader({
             <div className="flex shrink-0 items-center gap-2">{status}</div>
           ) : null}
         </div>
+        {/* One sentence, one text run. This slot deliberately carries no
+            `space-y-*`: the vertical rhythm was the licence call sites used
+            to stack explainer paragraphs into a muted `text-xs` slot. */}
         {description ? (
-          <div className="text-muted-foreground space-y-1 text-xs">
-            {description}
-          </div>
+          <div className="text-muted-foreground text-xs">{description}</div>
         ) : null}
       </div>
     </header>

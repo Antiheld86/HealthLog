@@ -108,20 +108,16 @@ export function AvatarSection() {
 
   return (
     <SettingsCard>
-      <SettingsCardHeader
-        icon={ImageUp}
-        title={t("settings.avatar.title")}
-        className="mb-4"
-      />
+      <SettingsCardHeader icon={ImageUp} title={t("settings.avatar.title")} />
       {/* The accepted formats and limits belong to the sentence that explains
           what this card does, not to a caption of their own under the buttons.
           Two strings rather than one merged key: the same wording is the
           upload's own constraint copy, and a translator keeps the shorter unit
           either way. */}
-      <p className="text-muted-foreground mb-4 pl-7 text-sm">
+      <p className="text-muted-foreground mb-4 text-sm">
         {t("settings.avatar.description")} {t("settings.avatar.hint")}
       </p>
-      <div className="flex items-center gap-4 pl-7">
+      <div className="flex items-center gap-4">
         <Avatar className="size-16">
           {avatarUrl && <AvatarImage src={avatarUrl} alt={user.username} />}
           <AvatarFallback className="text-base">

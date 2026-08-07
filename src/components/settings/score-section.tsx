@@ -15,11 +15,11 @@
  *     save all sit in the same card. A top half and a bottom half of the
  *     same decision is the split the settings IA rules forbid.
  *   - **The settings card anatomy, unmodified.** Header through
- *     `SettingsCardHeader`, body at `mt-4 pl-7` so every line starts on
- *     the title's reading edge, save bottom-right in its own row. The
- *     v1.35.0 cut hung the save in the header's status slot and let the
- *     body start at the card edge, which read as a different kind of card
- *     from the ones above and below it.
+ *     `SettingsCardHeader`, the header→body step owned by the card's own
+ *     gap, body on the card edge, save bottom-right in its own row via
+ *     `SettingsCardActions`. The v1.35.0 cut hung the save in the header's
+ *     status slot, which read as a different kind of card from the ones
+ *     above and below it.
  *   - **Grouped by domain, and the grouping is spacing.** Blood pressure,
  *     glycaemia and lipids sit under one heading; the gap between groups
  *     does the separating. Rules between every row made a short list look
@@ -311,10 +311,7 @@ export function ScoreSection() {
             description={t("settings.sections.score.card.description")}
           />
 
-          {/* The body starts on the title's reading edge — icon box plus
-              gap is 28 px, which is the `pl-7` every other settings card
-              uses. */}
-          <div className="mt-4 space-y-6 pl-7">
+          <div className="space-y-6">
             {/* The sentence the whole feature exists for. Foreground, in
                 the body, because it is content and not a meta
                 description. */}
@@ -446,7 +443,7 @@ export function ScoreSection() {
 
           {/* Bottom-right, in its own row, like every other settings card
               that saves a form. */}
-          <div className="mt-4 flex justify-end pl-7">
+          <div className="flex justify-end">
             <Button
               size="sm"
               type="button"

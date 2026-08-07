@@ -156,7 +156,7 @@ export function NotificationStatusCard() {
       />
 
       <ul
-        className="divide-border/60 mt-4 divide-y pl-7"
+        className="divide-border/60 divide-y"
         data-testid="notification-status-list"
       >
         {channels.map((ch) => (

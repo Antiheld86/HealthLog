@@ -61,7 +61,7 @@ function NotificationHealthPanel() {
         description={t("admin.notificationHealth.description")}
       />
 
-      <div className="mt-4 pl-7">
+      <div>
         {isLoading && (
           <Loader2 className="text-muted-foreground h-4 w-4 animate-spin motion-reduce:animate-none" />
         )}
@@ -205,7 +205,7 @@ export function RemindersSection() {
           description={t("admin.medicationRemindersDescription")}
         />
 
-        <div className="mt-4 space-y-3 pl-7">
+        <div className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="admin-reminder-late" className="text-xs">
@@ -260,7 +260,7 @@ export function RemindersSection() {
           </div>
         </div>
 
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="flex justify-end gap-2">
           <Button
             size="sm"
             variant="outline"
@@ -319,7 +319,7 @@ export function RemindersSection() {
 
         {testNotification.data?.results &&
           testNotification.data.results.length > 0 && (
-            <div className="mt-4 space-y-1">
+            <div className="space-y-1">
               {testNotification.data.results.map((r, i) => (
                 <div key={i} className="flex items-center gap-1.5 text-xs">
                   {r.success ? (
@@ -338,7 +338,7 @@ export function RemindersSection() {
 
         {reminderCheck.data?.medications &&
           reminderCheck.data.medications.length > 0 && (
-            <div className="mt-4 space-y-2">
+            <div className="space-y-2">
               {/* v1.4.33 IW9 — h4 -> h2 so the page outline stays
                 sequential (parent admin SectionFrame ships <h1>). */}
               <h2 className="text-sm font-medium">

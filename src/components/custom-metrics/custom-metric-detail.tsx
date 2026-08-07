@@ -18,6 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ResponsiveSheet } from "@/components/ui/responsive-sheet";
+import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MetricStatStrip } from "@/components/insights/metric-stat-strip";
 import { apiDelete, apiGet } from "@/lib/api/api-fetch";
@@ -171,14 +172,10 @@ export function CustomMetricDetail({
   if (metricError || listError) {
     return (
       <div className="space-y-6">
-        <header className="space-y-1.5">
-          <h1 className="text-2xl font-bold tracking-tight">
-            {metric?.name ?? t("customMetrics.detail.title")}
-          </h1>
-          <p className="text-foreground text-sm leading-relaxed">
-            {description}
-          </p>
-        </header>
+        <PageHeader
+          title={metric?.name ?? t("customMetrics.detail.title")}
+          description={description}
+        />
         <QueryErrorCard
           description={t("customMetrics.loadError")}
           onRetry={() => {
@@ -192,70 +189,69 @@ export function CustomMetricDetail({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight">
-            {metric?.name ?? <Skeleton className="h-7 w-32" />}
-          </h1>
-          {metric?.unit ? (
-            <p className="text-muted-foreground text-xs sm:text-sm">
-              {metric.unit}
-            </p>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {/* Controls, left → right: Delete · Edit · Show-all-values · Add. */}
-          <DeleteButton
-            onConfirm={() => deleteMetric.mutate()}
-            title={t("customMetrics.deleteConfirmTitle")}
-            description={t("customMetrics.deleteConfirmDescription")}
-            confirmLabel={t("customMetrics.delete")}
-            triggerTitle={t("customMetrics.delete")}
-            className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
-            iconClassName="h-4 w-4"
-          />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
-            onClick={() => setEditOpen(true)}
-            disabled={!metric}
-            aria-label={t("customMetrics.edit")}
-            title={t("customMetrics.edit")}
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
-          {entries.length > 0 ? (
+      <PageHeader
+        title={metric?.name ?? <Skeleton className="h-7 w-32" />}
+        description={description}
+        actions={
+          <>
+            {/* Controls, left → right: Delete · Edit · Show-all-values · Add. */}
+            <DeleteButton
+              onConfirm={() => deleteMetric.mutate()}
+              title={t("customMetrics.deleteConfirmTitle")}
+              description={t("customMetrics.deleteConfirmDescription")}
+              confirmLabel={t("customMetrics.delete")}
+              triggerTitle={t("customMetrics.delete")}
+              className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
+              iconClassName="h-4 w-4"
+            />
             <Button
-              asChild
               variant="ghost"
               size="icon"
-              data-slot="custom-metric-show-all-values"
               className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
+              onClick={() => setEditOpen(true)}
+              disabled={!metric}
+              aria-label={t("customMetrics.edit")}
+              title={t("customMetrics.edit")}
             >
-              <Link
-                href={`/custom-metrics/${customMetricId}/values`}
-                aria-label={t("customMetrics.showAllValues")}
-                title={t("customMetrics.showAllValues")}
-              >
-                <ListOrdered className="h-4 w-4" aria-hidden="true" />
-              </Link>
+              <Pencil className="h-4 w-4" />
             </Button>
-          ) : null}
-          <Button
-            onClick={() => setAddOpen(true)}
-            className="min-h-11 min-w-11 shrink-0 sm:min-h-9 sm:min-w-0"
-            aria-label={t("customMetrics.addValue")}
-          >
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">
-              {t("customMetrics.addValue")}
-            </span>
-          </Button>
-        </div>
-      </div>
+            {entries.length > 0 ? (
+              <Button
+                asChild
+                variant="ghost"
+                size="icon"
+                data-slot="custom-metric-show-all-values"
+                className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
+              >
+                <Link
+                  href={`/custom-metrics/${customMetricId}/values`}
+                  aria-label={t("customMetrics.showAllValues")}
+                  title={t("customMetrics.showAllValues")}
+                >
+                  <ListOrdered className="h-4 w-4" aria-hidden="true" />
+                </Link>
+              </Button>
+            ) : null}
+            <Button
+              onClick={() => setAddOpen(true)}
+              className="min-h-11 min-w-11 shrink-0 sm:min-h-9 sm:min-w-0"
+              aria-label={t("customMetrics.addValue")}
+            >
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">
+                {t("customMetrics.addValue")}
+              </span>
+            </Button>
+          </>
+        }
+      />
 
-      <p className="text-foreground text-sm leading-relaxed">{description}</p>
+      {/* The unit is meta about the metric, not its explainer, so it reads
+          below the header rather than competing for the one description line
+          every page header carries. */}
+      {metric?.unit ? (
+        <p className="text-muted-foreground text-sm">{metric.unit}</p>
+      ) : null}
 
       {isLoading ? (
         <Card>

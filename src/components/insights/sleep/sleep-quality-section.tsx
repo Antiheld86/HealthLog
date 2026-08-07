@@ -5,7 +5,7 @@ import { Activity, Gauge, Moon, Repeat, Target, Waves } from "lucide-react";
 import { useInsightsAnalytics } from "@/hooks/use-insights-analytics";
 import { useTranslations } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
-import { SectionHeading } from "@/components/insights/section-heading";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { DeviceScoreTile } from "@/components/insights/device-score-tile";
 import { DeviceScoreGridSkeleton } from "@/components/insights/device-score-tile-skeleton";
 

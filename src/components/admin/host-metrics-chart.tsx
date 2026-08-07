@@ -185,7 +185,7 @@ export function HostMetricsChart() {
         </h2>
         <p
           role="alert"
-          className="text-destructive bg-destructive/10 border-destructive/30 mt-3 rounded-md border px-3 py-2 text-xs"
+          className="text-destructive bg-destructive/10 border-destructive/30 rounded-md border px-3 py-2 text-xs"
         >
           {t("admin.hostMetrics.loadError")}
         </p>

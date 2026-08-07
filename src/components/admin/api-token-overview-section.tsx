@@ -160,7 +160,7 @@ export function ApiTokenOverviewSection() {
         description={t("admin.apiTokensDescription")}
       />
 
-      <div className="mt-4">
+      <div>
         {isLoading ? (
           <div className="flex justify-center py-4">
             <Loader2 className="text-muted-foreground h-5 w-5 animate-spin motion-reduce:animate-none" />

@@ -120,7 +120,7 @@ export function EmailCard({ isAuthenticated }: { isAuthenticated: boolean }) {
         description={t("settings.emailDescription")}
       />
 
-      <div className="mt-4 space-y-4 pl-7">
+      <div className="space-y-4">
         <div className="flex items-center justify-between">
           <Label htmlFor="email-toggle">{t("settings.emailEnable")}</Label>
           <Switch

@@ -128,7 +128,7 @@ export function NtfyCard({ isAuthenticated }: { isAuthenticated: boolean }) {
         description={t("settings.ntfyDescription")}
       />
 
-      <div className="mt-4 space-y-4 pl-7">
+      <div className="space-y-4">
         <div className="flex items-center justify-between">
           <Label htmlFor="ntfy-toggle">{t("settings.ntfyEnable")}</Label>
           <Switch

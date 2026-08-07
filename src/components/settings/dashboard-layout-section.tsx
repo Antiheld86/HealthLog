@@ -440,7 +440,7 @@ export function DashboardLayoutSection({ id }: { id: string }) {
   const dirty = draft !== null && layout !== null;
 
   return (
-    <SettingsCard id={id} className="scroll-mt-28 space-y-4">
+    <SettingsCard id={id} className="scroll-mt-28">
       {/* v1.4.19 A6 — title / action row uses the same stack-on-mobile,
           right-align-on-desktop contract as Account → Password +
           Restart onboarding tour. Avoids the long German "Auf Standard

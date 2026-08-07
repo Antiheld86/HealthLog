@@ -225,7 +225,7 @@ export function CoachNudgeCard({
         }
       />
       {enabled && (
-        <div className="mt-4 space-y-3 pl-7">
+        <div className="space-y-3">
           <p className="text-sm font-medium">
             {t("notifications.coachNudge.groupsLabel")}
           </p>
@@ -307,7 +307,7 @@ export function CoachNudgeCard({
           push-nudge master switch above (a user can keep nudges but silence
           the example prompts), so it sits outside the `enabled` gate and rides
           the same `coach` prefs blob. */}
-      <div className="border-border/60 mt-4 flex min-h-11 items-center justify-between gap-3 border-t pt-4">
+      <div className="border-border/60 flex min-h-11 items-center justify-between gap-3 border-t pt-4">
         <div className="min-w-0">
           <p className="text-sm">
             {t("notifications.coachNudge.suggestionsLabel")}
@@ -331,8 +331,8 @@ export function CoachNudgeCard({
           aria-live="polite"
           className={
             msgType === "error"
-              ? "text-destructive mt-3 pl-7 text-sm"
-              : "text-muted-foreground mt-3 pl-7 text-sm"
+              ? "text-destructive mt-3 text-sm"
+              : "text-muted-foreground mt-3 text-sm"
           }
         >
           {msg}

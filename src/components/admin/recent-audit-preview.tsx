@@ -70,7 +70,7 @@ export function RecentAuditPreview() {
         }
       />
 
-      <div className="mt-4">
+      <div>
         {isLoading ? (
           <div className="flex items-center gap-2 py-2">
             <Loader2

@@ -81,7 +81,7 @@ export function VorsorgeSettings() {
           title={t("moduleList.reorder.heading")}
           description={t("moduleList.reorder.description")}
         />
-        <div className="mt-4 pl-7">
+        <div>
           {isLoading ? (
             <div className="space-y-2">
               {Array.from({ length: 3 }, (_, i) => (
@@ -100,7 +100,7 @@ export function VorsorgeSettings() {
           title={t("measurementReminders.manage.title")}
           description={t("measurementReminders.manage.description")}
         />
-        <div className="mt-4 pl-7">
+        <div>
           {isLoading ? (
             <Skeleton className="h-24 w-full" />
           ) : (reminders?.length ?? 0) === 0 ? (

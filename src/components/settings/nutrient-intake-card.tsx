@@ -77,10 +77,9 @@ export function NutrientIntakeCard() {
         description={t("settings.sections.sources.nutrients.description", {
           days: WINDOW_DAYS,
         })}
-        className="mb-3"
       />
       {overview.isLoading ? (
-        <div className="space-y-1 pl-7" aria-hidden="true">
+        <div className="space-y-1" aria-hidden="true">
           <Skeleton className="h-9 w-full rounded-md" />
           <Skeleton className="h-9 w-full rounded-md" />
           <Skeleton className="h-9 w-full rounded-md" />
@@ -118,7 +117,7 @@ export function NutrientIntakeCard() {
           ))}
         </ul>
       )}
-      <p className="text-muted-foreground mt-3 text-xs">
+      <p className="text-muted-foreground text-xs">
         {t("settings.sections.sources.nutrients.moduleHint")}{" "}
         <Link
           href="/settings/modules"

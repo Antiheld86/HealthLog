@@ -210,7 +210,7 @@ export function TotpCard({
         }
       />
 
-      <div className="mt-4">
+      <div>
         {/* ── Not enabled, no wizard: the enable CTA ── */}
         {!enabled && !setup && !freshCodes && (
           <Button

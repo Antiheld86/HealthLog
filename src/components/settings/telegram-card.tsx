@@ -139,7 +139,7 @@ export function TelegramCard({
         description={t("settings.telegramDescription")}
       />
 
-      <div className="mt-4 space-y-4 pl-7">
+      <div className="space-y-4">
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">

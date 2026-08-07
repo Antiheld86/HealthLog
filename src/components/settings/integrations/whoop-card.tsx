@@ -224,12 +224,9 @@ export function WhoopCard({
         }
       />
 
-      <hr
-        data-testid="integration-card-divider"
-        className="border-border/60 mt-4"
-      />
+      <hr data-testid="integration-card-divider" className="border-border/60" />
 
-      <div className="mt-4 space-y-4 pl-7">
+      <div className="space-y-4">
         {errorMessage && <IntegrationErrorMessage message={errorMessage} />}
         {/* Parked-integration resume CTA. Surfaces only when the row
             state is `parked` (>24h of persistent failures). The button

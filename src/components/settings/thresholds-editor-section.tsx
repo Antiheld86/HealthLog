@@ -119,7 +119,7 @@ export function ThresholdsEditorSection({ id }: { id: string }) {
   });
 
   return (
-    <SettingsCard id={id} className="scroll-mt-28 space-y-4">
+    <SettingsCard id={id} className="scroll-mt-28">
       {/* v1.4.19 A8 / F-07: page header `settings.sections.thresholds.*`
           already provides the title + description for this route, so the
           card-level title + subtitle were a duplicate of the page header.

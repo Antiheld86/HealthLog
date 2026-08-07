@@ -185,7 +185,7 @@ export function PasskeyListSection({
         description={t("settings.passkeysDescription")}
       />
 
-      <div className="mt-4">
+      <div>
         {!passkeys || passkeys.length === 0 ? (
           <p className="text-muted-foreground text-sm">
             {t("settings.noPasskeys")}

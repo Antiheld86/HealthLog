@@ -1,0 +1,173 @@
+import { describe, it, expect } from "vitest";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { renderToStaticMarkup } from "react-dom/server";
+import { Bell } from "lucide-react";
+
+import { I18nProvider } from "@/lib/i18n/context";
+import { PageHeader } from "@/components/ui/page-header";
+import { SettingsCard } from "@/components/settings/settings-card";
+import { SettingsCardHeader } from "@/components/settings/_card-header";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
+
+/**
+ * Settings + Admin read as one surface. These pin the parts of that claim
+ * that can be checked exactly:
+ *
+ *   1. the header→body step is owned by `SettingsCard`, so a call site can
+ *      neither re-declare it nor drift from it;
+ *   2. the card header's description slot carries no vertical rhythm — the
+ *      licence call sites used to stack explainer paragraphs into a muted
+ *      `text-xs` slot;
+ *   3. the action row has one shape, and its one documented exception
+ *      (a card whose only actions are links out) is spelled as a prop;
+ *   4. `pl-7` — the off-scale body gutter that broke wherever two
+ *      neighbouring cards disagreed about it — stays gone;
+ *   5. both consoles render their page heading through `PageHeader`, so
+ *      Settings and Admin cannot drift a step apart from the module pages
+ *      or from each other.
+ */
+
+function render(node: React.ReactNode) {
+  return renderToStaticMarkup(
+    <I18nProvider initialLocale="en">{node}</I18nProvider>,
+  );
+}
+
+const ROOT = process.cwd();
+
+function walk(dir: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) {
+      if (entry === "__tests__") continue;
+      walk(full, out);
+    } else if (entry.endsWith(".tsx")) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+describe("SettingsCard — the container owns the rhythm", () => {
+  it("paints the gap-based shell, not a call-site margin", () => {
+    const html = render(<SettingsCard>body</SettingsCard>);
+    expect(html).toContain("flex flex-col gap-4");
+    expect(html).toContain("p-4");
+    expect(html).toContain("md:p-6");
+  });
+
+  it("gives the semantic-landmark variant the same rhythm", () => {
+    const html = render(<SettingsCard as="section">body</SettingsCard>);
+    expect(html).toContain("<section");
+    expect(html).toContain("flex flex-col gap-4");
+  });
+
+  it("still lets a dense card override the gap on the card itself", () => {
+    const html = render(<SettingsCard className="gap-2">body</SettingsCard>);
+    expect(html).toContain("gap-2");
+  });
+});
+
+describe("SettingsCardHeader — one description sentence, one text run", () => {
+  it("renders the description without any vertical rhythm of its own", () => {
+    const html = render(
+      <SettingsCardHeader icon={Bell} title="Channels" description="One." />,
+    );
+    // The slot is muted meta at the size floor…
+    expect(html).toContain("text-muted-foreground text-xs");
+    // …and carries no `space-y-*`, so a stack of <p>s cannot read as prose.
+    const slot = html.slice(html.indexOf("text-muted-foreground text-xs"));
+    expect(slot.slice(0, 60)).not.toMatch(/space-y-/);
+  });
+
+  it("keeps the title in the foreground tier at one size", () => {
+    const html = render(<SettingsCardHeader icon={Bell} title="Channels" />);
+    expect(html).toMatch(/<h2[^>]*class="text-lg font-semibold"/);
+  });
+});
+
+describe("SettingsCardActions — one row, one shape", () => {
+  it("puts the row at the trailing edge by default", () => {
+    const html = render(
+      <SettingsCardActions>
+        <button>Save</button>
+      </SettingsCardActions>,
+    );
+    expect(html).toContain('data-slot="settings-card-actions"');
+    expect(html).toContain("justify-end");
+  });
+
+  it("spells the link-row exception as a prop rather than a local class", () => {
+    const html = render(
+      <SettingsCardActions align="start">
+        <a href="/x">Open</a>
+      </SettingsCardActions>,
+    );
+    expect(html).toContain("justify-start");
+    expect(html).not.toContain("justify-end");
+  });
+});
+
+describe("PageHeader — the one page heading, including the shells", () => {
+  it("renders the explainer in the muted tier", () => {
+    const html = render(<PageHeader title="Settings" description="Yours." />);
+    expect(html).toMatch(/<p class="text-muted-foreground text-sm">Yours\./);
+  });
+
+  it("renders a second copy as a heading role, never a second <h1>", () => {
+    const html = render(
+      <PageHeader headingAs="div" title="Settings" description="Yours." />,
+    );
+    expect(html).not.toContain("<h1");
+    expect(html).toContain('role="heading"');
+    expect(html).toContain('aria-level="1"');
+  });
+
+  it("never truncates the explainer", () => {
+    const html = render(
+      <PageHeader title="Medications" description="Schedules and reminders." />,
+    );
+    expect(html).not.toContain("truncate");
+  });
+});
+
+describe("the Settings and Admin shells route their heading through PageHeader", () => {
+  for (const shell of [
+    join("src", "components", "settings", "settings-shell.tsx"),
+    join("src", "components", "admin", "admin-shell.tsx"),
+  ]) {
+    it(`${shell} has no hand-rolled H1 block`, () => {
+      const source = readFileSync(join(ROOT, shell), "utf8");
+      expect(source).toContain("<PageHeader");
+      // The hand-rolled copies were a literal `<h1 className="text-2xl …">`
+      // plus a `role="heading"` div beside it. Both belong to the primitive.
+      const code = source
+        .split("\n")
+        .filter((line) => !line.trimStart().startsWith("//"))
+        .join("\n");
+      expect(code).not.toMatch(/<h1\b/);
+      expect(code).not.toMatch(/role="heading"/);
+    });
+  }
+});
+
+describe("the abolished body gutter stays abolished", () => {
+  it("has no `pl-7` left under Settings or Admin", () => {
+    const offenders: string[] = [];
+    for (const dir of ["settings", "admin"]) {
+      for (const file of walk(join(ROOT, "src", "components", dir))) {
+        const source = readFileSync(file, "utf8");
+        for (const [i, line] of source.split("\n").entries()) {
+          // Comments may name the class they retired; class strings may not.
+          if (line.trimStart().startsWith("*")) continue;
+          if (line.includes("//")) continue;
+          if (/\bpl-7\b/.test(line)) {
+            offenders.push(`${file.slice(ROOT.length + 1)}:${i + 1}`);
+          }
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});

@@ -236,12 +236,9 @@ export function WithingsCard({
         }
       />
 
-      <hr
-        data-testid="integration-card-divider"
-        className="border-border/60 mt-4"
-      />
+      <hr data-testid="integration-card-divider" className="border-border/60" />
 
-      <div className="mt-4 space-y-4 pl-7">
+      <div className="space-y-4">
         {errorMessage && <IntegrationErrorMessage message={errorMessage} />}
         {/* v1.4.25 W5d — Withings activity-scope reconnect banner.
             Only paints when (a) the user has an active Withings

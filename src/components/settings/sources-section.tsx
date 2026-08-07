@@ -292,7 +292,7 @@ export function SourcesSection() {
   // card, below the ladder.
   return (
     <div className="space-y-6">
-      <SettingsCard className="space-y-4">
+      <SettingsCard>
         <SettingsCardHeader
           icon={Layers}
           title={t("settings.sections.sources.cardTitle")}

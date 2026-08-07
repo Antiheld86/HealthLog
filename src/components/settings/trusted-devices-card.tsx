@@ -90,9 +90,8 @@ export function TrustedDevicesCard({
       <SettingsCardHeader
         icon={ShieldCheck}
         title={t("settings.security.trustedDevices.title")}
-        className="mb-4"
       />
-      <div className="space-y-4 pl-7">
+      <div className="space-y-4">
         <p className="text-muted-foreground text-xs">
           {t("settings.security.trustedDevices.description")}
         </p>

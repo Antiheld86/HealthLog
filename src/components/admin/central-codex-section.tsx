@@ -166,7 +166,7 @@ export function CentralCodexSection() {
         }
       />
 
-      <div className="mt-4 space-y-4 pl-7">
+      <div className="space-y-4">
         <div className="text-muted-foreground flex items-start gap-2 text-xs">
           <ShieldAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
           <p className="min-w-0">{t("admin.centralCodex.honesty")}</p>

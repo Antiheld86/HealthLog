@@ -141,7 +141,6 @@ export function CoachMemorySection({
       as="section"
       aria-labelledby="settings-ai-coach-memory-title"
       data-testid="settings-coach-memory-card"
-      className="space-y-4"
     >
       <SettingsCardHeader
         icon={Brain}

@@ -306,7 +306,7 @@ export function UserManagementSection() {
           // rendered an empty `<tbody>` so an admin filter that returned
           // no rows produced a blank rectangle; the icon + filter-aware
           // copy + "Show all users" CTA make the state explicit.
-          <div className="mt-4">
+          <div>
             <EmptyState
               icon={<Users className="size-6" />}
               title={t("admin.section.users.emptyTitle")}
@@ -330,7 +330,7 @@ export function UserManagementSection() {
               `md:block hidden` swaps it out for the card-list below at
               `< md`. Hiding the table-only wrapper (instead of just
               the cells) saves DOM weight on mobile too. */}
-            <div className="mt-4 hidden overflow-x-auto md:block">
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-muted-foreground border-b text-xs">
@@ -399,7 +399,7 @@ export function UserManagementSection() {
               All four actions stay visible and tap-targetable; nothing
               is hidden behind a horizontal scroll. */}
             <ul
-              className="mt-4 space-y-2 md:hidden"
+              className="space-y-2 md:hidden"
               data-slot="admin-user-rows"
               data-testid="admin-users-mobile-list"
             >
@@ -444,7 +444,7 @@ export function UserManagementSection() {
           </>
         )
       ) : (
-        <div className="mt-4 flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <Loader2 className="text-muted-foreground h-4 w-4 animate-spin motion-reduce:animate-none" />
           <span className="text-muted-foreground text-sm">
             {t("admin.loadingUsers")}
@@ -454,7 +454,7 @@ export function UserManagementSection() {
 
       {/* Edit Dialog */}
       {editingUser && (
-        <div className="bg-muted/80 mt-4 rounded-lg p-4">
+        <div className="bg-muted/80 rounded-lg p-4">
           <h3 className="mb-3 text-sm font-semibold">
             {t("admin.editUserTitle", { name: editingUser.username })}
           </h3>
@@ -567,7 +567,7 @@ export function UserManagementSection() {
 
       {/* Password Reset Dialog */}
       {resetUser && (
-        <div className="bg-muted/80 mt-4 rounded-lg p-4">
+        <div className="bg-muted/80 rounded-lg p-4">
           <h3 className="mb-3 text-sm font-semibold">
             {t("admin.resetPasswordTitle", { name: resetUser.username })}
           </h3>

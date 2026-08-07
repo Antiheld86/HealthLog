@@ -45,7 +45,7 @@ export function SystemStatusSummary() {
       />
 
       {status ? (
-        <div className="mt-4 grid gap-3 pl-7 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <StatusItem
             icon={Tag}
             label={t("admin.overview.snapshotVersion")}
@@ -120,12 +120,12 @@ export function SystemStatusSummary() {
       ) : isError ? (
         <div
           role="alert"
-          className="text-destructive bg-destructive/10 border-destructive/30 mt-4 rounded-md border px-3 py-2 text-sm"
+          className="text-destructive bg-destructive/10 border-destructive/30 rounded-md border px-3 py-2 text-sm"
         >
           {t("admin.overview.snapshotLoadError")}
         </div>
       ) : (
-        <div className="mt-4 flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <Loader2
             className="text-muted-foreground h-4 w-4 animate-spin motion-reduce:animate-none"
             aria-hidden="true"

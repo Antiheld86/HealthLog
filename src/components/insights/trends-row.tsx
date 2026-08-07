@@ -6,7 +6,7 @@ import { ArrowRight, TrendingUp } from "lucide-react";
 import { useTranslations } from "@/lib/i18n/context";
 import { useAuth } from "@/hooks/use-auth";
 import { ChartSkeleton } from "@/components/charts/chart-skeleton";
-import { SectionHeading } from "@/components/insights/section-heading";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { HealthChartDynamicMini } from "@/components/charts/health-chart-dynamic";
 import type { DailyBriefing } from "@/lib/ai/schema";
 import {

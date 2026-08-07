@@ -184,7 +184,6 @@ export function HealthRecordExportPanel() {
       data-testid="health-record-export-panel"
     >
       <SettingsCardHeader
-        className="mb-4"
         icon={FileText}
         titleId="health-record-export-title"
         title={t("settings.healthRecord.title")}

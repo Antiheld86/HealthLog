@@ -148,7 +148,7 @@ export function GrantInviteCard() {
         title={t("recordSharing.invite.title")}
         description={t("recordSharing.invite.description")}
       />
-      <form onSubmit={submit} className="mt-4 space-y-3">
+      <form onSubmit={submit} className="space-y-3">
         <div className="space-y-1.5">
           <Label htmlFor="grant-invite-identifier">
             {t("recordSharing.invite.identifierLabel")}

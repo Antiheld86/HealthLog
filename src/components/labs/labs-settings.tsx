@@ -79,7 +79,7 @@ export function LabsSettings() {
   return (
     <div className="space-y-6">
       {/* View — card vs compact list. */}
-      <SettingsCard id="labs-view" className="scroll-mt-28 space-y-4">
+      <SettingsCard id="labs-view" className="scroll-mt-28">
         <SettingsCardHeader
           icon={LayoutGrid}
           title={t("moduleList.viewHeading")}
@@ -89,7 +89,7 @@ export function LabsSettings() {
       </SettingsCard>
 
       {/* Sort order — recency, alphabetical, or manual. */}
-      <SettingsCard id="labs-sort-card" className="scroll-mt-28 space-y-4">
+      <SettingsCard id="labs-sort-card" className="scroll-mt-28">
         <SettingsCardHeader
           icon={ArrowDownUp}
           title={t("labs.sort.heading")}
@@ -112,7 +112,7 @@ export function LabsSettings() {
       </SettingsCard>
 
       {manual ? (
-        <SettingsCard id="labs-order" className="scroll-mt-28 space-y-4">
+        <SettingsCard id="labs-order" className="scroll-mt-28">
           <SettingsCardHeader
             icon={ListOrdered}
             title={t("moduleList.reorder.heading")}
@@ -130,7 +130,7 @@ export function LabsSettings() {
       ) : null}
 
       {/* v1.18.10 — local (in-browser) OCR opt-in for lab scans. */}
-      <SettingsCard id="labs-local-ocr" className="scroll-mt-28 space-y-4">
+      <SettingsCard id="labs-local-ocr" className="scroll-mt-28">
         <SettingsCardHeader
           icon={ScanText}
           title={t("labs.localOcr.heading")}
@@ -147,7 +147,7 @@ export function LabsSettings() {
       </SettingsCard>
 
       {/* Biomarker catalog — define / edit / delete. */}
-      <SettingsCard id="labs-biomarkers" className="scroll-mt-28 space-y-4">
+      <SettingsCard id="labs-biomarkers" className="scroll-mt-28">
         <SettingsCardHeader
           icon={FlaskConical}
           title={t("labs.biomarker.manageTitle")}

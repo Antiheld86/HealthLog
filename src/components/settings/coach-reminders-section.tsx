@@ -155,7 +155,6 @@ export function CoachRemindersSection({
       as="section"
       aria-labelledby="settings-ai-coach-reminders-title"
       data-testid="settings-coach-reminders-card"
-      className="space-y-4"
     >
       <SettingsCardHeader
         icon={BellRing}

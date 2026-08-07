@@ -125,7 +125,7 @@ export function EncryptionSection() {
   return (
     <div className="space-y-6">
       {/* ── Coverage summary ───────────────────────────────────────── */}
-      <SettingsCard className="space-y-4">
+      <SettingsCard>
         <SettingsCardHeader
           icon={ShieldCheck}
           title={t("admin.section.encryption.coverageTitle")}
@@ -163,7 +163,7 @@ export function EncryptionSection() {
       </SettingsCard>
 
       {/* ── Rotation status + trigger ──────────────────────────────── */}
-      <SettingsCard className="space-y-4">
+      <SettingsCard>
         <SettingsCardHeader
           icon={KeyRound}
           title={t("admin.section.encryption.rotationTitle")}
@@ -230,7 +230,7 @@ export function EncryptionSection() {
       </SettingsCard>
 
       {/* ── Per-column coverage table ──────────────────────────────── */}
-      <SettingsCard className="space-y-3">
+      <SettingsCard>
         <SettingsCardHeader
           icon={ShieldCheck}
           title={t("admin.section.encryption.columnsTitle")}

@@ -144,8 +144,8 @@ function ExportCardShell({
           </span>
         }
       />
-      {children && <div className="mt-3 space-y-3">{children}</div>}
-      <div className="mt-4 flex flex-wrap items-center gap-3">{footer}</div>
+      {children && <div className="space-y-3">{children}</div>}
+      <div className="flex flex-wrap items-center gap-3">{footer}</div>
     </SettingsCard>
   );
 }

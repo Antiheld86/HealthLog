@@ -197,18 +197,17 @@ export function AboutSection() {
           icon={Info}
           title="HealthLog"
           description={t("settings.about.identityDescription")}
-          className="mb-4"
         />
 
         {isLoading || !version ? (
-          <div className="flex items-center gap-2 pl-7">
+          <div className="flex items-center gap-2">
             <Loader2 className="text-muted-foreground h-4 w-4 animate-spin motion-reduce:animate-none" />
             <span className="text-muted-foreground text-sm">
               {t("common.loading")}
             </span>
           </div>
         ) : (
-          <dl className="flex flex-wrap items-baseline gap-x-6 gap-y-3 pl-7 text-sm">
+          <dl className="flex flex-wrap items-baseline gap-x-6 gap-y-3 text-sm">
             <div className="flex items-baseline gap-2">
               <dt className="text-muted-foreground text-xs tracking-wide uppercase">
                 {t("settings.about.version")}
@@ -272,9 +271,8 @@ export function AboutSection() {
             icon={BookOpen}
             title={t("settings.about.linksHeading")}
             description={t("settings.about.linksDescription")}
-            className="mb-4"
           />
-          <div className="flex flex-col gap-2 pl-7 sm:flex-row sm:flex-wrap">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <Button
               asChild
               variant="outline"

@@ -25,7 +25,7 @@ export function ImportCardShell({
         <h3 className="text-base font-semibold">{title}</h3>
       </div>
       <p className="text-muted-foreground mt-1 text-xs">{description}</p>
-      <div className="mt-3 flex flex-1 flex-col gap-3">{children}</div>
+      <div className="flex flex-1 flex-col gap-3">{children}</div>
     </SettingsCard>
   );
 }

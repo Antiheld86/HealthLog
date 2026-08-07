@@ -151,7 +151,7 @@ function ResearchModeCard() {
         <div
           role="alert"
           data-slot="settings-research-mode-reprompt"
-          className="border-warning/40 bg-warning/10 mt-4 rounded-md border-l-4 px-3 py-2 text-sm"
+          className="border-warning/40 bg-warning/10 rounded-md border-l-4 px-3 py-2 text-sm"
         >
           <p className="text-foreground font-medium">
             {t("settings.researchMode.rePromptTitle")}
@@ -171,7 +171,7 @@ function ResearchModeCard() {
         </div>
       )}
 
-      <div className="mt-4 flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3">
         <div className="space-y-0.5">
           <p className="text-sm font-medium">
             {t("settings.researchMode.toggleLabel")}
@@ -197,7 +197,7 @@ function ResearchModeCard() {
       {errorMessage && (
         <p
           role="alert"
-          className="text-destructive mt-3 text-sm"
+          className="text-destructive text-sm"
           data-slot="settings-research-mode-error"
         >
           {errorMessage}

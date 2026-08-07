@@ -128,7 +128,7 @@ export function WebPushVapidSection() {
         status={configured ? <ConfiguredBadge /> : null}
       />
 
-      <div className="mt-4 grid gap-3 pl-7 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="admin-web-push-public-key" className="text-xs">
             {t("admin.webPushVapidPublicKey")}
@@ -191,7 +191,7 @@ export function WebPushVapidSection() {
         </div>
       </div>
 
-      <div className="mt-4 flex justify-end gap-2">
+      <div className="flex justify-end gap-2">
         <Button
           variant="outline"
           size="sm"

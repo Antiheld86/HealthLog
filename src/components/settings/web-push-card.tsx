@@ -214,7 +214,7 @@ export function WebPushCard() {
       />
 
       {(!loading && !isSupported) || (!loading && isDenied) || msg ? (
-        <div className="mt-4 space-y-4 pl-7">
+        <div className="space-y-4">
           {!loading && !isSupported ? (
             <p className="text-muted-foreground text-sm">
               {t("settings.webPushNotSupported")}

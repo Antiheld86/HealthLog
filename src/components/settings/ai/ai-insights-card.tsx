@@ -140,13 +140,13 @@ export function AiInsightsCard({
   }
 
   return (
-    <SettingsCard className="space-y-4">
+    <SettingsCard>
       {/* The card used to render an icon-only header row (Sparkles +
           status badges, no title), which left the tile unanchored next
           to its titled siblings. It now follows the shared
           `SettingsCardHeader` contract: icon column, title + description
           in the content column, status badges top-right — and the body
-          below indents to the title column (`pl-7`). */}
+          starts on the card edge like every other Settings card. */}
       <SettingsCardHeader
         icon={Sparkles}
         title={t("settings.ai.providerCardTitle")}
@@ -159,7 +159,7 @@ export function AiInsightsCard({
         }
       />
 
-      <div className="space-y-4 pl-7">
+      <div className="space-y-4">
         <ActiveProviderSelect
           value={selectedProvider}
           onChange={pickProvider}

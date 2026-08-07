@@ -203,9 +203,8 @@ export function EnvironmentSection() {
         <SettingsCardHeader
           icon={CloudSun}
           title={t("settings.sections.environment.title")}
-          className="mb-2"
         />
-        <p className="text-muted-foreground pl-7 text-sm leading-relaxed">
+        <p className="text-muted-foreground text-sm leading-relaxed">
           {t("settings.sections.environment.disabledHint")}
         </p>
       </SettingsCard>
@@ -227,12 +226,11 @@ export function EnvironmentSection() {
         <SettingsCardHeader
           icon={MapPin}
           title={t("settings.sections.environment.home.title")}
-          className="mb-2"
         />
-        <p className="text-muted-foreground mb-3 pl-7 text-sm leading-relaxed">
+        <p className="text-muted-foreground mb-3 text-sm leading-relaxed">
           {t("settings.sections.environment.home.description")}
         </p>
-        <div className="space-y-3 pl-7">
+        <div className="space-y-3">
           {home ? (
             <div className="space-y-1">
               <p className="text-sm" data-slot="environment-home-current">
@@ -315,12 +313,11 @@ export function EnvironmentSection() {
         <SettingsCardHeader
           icon={Plane}
           title={t("settings.sections.environment.travel.title")}
-          className="mb-2"
         />
-        <p className="text-muted-foreground mb-3 pl-7 text-sm leading-relaxed">
+        <p className="text-muted-foreground mb-3 text-sm leading-relaxed">
           {t("settings.sections.environment.travel.description")}
         </p>
-        <div className="space-y-3 pl-7">
+        <div className="space-y-3">
           {data && data.travel.length > 0 ? (
             <ul className="divide-border divide-y rounded-md border">
               {data.travel.map((tr) => (
@@ -459,12 +456,11 @@ export function EnvironmentSection() {
         <SettingsCardHeader
           icon={CloudSun}
           title={t("settings.sections.environment.backfill.title")}
-          className="mb-2"
         />
-        <p className="text-muted-foreground mb-3 pl-7 text-sm leading-relaxed">
+        <p className="text-muted-foreground mb-3 text-sm leading-relaxed">
           {t("settings.sections.environment.backfill.description")}
         </p>
-        <div className="flex flex-wrap items-end gap-2 pl-7">
+        <div className="flex flex-wrap items-end gap-2">
           <div className="space-y-1">
             <Label htmlFor="env-backfill-start">
               {t("settings.sections.environment.startDate")}
@@ -499,7 +495,7 @@ export function EnvironmentSection() {
           </Button>
         </div>
         {data && (
-          <p className="text-muted-foreground mt-3 pl-7 text-xs">
+          <p className="text-muted-foreground text-xs">
             {t("settings.sections.environment.storedDays", {
               count: data.context.days,
             })}
@@ -509,7 +505,7 @@ export function EnvironmentSection() {
           <p
             role="status"
             data-testid="environment-fetch-failed"
-            className="text-destructive mt-1 pl-7 text-xs"
+            className="text-destructive mt-1 text-xs"
           >
             {tCount(
               "settings.sections.environment.fetchFailed",

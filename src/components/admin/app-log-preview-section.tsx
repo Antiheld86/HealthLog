@@ -116,7 +116,7 @@ export function AppLogPreviewSection() {
   const events = data?.events ?? [];
 
   return (
-    <SettingsCard className="space-y-4">
+    <SettingsCard>
       <SettingsCardHeader
         icon={FileText}
         title={t("admin.section.app-logs.title")}
@@ -280,7 +280,7 @@ export function AppLogPreviewSection() {
             </table>
           </div>
           <div
-            className="text-muted-foreground mt-3 flex items-center justify-between text-xs"
+            className="text-muted-foreground flex items-center justify-between text-xs"
             data-testid="app-log-preview-summary"
           >
             <span>

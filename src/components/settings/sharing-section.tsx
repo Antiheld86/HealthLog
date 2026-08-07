@@ -132,7 +132,7 @@ function ShareLinksCard() {
   );
 
   return (
-    <SettingsCard className="space-y-6">
+    <SettingsCard>
       <SettingsCardHeader
         icon={Share2}
         title={t("settings.sharing.createTitle")}

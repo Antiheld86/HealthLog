@@ -3,15 +3,22 @@ import type { ComponentType, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * v1.15.10 — the one section heading for the Insights overview.
+ * The one heading for a GROUP of cards, app-wide.
  *
- * Every top-level overview section (health scores, daily briefing, vitals,
- * trends, period-in-review, cycle summary, signals of the day) leads with
- * this identical heading ABOVE its card: a leading Lucide icon and an `<h2>`
- * title, both in the foreground colour (white in dark mode — never a per-
- * section accent hue), at one size + weight. An optional `action` slot pins a
- * trailing affordance (a subtitle, a meta control) to the right edge without
- * breaking the row's alignment.
+ * Every top-level Insights overview section (health scores, daily briefing,
+ * vitals, trends, period-in-review, cycle summary, signals of the day) and
+ * every Settings card group (notification channels, the health record,
+ * integrations) leads with this identical heading ABOVE its cards: a leading
+ * Lucide icon and an `<h2>` title, both in the foreground colour (white in
+ * dark mode — never a per-section accent hue), at one size + weight. An
+ * optional `action` slot pins a trailing affordance (a subtitle, a meta
+ * control) to the right edge without breaking the row's alignment.
+ *
+ * It lives under `ui/` because it is not an Insights component: Settings
+ * used to open its groups with a bare `SettingsCardHeader` and no card, which
+ * reads as a card title whose card failed to paint. `text-base` here against
+ * `text-lg` on a card title is what separates "this labels the group" from
+ * "this titles a card".
  *
  * The overview used to mix three heading dialects: a `text-lg` `<h2>` with a
  * purple Sparkles glyph (briefing), a `text-lg` `<h2>` with NO icon (trends),

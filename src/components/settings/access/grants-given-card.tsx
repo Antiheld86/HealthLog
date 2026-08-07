@@ -52,7 +52,7 @@ export function GrantsGivenCard() {
         title={t("recordSharing.given.title")}
         description={t("recordSharing.given.description")}
       />
-      <div className="mt-4">
+      <div>
         {isLoading && (
           <Loader2
             className="text-muted-foreground size-5 animate-spin motion-reduce:animate-none"

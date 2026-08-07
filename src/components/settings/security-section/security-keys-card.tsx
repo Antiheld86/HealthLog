@@ -137,7 +137,7 @@ export function SecurityKeysCard({ keys }: { keys: WebauthnKeyInfo[] }) {
         description={t("settings.security.keys.description")}
       />
 
-      <div className="mt-4">
+      <div>
         {keys.length === 0 ? (
           <EmptyState
             variant="plain"

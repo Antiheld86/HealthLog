@@ -1011,7 +1011,7 @@ export function ManagedRecordSettingsSection({
             settings={query.data.settings}
           />
           {save.isError || validationFailed ? (
-            <p className="text-destructive mt-3 text-sm" role="alert">
+            <p className="text-destructive text-sm" role="alert">
               {t("common.networkError")}
             </p>
           ) : null}
