@@ -3,15 +3,15 @@
 The admin login overview shows a coarse `City, CC` location and a carrier
 next to every sign-in. Two tiers can produce that:
 
-- **Online.** A third-party lookup, `https://ipwho.is` by default. Free,
-  keyless, and on by default — which also means every login IP address of
-  every account on the instance leaves the host.
 - **Offline.** MaxMind's GeoLite2-City and GeoLite2-ASN databases read
   from a local directory. The ASN database is the authoritative source
-  for the carrier and the AS number. Note that the resolver is
-  online-first: having the databases in place is not by itself enough to
-  stop the outbound lookup, see "Turning the online lookup off entirely"
-  below.
+  for the carrier and the AS number. The resolver reads these first: an
+  address the local databases can place never leaves the host.
+- **Online.** A third-party lookup, `https://ipwho.is` by default. Free,
+  keyless, and the only tier on a host without the databases — which
+  means every login IP address of every account on that instance leaves
+  the host. With the databases mounted it sees only the addresses they
+  could not place, and you can switch it off entirely (below).
 
 The offline tier is optional and absent by default. The published image
 only carries the databases when the image build had a MaxMind licence key
@@ -73,8 +73,8 @@ is the subject of this page.
 
 ## Turning the online lookup off entirely
 
-Once the offline tier resolves, the third-party lookup is redundant. To
-stop all IP egress:
+With the databases mounted, the third-party lookup already only sees
+addresses they could not place. To remove that remainder too:
 
 ```env
 IP_GEO_LOOKUP_DISABLED="1"
@@ -127,6 +127,8 @@ the value is in `.env` but not on the `environment:` whitelist — compare
 against `docker-compose.yml`.
 
 **The carrier column is empty.** The carrier also comes from the online
-provider's ISP field, so it is normally filled even without the ASN
-database. If both tiers are off (`IP_GEO_LOOKUP_DISABLED="1"` and no
-`GeoLite2-ASN.mmdb`), there is no source for it and it stays empty.
+provider's ISP field, but the online lookup only runs for an address the
+City database could not place. On a host with `GeoLite2-City.mmdb` and no
+`GeoLite2-ASN.mmdb`, a location that resolves locally has no carrier to
+go with it — mount the ASN database too. With neither database, the
+online provider fills both, unless `IP_GEO_LOOKUP_DISABLED="1"` is set.
