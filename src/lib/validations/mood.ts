@@ -46,6 +46,43 @@ export function getScoreForMood(mood: string): number {
   return MOOD_SCORE_MAP[mood] ?? 3;
 }
 
+/**
+ * The five-point mood label mapped onto the level-A pleasantness scale (A1).
+ *
+ * The quick check-in asks one question and offers five faces, and it stays a
+ * full-value capture path: its answer produces a real A1 rather than a
+ * degraded one. This is the single place those five numbers exist. A second
+ * copy anywhere in the tree — including inside a migration — is a drift
+ * waiting to happen, which is why the backfill's SQL is read back and compared
+ * against this map by a test rather than trusted to stay in step.
+ *
+ * The endpoints are 1 and 9, not 0 and 10. "LAUSIG" means as bad as this
+ * instrument can express, not as bad as a person can feel; pinning it to 0
+ * would make every mapped historical entry look more extreme than every future
+ * hand-set one and would leave the true extremes unreachable. 5 is the
+ * concept's neutral midpoint and is where "OKAY" belongs.
+ */
+const MOOD_A1_MAP: Record<string, number> = {
+  SUPER_GUT: 9,
+  GUT: 7,
+  OKAY: 5,
+  SCHLECHT: 3,
+  LAUSIG: 1,
+};
+
+/**
+ * A1 for a five-point mood label. An unrecognised label answers the neutral
+ * midpoint, matching what `getScoreForMood` answers for the same input.
+ */
+export function getA1ForMood(mood: string): number {
+  return MOOD_A1_MAP[mood] ?? 5;
+}
+
+/** Read-only view of the A1 map, for the guards that pin the backfill to it. */
+export function moodA1Map(): Readonly<Record<string, number>> {
+  return MOOD_A1_MAP;
+}
+
 // v1.8.5 — structured-tag keys picked from the catalog (`mood_tags.key`).
 // Additive alongside the flat free-text `tags`: an entry can carry both.
 // Bounded so a single create can't fan out an unbounded link set.

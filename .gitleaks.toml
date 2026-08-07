@@ -28,6 +28,10 @@ regexes = [
   # Coach cadence-suggestion label keys are dotted message keys, not secrets;
   # one trips the generic-api-key entropy heuristic.
   '''coach\.reminderSuggestion\.cadence''',
+  # Level-A mood dimension label and anchor keys are dotted message keys, not
+  # secrets; they sit on fields named `labelKey` / `lowAnchorKey`, and the
+  # generic-api-key rule reads any `*Key: "<high-entropy string>"` as a token.
+  '''mood\.dimension\.''',
 ]
 
 # Specific commit fingerprints from prior false-positive findings (kept for reproducibility).
