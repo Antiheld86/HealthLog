@@ -241,7 +241,7 @@ beforeEach(async () => {
 });
 
 describe("the handshake, end to end", () => {
-  it("carries a household from invitation to revocation and leaves the right rows", async () => {
+  it("[J1-adult-levels-lifecycle] carries a household from invitation to revocation and leaves the right rows", async () => {
     const owner = await makeUser("owner");
     const delegate = await makeUser("delegate");
     await seedWeight(owner.id, 81);
@@ -741,7 +741,7 @@ describe("grant management cannot be reached from inside a switch", () => {
 });
 
 describe("the switch endpoint", () => {
-  it("refuses a switch into a grant that is not active", async () => {
+  it("[J1-adult-levels-lifecycle] refuses a switch into a grant that is not active", async () => {
     const owner = await makeUser("owner");
     const delegate = await makeUser("delegate");
     await signIn(owner.id);

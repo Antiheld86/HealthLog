@@ -120,17 +120,23 @@ describe("medication reminder cross-midnight persistence", () => {
       }),
     );
 
-    const anchors = await prisma.pushAttempt.findMany({
+    // The anchor is a record-scoped scheduler event, not a delivery attempt.
+    // It used to be a `push_attempts` row on a synthetic `DEDUP` channel; the
+    // separation moved it to `notification_events` and nothing writes that
+    // channel any more, so a query for it matched no rows and passed on an
+    // empty set whatever the tick did. Read the ledger the claim actually
+    // appends to, and pin the count, so a second dispatch shows up as a
+    // second row rather than as silence.
+    const anchors = await prisma.notificationEvent.findMany({
       where: {
-        userId: USER_ID,
-        channel: "DEDUP",
+        recordUserId: USER_ID,
         eventType: "MEDICATION_REMINDER",
       },
-      select: { reason: true },
+      select: { dedupKey: true },
     });
     expect(anchors).toEqual([
       {
-        reason: expect.stringContaining("23:45:YELLOW:2026-07-28"),
+        dedupKey: expect.stringContaining("23:45:YELLOW:2026-07-28"),
       },
     ]);
   });

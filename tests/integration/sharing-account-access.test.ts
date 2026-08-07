@@ -70,8 +70,14 @@ interface AccountAccessEntry {
   accountId: string;
   username: string;
   displayName: string | null;
-  access: "read" | "write" | "manage";
+  /**
+   * The legacy name, and deliberately narrower than `level`: it carries only
+   * `read` and `write`, because that is the union v1.36.0 published and
+   * shipped clients still decode. A MANAGE grant is a `write` here.
+   */
+  access: "read" | "write";
   level: "read" | "write" | "manage";
+  recordKind: "shared" | "managed";
   sections: string[] | null;
   canWrite: boolean;
 }
@@ -79,6 +85,7 @@ interface AccountAccessEntry {
 interface AccountAccessBlock {
   accounts: AccountAccessEntry[];
   active: AccountAccessEntry | null;
+  recordKind: "self" | "shared" | "managed";
   canSwitch: boolean;
 }
 
@@ -146,6 +153,9 @@ describe("accountAccess — what the payload publishes", () => {
     expect(accountAccess).toEqual({
       accounts: [],
       active: null,
+      // The record in view is this account's own, and the block says so
+      // rather than leaving the client to infer it from `active` being null.
+      recordKind: "self",
       canSwitch: false,
     });
   });
@@ -165,6 +175,10 @@ describe("accountAccess — what the payload publishes", () => {
         displayName: owner.displayName,
         access: "read",
         level: "read",
+        // An adult who shared their own record. `managed` is reserved for a
+        // profile that has no login of its own, and the two are not
+        // interchangeable on any surface that renders a name.
+        recordKind: "shared",
         sections: null,
         canWrite: false,
       },
@@ -260,11 +274,21 @@ describe("accountAccess — what the payload publishes", () => {
     expect(accountAccess.accounts[0].sections).toEqual([]);
   });
 
-  it("publishes a manage grant as manage, and as writable", async () => {
+  it("publishes a manage grant as manage on level, and as write on the legacy name", async () => {
     // The shipped expression was `access === "WRITE" ? "write" : "read"`,
     // which would have published a grant that can delete entries as read-only
     // — the payload understating access is the direction that reads as safe
     // and is not, because the server would have gone on admitting the writes.
+    //
+    // The correction is on `level`, and only there. `access` is the v1.36.0
+    // name, and its union is `read | write`: a client built against that
+    // release decodes it as a closed set and fails on a third value it has
+    // never seen. So MANAGE publishes as `write` on the legacy name — an
+    // understatement a shipped client can act on, beside the exact answer on
+    // `level` for a client that knows to read it. The narrowing is enforced
+    // rather than incidental: `accountAccessEntrySchema` raises an issue
+    // unless a `manage` entry carries exactly legacy write access and whole
+    // scope (`src/lib/sharing/account-access-schema.ts`).
     const owner = await makeUser("owner");
     const delegate = await makeUser("delegate");
     await grantAccess(owner.id, delegate.id, { access: "MANAGE" });
@@ -273,9 +297,10 @@ describe("accountAccess — what the payload publishes", () => {
     const { accountAccess } = await readMe();
 
     expect(accountAccess.accounts[0].level).toBe("manage");
-    expect(accountAccess.accounts[0].access).toBe("manage");
+    expect(accountAccess.accounts[0].access).toBe("write");
     expect(accountAccess.accounts[0].canWrite).toBe(true);
     expect(accountAccess.accounts[0].sections).toBeNull();
+    expect(accountAccess.accounts[0].recordKind).toBe("shared");
   });
 
   it("never lists a grant this account GAVE — the block is about what it may open", async () => {
@@ -311,12 +336,17 @@ describe("accountAccess — the active record", () => {
       displayName: owner.displayName,
       access: "read",
       level: "read",
+      recordKind: "shared",
       sections: null,
       canWrite: false,
     });
     // The active entry is one of the listed ones, by construction. A banner
     // that had to join the two could render unnamed when they disagreed.
     expect(accountAccess.accounts).toContainEqual(accountAccess.active);
+    // The block-level kind moves with the switch. It reads `self` in the
+    // empty case above, so a value stuck on one of the two would show up as
+    // one of these two cases disagreeing with the session.
+    expect(accountAccess.recordKind).toBe("shared");
   });
 
   it("reads as not-switched when the stamp outlives the grant", async () => {

@@ -154,7 +154,7 @@ beforeEach(async () => {
 });
 
 describe("sharing provider origin", () => {
-  it("enqueues and dispatches an owner-origin mutation as the positive control", async () => {
+  it("[J6-no-delegated-provider-egress] enqueues and dispatches an owner-origin mutation as the positive control", async () => {
     await createUser("provider-owner");
     headerJar.set(
       "authorization",
@@ -197,7 +197,7 @@ describe("sharing provider origin", () => {
     });
   });
 
-  it("enqueues and dispatches no provider work for a delegate, including a mutation-to-red payload", async () => {
+  it("[J6-no-delegated-provider-egress] enqueues and dispatches no provider work for a delegate, including a mutation-to-red payload", async () => {
     await createUser("provider-record");
     await createUser("provider-delegate");
     await grantManage({

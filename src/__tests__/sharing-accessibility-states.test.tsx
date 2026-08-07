@@ -53,21 +53,46 @@ const CONTRAST = "expectContentContrast";
 /**
  * Split a spec into `title -> body`.
  *
- * Bodies are delimited by the next `test(` rather than by brace matching: a
+ * Bodies are delimited by the next opener rather than by brace matching: a
  * body containing a string with a brace in it is common, a body containing the
  * literal `test(` is not. Exported and exercised against a synthetic spec
  * below, because a splitter that returned an empty map would make every leg
  * here pass by matching nothing.
+ *
+ * `it(` counts as an opener alongside `test(`. Both are the same call, and the
+ * repository splits by suite rather than by preference: the browser specs
+ * write `test(`, the Vitest files write `it(`. Five of the eight release
+ * journeys are proved by Vitest files, so a parser that saw only `test(` would
+ * read those files as having no tests at all — and every per-file leg below is
+ * over a matched set, so it would have passed on the empty one.
+ *
+ * ## What it does not see, said plainly
+ *
+ * A title written as a template literal, because the extractor takes only
+ * double-quoted strings — several parameterised cases in the sharing suites are
+ * written that way, and a marker placed in one would be invisible here.
+ * And a parameterised opener whose argument list contains its own `)`
+ * (`it.each([{ a: f() }])`), because the table is skipped by a non-nesting
+ * match. Both are limits of the matcher rather than statements about the
+ * suites, so a journey is wired to a plainly-quoted title on purpose.
  */
 export function testBodies(source: string): Map<string, string> {
   const bodies = new Map<string, string>();
   // `test.only(` and `test.skip(` are tests; `test.describe(` is not, and the
   // synthetic spec below is what caught the first version treating it as one.
-  const opener = /\btest(?:\.(?!describe)\w+)*\(\s*"([^"]+)"/g;
+  // `\b` keeps `it` from matching inside a word — `submit(`, `exit(`, `await(`
+  // — because neither side of the pair is a boundary there.
+  //
+  // Two shapes, because `it.each(table)("title")` puts the table between the
+  // opener and the title and the single-call form does not. The synthetic
+  // Vitest spec below is what caught the first version seeing only the second
+  // shape and reading a parameterised case as no case at all.
+  const opener =
+    /\b(?:test|it)(?:\.(?!describe)\w+)*\s*(?:\(\s*"([^"]+)"|\([^)]*\)\s*\(\s*"([^"]+)")/g;
   const starts: Array<{ title: string; from: number }> = [];
   let match: RegExpExecArray | null;
   while ((match = opener.exec(source)) !== null) {
-    starts.push({ title: match[1], from: match.index });
+    starts.push({ title: match[1] ?? match[2], from: match.index });
   }
   for (let i = 0; i < starts.length; i += 1) {
     const to = i + 1 < starts.length ? starts[i + 1].from : source.length;
@@ -102,6 +127,40 @@ describe("the state parser sees what it looks for", () => {
 
   it("does not treat a describe block as a test", () => {
     expect(testBodies(SYNTHETIC).has("a group")).toBe(false);
+  });
+
+  const SYNTHETIC_VITEST = `
+    import { describe, expect, it } from "vitest";
+
+    describe("a suite", () => {
+      it("answers the first question", async () => {
+        const submitted = await submit({ a: 1 });
+        expect(submitted).toBe(true);
+      });
+
+      it.each([1, 2])("answers the parameterised one", async () => {
+        expect(await exit()).toBe(0);
+      });
+    });
+  `;
+
+  it("reads a Vitest file's it( openers too", () => {
+    // Five of the eight journeys are proved by Vitest files. Without this the
+    // wiring leg below would read every one of them as a file with no tests,
+    // and pass on the empty set.
+    const bodies = testBodies(SYNTHETIC_VITEST);
+    expect([...bodies.keys()]).toEqual([
+      "answers the first question",
+      "answers the parameterised one",
+    ]);
+  });
+
+  it("does not find a test inside submit( or exit(", () => {
+    // The bodies above call both. If the word boundary were wrong, the map
+    // would carry entries the file never declared, and the wiring leg could be
+    // satisfied by a marker sitting in a helper call rather than in a title.
+    expect(testBodies(SYNTHETIC_VITEST).size).toBe(2);
+    expect(testBodies(SYNTHETIC_VITEST).has("a suite")).toBe(false);
   });
 });
 
@@ -229,45 +288,174 @@ describe("the eight release journeys are enumerated", () => {
   });
 
   /**
-   * v1.37.0 — the ids that are wired to a test title, and only those.
+   * v1.37.0 — every journey, and the files that carry it.
    *
    * The enumeration above says eight journeys exist. It says nothing about
    * whether any of them RAN, which is the same gap between "the suite is
    * green" and "the suite covers this" that the rest of this file exists to
-   * close. Wiring all eight is the integration plan's item; this list is the
-   * subset already claimed by a spec, and it grows as they land.
+   * close. All eight are wired now, so the list is no longer a growing subset:
+   * a journey missing from it fails below rather than reading as one nobody
+   * has got to yet.
    *
-   * An id on this list whose spec loses the marker fails here rather than
-   * disappearing quietly from a run nobody counted.
+   * ## Why a journey names more than one file
+   *
+   * A journey is a claim, not a test. J1 says an adult grant runs "through
+   * invite, accept, switch, expiry, revoke and direct URL" — the browser
+   * proves the switch, what each level opens and the direct-URL refusal; the
+   * lifecycle transitions either side of it are database facts and are proved
+   * against real Postgres. Forcing that onto one file would mean either a
+   * browser spec driving grant expiry through the clock, or an integration
+   * file asserting what a page renders. Both would be worse tests than the two
+   * that exist, so the wiring records both homes.
+   *
+   * ## Why the runner is written down
+   *
+   * Three journeys ride Playwright and run only in the acceptance stage; five
+   * are Vitest and run in the ordinary gate. That split is the same one
+   * `record-session-fence-acceptance-map.test.ts` records for the fence, and
+   * it is here for the same reason: a green run of THIS file means "all eight
+   * are claimed, and here is which ones have actually executed", never "all
+   * eight passed". The runner is checked against the path rather than trusted,
+   * so it cannot drift into a label that flatters the split.
+   *
+   * ## What this cannot do
+   *
+   * It proves a marker appears in a test title in a file that really has
+   * tests. It cannot prove the test behind the marker asserts anything worth
+   * asserting. Ten empty tests would satisfy it, which is why the journey
+   * claims stay written out above in the release's own words: the marker says
+   * where to look, and the claim says what to look for.
    */
-  const WIRED_JOURNEYS: ReadonlyArray<{ id: string; spec: string }> = [
+  const WIRED_JOURNEYS: ReadonlyArray<{
+    id: string;
+    proofs: ReadonlyArray<{ file: string; runner: "playwright" | "vitest" }>;
+  }> = [
+    {
+      id: "J1-adult-levels-lifecycle",
+      proofs: [
+        {
+          file: "e2e/v137-sharing-managed-profiles.spec.ts",
+          runner: "playwright",
+        },
+        {
+          file: "tests/integration/sharing-lifecycle.test.ts",
+          runner: "vitest",
+        },
+      ],
+    },
+    {
+      id: "J2-manage-edits-without-settings",
+      proofs: [
+        {
+          file: "e2e/v137-sharing-managed-profiles.spec.ts",
+          runner: "playwright",
+        },
+        {
+          file: "tests/integration/sharing-manage-handler-matrix.test.ts",
+          runner: "vitest",
+        },
+      ],
+    },
     {
       id: "J3-managed-profile-lifecycle",
-      spec: "e2e/v137-sharing-managed-profiles.spec.ts",
+      proofs: [
+        {
+          file: "e2e/v137-sharing-managed-profiles.spec.ts",
+          runner: "playwright",
+        },
+      ],
+    },
+    {
+      id: "J4-guardian-notification-matrix",
+      proofs: [
+        {
+          file: "tests/integration/guardian-notification-fanout.test.ts",
+          runner: "vitest",
+        },
+      ],
+    },
+    {
+      id: "J5-revoked-idempotent-replay",
+      proofs: [
+        {
+          file: "tests/integration/sharing-idempotency-revocation.test.ts",
+          runner: "vitest",
+        },
+      ],
+    },
+    {
+      id: "J6-no-delegated-provider-egress",
+      proofs: [
+        {
+          file: "tests/integration/sharing-provider-origin.test.ts",
+          runner: "vitest",
+        },
+      ],
+    },
+    {
+      id: "J7-durable-import-actor",
+      proofs: [
+        {
+          file: "tests/integration/sharing-import-attribution.test.ts",
+          runner: "vitest",
+        },
+      ],
+    },
+    {
+      id: "J8-old-client-compatibility",
+      proofs: [
+        {
+          file: "src/__tests__/sharing-legacy-client-contract.test.ts",
+          runner: "vitest",
+        },
+      ],
     },
   ];
 
-  it("claims only ids the enumeration actually declares", () => {
-    // A wiring entry naming a journey nobody enumerated would be a claim about
-    // nothing, and would make the leg below pass against a marker that means
-    // no more than the string it is.
-    expect(WIRED_JOURNEYS.length).toBeGreaterThan(0);
-    const declared = new Set(V137_E2E_JOURNEYS.map((j) => j.id));
-    for (const { id } of WIRED_JOURNEYS) {
-      expect(declared, id).toContain(id);
+  it("wires every enumerated journey, and claims no other", () => {
+    // Both directions. A wiring entry naming a journey nobody enumerated would
+    // be a claim about nothing; an enumerated journey missing from the wiring
+    // is the dropped one this whole file exists to surface, and before this
+    // release the list was allowed to be a subset, so a drop and a not-yet
+    // looked identical.
+    const declared = V137_E2E_JOURNEYS.map((j) => j.id).sort();
+    const wired = WIRED_JOURNEYS.map((j) => j.id).sort();
+    expect(wired).toEqual(declared);
+    expect(new Set(wired).size).toBe(wired.length);
+  });
+
+  it("splits the runners honestly, and by the path rather than the label", () => {
+    const all = WIRED_JOURNEYS.flatMap((j) => j.proofs);
+    // Non-zero on both sides: a split with nothing on one of them would let
+    // "which of these have actually executed in the gate" be answered by a
+    // list that never distinguished anything.
+    const browser = all.filter((p) => p.runner === "playwright");
+    const gate = all.filter((p) => p.runner === "vitest");
+    expect(browser.length).toBeGreaterThan(0);
+    expect(gate.length).toBeGreaterThan(0);
+    for (const proof of all) {
+      // A Playwright spec lives under e2e/ and nothing else does. Deriving the
+      // expected runner from the path is what stops the field from becoming a
+      // label somebody set to whichever value made the count read better.
+      const expected = proof.file.startsWith("e2e/") ? "playwright" : "vitest";
+      expect(proof.runner, proof.file).toBe(expected);
     }
   });
 
-  it.each(WIRED_JOURNEYS)("$id is carried by a test title", ({ id, spec }) => {
-    const source = readFileSync(join(ROOT, spec), "utf8");
-    // Non-zero proof: the spec really loaded and really has tests, so a path
+  it.each(
+    WIRED_JOURNEYS.flatMap(({ id, proofs }) =>
+      proofs.map((p) => ({ id, ...p })),
+    ),
+  )("$id is carried by a test title in $file", ({ id, file }) => {
+    const source = readFileSync(join(ROOT, file), "utf8");
+    // Non-zero proof: the file really loaded and really has tests, so a path
     // that stopped existing fails here rather than matching nothing quietly.
     expect(source.length).toBeGreaterThan(1000);
     const titles = [...testBodies(source).keys()];
-    expect(titles.length).toBeGreaterThan(1);
+    expect(titles.length, `${file} parsed to no tests`).toBeGreaterThan(1);
     expect(
       titles.filter((title) => title.includes(`[${id}]`)).length,
-      `no test title in ${spec} carries [${id}]`,
+      `no test title in ${file} carries [${id}]`,
     ).toBeGreaterThan(0);
   });
 });

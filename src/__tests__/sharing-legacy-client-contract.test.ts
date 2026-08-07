@@ -93,7 +93,7 @@ beforeEach(() => {
 });
 
 describe("what an older client makes of the v1.37.0 account payload", () => {
-  it("covers every fixture case, and the fixtures describe the server", async () => {
+  it("[J8-old-client-compatibility] covers every fixture case, and the fixtures describe the server", async () => {
     // Non-zero discovery, and the assertion that keeps the fixture honest: it
     // is a description of what the resolver emits, not a parallel invention.
     expect(LEGACY_ACCOUNT_PAYLOADS.length).toBeGreaterThan(0);
@@ -130,7 +130,7 @@ describe("what an older client makes of the v1.37.0 account payload", () => {
     },
   );
 
-  it("refuses a scoped grant rather than reading it as the whole record", async () => {
+  it("[J8-old-client-compatibility] refuses a scoped grant rather than reading it as the whole record", async () => {
     const scoped = LEGACY_ACCOUNT_PAYLOADS.find(
       (fixture) => fixture.sections !== null,
     );
@@ -171,7 +171,7 @@ describe("what the canonical readers make of the same payload", () => {
     },
   );
 
-  it("reads a scope the server could not parse as nothing, on both ends", async () => {
+  it("[J8-old-client-compatibility] reads a scope the server could not parse as nothing, on both ends", async () => {
     // The fail-closed reading: a stored scope this build cannot make sense of
     // resolves to an EMPTY section list rather than to the whole record. The
     // server refuses every section for it, and the client has to agree — an

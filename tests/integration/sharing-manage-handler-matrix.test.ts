@@ -1912,7 +1912,7 @@ proveManageRoute("POST /api/export/health-record", {
 /* -------------------------------------------------------------------------- */
 
 describe("what a destruction leaves behind", () => {
-  it("C3: a hard delete files what it destroyed, and never the encrypted text", async () => {
+  it("[J2-manage-edits-without-settings] C3: a hard delete files what it destroyed, and never the encrypted text", async () => {
     // The preventive-care reminder is the sharpest case in the tree: the row
     // is gone, no restore route reaches it, and the audit row used to say
     // `{ reminderId }` — a pointer at nothing. An owner reading their feed
@@ -1983,7 +1983,7 @@ describe("what a destruction leaves behind", () => {
     expect(row.details ?? "").not.toContain("reaction");
   });
 
-  it("C4: an edit files the field family and the value that is gone", async () => {
+  it("[J2-manage-edits-without-settings] C4: an edit files the field family and the value that is gone", async () => {
     const owner = await makeUser("owner");
     const manager = await makeUser("manager");
     const measurement = await makeMeasurement(owner.id, 80);

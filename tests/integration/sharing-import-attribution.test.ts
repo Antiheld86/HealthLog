@@ -47,7 +47,7 @@ beforeEach(async () => {
 });
 
 describe("shared intake import attribution", () => {
-  it("retains the record and manager through one durable completion audit", async () => {
+  it("[J7-durable-import-actor] retains the record and manager through one durable completion audit", async () => {
     const prisma = getPrismaClient();
     await prisma.user.createMany({
       data: [
@@ -110,7 +110,7 @@ describe("shared intake import attribution", () => {
     });
   });
 
-  it("lets the initiating manager poll the record-scoped job", async () => {
+  it("[J7-durable-import-actor] lets the initiating manager poll the record-scoped job", async () => {
     const prisma = getPrismaClient();
     await prisma.user.createMany({
       data: [

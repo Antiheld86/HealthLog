@@ -5886,8 +5886,20 @@ model PushAttempt {
   /// while the database trigger requires it to equal `recipientUserId`.
   userId          String   @map("user_id")
   /// The health-record subject. This supplies calculation context and content.
+  ///
+  /// Optional HERE and `NOT NULL` in the database, deliberately, and the two do
+  /// not disagree: `push_attempt_attribution_guard` is a BEFORE INSERT trigger,
+  /// so a write that omits both principals has them filled from `userId` before
+  /// the constraint is checked. Declaring them required would force every
+  /// established self-delivery writer to name a pair it has no opinion about;
+  /// making the columns nullable in SQL would let a partial pair reach the
+  /// table, which the trigger exists to refuse. `prisma migrate diff` reports
+  /// the difference because it cannot see the trigger — that report is expected,
+  /// and `notification-attribution.test.ts` ("persistence maps an omitted pair
+  /// from the legacy recipient") is what proves the accommodation still works.
   recordUserId    String?  @map("record_user_id")
   /// The account whose channel, preferences, and locale receive the delivery.
+  /// Nullable for the same reason as `recordUserId` above.
   recipientUserId String?  @map("recipient_user_id")
   channel         String // "APNS" | "WEB_PUSH" | "TELEGRAM" | "NTFY"
   eventType       String   @map("event_type") // dispatcher event-type string
