@@ -1,5 +1,4 @@
 import { NextRequest } from "next/server";
-import { z } from "zod/v4";
 
 import {
   apiHandler,
@@ -16,7 +15,7 @@ import { auditLog } from "@/lib/auth/audit";
 import { createManagedProfile } from "@/lib/managed-profiles/create";
 import { annotate } from "@/lib/logging/context";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { isValidTimezone } from "@/lib/tz/format";
+import { createManagedProfileSchema } from "@/lib/validations/managed-profiles";
 
 /**
  * The same ceiling its guardian sibling carries, and for the same reason.
@@ -29,19 +28,6 @@ import { isValidTimezone } from "@/lib/tz/format";
  */
 const CREATE_LIMIT = 10;
 const CREATE_WINDOW_MS = 60 * 60 * 1000;
-
-const managedProfileSchema = z
-  .object({
-    displayName: z.string().trim().min(1).max(80),
-    dateOfBirth: z.iso.date().nullable().optional(),
-    locale: z.enum(["de", "en", "es", "fr", "it", "pl"]),
-    timezone: z
-      .string()
-      .min(1)
-      .max(64)
-      .refine(isValidTimezone, "Invalid IANA timezone"),
-  })
-  .strict();
 
 /**
  * Create a record a Guardian administers. This deliberately uses the
@@ -65,7 +51,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   });
   if (jsonError) return jsonError;
 
-  const parsed = managedProfileSchema.safeParse(body);
+  const parsed = createManagedProfileSchema.safeParse(body);
   if (!parsed.success) return returnAllZodIssues(parsed.error, 422);
 
   const { profile, creatorGrant } = await createManagedProfile({

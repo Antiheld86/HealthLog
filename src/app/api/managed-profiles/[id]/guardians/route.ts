@@ -1,5 +1,4 @@
 import { NextRequest } from "next/server";
-import { z } from "zod/v4";
 
 import {
   apiHandler,
@@ -23,6 +22,7 @@ import { ManagedProfileLifecycleError } from "@/lib/managed-profiles/lifecycle";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { GRANT_PARTY_SELECT } from "@/lib/sharing/grant-view";
 import { GrantError, inviteManagedProfileGuardian } from "@/lib/sharing/grants";
+import { inviteManagedProfileGuardianSchema } from "@/lib/validations/managed-profiles";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -77,13 +77,6 @@ export const GET = apiHandler(
 const INVITE_LIMIT = 10;
 const INVITE_WINDOW_MS = 60 * 60 * 1000;
 
-const guardianInviteSchema = z
-  .object({
-    identifier: z.string().trim().min(1).max(255),
-    expiresAt: z.iso.datetime({ offset: true }).nullable().optional(),
-  })
-  .strict();
-
 /** Invite another Guardian from a cookie-backed, freshly verified session. */
 export const POST = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
@@ -100,7 +93,7 @@ export const POST = apiHandler(
       maxBytes: 8 * 1024,
     });
     if (jsonError) return jsonError;
-    const parsed = guardianInviteSchema.safeParse(body);
+    const parsed = inviteManagedProfileGuardianSchema.safeParse(body);
     if (!parsed.success) return returnAllZodIssues(parsed.error, 422);
     const { id } = await params;
 

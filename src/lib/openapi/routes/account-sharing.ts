@@ -29,12 +29,28 @@ import {
   inviteGrantSchema,
   switchAccountSchema,
 } from "@/lib/validations/account-sharing";
+import {
+  createManagedProfileSchema,
+  inviteManagedProfileGuardianSchema,
+} from "@/lib/validations/managed-profiles";
 import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
 
 inviteGrantSchema.meta({
   id: "AccountGrantInvite",
   description:
-    "Offer access to another account on this instance. `identifier` is the invitee's username or e-mail, matched case-insensitively — the same identifier they sign in with. `expiresAt` is optional; omitted or null means the grant runs until somebody ends it. `access` is READ when omitted, so a client that does not know about the field keeps working: READ can read the record and change nothing, WRITE can additionally ADD entries (readings, results, observations, a medication, a marked dose) and can still edit or delete nothing, including its own, and MANAGE can additionally change and remove entries, including ones the owner wrote, and read the generated insights — never the identity surfaces (login, second factor, connections, tokens, settings, or who else has access). `scope` narrows a READ or WRITE grant to named sections; omitted or null is the entire record, which is what every grant written before v1.37.0 means. An empty array, an unknown key, and any `scope` at all beside `access: MANAGE` are each 422 — management is whole-record by construction. Offering MANAGE additionally requires a fresh second factor when the account has one enrolled, which makes it cookie-only: a Bearer caller is refused with 403 `sharing.invite.manage_browser_only` and should send the person to a browser. The level and the scope are fixed when the invitation is written — no endpoint raises a live grant, because that would widen what the delegate accepted without asking them again. The way up is a new invitation the delegate accepts.",
+    "Offer access to another account on this instance. Every sentence here describes an INVITED grant on this endpoint, and nothing else: a Guardian of a managed profile also holds MANAGE over a whole record, but that grant is minted by `POST /api/managed-profiles/{id}/guardians` under its own gate and answers with its own shape, so none of the rules below — the step-up, the transport, the refusals — may be carried across to it. `identifier` is the invitee's username or e-mail, matched case-insensitively — the same identifier they sign in with. `expiresAt` is optional; omitted or null means the grant runs until somebody ends it. `access` is READ when omitted, so a client that does not know about the field keeps working: READ can read the record and change nothing, WRITE can additionally ADD entries (readings, results, observations, a medication, a marked dose) and can still edit or delete nothing, including its own, and MANAGE can additionally change and remove entries, including ones the owner wrote, and read the generated insights — never the identity surfaces (login, second factor, connections, tokens, settings, or who else has access). `scope` narrows a READ or WRITE grant to named sections; omitted or null is the entire record, which is what every grant written before v1.37.0 means. An empty array, an unknown key, and any `scope` at all beside `access: MANAGE` are each 422 — management is whole-record by construction. Offering MANAGE additionally requires a fresh second factor when the account has one enrolled, which makes it cookie-only: a Bearer caller is refused with 403 `sharing.invite.manage_browser_only` and should send the person to a browser. The level and the scope are fixed when the invitation is written — no endpoint raises a live grant, because that would widen what the delegate accepted without asking them again. The way up is a new invitation the delegate accepts.",
+});
+
+createManagedProfileSchema.meta({
+  id: "CreateManagedProfileRequest",
+  description:
+    "Create a health record for somebody who has no login of their own — a child, a dependent adult, an animal. The caller becomes its first Guardian in the same transaction, through an ordinary MANAGE grant with the new record as grantor, so the profile appears in `accountAccess.accounts` on the next `GET /api/auth/me` and is switched into like any other shared record. `displayName` is the only required text; `dateOfBirth` is an optional `YYYY-MM-DD` and is never synthesised from a year. `locale` and `timezone` belong to the RECORD and not to the Guardian reading it: they decide how the profile's own reminders are worded and when its day starts. Strict — an unexpected field is a 422 rather than an ignored key. Cookie transport only and step-up gated (`requireFreshMfa`, unconditional): a Bearer caller cannot mint a credential-less person and a permanent management relationship, and an account with no second factor enrolled is refused rather than waved through. Rate-limited to ten an hour per caller.",
+});
+
+inviteManagedProfileGuardianSchema.meta({
+  id: "InviteManagedProfileGuardianRequest",
+  description:
+    "Offer somebody else a share in looking after this profile. `identifier` is their username or e-mail, matched case-insensitively. `expiresAt` is an ISO instant WITH an offset — a bare `YYYY-MM-DD` is a 422 — or null for an invitation that runs until somebody ends it. The grant is created PENDING at MANAGE over the whole record; the invitee accepts it on their own invitations card exactly as they would any other, and until they do they do not satisfy the last-Guardian floor. Strict, cookie-only, step-up gated and rate-limited to ten an hour, like every act in this family.",
 });
 
 switchAccountSchema.meta({
@@ -137,7 +153,41 @@ const managedProfileGuardian = z
   .meta({
     id: "ManagedProfileGuardian",
     description:
-      "One person who looks after a managed profile. Ended grants — revoked or expired — are absent rather than listed with a state: the question is who looks after this record now.",
+      "One person who looks after a managed profile. Ended grants — revoked or expired — are absent rather than listed with a state: the question is who looks after this record now. The invitation route answers with this same shape, so a Guardian is described one way everywhere; it carries no `expiresAt`, because an expiry bounds one invitation rather than describing who is looking after the record.",
+  });
+
+const managedProfileCreated = z
+  .object({
+    id: z
+      .string()
+      .describe(
+        "The profile's account id — the value `POST /api/account/switch` and the `X-HealthLog-Account` selector take, and the `{id}` in this family's paths.",
+      ),
+    displayName: z.string(),
+    dateOfBirth: z.string().nullable(),
+    locale: z.string(),
+    timezone: z.string(),
+    recordKind: z
+      .literal("managed")
+      .describe(
+        "Always `managed` here. Published so a client can file the new record without re-deriving what it just created; the same value arrives on the account payload's entry for it.",
+      ),
+  })
+  .meta({
+    id: "ManagedProfile",
+    description:
+      "A record somebody looks after, as its creation answers with it. There is deliberately no list endpoint: the profiles a Guardian looks after are the `managed` entries of `accountAccess.accounts` on GET /api/auth/me, because a Guardian's relationship to a profile IS a MANAGE grant. Re-read the account payload after any change here; a client that refreshed only its own panel would leave the new record out of the switcher and the banner until the next boot.",
+  });
+
+const endedGuardianGrant = z
+  .object({
+    grantId: z.string(),
+    revokedAt: z.string(),
+  })
+  .meta({
+    id: "EndedManagedProfileGuardian",
+    description:
+      "What ended, and when. Two fields on purpose: who held it is on the roster the caller re-reads, and the grant row's remaining columns are storage rather than contract. Nothing is deleted — the row survives as the consent record with `revokedBy: GRANTOR`, the managed profile being the grantor of every Guardian grant.",
   });
 
 const grantListResponse = z
@@ -586,6 +636,79 @@ export const accountSharingPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       },
     },
   },
+  "/api/managed-profiles": {
+    post: {
+      tags: ["Account sharing"],
+      summary: "Create a record somebody looks after",
+      description:
+        "The one way a managed profile comes into existence. It has no password, no passkey and no second factor of its own, and it never gains one: an account with no self is reachable only through its Guardians, which is what makes the step-up below a boundary rather than a formality. The creator's own Guardian grant is minted in the same transaction, so the record is switchable immediately and the caller is never left holding a profile nobody administers. Cookie transport only — `requireFreshMfa` resolves through the session cookie, so a Bearer caller is refused as unauthenticated; a native client sends the person to a browser rather than surfacing that as an error.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: createManagedProfileSchema },
+        },
+      },
+      responses: {
+        ...stdResponses,
+        "201": {
+          description: "The new record.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                managedProfileCreated,
+                "ManagedProfileEnvelope",
+              ),
+            },
+          },
+        },
+        "401": {
+          description:
+            "No fresh second-factor proof (`meta.errorCode: auth.stepup.required`), or none enrolled at all (`meta.errorCode: auth.stepup.mfa_not_enrolled`) — this gate is unconditional, so an account without a second factor cannot create a managed profile until it enrols one. The ordinary unauthenticated 401 arrives here too, including for a Bearer caller, whose transport this gate does not read.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "429": {
+          description:
+            "More than ten profiles from one caller within the hour. No error code — rate-limit refusals carry none anywhere in this API; branch on the status. Nothing was created.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+  },
+  "/api/managed-profiles/{id}": {
+    delete: {
+      tags: ["Account sharing"],
+      summary: "Delete a managed record",
+      description:
+        "Ends the record and everything in it. This is the documented way OUT of the last-Guardian floor, which is why it carries no last-Guardian refusal of its own: a Guardian may not strand a record with nobody looking after it, but they may end the record. Any active Guardian may do it, from a cookie session with a fresh second factor.",
+      requestParams: {
+        path: z.object({ id: z.string() }),
+      },
+      responses: {
+        ...stdResponses,
+        "200": {
+          description: "The record is gone.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ deleted: z.literal(true) }),
+                "DeletedManagedProfileEnvelope",
+              ),
+            },
+          },
+        },
+        "401": {
+          description:
+            "No fresh second-factor proof, or none enrolled. Same unconditional gate as creation.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "404": {
+          description:
+            "No such managed profile, or the caller is not one of its Guardians (`meta.errorCode: managed_profile.not_found`). The two are byte-identical, so the refusal is not an enumeration oracle — and an ordinary record whose owner granted somebody MANAGE is not a managed profile, so it answers here too.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+  },
   "/api/managed-profiles/{id}/guardians": {
     get: {
       tags: ["Account sharing"],
@@ -611,6 +734,103 @@ export const accountSharingPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "404": {
           description:
             "No such managed profile, or the caller is not one of its Guardians (`meta.errorCode: managed_profile.not_found`). The two are byte-identical.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+    post: {
+      tags: ["Account sharing"],
+      summary: "Invite another Guardian",
+      description:
+        "Offers somebody else a share in looking after this profile, at MANAGE over the whole record. Cookie-only and step-up gated, like every act in this family — the read beside it is not. **Resolve refusals on `meta.errorCode` first and fall back to the status only for the two arms that carry none**, because this route answers 404 twice and the codeless one is the less serious of the two: an identifier that matches no account carries no code, while `managed_profile.not_found` means the caller is not a Guardian of that profile at all. A client branching on the status first would tell somebody to check a spelling when the real answer is that the record is no longer theirs to administer.",
+      requestParams: {
+        path: z.object({ id: z.string() }),
+      },
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: inviteManagedProfileGuardianSchema,
+          },
+        },
+      },
+      responses: {
+        ...stdResponses,
+        "201": {
+          description:
+            "The pending Guardian, in the shape the roster publishes.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                managedProfileGuardian,
+                "ManagedProfileGuardianEnvelope",
+              ),
+            },
+          },
+        },
+        "401": {
+          description:
+            "No fresh second-factor proof, or none enrolled. Same unconditional gate as creation.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "404": {
+          description:
+            "Two refusals share this status and only one carries a code. **No `meta.errorCode`**: no account on this instance carries that identifier — the same deliberate disclosure to an authenticated caller that `POST /api/account/grants` makes, and codeless there too, so this family does not answer one way here and another way one page over. `meta.errorCode: managed_profile.not_found`: no such managed profile, or the caller is not one of its Guardians.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "409": {
+          description:
+            "That account already holds a live grant on this record (`meta.errorCode: managed_profile.guardian.duplicate`). Inviting YOURSELF lands here rather than on a refusal of its own: a Guardian grant's grantor is the profile, never the caller, so naming yourself names an account that already has access — which is both true and the useful sentence.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "422": {
+          description:
+            "Validation failed (the multi-issue envelope; a bare `YYYY-MM-DD` expiry arrives here), or the invitee is itself a managed profile (`meta.errorCode: managed_profile.guardian.managed_invitee`) — a record with no self cannot look after another one.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "429": {
+          description:
+            "More than ten invitations from one caller within the hour. No error code, as above; branch on the status.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+  },
+  "/api/managed-profiles/{id}/guardians/{grantId}": {
+    delete: {
+      tags: ["Account sharing"],
+      summary: "End another Guardian's access",
+      description:
+        "Ends one Guardian grant on this profile — a pending invitation or an accepted one. Another person's, never the caller's own: the service refuses a target grant whose grantee is the caller, and that refusal is the same 404 an unknown profile gets, so a self-removal control would be a button that always fails with a sentence describing something else. A Guardian steps away through `POST /api/account/grants/{id}/renounce` instead, which carries the last-Guardian refusal properly. Count the ACTIVE rows on the roster BEFORE offering this: the floor is stated ahead of the act rather than discovered as a refusal, and on this route it cannot arrive as one — see the 409.",
+      requestParams: {
+        path: z.object({ id: z.string(), grantId: z.string() }),
+      },
+      responses: {
+        ...stdResponses,
+        "200": {
+          description: "What ended, and when.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                endedGuardianGrant,
+                "EndedManagedProfileGuardianEnvelope",
+              ),
+            },
+          },
+        },
+        "401": {
+          description:
+            "No fresh second-factor proof, or none enrolled. Same unconditional gate as creation.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "404": {
+          description:
+            "`meta.errorCode: managed_profile.not_found`, for four situations the caller cannot tell apart: no such profile, no such grant on it, the caller is not one of its Guardians, or the target grant is the caller's OWN. The last is the one to design around — a client must not offer this control on the caller's own row, because the refusal it earns describes a missing profile rather than what actually happened.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "409": {
+          description:
+            "The record would be left with nobody looking after it (`meta.errorCode: managed_profile.guardian.required`). **Not reachable through this route today**, and published anyway rather than silently: the caller must already be one active Guardian and the target is never the caller, so an active target is always a second one — and two is never the one the floor refuses. The same code IS emitted by the renounce route, by Guardian account deletion and by a data wipe, so a shared client resolver keeps this arm. It is documented here so that a change making it reachable is a change somebody notices.",
           content: { "application/json": { schema: errorEnvelope } },
         },
       },
