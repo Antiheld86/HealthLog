@@ -118,7 +118,17 @@ function accessLabel(
     : t("recordSharing.banner.readOnly");
 }
 
-function recordKindLabel(
+/**
+ * Which kind of record this is, in the banner's own words.
+ *
+ * Exported and pure because the ternary is the whole claim and nothing could
+ * fail it: the browser journey asserted `data-record-kind="managed"`, which is
+ * the attribute this function does not read, so inverting the two arms left
+ * every test in the suite green while telling a Guardian they were inside an
+ * ordinary shared record. Two sentences that mean different things are worth
+ * one test.
+ */
+export function recordKindLabel(
   recordKind: ReturnType<typeof resolveRecordPresentation>["recordKind"],
   t: ReturnType<typeof useTranslations>["t"],
 ): string {

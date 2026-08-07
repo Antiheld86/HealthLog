@@ -595,9 +595,18 @@ test.describe.serial("managed profile browser journey", () => {
     const banner = page.locator('[data-slot="shared-record-banner"]');
     await expect(banner).toBeVisible();
     await expect(banner).toHaveAttribute("data-record-kind", "managed");
+    // The WORDING, not only the attribute, and this is the one place in the
+    // suite where pinning copy is the right call rather than the lazy one: the
+    // claim is that the banner NAMES it as a managed record, and the attribute
+    // is not what a person reads. `recordKindLabel`'s ternary chooses between
+    // two sentences that mean different things, and inverting it left every
+    // attribute assertion green while telling a Guardian they were inside an
+    // ordinary shared record. The pure function is pinned in
+    // `src/components/layout/__tests__/shared-record-banner-label.test.tsx`;
+    // this line proves the rendered banner really calls it.
     await expect(
       page.locator('[data-slot="shared-record-banner-context"]'),
-    ).toBeVisible();
+    ).toContainText("Managed profile");
 
     // And back out, with the record still on the list.
     //
