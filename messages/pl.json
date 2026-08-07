@@ -7719,7 +7719,7 @@
     },
     "sheet": {
       "title": "Zapisz swój dzień",
-      "description": "Zapisz dzisiejsze krwawienie, objawy i notatki.",
+      "description": "Krwawienie, objawy i notatki z tego dnia.",
       "flow": "Krwawienie",
       "symptoms": "Objawy",
       "temperature": "Podstawowa temperatura ciała",
@@ -7754,7 +7754,10 @@
       "intimacySection": "Intymność i antykoncepcja",
       "testsSection": "Testy",
       "phaseDayHeader": "Dzień {day} · {phase}",
-      "bbtHint": "Zmierz ją rano zaraz po przebudzeniu, przed wstaniem."
+      "bbtHint": "Zmierz ją rano zaraz po przebudzeniu, przed wstaniem.",
+      "titleForDate": "Wpis z {date}",
+      "descriptionToday": "Dzisiaj. Krwawienie, objawy i notatki.",
+      "deleteBodyCycleStart": "Ten dzień otwiera cykl. Usunięcie go kasuje razem z nim początek miesiączki, więc poprzedni cykl biegnie dalej jak wcześniej. Znika też wszystko, co tu zapisano: krwawienie, temperatura, objawy i twoja notatka. Nie da się tego cofnąć."
     },
     "settings": {
       "title": "Ustawienia cyklu",
@@ -7831,7 +7834,13 @@
       "intercourseLabel": "Co śledzi stosunek?",
       "protected": "Czy podczas stosunku zastosowano antykoncepcję.",
       "protectedLabel": "Co oznacza zabezpieczony?"
-    }
+    },
+    "saveSuccess": "Wpis zapisany.",
+    "deleteSuccess": "Wpis usunięty.",
+    "periodStartSaved": "Początek miesiączki zapisany.",
+    "periodEndSaved": "Koniec miesiączki zapisany.",
+    "startedPeriodOnDate": "Miesiączka zaczęła się tego dnia",
+    "endedPeriodOnDate": "Miesiączka skończyła się tego dnia"
   },
   "cycleReminders": {
     "periodSoonTitle": "Miesiączka prawdopodobnie wkrótce",

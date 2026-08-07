@@ -103,7 +103,26 @@ export const LUTEAL_DEFAULT = 14;
 export const LUTEAL_MIN = 10;
 export const LUTEAL_MAX = 16;
 
-/** §4 — six-day fertile window: ovulation − 5 … ovulation + 1. */
+/**
+ * §4 — the fertile window: ovulation − 5 … ovulation + 1, seven days.
+ *
+ * Wilcox's six-day window is the five days BEFORE ovulation plus the day
+ * itself, and the trailing day here is a deliberate departure from it. The
+ * six-day figure is measured against a KNOWN ovulation day; ours is estimated,
+ * usually by back-calculating a luteal length from a median cycle, and an
+ * estimate that lands a day early would put the last fertile day outside a
+ * window drawn tight to it. The ovum also stays viable for the better part of a
+ * day after release, so the extra day is not only estimator slack.
+ *
+ * The asymmetry of the cost decides the direction. This window is surfaced to
+ * people trying to conceive and to people avoiding it, and for the second group
+ * a window one day too short is a window that misses. The constants are the
+ * conservative reading; the comment used to claim six days and describe seven,
+ * which is the only part of this that was wrong.
+ *
+ * Changing either constant changes what the iOS client reimplements from the
+ * same spec, so it needs a coordination note, not just an edit here.
+ */
 export const FERTILE_PRE = 5;
 export const FERTILE_POST = 1;
 

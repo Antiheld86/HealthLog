@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { addDays } from "../day-math";
+import { FERTILE_POST, FERTILE_PRE } from "../types";
 import {
   clampLuteal,
   confirmSymptothermal,
@@ -1089,5 +1090,35 @@ describe("cycle/dto — toCyclePredictionDTO still-learning honesty gate (M-1)",
     expect(goalGated.ovulationConfirmed).toBe(false);
     expect(goalGated.fertileWindowStart).toBeNull();
     expect(goalGated.predictedOvulation).toBeNull();
+  });
+});
+
+describe("cycle/prediction — the fertile window's width (A10)", () => {
+  it("spans seven days, ending the day after the ovulation estimate", () => {
+    // The comment on the constants used to say six days and the constants made
+    // seven. The width is now a decision with a reason written at the constant,
+    // so it is pinned here rather than left to be re-read off the same numbers
+    // the code uses: five days before the estimate, the estimate, and one after.
+    const cycles = cyclesFromGaps("2026-01-01", [28, 28, 28]);
+    const p = predictCycle(cycles, [], BASE_PROFILE, "2026-03-20", []);
+
+    expect(p.predictedOvulation).not.toBeNull();
+    expect(p.fertileWindowStart).toBe(addDays(p.predictedOvulation!, -5));
+    expect(p.fertileWindowEnd).toBe(addDays(p.predictedOvulation!, 1));
+
+    const span =
+      (Date.parse(`${p.fertileWindowEnd}T12:00:00Z`) -
+        Date.parse(`${p.fertileWindowStart}T12:00:00Z`)) /
+      86_400_000;
+    // Inclusive of both ends.
+    expect(span + 1).toBe(7);
+  });
+
+  it("keeps the extra day on the side that costs least to be wrong about", () => {
+    // The trailing day is estimator slack plus ovum viability. Dropping it
+    // would shorten the window for somebody avoiding pregnancy, which is the
+    // direction that misses.
+    expect(FERTILE_PRE).toBe(5);
+    expect(FERTILE_POST).toBe(1);
   });
 });

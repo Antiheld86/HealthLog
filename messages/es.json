@@ -7719,7 +7719,7 @@
     },
     "sheet": {
       "title": "Registrar tu día",
-      "description": "Captura el flujo, los síntomas y las notas de hoy.",
+      "description": "Flujo, síntomas y notas de este día.",
       "flow": "Flujo",
       "symptoms": "Síntomas",
       "temperature": "Temperatura basal",
@@ -7754,7 +7754,10 @@
       "intimacySection": "Intimidad y anticoncepción",
       "testsSection": "Pruebas",
       "phaseDayHeader": "Día {day} · {phase}",
-      "bbtHint": "Mídela a primera hora de la mañana, antes de levantarte."
+      "bbtHint": "Mídela a primera hora de la mañana, antes de levantarte.",
+      "titleForDate": "Registro del {date}",
+      "descriptionToday": "Hoy. Flujo, síntomas y notas.",
+      "deleteBodyCycleStart": "Este día abre un ciclo. Al eliminarlo se va con él el inicio del periodo, de modo que el ciclo anterior continúa como antes. También se va todo lo registrado aquí: flujo, temperatura, síntomas y tu nota. No hay forma de recuperarlo."
     },
     "settings": {
       "title": "Ajustes del ciclo",
@@ -7831,7 +7834,13 @@
       "intercourseLabel": "¿Qué registra relaciones?",
       "protected": "Si se usó anticoncepción durante las relaciones.",
       "protectedLabel": "¿Qué significa protegido?"
-    }
+    },
+    "saveSuccess": "Entrada guardada.",
+    "deleteSuccess": "Entrada eliminada.",
+    "periodStartSaved": "Inicio del periodo guardado.",
+    "periodEndSaved": "Fin del periodo guardado.",
+    "startedPeriodOnDate": "Mi periodo empezó este día",
+    "endedPeriodOnDate": "Mi periodo terminó este día"
   },
   "cycleReminders": {
     "periodSoonTitle": "El periodo llegará pronto",

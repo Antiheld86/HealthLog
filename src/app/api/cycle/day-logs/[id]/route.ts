@@ -23,6 +23,11 @@ import {
   safeJson,
 } from "@/lib/api-response";
 import { requireCycleEnabled } from "@/lib/cycle/gate";
+import {
+  ensureCycleForBleedingDay,
+  removeCycleStartedOn,
+} from "@/lib/cycle/cycle-boundaries";
+import { DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { getOrCreateCycleProfile } from "@/lib/cycle/profile";
 import { replaceSymptomLinks } from "@/lib/cycle/day-log-write";
@@ -157,6 +162,26 @@ export const PATCH = apiHandler(
       include: dayLogSymptomInclude,
     });
 
+    // An edit that turns a day into a first bleeding day opens the cycle it
+    // starts, and an edit that takes the bleeding back off it removes the
+    // cycle that day opened. Both directions go through the same shared
+    // boundary work the capture route and the one-tap start use — a cycle that
+    // could be created here but not undone here is how the record ends up
+    // holding a period nothing on the day says happened.
+    const openedCycleId = await ensureCycleForBleedingDay(
+      user.id,
+      existing.date,
+      user.timezone ?? DEFAULT_TIMEZONE,
+      row,
+    );
+    let removedCycleId: string | null = null;
+    if (!openedCycleId && !stillBleeds(row)) {
+      const removed = await prisma.$transaction((db) =>
+        removeCycleStartedOn(db, user.id, existing.date),
+      );
+      removedCycleId = removed?.cycleId ?? null;
+    }
+
     await auditLog("cycle.day-log.update", {
       userId: user.id,
       ipAddress: getClientIp(request),
@@ -166,6 +191,8 @@ export const PATCH = apiHandler(
       details: {
         dayLogId: id,
         date: existing.date,
+        ...(openedCycleId ? { openedCycleId } : {}),
+        ...(removedCycleId ? { removedCycleId } : {}),
         ...overwriteDetails({
           before: {},
           after: {},
@@ -182,6 +209,10 @@ export const PATCH = apiHandler(
         name: "cycle.day-log.update",
         entity_type: "cycle_day_log",
         entity_id: id,
+      },
+      meta: {
+        opened_cycle: openedCycleId !== null,
+        removed_cycle: removedCycleId !== null,
       },
     });
 
@@ -202,7 +233,7 @@ export const DELETE = apiHandler(
 
     const existing = await prisma.cycleDayLog.findUnique({
       where: { id },
-      select: { id: true, userId: true },
+      select: { id: true, userId: true, date: true },
     });
     if (!existing || existing.userId !== user.id) {
       return apiError("Day-log not found", 404);
@@ -211,15 +242,44 @@ export const DELETE = apiHandler(
     // Soft-delete: leave the row in place so the `/api/sync/changes`
     // delta feed surfaces it as a tombstone. A re-delete re-bumps
     // `syncVersion` harmlessly (idempotent).
-    await prisma.cycleDayLog.update({
-      where: { id },
-      data: { deletedAt: new Date(), syncVersion: { increment: 1 } },
+    //
+    // A day that OPENS a cycle takes that cycle with it. The one-tap "started
+    // my period" writes both rows, and this delete is the only way the web
+    // offers to take it back — leaving the cycle behind meant the previous one
+    // stayed closed against a start whose last trace had just been removed, and
+    // the forecast never came back. The cycle boundary is then re-derived for
+    // the preceding cycle, the same repair the cycle delete does.
+    const removed = await prisma.$transaction(async (db) => {
+      await db.cycleDayLog.update({
+        where: { id },
+        data: { deletedAt: new Date(), syncVersion: { increment: 1 } },
+      });
+      return removeCycleStartedOn(db, user.id, existing.date);
     });
 
     await auditLog("cycle.day-log.delete", {
       userId: user.id,
       ipAddress: getClientIp(request),
-      details: { dayLogId: id },
+      details: {
+        dayLogId: id,
+        date: existing.date,
+        ...(removed ? { removedCycleId: removed.cycleId } : {}),
+        ...(removed?.reanchored
+          ? {
+              reanchoredCycleId: removed.reanchored.cycleId,
+              ...overwriteDetails({
+                before: {
+                  endDate: removed.reanchored.endDateBefore,
+                  lengthDays: removed.reanchored.lengthDaysBefore,
+                },
+                after: {
+                  endDate: removed.reanchored.endDateAfter,
+                  lengthDays: removed.reanchored.lengthDaysAfter,
+                },
+              }),
+            }
+          : {}),
+      },
     });
 
     annotate({
@@ -227,6 +287,10 @@ export const DELETE = apiHandler(
         name: "cycle.day-log.delete",
         entity_type: "cycle_day_log",
         entity_id: id,
+      },
+      meta: {
+        removed_cycle: removed !== null,
+        reanchored_prior: removed?.reanchored != null,
       },
     });
 
@@ -280,4 +344,16 @@ function readStoredSensitive(row: {
     progesteroneTest: row.progesteroneTest,
     contraceptive: row.contraceptive,
   };
+}
+
+/**
+ * Whether the edited day still records a period. A cleared or downgraded flow,
+ * or one re-flagged as bleeding between periods, no longer anchors a cycle.
+ */
+function stillBleeds(row: {
+  flow: string | null;
+  intermenstrualBleeding: boolean;
+}): boolean {
+  if (row.intermenstrualBleeding) return false;
+  return row.flow !== null && row.flow !== "NONE" && row.flow !== "SPOTTING";
 }

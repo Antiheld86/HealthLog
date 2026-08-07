@@ -7719,7 +7719,7 @@
     },
     "sheet": {
       "title": "Enregistrer ta journée",
-      "description": "Saisis le flux, les symptômes et les notes du jour.",
+      "description": "Flux, symptômes et notes de cette journée.",
       "flow": "Flux",
       "symptoms": "Symptômes",
       "temperature": "Température basale",
@@ -7754,7 +7754,10 @@
       "intimacySection": "Intimité et contraception",
       "testsSection": "Tests",
       "phaseDayHeader": "Jour {day} · {phase}",
-      "bbtHint": "Prends-la dès le matin, avant de te lever."
+      "bbtHint": "Prends-la dès le matin, avant de te lever.",
+      "titleForDate": "Saisie du {date}",
+      "descriptionToday": "Aujourd'hui. Flux, symptômes et notes.",
+      "deleteBodyCycleStart": "Cette journée ouvre un cycle. La supprimer emporte le début des règles, si bien que le cycle précédent se poursuit comme avant. Tout ce qui est saisi ici disparaît aussi : flux, température, symptômes et ta note. Rien ne peut être récupéré."
     },
     "settings": {
       "title": "Réglages du cycle",
@@ -7831,7 +7834,13 @@
       "intercourseLabel": "Que suit le rapport ?",
       "protected": "Si une contraception a été utilisée pendant le rapport.",
       "protectedLabel": "Que signifie protégé ?"
-    }
+    },
+    "saveSuccess": "Entrée enregistrée.",
+    "deleteSuccess": "Entrée supprimée.",
+    "periodStartSaved": "Début des règles enregistré.",
+    "periodEndSaved": "Fin des règles enregistrée.",
+    "startedPeriodOnDate": "Mes règles ont commencé ce jour-là",
+    "endedPeriodOnDate": "Mes règles se sont terminées ce jour-là"
   },
   "cycleReminders": {
     "periodSoonTitle": "Règles probablement bientôt",

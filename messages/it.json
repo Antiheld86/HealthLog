@@ -7719,7 +7719,7 @@
     },
     "sheet": {
       "title": "Registra la tua giornata",
-      "description": "Annota flusso, sintomi e note di oggi.",
+      "description": "Flusso, sintomi e note di questo giorno.",
       "flow": "Flusso",
       "symptoms": "Sintomi",
       "temperature": "Temperatura basale",
@@ -7754,7 +7754,10 @@
       "intimacySection": "Intimità e contraccezione",
       "testsSection": "Test",
       "phaseDayHeader": "Giorno {day} · {phase}",
-      "bbtHint": "Misurala appena sveglia, prima di alzarti."
+      "bbtHint": "Misurala appena sveglia, prima di alzarti.",
+      "titleForDate": "Registrazione del {date}",
+      "descriptionToday": "Oggi. Flusso, sintomi e note.",
+      "deleteBodyCycleStart": "Questo giorno apre un ciclo. Eliminandolo sparisce anche l'inizio delle mestruazioni, così il ciclo precedente prosegue come prima. Se ne va pure tutto ciò che è annotato qui: flusso, temperatura, sintomi e la tua nota. Non c'è modo di recuperarlo."
     },
     "settings": {
       "title": "Impostazioni del ciclo",
@@ -7831,7 +7834,13 @@
       "intercourseLabel": "Cosa registra i rapporti?",
       "protected": "Se durante il rapporto è stata usata la contraccezione.",
       "protectedLabel": "Cosa significa protetto?"
-    }
+    },
+    "saveSuccess": "Voce salvata.",
+    "deleteSuccess": "Voce eliminata.",
+    "periodStartSaved": "Inizio delle mestruazioni salvato.",
+    "periodEndSaved": "Fine delle mestruazioni salvata.",
+    "startedPeriodOnDate": "Le mestruazioni sono iniziate questo giorno",
+    "endedPeriodOnDate": "Le mestruazioni sono finite questo giorno"
   },
   "cycleReminders": {
     "periodSoonTitle": "Ciclo probabilmente in arrivo",

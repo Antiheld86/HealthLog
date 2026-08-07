@@ -242,6 +242,7 @@ export async function buildCycleSnapshotBlock(
     cycles,
     prediction?.nextPeriodStart ?? null,
     lutealLength,
+    today,
   );
 
   // Next predicted event — period range + confidence + method, fertile window
@@ -279,6 +280,7 @@ export async function buildCycleSnapshotBlock(
     prediction?.nextPeriodStart ?? null,
     lutealLength,
     from,
+    today,
     today,
   );
   const measurements: CrossMetricMeasurement[] = measurementRows.map((m) => ({

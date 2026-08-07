@@ -11,15 +11,44 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const db = vi.hoisted(() => ({
-  cycleDayLog: {
-    findUnique: vi.fn(),
-    upsert: vi.fn(),
-    update: vi.fn(),
-  },
-  cycleSymptom: { findMany: vi.fn() },
-  cycleSymptomLink: { deleteMany: vi.fn(), createMany: vi.fn() },
-}));
+const db = vi.hoisted(() => {
+  const client: Record<string, unknown> = {
+    cycleDayLog: {
+      findUnique: vi.fn(),
+      upsert: vi.fn(),
+      update: vi.fn(),
+    },
+    // The write path asks whether the logged day opens a cycle. These cases
+    // are about the encryption columns, so the fake answers "no cycles on
+    // record" and lets the boundary work run for real against itself — the
+    // inference itself is pinned by its own unit + integration cases.
+    menstrualCycle: {
+      findFirst: vi.fn(async () => null),
+      upsert: vi.fn(async () => ({ id: "cyc-1", endDate: null })),
+      update: vi.fn(),
+    },
+    cycleSymptom: { findMany: vi.fn() },
+    cycleSymptomLink: { deleteMany: vi.fn(), createMany: vi.fn() },
+  };
+  client.$transaction = async (fn: (tx: unknown) => unknown) => fn(client);
+  return client as {
+    cycleDayLog: {
+      findUnique: ReturnType<typeof vi.fn>;
+      upsert: ReturnType<typeof vi.fn>;
+      update: ReturnType<typeof vi.fn>;
+    };
+    menstrualCycle: {
+      findFirst: ReturnType<typeof vi.fn>;
+      upsert: ReturnType<typeof vi.fn>;
+      update: ReturnType<typeof vi.fn>;
+    };
+    cycleSymptom: { findMany: ReturnType<typeof vi.fn> };
+    cycleSymptomLink: {
+      deleteMany: ReturnType<typeof vi.fn>;
+      createMany: ReturnType<typeof vi.fn>;
+    };
+  };
+});
 
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("@/lib/cycle/profile", () => ({
@@ -70,6 +99,8 @@ function existingRow(overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   db.cycleDayLog.upsert.mockResolvedValue({ id: "cdl-1" });
+  db.menstrualCycle.findFirst.mockResolvedValue(null);
+  db.menstrualCycle.upsert.mockResolvedValue({ id: "cyc-1", endDate: null });
 });
 
 describe("upsertCycleDayLog — C-1 undecryptable note preservation", () => {

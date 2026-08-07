@@ -195,6 +195,12 @@ export const GET = apiHandler(async (request: NextRequest) => {
     nextPeriodStart: predictionDto?.nextPeriodStart ?? null,
     fertileWindowStart: predictionDto?.fertileWindowStart ?? null,
     fertileWindowEnd: predictionDto?.fertileWindowEnd ?? null,
+    // The latest start the person logged, read off the cycle rows rather than
+    // the grid. The grid's phase band is withheld while the engine is still
+    // learning, and the day count must not go with it — `cycles` is ordered by
+    // startDate ascending, so the last one at or before today is the anchor.
+    lastPeriodStart:
+      cycles.filter((c) => c.startDate <= today).at(-1)?.startDate ?? null,
   });
 
   annotate({

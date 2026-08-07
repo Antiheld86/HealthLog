@@ -176,6 +176,7 @@ export const GET = apiHandler(async () => {
     profile.lutealPhaseLength ?? LUTEAL_DEFAULT,
     from,
     today,
+    today,
   );
 
   const measurements: CrossMetricMeasurement[] = measurementRows.map((m) => ({

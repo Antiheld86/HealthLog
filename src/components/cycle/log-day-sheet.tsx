@@ -45,6 +45,8 @@ import {
 import { ResponsiveSheet } from "@/components/ui/responsive-sheet";
 import { SheetSection, SheetSectionCount } from "@/components/ui/sheet-section";
 import { useTranslations } from "@/lib/i18n/context";
+import { resolveIntlLocale } from "@/lib/format-locale";
+import type { Locale } from "@/lib/i18n/config";
 import { CUSTOM_SYMPTOM_ICON_ALLOWLIST } from "@/lib/cycle/custom-symptoms-shared";
 import { FieldInfo } from "./field-info";
 import { CYCLE_SYMPTOM_CATALOG } from "./symptom-catalog";
@@ -322,6 +324,11 @@ export interface LogDaySheetProps {
   /** Today (YYYY-MM-DD). */
   today: string;
   /**
+   * Whether a logged cycle opens on `date`. Deleting the day-log of a cycle
+   * start removes that start too, so the confirm dialog has to say so.
+   */
+  startsCycle?: boolean;
+  /**
    * Whether a period is currently open (today is in the MENSTRUAL phase) — gates
    * the one-tap "end period" affordance so it never shows when no period is in
    * progress (QA M2).
@@ -463,10 +470,37 @@ function CervixRow<T extends string>({
   );
 }
 
+/**
+ * The day the sheet is writing to, spelled out in the reader's language.
+ *
+ * The sheet used to be titled "Log your day" whichever cell opened it, so a
+ * back-dated entry gave no clue which date it would land on and "Log today"
+ * gave no clue that any other date was possible. The weekday is included
+ * deliberately: it is how people recognise a date they are recalling.
+ */
+export function formatSheetDate(date: string, locale: Locale): string {
+  // A cycle day key is a calendar day, not an instant, so it is anchored at
+  // noon UTC and rendered in UTC — the same anchor the domain's day arithmetic
+  // uses. Formatting it in the browser's zone would let a reader east or west
+  // of it see the sheet name a different day than the one it writes to.
+  return new Date(`${date}T12:00:00Z`).toLocaleDateString(
+    resolveIntlLocale(locale),
+    {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    },
+  );
+}
+
 export function LogDaySheet({
   open,
   onOpenChange,
   date,
+  today,
+  startsCycle = false,
   activePeriod = false,
   phase = null,
   dayOfCycle = null,
@@ -475,7 +509,7 @@ export function LogDaySheet({
   rawChartMode = false,
   cyclesObserved = 0,
 }: LogDaySheetProps) {
-  const { t } = useTranslations();
+  const { t, locale } = useTranslations();
   const logDay = useLogDay();
   const patchDay = usePatchDayLog();
   const startPeriod = useStartPeriod();
@@ -682,8 +716,20 @@ export function LogDaySheet({
     <ResponsiveSheet
       open={open}
       onOpenChange={onOpenChange}
-      title={t("cycle.sheet.title")}
-      description={t("cycle.sheet.description")}
+      // The target date IS the title. Every button below writes to it and
+      // nothing else on the surface says which day it is.
+      title={
+        <span data-slot="cycle-log-sheet-date">
+          {t("cycle.sheet.titleForDate", {
+            date: formatSheetDate(date, locale),
+          })}
+        </span>
+      }
+      description={
+        date === today
+          ? t("cycle.sheet.descriptionToday")
+          : t("cycle.sheet.description")
+      }
       contentWidth="lg"
       footer={
         <>
@@ -696,7 +742,11 @@ export function LogDaySheet({
               label={t("cycle.sheet.delete")}
               ariaLabel={t("cycle.sheet.delete")}
               title={t("cycle.sheet.deleteTitle")}
-              body={t("cycle.sheet.deleteBody")}
+              body={
+                startsCycle
+                  ? t("cycle.sheet.deleteBodyCycleStart")
+                  : t("cycle.sheet.deleteBody")
+              }
               confirmLabel={t("cycle.sheet.deleteConfirm")}
               disabled={busy && !deleteDay.isPending}
               pending={deleteDay.isPending}
@@ -732,7 +782,9 @@ export function LogDaySheet({
 
       {/* One-tap period boundaries — available on any selected date so a
           forgotten day-1 can be corrected retroactively (M3). "End period"
-          shows only while a period is actually open (M2). */}
+          shows only while a period is actually open (M2). The labels drop the
+          word "today" on a back-dated day: they always wrote to the selected
+          date, and saying otherwise is how a correction reads as a mistake. */}
       <div className="flex flex-wrap gap-2">
         <Button
           variant="outline"
@@ -746,7 +798,9 @@ export function LogDaySheet({
           ) : (
             <Droplets className="h-4 w-4" style={{ color: FLOW_HUE }} />
           )}
-          {t("cycle.startedPeriod")}
+          {date === today
+            ? t("cycle.startedPeriod")
+            : t("cycle.startedPeriodOnDate")}
         </Button>
         {activePeriod ? (
           <Button
@@ -758,7 +812,9 @@ export function LogDaySheet({
             {endPeriod.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
             ) : null}
-            {t("cycle.endedPeriod")}
+            {date === today
+              ? t("cycle.endedPeriod")
+              : t("cycle.endedPeriodOnDate")}
           </Button>
         ) : null}
       </div>
