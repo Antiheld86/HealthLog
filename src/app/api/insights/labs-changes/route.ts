@@ -6,8 +6,10 @@
  * Groups the user's live numeric lab results by panel date, pairs the two
  * most-recent panels, and reports the per-analyte delta + reference-band
  * standing (`summariseLabChanges`). Absent when there are fewer than two
- * panels or no analyte is shared. Neutral framing only — a delta is not a
- * diagnosis.
+ * panels, no analyte is shared, or the newest panel is older than the
+ * recency window — the card's "since your last panel" wording is a claim
+ * about recent news, and it stops being made rather than being made about a
+ * years-old draw. Neutral framing only — a delta is not a diagnosis.
  *
  * Mirrors `/api/insights/derived`: `apiHandler`, `requireAuth`, the `insights`
  * module gate, the shared analytics-read budget. `userId` is narrowed from the
@@ -62,7 +64,13 @@ export const GET = apiHandler(async () => {
 
   annotate({
     action: { name: "insights.labs-changes.read" },
-    meta: { present: summary.present, changes: summary.changes.length },
+    meta: {
+      present: summary.present,
+      changes: summary.changes.length,
+      // Distinguishes "no comparable panels" from "the comparison aged out",
+      // so an absent card is diagnosable without reaching for the database.
+      lab_rows: rows.length,
+    },
   });
 
   return apiSuccess({ ...summary, generatedAt: new Date().toISOString() });
