@@ -169,10 +169,18 @@ export function MoodLevelASection({
                     })
               }
               clearLabel={t("mood.dimensionClear")}
-              onClear={() => {
-                if (dimension.key === "a1") onA1Touched?.();
-                onChange({ ...value, [dimension.key]: null });
-              }}
+              // Pleasantness has no clear control, and that is the same rule
+              // the server keeps: an entry always carries a five-point label,
+              // so it always implies a pleasantness value, and there is no
+              // state in which the field is honestly unanswered. Offering a
+              // control that the write path would immediately undo would be a
+              // button that quietly does nothing. The other four are genuinely
+              // optional and keep theirs.
+              onClear={
+                dimension.key === "a1"
+                  ? undefined
+                  : () => onChange({ ...value, [dimension.key]: null })
+              }
               onValueChange={(next) => {
                 if (dimension.key === "a1") onA1Touched?.();
                 onChange({ ...value, [dimension.key]: next });

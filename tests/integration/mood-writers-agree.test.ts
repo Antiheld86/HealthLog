@@ -429,4 +429,45 @@ describe("mood writers agree on the derived level-A value", () => {
     // An explicit null takes back an answer.
     expect(row.stressA2).toBeNull();
   });
+
+  it("will not empty pleasantness, on either route", async () => {
+    await createUserSession();
+    const { POST: postSingle } = await import("@/app/api/mood-entries/route");
+    const { PUT } = await import("@/app/api/mood-entries/[id]/route");
+
+    // An entry always carries a five-point label, so it always implies a
+    // pleasantness value. A null asks for one that cannot exist, and both
+    // routes answer it the same way: derive from the label. The capture
+    // surfaces therefore offer no clear control for this one field, which is
+    // the UI half of the same rule.
+    const created = await postSingle(
+      jsonRequest("/api/mood-entries", {
+        mood: "SUPER_GUT",
+        moodLoggedAt: "2026-05-16T14:00:00.000Z",
+        a1: null,
+      }),
+    );
+    expect(created.status).toBe(201);
+    const createdJson = (await created.json()) as {
+      data: { id: string; a1: number };
+    };
+    expect(createdJson.data.a1).toBe(9);
+    const id = createdJson.data.id;
+
+    const cleared = await PUT(
+      new NextRequest(`http://localhost/api/mood-entries/${id}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ a1: null }),
+      }),
+      { params: Promise.resolve({ id }) },
+    );
+    expect(cleared.status).toBe(200);
+
+    const row = await getPrismaClient().moodEntry.findUniqueOrThrow({
+      where: { id },
+    });
+    // Derived from the entry's own stored label, not emptied.
+    expect(row.moodA1).toBe(9);
+  });
 });

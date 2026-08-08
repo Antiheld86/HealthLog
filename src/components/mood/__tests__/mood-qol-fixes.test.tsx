@@ -145,6 +145,19 @@ describe("MoodForm — level A replaces the factor ratings (v1.37)", () => {
     // Nothing here defaults a value: the state starts empty and stays empty.
     expect(formSrc).toContain("useState<LevelAState>(EMPTY_LEVEL_A)");
   });
+
+  it("offers no clear control for pleasantness, matching the write path", () => {
+    // An entry always carries a label, so it always implies a pleasantness
+    // value and both write routes derive one from a null. A clear button here
+    // would be a control the server undoes on the way to the database.
+    const fieldsSrc = readFileSync(
+      resolve(__dirname, "../mood-level-a-fields.tsx"),
+      "utf8",
+    );
+    expect(fieldsSrc).toMatch(
+      /onClear=\{\s*dimension\.key === "a1"\s*\?\s*undefined/,
+    );
+  });
 });
 
 describe("MoodList — rated factor editing", () => {

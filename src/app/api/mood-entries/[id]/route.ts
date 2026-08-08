@@ -139,7 +139,15 @@ export const PUT = apiHandler(
     // v1.37 — level-A values are per-field on this path: omitted keeps the
     // stored value, an explicit number replaces it, an explicit null clears
     // it. Built one at a time from the parsed body, never spread.
-    if (data.a1 !== undefined) updateData.moodA1 = data.a1;
+    //
+    // Pleasantness is the exception, and it is the same exception the create
+    // path makes: an entry always carries a five-point label, so it always
+    // implies a pleasantness value, and a null falls back to the derivation
+    // rather than emptying the column. One rule on both routes — the capture
+    // surfaces therefore offer no clear control for it.
+    if (data.a1 !== undefined) {
+      updateData.moodA1 = data.a1 ?? deriveA1(data.mood ?? existing.mood);
+    }
     if (data.a2 !== undefined) updateData.stressA2 = data.a2;
     if (data.a3 !== undefined) updateData.energyA3 = data.a3;
     if (data.a4 !== undefined) updateData.connectionA4 = data.a4;
