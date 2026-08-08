@@ -962,6 +962,11 @@ model User {
   encounterDocumentLinks                    EncounterDocumentLink[]
   encounterLabLinks                         EncounterLabLink[]
   encounterConditionLinks                   EncounterConditionLink[]
+  // v1.38.0 — the immunization log. One row per administered dose, plus the
+  // link table that files the scanned Impfpass page beside it. Gated by the
+  // `vaccinations` module key, which governs the surfaces and not the store.
+  vaccinationRecords                        VaccinationRecord[]
+  vaccinationDocumentLinks                  VaccinationDocumentLink[]
 
   // v1.7.0 profile — optional patient-identity fields surfaced on the
   // health-record export cover (PDF) and the FHIR `Patient` resource.
@@ -5070,61 +5075,82 @@ model Device {
 /// server-computed + stored (server-authoritative — iOS consumes the resolved
 /// value, never recomputes). Soft-deleted.
 model MeasurementReminder {
-  id              String           @id @default(cuid())
-  userId          String           @map("user_id")
+  id                 String           @id @default(cuid())
+  userId             String           @map("user_id")
   /// User-facing copy: "Blutdruck messen", "Großes Blutbild".
-  label           String
+  label              String
   /// Auto-resolve target. NULL = free-text / checklist Vorsorge (a blood
   /// panel, a dermatology check) with no measurement to match against; those
   /// resolve only on a manual satisfy. Non-NULL = the cron advances
   /// `lastSatisfiedAt` when a matching Measurement of this type lands.
-  measurementType MeasurementType? @map("measurement_type")
+  measurementType    MeasurementType? @map("measurement_type")
   /// Rolling cadence: fire every N days (7 / 30 / 365). Maps to the recurrence
   /// engine's `rollingIntervalDays`. Mutually exclusive with `rrule` in
   /// practice; both NULL is a one-shot reminder anchored on `anchorDate`.
-  intervalDays    Int?             @map("interval_days")
+  intervalDays       Int?             @map("interval_days")
   /// Optional RFC-5545 recurrence (e.g. `FREQ=YEARLY`). Maps straight through
   /// the same recurrence engine the medication schedules use.
-  rrule           String?
+  rrule              String?
   /// First-due anchor; the resolver falls back to `lastSatisfiedAt ?? createdAt`
   /// when NULL.
-  anchorDate      DateTime?        @map("anchor_date")
+  anchorDate         DateTime?        @map("anchor_date")
   /// Optional course-window end. NULL = open-ended cadence (the existing
   /// behaviour). Non-NULL bounds a finite cadence: the recurrence engine
   /// (`medication.endsOn` precedent) stops producing occurrences past this
   /// instant, so a Coach-suggested "measure BP morning+evening for a week"
   /// self-expires. Additive; every existing reminder keeps `NULL` and stays
   /// open-ended.
-  endsOn          DateTime?        @map("ends_on")
+  endsOn             DateTime?        @map("ends_on")
   /// Who produced this reminder. `VORSORGE` = the user created it through the
   /// Vorsorge surface (the existing, default behaviour). `COACH` = the AI
   /// coach minted it from an evidence-based cadence suggestion, posted to the
   /// SAME `POST /api/measurement-reminders` endpoint — one engine, not two.
   /// Lets the UI label provenance and lets Coach dedupe its own suggestions.
-  origin          ReminderOrigin   @default(VORSORGE)
+  origin             ReminderOrigin   @default(VORSORGE)
   /// Local hour (0–23) to fire the nudge, mirroring the mood-reminder hour.
   /// DST-safe windowing is applied at the cron via the existing TZ helpers.
-  notifyHour      Int              @default(9) @map("notify_hour")
+  notifyHour         Int              @default(9) @map("notify_hour")
   /// Free-text "wo": "Hausarzt", "Labor Dr. X". Optional.
-  location        String?
+  location           String?
   /// Server-computed canonical next-due instant (server-authoritative).
-  nextDueAt       DateTime?        @map("next_due_at")
+  nextDueAt          DateTime?        @map("next_due_at")
   /// When the reminder was last fulfilled (a matching measurement or a manual
   /// satisfy). Re-anchors the next-due computation.
-  lastSatisfiedAt DateTime?        @map("last_satisfied_at")
+  lastSatisfiedAt    DateTime?        @map("last_satisfied_at")
   /// Master on/off for this reminder. Distinct from soft-delete: a disabled
   /// reminder is retained + editable but never fires.
-  enabled         Boolean          @default(true)
-  createdAt       DateTime         @default(now()) @map("created_at")
-  updatedAt       DateTime         @updatedAt @map("updated_at")
+  enabled            Boolean          @default(true)
+  /// Booster match key: the antigen slug a logged vaccination clears this
+  /// reminder for. Written only by the vaccination booster mint (rung 2 —
+  /// prefilled, user-confirmed) and read only by the create path's satisfy
+  /// matcher (`src/lib/vaccinations/satisfy-matching.ts`), which resolves a
+  /// dose's component antigens and satisfies every reminder they match.
+  ///
+  /// Deliberately absent from the reminder DTO
+  /// (`src/lib/measurement-reminders/dto.ts`): this is a match key, not a
+  /// behaviour, so the published contract does not move — the `origin` enum
+  /// stays two-armed, the cron still fires by `nextDueAt` regardless of why a
+  /// row exists, and no Vorsorge surface excludes these rows. A booster
+  /// belongs on `/checkups`. That is also why a fourth nullable column here
+  /// is not the signal the appointment arm's warning described: an
+  /// appointment had to be bent into this engine (one-shot, no cadence,
+  /// excluded everywhere), whereas a booster is the engine's native case —
+  /// recurring, satisfiable, cadence-bearing.
+  vaccinationAntigen String?          @map("vaccination_antigen")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
   /// Soft-delete tombstone. NULL = live; non-NULL = deleted at the instant.
-  deletedAt       DateTime?        @map("deleted_at")
+  deletedAt          DateTime?        @map("deleted_at")
 
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   /// Back-relation for the appointment arm: a PLANNED `Encounter` mints
   /// exactly one ENCOUNTER-origin row and points at it. SetNull on the far
   /// side, so deleting the reminder leaves the visit intact.
-  encounters Encounter[]
+  encounters   Encounter[]
+  /// Back-relation for the booster arm: the doses that recorded satisfying
+  /// this reminder. SetNull on the far side — deleting the reminder leaves
+  /// the vaccination record intact.
+  vaccinations VaccinationRecord[]
 
   @@index([userId, deletedAt])
   @@index([userId, nextDueAt])
@@ -7436,8 +7462,12 @@ model InboundDocument {
   /// Soft-delete tombstone. NULL = live; non-NULL = discarded.
   deletedAt DateTime? @map("deleted_at")
 
-  user           User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  encounterLinks EncounterDocumentLink[]
+  user             User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  encounterLinks   EncounterDocumentLink[]
+  /// Vaccination memberships (m:n via `VaccinationDocumentLink`): a scanned
+  /// Impfpass page carries many doses, and a dose may be evidenced by more
+  /// than one page.
+  vaccinationLinks VaccinationDocumentLink[]
 
   @@index([userId, createdAt])
   // The list always filters `deletedAt: null` and sorts by `documentDate`, so
@@ -7744,6 +7774,9 @@ model Encounter {
   documentLinks  EncounterDocumentLink[]
   labLinks       EncounterLabLink[]
   conditionLinks EncounterConditionLink[]
+  /// Doses administered at this visit. SetNull on the far side: deleting the
+  /// visit leaves the immunization history intact.
+  vaccinations   VaccinationRecord[]
 
   @@index([userId, deletedAt, occurredAt])
   @@index([userId, status, occurredAt])
@@ -7807,8 +7840,9 @@ model Practitioner {
   /// Soft-delete tombstone. NULL = live; non-NULL = deleted at the instant.
   deletedAt     DateTime? @map("deleted_at")
 
-  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  encounters Encounter[]
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  encounters   Encounter[]
+  vaccinations VaccinationRecord[]
 
   @@index([userId, deletedAt, name])
   @@map("practitioners")
@@ -7875,4 +7909,129 @@ model EncounterConditionLink {
   @@index([episodeId])
   @@index([userId])
   @@map("encounter_condition_links")
+}
+
+// ─── Vaccinations ─────────────────────────────────────────────
+
+/// v1.38.0 — one administered dose, the Impfpass line made structured.
+///
+/// The model is deliberately slim, and every absence below is a decision:
+///
+/// - The disease, the typical series length and the booster interval are
+///   NOT columns. They belong to the antigen, not to the dose, and live on
+///   the catalogue entry behind `antigenSlug`
+///   (`src/lib/vaccinations/vaccine-catalog.ts`) where they can be corrected
+///   in a patch release instead of a migration.
+/// - The practice address is not here either; it is on the linked
+///   `Practitioner`. The scanned Pass page is not here; it is on the
+///   document link.
+/// - Either `antigenSlug` or `vaccineName` must be present, and that rule
+///   lives in Zod (`src/lib/validations/vaccinations.ts`), not in a DB
+///   CHECK. A CHECK would refuse a legacy row on restore, and a backup that
+///   cannot round-trip is not a backup.
+/// - There is no manufacturer column and no route column. Route follows the
+///   antigen and derives from the catalogue at the FHIR boundary. A
+///   manufacturer column would pull trade names into shipped content; the
+///   only place a trade name legitimately appears is `vaccineName`, which is
+///   the person's own transcription of their Pass — user data, not ours.
+///
+/// Module gate: `"vaccinations"`, SURFACE-gated like `medications`. The nav
+/// entry, the dashboard and report surfaces and the picker hide when the
+/// module is off; these data routes stay exempt so a restore or an import
+/// keeps working and re-enabling finds every row intact.
+model VaccinationRecord {
+  id             String           @id @default(cuid())
+  userId         String           @map("user_id")
+  /// The day the dose was given, at UTC midnight. An Impfpass carries dates,
+  /// never times, so the time component is not meaningful and is not
+  /// collected. The API refuses future instants: a vaccination is logged
+  /// after the fact, and a planned booster is a reminder, not a record.
+  occurredAt     DateTime         @map("occurred_at")
+  /// Catalogue identity. NULL = a free-text-only row, which is the arm that
+  /// makes a 1987 Pass line loggable at all.
+  ///
+  /// Slugs are append-only by convention (the `BIOMARKER_CATALOG` precedent,
+  /// `src/lib/labs/biomarker-catalog.ts`). Storage is deliberately tolerant
+  /// where the API is strict: `POST` refuses a slug the catalogue does not
+  /// resolve, but a restore writes whatever the backup held. A slug that
+  /// stops resolving degrades to the free-text arm — a tested behaviour, not
+  /// an accident (`src/lib/vaccinations/__tests__/catalog-integrity.test.ts`).
+  antigenSlug    String?          @map("antigen_slug")
+  /// The Pass's own wording, verbatim. May be a trade name; that is user
+  /// data. Plaintext and bounded so the list can render and search it.
+  vaccineName    String?          @map("vaccine_name")
+  /// The Pass's claim about which dose this is. Optional — the series
+  /// derivation falls back to the chronological index per component antigen.
+  doseNumber     Int?             @map("dose_number")
+  /// Per-record override of the catalogue's typical series length, for the
+  /// schedule a person was actually given.
+  seriesDoses    Int?             @map("series_doses")
+  /// Chargenbezeichnung (IfSG §22). A batch code, not a secret: plaintext and
+  /// bounded so the list and the report can render it without a decrypt.
+  lotNumber      String?          @map("lot_number")
+  site           VaccinationSite?
+  practitionerId String?          @map("practitioner_id")
+  encounterId    String?          @map("encounter_id")
+  /// The booster reminder this dose satisfied, when one matched. The act runs
+  /// through `satisfyReminder`; this column is the record of it, not the act.
+  /// One id for possibly several satisfied rows — the engine keeps
+  /// `lastSatisfiedAt` per reminder, this keeps the first match in catalogue
+  /// component order.
+  reminderId     String?          @map("reminder_id")
+  /// The one free-text field (AES-256-GCM at rest, the `*Encrypted` Bytes
+  /// convention). Impfreaktionen live here in v1 rather than in a structured
+  /// reaction model nobody has asked for yet.
+  noteEncrypted  Bytes?           @map("note_encrypted")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  /// Soft-delete tombstone. NULL = live; non-NULL = deleted at the instant.
+  deletedAt      DateTime?        @map("deleted_at")
+
+  user          User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  practitioner  Practitioner?             @relation(fields: [practitionerId], references: [id], onDelete: SetNull)
+  encounter     Encounter?                @relation(fields: [encounterId], references: [id], onDelete: SetNull)
+  reminder      MeasurementReminder?      @relation(fields: [reminderId], references: [id], onDelete: SetNull)
+  documentLinks VaccinationDocumentLink[]
+
+  @@index([userId, deletedAt, occurredAt])
+  @@index([userId, antigenSlug, occurredAt])
+  @@map("vaccination_records")
+}
+
+/// Where the dose went. Small and closed, because the Pass's own vocabulary
+/// is small and closed; OTHER absorbs the rest rather than growing the enum.
+enum VaccinationSite {
+  LEFT_ARM
+  RIGHT_ARM
+  LEFT_THIGH
+  RIGHT_THIGH
+  ORAL
+  NASAL
+  OTHER
+
+  @@map("vaccination_site")
+}
+
+/// Dose ↔ stored document, the `DocumentConditionLink` shape. m:n because a
+/// scanned Impfpass page carries every dose on it, and a dose may be
+/// evidenced by more than one page. Never mandatory: a dose saves without a
+/// document, and a document files without a dose. `userId` is denormalised
+/// for the owner-scoped list query. This is the only link table the
+/// vaccination source owns — practitioner and encounter attach by scalar FK,
+/// because a dose is administered once.
+model VaccinationDocumentLink {
+  id            String   @id @default(cuid())
+  vaccinationId String   @map("vaccination_id")
+  documentId    String   @map("document_id")
+  userId        String   @map("user_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  vaccination VaccinationRecord @relation(fields: [vaccinationId], references: [id], onDelete: Cascade)
+  document    InboundDocument   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([vaccinationId, documentId])
+  @@index([documentId])
+  @@index([userId])
+  @@map("vaccination_document_links")
 }

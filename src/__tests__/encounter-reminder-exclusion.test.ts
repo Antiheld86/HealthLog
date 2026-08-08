@@ -95,6 +95,7 @@ function reminderRow(
     nextDueAt: at,
     lastSatisfiedAt: null,
     enabled: true,
+    vaccinationAntigen: null,
     createdAt: at,
     updatedAt: at,
     deletedAt: null,
