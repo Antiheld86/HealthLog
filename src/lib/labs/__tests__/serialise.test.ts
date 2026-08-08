@@ -17,6 +17,9 @@ const baseRow: LabRow = {
   unit: "mg/dl", // lowercase legacy unit
   referenceLow: null,
   referenceHigh: 100, // stale per-row bound
+  sourceReferenceLow: null,
+  sourceReferenceHigh: null,
+  sourceReferenceText: null,
   takenAt: new Date("2026-01-01T08:00:00.000Z"),
   source: "MANUAL",
   biomarkerId: "bm_1",

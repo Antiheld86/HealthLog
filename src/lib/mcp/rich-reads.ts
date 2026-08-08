@@ -48,7 +48,7 @@ import {
   type MetricStatusMetricId,
 } from "@/lib/insights/metric-status-registry";
 import { allSignals, getSignal } from "@/lib/signals/registry";
-import { classifyReferenceRange } from "@/lib/labs/reference-range";
+import { classifyAgainstEffectiveRange } from "@/lib/labs/reference-range";
 import { resolveLabFields } from "@/lib/labs/serialise";
 import { sanitizeValueText } from "@/lib/ai/coach/labs-snapshot";
 import { encodeOffsetCursor } from "@/lib/mcp/pagination";
@@ -1316,6 +1316,9 @@ export async function getLabHistory(
       unit: true,
       referenceLow: true,
       referenceHigh: true,
+      sourceReferenceLow: true,
+      sourceReferenceHigh: true,
+      sourceReferenceText: true,
       takenAt: true,
       biomarkerId: true,
       biomarker: {
@@ -1350,14 +1353,10 @@ export async function getLabHistory(
       unit: resolved.unit,
       referenceLow: resolved.referenceLow,
       referenceHigh: resolved.referenceHigh,
-      rangeStatus:
-        row.value === null
-          ? "unknown"
-          : classifyReferenceRange(
-              row.value,
-              resolved.referenceLow,
-              resolved.referenceHigh,
-            ),
+      rangeStatus: classifyAgainstEffectiveRange(
+        row.value,
+        resolved.effectiveRange,
+      ),
       takenAt: row.takenAt.toISOString(),
     };
   });

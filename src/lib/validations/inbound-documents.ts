@@ -167,6 +167,15 @@ export const extractedFactRawSchema = z.object({
   unit: nullableText(80),
   referenceLow: z.number().finite().nullable().catch(null),
   referenceHigh: z.number().finite().nullable().catch(null),
+  /**
+   * Observation: the reference range EXACTLY as printed, verbatim. A report
+   * writes its window in prose ("3,5 - 5,0", "< 5", "bis 5,0", "negativ"), and
+   * `referenceLow` / `referenceHigh` above can only carry the cases that
+   * reduce to two numbers. This field is what stops every other case from
+   * being dropped on the floor — the string is kept whether or not the parser
+   * gets bounds out of it.
+   */
+  referenceText: nullableText(120),
   /** MedicationStatement: dose + stated status (verbatim). */
   dose: nullableText(120),
   medicationStatus: nullableText(64),
@@ -237,6 +246,14 @@ export interface ObservationFactData {
   unit: string | null;
   referenceLow: number | null;
   referenceHigh: number | null;
+  /**
+   * The reference range as printed on the report, verbatim.
+   *
+   * Optional because it genuinely is: a fact staged before this field existed
+   * carries no key for it, and that is an honest absence rather than a shim
+   * for a caller we do not ship. Read it as `?? null`.
+   */
+  referenceText?: string | null;
   effectiveDate: string | null;
 }
 
@@ -379,6 +396,7 @@ const observationEditSchema = z
     unit: optText(80),
     referenceLow: z.number().finite().nullable().optional(),
     referenceHigh: z.number().finite().nullable().optional(),
+    referenceText: optText(120),
     effectiveDate: isoDate,
   })
   // Numeric XOR qualitative, mirroring the lab-result discipline. A null/absent

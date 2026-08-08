@@ -364,6 +364,10 @@ export async function upsertPolarMeasurements(
   for (let index = 0; index < readings.length; index++) {
     const reading = readings[index]!;
     const verdict = verdicts[index]!;
+    // Refused by the plausibility gate: nothing was written and nothing was
+    // touched, so the reading counts as neither imported nor a rollup dirt
+    // mark. The drop is already on the wide event.
+    if (verdict.status === "rejected_range") continue;
     for (const dirty of verdict.dirtyIdentities ?? []) {
       touched.push(dirty);
     }

@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { Prisma } from "@/generated/prisma/client";
+import { eventStorage } from "@/lib/logging/context";
+import { WideEventBuilder } from "@/lib/logging/event-builder";
+import { RANGE_REJECTED_META_KEY } from "../plausibility-gate";
 import {
   reconcileExternalMeasurement,
   type ExternalMeasurementWrite,
@@ -381,5 +384,106 @@ describe("reconcileExternalMeasurement", () => {
     expect(tx.$executeRawUnsafe).toHaveBeenCalledWith(
       "ROLLBACK TO SAVEPOINT measurement_identity_reconcile",
     );
+  });
+});
+
+/**
+ * The reconciler is the shared write seam for every provider that does not
+ * hold Prisma itself — Polar, Oura, WHOOP, the Withings sleep leg, the Apple
+ * export importer, the batch endpoint. Gating here rather than at each caller
+ * is what makes a provider added tomorrow inherit the refusal instead of
+ * having to remember a check it never knew about.
+ */
+describe("reconcileExternalMeasurement — plausibility gate", () => {
+  it("reconciles a value inside the metric's declared band", async () => {
+    const { tx, measurement } = transaction([]);
+    measurement.create.mockResolvedValue(row({ id: "fresh" }));
+
+    // PULSE is declared 20–300.
+    const verdict = await reconcileExternalMeasurement(
+      tx,
+      desired({ type: "PULSE", value: 112, unit: "bpm", sleepStage: null }),
+    );
+
+    expect(verdict.status).toBe("inserted");
+    expect(measurement.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses an out-of-band value without touching the transaction", async () => {
+    const { tx, measurement } = transaction([]);
+
+    const verdict = await reconcileExternalMeasurement(
+      tx,
+      desired({
+        type: "PULSE",
+        value: 55643821.505,
+        unit: "bpm",
+        sleepStage: null,
+      }),
+    );
+
+    expect(verdict).toEqual({
+      status: "rejected_range",
+      rejection: { type: "PULSE", direction: "above_max" },
+    });
+    // No row written, no row updated, and no savepoint opened — the refusal
+    // happens before the reconciler does any work at all.
+    expect(measurement.create).not.toHaveBeenCalled();
+    expect(measurement.update).not.toHaveBeenCalled();
+    expect(tx.$executeRawUnsafe).not.toHaveBeenCalled();
+  });
+
+  it("refuses rather than overwriting a good stored row", async () => {
+    // The dangerous shape: a live row already holds a real reading, and the
+    // provider re-sends the same identity carrying an impossible value. The
+    // update branch would have rewritten a good value with a bad one.
+    const existing = row({
+      id: "exact-row",
+      type: "PULSE",
+      value: 62,
+      unit: "bpm",
+      sleepStage: null,
+      measuredAt: new Date("2026-07-20T06:30:00.000Z"),
+    });
+    const { tx, measurement } = transaction([existing]);
+
+    const verdict = await reconcileExternalMeasurement(
+      tx,
+      desired({
+        type: "PULSE",
+        value: 55643821.505,
+        unit: "bpm",
+        sleepStage: null,
+      }),
+    );
+
+    expect(verdict.status).toBe("rejected_range");
+    expect(measurement.update).not.toHaveBeenCalled();
+  });
+
+  it("tallies the refusal on the ambient wide event under the provider", async () => {
+    const { tx } = transaction([]);
+    const event = new WideEventBuilder("background");
+
+    await eventStorage.run(event, () =>
+      reconcileExternalMeasurement(
+        tx,
+        desired({
+          type: "PULSE",
+          value: 55643821.505,
+          unit: "bpm",
+          source: "WHOOP",
+          sleepStage: null,
+        }),
+      ),
+    );
+
+    expect(event.toJSON().meta?.[RANGE_REJECTED_META_KEY]).toEqual({
+      total: 1,
+      buckets: [
+        { source: "whoop", type: "PULSE", direction: "above_max", count: 1 },
+      ],
+    });
+    expect(event.getLevel()).toBe("warn");
   });
 });

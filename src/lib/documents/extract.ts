@@ -74,7 +74,8 @@ Extract these fact types:
    - code + codeSystem ("LOINC"): ONLY if a code is printed, else null.
    - value: the numeric result OR null. valueText: the qualitative result text (e.g. "negative") OR null. Set EXACTLY ONE.
    - unit: the printed unit, or null. NEVER convert or normalise a unit.
-   - referenceLow / referenceHigh: the printed reference bounds as numbers, or null. Do NOT flag the value against them.
+   - referenceText: the reference range EXACTLY as printed beside the value, verbatim and complete, including its operator and unit if written (for example "3,5 - 5,0", "< 5", "bis 5,0", "\u2265 3,5", "150.000 - 400.000 /\u00b5l", "negativ"). Copy the characters; do NOT reformat, convert, or normalise them. Null only when no range is printed for that value.
+   - referenceLow / referenceHigh: the SAME range reduced to two numbers, when it reduces to two numbers, else null. Do NOT flag the value against them.
    - effectiveDate: the stated measurement date (YYYY-MM-DD), else null.
 3. MEDICATION_STATEMENT — a medication the patient is/was taking, as recorded. Capture:
    - label: the drug name, verbatim.
@@ -91,7 +92,7 @@ For EVERY fact also capture:
 Do not emit a fact you cannot read — omit it rather than invent one. Also capture reportDate: the document's stated report/collection date (YYYY-MM-DD), or null, and kind: "DOCTOR_REPORT", "DISCHARGE_LETTER", or "OTHER".
 
 Respond ONLY with a JSON object of this exact shape:
-{ "reportDate": string|null, "kind": "DOCTOR_REPORT"|"DISCHARGE_LETTER"|"OTHER"|null, "facts": [ { "type": "CONDITION"|"OBSERVATION"|"MEDICATION_STATEMENT", "label": string, "code": string|null, "codeSystem": "SNOMED"|"ICD10"|"LOINC"|"RXNORM"|"ATC"|null, "clinicalStatus": string|null, "verificationStatus": string|null, "value": number|null, "valueText": string|null, "unit": string|null, "referenceLow": number|null, "referenceHigh": number|null, "dose": string|null, "medicationStatus": string|null, "effectiveDate": string|null, "sourceText": string, "page": number|null, "confidence": number } ] }`;
+{ "reportDate": string|null, "kind": "DOCTOR_REPORT"|"DISCHARGE_LETTER"|"OTHER"|null, "facts": [ { "type": "CONDITION"|"OBSERVATION"|"MEDICATION_STATEMENT", "label": string, "code": string|null, "codeSystem": "SNOMED"|"ICD10"|"LOINC"|"RXNORM"|"ATC"|null, "clinicalStatus": string|null, "verificationStatus": string|null, "value": number|null, "valueText": string|null, "unit": string|null, "referenceText": string|null, "referenceLow": number|null, "referenceHigh": number|null, "dose": string|null, "medicationStatus": string|null, "effectiveDate": string|null, "sourceText": string, "page": number|null, "confidence": number } ] }`;
 
 const USER_PROMPT = `Transcribe the clinical document in the attached file into the JSON schema described in the system prompt. Reproduce only what is written — do not interpret. Return only the JSON object.`;
 
@@ -172,6 +173,7 @@ function mapFactData(raw: ExtractedFactRaw): FactData | null {
       unit: raw.unit,
       referenceLow: raw.referenceLow,
       referenceHigh: raw.referenceHigh,
+      referenceText: raw.referenceText,
       effectiveDate,
     };
     return data;
@@ -309,6 +311,14 @@ export async function runInboundExtraction(
       unanchored,
       conditions: facts.filter((f) => f.factType === "CONDITION").length,
       observations: facts.filter((f) => f.factType === "OBSERVATION").length,
+      // How many transcribed observations arrived with the window the report
+      // printed beside them. A collapse here is the extraction quietly going
+      // back to dropping the range.
+      observationsWithRange: facts.filter(
+        (f) =>
+          f.factType === "OBSERVATION" &&
+          ((f.data as ObservationFactData).referenceText ?? null) !== null,
+      ).length,
       medications: facts.filter((f) => f.factType === "MEDICATION_STATEMENT")
         .length,
       needsReview: facts.filter((f) => f.needsReview).length,
