@@ -44,8 +44,10 @@ import {
   applyVaccinationLinks,
   resolveOwnedEncounter,
   resolveOwnedPractitioner,
+  resolveOwnerTimezone,
   resolveSeriesFor,
 } from "@/lib/vaccinations/service";
+import { satisfyBoostersForDose } from "@/lib/vaccinations/satisfy-matching";
 
 export const GET = apiHandler(async (request: NextRequest) => {
   const { user } = await requireRecordAuth("read", "profile");
@@ -130,6 +132,11 @@ async function postVaccination(request: NextRequest): Promise<Response> {
 
   const entry = parsed.data;
   const occurredAt = new Date(entry.occurredAt);
+  const timezone = await resolveOwnerTimezone(user.id);
+
+  // Filled inside the transaction, read after it for the wide event: an
+  // annotation is not worth holding a transaction open for.
+  let satisfiedReminderIds: string[] = [];
 
   const created = await prisma.$transaction(async (tx) => {
     // Every id the body carries is re-narrowed to the resolved account before
@@ -168,6 +175,26 @@ async function postVaccination(request: NextRequest): Promise<Response> {
     });
 
     await applyVaccinationLinks(tx, user.id, row.id, entry.documentIds);
+
+    // The booster arm, inside the same transaction so a dose that failed to
+    // save cannot leave a reminder looking settled. It runs on the OWNER's
+    // reminders, which is correct even when a delegate is transcribing: it is
+    // the owner's booster plan, and filing their Impfpass is exactly the work
+    // that should settle it.
+    const boosters = await satisfyBoostersForDose(
+      tx,
+      user.id,
+      entry.antigenSlug ?? null,
+      occurredAt,
+      timezone,
+    );
+    satisfiedReminderIds = boosters.satisfiedReminderIds;
+    if (boosters.primaryReminderId) {
+      await tx.vaccinationRecord.update({
+        where: { id: row.id },
+        data: { reminderId: boosters.primaryReminderId },
+      });
+    }
 
     return tx.vaccinationRecord.findUniqueOrThrow({
       where: { id: row.id },
@@ -209,8 +236,19 @@ async function postVaccination(request: NextRequest): Promise<Response> {
     meta: {
       antigen_slug: created.antigenSlug ?? "free-text",
       linked_documents: entry.documentIds?.length ?? 0,
+      satisfied_boosters: satisfiedReminderIds.length,
     },
   });
+  for (const reminderId of satisfiedReminderIds) {
+    annotate({
+      action: {
+        name: "vaccination.booster.satisfied",
+        entity_type: "measurement-reminder",
+        entity_id: reminderId,
+      },
+      meta: { antigen_slug: created.antigenSlug ?? "free-text" },
+    });
+  }
 
   return apiSuccess(
     toVaccinationDTO(created, series.get(created.id) ?? []),

@@ -9,6 +9,7 @@
  */
 import type { Prisma } from "@/generated/prisma/client";
 
+import { prisma } from "@/lib/db";
 import { listTargets, replaceTargets } from "@/lib/links";
 import { grantCoversDomain } from "@/lib/sharing/grants";
 import type { ShareDomain } from "@/lib/sharing/scope";
@@ -17,6 +18,9 @@ import {
   deriveSeries,
   type SeriesInputRecord,
 } from "@/lib/vaccinations/series";
+
+/** Matches the visits service: the fallback when an account never set one. */
+const DEFAULT_TIMEZONE = "Europe/Berlin";
 
 /** The relations every vaccination response resolves. */
 export const VACCINATION_INCLUDE = {
@@ -155,6 +159,21 @@ export async function resolveOwnedPractitioner(
     where: { id: practitionerId, userId, deletedAt: null },
     select: { id: true },
   });
+}
+
+/**
+ * The RECORD owner's timezone, for the booster reschedule.
+ *
+ * The owner's, never the acting delegate's: a reminder fires on the owner's
+ * phone at the owner's local hour, and a helper transcribing from another
+ * timezone must not shift when it rings.
+ */
+export async function resolveOwnerTimezone(userId: string): Promise<string> {
+  const row = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { timezone: true },
+  });
+  return row?.timezone || DEFAULT_TIMEZONE;
 }
 
 /** Does the caller own a live visit with this id? */
