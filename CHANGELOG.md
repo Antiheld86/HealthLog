@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.37.1] — 2026-08-08
+
 ### Added
 
 - A mood entry now records five separate values instead of one. The quick
@@ -27,6 +29,167 @@
   already logged still show, still edit, and still feed the breakdowns that
   read them.
 
+- A lab result now keeps the reference range printed on its report. The
+  document reading used to extract the value and discard the range beside it,
+  and for any analyte already tracked, the general catalog band was stamped
+  over what the report said, although the physician evaluates against the
+  printed range. Extraction now captures that range, through a parser that
+  understands the common German report forms: two-sided windows with dash or
+  "bis", one-sided bounds in a dozen spellings, thousands separators in both
+  conventions, and text verdicts like "negativ". Anything it cannot parse with
+  confidence lands verbatim in a text field instead of being guessed at. For a
+  value that carries a source range, that range decides the verdict
+  everywhere: the API, insights, the assistant, the doctor report and its PDF,
+  FHIR, backup and restore. The chart shows the source window as a second
+  band and marks a divergence from the catalog. Values without a printed range
+  keep the catalog as their net.
+
+- Three scheduled security workflows join the pipeline, all additive. CodeQL
+  analyses the TypeScript tree on pull requests and weekly. Trivy scans both
+  the filesystem, with development dependencies included, and the published
+  container image on a schedule; the dev-dependency flag exists because the
+  recent PDF-renderer advisory was invisible to a production-only audit.
+  Scorecard publishes to the OpenSSF API weekly. The blocking pre-publish
+  image scan keeps its job; these add what it structurally cannot see.
+
+### Changed
+
+- The settings pages and the admin console are one design now. They had
+  drifted apart wherever no primitive held them: three techniques for the
+  header-to-body gap, body indents alternating between an icon column and the
+  card edge, buttons in four placements and five variants, and descriptions
+  that had grown into paragraphs. One page header serves both shells, one
+  action-row shape, one connect-button variant, and a card description is one
+  sentence, enforced by a check that fails on the next paragraph; 36
+  descriptions were shortened or moved into the body across all six
+  languages. The geometry is measured rather than asserted by eye, across 41
+  routes, two locales and two viewports, and the measurement found what
+  reading could not: one card variant sat a step tighter than its neighbors
+  on every desktop width, and the layout child pages never mounted their way
+  back to the settings hub.
+
+### Fixed
+
+- Mood entries now survive a restore whole. The disaster-recovery backup was
+  carrying only the rated factors of an entry, so every tag ticked present or
+  absent was missing from the file, and it was dropping the note, the entry's
+  own timezone and the sync counter as well. A restored entry came back without
+  its text, read its day boundaries under the old Berlin assumption whatever
+  zone it had been logged in, and could lose the next sync round to a paired
+  phone still holding a higher counter. The backup carries every column now,
+  both halves of the tag taxonomy come back, and a structural check fails the
+  build if a future column goes missing the same way. Backup files written
+  before this restore exactly as they did.
+
+- The workout detail draws the whole heart-rate profile. The curve used to
+  stop at the moving-time mark, so a ride with twenty minutes of stops lost
+  twenty minutes of curve with no gap and no marker; it now runs to the
+  session end. The min-to-max band no longer drags the y-axis to zero, which
+  had squashed the effort shape into the top quarter of the chart on exactly
+  the dense sessions with the most shape to show. The peak marker renders
+  again instead of being discarded whenever the peak sat above the bucket
+  means. And a session with heart-rate figures but no profile behind them is
+  named as such, distinct from one where nothing was measured.
+
+- Marking an older missed dose as taken no longer lands on the wrong slot.
+  The route resolved the target only by time window around "now", so a
+  backfilled dose fell through to a standalone row at the current minute, the
+  named slot stayed missed, and the refetch wiped the optimistic tick. The
+  route now honours the named slot for backfills, and the history read binds
+  each row to its slot.
+
+- The insights baseline no longer compares an impossible stored reading
+  against a band built from the same reading. Values the app itself refuses
+  at every write surface, such as a pulse in the millions, still sat in the
+  table from older syncs and skewed both ends of the comparison. The read
+  side now applies the app's own declared plausibility ranges before
+  averaging or banding.
+
+- Sync writers now refuse readings the app itself calls impossible. Every
+  person-driven write path enforces the plausibility bands, but a provider
+  sync could still store a pulse in the millions, and one recently did. The
+  gate now sits at the shared reconciler and at the five writers that hold
+  the database directly, ahead of the insert-or-overwrite decision, because
+  the overwrite branch was the dangerous one: an impossible reading could
+  replace a good stored value. An implausible sample is dropped and counted,
+  never clamped and never allowed to fail the batch, and a read-only
+  diagnostic lists any stored rows outside the declared bands.
+
+- The hero card and the day's signals no longer say "today" about a reading
+  that is five days old. Deviations carry their age now, today-claims are
+  bounded to one day, and a stale value stays visible as what it is: a last
+  reading from N days ago.
+
+- A hand-entered night of sleep is no longer stored as minutes when the field
+  asks for hours; 7.5 had become seven and a half minutes and nothing
+  objected. The submit path converts at the boundary and the field accepts a
+  decimal comma.
+
+- An overdue period can say so now. The phase builder ended the open cycle at
+  the predicted next start, so from that day on the verdict read
+  "insufficient data" instead of "overdue". The open cycle runs through
+  today, with the ovulation anchor pinned to the predicted length so a
+  growing window cannot walk the estimate.
+
+- Deleting a period start no longer leaves the previous cycle as a closed
+  torso that stops all forecasting. Neighbour boundaries are re-derived from
+  the rows that remain, on both delete paths, and the sheet's delete now
+  actually removes the cycle rather than only the day log.
+
+- A backdated period saved fine on the server and painted nothing in the
+  calendar, because the view read a fixed ninety-day window. The month grid
+  now loads its own month, and every save reports success or names its error.
+
+- A period logged only as flow now opens a cycle, under a conservative rule:
+  no spotting, no intermenstrual bleeding, nothing within the minimum cycle
+  distance of an existing start. Until now such a period never created a
+  cycle row, so charts and verdicts saw no first period; this covered the
+  whole Apple Health import path. The cold-start prompt also counts real
+  periods now instead of asking for a first period beside three logged ones,
+  and the day-of-cycle number no longer depends on how wide the read window
+  happened to be.
+
+- Dialogs no longer scroll sideways on a phone. Two primitives conspired: the
+  date and time fields wrap a text input whose intrinsic size demands more
+  width than a phone dialog has, and the dialog scroll body promoted the
+  horizontal axis to auto, turning every intentional focus ring into
+  sideways panning. Both fixed once in the primitives, and sixty
+  width-by-dialog combinations measure clean.
+
+- The coach launcher no longer shows a dot with an empty conversation behind
+  it. A reminder sweep flipped reminders to due without writing anything into
+  the thread, and the flag that should mark them surfaced had no writer
+  anywhere, so opening the coach could not clear it. The sweep now writes the
+  reminder into the conversation and marks it surfaced in one step; the dot
+  means a message you can read.
+
+- Smaller surface fixes in the same pass: the empty delivery-status card
+  names the integrations page instead of pointing "below", in all six
+  languages; the lab-comparison card ages out on the data instead of asking
+  to be dismissed, with the comparison window now a year for web and the
+  native client alike; the mental-wellbeing intro is shorter; the lifestyle
+  entries in the anamnesis settings get a proper action row; the coach
+  composer text sits centred in its pill.
+
+- The admin "wipe all data" action wiped nine tables of 122. The list lived
+  inline in the route, a snapshot of the schema from the day it was written,
+  and its result line read identically however much was cleared. The route
+  now derives from the same wipe plan as the per-account wipe, in one
+  transaction: 88 tables cleared, and every survivor is either a sign-in
+  credential, instance configuration, or the single deliberate exemption of
+  account grants. A build-time rule fails if the route ever names a table
+  inline again.
+
+- The geo resolver read the mounted GeoLite2 databases only after asking the
+  online provider, while every operator-facing document promised the
+  reverse. A self-hoster who mounted the databases specifically to keep login
+  addresses on the host kept none of them there, silently. The order is now
+  offline first, online only when the local databases cannot place the
+  address.
+
+- SECURITY.md claimed the publish workflow runs on every push to main; that
+  trigger was removed in v1.4.34. The sentence now matches the workflow.
+
 ### Security
 
 - The PDF renderer behind the document vault moves to a release that closes a
@@ -45,18 +208,9 @@
   reliably the one that ran. It is selected by name now, and a copy that never
   arrived fails the build instead of quietly leaving another one in its place.
 
-### Fixed
-
-- Mood entries now survive a restore whole. The disaster-recovery backup was
-  carrying only the rated factors of an entry, so every tag ticked present or
-  absent was missing from the file, and it was dropping the note, the entry's
-  own timezone and the sync counter as well. A restored entry came back without
-  its text, read its day boundaries under the old Berlin assumption whatever
-  zone it had been logged in, and could lose the next sync round to a paired
-  phone still holding a higher counter. The backup carries every column now,
-  both halves of the tag taxonomy come back, and a structural check fails the
-  build if a future column goes missing the same way. Backup files written
-  before this restore exactly as they did.
+- A dependency advisory names nanoid below 3.3.17, reached through the
+  framework toolchain; a bounded override floats it past the flaw, and the
+  audit is clean again.
 
 ## [1.37.0] — 2026-08-07
 
