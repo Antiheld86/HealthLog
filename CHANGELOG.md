@@ -2,7 +2,23 @@
 
 ## [Unreleased]
 
+## [1.37.2] — 2026-08-08
+
 ### Added
+
+- Doctor visits and the practices behind them have a home now. A visit records
+  what kind it was, when it happened, its status, an optional practice from a
+  contact list you keep, an encrypted note, and links to the lab results,
+  documents and illness episodes it concerned — linked, never copied, so a
+  correction in the source shows through. Visits and their checkups live under
+  a segmented view; a preventive-care checkup can be closed by recording the
+  visit that fulfilled it, and a due checkup can carry a planned appointment.
+  A planned visit sets a reminder that the server re-anchors when you move it
+  and clears when the visit happens or is cancelled; it fires once and never
+  nags, and it carries no "done" button, because the appointment is not a task
+  you tick off. The whole thing rides the record-sharing model as its own
+  section, and it shows up in the doctor report as a visit list you can leave
+  out.
 
 - The mood module can now say what a day would have looked like on your own
   past patterns, and how far the day you recorded sits from that. It is a

@@ -136,6 +136,13 @@ export default defineConfig({
         // desktop project instead, where the shell below `md` renders from the
         // same width-driven rules. Its file comment carries the reasoning.
         "chrome-header-seam-banners.spec.ts",
+        // The incidental-linking journey creates a visit and files a document
+        // against it, then asserts a GLOBAL verdict — one candidate in the
+        // document's ±7-day window. Two projects mutating the one shared
+        // account in parallel would leave two visits in that window and flip
+        // the single-candidate branch to the picker. It proves a flow through
+        // stable data-slots, not a mobile layout, so it runs in one project.
+        "visits.spec.ts",
         // Runs only in the service-worker project.
         "v137-record-session-fence-offline.spec.ts",
       ],
