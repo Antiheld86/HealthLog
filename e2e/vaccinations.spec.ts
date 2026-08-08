@@ -198,8 +198,21 @@ test.describe("vaccinations", () => {
       booster: "confirm",
     });
 
-    const afterMint = await listReminders(request);
-    const minted = afterMint.find((r) => !before.has(r.id));
+    // Confirming the prompt closes the sheet before the mint's write has
+    // necessarily propagated to the list route, so poll for the new reminder
+    // rather than reading once against an in-flight mutation.
+    await expect
+      .poll(
+        async () =>
+          (await listReminders(request)).filter((r) => !before.has(r.id))
+            .length,
+        { timeout: 15_000 },
+      )
+      .toBe(1);
+
+    const minted = (await listReminders(request)).find(
+      (r) => !before.has(r.id),
+    );
     expect(minted, "the mint wrote exactly one new reminder").toBeDefined();
     expect(minted!.origin).toBe("VORSORGE");
     expect(minted!.nextDueAt).toBeTruthy();
@@ -219,17 +232,20 @@ test.describe("vaccinations", () => {
     await page.goto("/vaccinations");
     await captureDose(page, { catalogSlug: "tetanus", booster: "decline" });
 
-    const reminderAfter = (await listReminders(request)).find(
-      (r) => r.id === minted!.id,
-    );
-    expect(
-      reminderAfter,
-      "the reminder survives the second dose",
-    ).toBeDefined();
-    expect(reminderAfter!.nextDueAt).toBeTruthy();
-    expect(new Date(reminderAfter!.nextDueAt!).getTime()).toBeGreaterThan(
-      dueBefore,
-    );
+    // The satisfy re-anchor runs inside the second dose's create transaction;
+    // poll the reminder's due date forward rather than reading once, so a scan
+    // that beats the commit does not read the pre-anchor value.
+    await expect
+      .poll(
+        async () => {
+          const row = (await listReminders(request)).find(
+            (r) => r.id === minted!.id,
+          );
+          return row?.nextDueAt ? new Date(row.nextDueAt).getTime() : null;
+        },
+        { timeout: 15_000 },
+      )
+      .toBeGreaterThan(dueBefore);
   });
 
   test("turning the module off drops the nav entry and the direct visit redirects", async ({
@@ -287,8 +303,27 @@ test.describe("vaccinations", () => {
   });
 });
 
+/**
+ * Wait until every running CSS animation/transition on the page has settled.
+ *
+ * The capture sheet fades in, and axe reads computed colours: a scan that races
+ * the fade measures a half-opacity blend of the muted foreground over the card
+ * and reports phantom `color-contrast` failures that clear the instant the
+ * animation lands. Settling first makes the scan read the real, final surface —
+ * it never relaxes what axe asserts.
+ */
+async function waitForAnimationsSettled(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const anims = document
+      .getAnimations()
+      .map((a) => a.finished.catch(() => undefined));
+    await Promise.all(anims);
+  });
+}
+
 /** Fail only on serious/critical WCAG violations, the suite's a11y floor. */
 async function expectNoSeriousAxe(page: Page): Promise<void> {
+  await waitForAnimationsSettled(page);
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();

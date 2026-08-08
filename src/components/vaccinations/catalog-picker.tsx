@@ -77,6 +77,11 @@ export function CatalogPicker({
               variant="outline"
               role="combobox"
               aria-expanded={open}
+              // `role="combobox"` is not a name-from-content role, so the
+              // visible placeholder span does not name the control for a screen
+              // reader and the wrapping field label targets an id this button
+              // does not carry. Name it explicitly with the field's own label.
+              aria-label={t("vaccinations.form.catalogLabel")}
               disabled={disabled}
               data-slot="vaccination-catalog-trigger"
               className="min-h-11 min-w-0 flex-1 justify-between font-normal"
