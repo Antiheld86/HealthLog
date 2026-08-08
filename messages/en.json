@@ -9677,9 +9677,7 @@
     },
     "switcher": {
       "label": "Open a record",
-      "ownRecord": "My own record",
-      "readOnly": "Read only",
-      "canWrite": "Can add entries"
+      "ownRecord": "My own record"
     },
     "switch": {
       "failed": "Could not open that record. Please try again.",

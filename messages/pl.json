@@ -9677,9 +9677,7 @@
     },
     "switcher": {
       "label": "Otwórz kartę",
-      "ownRecord": "Moja własna karta",
-      "readOnly": "Tylko odczyt",
-      "canWrite": "Może dodawać wpisy"
+      "ownRecord": "Moja własna karta"
     },
     "switch": {
       "failed": "Nie udało się otworzyć tej karty. Spróbuj ponownie.",

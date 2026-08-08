@@ -9677,9 +9677,7 @@
     },
     "switcher": {
       "label": "Abrir un historial",
-      "ownRecord": "Mi propio historial",
-      "readOnly": "Solo lectura",
-      "canWrite": "Puede añadir entradas"
+      "ownRecord": "Mi propio historial"
     },
     "switch": {
       "failed": "No se pudo abrir ese historial. Inténtalo de nuevo.",

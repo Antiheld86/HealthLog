@@ -313,6 +313,15 @@ test.describe("account sharing", () => {
     const entry = page.locator('[data-slot="account-switcher-entry"]');
     await expect(entry).toHaveCount(1);
     await expect(entry).toContainText(E2E_OWNER.username);
+    // Two lines: the name and the kind of record. The access level used to
+    // take a third and was truncated more often than it was read; it is what
+    // the banner says once you are inside. The row still CARRIES the level as
+    // an attribute, which is the positive control for the absence below —
+    // without it, a renamed slot would make this read green.
+    await expect(entry).toHaveAttribute("data-access-level", /.+/);
+    await expect(entry).not.toContainText("Read only");
+    await expect(entry).not.toContainText("Can add entries");
+    await expect(entry).not.toContainText("change or remove what is in it");
     // The way home is in the same menu as the way in.
     await expect(
       page.locator('[data-slot="account-switcher-own"]'),

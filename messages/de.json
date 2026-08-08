@@ -9677,9 +9677,7 @@
     },
     "switcher": {
       "label": "Akte öffnen",
-      "ownRecord": "Meine eigene Akte",
-      "readOnly": "Nur lesen",
-      "canWrite": "Darf Einträge anlegen"
+      "ownRecord": "Meine eigene Akte"
     },
     "switch": {
       "failed": "Die Akte konnte nicht geöffnet werden. Bitte noch einmal versuchen.",

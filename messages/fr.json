@@ -9677,9 +9677,7 @@
     },
     "switcher": {
       "label": "Ouvrir un dossier",
-      "ownRecord": "Mon propre dossier",
-      "readOnly": "Lecture seule",
-      "canWrite": "Peut ajouter des entrées"
+      "ownRecord": "Mon propre dossier"
     },
     "switch": {
       "failed": "Impossible d'ouvrir ce dossier. Veuillez réessayer.",

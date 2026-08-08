@@ -9677,9 +9677,7 @@
     },
     "switcher": {
       "label": "Apri una cartella",
-      "ownRecord": "La mia cartella",
-      "readOnly": "Sola lettura",
-      "canWrite": "Può aggiungere voci"
+      "ownRecord": "La mia cartella"
     },
     "switch": {
       "failed": "Non è stato possibile aprire quella cartella. Riprova.",
