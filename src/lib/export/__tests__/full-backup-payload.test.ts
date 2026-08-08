@@ -38,6 +38,8 @@ import { restoreProfileData } from "../profile-backup";
 const deletedAt = new Date("2026-07-19T12:00:00.000Z");
 const measurementNote = encryptToBytes("canonical measurement note");
 const sideEffectNote = encryptToBytes("nausea after the evening dose");
+const moodNotePlaintext = "quiet evening, slept badly";
+const moodNote = encryptToBytes(moodNotePlaintext);
 
 const appSettings = {
   id: "singleton",
@@ -193,11 +195,27 @@ function makePrisma() {
           mood: "OKAY",
           score: 3,
           tags: null,
+          note: null,
+          noteEncrypted: moodNote,
           source: "MOODLOG",
           externalId: "moodlog-42",
           moodLoggedAt: new Date("2026-07-19T08:00:00.000Z"),
+          tz: "America/New_York",
+          syncedAt: new Date("2026-07-19T08:00:01.000Z"),
+          syncVersion: 3,
           deletedAt,
-          tagLinks: [{ rating: 4, moodTag: { key: "sleep_quality" } }],
+          createdAt: new Date("2026-07-19T08:00:00.000Z"),
+          updatedAt: new Date("2026-07-19T09:00:00.000Z"),
+          tagLinks: [
+            {
+              rating: 4,
+              moodTag: { key: "sleep_quality", kind: "RATED" },
+            },
+            {
+              rating: null,
+              moodTag: { key: "headache", kind: "BINARY" },
+            },
+          ],
         },
       ]),
     },
@@ -409,7 +427,13 @@ describe("buildFullBackupPayload disaster-recovery mode", () => {
     expect(prisma.moodEntry.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { userId: "user-1" },
-        include: expect.any(Object),
+        select: expect.objectContaining({
+          id: true,
+          noteEncrypted: true,
+          tz: true,
+          syncVersion: true,
+          deletedAt: true,
+        }),
       }),
     );
     expect(mocks.buildRecordsBackupSection).toHaveBeenCalledWith(
@@ -485,7 +509,16 @@ describe("buildFullBackupPayload disaster-recovery mode", () => {
           id: "mood-tombstone",
           externalId: "moodlog-42",
           deletedAt: deletedAt.toISOString(),
+          tz: "America/New_York",
+          syncedAt: "2026-07-19T08:00:01.000Z",
+          syncVersion: 3,
+          createdAt: "2026-07-19T08:00:00.000Z",
+          updatedAt: "2026-07-19T09:00:00.000Z",
+          note: null,
+          noteEncrypted: Buffer.from(moodNote).toString("base64"),
           factors: [{ key: "sleep_quality", rating: 4 }],
+          // The BINARY link the old `rating: { not: null }` filter excluded.
+          structuredTags: ["headache"],
         },
       ],
       nutrientDays: [
@@ -1146,5 +1179,81 @@ describe("buildFullBackupPayload — profile and custom metrics", () => {
       }),
     ]);
     expect(counts.intradayProfiles).toBe(1);
+  });
+});
+
+describe("buildFullBackupPayload — mood arms", () => {
+  it("carries the ciphertext and the whole row on the disaster-recovery arm", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+
+    const { payload } = await buildFullBackupPayload(
+      prisma as never,
+      "user-1",
+      {
+        purpose: "disaster-recovery",
+        exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+      },
+    );
+
+    const [entry] = (payload as { moodEntries: Array<Record<string, unknown>> })
+      .moodEntries;
+    expect(entry).toEqual(
+      expect.objectContaining({
+        id: "mood-tombstone",
+        note: null,
+        noteEncrypted: Buffer.from(moodNote).toString("base64"),
+        tz: "America/New_York",
+        syncedAt: "2026-07-19T08:00:01.000Z",
+        syncVersion: 3,
+        createdAt: "2026-07-19T08:00:00.000Z",
+        updatedAt: "2026-07-19T09:00:00.000Z",
+        deletedAt: deletedAt.toISOString(),
+        factors: [{ key: "sleep_quality", rating: 4 }],
+        structuredTags: ["headache"],
+      }),
+    );
+  });
+
+  it("carries the readable note and no ciphertext on the portable arm", async () => {
+    installSectionMocks();
+    const prisma = makePrisma();
+
+    const { payload } = await buildFullBackupPayload(
+      prisma as never,
+      "user-1",
+      {
+        purpose: "portable-export",
+        exportedAt: new Date("2026-07-20T00:00:00.000Z"),
+      },
+    );
+
+    const [entry] = (payload as { moodEntries: Array<Record<string, unknown>> })
+      .moodEntries;
+    // Same split the measurement arm makes: the readable artefact carries the
+    // decrypted text and nothing an operator could not read, and the counters
+    // that only mean something to this instance stay behind.
+    expect(entry).toEqual(
+      expect.objectContaining({
+        note: moodNotePlaintext,
+        tz: "America/New_York",
+        structuredTags: ["headache"],
+      }),
+    );
+    expect(entry).not.toHaveProperty("noteEncrypted");
+    expect(entry).not.toHaveProperty("syncVersion");
+    expect(entry).not.toHaveProperty("syncedAt");
+    expect(JSON.stringify(entry)).not.toContain(
+      Buffer.from(moodNote).toString("base64"),
+    );
+    // The tag-link read is unfiltered on both arms; a BINARY link is the one
+    // most people have and it was the one the file never carried.
+    expect(prisma.moodEntry.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          tagLinks: { select: expect.any(Object) },
+        }),
+      }),
+    );
   });
 });
