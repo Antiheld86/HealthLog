@@ -40,6 +40,7 @@ import { recordSettingsKeys } from "./record-settings";
 import { profileKeys } from "./profile";
 import { settingsKeys } from "./settings";
 import { sharingKeys } from "./sharing";
+import { vaccinationKeys } from "./vaccinations";
 import { workoutKeys } from "./workouts";
 
 export const queryKeys = {
@@ -70,6 +71,7 @@ export const queryKeys = {
   ...recordSettingsKeys,
   ...profileKeys,
   ...sharingKeys,
+  ...vaccinationKeys,
 };
 
 export { recordSettingsKeys } from "./record-settings";
@@ -250,6 +252,20 @@ export const cycleDependentKeys = [queryKeys.cycle(), queryKeys.insightsRoot()];
 export const encounterDependentKeys = [
   queryKeys.encounters(),
   queryKeys.practitioners(),
+];
+
+/**
+ * Keys invalidated when a dose changes.
+ *
+ * The preventive-care root rides along, and it is the whole reason this is a
+ * bundle rather than one key: logging a dose satisfies the booster reminders
+ * it answers, so the checkups list is stale the moment the dose saves.
+ * Evicting only the immunization list would leave a booster on screen that
+ * the server had already moved a decade out.
+ */
+export const vaccinationDependentKeys = [
+  queryKeys.vaccinations(),
+  queryKeys.measurementReminders(),
 ];
 
 /**

@@ -10031,7 +10031,7 @@
       },
       "profile": {
         "label": "Health background",
-        "detail": "Allergies, family history, the facts in your health profile, and your visits and practices."
+        "detail": "Allergies, family history, the facts in your health profile, your visits and practices, and your vaccination record."
       },
       "illness": {
         "label": "Illness",

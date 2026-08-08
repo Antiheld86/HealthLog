@@ -10031,7 +10031,7 @@
       },
       "profile": {
         "label": "Antécédents de santé",
-        "detail": "Allergies, antécédents familiaux, les informations de votre profil de santé, ainsi que vos consultations et cabinets."
+        "detail": "Allergies, antécédents familiaux, les informations de votre profil de santé, vos consultations et cabinets, ainsi que votre carnet de vaccination."
       },
       "illness": {
         "label": "Maladies",

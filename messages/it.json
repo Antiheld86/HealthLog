@@ -10031,7 +10031,7 @@
       },
       "profile": {
         "label": "Anamnesi",
-        "detail": "Allergie, anamnesi familiare, i dati del tuo profilo sanitario e le tue visite mediche e studi."
+        "detail": "Allergie, anamnesi familiare, i dati del tuo profilo sanitario, le tue visite mediche e studi, e il tuo libretto vaccinale."
       },
       "illness": {
         "label": "Malattie",
