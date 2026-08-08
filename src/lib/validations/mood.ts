@@ -46,6 +46,43 @@ export function getScoreForMood(mood: string): number {
   return MOOD_SCORE_MAP[mood] ?? 3;
 }
 
+/**
+ * The five-point mood label mapped onto the level-A pleasantness scale (A1).
+ *
+ * The quick check-in asks one question and offers five faces, and it stays a
+ * full-value capture path: its answer produces a real A1 rather than a
+ * degraded one. This is the single place those five numbers exist. A second
+ * copy anywhere in the tree — including inside a migration — is a drift
+ * waiting to happen, which is why the backfill's SQL is read back and compared
+ * against this map by a test rather than trusted to stay in step.
+ *
+ * The endpoints are 1 and 9, not 0 and 10. "LAUSIG" means as bad as this
+ * instrument can express, not as bad as a person can feel; pinning it to 0
+ * would make every mapped historical entry look more extreme than every future
+ * hand-set one and would leave the true extremes unreachable. 5 is the
+ * concept's neutral midpoint and is where "OKAY" belongs.
+ */
+const MOOD_A1_MAP: Record<string, number> = {
+  SUPER_GUT: 9,
+  GUT: 7,
+  OKAY: 5,
+  SCHLECHT: 3,
+  LAUSIG: 1,
+};
+
+/**
+ * A1 for a five-point mood label. An unrecognised label answers the neutral
+ * midpoint, matching what `getScoreForMood` answers for the same input.
+ */
+export function getA1ForMood(mood: string): number {
+  return MOOD_A1_MAP[mood] ?? 5;
+}
+
+/** Read-only view of the A1 map, for the guards that pin the backfill to it. */
+export function moodA1Map(): Readonly<Record<string, number>> {
+  return MOOD_A1_MAP;
+}
+
 // v1.8.5 — structured-tag keys picked from the catalog (`mood_tags.key`).
 // Additive alongside the flat free-text `tags`: an entry can carry both.
 // Bounded so a single create can't fan out an unbounded link set.
@@ -69,6 +106,14 @@ const ratedFactor = z.object({
 });
 const ratedFactors = z.array(ratedFactor).max(30);
 
+// v1.37 — the five level-A self-state values, each 0-10. Optional on every
+// path: a client that sends only a five-point label still writes a complete
+// entry, because the server derives A1 from the label. A2 to A5 are only ever
+// what the user set, so an omitted one stays absent rather than defaulting to
+// the middle of the scale. The bound is the scale itself; `MOOD_DIMENSIONS`
+// (`src/lib/mood/dimensions.ts`) carries the anchors the numbers mean.
+const levelADimension = z.number().int().min(0).max(10);
+
 export const createMoodEntrySchema = z
   .object({
     mood: moodLevelEnum,
@@ -83,6 +128,19 @@ export const createMoodEntrySchema = z
     // `MoodEntryTagLink.rating`. Out-of-scale or non-RATED keys are
     // rejected (422) / dropped server-side per the catalog.
     ratedFactors: ratedFactors.optional(),
+    // v1.37 — the five level-A values the detail sliders capture. Three
+    // states, and they mean three different things, because this create can
+    // land on the `update:` arm of an `externalId` upsert:
+    //   absent  — nothing to say; a stored answer is left alone
+    //   number  — the answer, stored literally
+    //   null    — take the answer back
+    // `a1` is the exception: absent or null, the server derives it from
+    // `mood`, so a one-tap check-in is a full entry and never a degraded one.
+    a1: levelADimension.nullable().optional(),
+    a2: levelADimension.nullable().optional(),
+    a3: levelADimension.nullable().optional(),
+    a4: levelADimension.nullable().optional(),
+    a5: levelADimension.nullable().optional(),
     // v1.4.30 H-5 — first-class free-text note. Replaces the
     // `tags: ["note:<text>"]` workaround. Capped at 500 chars so the
     // Coach evidence shelf renders cleanly without truncating chips.
@@ -118,6 +176,15 @@ export const updateMoodEntrySchema = z.object({
   // v1.12.0 — full replacement of the rated-factor set when present.
   // `null` clears every rated link; omit to leave them untouched.
   ratedFactors: ratedFactors.nullable().optional(),
+  // v1.37 — level-A values on the edit path. Omitted leaves the stored value
+  // alone; an explicit `null` clears it, which is how a user takes back an
+  // answer they did not mean to give. Editing the five-point label without
+  // sending `a1` re-derives A1, the same way it re-derives `score`.
+  a1: levelADimension.nullable().optional(),
+  a2: levelADimension.nullable().optional(),
+  a3: levelADimension.nullable().optional(),
+  a4: levelADimension.nullable().optional(),
+  a5: levelADimension.nullable().optional(),
   note: z.string().max(500).nullable().optional(),
   // v1.17 W1b — same plausibility bound on the edit path.
   moodLoggedAt: validateEntryInstant(

@@ -87,6 +87,13 @@ import {
 } from "@/components/data-list";
 import { useRovingRadioGroup } from "@/hooks/use-roving-radio-group";
 import { MoodTagPicker, type RatedFactor } from "./mood-tag-picker";
+import {
+  EMPTY_LEVEL_A,
+  MoodLevelASection,
+  levelAFromEntry,
+  levelAUpdatePayload,
+  type LevelAState,
+} from "./mood-level-a-fields";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api/api-fetch";
 import { localizedApiError } from "@/lib/api/localized-error";
 
@@ -104,6 +111,12 @@ interface MoodEntry {
   // v1.8.5 — structured-tag keys + free-text note.
   tagKeys: string[];
   ratedFactors: RatedFactor[];
+  // v1.37 — the five level-A values, absent on entries written before them.
+  a1?: number | null;
+  a2?: number | null;
+  a3?: number | null;
+  a4?: number | null;
+  a5?: number | null;
   note: string | null;
   source: string;
   moodLoggedAt: string;
@@ -185,6 +198,9 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
   const [editTagsInput, setEditTagsInput] = useState("");
   const [editTagKeys, setEditTagKeys] = useState<string[]>([]);
   const [editRatedFactors, setEditRatedFactors] = useState<RatedFactor[]>([]);
+  // v1.37 — the five level-A values on the edit path. Seeded from the entry,
+  // so what the capture sheet wrote is visible and changeable here.
+  const [editLevelA, setEditLevelA] = useState<LevelAState>(EMPTY_LEVEL_A);
   const [editNote, setEditNote] = useState("");
   const [editMoodLoggedAt, setEditMoodLoggedAt] = useState("");
   const [editSeed, setEditSeed] = useState<{
@@ -192,6 +208,7 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
     tagsInput: string;
     tagKeys: string[];
     ratedFactors: RatedFactor[];
+    levelA: LevelAState;
     note: string;
     moodLoggedAt: string;
   }>({
@@ -199,6 +216,7 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
     tagsInput: "",
     tagKeys: [],
     ratedFactors: [],
+    levelA: EMPTY_LEVEL_A,
     note: "",
     moodLoggedAt: "",
   });
@@ -391,6 +409,7 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
       tags,
       tagKeys,
       ratedFactors,
+      levelA,
       note,
       moodLoggedAt,
     }: {
@@ -399,6 +418,7 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
       tags: string[] | null;
       tagKeys: string[];
       ratedFactors: RatedFactor[];
+      levelA: LevelAState;
       note: string | null;
       moodLoggedAt: string;
     }) => {
@@ -407,6 +427,10 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
         tags,
         tagKeys,
         ratedFactors,
+        // Nulls included: this path replaces rather than adds, so a value the
+        // user cleared has to travel as an explicit null or the old answer
+        // survives an edit that visibly removed it.
+        ...levelAUpdatePayload(levelA),
         note,
         moodLoggedAt,
       });
@@ -421,6 +445,7 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
         ratedFactors: [...editRatedFactors].sort((a, b) =>
           a.key.localeCompare(b.key),
         ),
+        levelA: editLevelA,
         note: editNote,
         moodLoggedAt: editMoodLoggedAt,
       });
@@ -439,6 +464,7 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
       ratedFactors: [...editRatedFactors].sort((a, b) =>
         a.key.localeCompare(b.key),
       ),
+      levelA: editLevelA,
       note: editNote,
       moodLoggedAt: editMoodLoggedAt,
     },
@@ -455,6 +481,7 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
       ratedFactors: [...(entry.ratedFactors ?? [])].sort((a, b) =>
         a.key.localeCompare(b.key),
       ),
+      levelA: levelAFromEntry(entry),
       note: entry.note ?? "",
       moodLoggedAt: toDateTimeLocalValue(entry.moodLoggedAt),
     };
@@ -463,6 +490,7 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
     setEditTagsInput(seed.tagsInput);
     setEditTagKeys(seed.tagKeys);
     setEditRatedFactors(seed.ratedFactors);
+    setEditLevelA(seed.levelA);
     setEditNote(seed.note);
     setEditMoodLoggedAt(seed.moodLoggedAt);
     setEditSeed(seed);
@@ -515,6 +543,7 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
       tags: tags.length > 0 ? tags : null,
       tagKeys: editTagKeys,
       ratedFactors: editRatedFactors,
+      levelA: editLevelA,
       note: trimmedNote.length > 0 ? trimmedNote : null,
       moodLoggedAt: measuredDate.toISOString(),
     });
@@ -1007,6 +1036,13 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
                 onRateFactor={rateEditFactor}
               />
             </div>
+
+            {/* v1.37 — the five level-A values, seeded from the entry.
+                Pleasantness is not re-seeded from the face here: this dialog
+                edits an entry that already has an answer, and replacing it
+                with the derived one would quietly discard what the person
+                set. */}
+            <MoodLevelASection value={editLevelA} onChange={setEditLevelA} />
 
             {/* v1.8.5 (C1) — free-text note. */}
             <div className="space-y-2">

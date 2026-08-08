@@ -35,6 +35,15 @@ import {
   computeMoodNarratives,
   type MoodNarrative,
 } from "@/lib/insights/mood-narratives";
+import {
+  computeMoodDimensionSeries,
+  type MoodDimensionSummary,
+} from "@/lib/insights/mood-dimension-series";
+export {
+  computeMoodDimensionSeries,
+  type MoodDimensionPoint,
+  type MoodDimensionSummary,
+} from "@/lib/insights/mood-dimension-series";
 import { resolveUserTimezone } from "@/lib/tz/resolver";
 import { annotate } from "@/lib/logging/context";
 import { createCustomLabelResolver } from "@/lib/mood/custom-tags";
@@ -162,6 +171,16 @@ export interface MoodAggregateEntry {
    * aggregate tests (flat tags only) keep their narrow fixtures.
    */
   structuredTags?: StructuredTagRef[];
+  /**
+   * v1.37 — the five level-A values, each 0-10 and each nullable. Optional so
+   * every fixture written before they existed keeps its narrow shape, and
+   * nullable because an unanswered dimension is absent rather than average.
+   */
+  a1?: number | null;
+  a2?: number | null;
+  a3?: number | null;
+  a4?: number | null;
+  a5?: number | null;
   /**
    * v1.14.0 — per-entry RATED factor scores (work / sleep-quality /
    * stress …) from the same `mood_entry_tag_links` join, but carrying the
@@ -414,6 +433,13 @@ export interface MoodAggregates {
     cells: HeatmapCell[];
   };
   distribution: DistributionRow[];
+  /**
+   * v1.37 — one summary per level-A dimension: 7 / 30 / 90-day means, the
+   * newest value with its age, and the daily series behind them. A dimension
+   * nobody answered reports `present: false` and an empty series; the surface
+   * says so rather than drawing a line through the middle of the scale.
+   */
+  dimensions: MoodDimensionSummary[];
   weekday: WeekdayRow[];
   /**
    * v1.9.0 — average mood per part of day, bucketed in each entry's own
@@ -578,6 +604,17 @@ export function computeMoodAggregates(args: {
       cells: computeHeatmapCells(entries, now, windowDays),
     },
     distribution: computeDistribution(moodDaily),
+    dimensions: computeMoodDimensionSeries(
+      entries.map((entry) => ({
+        date: entry.date,
+        a1: entry.a1 ?? null,
+        a2: entry.a2 ?? null,
+        a3: entry.a3 ?? null,
+        a4: entry.a4 ?? null,
+        a5: entry.a5 ?? null,
+      })),
+      dayOffsetToBerlinDayKey(now, 0, tz),
+    ),
     weekday,
     timeOfDay,
     stability,
@@ -624,6 +661,13 @@ export async function fetchMoodAggregates(
       select: {
         date: true,
         score: true,
+        // v1.37 — the five level-A values. Plaintext columns, so the trend is
+        // a plain read rather than a decrypt-per-row.
+        moodA1: true,
+        stressA2: true,
+        energyA3: true,
+        connectionA4: true,
+        stabilityA5: true,
         tags: true,
         moodLoggedAt: true,
         // v1.9.0 — per-row IANA tz anchors the part-of-day bucketing in
@@ -664,6 +708,11 @@ export async function fetchMoodAggregates(
       return rows.reverse().map((row) => ({
         date: row.date,
         score: row.score,
+        a1: row.moodA1,
+        a2: row.stressA2,
+        a3: row.energyA3,
+        a4: row.connectionA4,
+        a5: row.stabilityA5,
         tags: parseTags(row.tags),
         moodLoggedAt: row.moodLoggedAt,
         tz: row.tz,

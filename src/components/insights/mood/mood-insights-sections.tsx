@@ -34,12 +34,25 @@ import { MoodHeatmap } from "@/components/charts/mood-heatmap";
 // without a layout shift (charts stay Recharts, visually identical). Types
 // stay value-free imports so they don't drag the chunk back in.
 import type { MoodDistributionRow } from "./mood-distribution-chart";
+import type { MoodDimensionSummaryData } from "./mood-dimension-trends";
 import type { MoodWeekdayRow } from "./mood-weekday-chart";
 import type { MoodTimeOfDayPattern } from "./mood-time-of-day-chart";
 // v1.16.7 established the shared-barrel pattern for the trio; all three
 // loaders now resolve the app-wide chart-runtime boundary, so they share
 // the ONE recharts chunk with every other chart surface: the cards reveal
 // together, and recharts ships exactly once for the whole app.
+const MoodDimensionTrends = dynamic(
+  () =>
+    import("@/components/charts/chart-runtime").then((mod) => ({
+      default: mod.MoodDimensionTrends,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <Skeleton className="h-[clamp(160px,34vh,220px)] w-full rounded-md" />
+    ),
+  },
+);
 const MoodDistributionChart = dynamic(
   () =>
     import("@/components/charts/chart-runtime").then((mod) => ({
@@ -127,6 +140,9 @@ interface MoodInsightsResponse {
     cells: Array<{ date: string; score: number; samples: number }>;
   };
   distribution: MoodDistributionRow[];
+  // Optional only to tolerate a stale pre-v1.37 cached payload during a
+  // rollout; the live endpoint always populates it.
+  dimensions?: MoodDimensionSummaryData[];
   weekday: MoodWeekdayRow[];
   timeOfDay: MoodTimeOfDayPattern;
   stability: MoodStabilityData | null;
@@ -258,6 +274,8 @@ export function MoodInsightsSections({
   const hasCrosstab = crosstabRows.length > 0;
   const factorCrosstabRows = data.factorCrosstab ?? [];
   const hasFactorCrosstab = factorCrosstabRows.length > 0;
+  const dimensionSummaries = data.dimensions ?? [];
+  const hasDimensions = dimensionSummaries.some((d) => d.present);
 
   // v1.12.7 — the Stimmungskalender is lifted above the line chart on the page,
   // so it renders as its own region here.
@@ -333,6 +351,15 @@ export function MoodInsightsSections({
           (was two separate cards). Self-fetches the discovery surface and
           renders nothing when both halves are empty. */}
       <MoodWhatStandsOut narratives={narratives} />
+
+      {/* v1.37 — the five level-A dimensions. Renders only once at least one
+          of them carries a value; an account that has never opened the detail
+          section sees the page it saw before. */}
+      {hasDimensions && (
+        <SectionCard title={t("insights.mood.dimensions.title")} icon={Gauge}>
+          <MoodDimensionTrends dimensions={dimensionSummaries} />
+        </SectionCard>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <SectionCard

@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+### Added
+
+- A mood entry now records five separate values instead of one. The quick
+  check-in is unchanged: pick a face, save, done in a tap, and its answer maps
+  onto a new pleasantness scale so nothing about that entry is second class.
+  Underneath it, a section that stays closed until you open it holds five
+  sliders running 0 to 10, each with wording at both ends: how the day felt,
+  how much strain it carried, how much energy there was, how connected you
+  were, and how able to act you felt. Anything you leave alone stays empty
+  rather than landing in the middle, and clearing a slider takes the answer
+  back. Entries you have already logged carry the mapped value for the first
+  scale and nothing invented for the other four.
+
+- The mood page trends all five, over seven, thirty or ninety days, each drawn
+  the way you answered it. A scale you have never filled in is named as not
+  recorded rather than drawn flat through the middle. The daily briefing and
+  the assistant read all five as well, each with its own age, so a value from
+  last week is stated with its date instead of as today's.
+
+- Factor ratings are no longer offered on a new entry. A one-to-five score for
+  work stress and a nought-to-ten stress scale are two answers to the same
+  question, and only the second is asked now. Nothing was removed: ratings
+  already logged still show, still edit, and still feed the breakdowns that
+  read them.
+
 ### Security
 
 - The PDF renderer behind the document vault moves to a release that closes a

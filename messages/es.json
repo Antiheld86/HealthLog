@@ -887,11 +887,42 @@
       "iconGroupMisc": "Otros"
     },
     "sectionMoreTags": "Más etiquetas",
-    "sectionFactors": "Factores",
     "sectionNoteDetails": "Nota y detalles",
     "quickTagsHelp": "Tus etiquetas frecuentes: un toque",
     "quickTagsExpand": "Más",
-    "loadError": "No se pudieron cargar tus registros de estado de ánimo."
+    "loadError": "No se pudieron cargar tus registros de estado de ánimo.",
+    "sectionLevelA": "Cinco escalas",
+    "sectionLevelAHelp": "Opcional. Lo que no toques queda vacío.",
+    "dimensionNotAnswered": "sin indicar",
+    "dimensionClear": "borrar",
+    "dimensionValueText": "{value} de {max}: {low} a {high}",
+    "dimension": {
+      "a1": {
+        "label": "Estado de ánimo",
+        "low": "muy desagradable",
+        "high": "muy agradable"
+      },
+      "a2": {
+        "label": "Estrés",
+        "low": "completamente relajado",
+        "high": "extremadamente tenso"
+      },
+      "a3": {
+        "label": "Energía",
+        "low": "agotado",
+        "high": "lleno de energía"
+      },
+      "a4": {
+        "label": "Conexión",
+        "low": "aislado",
+        "high": "comprendido y apoyado"
+      },
+      "a5": {
+        "label": "Estabilidad",
+        "low": "completamente desbordado",
+        "high": "con plena capacidad de acción"
+      }
+    }
   },
   "medications": {
     "title": "Medicamentos",
@@ -3612,7 +3643,15 @@
         "statLabel": "Cómo se calculó esto",
         "explainerLabel": "Cómo se calculó esto"
       },
-      "inTargetTitle": "En tu rango"
+      "inTargetTitle": "En tu rango",
+      "dimensions": {
+        "title": "Cinco escalas",
+        "none": "Todavía no hay nada registrado en estas cinco escalas.",
+        "window": "{days} días",
+        "noneInWindow": "nada en este periodo",
+        "higherIsMore": "más alto = {anchor}",
+        "notRecorded": "Sin registrar: {list}."
+      }
     },
     "derived": {
       "coverage": {

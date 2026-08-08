@@ -254,6 +254,15 @@ const moodEntrySchema = z
     date: z.string().min(1),
     mood: z.string().min(1),
     score: z.number().int().min(0).max(10),
+    // The five level-A values. Optional and nullable: a file written before
+    // they existed carries none, and an entry whose sliders were never touched
+    // carries nulls. Absent restores as NULL, never as a defaulted midpoint —
+    // a restore that invents an answer is worse than one that admits none.
+    a1: z.number().int().min(0).max(10).nullable().optional(),
+    a2: z.number().int().min(0).max(10).nullable().optional(),
+    a3: z.number().int().min(0).max(10).nullable().optional(),
+    a4: z.number().int().min(0).max(10).nullable().optional(),
+    a5: z.number().int().min(0).max(10).nullable().optional(),
     tags: moodEntryTagsSchema,
     // The free text, in both storage shapes. A portable export carries the
     // decrypted `note`; a disaster-recovery file carries `noteEncrypted` plus

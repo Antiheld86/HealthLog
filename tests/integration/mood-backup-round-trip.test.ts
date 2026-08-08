@@ -186,6 +186,15 @@ describe("mood backup round trip", () => {
         date: "2026-07-19",
         mood: "OKAY",
         score: 3,
+        // All five level-A values, and deliberately not the ones the label
+        // would derive: a restore that re-derived them instead of carrying
+        // them would look right on this row and be wrong on every row where
+        // the person disagreed with their own five-point pick.
+        moodA1: 4,
+        stressA2: 9,
+        energyA3: 2,
+        connectionA4: 6,
+        stabilityA5: 0,
         tags: JSON.stringify(["free-text-tag"]),
         note: null,
         noteEncrypted: encryptNote(NOTE),
@@ -268,6 +277,14 @@ describe("mood backup round trip", () => {
     expect(restored.updatedAt).toEqual(UPDATED_AT);
     expect(restored.date).toBe("2026-07-19");
     expect(restored.score).toBe(3);
+    // Each of the five asserted by value. Zero is included on purpose: it is a
+    // real answer on this scale, and a carrier that treated it as absence
+    // would round-trip it as NULL and pass a truthiness check.
+    expect(restored.moodA1).toBe(4);
+    expect(restored.stressA2).toBe(9);
+    expect(restored.energyA3).toBe(2);
+    expect(restored.connectionA4).toBe(6);
+    expect(restored.stabilityA5).toBe(0);
     expect(restored.tags).toBe(JSON.stringify(["free-text-tag"]));
     expect(restored.deletedAt).toBeNull();
 
@@ -276,6 +293,11 @@ describe("mood backup round trip", () => {
     });
     expect(tombstone.deletedAt).toEqual(DELETED_AT);
     expect(tombstone.syncVersion).toBe(5);
+    // The tombstone was written without level-A values and comes back without
+    // them. A restore filling these in would put an answer nobody gave into a
+    // row the person had already deleted.
+    expect(tombstone.moodA1).toBeNull();
+    expect(tombstone.stressA2).toBeNull();
 
     const links = await prisma.moodEntryTagLink.findMany({
       where: { moodEntryId: "mood-rt-entry" },
@@ -294,6 +316,146 @@ describe("mood backup round trip", () => {
     expect(byKey.get("rt_headache")!.rating).toBeNull();
     expect(byKey.get("custom:rt_long_walk")!.rating).toBeNull();
     expect(byKey.get("rt_sleep_quality")!.rating).toBe(4);
+  });
+
+  it("wipes before it rebuilds, so a live row comes back exactly as the file describes it", async () => {
+    const prisma = getPrismaClient();
+    await seedAdminSession(prisma);
+    await seedOwner(prisma);
+
+    // A row as it stands today, with answered sliders.
+    await prisma.moodEntry.create({
+      data: {
+        id: "mood-rt-live",
+        userId: OWNER_ID,
+        date: "2026-07-19",
+        mood: "OKAY",
+        score: 3,
+        moodA1: 4,
+        stressA2: 9,
+        source: "MANUAL",
+        moodLoggedAt: LOGGED_AT,
+      },
+    });
+
+    // Restoring a file written before these columns existed. The restore
+    // deletes the owner's mood partition and rebuilds it from the file, so
+    // the row that comes back is the file's row and carries nothing the file
+    // did not hold. This is the disaster-recovery contract and it is asserted
+    // here so nobody reads the omit-on-update below as protecting a live row:
+    // by the time that arm runs there are no live rows left.
+    const legacyPayload = {
+      schemaVersion: "2",
+      exportedAt: "2026-07-20T00:00:00.000Z",
+      userId: OWNER_ID,
+      appSettings: null,
+      measurements: [],
+      medications: [],
+      intakeEvents: [],
+      moodEntries: [
+        {
+          id: "mood-rt-live",
+          date: "2026-07-19",
+          mood: "OKAY",
+          score: 3,
+          tags: null,
+          source: "MANUAL",
+          loggedAt: LOGGED_AT.toISOString(),
+          externalId: null,
+          deletedAt: null,
+          factors: [],
+        },
+      ],
+      customMoodTags: [],
+      nutrientDays: [],
+    };
+
+    const response = await restoreFromPayload(
+      prisma,
+      parseBackupPayload(legacyPayload),
+      "MOOD_LEVEL_A_WIPE",
+    );
+    expect(response.status).toBe(200);
+
+    const after = await prisma.moodEntry.findUniqueOrThrow({
+      where: { id: "mood-rt-live" },
+    });
+    // Not 4 and not 9: the file said nothing about them and the file is what
+    // was restored. Nothing was derived to fill the gap either.
+    expect(after.moodA1).toBeNull();
+    expect(after.stressA2).toBeNull();
+  });
+
+  it("lets a second entry for the same row add without erasing", async () => {
+    const prisma = getPrismaClient();
+    await seedAdminSession(prisma);
+    await seedOwner(prisma);
+
+    // Two entries in ONE file addressing the same row. The first creates it,
+    // the second lands on the upsert's update arm — the only way that arm is
+    // reachable, since the partition was wiped a moment earlier. A second
+    // entry that mentions nothing about a dimension must not blank what the
+    // first one set, and one that mentions it wins, including a null.
+    const payload = {
+      schemaVersion: "2",
+      exportedAt: "2026-08-08T00:00:00.000Z",
+      userId: OWNER_ID,
+      appSettings: null,
+      measurements: [],
+      medications: [],
+      intakeEvents: [],
+      moodEntries: [
+        {
+          id: "mood-rt-collide",
+          date: "2026-07-19",
+          mood: "OKAY",
+          score: 3,
+          tags: null,
+          source: "MANUAL",
+          loggedAt: LOGGED_AT.toISOString(),
+          externalId: null,
+          deletedAt: null,
+          a1: 4,
+          a2: 9,
+          a3: 6,
+          factors: [],
+        },
+        {
+          id: "mood-rt-collide",
+          date: "2026-07-19",
+          mood: "GUT",
+          score: 4,
+          tags: null,
+          source: "MANUAL",
+          loggedAt: LOGGED_AT.toISOString(),
+          externalId: null,
+          deletedAt: null,
+          a1: 7,
+          a3: null,
+          factors: [],
+        },
+      ],
+      customMoodTags: [],
+      nutrientDays: [],
+    };
+
+    const response = await restoreFromPayload(
+      prisma,
+      parseBackupPayload(payload),
+      "MOOD_LEVEL_A_COLLIDE",
+    );
+    expect(response.status).toBe(200);
+
+    const after = await prisma.moodEntry.findUniqueOrThrow({
+      where: { id: "mood-rt-collide" },
+    });
+    expect(after.mood).toBe("GUT");
+    // Stated by the second entry.
+    expect(after.moodA1).toBe(7);
+    // Not mentioned by the second entry: the first entry's answer stands.
+    expect(after.stressA2).toBe(9);
+    // Stated as null by the second entry: cleared.
+    expect(after.energyA3).toBeNull();
   });
 
   it("restores a file written in the shape that predates these fields", async () => {
@@ -338,6 +500,7 @@ describe("mood backup round trip", () => {
     expect(parsed.moodEntries[0].structuredTags).toEqual([]);
     expect(parsed.moodEntries[0].tz).toBeUndefined();
     expect(parsed.moodEntries[0].syncVersion).toBeUndefined();
+    expect(parsed.moodEntries[0].a1).toBeUndefined();
 
     const response = await restoreFromPayload(
       prisma,
@@ -360,6 +523,14 @@ describe("mood backup round trip", () => {
     expect(restored.score).toBe(4);
     expect(restored.externalId).toBe("moodlog-legacy");
     expect(restored.deletedAt).toBeNull();
+    // A file from before these columns carries no answer for them, and the
+    // restore does not invent one. `GUT` would derive to 7; a restore that
+    // derived instead of carrying would write a number this file never held.
+    expect(restored.moodA1).toBeNull();
+    expect(restored.stressA2).toBeNull();
+    expect(restored.energyA3).toBeNull();
+    expect(restored.connectionA4).toBeNull();
+    expect(restored.stabilityA5).toBeNull();
 
     const links = await prisma.moodEntryTagLink.findMany({
       where: { moodEntryId: "mood-rt-legacy" },

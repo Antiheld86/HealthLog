@@ -126,6 +126,7 @@ const eslintConfig = defineConfig([
       "src/components/cycle/bbt-chart.tsx",
       "src/components/insights/derived/delta-sparkline.tsx",
       "src/components/insights/intraday-pulse-chart.tsx",
+      "src/components/insights/mood/mood-dimension-trends.tsx",
       "src/components/insights/mood/mood-distribution-chart.tsx",
       "src/components/insights/mood/mood-time-of-day-chart.tsx",
       "src/components/insights/mood/mood-weekday-chart.tsx",

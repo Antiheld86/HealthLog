@@ -53,6 +53,12 @@ const SKIP_DIRS = new Set(["__tests__", "node_modules", ".next", "generated"]);
 const DYNAMIC_ALLOWLIST_PREFIXES = [
   "mood.tag",
   "mood.tagCategory",
+  // `mood.dimension`: the five level-A dimensions are a table
+  // (`src/lib/mood/dimensions.ts`) whose rows carry their own label and anchor
+  // keys, so every leaf is resolved from a value rather than written as a
+  // literal. The table is the reason the keys cannot drift apart from the
+  // columns they describe.
+  "mood.dimension",
   // The whole namespace is a runtime lookup table: the client resolves an
   // error envelope's `meta.errorCode` through it (`localizedApiError`), so no
   // leaf ever appears as a literal at a call site. Adding a key here is only

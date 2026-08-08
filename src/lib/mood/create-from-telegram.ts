@@ -17,6 +17,7 @@ import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db";
 import { MOOD_ENUM_BY_SCORE } from "@/lib/mood/labels";
 import { getScoreForMood } from "@/lib/validations/mood";
+import { deriveA1 } from "@/lib/mood/level-a";
 import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
 import { encryptNote } from "@/lib/crypto/note-cipher";
 import { invalidateUserMood } from "@/lib/cache/invalidate";
@@ -79,6 +80,10 @@ export async function logTelegramMood(input: {
       tz,
       mood,
       score,
+      // v1.37 — pleasantness derived from the same label the score comes
+      // from, so a mood tapped in the chat carries the value a mood typed
+      // into the web form would. Nothing here can answer the other four.
+      moodA1: deriveA1(mood),
       // v1.23 — encrypt the note at rest; legacy plaintext column nulled.
       note: null,
       noteEncrypted: encryptNote(input.note ?? null),

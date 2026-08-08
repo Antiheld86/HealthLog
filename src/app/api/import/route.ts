@@ -39,6 +39,7 @@ import { emitInsertedMeasurementArrivals } from "@/lib/arrivals/measurement-emit
 import { maybeEnqueueMorningRefresh } from "@/lib/daily/morning-refresh-trigger";
 import { isP2002, isP2025 } from "@/lib/prisma-errors";
 import { DEFAULT_TIMEZONE, moodDateKey } from "@/lib/mood/date-key";
+import { deriveA1 } from "@/lib/mood/level-a";
 import { zonedWallClockToUtc } from "@/lib/tz/wall-clock";
 
 // Derived from canonical enum so round-trip export → import covers every
@@ -364,6 +365,12 @@ export const POST = apiHandler(async (request: NextRequest) => {
                 date: e.date,
                 mood: e.mood,
                 score: e.score,
+                // v1.37 — pleasantness derived from the row's own label, not
+                // from the file's `score`. This is the one writer whose score
+                // comes out of the file rather than out of the label, so the
+                // two can disagree; the column that records a self-assessment
+                // has to agree with the label the user actually picked.
+                moodA1: deriveA1(e.mood),
                 tags: e.tags || null,
                 moodLoggedAt: loggedAt,
               },
@@ -372,6 +379,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
                 date: e.date,
                 mood: e.mood,
                 score: e.score,
+                moodA1: deriveA1(e.mood),
                 tags: e.tags || null,
                 source: "IMPORT",
                 externalId: e.externalId,
@@ -385,6 +393,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
                 date: e.date,
                 mood: e.mood,
                 score: e.score,
+                // See the upsert arm above: derived from the label, because
+                // an imported file's `score` is its own field.
+                moodA1: deriveA1(e.mood),
                 tags: e.tags || null,
                 source: "IMPORT",
                 moodLoggedAt: loggedAt,

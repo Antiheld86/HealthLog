@@ -336,6 +336,12 @@ export function formatMoodEntriesForExport(
     note?: string | null;
     source: string;
     moodLoggedAt: Date;
+    /** The five level-A values, absent on entries written before they existed. */
+    moodA1?: number | null;
+    stressA2?: number | null;
+    energyA3?: number | null;
+    connectionA4?: number | null;
+    stabilityA5?: number | null;
   }>,
   userTz?: string,
 ): ExportableRecord[] {
@@ -347,5 +353,14 @@ export function formatMoodEntriesForExport(
     note: e.note ?? "",
     source: e.source,
     loggedAt: formatTimestamp(e.moodLoggedAt, userTz),
+    // Appended after the existing columns rather than slotted in beside
+    // `score`, because this file lands in somebody's spreadsheet and a column
+    // that moves breaks every formula pointed at it. An unanswered value is an
+    // empty cell, not a zero: zero is a real answer on this scale.
+    a1: e.moodA1 ?? "",
+    a2: e.stressA2 ?? "",
+    a3: e.energyA3 ?? "",
+    a4: e.connectionA4 ?? "",
+    a5: e.stabilityA5 ?? "",
   }));
 }
