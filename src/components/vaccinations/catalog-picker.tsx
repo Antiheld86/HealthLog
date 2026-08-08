@@ -116,6 +116,7 @@ export function CatalogPicker({
                     key={entry.slug}
                     type="button"
                     data-slot="vaccination-catalog-option"
+                    data-catalog-slug={entry.slug}
                     onClick={() => {
                       onChange(entry.slug);
                       setOpen(false);
