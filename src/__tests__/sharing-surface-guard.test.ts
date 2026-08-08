@@ -888,8 +888,8 @@ const DELEGABLE_ROUTES: Record<string, DelegableEntry> = {
     why: "The record's mood entries. The nested include is the tag vocabulary — a key and a kind, no identifiers. Note that `GET /api/mood/tags` is refused and stays refused: it pulls the owner's tag LAYOUT, which is a presentation preference and belongs to the person, not the record.",
   },
   "app/api/mood/linked-context/route.ts": {
-    domain: "mind",
-    why: "What the sleep, activity, vitals and illness modules already hold for one of the record's days, read-only and resolved per request. Every figure it returns is a figure a delegate can already read on the record's own surfaces; nothing here is a preference of the person, and nothing is written.",
+    domain: "record",
+    why: "What the sleep, activity, vitals and illness modules already hold for one of the record's days, read-only. It is reached from a mood surface and it is NOT a mind read: the payload is sleep minutes, steps, active energy, resting heart rate, heart-rate variability and an illness day-log with its symptom keys. Declared `mind` it let a mood-only delegate walk arbitrary dates and read two sections the owner had declined to share, with no entry needing to exist for the date. Admitted on the whole-record grant only, like the other cross-section reads; a scoped grant is refused rather than served a filtered day.",
   },
   "app/api/mood-entries/[id]/route.ts": {
     domain: "mind",

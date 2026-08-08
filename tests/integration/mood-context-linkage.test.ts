@@ -19,7 +19,7 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { cookieJar } from "./mock-next-headers";
-import { getPrismaClient, truncateAllTables } from "./setup";
+import { getPrismaClient, switchSessionTo, truncateAllTables } from "./setup";
 
 const TEST_USER_ID = "user-mood-linkage";
 const DAY = "2026-06-11";
@@ -283,6 +283,251 @@ describe("mood context linkage (real Postgres)", () => {
       available: false,
       reason: "module-disabled",
     });
+  });
+
+  it("sums one source per day, not both, when two report the same day", async () => {
+    // Two sources reporting the same day is the ordinary case for anyone
+    // syncing a phone and a watch, and summing both doubles the number on the
+    // mood sheet. The repo's cure is the canonical-source picker every other
+    // steps/energy read already runs through.
+    await getPrismaClient().measurement.createMany({
+      data: [
+        {
+          userId: TEST_USER_ID,
+          type: "ACTIVITY_STEPS",
+          value: 6000,
+          unit: "steps",
+          measuredAt: new Date("2026-06-11T08:00:00.000Z"),
+          source: "APPLE_HEALTH",
+        },
+        {
+          userId: TEST_USER_ID,
+          type: "ACTIVITY_STEPS",
+          value: 5900,
+          unit: "steps",
+          measuredAt: new Date("2026-06-11T09:00:00.000Z"),
+          source: "FITBIT",
+        },
+        {
+          userId: TEST_USER_ID,
+          type: "ACTIVE_ENERGY_BURNED",
+          value: 500,
+          unit: "kcal",
+          measuredAt: new Date("2026-06-11T08:00:00.000Z"),
+          source: "APPLE_HEALTH",
+        },
+        {
+          userId: TEST_USER_ID,
+          type: "ACTIVE_ENERGY_BURNED",
+          value: 480,
+          unit: "kcal",
+          measuredAt: new Date("2026-06-11T09:00:00.000Z"),
+          source: "FITBIT",
+        },
+      ],
+    });
+
+    const linked = await readLinked();
+    // One stream, whichever the ladder picks — never the two added together.
+    expect([6000, 5900]).toContain(linked.activity.steps?.value);
+    expect([500, 480]).toContain(linked.activity.activeEnergy?.value);
+    expect(linked.activity.steps?.value).not.toBe(11900);
+    expect(linked.activity.activeEnergy?.value).not.toBe(980);
+  });
+
+  it("takes one source's vital for the day rather than whichever row is last", async () => {
+    // The default resting-heart-rate ladder ranks FITBIT above APPLE_HEALTH,
+    // and the fixture puts the LOWER-ranked source last in the day on purpose:
+    // a source-blind "latest of the day" answers 71, the canonical stream
+    // answers 62. Without that ordering the two rules agree and the case
+    // proves nothing.
+    await getPrismaClient().measurement.createMany({
+      data: [
+        {
+          userId: TEST_USER_ID,
+          type: "RESTING_HEART_RATE",
+          value: 60,
+          unit: "bpm",
+          measuredAt: new Date("2026-06-11T07:00:00.000Z"),
+          source: "FITBIT",
+        },
+        {
+          userId: TEST_USER_ID,
+          type: "RESTING_HEART_RATE",
+          value: 62,
+          unit: "bpm",
+          measuredAt: new Date("2026-06-11T12:00:00.000Z"),
+          source: "FITBIT",
+        },
+        {
+          userId: TEST_USER_ID,
+          type: "RESTING_HEART_RATE",
+          value: 71,
+          unit: "bpm",
+          // 21:00 Berlin, deliberately still inside the same local day: at
+          // 22:00 UTC in June this row would belong to the NEXT Berlin day and
+          // the case would pass without proving anything.
+          measuredAt: new Date("2026-06-11T19:00:00.000Z"),
+          source: "APPLE_HEALTH",
+        },
+      ],
+    });
+
+    const linked = await readLinked();
+    // The picked source's latest, not the day's latest.
+    expect(linked.vitals.restingHeartRate).toEqual({
+      present: true,
+      value: 62,
+      unit: "bpm",
+    });
+  });
+
+  it("keeps ambient movement available when the workouts module is off", async () => {
+    // `workouts` gates workout SESSIONS. Steps and active energy are ambient
+    // movement and are deliberately unscoped — the module ownership table says
+    // so, and gating them here made the mood sheet stricter than every other
+    // surface in the product.
+    await getPrismaClient().measurement.create({
+      data: {
+        userId: TEST_USER_ID,
+        type: "ACTIVITY_STEPS",
+        value: 3000,
+        unit: "steps",
+        measuredAt: new Date("2026-06-11T08:00:00.000Z"),
+        source: "MANUAL",
+      },
+    });
+    await getPrismaClient().user.update({
+      where: { id: TEST_USER_ID },
+      data: { modulePreferencesJson: { workouts: false } },
+    });
+
+    const linked = await readLinked();
+    expect(linked.activity.available).toBe(true);
+    expect(linked.activity.steps).toEqual({
+      present: true,
+      value: 3000,
+      unit: "steps",
+    });
+  });
+
+  it("blanks the vitals block when the recovery module is off", async () => {
+    // Resting heart rate and heart-rate variability are owned by `recovery`,
+    // which the ownership table has said since v1.30.22. The block claimed to
+    // be core and answered them regardless, which made the release note's
+    // "a module you have switched off leaves its block out entirely" false.
+    await getPrismaClient().measurement.create({
+      data: {
+        userId: TEST_USER_ID,
+        type: "RESTING_HEART_RATE",
+        value: 58,
+        unit: "bpm",
+        measuredAt: new Date("2026-06-11T07:00:00.000Z"),
+        source: "MANUAL",
+      },
+    });
+    expect((await readLinked()).vitals.available).toBe(true);
+
+    await getPrismaClient().user.update({
+      where: { id: TEST_USER_ID },
+      data: { modulePreferencesJson: { recovery: false } },
+    });
+
+    const linked = await readLinked();
+    expect(linked.vitals).toEqual({
+      available: false,
+      reason: "module-disabled",
+    });
+    expect(linked.vitals).not.toHaveProperty("restingHeartRate");
+  });
+
+  it("refuses a delegate whose grant does not open the whole record", async () => {
+    // The finding this case exists for: the route reads sleep, activity,
+    // vitals and the illness journal, and it used to declare `mind`. A
+    // delegate given the mind section alone could therefore walk arbitrary
+    // dates and read four other sections of the owner's record — no mood
+    // entry even had to exist for the date.
+    //
+    // The convention for a read that crosses sections is `record`, and a
+    // scoped grant never reaches one. So the scoped delegate loses the linked
+    // block entirely, which is the honest answer rather than a filtered one.
+    await getPrismaClient().measurement.createMany({
+      data: [
+        {
+          userId: TEST_USER_ID,
+          type: "ACTIVITY_STEPS",
+          value: 7777,
+          unit: "steps",
+          measuredAt: new Date("2026-06-11T08:00:00.000Z"),
+          source: "MANUAL",
+        },
+        {
+          userId: TEST_USER_ID,
+          type: "RESTING_HEART_RATE",
+          value: 55,
+          unit: "bpm",
+          measuredAt: new Date("2026-06-11T07:00:00.000Z"),
+          source: "MANUAL",
+        },
+      ],
+    });
+    const episode = await getPrismaClient().illnessEpisode.create({
+      data: {
+        userId: TEST_USER_ID,
+        label: "cold",
+        type: "INFECTION",
+        onsetAt: new Date("2026-06-10T08:00:00.000Z"),
+      },
+    });
+    await getPrismaClient().illnessDayLog.create({
+      data: {
+        userId: TEST_USER_ID,
+        episodeId: episode.id,
+        date: DAY,
+        functionalImpact: 3,
+      },
+    });
+
+    const delegate = await getPrismaClient().user.create({
+      data: {
+        id: "user-mood-linkage-delegate",
+        username: "mood-linkage-delegate",
+        email: "mood-linkage-delegate@example.test",
+        timezone: "Europe/Berlin",
+      },
+    });
+    await getPrismaClient().accountGrant.create({
+      data: {
+        grantorId: TEST_USER_ID,
+        granteeId: delegate.id,
+        access: "READ",
+        acceptedAt: new Date(),
+        // Only the mind section. Everything this route reads is outside it.
+        scopeJson: ["mind"] as never,
+      },
+    });
+    const session = await getPrismaClient().session.create({
+      data: {
+        userId: delegate.id,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    });
+    cookieJar.set("healthlog_session", session.id);
+    await switchSessionTo(session.id, TEST_USER_ID);
+
+    const { GET } = await import("@/app/api/mood/linked-context/route");
+    const res = await GET(
+      new NextRequest(
+        `http://localhost/api/mood/linked-context?date=${DAY}&tz=Europe%2FBerlin`,
+      ),
+    );
+    expect(res.status).toBe(403);
+    const raw = await res.text();
+    // Asserted on the bytes, not on a parsed field: the point is that not one
+    // of the owner's figures reached the response.
+    expect(raw).not.toContain("7777");
+    expect(raw).not.toContain("55");
+    expect(raw).not.toContain("functionalImpact");
   });
 
   it("refuses a malformed day", async () => {
