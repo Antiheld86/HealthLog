@@ -354,6 +354,7 @@
     "vorsorge": "Checkups",
     "illness": "Illness",
     "documents": "Documents",
+    "vaccinations": "Vaccinations",
     "mentalWellbeing": "Mental wellbeing"
   },
   "auth": {
@@ -8512,6 +8513,14 @@
     "vaccinations": {
       "label": "Vaccinations",
       "description": "The vaccination record, structured: dose, series, next booster."
+    }
+  },
+  "vaccinations": {
+    "title": "Vaccinations",
+    "subtitle": "Your immunization record, dose by dose.",
+    "empty": {
+      "title": "No vaccination logged yet",
+      "description": "Transcribe your vaccination card line by line — a date and the vaccine are enough."
     }
   },
   "illness": {

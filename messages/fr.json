@@ -354,6 +354,7 @@
     "vorsorge": "Examens",
     "illness": "Maladie",
     "documents": "Documents",
+    "vaccinations": "Vaccinations",
     "mentalWellbeing": "Bien-être mental"
   },
   "auth": {
@@ -8512,6 +8513,14 @@
     "vaccinations": {
       "label": "Vaccinations",
       "description": "Le carnet de vaccination structuré : dose, série, prochain rappel."
+    }
+  },
+  "vaccinations": {
+    "title": "Vaccinations",
+    "subtitle": "Votre carnet de vaccination, dose par dose.",
+    "empty": {
+      "title": "Aucune vaccination enregistrée",
+      "description": "Recopiez votre carnet de vaccination ligne par ligne : une date et le vaccin suffisent."
     }
   },
   "illness": {

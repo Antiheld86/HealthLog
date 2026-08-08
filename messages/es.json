@@ -354,6 +354,7 @@
     "vorsorge": "Revisiones",
     "illness": "Enfermedad",
     "documents": "Documentos",
+    "vaccinations": "Vacunas",
     "mentalWellbeing": "Bienestar mental"
   },
   "auth": {
@@ -8512,6 +8513,14 @@
     "vaccinations": {
       "label": "Vacunas",
       "description": "La cartilla de vacunación estructurada: dosis, serie, próximo refuerzo."
+    }
+  },
+  "vaccinations": {
+    "title": "Vacunas",
+    "subtitle": "Tu registro de vacunación, dosis a dosis.",
+    "empty": {
+      "title": "Aún no hay ninguna vacuna registrada",
+      "description": "Transcribe tu cartilla de vacunación línea por línea: bastan una fecha y la vacuna."
     }
   },
   "illness": {

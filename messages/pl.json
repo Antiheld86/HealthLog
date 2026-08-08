@@ -354,6 +354,7 @@
     "vorsorge": "Badania",
     "illness": "Choroba",
     "documents": "Dokumenty",
+    "vaccinations": "Szczepienia",
     "mentalWellbeing": "Dobrostan psychiczny"
   },
   "auth": {
@@ -8512,6 +8513,14 @@
     "vaccinations": {
       "label": "Szczepienia",
       "description": "Książeczka szczepień uporządkowana: dawka, seria, następne przypomnienie."
+    }
+  },
+  "vaccinations": {
+    "title": "Szczepienia",
+    "subtitle": "Twoja karta szczepień, dawka po dawce.",
+    "empty": {
+      "title": "Nie zarejestrowano jeszcze żadnego szczepienia",
+      "description": "Przepisz swoją kartę szczepień wiersz po wierszu — wystarczą data i szczepionka."
     }
   },
   "illness": {

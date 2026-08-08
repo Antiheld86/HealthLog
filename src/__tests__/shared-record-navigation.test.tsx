@@ -47,9 +47,15 @@ describe("shared-record navigation", () => {
     expect(SHARED_RECORD_DOMAIN_ROUTE_FAMILIES.profile).toEqual([
       "/profile",
       "/checkups",
+      "/vaccinations",
     ]);
-    expect(navigation.destinationHrefs).toEqual(["/profile", "/checkups"]);
+    expect(navigation.destinationHrefs).toEqual([
+      "/profile",
+      "/checkups",
+      "/vaccinations",
+    ]);
     expect(navigation.allowsPath("/profile")).toBe(true);
+    expect(navigation.allowsPath("/vaccinations")).toBe(true);
     expect(navigation.allowsPath("/settings/anamnesis")).toBe(false);
   });
 

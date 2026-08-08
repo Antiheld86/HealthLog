@@ -354,6 +354,7 @@
     "vorsorge": "Controlli",
     "illness": "Malattia",
     "documents": "Documenti",
+    "vaccinations": "Vaccinazioni",
     "mentalWellbeing": "Benessere mentale"
   },
   "auth": {
@@ -8512,6 +8513,14 @@
     "vaccinations": {
       "label": "Vaccinazioni",
       "description": "Il libretto vaccinale strutturato: dose, serie, prossimo richiamo."
+    }
+  },
+  "vaccinations": {
+    "title": "Vaccinazioni",
+    "subtitle": "Il tuo libretto vaccinale, dose per dose.",
+    "empty": {
+      "title": "Nessuna vaccinazione registrata",
+      "description": "Trascrivi il tuo libretto vaccinale riga per riga: bastano una data e il vaccino."
     }
   },
   "illness": {

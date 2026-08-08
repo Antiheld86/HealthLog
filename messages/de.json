@@ -354,6 +354,7 @@
     "vorsorge": "Vorsorge",
     "illness": "Krankheit",
     "documents": "Dokumente",
+    "vaccinations": "Impfungen",
     "mentalWellbeing": "Seelisches Wohlbefinden"
   },
   "auth": {
@@ -8512,6 +8513,14 @@
     "vaccinations": {
       "label": "Impfungen",
       "description": "Der Impfpass in strukturierter Form: Dosis, Serie, nächste Auffrischung."
+    }
+  },
+  "vaccinations": {
+    "title": "Impfungen",
+    "subtitle": "Dein Impfpass, Dosis für Dosis.",
+    "empty": {
+      "title": "Noch keine Impfung erfasst",
+      "description": "Übertrage deinen Impfpass Zeile für Zeile — Datum und Impfstoff genügen."
     }
   },
   "illness": {
