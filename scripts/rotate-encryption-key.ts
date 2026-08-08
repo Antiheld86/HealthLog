@@ -479,6 +479,17 @@ async function main() {
       prisma.measurement,
     ),
   );
+  // v1.38 — the day-context note on a mood entry. Its own table, so its own
+  // walk; a context row exists only where somebody added one, and a row with
+  // no note carries NULL here and is skipped like every other nullable Bytes
+  // column.
+  results.push(
+    await rotateBytesColumn(
+      "MoodContext",
+      "notesEncrypted",
+      prisma.moodContext,
+    ),
+  );
 
   // ───── v1.25 medication free-text notes (Bytes columns) ─────
   // "notesEncrypted" (MedicationSideEffect + MedicationInventoryItem) +
