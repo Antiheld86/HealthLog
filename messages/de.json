@@ -5213,13 +5213,6 @@
         "axis": {
           "countsFor": "{pillar} in den Score einrechnen"
         },
-        "domain": {
-          "cardiometabolic": "Herz und Stoffwechsel",
-          "activity": "Aktivität",
-          "sleep": "Schlaf",
-          "adiposity": "Körperform",
-          "wellbeing": "Wohlbefinden"
-        },
         "state": {
           "counting": "Zählt in deinen Score",
           "waiting": "Ausgewählt, wartet auf Daten",
@@ -9903,9 +9896,11 @@
       "accessReadLabel": "Darf lesen",
       "accessReadCapability": "Sie kann alles lesen, was von dieser Akte geteilt wird. Hinzufügen oder ändern kann sie nichts.",
       "accessWriteLabel": "Darf lesen und hinzufügen",
-      "accessWriteCapability": "Sie kann außerdem etwas zur Akte hinzufügen: Messwerte, Laborergebnisse, einen neuen Laborwert, einen Krankheitseintrag, eine Nebenwirkung zu einem Medikament, ein neues Medikament und eine Dosis als genommen oder ausgelassen markieren. Ändern oder löschen kann sie nichts, auch nicht das, was sie selbst eingetragen hat, und eine deiner Erinnerungen verschieben kann sie auch nicht. Das kannst nur du.",
+      "accessWriteCapability": "Sie kann Einträge hinzufügen, aber nichts ändern oder löschen, auch nicht das, was sie selbst eingetragen hat.",
+      "accessWriteDetail": "Sie kann Messwerte, Laborergebnisse, einen neuen Laborwert, einen Krankheitseintrag, eine Nebenwirkung zu einem Medikament und ein neues Medikament hinzufügen sowie eine Dosis als genommen oder ausgelassen markieren. Ändern oder löschen kann sie nichts, auch nicht das Eigene, und eine deiner Erinnerungen verschieben kann sie nicht. Das kannst nur du.",
       "accessManageLabel": "Darf verwalten",
-      "accessManageCapability": "Sie kann Einträge in deiner Akte anlegen, ändern und löschen, auch solche, die du selbst erfasst hast, und sie kann die daraus erzeugten Auswertungen lesen. Deine Anmeldung, deine Sicherheitseinstellungen, deine Verbindungen und den Zugriff anderer Personen kann sie nicht ändern. Du kannst das jederzeit beenden.",
+      "accessManageCapability": "Sie kann Einträge anlegen, ändern und löschen, auch solche, die du selbst erfasst hast.",
+      "accessManageDetail": "Sie kann außerdem die daraus erzeugten Auswertungen lesen. Deine Anmeldung, deine Sicherheitseinstellungen, deine Verbindungen und den Zugriff anderer Personen kann sie nicht ändern. Du kannst das jederzeit beenden.",
       "manageStepUpNote": "Dafür wird dein zweiter Faktor abgefragt, deshalb geht das nur im Browser.",
       "scopeLegend": "Was die Person öffnen darf",
       "scopeAllLabel": "Gesamte Akte",
@@ -9917,6 +9912,7 @@
       "scopeAggregateNote": "Die Übersicht auf dem Dashboard, der Health Score und die Tageszusammenfassung erscheinen nur, wenn die gesamte Akte geteilt ist.",
       "scopeDocumentsNote": "Ein Dokument kann alles enthalten. Teile diesen Bereich nur, wenn die Person alles davon lesen darf.",
       "scopeEmptyHint": "Wähle mindestens einen Bereich aus oder teile wieder die gesamte Akte.",
+      "scopeChooseHint": "Wähle, ob die gesamte Akte oder nur einzelne Bereiche geteilt werden.",
       "expiresLabel": "Zugriff endet am (optional)",
       "expiresHint": "Leer lassen für Zugriff, der gilt, bis ihn jemand beendet. Ein Datum wird bei jeder Anfrage geprüft, der Zugriff endet also am Ende dieses Tages von selbst.",
       "submit": "Einladung senden",

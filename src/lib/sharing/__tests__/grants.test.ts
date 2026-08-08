@@ -154,7 +154,7 @@ describe("grantAllows", () => {
  */
 describe("inviteGrant", () => {
   function captureDb(): {
-    db: Pick<Prisma.TransactionClient, "accountGrant">;
+    db: Pick<Prisma.TransactionClient, "accountGrant" | "auditLog">;
     writes: Array<{
       access: string;
       grantorId: string;
@@ -170,6 +170,9 @@ describe("inviteGrant", () => {
     }> = [];
     const db = {
       accountGrant: {
+        // No expired live-pair row in these fixtures, so the pre-create sweep
+        // closes nothing and the audit branch is never reached.
+        updateMany: async () => ({ count: 0 }),
         create: async (args: {
           data: {
             access: string;
@@ -182,7 +185,7 @@ describe("inviteGrant", () => {
           return { id: "grant-1", ...args.data } as unknown as AccountGrant;
         },
       },
-    } as unknown as Pick<Prisma.TransactionClient, "accountGrant">;
+    } as unknown as Pick<Prisma.TransactionClient, "accountGrant" | "auditLog">;
     return { db, writes };
   }
 
@@ -391,18 +394,19 @@ describe("grantCoversDomain", () => {
 
 describe("inviteGrant, on scope", () => {
   function captureScopeDb(): {
-    db: Pick<Prisma.TransactionClient, "accountGrant">;
+    db: Pick<Prisma.TransactionClient, "accountGrant" | "auditLog">;
     writes: Array<{ scopeJson: unknown }>;
   } {
     const writes: Array<{ scopeJson: unknown }> = [];
     const db = {
       accountGrant: {
+        updateMany: async () => ({ count: 0 }),
         create: async (args: { data: { scopeJson: unknown } }) => {
           writes.push(args.data);
           return { id: "grant-1", ...args.data } as unknown as AccountGrant;
         },
       },
-    } as unknown as Pick<Prisma.TransactionClient, "accountGrant">;
+    } as unknown as Pick<Prisma.TransactionClient, "accountGrant" | "auditLog">;
     return { db, writes };
   }
 

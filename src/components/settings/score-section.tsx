@@ -72,7 +72,6 @@ import {
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { useAnalyticsQuery } from "@/lib/queries/use-analytics-query";
-import { SCORE_DOMAIN_LABEL_KEYS } from "@/lib/score-config/labels";
 import {
   buildScoreConfigRows,
   type ScorePillarVerdict,
@@ -387,38 +386,22 @@ export function ScoreSection() {
                 <Skeleton className="h-11 w-full" />
               </div>
             ) : (
-              <div className="space-y-6">
-                {groups.map((group) => (
-                  <div
-                    key={group.domain}
-                    data-slot="score-config-group"
-                    data-domain={group.domain}
-                    className="space-y-2"
-                  >
-                    {/* Names an area of health, so it sits in the content
-                        tier. The muted section-label treatment it shipped
-                        with read as switched-off beside the rows it
-                        heads. */}
-                    <h3
-                      data-slot="score-config-group-heading"
-                      className="text-foreground text-xs font-medium tracking-wide uppercase"
-                    >
-                      {t(SCORE_DOMAIN_LABEL_KEYS[group.domain])}
-                    </h3>
-                    {/* No rules between the rows: the gap between groups
-                        is the grouping. */}
-                    <div className="space-y-3">
-                      {group.rows.map((row) => (
-                        <ScorePillarRow
-                          key={row.id}
-                          row={row}
-                          pending={busy}
-                          onToggle={(next) => toggle(row.id, next)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ))}
+              // One flat list of topics separated by hairline dividers, the
+              // way Anamnese lists its facts. The group headings are gone; the
+              // registry order (domain, then pillar) is preserved by flattening
+              // the groups in order, and each row keeps its `data-domain` for
+              // tests and e2e.
+              <div className="divide-border divide-y">
+                {groups.flatMap((group) =>
+                  group.rows.map((row) => (
+                    <ScorePillarRow
+                      key={row.id}
+                      row={row}
+                      pending={busy}
+                      onToggle={(next) => toggle(row.id, next)}
+                    />
+                  )),
+                )}
               </div>
             )}
 

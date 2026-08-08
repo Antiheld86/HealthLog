@@ -128,6 +128,20 @@ describe("<ResponsiveSheet>", () => {
     expect(html).not.toContain('data-slot="mock-sheet"');
   });
 
+  it("reclaims a scroll gutter on the Dialog body so the scrollbar clears right-aligned labels", () => {
+    mobile = false;
+    const html = renderToStaticMarkup(
+      <ResponsiveSheet open onOpenChange={() => {}} title="Add mood">
+        <p>body</p>
+      </ResponsiveSheet>,
+    );
+    // The body carries `-mr-3 pr-3`: a 12 px gutter reclaimed from the dialog's
+    // own padding so the vertical scrollbar lives beside the text, not on the
+    // last characters of a right-aligned slider anchor.
+    expect(html).toContain("-mr-3");
+    expect(html).toContain("pr-3");
+  });
+
   it("renders the bottom Sheet branch on narrow viewports", () => {
     mobile = true;
     const html = renderToStaticMarkup(

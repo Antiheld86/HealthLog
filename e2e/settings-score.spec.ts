@@ -130,14 +130,13 @@ test.describe("Settings → Health Score", () => {
       1,
     );
 
-    // The cardiometabolic triple, visibly under one heading.
+    // The cardiometabolic triple. The list is flat (no group headings) — the
+    // rows carry their domain, so the three cardiometabolic pillars are found
+    // on the row itself.
     const cardio = page.locator(
-      '[data-slot="score-config-group"][data-domain="cardiometabolic"]',
+      '[data-slot="score-pillar-row"][data-domain="cardiometabolic"]',
     );
-    await expect(cardio).toHaveCount(1);
-    await expect(cardio.locator('[data-slot="score-pillar-row"]')).toHaveCount(
-      3,
-    );
+    await expect(cardio).toHaveCount(3);
 
     // The rows say nothing about recording or showing — the card says it
     // once, above them, and the modules screen owns those two questions.

@@ -16,10 +16,19 @@
  * a rewrite that quietly drops it should fail here.
  */
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "@/lib/i18n/context";
 import type { GrantList, GrantRow } from "@/lib/queries/use-account-grants";
+
+/** The shipped English invite copy, the source of truth for the consent text. */
+const inviteBundle = (
+  JSON.parse(readFileSync(join(process.cwd(), "messages/en.json"), "utf8")) as {
+    recordSharing: { invite: Record<string, string> };
+  }
+).recordSharing.invite;
 
 const grantsRef: { value: GrantList } = { value: grantList() };
 /**
@@ -110,8 +119,11 @@ describe("offering a level", () => {
     // second group of radios in the same idiom, and a group that lost the ring
     // would be the same defect shipped again one section further down.
     const html = render(<GrantInviteCard />);
+    // Access options carry an (i) sibling now, so the row is a `<div>` with the
+    // radio in a nested `<label>`; scope options stay a wrapping `<label>`. The
+    // focus ring rides the row in both, which is what this pins.
     const levels = html.match(
-      /<label[^>]*data-slot="grant-invite-access-option"[^>]*>/g,
+      /<div[^>]*data-slot="grant-invite-access-option"[^>]*>/g,
     );
     const scopes = html.match(
       /<label[^>]*data-slot="grant-invite-scope-option"[^>]*>/g,
@@ -126,39 +138,54 @@ describe("offering a level", () => {
 
   it("says plainly that manage can change and delete what the owner wrote", () => {
     const html = render(<GrantInviteCard />);
-    // The clause that separates this level from the one below it. A rewrite
-    // that keeps "manage" and drops this is a rewrite that stops describing
-    // a delete button.
-    expect(html).toContain("add, change and remove entries in your record");
+    // The clause that separates this level from the one below it, on the label
+    // where somebody decides. A rewrite that keeps "manage" and drops this is a
+    // rewrite that stops describing a delete button.
+    expect(html).toContain("add, change and remove entries");
     expect(html).toContain("including ones you entered yourself");
-    // And the fence, in the same breath. Consent to management is only
-    // meaningful beside what management does not reach.
-    expect(html).toContain("They cannot change your login");
-    expect(html).toContain("who else has access");
-    expect(html).toContain("You can end this at any time.");
+    // And the fence, in the same breath — now one tap behind the (i) rather
+    // than a wall inline, but still shipped consent copy, not docs. Consent to
+    // management is only meaningful beside what management does not reach.
+    expect(inviteBundle.accessManageDetail).toContain(
+      "They cannot change your login",
+    );
+    expect(inviteBundle.accessManageDetail).toContain("who else has access");
+    expect(inviteBundle.accessManageDetail).toContain(
+      "You can end this at any time.",
+    );
   });
 
   it("says what the wider level actually does, and what it does not", () => {
     const html = render(<GrantInviteCard />);
-    // The thing a person reading "write access" gets wrong.
+    // The thing a person reading "write access" gets wrong, inline on the label.
     expect(html).toContain("cannot edit or delete anything");
-    expect(html).toContain("marking a dose taken or skipped");
+    // The exact list of what write may add rides the (i) detail now.
+    expect(inviteBundle.accessWriteDetail).toContain(
+      "mark a dose taken or skipped",
+    );
     // v1.36.1 — the copy named allergies, which left the admitted set before
     // this shipped, and it did so on the one screen where somebody decides who
     // may write into their health record. Assert the withdrawal too, not only
     // the presence of the rest: a consent notice that over-promises is worse
-    // than one that is merely incomplete.
+    // than one that is merely incomplete. Neither the inline line nor the
+    // detail may name it.
     expect(html).not.toContain("allergies");
+    expect(inviteBundle.accessWriteDetail).not.toContain("allergies");
     // v1.36.x — and the same again for logging a value on a tracked metric.
     // The route was admitted, the copy promised it, and no delegate could
     // reach a surface that posts one: `/custom-metrics/{id}` is not a
     // shared-record destination, so the shell answers before the form does.
     // The permission and the sentence went together.
     expect(html).not.toContain("a metric you track yourself");
+    expect(inviteBundle.accessWriteDetail).not.toContain(
+      "a metric you track yourself",
+    );
     // Deferring a reminder is the capability the same request could reach and
     // delegation does not cover; the notice has to say so.
-    expect(html).toContain("cannot defer one of your reminders");
-    // And the narrow option still says it is narrow.
+    expect(inviteBundle.accessWriteDetail).toContain(
+      "cannot defer one of your reminders",
+    );
+    // And the narrow option still says it is narrow, inline.
     expect(html).toContain("They cannot add or change anything.");
   });
 });

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Slider as SliderPrimitive } from "radix-ui";
+import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -136,9 +137,11 @@ function SliderField({
               type="button"
               onClick={onClear}
               data-slot="slider-field-clear"
-              className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 rounded text-xs underline-offset-2 outline-none hover:underline focus-visible:ring-[3px]"
+              aria-label={clearLabel}
+              className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex size-6 items-center justify-center rounded outline-none focus-visible:ring-[3px]"
             >
-              {clearLabel}
+              <X className="size-3.5" aria-hidden="true" />
+              <span className="sr-only">{clearLabel}</span>
             </button>
           ) : null}
         </span>

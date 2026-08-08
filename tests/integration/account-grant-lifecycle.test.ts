@@ -439,6 +439,70 @@ describe("account grant lifecycle", () => {
     ).toBeNull();
   });
 
+  it("re-invites after a grant EXPIRED, closing the lapsed row instead of colliding", async () => {
+    // The bug carrier is the partial unique index `WHERE revoked_at IS NULL`:
+    // it cannot read the clock, so an expired-but-never-revoked row keeps
+    // occupying the live-pair slot and every re-invitation 409s. A mocked
+    // Prisma cannot reproduce this — the index is the thing under test — so it
+    // lives here, against real Postgres.
+    for (const accepted of [true, false]) {
+      const owner = await makeUser("owner");
+      const delegate = await makeUser("delegate");
+
+      const first = await inviteGrant({
+        grantorId: owner.id,
+        granteeId: delegate.id,
+        access: "READ",
+        scope: null,
+        expiresAt: new Date(Date.now() - 1000),
+      });
+      if (accepted) {
+        // Acceptance is refused once lapsed, so stamp it directly to build the
+        // "accepted then expired" row the report describes.
+        await getPrismaClient().accountGrant.update({
+          where: { id: first.id },
+          data: { acceptedAt: new Date(Date.now() - 2000) },
+        });
+      }
+
+      // The lapsed row confers nothing already.
+      expect(
+        await findActiveGrant({ grantorId: owner.id, granteeId: delegate.id }),
+      ).toBeNull();
+
+      // Re-inviting the same pair must succeed rather than 409 on the index.
+      const second = await inviteGrant({
+        grantorId: owner.id,
+        granteeId: delegate.id,
+        access: "READ",
+        scope: null,
+      });
+      expect(second.id).not.toBe(first.id);
+      expect(second.revokedAt).toBeNull();
+
+      // History kept, not deleted: the old row is now closed by expiry, and its
+      // revoker is stamped so the paired CHECK holds.
+      const old = await getPrismaClient().accountGrant.findUniqueOrThrow({
+        where: { id: first.id },
+      });
+      expect(old.revokedAt).not.toBeNull();
+      expect(old.revokedBy).toBe("GRANTOR");
+
+      // Two rows for the pair: the ended one and the fresh one.
+      expect(
+        await getPrismaClient().accountGrant.count({
+          where: { grantorId: owner.id, granteeId: delegate.id },
+        }),
+      ).toBe(2);
+
+      // And the close is on the audit trail.
+      const trail = await getPrismaClient().auditLog.findMany({
+        where: { action: "sharing.grant.expired_closed", userId: owner.id },
+      });
+      expect(trail).toHaveLength(1);
+    }
+  });
+
   it("keeps history without limit — a third grant does not collide with two ended ones", async () => {
     const owner = await makeUser("owner");
     const delegate = await makeUser("delegate");
