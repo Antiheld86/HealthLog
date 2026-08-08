@@ -329,6 +329,33 @@ async function upsertDocs(
 }
 
 /**
+ * Remove the seeded e2e user's visits and their document links.
+ *
+ * The incidental-linking spec asserts a GLOBAL verdict — "exactly one visit
+ * falls in this document's ±7-day window" — so it must own the window it counts
+ * against. A visit created by an earlier run, a Playwright retry, or a second
+ * project sharing the account would leave two rows in the window and turn the
+ * single-candidate branch into the picker branch. Clearing first makes the
+ * count the test creates the only count it reads. `encounter_document_links`
+ * goes first for the FK; both are user-scoped.
+ */
+export async function resetEncounters(): Promise<void> {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("[vault-fixture] DATABASE_URL is not set");
+  const pool = new pg.Pool({ connectionString: url });
+  try {
+    const userId = await getUserId(pool);
+    await pool.query(
+      "DELETE FROM encounter_document_links WHERE user_id = $1",
+      [userId],
+    );
+    await pool.query("DELETE FROM encounters WHERE user_id = $1", [userId]);
+  } finally {
+    await pool.end();
+  }
+}
+
+/**
  * Enable the vault module for the seeded e2e user and plant the doctor-flow
  * corpus. Safe to call from every spec's beforeAll — every statement
  * upserts.

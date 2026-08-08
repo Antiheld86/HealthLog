@@ -19,15 +19,37 @@
  * assertion below covers, and the linking half needs a visit whose instant is
  * pinned relative to the seeded document's date.
  */
+import { STORAGE_STATE_PATH } from "./setup/global-setup";
 import { expect, test } from "./setup/test";
 
-import { ensureVaultFixture, MRT_DOC_ID } from "./setup/vault-fixture";
+import {
+  ensureVaultFixture,
+  MRT_DOC_ID,
+  resetEncounters,
+} from "./setup/vault-fixture";
 
 test.beforeEach(async () => {
+  // Own the window the linking case counts against: clear the account's visits
+  // before each test so a retry or a prior run cannot leave a second candidate
+  // in the ±7-day window and flip the single-candidate verdict to the picker.
+  await resetEncounters();
   await ensureVaultFixture();
 });
 
+// Serial, and single-project below: the two tests share one account, and the
+// reset above would race a sibling running in parallel — the linking test would
+// clear the visit the save test is still asserting. In order, in one worker,
+// each test owns the account for its span.
+test.describe.configure({ mode: "serial" });
+
 test.describe("visits", () => {
+  // The seeded account owns the visits and the document this flow drives, and
+  // both the `page` and the `request` fixture read them under its session.
+  // Without this the whole file runs anonymous: `/checkups` redirects to login
+  // and every `/api/*` read answers 401, which is a test-setup gap, not a
+  // product one.
+  test.use({ storageState: STORAGE_STATE_PATH });
+
   test("a visit saves with a date and nothing else", async ({ page }) => {
     await page.goto("/checkups");
     await page.getByTestId("checkups-tab-visits").click();

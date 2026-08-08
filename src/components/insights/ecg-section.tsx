@@ -12,9 +12,9 @@ import { cn } from "@/lib/utils";
 import { SectionHeading } from "@/components/ui/section-heading";
 import {
   ecgResultLabel,
-  ECG_OVERVIEW_LIMIT,
   type EcgClassification,
 } from "@/lib/insights/ecg-classification";
+import { ECG_OVERVIEW_LIMIT } from "@/lib/insights/ecg-overview-limit";
 import { InsightSectionCard } from "./insight-section-card";
 
 // Re-exported so the tests (and any teaser call site) can keep importing the

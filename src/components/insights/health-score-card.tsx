@@ -17,7 +17,7 @@ import {
 } from "@/components/insights/derived/band-tokens";
 import { CoverageMeter } from "@/components/insights/derived/coverage-meter";
 import { ProvenanceExplainer } from "@/components/insights/derived/provenance-explainer";
-import { METRIC_PROVENANCE } from "@/components/insights/derived/standards";
+import { HEALTH_SCORE_PROVENANCE } from "@/components/insights/derived/health-score-provenance";
 import {
   pillarDetailLines,
   pillarObservedText,
@@ -643,8 +643,8 @@ export function HealthScoreCard({
               )}
               <ProvenanceExplainer
                 provenance={composite.provenance}
-                method={t(METRIC_PROVENANCE.HEALTH_SCORE.methodKey)}
-                standard={METRIC_PROVENANCE.HEALTH_SCORE.standard}
+                method={t(HEALTH_SCORE_PROVENANCE.methodKey)}
+                standard={HEALTH_SCORE_PROVENANCE.standard}
                 className="block"
               />
               {/* v1.35.0 — the one way into the surface that decides what

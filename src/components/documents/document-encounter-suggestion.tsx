@@ -12,6 +12,14 @@
  * of the two; `documentDate` is the person's own filing date and is the
  * fallback.
  *
+ * Both DTO fields are date-only (`YYYY-MM-DD`), but the suggest endpoint takes
+ * a full instant — the same shape the two lab moments already hand it. So the
+ * date is lifted to noon UTC here, exactly as the OCR review does: the rule is
+ * a ±7-day window, so the time of day never changes the verdict, and noon keeps
+ * a viewer's local midnight from rounding the day either way. Passing the bare
+ * date instead is what made this suggestion silently never appear — the API
+ * answered 422 and the field rendered nothing.
+ *
  * It renders nothing once the document already names a visit that this session
  * did not choose: an offer to file something already filed is noise.
  */
@@ -31,9 +39,10 @@ export function DocumentEncounterSuggestion({
   onChange: (encounterId: string | null) => void;
 }) {
   if (alreadyLinked) return null;
+  const instant = anchor ? `${anchor}T12:00:00.000Z` : null;
   return (
     <EncounterSuggestionField
-      anchor={anchor}
+      anchor={instant}
       value={value}
       onChange={onChange}
       disabled={disabled}
