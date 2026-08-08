@@ -15,9 +15,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  e2e:
+  # The suite outgrew the runner the same way the integration suite did: the
+  # single job passed at ~18 minutes against a 20-minute cap, and the settings
+  # geometry measurements pushed it over. Same remedy, split rather than raise:
+  # two Playwright shards, each with its own database and production build, and
+  # a gate job below that carries the exact name branch protection requires.
+  shard:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    name: e2e shard ${{ matrix.shard }}/2
     services:
       postgres:
         image: postgres:16-alpine
@@ -87,7 +97,7 @@ jobs:
       # chart-runtime boundary (a duplicated ~92 KB gz recharts chunk).
       - run: pnpm bundle-check
 
-      - run: pnpm exec playwright test
+      - run: pnpm exec playwright test --shard=${{ matrix.shard }}/2
         env:
           E2E_BASE_URL: http://localhost:3000
 
@@ -99,3 +109,19 @@ jobs:
           path: playwright-report/
           retention-days: 7
           if-no-files-found: ignore
+
+  # Branch protection requires a check named exactly "e2e". This job carries
+  # that name and answers for both shards: it fails when any shard failed or
+  # was cancelled, so a half-green matrix cannot satisfy the gate.
+  e2e:
+    runs-on: ubuntu-latest
+    needs: shard
+    if: always()
+    timeout-minutes: 5
+    steps:
+      - name: Every shard finished green
+        run: |
+          if [ "${{ needs.shard.result }}" != "success" ]; then
+            echo "shard result: ${{ needs.shard.result }}"
+            exit 1
+          fi
