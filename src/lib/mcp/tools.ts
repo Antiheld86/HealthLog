@@ -1552,7 +1552,18 @@ export const MCP_TOOLS: McpToolDefinition[] = [
     outputShape: getPreventiveCareOutput,
     async run(ctx) {
       const reminders = await prisma.measurementReminder.findMany({
-        where: { userId: ctx.userId, deletedAt: null, enabled: true },
+        // A booked visit's one-shot reminder rides this same engine with
+        // `origin: ENCOUNTER`. It is not a checkup and must not appear on a
+        // Vorsorge surface, or the list fills with appointments. Four read
+        // sites carry this exclusion; `encounter-reminder-exclusion.test.ts`
+        // proves every one of them, and the DTO mapper refuses such a row
+        // outright so a site that lost its filter fails loudly.
+        where: {
+          userId: ctx.userId,
+          deletedAt: null,
+          enabled: true,
+          origin: { not: "ENCOUNTER" },
+        },
         // Most-urgent first; a null next-due (uncomputable) sinks to the end.
         orderBy: [
           { nextDueAt: { sort: "asc", nulls: "last" } },

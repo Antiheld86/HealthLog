@@ -46,7 +46,17 @@ export const SHARE_DOMAINS = [
   "medications",
   /** Lab results and the biomarker catalogue behind them. */
   "labs",
-  /** Health background: allergies, family history, anamnesis facts. */
+  /**
+   * Health background: allergies, family history, anamnesis facts, and visits
+   * and practitioners.
+   *
+   * Visits joined this domain rather than getting one of their own, and the
+   * cost is worth naming: somebody granted `profile` so a relative could see
+   * an allergy list also gains the record of every appointment and the address
+   * book behind it. The mitigation is not this comment — it is the consent
+   * copy, which names visits in all six locales, so the widening is stated
+   * where it is agreed to rather than inferred from the code.
+   */
   "profile",
   /** Illness episodes and the day logs under them. */
   "illness",

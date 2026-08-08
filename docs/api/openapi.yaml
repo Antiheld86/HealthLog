@@ -9701,6 +9701,650 @@ paths:
         "404": *a14
         "422": *a3
         "429": *a4
+  /api/encounters:
+    get:
+      tags:
+        - Records
+      summary: List visits
+      description: Returns the caller's live visits, split into `upcoming` and `past`. Bounded and windowed; soft-deleted
+        visits are excluded.
+      parameters:
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum:
+              - PLANNED
+              - DONE
+              - CANCELLED
+              - NO_SHOW
+        - in: query
+          name: practitionerId
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 40
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        "200":
+          description: The caller's visits.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListEncountersEnvelope"
+        "401": *a1
+        "403": *a6
+        "422": *a3
+        "429": *a4
+    post:
+      tags:
+        - Records
+      summary: File or book a visit
+      description: "Creates one visit. A future instant with `status: PLANNED` books an appointment and mints its reminder; a
+        past instant with `status: DONE` and a `reminderId` closes that checkup. Claiming both is a 422 — a visit that
+        has not happened cannot have closed anything. Honours `Idempotency-Key`. Audits as `encounter.visit.create`."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                occurredAt:
+                  type: string
+                  format: date-time
+                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                status:
+                  default: DONE
+                  type: string
+                  enum:
+                    - PLANNED
+                    - DONE
+                    - CANCELLED
+                    - NO_SHOW
+                kind:
+                  default: OTHER
+                  type: string
+                  enum:
+                    - ROUTINE
+                    - ACUTE
+                    - SPECIALIST
+                    - PREVENTIVE
+                    - EMERGENCY
+                    - HOSPITAL
+                    - THERAPY
+                    - OTHER
+                practitionerId:
+                  anyOf:
+                    - type: string
+                      minLength: 1
+                      maxLength: 40
+                    - type: "null"
+                reason:
+                  anyOf:
+                    - type: string
+                      maxLength: 2000
+                    - type: "null"
+                outcome:
+                  anyOf:
+                    - type: string
+                      maxLength: 4000
+                    - type: "null"
+                reminderId:
+                  anyOf:
+                    - type: string
+                      minLength: 1
+                      maxLength: 40
+                    - type: "null"
+                documentIds:
+                  maxItems: 100
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
+                labResultIds:
+                  maxItems: 100
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
+                episodeIds:
+                  maxItems: 100
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
+              required:
+                - occurredAt
+              additionalProperties: false
+      responses:
+        "201":
+          description: Visit filed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateEncounterEnvelope"
+        "401": *a1
+        "403": *a6
+        "422": *a3
+        "429": *a4
+  /api/encounters/{id}:
+    get:
+      tags:
+        - Records
+      summary: Read a single visit
+      description: Returns the visit with its three link families resolved. Owner-scoped; a cross-user or tombstoned id 404s.
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: The visit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetEncounterEnvelope"
+        "401": *a1
+        "403": *a6
+        "404": &a16
+          description: Visit not found (or owned by another user).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422": *a3
+        "429": *a4
+    patch:
+      tags:
+        - Records
+      summary: Edit a visit
+      description: Partial edit; omitted fields are left untouched. Audits as `encounter.visit.update`. Owner-scoped.
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                occurredAt:
+                  type: string
+                  format: date-time
+                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                status:
+                  type: string
+                  enum:
+                    - PLANNED
+                    - DONE
+                    - CANCELLED
+                    - NO_SHOW
+                kind:
+                  type: string
+                  enum:
+                    - ROUTINE
+                    - ACUTE
+                    - SPECIALIST
+                    - PREVENTIVE
+                    - EMERGENCY
+                    - HOSPITAL
+                    - THERAPY
+                    - OTHER
+                practitionerId:
+                  anyOf:
+                    - type: string
+                      minLength: 1
+                      maxLength: 40
+                    - type: "null"
+                reason:
+                  anyOf:
+                    - type: string
+                      maxLength: 2000
+                    - type: "null"
+                outcome:
+                  anyOf:
+                    - type: string
+                      maxLength: 4000
+                    - type: "null"
+                reminderId:
+                  anyOf:
+                    - type: string
+                      minLength: 1
+                      maxLength: 40
+                    - type: "null"
+                documentIds:
+                  maxItems: 100
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
+                labResultIds:
+                  maxItems: 100
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
+                episodeIds:
+                  maxItems: 100
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
+              additionalProperties: false
+      responses:
+        "200":
+          description: Visit updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateEncounterEnvelope"
+        "401": *a1
+        "403": *a6
+        "404": *a16
+        "422": *a3
+        "429": *a4
+    delete:
+      tags:
+        - Records
+      summary: Soft-delete a visit
+      description: Stamps `deletedAt` and retires the visit's own appointment reminder with it — never a checkup the visit
+        closed, which belongs to the preventive-care list and outlives it. Idempotent. Audits as
+        `encounter.visit.delete`.
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Soft-deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteEncounterEnvelope"
+        "401": *a1
+        "403": *a6
+        "404": *a16
+        "422": *a3
+        "429": *a4
+  /api/encounters/{id}/restore:
+    post:
+      tags:
+        - Records
+      summary: Restore a soft-deleted visit
+      description: Clears the tombstone. The link rows survived the soft delete, so the visit returns with its documents, labs
+        and conditions still filed against it. Its appointment reminder returns only if the appointment is still in the
+        future. Restoring a live visit is a no-op that still succeeds.
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Visit restored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RestoreEncounterEnvelope"
+        "401": *a1
+        "403": *a6
+        "404": *a16
+        "422": *a3
+        "429": *a4
+  /api/encounters/{id}/links:
+    post:
+      tags:
+        - Records
+      summary: File targets against a visit
+      description: "Adds links. Idempotent: a pair that already exists succeeds and changes nothing. Session-authenticated
+        only, matching document link and unlink."
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                targetKind:
+                  type: string
+                  enum:
+                    - document
+                    - labResult
+                    - conditionEpisode
+                targetIds:
+                  minItems: 1
+                  maxItems: 100
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
+              required:
+                - targetKind
+                - targetIds
+              additionalProperties: false
+      responses:
+        "200":
+          description: The visit's links after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkEncounterEnvelope"
+        "401": *a1
+        "404": *a16
+        "422": *a3
+        "429": *a4
+    delete:
+      tags:
+        - Records
+      summary: Unfile targets from a visit
+      description: Removes links. Idempotent, and it still works for a target the account has since deleted — refusing would
+        leave a filing nobody can clear.
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                targetKind:
+                  type: string
+                  enum:
+                    - document
+                    - labResult
+                    - conditionEpisode
+                targetIds:
+                  minItems: 1
+                  maxItems: 100
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
+              required:
+                - targetKind
+                - targetIds
+              additionalProperties: false
+      responses:
+        "200":
+          description: The visit's links after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnlinkEncounterEnvelope"
+        "401": *a1
+        "404": *a16
+        "422": *a3
+        "429": *a4
+  /api/practitioners:
+    get:
+      tags:
+        - Records
+      summary: List practitioners
+      description: Returns the caller's address book, name-ordered, with an optional case-insensitive name search.
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 160
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        "200":
+          description: The caller's address book.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListPractitionersEnvelope"
+        "401": *a1
+        "403": *a6
+        "422": *a3
+        "429": *a4
+    post:
+      tags:
+        - Records
+      summary: Add a practitioner
+      description: Creates one address-book entry. Honours `Idempotency-Key`. Audits as `practitioner.contact.create`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 160
+                specialty:
+                  anyOf:
+                    - type: string
+                      maxLength: 120
+                    - type: "null"
+                practice:
+                  anyOf:
+                    - type: string
+                      maxLength: 160
+                    - type: "null"
+                location:
+                  anyOf:
+                    - type: string
+                      maxLength: 300
+                    - type: "null"
+                phone:
+                  anyOf:
+                    - type: string
+                      maxLength: 60
+                    - type: "null"
+                note:
+                  anyOf:
+                    - type: string
+                      maxLength: 2000
+                    - type: "null"
+              required:
+                - name
+              additionalProperties: false
+      responses:
+        "201":
+          description: Practitioner added.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatePractitionerEnvelope"
+        "401": *a1
+        "403": *a6
+        "422": *a3
+        "429": *a4
+  /api/practitioners/{id}:
+    get:
+      tags:
+        - Records
+      summary: Read a single practitioner
+      description: Returns the entry including its decrypted `note`. Owner-scoped; a cross-user or tombstoned id 404s.
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: The practitioner.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetPractitionerEnvelope"
+        "401": *a1
+        "403": *a6
+        "404": &a17
+          description: Practitioner not found (or owned by another user).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422": *a3
+        "429": *a4
+    patch:
+      tags:
+        - Records
+      summary: Edit a practitioner
+      description: Partial edit; omitted fields are left untouched. Audits as `practitioner.contact.update`. Owner-scoped.
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 160
+                specialty:
+                  anyOf:
+                    - type: string
+                      maxLength: 120
+                    - type: "null"
+                practice:
+                  anyOf:
+                    - type: string
+                      maxLength: 160
+                    - type: "null"
+                location:
+                  anyOf:
+                    - type: string
+                      maxLength: 300
+                    - type: "null"
+                phone:
+                  anyOf:
+                    - type: string
+                      maxLength: 60
+                    - type: "null"
+                note:
+                  anyOf:
+                    - type: string
+                      maxLength: 2000
+                    - type: "null"
+              additionalProperties: false
+      responses:
+        "200":
+          description: Practitioner updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdatePractitionerEnvelope"
+        "401": *a1
+        "403": *a6
+        "404": *a17
+        "422": *a3
+        "429": *a4
+    delete:
+      tags:
+        - Records
+      summary: Soft-delete a practitioner
+      description: Stamps `deletedAt`. Every visit that named this entry survives with no practice attached, because the
+        reference nulls rather than cascades. Idempotent. Audits as `practitioner.contact.delete`.
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Soft-deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletePractitionerEnvelope"
+        "401": *a1
+        "403": *a6
+        "404": *a17
+        "422": *a3
+        "429": *a4
+  /api/practitioners/{id}/restore:
+    post:
+      tags:
+        - Records
+      summary: Restore a soft-deleted practitioner
+      description: Clears the tombstone. It does NOT re-attach the visits whose reference was nulled on delete — which visits
+        meant this practice is not recoverable, and guessing would be worse than the gap. Restoring a live entry is a
+        no-op that still succeeds.
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Practitioner restored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RestorePractitionerEnvelope"
+        "401": *a1
+        "403": *a6
+        "404": *a17
+        "422": *a3
+        "429": *a4
   /api/illness/episodes:
     get:
       tags:
@@ -9826,7 +10470,7 @@ paths:
                 $ref: "#/components/schemas/GetIllnessEpisodeEnvelope"
         "401": *a1
         "403": *a6
-        "404": &a16
+        "404": &a18
           description: Illness episode not found (or owned by another user).
           content:
             application/json:
@@ -9905,7 +10549,7 @@ paths:
                 $ref: "#/components/schemas/UpdateIllnessEpisodeEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a16
+        "404": *a18
         "422": *a3
         "429": *a4
     delete:
@@ -9929,7 +10573,7 @@ paths:
                 $ref: "#/components/schemas/DeleteIllnessEpisodeEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a16
+        "404": *a18
         "422": *a3
         "429": *a4
   /api/illness/episodes/{id}/restore:
@@ -9956,7 +10600,7 @@ paths:
                 $ref: "#/components/schemas/RestoreIllnessEpisodeEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a16
+        "404": *a18
         "422": *a3
         "429": *a4
   /api/illness/episodes/{id}/resolve:
@@ -9993,7 +10637,7 @@ paths:
                 $ref: "#/components/schemas/ResolveIllnessEpisodeEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a16
+        "404": *a18
         "422": *a3
         "429": *a4
   /api/illness/episodes/{id}/day-logs:
@@ -10044,7 +10688,7 @@ paths:
                 $ref: "#/components/schemas/GetIllnessDayLogEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a16
+        "404": *a18
         "422": *a3
         "429": *a4
     post:
@@ -10124,7 +10768,7 @@ paths:
                 $ref: "#/components/schemas/UpsertIllnessDayLogCreatedEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a16
+        "404": *a18
         "422": *a3
         "429": *a4
   /api/illness/episodes/{id}/correlation:
@@ -10151,7 +10795,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/IllnessCorrelationEnvelope"
         "401": *a1
-        "404": *a16
+        "404": *a18
         "422": *a3
         "429": *a4
   /api/illness/insights:
@@ -10424,7 +11068,7 @@ paths:
                 $ref: "#/components/schemas/GetAllergyEnvelope"
         "401": *a1
         "403": *a6
-        "404": &a17
+        "404": &a19
           description: Allergy not found (or owned by another user).
           content:
             application/json:
@@ -10507,7 +11151,7 @@ paths:
                 $ref: "#/components/schemas/UpdateAllergyEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a17
+        "404": *a19
         "422": *a3
         "429": *a4
     delete:
@@ -10531,7 +11175,7 @@ paths:
                 $ref: "#/components/schemas/DeleteAllergyEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a17
+        "404": *a19
         "422": *a3
         "429": *a4
   /api/family-history:
@@ -10639,7 +11283,7 @@ paths:
                 $ref: "#/components/schemas/GetFamilyHistoryEnvelope"
         "401": *a1
         "403": *a6
-        "404": &a18
+        "404": &a20
           description: Family history entry not found (or owned by another user).
           content:
             application/json:
@@ -10708,7 +11352,7 @@ paths:
                 $ref: "#/components/schemas/UpdateFamilyHistoryEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a18
+        "404": *a20
         "422": *a3
         "429": *a4
     delete:
@@ -10732,7 +11376,7 @@ paths:
                 $ref: "#/components/schemas/DeleteFamilyHistoryEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a18
+        "404": *a20
         "422": *a3
         "429": *a4
   /api/documents/inbound:
@@ -11852,7 +12496,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreateCustomMetricResponse"
         "401": *a1
-        "409": &a20
+        "409": &a22
           description: A custom metric with this name already exists for the caller.
           content:
             application/json:
@@ -11881,7 +12525,7 @@ paths:
                 $ref: "#/components/schemas/GetCustomMetricResponse"
         "401": *a1
         "403": *a6
-        "404": &a19
+        "404": &a21
           description: Custom metric not found (or owned by another user).
           content:
             application/json:
@@ -11945,8 +12589,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateCustomMetricResponse"
         "401": *a1
-        "404": *a19
-        "409": *a20
+        "404": *a21
+        "409": *a22
         "422": *a3
         "429": *a4
     delete:
@@ -11969,7 +12613,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteCustomMetricResponse"
         "401": *a1
-        "404": *a19
+        "404": *a21
         "422": *a3
         "429": *a4
   /api/custom-metrics/{id}/entries:
@@ -12013,7 +12657,7 @@ paths:
                 $ref: "#/components/schemas/ListCustomMetricEntriesEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a19
+        "404": *a21
         "422": *a3
         "429": *a4
     post:
@@ -12057,7 +12701,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreateCustomMetricEntryResponse"
         "401": *a1
-        "404": *a19
+        "404": *a21
         "422": *a3
         "429": *a4
   /api/custom-metrics/{id}/entries/{entryId}:
@@ -12107,7 +12751,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateCustomMetricEntryResponse"
         "401": *a1
-        "404": &a21
+        "404": &a23
           description: Custom metric entry not found (or owned by another user).
           content:
             application/json:
@@ -12139,7 +12783,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteCustomMetricEntryResponse"
         "401": *a1
-        "404": *a21
+        "404": *a23
         "422": *a3
         "429": *a4
   /api/onboarding/disclaimer:
@@ -12309,7 +12953,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientOverviewEnvelope"
         "401": *a1
-        "403": &a22
+        "403": &a24
           description: >-
             The opt-in `nutrients` module is off for this account (errorCode `module.disabled`). Stop syncing and do not
             retry; offer the enable-in-settings hint. Only run the HealthKit read-authorization flow while the module is
@@ -12364,7 +13008,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientDailySeriesEnvelope"
         "401": *a1
-        "403": *a22
+        "403": *a24
         "422": *a3
         "429": *a4
   /api/nutrients/water:
@@ -12391,7 +13035,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientWaterWriteEnvelope"
         "401": *a1
-        "403": *a22
+        "403": *a24
         "422": *a3
         "429": *a4
   /api/integrations/healthkit:
@@ -12729,7 +13373,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RecordActivityEnvelope"
         "401": *a1
-        "403": &a23
+        "403": &a25
           description: Refused. `meta.errorCode` is `sharing.not_permitted` when the request was made while acting on another
             account (grant management is never delegable), or `sharing.access.denied` when the caller may not act as the
             account they named. The latter is byte-identical for an account that does not exist and one that granted
@@ -12754,7 +13398,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AccountGrantListEnvelope"
         "401": *a1
-        "403": *a23
+        "403": *a25
         "422": *a3
         "429": *a4
     post:
@@ -12849,7 +13493,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AcceptedAccountGrantEnvelope"
         "401": *a1
-        "403": *a23
+        "403": *a25
         "404":
           description: No such invitation for this account.
           content:
@@ -12893,7 +13537,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RevokedAccountGrantEnvelope"
         "401": *a1
-        "403": *a23
+        "403": *a25
         "404":
           description: No such grant on this account's record.
           content:
@@ -12934,7 +13578,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RenouncedAccountGrantEnvelope"
         "401": *a1
-        "403": *a23
+        "403": *a25
         "404":
           description: No such grant held by this account.
           content:
@@ -13233,7 +13877,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "401": *a1
-        "403": *a23
+        "403": *a25
         "409":
           description: "The record this browser session is on is not the record the request asserted. `meta.errorCode` is
             `sharing.session.changed`. It is not a refusal of access — the caller may well be entitled to both records —
@@ -34227,6 +34871,487 @@ components:
           required:
             - deleted
           additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    ListEncountersEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/EncounterList"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    EncounterList:
+      type: object
+      properties:
+        upcoming:
+          type: array
+          items:
+            $ref: "#/components/schemas/Encounter"
+        past:
+          type: array
+          items:
+            $ref: "#/components/schemas/Encounter"
+      required:
+        - upcoming
+        - past
+      additionalProperties: false
+      description: Visits split server-side rather than client-side. `upcoming` reads soonest-first and `past` reads
+        newest-first — opposite directions, resolved once here so the ordering lives in one place.
+    Encounter:
+      type: object
+      properties:
+        id:
+          type: string
+        occurredAt:
+          type: string
+        status:
+          type: string
+          enum:
+            - PLANNED
+            - DONE
+            - CANCELLED
+            - NO_SHOW
+        kind:
+          type: string
+          enum:
+            - ROUTINE
+            - ACUTE
+            - SPECIALIST
+            - PREVENTIVE
+            - EMERGENCY
+            - HOSPITAL
+            - THERAPY
+            - OTHER
+        practitioner:
+          anyOf:
+            - $ref: "#/components/schemas/Practitioner"
+            - type: "null"
+        reason:
+          anyOf:
+            - type: string
+            - type: "null"
+        outcome:
+          anyOf:
+            - type: string
+            - type: "null"
+        reminderNextDueAt:
+          anyOf:
+            - type: string
+            - type: "null"
+        links:
+          $ref: "#/components/schemas/EncounterLinks"
+        skipped:
+          $ref: "#/components/schemas/EncounterSkipReport"
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - occurredAt
+        - status
+        - kind
+        - practitioner
+        - reason
+        - outcome
+        - reminderNextDueAt
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+      description: "One contact with the healthcare system: a visit that happened, or one that is booked. `practitioner` is
+        resolved rather than an id. `reason` and `outcome` are the decrypted free text (null on a key-rotation gap).
+        `reminderNextDueAt` is the server-computed instant a booked appointment next nudges, and is null for a visit
+        that already happened or whose one-shot reminder is spent."
+    Practitioner:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        specialty:
+          anyOf:
+            - type: string
+            - type: "null"
+        practice:
+          anyOf:
+            - type: string
+            - type: "null"
+        location:
+          anyOf:
+            - type: string
+            - type: "null"
+        phone:
+          anyOf:
+            - type: string
+            - type: "null"
+        note:
+          anyOf:
+            - type: string
+            - type: "null"
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - name
+        - specialty
+        - practice
+        - location
+        - phone
+        - note
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+      description: One entry in the caller's address book. `note` is the decrypted free text, or null on a key-rotation gap —
+        fail-soft, never a 500.
+    EncounterLinks:
+      type: object
+      properties:
+        documents:
+          type: array
+          items:
+            $ref: "#/components/schemas/EncounterLinkedTarget"
+        labResults:
+          type: array
+          items:
+            $ref: "#/components/schemas/EncounterLinkedTarget"
+        conditions:
+          type: array
+          items:
+            $ref: "#/components/schemas/EncounterLinkedTarget"
+      required:
+        - documents
+        - labResults
+        - conditions
+      additionalProperties: false
+      description: The three link families of one visit, each ordered by when it was filed. Present on the detail response,
+        absent from the list.
+    EncounterLinkedTarget:
+      type: object
+      properties:
+        id:
+          type: string
+        label:
+          anyOf:
+            - type: string
+            - type: "null"
+        date:
+          anyOf:
+            - type: string
+            - type: "null"
+        redacted:
+          type: boolean
+      required:
+        - id
+        - label
+        - date
+        - redacted
+      additionalProperties: false
+      description: "One thing filed against a visit, resolved. The label and date are computed server-side from the target
+        itself — a document's title and filing date, a lab result's panel and analyte and draw date, a condition's label
+        and onset — so the client never re-derives them and the two cannot drift. Both go null together, with `redacted:
+        true`, when the caller's grant does not cover the target's own domain: a visit lives in the health background
+        but points at the vault, the labs and the illness journal, and a grant that opened only the first was never
+        consent for the names in the other three. The link itself is still listed — the caller may know the visit
+        produced a lab result — and `redacted` is what tells a withheld name apart from a target that simply has no
+        date."
+    EncounterSkipReport:
+      type: object
+      properties:
+        catalogueKeys:
+          type: array
+          items:
+            type: object
+            properties:
+              catalogue:
+                type: string
+              key:
+                type: string
+              links:
+                type: number
+            required:
+              - catalogue
+              - key
+              - links
+            additionalProperties: false
+        links:
+          type: number
+      required:
+        - catalogueKeys
+        - links
+      additionalProperties: false
+      description: "What the write could not do, named. `links: 0` with an empty list is the ordinary answer. Anything else is
+        a side effect the caller's grant did not reach — today only `checkupClosure`, the closing of a preventive-care
+        checkup, which is a measurements-domain write a health-background delegate cannot perform. The visit still
+        saves; the checkup stays due and the response says so, because somebody who believes a checkup was closed will
+        not look at it again."
+    CreateEncounterEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Encounter"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    GetEncounterEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Encounter"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    UpdateEncounterEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Encounter"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    DeleteEncounterEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            deleted:
+              type: boolean
+          required:
+            - deleted
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    RestoreEncounterEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Encounter"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    LinkEncounterEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            links:
+              $ref: "#/components/schemas/EncounterLinks"
+            unknown:
+              type: array
+              items:
+                type: string
+          required:
+            - links
+            - unknown
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    UnlinkEncounterEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            links:
+              $ref: "#/components/schemas/EncounterLinks"
+            unknown:
+              type: array
+              items:
+                type: string
+          required:
+            - links
+            - unknown
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    ListPractitionersEnvelope:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Practitioner"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    CreatePractitionerEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Practitioner"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    GetPractitionerEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Practitioner"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    UpdatePractitionerEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Practitioner"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    DeletePractitionerEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            deleted:
+              type: boolean
+          required:
+            - deleted
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    RestorePractitionerEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Practitioner"
         error:
           type: "null"
         meta:

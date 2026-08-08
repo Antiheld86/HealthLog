@@ -15,6 +15,7 @@ import {
   resolveDocumentLimits,
 } from "@/lib/documents/upload-policy";
 import { resolveOcrCapability } from "@/lib/labs/ocr-capability";
+import { listDistinctTargets } from "@/lib/links";
 import { annotate } from "@/lib/logging/context";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import type { DocumentUsageDto } from "@/lib/validations/inbound-documents";
@@ -50,11 +51,10 @@ export const GET = apiHandler(async () => {
       // bar's condition chips. Sourced here (not from the loaded corpus) so
       // a chip exists even when its documents sit pages deep in the
       // timeline; one indexed grouped query, no blobs.
-      prisma.documentConditionLink.findMany({
-        where: { userId: user.id, document: { deletedAt: null } },
-        select: { episodeId: true, episode: { select: { label: true } } },
-        distinct: ["episodeId"],
-        orderBy: { episodeId: "asc" },
+      listDistinctTargets(prisma, {
+        userId: user.id,
+        sourceKind: "document",
+        targetKind: "conditionEpisode",
       }),
       // Whether an AI action can run for this caller (assist + indexing share
       // the same provider precondition). Honest availability so the UI never
@@ -85,8 +85,8 @@ export const GET = apiHandler(async () => {
     maxFileBytes: limits.maxFileBytes,
     acceptedExtensions: [...DOCUMENT_ACCEPTED_EXTENSIONS],
     linkedEpisodes: linkRows.map((row) => ({
-      episodeId: row.episodeId,
-      name: row.episode.label,
+      episodeId: row.id,
+      name: row.label,
     })),
     assistAvailable: capability.available,
     contentIndex: {

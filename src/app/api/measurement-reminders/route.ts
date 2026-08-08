@@ -39,7 +39,13 @@ export const GET = apiHandler(async () => {
   const { user } = await requireRecordAuth("read", "measurements");
 
   const reminders = await prisma.measurementReminder.findMany({
-    where: { userId: user.id, deletedAt: null },
+    // A booked visit's one-shot reminder rides this same engine with
+    // `origin: ENCOUNTER`. It is not a checkup and must not appear on a
+    // Vorsorge surface, or the list fills with appointments. Four read
+    // sites carry this exclusion; `encounter-reminder-exclusion.test.ts`
+    // proves every one of them, and the DTO mapper refuses such a row
+    // outright so a site that lost its filter fails loudly.
+    where: { userId: user.id, deletedAt: null, origin: { not: "ENCOUNTER" } },
     // Most-urgent first; a null next-due (uncomputable / disabled) sinks
     // to the end so the actionable items float to the top.
     orderBy: [

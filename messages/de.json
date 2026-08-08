@@ -6891,6 +6891,8 @@
         "restoreSkippedIllnessSymptom": "Krankheitssymptom",
         "restoreSkippedMoodFactor": "Stimmungsfaktor",
         "restoreSkippedMoodTag": "Stimmungs-Tag",
+        "restoreSkippedVisitReference": "Besuchsverknüpfung",
+        "restoreSkippedCheckupClosure": "Vorsorge-Abschluss",
         "docsLink": "Dokumentation"
       },
       "danger-zone": {
@@ -9956,6 +9958,14 @@
       "illnessEpisodeDelete": "{name} hat einen Krankheitseintrag gelöscht",
       "illnessEpisodeResolve": "{name} hat eine Erkrankung als beendet markiert",
       "illnessEpisodeRestore": "{name} hat einen Krankheitseintrag wiederhergestellt",
+      "encounterVisitCreate": "{name} hat einen Arztbesuch angelegt",
+      "encounterVisitUpdate": "{name} hat einen Arztbesuch bearbeitet",
+      "encounterVisitDelete": "{name} hat einen Arztbesuch gelöscht",
+      "encounterVisitRestore": "{name} hat einen Arztbesuch wiederhergestellt",
+      "practitionerContactCreate": "{name} hat eine Praxis zum Adressbuch hinzugefügt",
+      "practitionerContactUpdate": "{name} hat einen Adressbucheintrag bearbeitet",
+      "practitionerContactDelete": "{name} hat einen Adressbucheintrag gelöscht",
+      "practitionerContactRestore": "{name} hat einen Adressbucheintrag wiederhergestellt",
       "illnessDayLogUpsert": "{name} hat einen Krankheitstag erfasst",
       "medicationUpdate": "{name} hat ein Medikament geändert",
       "medicationDelete": "{name} hat ein Medikament gelöscht",
@@ -10031,7 +10041,7 @@
       },
       "profile": {
         "label": "Gesundheitliche Vorgeschichte",
-        "detail": "Allergien, Familienanamnese und die Angaben in deinem Gesundheitsprofil."
+        "detail": "Allergien, Familienanamnese, die Angaben in deinem Gesundheitsprofil sowie Arztbesuche und Praxen."
       },
       "illness": {
         "label": "Krankheiten",
@@ -10070,6 +10080,18 @@
     },
     "anamnesis": {
       "relativeNote": "Ein Eintrag zur Familienanamnese beschreibt die Angehörigen dieser Person. Trage ihn nur ein, wenn sie das hier festgehalten haben möchte."
+    }
+  },
+  "encounters": {
+    "kind": {
+      "routine": "Routinetermin",
+      "acute": "Akuttermin",
+      "specialist": "Facharzttermin",
+      "preventive": "Vorsorgetermin",
+      "emergency": "Notfall",
+      "hospital": "Krankenhaus",
+      "therapy": "Therapietermin",
+      "other": "Arzttermin"
     }
   }
 }

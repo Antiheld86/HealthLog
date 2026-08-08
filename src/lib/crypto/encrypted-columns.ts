@@ -233,6 +233,15 @@ export const ENCRYPTED_COLUMNS: readonly EncryptedColumn[] = [
   { model: "Allergy", field: "notesEncrypted", kind: "bytes" },
   { model: "FamilyHistoryEntry", field: "notesEncrypted", kind: "bytes" },
 
+  // ───── v1.38.0 visit free text (Bytes columns) ─────
+  // Why the person went, what came out of it, and the practice note. The
+  // structured columns a picker sorts and searches on — the practitioner's
+  // name, the kind, the status — stay queryable plaintext, the same split the
+  // structured health records above make.
+  { model: "Encounter", field: "reasonEncrypted", kind: "bytes" },
+  { model: "Encounter", field: "outcomeEncrypted", kind: "bytes" },
+  { model: "Practitioner", field: "noteEncrypted", kind: "bytes" },
+
   // ───── Inbound clinical document (Bytes column, codec-dispatched) ─────
   // The raw uploaded document (the most sensitive blob in the corpus; never
   // logged, never in wide-event meta). Two layouts, recorded per row in

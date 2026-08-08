@@ -667,7 +667,14 @@ describe("get_preventive_care", () => {
     };
     expect(prisma.measurementReminder.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { userId: "user-1", deletedAt: null, enabled: true },
+        where: {
+          userId: "user-1",
+          deletedAt: null,
+          enabled: true,
+          // A booked visit's reminder rides the same engine and is not a
+          // checkup; the tool must not offer one as preventive care.
+          origin: { not: "ENCOUNTER" },
+        },
       }),
     );
     expect(result.present).toBe(true);

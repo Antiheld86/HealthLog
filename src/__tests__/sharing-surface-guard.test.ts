@@ -931,6 +931,22 @@ const DELEGABLE_ROUTES: Record<string, DelegableEntry> = {
     domain: "measurements",
     why: "One nutrient's daily series over the record, scoped by the resolved user id.",
   },
+  "app/api/encounters/route.ts": {
+    domain: "profile",
+    why: "The record's visits — what happened at a practice and what is booked. Record content in the same sense as the allergies and family history already under this domain: it names no credential, no integration and no notification channel. Carries the honest cost of that classification, which is that a delegate granted `profile` for allergies also sees the visit list; the consent copy names visits for exactly this reason. The create arm is a delegable write.",
+  },
+  "app/api/encounters/[id]/route.ts": {
+    domain: "profile",
+    why: "One visit of the record, fetch-then-guard against the resolved user. The links it resolves are read through the link service, which narrows both ends to the same resolved id.",
+  },
+  "app/api/practitioners/route.ts": {
+    domain: "profile",
+    why: "The record's own address book of doctors and practices. Record content, not account configuration — it touches no credential, no integration and no notification channel, which is the fence the classification turns on. The create arm is a delegable write.",
+  },
+  "app/api/practitioners/[id]/route.ts": {
+    domain: "profile",
+    why: "One practitioner of the record, fetch-then-guard against the resolved user.",
+  },
   "app/api/illness/episodes/route.ts": {
     domain: "illness",
     why: "The record's illness episodes. Module-gated on the record on both arms, so a delegate gets the surface only where the owner switched it on; the create arm is a delegable write.",
@@ -1115,6 +1131,14 @@ const DELEGABLE_ROUTES: Record<string, DelegableEntry> = {
   "app/api/illness/episodes/[id]/restore/route.ts": {
     domain: "illness",
     why: "Reopening a deleted episode with its day logs intact. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/encounters/[id]/restore/route.ts": {
+    domain: "profile",
+    why: "Reopening a deleted visit with its links intact. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/practitioners/[id]/restore/route.ts": {
+    domain: "profile",
+    why: "Reopening a deleted address-book entry. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
   },
   "app/api/mood-entries/bulk-delete/route.ts": {
     domain: "mind",
@@ -1355,6 +1379,10 @@ const DELEGABLE_WRITE_ROUTES: Record<string, string> = {
     "Adding an analyte to the record's catalogue. A name the record already tracks is the ordinary 409 from the same `(userId, name)` uniqueness the owner would hit themselves.",
   "app/api/illness/episodes/route.ts":
     "Opening an illness episode. The module gate runs against the RECORD before the write, so a delegate cannot create an episode inside a record whose owner switched the module off.",
+  "app/api/encounters/route.ts":
+    "Filing a visit, or booking one. Every id the body may carry — the practitioner, the checkup it closes, the three link arrays — is re-narrowed to the resolved record before anything is written, so a delegate cannot attach one record's document to another's visit. Booking mints the appointment reminder under the RECORD, which is correct: it is the owner's appointment and the owner's channels that should be nudged about it.",
+  "app/api/practitioners/route.ts":
+    "Adding a doctor or practice to the record's address book. Nothing is unique across accounts here by design, so a delegate adding a practice the owner already has produces a second row rather than a collision with somebody else's namespace.",
   "app/api/medications/[id]/side-effects/route.ts":
     "Recording a side effect. Admitted on one condition, met at the call site: the POST rate bucket keys on the ACTOR, so a delegate burns their own allowance rather than the owner's and cannot collect a fresh one by switching records.",
   "app/api/medications/route.ts":
@@ -1460,6 +1488,26 @@ const DELEGABLE_MANAGE_ROUTES: Record<string, ManageEntry> = {
     domain: "illness",
     conditions: ["C4"],
     why: "Editing and deleting an episode; the delete soft-deletes. C4 on the edit.",
+  },
+  "app/api/encounters/[id]/route.ts": {
+    domain: "profile",
+    conditions: ["C4"],
+    why: "Editing and deleting a visit; the delete soft-deletes and retires the visit's own appointment reminder with it, never a checkup the visit closed. C4 on the edit: the date, the status, the kind and the practitioner are filed before and after, and the encrypted reason and outcome deliberately are not.",
+  },
+  "app/api/encounters/[id]/restore/route.ts": {
+    domain: "profile",
+    conditions: [],
+    why: "Reopening a deleted visit with its links intact.",
+  },
+  "app/api/practitioners/[id]/route.ts": {
+    domain: "profile",
+    conditions: ["C4"],
+    why: "Correcting and removing one address-book entry; the delete soft-deletes and leaves every visit that named it, because the reference nulls rather than cascades. C4 on the edit, over the plaintext fields only.",
+  },
+  "app/api/practitioners/[id]/restore/route.ts": {
+    domain: "profile",
+    conditions: [],
+    why: "Reopening a deleted address-book entry. It does not re-attach the visits whose reference was nulled, because which visits meant this practice is not recoverable.",
   },
   "app/api/illness/episodes/[id]/resolve/route.ts": {
     domain: "illness",
@@ -1816,11 +1864,12 @@ const ACTOR_ROUTES: Record<string, string> = {
  * managed-record configuration adds one more: 196 → 197. The bounded
  * read-only profile summary makes the next explicit admission: 197 → 198.
  * The two initial Cycle reads follow as separate, scoped admissions: 198 → 200.
- * The mood day's linked figures, read-only, add one: 200 → 201. The mood
- * prognosis, read-only and admitted on the whole record for the same reason,
- * adds one: 201 → 202.
+ * The mood day's linked figures, read-only, add one: 200 → 201. The visit
+ * record and its address book bring twelve: 201 → 213. The mood prognosis,
+ * read-only and admitted on the whole record for the same reason as the linked
+ * figures, adds one: 213 → 214.
  */
-const FROZEN_ENTRY_COUNT = 202;
+const FROZEN_ENTRY_COUNT = 214;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —
@@ -2581,7 +2630,7 @@ describe("(g) the MANAGE route set is frozen", () => {
 
   it("keeps the admitted mutation inventory complete and discoverable", () => {
     expect(ADMITTED_MUTATING_HANDLERS.length).toBeGreaterThan(0);
-    expect(ADMITTED_MUTATING_HANDLERS.length).toBe(62);
+    expect(ADMITTED_MUTATING_HANDLERS.length).toBe(70);
 
     const expected = ADMITTED_MUTATING_HANDLERS.map(
       ({ handlerModule, action, level }) =>

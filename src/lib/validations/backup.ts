@@ -32,6 +32,8 @@ import {
   ContraceptiveKind,
   CycleTrackingGoal,
   DocumentSummaryState,
+  EncounterKind,
+  EncounterStatus,
   FamilyRelationship,
   FlowLevel,
   GlucoseContext,
@@ -832,6 +834,56 @@ const illnessEpisodeBackupSchema = z
   })
   .passthrough();
 
+/**
+ * A practitioner, an encounter, and the edges between an encounter and the
+ * things it produced.
+ *
+ * `id` is required on both records, unlike the lab result above: a link
+ * addresses an encounter and its far side by id and nothing else on either row
+ * is unique enough to rebuild the reference from. The ciphertext columns ride
+ * verbatim as base64 — a visit note is never decrypted into the file.
+ */
+const practitionerBackupSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    specialty: z.string().nullable().optional(),
+    practice: z.string().nullable().optional(),
+    location: z.string().nullable().optional(),
+    phone: z.string().nullable().optional(),
+    noteEncrypted: base64BytesSchema.nullable().optional(),
+    createdAt: isoDateTime,
+    updatedAt: isoDateTime,
+    deletedAt: isoDateTime.nullable().optional(),
+  })
+  .passthrough();
+
+const encounterBackupSchema = z
+  .object({
+    id: z.string().min(1),
+    occurredAt: isoDateTime,
+    status: z.enum(EncounterStatus),
+    kind: z.enum(EncounterKind),
+    practitionerId: z.string().nullable().optional(),
+    reasonEncrypted: base64BytesSchema.nullable().optional(),
+    outcomeEncrypted: base64BytesSchema.nullable().optional(),
+    // Carried so the loss is visible in the file. The restore resolves it to
+    // NULL and names the drop: the reminder it points at does not travel.
+    reminderId: z.string().nullable().optional(),
+    createdAt: isoDateTime,
+    updatedAt: isoDateTime,
+    deletedAt: isoDateTime.nullable().optional(),
+  })
+  .passthrough();
+
+const encounterLinkBackupSchema = z
+  .object({
+    encounterId: z.string().min(1),
+    targetId: z.string().min(1),
+    createdAt: isoDateTime,
+  })
+  .passthrough();
+
 const allergyBackupSchema = z
   .object({
     id: z.string().min(1),
@@ -975,6 +1027,15 @@ export const backupPayloadSchema = z
     // the sections above: a file written before the table existed carries no
     // key, and an account whose score never resolved writes [].
     healthScoreRecords: z.array(healthScoreRecordBackupSchema).default([]),
+    // Visits, the address book behind them, and the three link tables.
+    // Defaulted for the same reason as the sections above: a file written
+    // before the tables existed carries no key, and an account that has never
+    // filed a visit writes [].
+    practitioners: z.array(practitionerBackupSchema).default([]),
+    encounters: z.array(encounterBackupSchema).default([]),
+    encounterDocumentLinks: z.array(encounterLinkBackupSchema).default([]),
+    encounterLabLinks: z.array(encounterLinkBackupSchema).default([]),
+    encounterConditionLinks: z.array(encounterLinkBackupSchema).default([]),
     manifest: backupManifestSchema.nullable().default(null),
   })
   .passthrough()

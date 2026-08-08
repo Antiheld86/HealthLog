@@ -281,7 +281,7 @@ const ROUTE_IMPORTS = import.meta.glob<Record<string, unknown>>(
 
 describe("the complete MANAGE handler matrix", () => {
   it("starts with a non-empty, exact handler inventory", () => {
-    expect(ADMITTED_MUTATING_HANDLERS.length).toBe(62);
+    expect(ADMITTED_MUTATING_HANDLERS.length).toBe(70);
   });
 });
 
@@ -508,6 +508,31 @@ async function makeEpisode(userId: string) {
       label: "Influenza",
       type: "INFECTION",
       onsetAt: new Date(ISO),
+    },
+  });
+}
+
+async function makePractitioner(userId: string) {
+  return getPrismaClient().practitioner.create({
+    data: { userId, name: "Praxis Nord", specialty: "Internal medicine" },
+  });
+}
+
+/**
+ * A visit that already happened.
+ *
+ * Past rather than booked on purpose: a PLANNED future visit mints an
+ * appointment reminder, and the drivers below assert one effect each. Keeping
+ * the fixture in the past leaves the edit and delete verbs saying only what
+ * they are here to say.
+ */
+async function makeVisit(userId: string) {
+  return getPrismaClient().encounter.create({
+    data: {
+      userId,
+      occurredAt: new Date(ISO),
+      status: "DONE",
+      kind: "ROUTINE",
     },
   });
 }
@@ -1225,6 +1250,193 @@ manageContract("POST /api/illness/episodes/[id]/restore", {
         where: { id: row.id },
       })
     )?.deletedAt === null,
+});
+
+writeEffectContract("POST /api/encounters", {
+  contract: ADMITTED_MUTATING_HANDLERS.find(
+    (entry) => entry.route === "/api/encounters" && entry.action === "POST",
+  )!,
+  prepare: async (ownerId) => ({ ownerId }),
+  act: async () => {
+    const { POST } = await import("@/app/api/encounters/route");
+    return call(POST as Handler, "POST", "/api/encounters", {
+      occurredAt: ISO,
+      status: "DONE",
+    });
+  },
+  ok: 201,
+  auditAction: "encounter.visit.create",
+  applied: async ({ ownerId }) =>
+    (await getPrismaClient().encounter.count({
+      where: { userId: ownerId },
+    })) === 1,
+});
+
+manageContract("PATCH /api/encounters/[id]", {
+  contract: ADMITTED_MUTATING_HANDLERS.find(
+    (entry) =>
+      entry.route === "/api/encounters/[id]" && entry.action === "PATCH",
+  )!,
+  prepare: (ownerId) => makeVisit(ownerId),
+  act: async (row) => {
+    const { PATCH } = await import("@/app/api/encounters/[id]/route");
+    return call(
+      PATCH as Handler,
+      "PATCH",
+      `/api/encounters/${row.id}`,
+      { kind: "SPECIALIST" },
+      { id: row.id },
+    );
+  },
+  ok: 200,
+  auditAction: "encounter.visit.update",
+  applied: async (row) =>
+    (await getPrismaClient().encounter.findUnique({ where: { id: row.id } }))
+      ?.kind === "SPECIALIST",
+});
+
+manageContract("DELETE /api/encounters/[id]", {
+  contract: ADMITTED_MUTATING_HANDLERS.find(
+    (entry) =>
+      entry.route === "/api/encounters/[id]" && entry.action === "DELETE",
+  )!,
+  prepare: (ownerId) => makeVisit(ownerId),
+  act: async (row) => {
+    const { DELETE } = await import("@/app/api/encounters/[id]/route");
+    return call(
+      DELETE as Handler,
+      "DELETE",
+      `/api/encounters/${row.id}`,
+      undefined,
+      { id: row.id },
+    );
+  },
+  ok: 200,
+  auditAction: "encounter.visit.delete",
+  applied: async (row) =>
+    (await getPrismaClient().encounter.findUnique({ where: { id: row.id } }))
+      ?.deletedAt !== null,
+});
+
+manageContract("POST /api/encounters/[id]/restore", {
+  contract: ADMITTED_MUTATING_HANDLERS.find(
+    (entry) => entry.route === "/api/encounters/[id]/restore",
+  )!,
+  prepare: async (ownerId) => {
+    const row = await makeVisit(ownerId);
+    return getPrismaClient().encounter.update({
+      where: { id: row.id },
+      data: { deletedAt: new Date() },
+    });
+  },
+  act: async (row) => {
+    const { POST } = await import("@/app/api/encounters/[id]/restore/route");
+    return call(
+      POST as Handler,
+      "POST",
+      `/api/encounters/${row.id}/restore`,
+      {},
+      { id: row.id },
+    );
+  },
+  ok: 200,
+  auditAction: "encounter.visit.restore",
+  applied: async (row) =>
+    (await getPrismaClient().encounter.findUnique({ where: { id: row.id } }))
+      ?.deletedAt === null,
+});
+
+writeEffectContract("POST /api/practitioners", {
+  contract: ADMITTED_MUTATING_HANDLERS.find(
+    (entry) => entry.route === "/api/practitioners" && entry.action === "POST",
+  )!,
+  prepare: async (ownerId) => ({ ownerId }),
+  act: async () => {
+    const { POST } = await import("@/app/api/practitioners/route");
+    return call(POST as Handler, "POST", "/api/practitioners", {
+      name: "Praxis Nord",
+    });
+  },
+  ok: 201,
+  auditAction: "practitioner.contact.create",
+  applied: async ({ ownerId }) =>
+    (await getPrismaClient().practitioner.count({
+      where: { userId: ownerId },
+    })) === 1,
+});
+
+manageContract("PATCH /api/practitioners/[id]", {
+  contract: ADMITTED_MUTATING_HANDLERS.find(
+    (entry) =>
+      entry.route === "/api/practitioners/[id]" && entry.action === "PATCH",
+  )!,
+  prepare: (ownerId) => makePractitioner(ownerId),
+  act: async (row) => {
+    const { PATCH } = await import("@/app/api/practitioners/[id]/route");
+    return call(
+      PATCH as Handler,
+      "PATCH",
+      `/api/practitioners/${row.id}`,
+      { name: "Praxis Süd" },
+      { id: row.id },
+    );
+  },
+  ok: 200,
+  auditAction: "practitioner.contact.update",
+  applied: async (row) =>
+    (await getPrismaClient().practitioner.findUnique({ where: { id: row.id } }))
+      ?.name === "Praxis Süd",
+});
+
+manageContract("DELETE /api/practitioners/[id]", {
+  contract: ADMITTED_MUTATING_HANDLERS.find(
+    (entry) =>
+      entry.route === "/api/practitioners/[id]" && entry.action === "DELETE",
+  )!,
+  prepare: (ownerId) => makePractitioner(ownerId),
+  act: async (row) => {
+    const { DELETE } = await import("@/app/api/practitioners/[id]/route");
+    return call(
+      DELETE as Handler,
+      "DELETE",
+      `/api/practitioners/${row.id}`,
+      undefined,
+      { id: row.id },
+    );
+  },
+  ok: 200,
+  auditAction: "practitioner.contact.delete",
+  applied: async (row) =>
+    (await getPrismaClient().practitioner.findUnique({ where: { id: row.id } }))
+      ?.deletedAt !== null,
+});
+
+manageContract("POST /api/practitioners/[id]/restore", {
+  contract: ADMITTED_MUTATING_HANDLERS.find(
+    (entry) => entry.route === "/api/practitioners/[id]/restore",
+  )!,
+  prepare: async (ownerId) => {
+    const row = await makePractitioner(ownerId);
+    return getPrismaClient().practitioner.update({
+      where: { id: row.id },
+      data: { deletedAt: new Date() },
+    });
+  },
+  act: async (row) => {
+    const { POST } = await import("@/app/api/practitioners/[id]/restore/route");
+    return call(
+      POST as Handler,
+      "POST",
+      `/api/practitioners/${row.id}/restore`,
+      {},
+      { id: row.id },
+    );
+  },
+  ok: 200,
+  auditAction: "practitioner.contact.restore",
+  applied: async (row) =>
+    (await getPrismaClient().practitioner.findUnique({ where: { id: row.id } }))
+      ?.deletedAt === null,
 });
 
 manageContract("POST /api/illness/episodes/[id]/day-logs", {
@@ -2167,13 +2379,13 @@ describe("the conditions the admissions were granted on", () => {
 describe("the complete MANAGE handler matrix", () => {
   it("registers one strict actor-and-effect driver for every admission", () => {
     const expected = ADMITTED_MUTATING_HANDLERS.map(matrixKey).sort();
-    expect(STRICT_DRIVER_KEYS.size).toBe(62);
+    expect(STRICT_DRIVER_KEYS.size).toBe(70);
     expect([...STRICT_DRIVER_KEYS].sort()).toEqual(expected);
   });
 
   it("executes every registered driver through its owned effect and actor audit", () => {
     const expected = ADMITTED_MUTATING_HANDLERS.map(matrixKey).sort();
-    expect(REAL_EFFECT_KEYS.size).toBe(62);
+    expect(REAL_EFFECT_KEYS.size).toBe(70);
     expect([...REAL_EFFECT_KEYS].sort()).toEqual(expected);
   });
 });
