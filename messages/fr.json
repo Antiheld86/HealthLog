@@ -8523,6 +8523,10 @@
     "nutrients": {
       "label": "Apports en nutriments",
       "description": "Enregistre les totaux quotidiens de micronutriments (vitamines, minéraux, eau, caféine) synchronisés depuis Apple Health. Désactivé par défaut."
+    },
+    "vaccinations": {
+      "label": "Vaccinations",
+      "description": "Le carnet de vaccination sous forme structurée : quelle dose a été administrée et quand, sa place dans la série, et la date du prochain rappel."
     }
   },
   "illness": {
@@ -9944,6 +9948,10 @@
       "encounterVisitUpdate": "{name} a modifié une consultation",
       "encounterVisitDelete": "{name} a supprimé une consultation",
       "encounterVisitRestore": "{name} a restauré une consultation",
+      "vaccinationRecordCreate": "{name} a ajouté une vaccination",
+      "vaccinationRecordUpdate": "{name} a modifié une vaccination",
+      "vaccinationRecordDelete": "{name} a supprimé une vaccination",
+      "vaccinationRecordRestore": "{name} a restauré une vaccination",
       "practitionerContactCreate": "{name} a ajouté un cabinet au carnet d'adresses",
       "practitionerContactUpdate": "{name} a modifié une entrée du carnet d'adresses",
       "practitionerContactDelete": "{name} a supprimé une entrée du carnet d'adresses",

@@ -8523,6 +8523,10 @@
     "nutrients": {
       "label": "Nährstoffzufuhr",
       "description": "Speichert tägliche Mikronährstoff-Summen (Vitamine, Mineralstoffe, Wasser, Koffein) aus Apple Health. Standardmäßig aus."
+    },
+    "vaccinations": {
+      "label": "Impfungen",
+      "description": "Der Impfpass in strukturierter Form: welche Dosis wann gegeben wurde, in welcher Serie sie steht und wann die nächste Auffrischung ansteht."
     }
   },
   "illness": {
@@ -9944,6 +9948,10 @@
       "encounterVisitUpdate": "{name} hat einen Arztbesuch bearbeitet",
       "encounterVisitDelete": "{name} hat einen Arztbesuch gelöscht",
       "encounterVisitRestore": "{name} hat einen Arztbesuch wiederhergestellt",
+      "vaccinationRecordCreate": "{name} hat eine Impfung eingetragen",
+      "vaccinationRecordUpdate": "{name} hat eine Impfung bearbeitet",
+      "vaccinationRecordDelete": "{name} hat eine Impfung gelöscht",
+      "vaccinationRecordRestore": "{name} hat eine Impfung wiederhergestellt",
       "practitionerContactCreate": "{name} hat eine Praxis zum Adressbuch hinzugefügt",
       "practitionerContactUpdate": "{name} hat einen Adressbucheintrag bearbeitet",
       "practitionerContactDelete": "{name} hat einen Adressbucheintrag gelöscht",

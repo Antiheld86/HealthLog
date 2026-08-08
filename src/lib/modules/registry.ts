@@ -154,6 +154,25 @@ export const MODULE_KEYS = [
   // ingest route refuses (403 `module.disabled`) and the settings card
   // does not render. The `optIn` marker inverts the per-user default.
   "nutrients",
+  // v1.38.0 — the immunization log (`/vaccinations`). A tracked clinical
+  // vertical a person may not use at all, which is exactly the shape the
+  // existing opt-out verticals have (`labs`, `illness`, `medications`), so it
+  // gets a key rather than riding somebody else's. Default-on, no `optIn`
+  // marker: no egress, no new attack surface — the `mentalHealth` /
+  // `inboundDocuments` posture.
+  //
+  // SURFACE-gated like `medications`: the nav entry, the dashboard and report
+  // surfaces and the picker hide, and the `/api/vaccinations*` data routes
+  // stay exempt so a restore / import keeps working and re-enabling finds
+  // every row intact.
+  //
+  // The one subtlety, stated so nobody reads it as a leak: a booster reminder
+  // the user CONFIRMED does not follow this off-switch. It is an ordinary
+  // preventive-care row on an engine that is never gated, and a reminder
+  // somebody agreed to keeps its promise. Turning the module off hides
+  // surfaces the person made content for; it does not silently retract a
+  // commitment the app made to them.
+  "vaccinations",
 ] as const;
 
 export type ModuleKey = (typeof MODULE_KEYS)[number];
@@ -343,6 +362,14 @@ export const MODULE_REGISTRY: Readonly<Record<ModuleKey, ModuleDefinition>> =
       // HealthKit read permission was granted on the device. Ships dark;
       // ingest refuses while off (refuse-ingest posture, not surface-only).
       optIn: true,
+    },
+    vaccinations: {
+      key: "vaccinations",
+      labelKey: "modules.vaccinations.label",
+      descriptionKey: "modules.vaccinations.description",
+      category: "tracking",
+      // No `optIn`: default-on. Nothing leaves the instance and the surfaces
+      // are inert until the person logs a dose.
     },
   });
 

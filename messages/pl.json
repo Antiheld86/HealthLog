@@ -8523,6 +8523,10 @@
     "nutrients": {
       "label": "Spożycie składników odżywczych",
       "description": "Zapisuje dzienne sumy mikroskładników (witaminy, minerały, woda, kofeina) synchronizowane z Apple Health. Domyślnie wyłączone."
+    },
+    "vaccinations": {
+      "label": "Szczepienia",
+      "description": "Książeczka szczepień w formie uporządkowanej: która dawka i kiedy została podana, w którym miejscu serii się znajduje i kiedy przypada następne przypomnienie."
     }
   },
   "illness": {
@@ -9944,6 +9948,10 @@
       "encounterVisitUpdate": "{name} zmienił wizytę lekarską",
       "encounterVisitDelete": "{name} usunął wizytę lekarską",
       "encounterVisitRestore": "{name} przywrócił wizytę lekarską",
+      "vaccinationRecordCreate": "{name} dodał szczepienie",
+      "vaccinationRecordUpdate": "{name} zmienił szczepienie",
+      "vaccinationRecordDelete": "{name} usunął szczepienie",
+      "vaccinationRecordRestore": "{name} przywrócił szczepienie",
       "practitionerContactCreate": "{name} dodał gabinet do książki adresowej",
       "practitionerContactUpdate": "{name} zmienił wpis w książce adresowej",
       "practitionerContactDelete": "{name} usunął wpis w książce adresowej",

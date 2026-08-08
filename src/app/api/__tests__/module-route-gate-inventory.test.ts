@@ -140,6 +140,13 @@ const MODULE_ROUTE_TREES: ReadonlyArray<string> = [
   // phone whose user never opted in cannot land rows server-side. Walking
   // the tree means a NEW ungated nutrients route fails BY NAME.
   "src/app/api/nutrients",
+  // v1.38.0 — the immunization log (`vaccinations` module). SURFACE-gated
+  // like medications, not data-layer-gated: every `/api/vaccinations/*` route
+  // is raw CRUD over the person's own doses, so all four are EXEMPT below
+  // under the same reasoning. Walking the tree means a NEW vaccination route
+  // must justify itself — gate or documented exemption — rather than
+  // silently appearing.
+  "src/app/api/vaccinations",
 ];
 
 /**
@@ -283,6 +290,19 @@ const EXEMPT_ROUTES: ReadonlyArray<string> = [
   // rationale as glp1-timeline above: a deterministic detector over weight +
   // dose history, no AI narrative, medications is core/always-on.
   "src/app/api/insights/glp1-plateau/route.ts",
+  // ── DATA LAYER (vaccinations) ─────────────────────────────────────
+  // v1.38.0 — the immunization log is SURFACE-gated (nav entry, dashboard
+  // and report leaves, the picker), not data-layer-gated. Every
+  // `/api/vaccinations/*` route is raw CRUD over the person's own doses and
+  // the pages they were transcribed from — the same reasoning as mood, labs
+  // and medications above: the module toggle governs whether vaccinations
+  // SURFACE, not whether the row store accepts rows. A restore or an import
+  // must keep working while the module is off, and re-enabling must find
+  // every dose intact rather than a gap in an Impfpass nobody can rebuild.
+  "src/app/api/vaccinations/route.ts",
+  "src/app/api/vaccinations/[id]/route.ts",
+  "src/app/api/vaccinations/[id]/restore/route.ts",
+  "src/app/api/vaccinations/[id]/links/route.ts",
 ];
 
 const MODULE_GATE_NEEDLE = "requireModuleEnabled(";

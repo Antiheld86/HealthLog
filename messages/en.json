@@ -8523,6 +8523,10 @@
     "nutrients": {
       "label": "Nutrient intake",
       "description": "Store daily micronutrient totals (vitamins, minerals, water, caffeine) synced from Apple Health. Off by default."
+    },
+    "vaccinations": {
+      "label": "Vaccinations",
+      "description": "The vaccination record in structured form: which dose was given when, where it sits in its series, and when the next booster is due."
     }
   },
   "illness": {
@@ -9944,6 +9948,10 @@
       "encounterVisitUpdate": "{name} edited a visit",
       "encounterVisitDelete": "{name} deleted a visit",
       "encounterVisitRestore": "{name} restored a visit",
+      "vaccinationRecordCreate": "{name} added a vaccination",
+      "vaccinationRecordUpdate": "{name} edited a vaccination",
+      "vaccinationRecordDelete": "{name} deleted a vaccination",
+      "vaccinationRecordRestore": "{name} restored a vaccination",
       "practitionerContactCreate": "{name} added a practice to the address book",
       "practitionerContactUpdate": "{name} edited an address book entry",
       "practitionerContactDelete": "{name} deleted an address book entry",
