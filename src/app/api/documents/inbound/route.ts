@@ -56,6 +56,7 @@ import {
 } from "@/lib/documents/upload-policy";
 import { withIdempotency } from "@/lib/idempotency";
 import { BodyTooLargeError, readBoundedBody } from "@/lib/labs/ocr-upload";
+import { linkTargets } from "@/lib/links";
 import { annotate } from "@/lib/logging/context";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import { isP2002 } from "@/lib/prisma-errors";
@@ -337,12 +338,12 @@ async function processUpload(
       });
 
       if (episodeIds.length > 0) {
-        await tx.documentConditionLink.createMany({
-          data: episodeIds.map((episodeId) => ({
-            documentId: created.id,
-            episodeId,
-            userId: user.id,
-          })),
+        await linkTargets(tx, {
+          userId: user.id,
+          sourceKind: "document",
+          sourceId: created.id,
+          targetKind: "conditionEpisode",
+          targetIds: episodeIds,
         });
       }
       return created;

@@ -14,16 +14,27 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 process.env.ENCRYPTION_KEY =
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
-const { txQueryRaw, txCreate, txCreateMany } = vi.hoisted(() => ({
+const {
+  txQueryRaw,
+  txCreate,
+  txCreateMany,
+  txDocumentFindMany,
+  txEpisodeFindMany,
+} = vi.hoisted(() => ({
   txQueryRaw: vi.fn(),
   txCreate: vi.fn(),
   txCreateMany: vi.fn(),
+  // The link service re-narrows BOTH ends inside the transaction before it
+  // writes, so the transaction double has to answer for them.
+  txDocumentFindMany: vi.fn(),
+  txEpisodeFindMany: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => {
   const tx = {
     $queryRaw: txQueryRaw,
-    inboundDocument: { create: txCreate },
+    inboundDocument: { create: txCreate, findMany: txDocumentFindMany },
+    illnessEpisode: { findMany: txEpisodeFindMany },
     documentConditionLink: { createMany: txCreateMany },
   };
   return {
@@ -186,6 +197,8 @@ beforeEach(() => {
   txQueryRaw.mockResolvedValue([{ used: BigInt(0) }]);
   txCreate.mockResolvedValue(docRow() as never);
   txCreateMany.mockResolvedValue({ count: 0 } as never);
+  txDocumentFindMany.mockResolvedValue([{ id: "doc-1" }] as never);
+  txEpisodeFindMany.mockResolvedValue([] as never);
 });
 
 describe("POST /api/documents/inbound (vault upload)", () => {
@@ -294,10 +307,14 @@ describe("POST /api/documents/inbound (vault upload)", () => {
     vi.mocked(prisma.illnessEpisode.findMany).mockResolvedValue([
       { id: "ep-1" },
     ] as never);
+    txEpisodeFindMany.mockResolvedValue([{ id: "ep-1" }] as never);
     let res = await post(mkUpload({ episodeIds: ["ep-1"] }));
     expect(res.status).toBe(201);
     expect(txCreateMany).toHaveBeenCalledWith({
       data: [{ documentId: "doc-1", episodeId: "ep-1", userId: "user-1" }],
+      // The link service is idempotent by construction, so a retried upload
+      // that reaches the same pair succeeds instead of hitting the unique index.
+      skipDuplicates: true,
     });
 
     // Foreign/unknown episode id → 404-shaped refusal, nothing persisted.
@@ -433,12 +450,13 @@ describe("GET /api/documents/inbound (list)", () => {
       { documentId: "d2", status: "APPROVED", _count: { _all: 1 } },
       { documentId: "d2", status: "REJECTED", _count: { _all: 3 } },
     ] as never);
+    // The link read resolves labels in a second query rather than through a
+    // relation join, so both halves are mocked.
     vi.mocked(prisma.documentConditionLink.findMany).mockResolvedValue([
-      {
-        documentId: "d1",
-        episodeId: "ep-1",
-        episode: { label: "Knie" },
-      },
+      { documentId: "d1", episodeId: "ep-1" },
+    ] as never);
+    vi.mocked(prisma.illnessEpisode.findMany).mockResolvedValue([
+      { id: "ep-1", label: "Knie", onsetAt: new Date("2026-06-01T00:00:00Z") },
     ] as never);
 
     const res = await get(

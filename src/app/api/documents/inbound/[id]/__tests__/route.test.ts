@@ -14,6 +14,7 @@ vi.mock("@/lib/db", () => ({
   prisma: {
     inboundDocument: {
       findFirst: vi.fn(),
+      findMany: vi.fn(),
       update: vi.fn(),
       findFirstOrThrow: vi.fn(),
     },
@@ -131,6 +132,11 @@ beforeEach(() => {
   vi.mocked(prisma.documentConditionLink.findMany).mockResolvedValue(
     [] as never,
   );
+  // The link service re-narrows both ends before it writes: the document it is
+  // filing, and the episodes it is filing against.
+  vi.mocked(prisma.inboundDocument.findMany).mockResolvedValue([
+    { id: "doc-1" },
+  ] as never);
   vi.mocked(prisma.documentConditionLink.deleteMany).mockResolvedValue({
     count: 0,
   } as never);
