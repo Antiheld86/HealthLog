@@ -227,7 +227,7 @@ describe("PATCH /api/auth/me/disable-coach", () => {
 
   it("is idempotent when the column already holds the requested value", async () => {
     // Toggling a column from true→true (or false→false) still writes
-    // through so the audit row exists. Matches the research-mode
+    // through so the audit row exists. Matches the doctor-report-prefs
     // route's "always write" posture.
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({

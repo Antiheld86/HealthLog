@@ -53,6 +53,7 @@ const OWNER = {
   accountId: "acct-owner",
   username: "owner",
   displayName: "Margarethe",
+  fullName: null,
   access: "read" as const,
   level: "read" as const,
   sections: null,

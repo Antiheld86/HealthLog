@@ -21,6 +21,12 @@ import { settleBeforeMeasure } from "./utils/settle";
  *   3. **One reading edge.** Every card body starts at the card's inner edge.
  *      The `pl-7` gutter put some bodies 28 px in and some at the edge, on the
  *      same page, one card apart.
+ *   4. **One row rhythm in a list card.** A card whose rows are a `divide-y`
+ *      ledger has nothing between two rows but the divider line, and its first
+ *      row starts at the card's inner top edge. The card contract carries a
+ *      `gap-4 md:gap-6` for a stack of blocks; dropping the padding without
+ *      dropping the gap leaves that gap standing between the rows as dead,
+ *      unclickable space the top of the list does not have.
  *
  * Runs in EN and DE, at desktop and phone widths. German runs 15-25% longer,
  * and an explainer that wraps in German where English fits is the same defect
@@ -204,6 +210,63 @@ async function measureCards(page: import("@playwright/test").Page) {
           next.getBoundingClientRect().top -
           header.getBoundingClientRect().bottom,
         bodyInset: next.getBoundingClientRect().left - cardInnerLeft,
+      });
+    }
+    return out;
+  });
+}
+
+/**
+ * Row rhythm inside a `divide-y` list card, per card on the page.
+ *
+ * A list card is recognised by its own shape rather than by a class name:
+ * three or more direct children, no card header among them, and a divider on
+ * every seam between them. That is the ledger pattern wherever it is written,
+ * and the three-row floor keeps a header-plus-one-bordered-block card — which
+ * claim 2 already owns — out of this one.
+ *
+ * `topInset` is the space above the FIRST row, measured from the card's inner
+ * top edge; `rowGaps` is the space between consecutive rows, over and above
+ * the divider line itself. Both are zero in a correct ledger — which is the
+ * whole point: the first row and every later row sit the same distance from
+ * the line above them.
+ */
+async function measureListCards(page: import("@playwright/test").Page) {
+  return page.evaluate(() => {
+    const out: { slot: string; topInset: number; rowGaps: number[] }[] = [];
+    for (const card of document.querySelectorAll('[data-slot="card"]')) {
+      if (card.querySelector(":scope > header")) continue;
+      const rows = Array.from(card.children) as HTMLElement[];
+      if (rows.length < 3) continue;
+      // Tailwind writes the divider on the top edge of every row but the
+      // first, or on the bottom edge of every row but the last, depending on
+      // the utility. Accept either — the pattern is the same ledger.
+      const dividedFromTop = rows
+        .slice(1)
+        .every((row) => parseFloat(getComputedStyle(row).borderTopWidth) > 0);
+      const dividedFromBottom = rows
+        .slice(0, -1)
+        .every(
+          (row) => parseFloat(getComputedStyle(row).borderBottomWidth) > 0,
+        );
+      if (!dividedFromTop && !dividedFromBottom) continue;
+      const cardStyle = getComputedStyle(card);
+      const cardInnerTop =
+        card.getBoundingClientRect().top +
+        parseFloat(cardStyle.borderTopWidth) +
+        parseFloat(cardStyle.paddingTop);
+      out.push({
+        slot: card.getAttribute("data-testid") ?? "card",
+        topInset: rows[0].getBoundingClientRect().top - cardInnerTop,
+        // The divider is drawn inside the row's border box, so it is already
+        // inside the measured top edge — a correct ledger reports 0 here.
+        rowGaps: rows
+          .slice(1)
+          .map(
+            (row, index) =>
+              row.getBoundingClientRect().top -
+              rows[index].getBoundingClientRect().bottom,
+          ),
       });
     }
     return out;
@@ -401,6 +464,59 @@ for (const locale of ["en", "de"] as const) {
 
       expect(offGap, "header→body gap is not the card's own gap").toEqual([]);
       expect(offEdge, "card body does not start at the card edge").toEqual([]);
+    });
+
+    test(`list cards keep one row rhythm (${locale})`, async ({ page }) => {
+      test.setTimeout(420_000);
+      await page.context().addCookies([
+        {
+          name: "healthlog-locale",
+          value: locale,
+          url: process.env.E2E_BASE_URL ?? "http://localhost:3000",
+        },
+      ]);
+
+      const offenders: string[] = [];
+      let measured = 0;
+      for (const route of ROUTES) {
+        const response = await page.goto(route, {
+          waitUntil: "domcontentloaded",
+        });
+        if (response && response.status() >= 400) continue;
+        const heading = page
+          .locator(
+            'main h1:visible, main [role="heading"][aria-level="1"]:visible',
+          )
+          .first();
+        if (!(await heading.isVisible().catch(() => false))) {
+          await heading
+            .waitFor({ state: "visible", timeout: 8_000 })
+            .catch(() => {});
+        }
+        await settleBeforeMeasure(page, page.locator("main").first());
+        for (const card of await measureListCards(page)) {
+          measured += 1;
+          const worstGap = Math.max(0, ...card.rowGaps);
+          if (
+            Math.abs(card.topInset) > TOLERANCE ||
+            worstGap > TOLERANCE ||
+            Math.abs(worstGap - Math.min(...card.rowGaps)) > TOLERANCE
+          ) {
+            offenders.push(
+              `${route} (${card.slot}): first row inset ${card.topInset.toFixed(1)}px, ` +
+                `between rows ${[...new Set(card.rowGaps.map((g) => g.toFixed(1)))].join("/")}px`,
+            );
+          }
+        }
+      }
+
+      console.log(`[${locale}] list cards measured: ${measured}`);
+      // The sweep has to actually find the ledgers it is about.
+      expect(measured).toBeGreaterThan(0);
+      expect(
+        offenders,
+        "a divided list card puts dead space above its rows that the first row does not have",
+      ).toEqual([]);
     });
   });
 }

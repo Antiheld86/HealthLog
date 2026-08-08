@@ -31,6 +31,7 @@ const canonicalEntry = {
   accountId: "record-a",
   username: "record-a",
   displayName: "Record A",
+  fullName: null,
   access: "read",
   level: "read",
   recordKind: "shared",

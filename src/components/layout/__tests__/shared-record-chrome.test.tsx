@@ -56,6 +56,7 @@ const OWNER = {
   accountId: "acct-owner",
   username: "grandma",
   displayName: "Margarethe",
+  fullName: null,
   access: "read" as const,
   level: "read" as const,
   sections: null,
@@ -106,6 +107,25 @@ describe("<SharedRecordBanner>", () => {
     );
     // Never an unnamed banner. "You are in 's record" is worse than useless.
     expect(html).toContain("grandma");
+  });
+
+  it("names the owner in full when they have a full name, to a read-only delegate", () => {
+    // v1.37.2 — the banner is the account-access view that renders server-side,
+    // and this OWNER is READ (`canWrite: false`). The full name leads over the
+    // greeting name: a delegate about to log a reading sees whose record it is
+    // as who they are, not by a nickname. A deliberate disclosure to everyone
+    // shared with, read-only included (maintainer decision 2026-08-08).
+    const named = {
+      ...OWNER,
+      fullName: "Test Full Name",
+      displayName: "Margarethe",
+    };
+    const html = render(
+      { accounts: [named], active: named, canSwitch: true },
+      <SharedRecordBanner />,
+    );
+    expect(html).toContain('data-slot="shared-record-banner"');
+    expect(html).toContain("Test Full Name");
   });
 
   it("says the access is read-only, and carries the way out", () => {

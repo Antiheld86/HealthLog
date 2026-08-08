@@ -69,6 +69,7 @@ import {
   DELEGATE_STORAGE_STATE_PATH,
   E2E_DELEGATE_MARKER_KG,
   E2E_OWNER,
+  E2E_OWNER_FULL_NAME,
   E2E_USER,
   OWNER_STORAGE_STATE_PATH,
 } from "./setup/test-helpers";
@@ -312,7 +313,26 @@ test.describe("account sharing", () => {
 
     const entry = page.locator('[data-slot="account-switcher-entry"]');
     await expect(entry).toHaveCount(1);
-    await expect(entry).toContainText(E2E_OWNER.username);
+    // v1.37.2 — the owner set a full name, so a delegate sees them by it
+    // rather than by the greeting name or the login handle. This is the
+    // record-owner's full name crossing to a read-only delegate, which is the
+    // deliberate disclosure the maintainer decided on. The username stays on
+    // the row as an attribute, which is the positive control for the label
+    // assertion — without it, a renamed slot would make this read green.
+    await expect(entry).toContainText(E2E_OWNER_FULL_NAME);
+    await expect(entry).toHaveAttribute(
+      "data-account-username",
+      E2E_OWNER.username,
+    );
+    // Two lines: the name and the kind of record. The access level used to
+    // take a third and was truncated more often than it was read; it is what
+    // the banner says once you are inside. The row still CARRIES the level as
+    // an attribute, which is the positive control for the absence below —
+    // without it, a renamed slot would make this read green.
+    await expect(entry).toHaveAttribute("data-access-level", /.+/);
+    await expect(entry).not.toContainText("Read only");
+    await expect(entry).not.toContainText("Can add entries");
+    await expect(entry).not.toContainText("change or remove what is in it");
     // The way home is in the same menu as the way in.
     await expect(
       page.locator('[data-slot="account-switcher-own"]'),
@@ -342,10 +362,11 @@ test.describe("account sharing", () => {
 
     // Wait for CONTENT, and for content the assertion is not about: the
     // banner naming the owner. A skeleton does not satisfy it, and it says
-    // nothing about the marker either way.
+    // nothing about the marker either way. The owner set a full name, so the
+    // banner names them by it (v1.37.2) — the same label the switcher used.
     const banner = page.locator('[data-slot="shared-record-banner"]');
     await expect(banner).toBeVisible();
-    await expect(banner).toContainText(E2E_OWNER.username);
+    await expect(banner).toContainText(E2E_OWNER_FULL_NAME);
 
     // The document showing the banner has never shown the delegate's own
     // number. The latch was armed by that document's own init script, so this

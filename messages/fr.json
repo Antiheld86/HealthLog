@@ -1612,26 +1612,6 @@
       }
     },
     "researchMode": {
-      "dialog": {
-        "title": "Activer le mode Recherche",
-        "intro": "Le mode Recherche ajoute un graphique estimé du niveau de médicament à votre page GLP-1. Lisez la limite ci-dessous avant de l'activer — le graphique est un outil d'apprentissage, jamais une mesure, jamais un conseil médical.",
-        "whatItIsHeader": "Ce que c'est",
-        "whatItIs": "Une courbe en dents de scie qui simule la superposition de vos doses enregistrées dans le temps, à partir du modèle Bateman à un compartiment avec les paramètres d'absorption et de demi-vie publiés dans l'EPAR EMA de chaque agoniste GLP-1 approuvé. L'axe vertical est sans unité et non étiqueté. C'est la forme, pas la valeur, qui est l'information de la courbe.",
-        "whatItIsntHeader": "Ce que ce n'est pas",
-        "whatItIsnt": "Pas un taux sanguin. Pas une mesure. Pas une prévision de la réponse réelle de votre corps. Pas une base pour une décision de dose, de timing ou d'escalade. Pour tout ce qui touche à votre traitement, parlez-en à votre médecin prescripteur.",
-        "whyEstimateHeader": "Pourquoi c'est une estimation",
-        "whyEstimate": "La pharmacocinétique de population décrit le patient typique. La variabilité individuelle est grande — le modèle Schneck/Urva 2024 du tirzépatide rapporte environ 22 % de variabilité interindividuelle sur l'absorption et environ 49 % sur le volume de distribution. Une courbe de manuel ne peut capturer ni votre poids, ni votre fonction rénale, ni votre technique d'injection, ni la précision de vos horaires. Lisez la courbe comme le rythme de votre dosage, pas comme votre niveau.",
-        "mdrBoundaryHeader": "Limite réglementaire",
-        "mdrBoundary": "HealthLog affiche des données réglementaires publiques et vos propres enregistrements. L'application ne prédit, ne diagnostique, ne traite et ne recommande aucune thérapie. Le règlement UE 2017/745 (Medical Device Regulation, MDR) et le document de guidance MDCG 2021-24 tracent la limite à partir des logiciels qui interprètent des données à des fins médicales — cette courbe reste résolument du côté éducatif de cette limite. Si vous avez le sentiment qu'elle vous pousse vers une décision clinique, fermez-la.",
-        "citationsHeader": "Sources",
-        "citations": "Rapports européens publics d'évaluation (EPAR) de l'EMA pour Mounjaro, Ozempic, Wegovy, Saxenda, Trulicity, Byetta et Bydureon (section 5.2). Schneck K, Urva S. Population pharmacokinetics of the GIP/GLP receptor agonist tirzepatide. CPT Pharmacometrics Syst Pharmacol 2024;13(3):494-503 (DOI 10.1002/psp4.13099).",
-        "versionLine": "Version du disclaimer : {version}",
-        "acknowledgeCta": "J'ai compris — activer",
-        "cancelCta": "Annuler",
-        "successToast": "Mode Recherche activé. La courbe de niveau de médicament est maintenant visible sur votre page GLP-1.",
-        "errorToast": "Impossible d'activer le mode Recherche. Veuillez réessayer.",
-        "staleVersionToast": "Le disclaimer a été mis à jour depuis le chargement de cette page. Rechargez pour lire la version actuelle."
-      },
       "chart": {
         "title": "Niveau de médicament estimé",
         "axisLabel": "Niveau estimé (relatif)",
@@ -3118,8 +3098,7 @@
       "valuesBack": "Retour aux Insights",
       "valuesBackToMetric": "Retour à {metric}",
       "scoresBack": "Retour aux Insights",
-      "ecgDescription": "Enregistrements ECG à dérivation unique de votre appareil, chacun accompagné du résultat de l'appareil.",
-      "ecgDisclaimer": "HealthLog affiche le tracé et l'enregistrement, mais n'interprète pas la courbe."
+      "ecgDescription": "Enregistrements ECG à dérivation unique de votre appareil, chacun accompagné du résultat de l'appareil."
     },
     "units": {
       "steps": "pas",
@@ -4282,10 +4261,8 @@
     },
     "ecg": {
       "sectionTitle": "Enregistrements ECG",
-      "sectionIntro": "Tracés ECG à une seule dérivation enregistrés par votre appareil. HealthLog affiche uniquement l'enregistrement et le résultat produit par votre appareil ; il ne lit ni n'interprète le tracé.",
       "loadError": "Impossible de charger vos enregistrements ECG.",
       "backToList": "Retour aux enregistrements",
-      "disclaimer": "Il s'agit du résultat produit par votre appareil d'enregistrement. HealthLog ne lit ni n'interprète les enregistrements ECG et ne fournit aucun diagnostic.",
       "clinicianNote": "Si ce résultat vous préoccupe, parlez de cet enregistrement à un professionnel de santé.",
       "resultAttribution": "Résultat enregistré : {result}, tel que signalé par l'appareil d'enregistrement.",
       "result": {
@@ -4618,19 +4595,6 @@
     "remainingMany": "Encore {count} mesures avant la tendance."
   },
   "settings": {
-    "researchMode": {
-      "sectionTitle": "Mode Recherche",
-      "subtitle": "Courbe optionnelle du niveau estimé de GLP-1, d'après les données de l'EMA.",
-      "toggleLabel": "Afficher la courbe estimée du niveau de médicament",
-      "disabledStatus": "Désactivé. La courbe est masquée.",
-      "enabledStaleStatus": "Le disclaimer a été mis à jour. Reconfirmez ci-dessous pour réafficher la courbe.",
-      "acknowledgedOn": "Confirmé le {date}.",
-      "rePromptTitle": "Disclaimer mis à jour",
-      "rePromptBody": "Le disclaimer du mode Recherche a été mis à jour depuis votre dernière confirmation. Relisez-le et reconfirmez pour garder la courbe visible.",
-      "rePromptCta": "Reconfirmer le disclaimer",
-      "disableError": "Impossible de désactiver le mode Recherche. Veuillez réessayer.",
-      "subtitleDetail": "Lecture seule — jamais une mesure ni un conseil médical."
-    },
     "shell": {
       "sectionsNav": "Sections des réglages",
       "groups": {
@@ -4914,8 +4878,8 @@
       },
       "advanced": {
         "title": "Avancé",
-        "description": "Bouton opt-in du mode Recherche et zone dangereuse pour effacer irrévocablement toutes les données de santé.",
-        "subtitle": "Mode recherche, réinitialisation des données et suppression du compte."
+        "description": "La sortie : effacer définitivement toutes les données de santé ou fermer le compte.",
+        "subtitle": "Réinitialisation des données et suppression du compte."
       },
       "export": {
         "title": "Export et import",
@@ -6066,14 +6030,6 @@
       "createDetail": "Le jeton n'est affiché qu'une fois à la création — conservez-le alors ; il ne peut pas être récupéré."
     },
     "genderOther": "Autre",
-    "cycleTracking": {
-      "title": "Suivi du cycle",
-      "description": "Suivez votre cycle menstruel, les prédictions, les symptômes et les analyses de phases.",
-      "enable": "Activer le suivi du cycle",
-      "manage": "Ouvrir le suivi du cycle",
-      "error": "Impossible de mettre à jour le suivi du cycle.",
-      "detail": "Activé par défaut pour les comptes définis comme féminins ; disponible pour tous."
-    },
     "nightscout": "Nightscout",
     "nightscoutTag": "CGM",
     "nightscoutDescription": "Connecte ton propre site Nightscout pour synchroniser les mesures de glucose en continu dans le panneau glucose.",
@@ -6314,9 +6270,8 @@
       },
       "posture": {
         "title": "Posture de confidentialité",
-        "description": "Contrôlez la quantité de données partagées avec les fonctions d'IA et la recherche optionnelle.",
-        "openAi": "Mode confidentialité IA",
-        "openResearch": "Mode recherche"
+        "description": "Contrôlez la quantité de données partagées avec les fonctions d'IA.",
+        "openAi": "Mode confidentialité IA"
       }
     },
     "mcp": {
@@ -8535,23 +8490,23 @@
     },
     "mcp": {
       "label": "Accès assistant externe (MCP)",
-      "description": "Autorise un assistant compatible MCP à lire vos données de santé via un jeton à portée limitée. Désactivé par défaut."
+      "description": "Accès en lecture pour un assistant compatible MCP, via un jeton limité."
     },
     "environment": {
       "label": "Environnement",
-      "description": "Intégrez la météo et la durée du jour quotidiennes de votre lieu pour les corréler à l'humeur, au sommeil et aux constantes. Désactivé par défaut."
+      "description": "Météo et durée du jour quotidiennes de votre lieu, à côté de l'humeur, du sommeil et des constantes."
     },
     "inboundDocuments": {
       "label": "Documents",
-      "description": "Conservez chaque courrier médical, compte rendu et scan dans un espace chiffré et consultable — lié à vos affections. Désactivé par défaut."
+      "description": "Courriers médicaux, comptes rendus et scans dans un espace chiffré et consultable."
     },
     "mentalHealth": {
       "label": "Bien-être mental",
-      "description": "Questionnaires PHQ-9 et GAD-7 facultatifs, en complément du suivi de l'humeur. Désactivé par défaut ; les réponses sont chiffrées et tenues à l'écart du Coach IA."
+      "description": "Quatre questionnaires facultatifs, à côté du suivi de l'humeur."
     },
     "nutrients": {
       "label": "Apports en nutriments",
-      "description": "Enregistre les totaux quotidiens de micronutriments (vitamines, minéraux, eau, caféine) synchronisés depuis Apple Health. Désactivé par défaut."
+      "description": "Totaux quotidiens de micronutriments synchronisés depuis Apple Health."
     }
   },
   "illness": {
@@ -9048,7 +9003,8 @@
     },
     "openDetail": "Voir les détails",
     "historyLoadError": "Ton historique d'évaluations n'a pas pu être chargé",
-    "historyLoadErrorHint": "Cela ne veut pas dire que tu n'as aucun résultat : la liste n'a pas pu être récupérée. Réessaie."
+    "historyLoadErrorHint": "Cela ne veut pas dire que tu n'as aucun résultat : la liste n'a pas pu être récupérée. Réessaie.",
+    "privacyNote": "Vos réponses sont stockées chiffrées et n'atteignent jamais le Coach IA."
   },
   "records": {
     "aiInclusion": {
@@ -9759,9 +9715,7 @@
     },
     "switcher": {
       "label": "Ouvrir un dossier",
-      "ownRecord": "Mon propre dossier",
-      "readOnly": "Lecture seule",
-      "canWrite": "Peut ajouter des entrées"
+      "ownRecord": "Mon propre dossier"
     },
     "switch": {
       "failed": "Impossible d'ouvrir ce dossier. Veuillez réessayer.",

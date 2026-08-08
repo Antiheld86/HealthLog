@@ -9,6 +9,9 @@ import { SlidersHorizontal, TrendingUp } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { queryKeys } from "@/lib/query-keys";
 import { apiGet } from "@/lib/api/api-fetch";
+// Pure constant — importing it here does NOT pull the dynamically-loaded ECG
+// component into this bundle, which is exactly why it lives in the lib module.
+import { ECG_OVERVIEW_LIMIT } from "@/lib/insights/ecg-classification";
 import { useFeatureFlags } from "@/hooks/use-feature-flags";
 import { useInsightsLayoutQuery } from "@/hooks/use-insights-layout";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
@@ -527,7 +530,7 @@ export default function InsightsPageClient() {
     "health-status": <HealthStatusCard enabled={isAuthenticated} />,
     breathing: <BreathingScreeningCard enabled={isAuthenticated} />,
     "labs-changes": <LabsChangesCard enabled={isAuthenticated} />,
-    ecg: <EcgSection enabled={isAuthenticated} />,
+    ecg: <EcgSection enabled={isAuthenticated} limit={ECG_OVERVIEW_LIMIT} />,
   };
 
   const orderedSectionIds = orderedVisibleSectionIds(layout);

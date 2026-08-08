@@ -28,10 +28,22 @@ import { cn } from "@/lib/utils";
  *
  * `as="section"` keeps a card's semantic landmark element (a `<section>` with
  * an `aria-labelledby`) while painting the same shape, rhythm, and padding.
+ *
+ * `flush` is for the other body shape: an edge-to-edge `divide-y` ledger whose
+ * rows carry their own inset. Such a card drops BOTH the padding and the gap.
+ * Dropping only the padding is the trap — the gap survives as dead,
+ * unclickable space between the rows that the first row does not have, so the
+ * list reads a step off itself. `<InsightSectionCard flush>` names the same
+ * shape on the Insights side.
  */
 const SETTINGS_CARD_SHELL = "flex flex-col gap-4 p-4 md:p-6";
+// Both breakpoints are named explicitly: the `<Card>` primitive carries
+// `md:gap-6` / `md:py-6`, and a bare `gap-0` / `p-0` loses to a `md:` variant
+// from `md` up — which is exactly the width the dead space showed at.
+const SETTINGS_CARD_FLUSH_SHELL =
+  "flex flex-col gap-0 overflow-hidden p-0 md:gap-0 md:p-0";
 
-type SettingsCardOwnProps = { className?: string };
+type SettingsCardOwnProps = { className?: string; flush?: boolean };
 
 type SettingsCardProps<E extends React.ElementType> = SettingsCardOwnProps & {
   as?: E;
@@ -40,6 +52,7 @@ type SettingsCardProps<E extends React.ElementType> = SettingsCardOwnProps & {
 export function SettingsCard<E extends React.ElementType = typeof Card>({
   as,
   className,
+  flush = false,
   ...props
 }: SettingsCardProps<E>) {
   if (as) {
@@ -50,7 +63,10 @@ export function SettingsCard<E extends React.ElementType = typeof Card>({
         // Mirror the ui Card shell so a semantic landmark card paints
         // identically to the default <Card>-backed one.
         className={cn(
-          "bg-card text-card-foreground flex flex-col gap-4 rounded-xl border p-4 shadow-sm md:gap-6 md:p-6",
+          "bg-card text-card-foreground rounded-xl border shadow-sm",
+          flush
+            ? SETTINGS_CARD_FLUSH_SHELL
+            : "flex flex-col gap-4 p-4 md:gap-6 md:p-6",
           className,
         )}
         {...props}
@@ -61,7 +77,10 @@ export function SettingsCard<E extends React.ElementType = typeof Card>({
     <Card
       // Reset the primitive's flex/gap layout and apply the shared
       // `p-4 md:p-6` padding; Settings bodies own their internal spacing.
-      className={cn(SETTINGS_CARD_SHELL, className)}
+      className={cn(
+        flush ? SETTINGS_CARD_FLUSH_SHELL : SETTINGS_CARD_SHELL,
+        className,
+      )}
       {...(props as React.ComponentProps<typeof Card>)}
     />
   );

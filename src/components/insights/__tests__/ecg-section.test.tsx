@@ -4,20 +4,19 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { I18nProvider } from "@/lib/i18n/context";
 
 /**
- * v1.28.50 — `<EcgSection>` / `<EcgDetail>` unit tests.
+ * `<EcgSection>` — the list of recorded strips.
  *
  * The load-bearing behaviour under test:
- *   - data-availability gating: the section un-mounts entirely when the
- *     user has no recordings or while the payload is in flight;
- *   - the NON-DIAGNOSTIC framing (mirrors `RhythmEventsCard`): the device's
- *     result is shown attributed to the device, a permanent disclaimer
- *     states HealthLog does not interpret / diagnose, and any non-normal
- *     device result adds the "discuss with a clinician" note — while a
- *     normal result does NOT.
+ *   - data-availability gating: the section un-mounts entirely when the user
+ *     has no recordings or while the payload is in flight;
+ *   - the reading cap: a device that records every morning accumulates
+ *     hundreds of strips, and the list paints the most recent handful;
+ *   - the device's verdict rides the timestamp as a tag, and a row that has
+ *     a waveform opens the recording's own address.
  *
  * `useAuth` + TanStack Query are mocked and the assertions run through SSR
  * (the suite's node environment has no DOM), exactly like the sibling
- * `rhythm-events-card` test.
+ * `rhythm-events-card` test. `<EcgDetail>` has its own spec.
  */
 
 vi.mock("@/hooks/use-auth", () => ({
@@ -29,20 +28,8 @@ vi.mock("@tanstack/react-query", () => ({
   useQuery: (opts: unknown) => useQueryMock(opts),
 }));
 
-const { EcgSection, EcgDetail } = await import("../ecg-section");
-
-interface EcgRecordingListItem {
-  id: string;
-  recordedAt: string;
-  durationSeconds: number | null;
-  samplingFrequency: number;
-  sampleCount: number;
-  averageHeartRate: number | null;
-  lead: string | null;
-  classification: "IRREGULAR" | "NOT_DETECTED" | "INCONCLUSIVE" | null;
-  source: string;
-  hasWaveform: boolean;
-}
+const { EcgSection, ECG_OVERVIEW_LIMIT } = await import("../ecg-section");
+type EcgRecordingListItem = import("../ecg-section").EcgRecordingListItem;
 
 const IRREGULAR_REC: EcgRecordingListItem = {
   id: "ecg_1",
@@ -63,44 +50,21 @@ const NORMAL_REC: EcgRecordingListItem = {
   classification: "NOT_DETECTED",
 };
 
-const DETAIL = {
-  recordedAt: "2026-06-01T09:15:00.000Z",
-  durationSeconds: 30,
-  samplingFrequency: 300,
-  averageHeartRate: 72,
-  lead: null,
-  classification: "IRREGULAR" as const,
-  source: "WITHINGS",
-  samples: [0, 10, -5, 40, -20, 5, 0],
-  decimated: true,
-};
-
 function renderSection(
   data:
     { recordings: EcgRecordingListItem[]; hasRecordings: boolean } | undefined,
+  props: { limit?: number } = {},
 ) {
   useQueryMock.mockReturnValue({ data, isLoading: false });
   return renderToStaticMarkup(
     <I18nProvider initialLocale="en">
-      <EcgSection />
+      <EcgSection {...props} />
     </I18nProvider>,
   );
 }
 
-function renderDetail(
-  recording: EcgRecordingListItem,
-  resultLabel: string | null,
-) {
-  useQueryMock.mockReturnValue({ data: DETAIL, isLoading: false });
-  return renderToStaticMarkup(
-    <I18nProvider initialLocale="en">
-      <EcgDetail
-        recording={recording}
-        resultLabel={resultLabel}
-        onBack={() => {}}
-      />
-    </I18nProvider>,
-  );
+function countRows(html: string): number {
+  return (html.match(/data-slot="ecg-row"/g) ?? []).length;
 }
 
 describe("<EcgSection>", () => {
@@ -119,65 +83,95 @@ describe("<EcgSection>", () => {
     expect(html).toBe("");
   });
 
-  it("renders the recording list with a device-result label per row", () => {
+  it("renders one row per recording with the device result as a tag", () => {
     const html = renderSection({
       recordings: [IRREGULAR_REC, NORMAL_REC],
       hasRecordings: true,
     });
     expect(html).toContain('data-slot="ecg-card"');
     expect(html).toContain('data-slot="ecg-list"');
-    const rows = (html.match(/data-slot="ecg-row"/g) ?? []).length;
-    expect(rows).toBe(2);
+    expect(countRows(html)).toBe(2);
     expect(html).toContain("Atrial fibrillation detected");
     expect(html).toContain("No signs of atrial fibrillation");
+    // The verdict sits beside the timestamp inside the row's own header
+    // line, not on a line of its own beneath it.
+    expect(html).toMatch(
+      /<span[^>]*data-slot="ecg-row-result"[^>]*class="[^"]*rounded-full/,
+    );
   });
 
-  it("shows the permanent non-diagnostic disclaimer on the list", () => {
+  const eightRecordings = () =>
+    Array.from({ length: 8 }, (_, index) => ({
+      ...NORMAL_REC,
+      id: `ecg_${index}`,
+      recordedAt: new Date(Date.UTC(2026, 5, 20 - index, 9, 15)).toISOString(),
+    }));
+
+  it("caps the OVERVIEW teaser at the most recent handful", () => {
+    // The teaser passes `limit`. Eight strips in, five out — and the five are
+    // the ones the route handed back first, which it orders `recordedAt desc`.
+    const recordings = eightRecordings();
+    const html = renderSection(
+      { recordings, hasRecordings: true },
+      { limit: ECG_OVERVIEW_LIMIT },
+    );
+
+    expect(ECG_OVERVIEW_LIMIT).toBe(5);
+    expect(countRows(html)).toBe(ECG_OVERVIEW_LIMIT);
+    for (const kept of recordings.slice(0, ECG_OVERVIEW_LIMIT)) {
+      expect(html, `${kept.id} should be listed`).toContain(
+        `/insights/ecg/${kept.id}`,
+      );
+    }
+    for (const dropped of recordings.slice(ECG_OVERVIEW_LIMIT)) {
+      expect(html, `${dropped.id} is past the teaser cap`).not.toContain(
+        `/insights/ecg/${dropped.id}`,
+      );
+    }
+  });
+
+  it("renders every recording when NO limit is given (the full page)", () => {
+    // The dedicated `/insights/ecg` page passes no `limit`, so an account with
+    // many strips reaches all of them — the cap is a teaser affordance, never
+    // a wall on the full surface. Eight seeded, eight rendered, every one
+    // reachable by its own address.
+    const recordings = eightRecordings();
+    const html = renderSection({ recordings, hasRecordings: true });
+
+    expect(countRows(html)).toBe(8);
+    for (const rec of recordings) {
+      expect(html, `${rec.id} must be reachable on the full page`).toContain(
+        `/insights/ecg/${rec.id}`,
+      );
+    }
+  });
+
+  it("opens the recording's own address when it has a waveform", () => {
     const html = renderSection({
       recordings: [IRREGULAR_REC],
       hasRecordings: true,
     });
-    expect(html).toContain('data-slot="ecg-disclaimer"');
-    expect(html).toContain(
-      "HealthLog does not read or interpret ECG recordings",
-    );
-    expect(html).toContain("does not provide a diagnosis");
-  });
-});
-
-describe("<EcgDetail> — non-diagnostic framing", () => {
-  it("attributes the result to the recording device and draws the waveform", () => {
-    const html = renderDetail(IRREGULAR_REC, "Atrial fibrillation detected");
-    expect(html).toContain('data-slot="ecg-detail"');
-    expect(html).toContain('data-slot="ecg-result"');
-    // Load-bearing: the verdict is the device's, attributed to the device.
-    expect(html).toContain("as reported by the recording device");
-    expect(html).toContain("Atrial fibrillation detected");
-    // The waveform strip is rendered.
-    expect(html).toContain('data-slot="ecg-trace"');
-    // And the permanent disclaimer is present here too.
-    expect(html).toContain('data-slot="ecg-disclaimer"');
+    expect(html).toContain('href="/insights/ecg/ecg_1"');
   });
 
-  it("adds the 'discuss with a clinician' note on a non-normal result", () => {
-    const html = renderDetail(IRREGULAR_REC, "Atrial fibrillation detected");
-    expect(html).toContain('data-slot="ecg-clinician-note"');
-    expect(html).toContain("discuss this recording with a clinician");
+  it("leaves a waveform-less recording unlinked", () => {
+    const html = renderSection({
+      recordings: [{ ...IRREGULAR_REC, hasWaveform: false }],
+      hasRecordings: true,
+    });
+    expect(countRows(html)).toBe(1);
+    expect(html).not.toContain('href="/insights/ecg/ecg_1"');
   });
 
-  it("adds the clinician note for an INCONCLUSIVE result", () => {
-    const html = renderDetail(
-      { ...IRREGULAR_REC, classification: "INCONCLUSIVE" },
-      "Inconclusive recording",
-    );
-    expect(html).toContain('data-slot="ecg-clinician-note"');
-  });
-
-  it("does NOT add the clinician note for a normal (not-detected) result", () => {
-    const html = renderDetail(NORMAL_REC, "No signs of atrial fibrillation");
-    expect(html).not.toContain('data-slot="ecg-clinician-note"');
-    // But the disclaimer + device attribution are still present.
-    expect(html).toContain('data-slot="ecg-disclaimer"');
-    expect(html).toContain("as reported by the recording device");
+  it("carries no intro paragraph and no disclaimer block", () => {
+    // Both were removed: the page heading already says what the surface is,
+    // and the device attribution on the detail page is where the "this is
+    // the device's result" statement belongs.
+    const html = renderSection({
+      recordings: [IRREGULAR_REC],
+      hasRecordings: true,
+    });
+    expect(html).not.toContain('data-slot="ecg-disclaimer"');
+    expect(html).not.toContain("Single-lead ECG strips");
   });
 });

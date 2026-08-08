@@ -1612,26 +1612,6 @@
       }
     },
     "researchMode": {
-      "dialog": {
-        "title": "Forschungsmodus aktivieren",
-        "intro": "Der Forschungsmodus ergänzt deine GLP-1-Medikamentenseite um eine geschätzte Wirkstoff-Verlaufskurve. Lies die Abgrenzung unten, bevor du den Modus einschaltest — die Kurve ist eine Lernhilfe, niemals eine Messung und nie ein medizinischer Rat.",
-        "whatItIsHeader": "Was das ist",
-        "whatItIs": "Eine Sägezahnkurve, die die Überlagerung deiner protokollierten Dosen über die Zeit simuliert. Grundlage ist das Ein-Kompartment-Modell nach Bateman mit Absorptions- und Halbwertszeit-Parametern aus den EMA-EPARs der zugelassenen GLP-1-Rezeptoragonisten. Die Y-Achse ist einheitenlos und ohne Beschriftung. Die Form, nicht der Zahlenwert, ist die Aussage der Kurve.",
-        "whatItIsntHeader": "Was das nicht ist",
-        "whatItIsnt": "Kein Blutspiegel. Keine Messung. Keine Vorhersage, wie dein Körper tatsächlich reagiert. Keine Grundlage für Dosierungs-, Zeitpunkt- oder Eskalationsentscheidungen. Für alles, was deine Therapie betrifft, sprich mit deiner verschreibenden Ärztin oder deinem Arzt.",
-        "whyEstimateHeader": "Warum es eine Schätzung ist",
-        "whyEstimate": "Populations-Pharmakokinetik beschreibt den typischen Patienten. Die individuelle Streuung ist groß — das Tirzepatid-Modell Schneck/Urva 2024 weist rund 22 % interindividuelle Variabilität bei der Absorption und rund 49 % beim Verteilungsvolumen aus. Eine Lehrbuchkurve kann weder dein Gewicht, deine Nierenfunktion, deine Injektionstechnik noch deine Zeitgenauigkeit abbilden. Lies die Kurve als Rhythmus deiner Dosierung, nicht als deinen Spiegel.",
-        "mdrBoundaryHeader": "Regulatorische Abgrenzung",
-        "mdrBoundary": "HealthLog stellt öffentliche regulatorische Daten und deine eigenen Einträge dar. Die App stellt keine Prognose, Diagnose, Behandlung oder Therapieempfehlung. Die EU-Verordnung 2017/745 (Medical Device Regulation, MDR) und das Leitfadenpapier MDCG 2021-24 ziehen die Grenze bei Software, die Daten für medizinische Zwecke interpretiert — diese Kurve bleibt klar auf der edukativen Seite dieser Linie. Wenn du das Gefühl hast, die Kurve dränge dich zu einer klinischen Entscheidung, schließe sie.",
-        "citationsHeader": "Quellen",
-        "citations": "EMA European Public Assessment Reports für Mounjaro, Ozempic, Wegovy, Saxenda, Trulicity, Byetta und Bydureon (Abschnitt 5.2). Schneck K, Urva S. Population pharmacokinetics of the GIP/GLP receptor agonist tirzepatide. CPT Pharmacometrics Syst Pharmacol 2024;13(3):494-503 (DOI 10.1002/psp4.13099).",
-        "versionLine": "Disclaimer-Version: {version}",
-        "acknowledgeCta": "Verstanden — aktivieren",
-        "cancelCta": "Abbrechen",
-        "successToast": "Forschungsmodus aktiviert. Die Wirkstoff-Verlaufskurve ist jetzt auf deiner GLP-1-Medikamentenseite sichtbar.",
-        "errorToast": "Forschungsmodus konnte nicht aktiviert werden. Bitte erneut versuchen.",
-        "staleVersionToast": "Der Disclaimer wurde aktualisiert, seit diese Seite geladen wurde. Lade die Seite neu, um die aktuelle Fassung zu lesen."
-      },
       "chart": {
         "title": "Geschätzter Wirkstoffverlauf",
         "axisLabel": "Geschätzter Spiegel (relativ)",
@@ -3118,8 +3098,7 @@
       "valuesBack": "Zurück zu Insights",
       "valuesBackToMetric": "Zurück zu {metric}",
       "scoresBack": "Zurück zu Insights",
-      "ecgDescription": "Einkanal-EKG-Aufzeichnungen deines Geräts, jeweils mit dem Ergebnis des Geräts.",
-      "ecgDisclaimer": "HealthLog zeigt die Kurve und die Aufzeichnung – die Kurve wird nicht interpretiert."
+      "ecgDescription": "Einkanal-EKG-Aufzeichnungen deines Geräts, jeweils mit dem Ergebnis des Geräts."
     },
     "units": {
       "steps": "Schritte",
@@ -4282,10 +4261,8 @@
     },
     "ecg": {
       "sectionTitle": "EKG-Aufzeichnungen",
-      "sectionIntro": "Einkanal-EKG-Streifen, die dein Gerät aufgezeichnet hat. HealthLog zeigt nur die Aufzeichnung und das von deinem Gerät erstellte Ergebnis – die Kurve wird nicht gelesen oder ausgewertet.",
       "loadError": "Deine EKG-Aufzeichnungen konnten nicht geladen werden.",
       "backToList": "Zurück zu den Aufzeichnungen",
-      "disclaimer": "Dies ist das Ergebnis, das dein Aufzeichnungsgerät erstellt hat. HealthLog liest oder interpretiert EKG-Aufzeichnungen nicht und stellt keine Diagnose.",
       "clinicianNote": "Wenn dich dieses Ergebnis beunruhigt, besprich diese Aufzeichnung mit einer Ärztin oder einem Arzt.",
       "resultAttribution": "Aufgezeichnetes Ergebnis: {result}, wie vom Aufzeichnungsgerät gemeldet.",
       "result": {
@@ -4618,19 +4595,6 @@
     "remainingMany": "Noch {count} Messungen bis zum Trend."
   },
   "settings": {
-    "researchMode": {
-      "sectionTitle": "Forschungsmodus",
-      "subtitle": "Optionale Kurve des geschätzten GLP-1-Wirkstoffspiegels nach EMA-Daten.",
-      "toggleLabel": "Geschätzte Wirkstoffkurve anzeigen",
-      "disabledStatus": "Deaktiviert. Die Wirkstoffkurve ist ausgeblendet.",
-      "enabledStaleStatus": "Der Disclaimer wurde aktualisiert. Bestätige unten erneut, um die Kurve wieder anzuzeigen.",
-      "acknowledgedOn": "Bestätigt am {date}.",
-      "rePromptTitle": "Disclaimer aktualisiert",
-      "rePromptBody": "Der Disclaimer des Forschungsmodus wurde seit deiner letzten Bestätigung aktualisiert. Lies ihn erneut und bestätige, damit die Kurve sichtbar bleibt.",
-      "rePromptCta": "Disclaimer erneut bestätigen",
-      "disableError": "Forschungsmodus konnte nicht deaktiviert werden. Bitte erneut versuchen.",
-      "subtitleDetail": "Nur zur Anschauung — niemals eine Messung oder ein medizinischer Rat."
-    },
     "shell": {
       "sectionsNav": "Einstellungs-Bereiche",
       "groups": {
@@ -4914,8 +4878,8 @@
       },
       "advanced": {
         "title": "Erweitert",
-        "description": "Opt-in-Schalter für den Forschungsmodus sowie der Notausgang zum unwiderruflichen Löschen aller Gesundheitsdaten.",
-        "subtitle": "Research-Modus, Daten zurücksetzen und Konto löschen."
+        "description": "Der Notausgang: alle Gesundheitsdaten unwiderruflich löschen oder das Konto auflösen.",
+        "subtitle": "Daten zurücksetzen und Konto löschen."
       },
       "export": {
         "title": "Export & Import",
@@ -6066,14 +6030,6 @@
       "createDetail": "Der Token wird nur einmal bei der Erstellung angezeigt — sichere ihn dann; er lässt sich nicht wiederherstellen."
     },
     "genderOther": "Divers",
-    "cycleTracking": {
-      "title": "Zyklus-Tracking",
-      "description": "Verfolge deinen Menstruationszyklus, Vorhersagen, Symptome und Phasen-Insights.",
-      "enable": "Zyklus-Tracking aktivieren",
-      "manage": "Zyklus-Tracking öffnen",
-      "error": "Zyklus-Tracking konnte nicht aktualisiert werden.",
-      "detail": "Standardmäßig an für als weiblich eingestellte Konten; für alle verfügbar."
-    },
     "nightscout": "Nightscout",
     "nightscoutTag": "CGM",
     "nightscoutDescription": "Verbinde deine eigene Nightscout-Seite, um kontinuierliche Glukosewerte ins Glukose-Panel zu synchronisieren.",
@@ -6314,9 +6270,8 @@
       },
       "posture": {
         "title": "Datenschutz-Einstellung",
-        "description": "Steuere, wie viele deiner Daten an KI-Funktionen und die freiwillige Forschung weitergegeben werden.",
-        "openAi": "KI-Datenschutzmodus",
-        "openResearch": "Forschungsmodus"
+        "description": "Steuere, wie viele deiner Daten an KI-Funktionen weitergegeben werden.",
+        "openAi": "KI-Datenschutzmodus"
       }
     },
     "mcp": {
@@ -8535,23 +8490,23 @@
     },
     "mcp": {
       "label": "Externer Assistentenzugriff (MCP)",
-      "description": "Einem MCP-fähigen Assistenten Lesezugriff auf deine Gesundheitsdaten über ein begrenztes Token erlauben. Standardmäßig aus."
+      "description": "Lesezugriff für einen MCP-fähigen Assistenten, über ein begrenztes Token."
     },
     "environment": {
       "label": "Umwelt",
-      "description": "Tägliches Wetter und Tageslicht für deinen Ort einbeziehen, um Zusammenhänge mit Stimmung, Schlaf und Vitalwerten zu erkennen. Standardmäßig aus."
+      "description": "Tägliches Wetter und Tageslicht für deinen Ort, neben Stimmung, Schlaf und Vitalwerten."
     },
     "inboundDocuments": {
       "label": "Dokumente",
-      "description": "Bewahre jedes medizinische Schreiben, jeden Befund und Scan an einem verschlüsselten, durchsuchbaren Ort auf — verknüpft mit deinen Erkrankungen. Standardmäßig aus."
+      "description": "Arztbriefe, Befunde und Scans verschlüsselt und durchsuchbar an einem Ort."
     },
     "mentalHealth": {
       "label": "Seelisches Wohlbefinden",
-      "description": "Freiwillige PHQ-9- und GAD-7-Selbsttests ergänzend zum Stimmungstagebuch. Standardmäßig aus; Antworten sind verschlüsselt und bleiben aus dem KI-Coach heraus."
+      "description": "Vier freiwillige Selbsttests neben dem Stimmungstagebuch."
     },
     "nutrients": {
       "label": "Nährstoffzufuhr",
-      "description": "Speichert tägliche Mikronährstoff-Summen (Vitamine, Mineralstoffe, Wasser, Koffein) aus Apple Health. Standardmäßig aus."
+      "description": "Tägliche Mikronährstoff-Summen aus Apple Health."
     }
   },
   "illness": {
@@ -9048,7 +9003,8 @@
     },
     "openDetail": "Details anzeigen",
     "historyLoadError": "Dein Testverlauf konnte nicht geladen werden",
-    "historyLoadErrorHint": "Das heißt nicht, dass keine Ergebnisse vorliegen — die Liste konnte nicht abgerufen werden. Versuche es erneut."
+    "historyLoadErrorHint": "Das heißt nicht, dass keine Ergebnisse vorliegen — die Liste konnte nicht abgerufen werden. Versuche es erneut.",
+    "privacyNote": "Deine Antworten sind verschlüsselt gespeichert und erreichen den KI-Coach nicht."
   },
   "records": {
     "aiInclusion": {
@@ -9759,9 +9715,7 @@
     },
     "switcher": {
       "label": "Akte öffnen",
-      "ownRecord": "Meine eigene Akte",
-      "readOnly": "Nur lesen",
-      "canWrite": "Darf Einträge anlegen"
+      "ownRecord": "Meine eigene Akte"
     },
     "switch": {
       "failed": "Die Akte konnte nicht geöffnet werden. Bitte noch einmal versuchen.",

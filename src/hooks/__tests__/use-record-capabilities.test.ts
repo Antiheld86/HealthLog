@@ -27,6 +27,7 @@ const READ_ONLY: AccountAccessEntry = {
   accountId: "acct-owner",
   username: "owner",
   displayName: "Margarethe",
+  fullName: null,
   access: "read",
   level: "read",
   sections: null,

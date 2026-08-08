@@ -66,6 +66,12 @@ export const E2E_OWNER = {
 } as const;
 
 /**
+ * v1.37.2 — the owner carries a full name, so the switcher journey can assert
+ * that a delegate sees it. Generic on purpose: fixtures hold no real name.
+ */
+export const E2E_OWNER_FULL_NAME = "Test Full Name";
+
+/**
  * v1.37.0 — the account that creates and administers managed profiles.
  *
  * Its own account, and not one of the others, for one reason: every route in
@@ -592,20 +598,22 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
       `INSERT INTO users
         (id, username, email, password_hash, role,
          created_at, updated_at,
-         onboarding_completed_at, onboarding_tour_completed)
-       VALUES ($1, $2, $3, $4, 'USER', $5, $5, $5, true)
+         onboarding_completed_at, onboarding_tour_completed, full_name)
+       VALUES ($1, $2, $3, $4, 'USER', $5, $5, $5, true, $6)
        ON CONFLICT (username) DO UPDATE SET
          email = EXCLUDED.email,
          password_hash = EXCLUDED.password_hash,
          updated_at = EXCLUDED.updated_at,
          onboarding_completed_at = EXCLUDED.onboarding_completed_at,
-         onboarding_tour_completed = EXCLUDED.onboarding_tour_completed`,
+         onboarding_tour_completed = EXCLUDED.onboarding_tour_completed,
+         full_name = EXCLUDED.full_name`,
       [
         cuid(),
         E2E_OWNER.username,
         E2E_OWNER.email,
         await hashPassword(E2E_OWNER.password),
         now,
+        E2E_OWNER_FULL_NAME,
       ],
     );
 

@@ -22,13 +22,14 @@ import { EcgSection } from "@/components/insights/ecg-section";
  * all. This page gives ECG its own address, reached from the Heart-group
  * pill in the tab strip (gated on `hasRecordings`) and the metric catalog.
  *
- * The surface itself is the existing `<EcgSection>`, reused verbatim — its
- * non-diagnostic disclaimer + waveform logic are load-bearing and untouched.
- * We only suppress its internal `<SectionHeading>` (via `hideHeading`) because
+ * The surface itself is `<EcgSection>` — the list of strips. Its internal
+ * `<SectionHeading>` is suppressed (via `hideHeading`) because
  * `<SubPageShell>` already renders the page heading, mirroring how every other
  * routed sub-page lets the shell own the `<h1>`.
  *
- * The overview `<EcgSection>` teaser on `/insights` stays as-is.
+ * A row opens `/insights/ecg/[id]`, which is where the trace, the metadata and
+ * the device's own result live. The overview `<EcgSection>` teaser on
+ * `/insights` links to the same place.
  */
 export default function InsightsEcgPage() {
   const { isAuthenticated } = useAuth();
@@ -76,11 +77,6 @@ export default function InsightsEcgPage() {
       title={t("insights.ecg.sectionTitle")}
       description={t("insights.subPage.ecgDescription")}
     >
-      {/* What the app does and does not claim about a trace. Its own
-          paragraph, so the page explainer above stays one sentence. */}
-      <p className="text-muted-foreground text-sm">
-        {t("insights.subPage.ecgDisclaimer")}
-      </p>
       <EcgSection enabled={isAuthenticated} hideHeading />
     </SubPageShell>
   );
