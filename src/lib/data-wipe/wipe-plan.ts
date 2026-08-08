@@ -91,6 +91,15 @@ export const WIPE_MODELS = [
   "EncounterConditionLink",
   "Encounter",
 
+  // ── Vaccinations ────────────────────────────────────────────────────────
+  // Same ordering argument as the visit links: the document link cascades
+  // from the dose AND from the stored document, so it is deleted before
+  // either or its count reads zero on the audit row. The dose points at a
+  // practitioner and an encounter with SetNull, which is why it goes here,
+  // ahead of both.
+  "VaccinationDocumentLink",
+  "VaccinationRecord",
+
   // ── Clinical record ─────────────────────────────────────────────────────
   "MentalHealthAssessment",
   "LabResult",
