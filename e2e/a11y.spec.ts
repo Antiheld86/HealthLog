@@ -183,6 +183,7 @@ const inboundDocument = {
   factCount: 0,
   pendingCount: 0,
   conditionLinks: [],
+  encounterLinks: [],
   servingClass: "attachment",
   hasContentIndex: true,
   contentIndexSource: "vision",
