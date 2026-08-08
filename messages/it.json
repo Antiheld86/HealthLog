@@ -3785,6 +3785,25 @@
         "statement": "Nei giorni con «{label}» l'umore è stato in media {direction}: {withAvg} contro {withoutAvg}.",
         "counts": "{withDays} giorni con, {withoutDays} giorni senza",
         "caveat": "Questo mostra una relazione, non una causa."
+      },
+      "prognosis": {
+        "title": "La tua valutazione e ciò che suggeriscono le tue giornate passate",
+        "selfLabel": "La tua valutazione",
+        "expectedLabel": "Atteso in base alle tue abitudini",
+        "band": "Intervallo da {low} a {high}",
+        "statement": "In base alle tue abitudini finora, per {date} ci si sarebbe attesi un valore intorno a {value}. Ricavato da {n} giornate che contengono tutto ciò che serve al confronto.",
+        "provisional": "Ancora provvisorio: lo schema si appoggia su poche giornate.",
+        "notToday": "Questo descrive {date}, non oggi.",
+        "deviationWithin": "La tua valutazione rientra in questo intervallo.",
+        "deviationAbove": "La tua valutazione è {amount} punti sopra questo intervallo.",
+        "deviationBelow": "La tua valutazione è {amount} punti sotto questo intervallo.",
+        "weightedTitle": "Che cosa ha pesato di più nel confronto di questa giornata",
+        "weightedUp": "{label} — contava verso un valore atteso più alto",
+        "weightedDown": "{label} — contava verso un valore atteso più basso",
+        "caveat": "È un confronto con le tue giornate passate, non un'affermazione su come una giornata sia andata a finire così.",
+        "learning": "Fase di apprendimento: {entries} giornate su {threshold} registrate. Il confronto compare quando ce ne sono abbastanza.",
+        "noPattern": "Nelle {entries} giornate registrate finora non c'è nulla di abbastanza costante per confrontare una giornata. Registrare il contesto della giornata rende confrontabile una parte maggiore.",
+        "featureValue": "{field}: {value}"
       }
     },
     "derived": {
