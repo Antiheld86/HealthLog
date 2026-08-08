@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+
+- Workouts recorded before the phone learned to send heart-rate detail can
+  pick that detail up afterwards. When the app sends a session the server
+  already holds and the payload carries the reading-by-reading heart rate
+  this time, the curve is attached to the workout that is already there and
+  shows up on its detail page. The session itself is untouched: duration,
+  calories, the average and maximum heart rate, the times, all stay as they
+  were first recorded. A workout that already has its curve is left alone,
+  so the phone can walk back through years of history as often as it likes
+  without anything being written twice. If one session's readings arrive
+  unusable, that session alone is reported back and the rest of the batch
+  still lands.
+
 ### Fixed
 
 - Marking an older missed dose as taken from the intake history now records
