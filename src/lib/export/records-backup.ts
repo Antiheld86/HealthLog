@@ -54,6 +54,10 @@ export interface LabResultBackupEntry {
   unit: string;
   referenceLow: number | null;
   referenceHigh: number | null;
+  /** The window the reading's own source report printed, verbatim + derived. */
+  sourceReferenceLow: number | null;
+  sourceReferenceHigh: number | null;
+  sourceReferenceText: string | null;
   takenAt: string;
   source: string;
   /** Human-readable cross-reference into `biomarkers` below, not an id. */
@@ -336,6 +340,9 @@ export async function buildRecordsBackupSection(
     unit: r.unit,
     referenceLow: r.referenceLow,
     referenceHigh: r.referenceHigh,
+    sourceReferenceLow: r.sourceReferenceLow,
+    sourceReferenceHigh: r.sourceReferenceHigh,
+    sourceReferenceText: r.sourceReferenceText,
     takenAt: r.takenAt.toISOString(),
     source: r.source,
     biomarkerName: r.biomarker?.name ?? null,

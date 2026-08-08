@@ -33,6 +33,7 @@ import { withIdempotency } from "@/lib/idempotency";
 import { enqueueReminderSatisfy } from "@/lib/jobs/reminder-satisfy";
 import { emitDataArrival } from "@/lib/arrivals/emit-shared";
 import { resolveOrMintBiomarker } from "@/lib/labs/biomarker-store";
+import { parseReferenceRange } from "@/lib/labs/parse-reference-range";
 import { serialiseLabResult } from "@/lib/labs/serialise";
 import {
   linkOcrLabsToVaultDocument,
@@ -151,12 +152,19 @@ async function commitOcrRows(request: NextRequest) {
     }
 
     const isQualitative = row.valueText !== undefined;
+    // The window the scan read off the report. The confirmed numeric bounds
+    // win over a re-parse of the string (the human may have corrected them on
+    // the review screen); the string rides along either way.
+    const printed = parseReferenceRange(row.referenceText, row.unit);
+    const sourceLow = row.referenceLow ?? printed?.low ?? null;
+    const sourceHigh = row.referenceHigh ?? printed?.high ?? null;
+    const sourceText = printed?.text ?? null;
     const biomarker = await resolveOrMintBiomarker(user.id, {
       analyte: row.analyte,
       // A qualitative reading has no numeric unit / range.
       unit: isQualitative ? (row.unit ?? "") : (row.unit as string),
-      referenceLow: isQualitative ? null : (row.referenceLow ?? null),
-      referenceHigh: isQualitative ? null : (row.referenceHigh ?? null),
+      referenceLow: isQualitative ? null : sourceLow,
+      referenceHigh: isQualitative ? null : sourceHigh,
       panel: row.panel ?? null,
     });
 
@@ -173,6 +181,9 @@ async function commitOcrRows(request: NextRequest) {
         unit: biomarker.unit,
         referenceLow: biomarker.lowerBound,
         referenceHigh: biomarker.upperBound,
+        sourceReferenceLow: isQualitative ? null : sourceLow,
+        sourceReferenceHigh: isQualitative ? null : sourceHigh,
+        sourceReferenceText: isQualitative ? null : sourceText,
         takenAt: row.takenAt,
         source: "OCR",
         noteEncrypted: null,

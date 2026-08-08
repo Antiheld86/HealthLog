@@ -4,9 +4,11 @@
  * Groups the user's numeric lab results by panel DATE (the calendar day of
  * `takenAt`, UTC), finds the two most-recent dates, and for every analyte that
  * appears in BOTH the latest and the previous panel reports the signed delta,
- * the direction, and where the latest value sits against its reference band
- * (`classifyReferenceRange`). Qualitative (valueText-only) results carry no
- * numeric value, so they are skipped — a delta is meaningless for them.
+ * the direction, and where the latest value sits against the reference window
+ * in force for it — the range that reading's own report printed when it has
+ * one, the catalog band otherwise, resolved through the shared
+ * `resolveEffectiveReferenceRange`. Qualitative (valueText-only) results carry
+ * no numeric value, so they are skipped — a delta is meaningless for them.
  *
  * Pure + Prisma-free so the present / absent states are unit-testable: it is
  * absent when there are fewer than two panel dates, no analyte is shared, or
@@ -14,12 +16,14 @@
  * only — a delta is not a diagnosis.
  */
 import {
-  classifyReferenceRange,
+  classifyAgainstEffectiveRange,
+  resolveEffectiveReferenceRange,
   type ReferenceRangeStatus,
+  type SourceReferenceRange,
 } from "@/lib/labs/reference-range";
 
-/** A single numeric lab reading. */
-export interface LabChangeRow {
+/** A single numeric lab reading, with both windows it could be judged against. */
+export interface LabChangeRow extends SourceReferenceRange {
   analyte: string;
   unit: string;
   value: number;
@@ -150,10 +154,13 @@ export function summariseLabChanges(
       previous: previousRow.value,
       delta,
       direction,
-      status: classifyReferenceRange(
+      status: classifyAgainstEffectiveRange(
         latestRow.value,
-        latestRow.referenceLow,
-        latestRow.referenceHigh,
+        resolveEffectiveReferenceRange(
+          latestRow.referenceLow,
+          latestRow.referenceHigh,
+          latestRow,
+        ),
       ),
     });
   }

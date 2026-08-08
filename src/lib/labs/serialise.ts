@@ -10,13 +10,40 @@
  *  - If the row is unlinked (legacy / pre-backfill), it falls back to its own
  *    free-text `analyte` / `unit` / `reference*` columns.
  *
- * Either way the verdict (`rangeStatus`) is computed from the RESOLVED bounds
- * via `classifyReferenceRange`. The DTO carries the resolved values so the web
- * client AND the iOS client render the same numbers — neither recomputes the
- * range or guesses the unit. This is the server-authoritative-parity rule for
- * Labs.
+ * On top of that the reading's OWN printed window wins. A lab report states
+ * the range its method and device produce right beside the value, and that is
+ * the window a physician evaluates against; the catalog band is the net for
+ * readings that carry none. `resolveEffectiveReferenceRange` owns that
+ * precedence and this file is one of its callers, not a second copy of it.
+ *
+ * The DTO therefore carries three windows and says which one is in force:
+ *
+ *  - `referenceLow` / `referenceHigh` — the EFFECTIVE bounds, the ones
+ *    `rangeStatus` was computed from. A client that reads only these fields
+ *    (including an iOS build that predates the source window) renders the
+ *    right numbers and the right verdict with no change of its own.
+ *  - `catalogReferenceLow` / `catalogReferenceHigh` — the catalog band, so a
+ *    surface can paint both and show where they part.
+ *  - `sourceReferenceLow` / `sourceReferenceHigh` / `sourceReferenceText` —
+ *    what the report printed, the last verbatim.
+ *
+ * `referenceOrigin` names which window is in force and
+ * `referenceDivergesFromCatalog` flags the case a reader must be told about.
+ * Every value is resolved server-side; neither client recomputes a range,
+ * guesses a unit, or re-derives the verdict.
+ *
+ * The two serialisers below spell every field out rather than spreading a
+ * shared helper: `written-outcome-response-consumer-guard` walks these object
+ * literals to enumerate the response leaves and pair each with a client
+ * reader, and a spread of a function call hides them from it. A field added
+ * here must be visible there.
  */
-import { classifyReferenceRange } from "@/lib/labs/reference-range";
+import {
+  classifyAgainstEffectiveRange,
+  resolveEffectiveReferenceRange,
+  type EffectiveReferenceRange,
+  type ReferenceRangeOrigin,
+} from "@/lib/labs/reference-range";
 
 /** The minimal biomarker shape the resolver needs (no encrypted context). */
 export interface ResolvedBiomarker {
@@ -40,6 +67,10 @@ export interface LabRow {
   unit: string;
   referenceLow: number | null;
   referenceHigh: number | null;
+  /** The window the source report printed for THIS reading. */
+  sourceReferenceLow: number | null;
+  sourceReferenceHigh: number | null;
+  sourceReferenceText: string | null;
   takenAt: Date;
   source: string;
   biomarkerId: string | null;
@@ -48,60 +79,95 @@ export interface LabRow {
   updatedAt: Date;
 }
 
-/**
- * Resolve the canonical name / unit / bounds / panel for a lab row, preferring
- * the linked biomarker over the legacy per-row fields. Returns a plain shape
- * the list + detail serialisers both build on.
- */
-export function resolveLabFields(
-  row: Pick<
-    LabRow,
-    | "analyte"
-    | "unit"
-    | "referenceLow"
-    | "referenceHigh"
-    | "panel"
-    | "biomarkerId"
-  >,
-  biomarker: ResolvedBiomarker | null | undefined,
-): {
+/** The columns `resolveLabFields` needs off a lab row. */
+export type LabFieldRow = Pick<
+  LabRow,
+  | "analyte"
+  | "unit"
+  | "referenceLow"
+  | "referenceHigh"
+  | "sourceReferenceLow"
+  | "sourceReferenceHigh"
+  | "sourceReferenceText"
+  | "panel"
+  | "biomarkerId"
+>;
+
+/** What every lab surface reads off a row: identity, unit, and one window. */
+export interface ResolvedLabFields {
   analyte: string;
   unit: string;
+  panel: string | null;
+  /** The bounds in force for this reading — source window first, catalog next. */
   referenceLow: number | null;
   referenceHigh: number | null;
-  panel: string | null;
-} {
-  if (biomarker) {
-    return {
-      analyte: biomarker.name,
-      unit: biomarker.unit,
-      referenceLow: biomarker.lowerBound,
-      referenceHigh: biomarker.upperBound,
-      panel: biomarker.panel,
-    };
-  }
-  return {
-    analyte: row.analyte,
-    unit: row.unit,
-    referenceLow: row.referenceLow,
-    referenceHigh: row.referenceHigh,
-    panel: row.panel,
-  };
+  /** The catalog band, so a surface can show both windows. */
+  catalogReferenceLow: number | null;
+  catalogReferenceHigh: number | null;
+  /** What the source report printed for this reading. */
+  sourceReferenceLow: number | null;
+  sourceReferenceHigh: number | null;
+  sourceReferenceText: string | null;
+  referenceOrigin: ReferenceRangeOrigin;
+  referenceDivergesFromCatalog: boolean;
+  /** The resolved window as one value, for callers that pass it on. */
+  effectiveRange: EffectiveReferenceRange;
 }
 
 /**
- * v1.18.9 — the reference-range verdict for a row. A qualitative row (no
- * numeric `value`) has nothing to compare against the bounds, so it always
- * reports `"unknown"` — the neutral, no-verdict state — never a fabricated
- * in/out classification. A numeric row classifies against the resolved bounds.
+ * Resolve the canonical name / unit / window / panel for a lab row.
+ *
+ * Two resolutions happen here, in this order:
+ *
+ *  1. Identity + catalog band: the linked biomarker wins over the row's legacy
+ *     free-text columns (an unlinked pre-backfill row falls back to its own).
+ *  2. The window in force: the reading's printed source range wins over the
+ *     catalog band, through `resolveEffectiveReferenceRange`.
+ *
+ * Every lab surface calls this, so the window a reading is judged against is
+ * the same on the API, the doctor report, insights, the coach, MCP and FHIR.
  */
-function rowRangeStatus(
-  value: number | null,
-  referenceLow: number | null,
-  referenceHigh: number | null,
-) {
-  if (value === null) return "unknown" as const;
-  return classifyReferenceRange(value, referenceLow, referenceHigh);
+export function resolveLabFields(
+  row: LabFieldRow,
+  biomarker: ResolvedBiomarker | null | undefined,
+): ResolvedLabFields {
+  const identity = biomarker
+    ? {
+        analyte: biomarker.name,
+        unit: biomarker.unit,
+        panel: biomarker.panel,
+        catalogLow: biomarker.lowerBound,
+        catalogHigh: biomarker.upperBound,
+      }
+    : {
+        analyte: row.analyte,
+        unit: row.unit,
+        panel: row.panel,
+        catalogLow: row.referenceLow,
+        catalogHigh: row.referenceHigh,
+      };
+
+  const effectiveRange = resolveEffectiveReferenceRange(
+    identity.catalogLow,
+    identity.catalogHigh,
+    row,
+  );
+
+  return {
+    analyte: identity.analyte,
+    unit: identity.unit,
+    panel: identity.panel,
+    referenceLow: effectiveRange.low,
+    referenceHigh: effectiveRange.high,
+    catalogReferenceLow: effectiveRange.catalogLow,
+    catalogReferenceHigh: effectiveRange.catalogHigh,
+    sourceReferenceLow: row.sourceReferenceLow,
+    sourceReferenceHigh: row.sourceReferenceHigh,
+    sourceReferenceText: effectiveRange.sourceText,
+    referenceOrigin: effectiveRange.origin,
+    referenceDivergesFromCatalog: effectiveRange.divergesFromCatalog,
+    effectiveRange,
+  };
 }
 
 /**
@@ -123,13 +189,21 @@ export function serialiseLabResult(
     unit: resolved.unit,
     referenceLow: resolved.referenceLow,
     referenceHigh: resolved.referenceHigh,
+    catalogReferenceLow: resolved.catalogReferenceLow,
+    catalogReferenceHigh: resolved.catalogReferenceHigh,
+    sourceReferenceLow: resolved.sourceReferenceLow,
+    sourceReferenceHigh: resolved.sourceReferenceHigh,
+    sourceReferenceText: resolved.sourceReferenceText,
+    referenceOrigin: resolved.referenceOrigin,
+    referenceDivergesFromCatalog: resolved.referenceDivergesFromCatalog,
     takenAt: row.takenAt.toISOString(),
     source: row.source,
     hasNote: row.noteEncrypted !== null,
-    rangeStatus: rowRangeStatus(
+    // A qualitative row has no number to place against bounds, so it reports
+    // the neutral "unknown" rather than a fabricated in/out verdict.
+    rangeStatus: classifyAgainstEffectiveRange(
       row.value,
-      resolved.referenceLow,
-      resolved.referenceHigh,
+      resolved.effectiveRange,
     ),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -156,13 +230,19 @@ export function serialiseLabResultDetail(
     unit: resolved.unit,
     referenceLow: resolved.referenceLow,
     referenceHigh: resolved.referenceHigh,
+    catalogReferenceLow: resolved.catalogReferenceLow,
+    catalogReferenceHigh: resolved.catalogReferenceHigh,
+    sourceReferenceLow: resolved.sourceReferenceLow,
+    sourceReferenceHigh: resolved.sourceReferenceHigh,
+    sourceReferenceText: resolved.sourceReferenceText,
+    referenceOrigin: resolved.referenceOrigin,
+    referenceDivergesFromCatalog: resolved.referenceDivergesFromCatalog,
     takenAt: row.takenAt.toISOString(),
     source: row.source,
     note,
-    rangeStatus: rowRangeStatus(
+    rangeStatus: classifyAgainstEffectiveRange(
       row.value,
-      resolved.referenceLow,
-      resolved.referenceHigh,
+      resolved.effectiveRange,
     ),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
