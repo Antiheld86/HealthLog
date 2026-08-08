@@ -16,6 +16,15 @@
   unusable, that session alone is reported back and the rest of the batch
   still lands.
 
+### Fixed
+
+- Marking an older missed dose as taken from the intake history now records
+  the dose at the slot's own date and time. Marking Tuesday 09:00 from a
+  Thursday evening used to land on the right slot but stamp the intake with
+  the current moment; the recorded time now matches the claim being made. The
+  optimistic paint had promised this all along, and the skipped-to-taken flip
+  in the same view already behaved this way.
+
 ## [1.37.1] — 2026-08-08
 
 ### Added
