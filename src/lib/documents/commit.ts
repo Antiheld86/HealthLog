@@ -15,6 +15,12 @@
  * as-needed medication with notifications off — a record of what the patient
  * takes, never a prescription action. An Observation never carries a
  * range-flag; the reference bounds ride along only as the document stated them.
+ *
+ * The window the report printed beside a value is carried onto the reading, not
+ * dropped. Until now it only seeded a freshly minted catalog marker, which meant
+ * that for every analyte the user already had, the range printed on the report
+ * was read and then thrown away. It now lands on the row's `sourceReference*`
+ * columns and governs that reading's verdict.
  */
 import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 import { prisma } from "@/lib/db";
@@ -22,6 +28,7 @@ import { invalidateUserHealthScore } from "@/lib/cache/invalidate";
 import { emitDataArrival } from "@/lib/arrivals/emit-shared";
 import { decryptFactData } from "@/lib/documents/store";
 import { resolveOrMintBiomarker } from "@/lib/labs/biomarker-store";
+import { parseReferenceRange } from "@/lib/labs/parse-reference-range";
 import type { ExtractedFact } from "@/generated/prisma/client";
 import type {
   ConditionFactData,
@@ -66,11 +73,21 @@ async function commitObservation(
       "A numeric value needs a unit before it can be saved",
     );
   }
+  // The printed window, read once. `referenceText` is what the report wrote;
+  // the parser derives bounds from it where it can, and where it cannot the
+  // string still survives onto the row. A document staged before the field
+  // existed has no text, and the numeric bounds the model reported are then
+  // the whole of what it stated.
+  const printed = parseReferenceRange(data.referenceText, data.unit);
+  const sourceLow = printed?.low ?? data.referenceLow;
+  const sourceHigh = printed?.high ?? data.referenceHigh;
+  const sourceText = printed?.text ?? null;
+
   const biomarker = await resolveOrMintBiomarker(userId, {
     analyte: data.label,
     unit: isQualitative ? (data.unit ?? "") : (data.unit as string),
-    referenceLow: isQualitative ? null : data.referenceLow,
-    referenceHigh: isQualitative ? null : data.referenceHigh,
+    referenceLow: isQualitative ? null : sourceLow,
+    referenceHigh: isQualitative ? null : sourceHigh,
     panel: null,
   });
   // Fail closed on a unit mismatch against an EXISTING marker. A freshly
@@ -101,6 +118,11 @@ async function commitObservation(
       unit: biomarker.unit,
       referenceLow: biomarker.lowerBound,
       referenceHigh: biomarker.upperBound,
+      // The report's own window for THIS reading. A qualitative result has no
+      // window to record.
+      sourceReferenceLow: isQualitative ? null : sourceLow,
+      sourceReferenceHigh: isQualitative ? null : sourceHigh,
+      sourceReferenceText: isQualitative ? null : sourceText,
       takenAt: statedDateOrNow(data.effectiveDate),
       source: "DOCUMENT",
       noteEncrypted: null,

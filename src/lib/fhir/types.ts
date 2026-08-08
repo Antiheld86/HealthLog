@@ -117,6 +117,13 @@ export interface FhirObservation {
 export interface FhirObservationReferenceRange {
   low?: FhirQuantity;
   high?: FhirQuantity;
+  /**
+   * R4 `referenceRange.text`. Carries the window the source report printed,
+   * verbatim, when the reading has one. A receiver that cannot use the bounds
+   * (because the report stated a qualitative window like "negativ", or a
+   * one-sided one) still reads what the lab wrote.
+   */
+  text?: string;
 }
 
 export interface FhirDosage {

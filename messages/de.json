@@ -281,7 +281,9 @@
     "familyHistoryTitle": "Familienanamnese",
     "familyHistoryColRelationship": "Verwandtschaft",
     "familyHistoryColCondition": "Erkrankung",
-    "familyHistoryColAgeAtOnset": "Alter bei Beginn"
+    "familyHistoryColAgeAtOnset": "Alter bei Beginn",
+    "labsSourceRangeNote": "* Der Referenzbereich stammt aus dem Befund und weicht vom gespeicherten Bereich ab:",
+    "labsCatalogRangeLabel": "gespeicherter Bereich"
   },
   "errorBoundary": {
     "title": "Da ist etwas schiefgelaufen",
@@ -8086,7 +8088,12 @@
       "qualitativePlaceholder": "z. B. negativ",
       "qualNegative": "negativ",
       "qualPositive": "positiv",
-      "qualBorderline": "grenzwertig"
+      "qualBorderline": "grenzwertig",
+      "sourceRange": "Bereich laut Befund",
+      "sourceRangePlaceholder": "z. B. 3,5 - 5,0 oder < 5",
+      "sourceRangeAdd": "+ Bereich aus dem Befund ergänzen",
+      "sourceRangeHint": "Optional. Gilt nur für diesen Wert; dein gespeicherter Bereich bleibt unverändert.",
+      "sourceRangeUnparsed": "Wird so übernommen — daraus ließ sich kein Zahlenbereich lesen."
     },
     "backToLabs": "Zurück zu den Laborwerten",
     "hasNote": "Notiz",
@@ -8117,7 +8124,10 @@
         "90": "90 T",
         "365": "1 J",
         "all": "Alle"
-      }
+      },
+      "sourceRangeLabel": "Befundbereich",
+      "sourceBandLegend": "Zweites Band: der Bereich aus dem Befund vom {date}.",
+      "sourceBandMixed": "Zweites Band: der Bereich aus dem neuesten Befund. Frühere Befunde im Zeitraum nennen andere Bereiche."
     },
     "biomarker": {
       "manageTitle": "Biomarker",
@@ -8292,11 +8302,17 @@
       "fileTooLarge": "Datei ist zu groß (max. 12 MB).",
       "fileType": "Lade ein JPEG, PNG, WebP oder PDF hoch.",
       "extractFailed": "Der Befund konnte nicht gelesen werden. Versuche ein schärferes Foto.",
-      "pdfNeedsAnthropic": "PDF-Scannen benötigt einen Claude-Bildanbieter; lade stattdessen ein Foto hoch."
+      "pdfNeedsAnthropic": "PDF-Scannen benötigt einen Claude-Bildanbieter; lade stattdessen ein Foto hoch.",
+      "refTextLabel": "Bereich wie gedruckt",
+      "refTextPlaceholder": "z. B. 3,5 - 5,0"
     },
     "loadMoreReadings": "Weitere Werte laden",
     "documentsLink": "Befund-Dokumente",
-    "notLinkedYet": "Noch keinem Biomarker zugeordnet"
+    "notLinkedYet": "Noch keinem Biomarker zugeordnet",
+    "sourceRange": {
+      "fromReport": "Befundbereich {range}",
+      "catalogDiffers": "dein Bereich {range}"
+    }
   },
   "modules": {
     "cycle": {

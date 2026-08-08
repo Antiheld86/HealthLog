@@ -1,0 +1,60 @@
+name: OpenSSF Scorecard
+
+# Automated checks against the OpenSSF's supply-chain criteria: are Actions
+# pinned by SHA, is there a security policy, are dependencies updated
+# automatically, is the release pipeline signed, is there a fuzzing or a
+# static-analysis story. Most of what it looks for this repository already
+# does; the value is that it keeps looking after the person who set it up
+# has moved on to something else.
+#
+# `publish_results: true` sends the result to the OpenSSF's public API,
+# which is what makes the score citable by anyone evaluating the project
+# without asking for CI access. Nothing about the code or its contents
+# leaves; the checks read repository metadata and the workflow files.
+on:
+  # Re-score when a branch-protection rule changes, since several checks
+  # read exactly that.
+  branch_protection_rule:
+  schedule:
+    # Tuesdays, 07:20 UTC.
+    - cron: "20 7 * * 2"
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Score supply-chain practices
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      # Write the findings into the repository's code-scanning alerts.
+      security-events: write
+      # Publish the result to the public API. This is an OIDC token
+      # exchange, the same mechanism the release workflow uses for keyless
+      # image signing; no long-lived credential is involved.
+      id-token: write
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Scorecard reads the repository through the API, not through the
+          # checkout, and leaving the token in `.git/config` would hand it
+          # to anything else running in the job.
+          persist-credentials: false
+
+      - name: Run analysis
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: scorecard-results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Upload results
+        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        with:
+          sarif_file: scorecard-results.sarif
+          category: scorecard

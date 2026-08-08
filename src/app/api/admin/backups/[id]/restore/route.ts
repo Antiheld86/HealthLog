@@ -980,6 +980,9 @@ const handler = apiHandler(
                 unit: lab.unit,
                 referenceLow: lab.referenceLow ?? null,
                 referenceHigh: lab.referenceHigh ?? null,
+                sourceReferenceLow: lab.sourceReferenceLow ?? null,
+                sourceReferenceHigh: lab.sourceReferenceHigh ?? null,
+                sourceReferenceText: lab.sourceReferenceText ?? null,
                 takenAt: new Date(lab.takenAt),
                 source: lab.source,
                 noteEncrypted:

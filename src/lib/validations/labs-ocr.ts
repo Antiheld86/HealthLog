@@ -78,6 +78,13 @@ export const extractedRowSchema = z.object({
   unit: z.string().trim().max(80).nullable().catch(null),
   referenceLow: z.number().finite().nullable().catch(null),
   referenceHigh: z.number().finite().nullable().catch(null),
+  /**
+   * The reference range EXACTLY as printed, verbatim. The two numeric bounds
+   * above can only carry a window that reduces to two numbers; a report that
+   * prints "bis 5,0" or "negativ" states a window all the same, and this is
+   * what keeps it instead of dropping it.
+   */
+  referenceText: z.string().trim().max(120).nullable().catch(null),
   takenAt: z.string().nullable().catch(null),
   confidence: extractedConfidenceSchema,
 });
@@ -107,6 +114,8 @@ export interface OcrExtractedRowDto {
   unit: string | null;
   referenceLow: number | null;
   referenceHigh: number | null;
+  /** The reference range as printed on the report, verbatim. */
+  referenceText: string | null;
   takenAt: string | null;
   confidence: {
     analyte: number;
@@ -150,6 +159,17 @@ export const ocrCommitRowSchema = z
     unit: z.string().trim().min(1).max(40).optional(),
     referenceLow,
     referenceHigh,
+    /**
+     * The window the scanned report printed for this row. Confirmed by the
+     * human on the review screen alongside everything else, and written onto
+     * the reading rather than only used to seed a new catalog marker.
+     */
+    referenceText: z
+      .string()
+      .trim()
+      .max(120)
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
     takenAt: takenAtField,
   })
   // Numeric XOR qualitative: exactly one of value / valueText.

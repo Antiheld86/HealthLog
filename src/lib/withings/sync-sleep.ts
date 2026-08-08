@@ -474,6 +474,9 @@ export async function syncUserSleep(
           if (verdict.status === "failed") {
             throw new MeasurementReconciliationError(verdict);
           }
+          // Refused by the plausibility gate: nothing was written and nothing
+          // was touched. The drop is already on the wide event.
+          if (verdict.status === "rejected_range") continue;
           for (const dirty of verdict.dirtyIdentities ?? []) {
             touched.push(dirty);
           }
@@ -542,6 +545,9 @@ export async function syncUserSleep(
             if (verdict.status === "failed") {
               throw new MeasurementReconciliationError(verdict);
             }
+            // Refused by the plausibility gate: nothing was written and
+            // nothing was touched. The drop is already on the wide event.
+            if (verdict.status === "rejected_range") continue;
             for (const dirty of verdict.dirtyIdentities ?? []) {
               touched.push(dirty);
             }

@@ -70,6 +70,14 @@ beforeEach(async () => {
       username: "cycle-flow",
       email: "cycle-flow@example.test",
       gender: "FEMALE",
+      // The suite runs under TZ=UTC and computes its relative day keys with
+      // local Date arithmetic, i.e. in UTC. The route resolves "today" in the
+      // USER's zone and falls back to Europe/Berlin when none is set - one
+      // hour past 22:00 UTC the two clocks disagree about the date and every
+      // day-of-cycle assertion is off by one. Pinning the fixture zone to UTC
+      // makes the test's clock and the route's clock the same clock at any
+      // hour of the day.
+      timezone: "UTC",
     },
   });
   await loginAs(USER_ID);

@@ -1,0 +1,164 @@
+name: Trivy Scheduled Scan
+
+# Two scans that the per-change gates cannot do, on a daily cadence.
+#
+# What already exists and is NOT repeated here:
+#   - `security.yml` → `dependency-audit` runs `pnpm audit --prod` on every
+#     push and pull request, blocking on HIGH/CRITICAL.
+#   - `security.yml` → `docker-security` builds the image on a push to `main`
+#     and runs `trivy image` against it, blocking on HIGH/CRITICAL.
+#
+# Both are change-triggered, and both answer "is this change safe". Neither
+# answers "is what we shipped last week still safe", because an advisory
+# published today lands against an image nobody is about to rebuild. That is
+# what the schedule is for. There is deliberately no push or pull_request
+# trigger: adding one would run the same scan the `docker-security` job
+# already ran, minutes later, on the same tree.
+on:
+  schedule:
+    # Daily, 05:17 UTC.
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trivy-scheduled
+  cancel-in-progress: true
+
+jobs:
+  filesystem:
+    name: Lockfile (including dev dependencies)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # `pnpm audit --prod` is the blocking gate and it is scoped to
+      # production dependencies on purpose: a dev-only advisory should not
+      # stop a release. The gap that scoping leaves is that "dev dependency"
+      # and "not in the image" are not the same statement.
+      #
+      # `pdfjs-dist` is the worked example. It sits in `devDependencies`,
+      # and `src/lib/documents/rasterize-pdf.ts` imports it at runtime, so
+      # Next's standalone output tracing copies it into the production
+      # image. `pnpm audit --prod` cannot see it. This scan can: without
+      # the flag Trivy reads 627 packages out of `pnpm-lock.yaml`, with it
+      # 1455, and `pdfjs-dist` is only in the second set.
+      #
+      # Trivy's own `--help` lists the flag as supported for npm, yarn and
+      # gradle. It works on `pnpm-lock.yaml` too; the help text is behind
+      # the parser. Verified against this repository before this workflow
+      # was written, and worth re-checking if the package count ever
+      # collapses back to the production figure.
+      #
+      # Report-only, and that is a deliberate choice rather than a soft
+      # one. The findings this widening surfaces are overwhelmingly
+      # transitive dev-tool advisories with fixes available upstream;
+      # failing the run on them from day one produces a red badge that gets
+      # muted within a week, and a muted signal is worse than none. The
+      # SARIF upload puts every finding in the repository's code-scanning
+      # alerts, which persist, notify, and can be triaged one at a time.
+      # The blocking answer to "does this ship" stays where it is, in
+      # `security.yml`.
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          # No action input maps to `--include-dev-deps`; Trivy reads every
+          # flag from a `TRIVY_`-prefixed environment variable, so this is
+          # the documented way to reach it through the action.
+          TRIVY_INCLUDE_DEV_DEPS: "true"
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          format: sarif
+          output: trivy-filesystem.sarif
+          severity: "CRITICAL,HIGH,MEDIUM"
+          limit-severities-for-sarif: true
+          exit-code: "0"
+          # Generated Prisma client. Nobody edits it, the fix for anything
+          # found in it is `pnpm prisma generate`, and it is ~9 MB.
+          skip-dirs: src/generated
+
+      - name: Upload results
+        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        with:
+          sarif_file: trivy-filesystem.sarif
+          category: trivy-filesystem
+
+  published-image:
+    name: Published image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+
+    steps:
+      # The `docker-security` job scans an image it just built from the
+      # current `main`. This one scans the image operators actually pull,
+      # which is the one built from the last release tag and unchanged
+      # since. The two answer different questions and the gap between them
+      # widens every day a release stays out.
+      #
+      # Trivy resolves the multi-arch manifest to the runner's platform, so
+      # this covers `linux/amd64`. The arm64 manifest shares every
+      # application layer and differs only in native binaries.
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # `.trivyignore` lives at the repository root and Trivy reads it
+      # automatically, so the suppressions the blocking gate already
+      # carries apply here too and the two scans cannot disagree about
+      # what is accepted.
+      - name: Checkout for .trivyignore
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Fails on CRITICAL only. A critical advisory against the image
+      # self-hosters are running right now is worth a red badge and a
+      # notification; HIGH goes to code scanning with everything else,
+      # because the release pipeline already refuses to publish an image
+      # carrying one and anything that appears here appeared after the
+      # fact.
+      - name: Trivy published-image scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ghcr.io/mbombeck/healthlog:latest
+          scanners: vuln
+          format: sarif
+          output: trivy-published-image.sarif
+          severity: "CRITICAL,HIGH,MEDIUM"
+          limit-severities-for-sarif: true
+          exit-code: "0"
+
+      - name: Upload results
+        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        with:
+          sarif_file: trivy-published-image.sarif
+          category: trivy-published-image
+
+      # Separate table pass so the SARIF upload above always runs, even
+      # when this one fails the job. A scan whose failure suppresses its
+      # own report is a scan you have to re-run by hand to read.
+      - name: Fail on a critical finding in the published image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ghcr.io/mbombeck/healthlog:latest
+          scanners: vuln
+          format: table
+          severity: "CRITICAL"
+          exit-code: "1"

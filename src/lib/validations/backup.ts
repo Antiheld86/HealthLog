@@ -717,6 +717,11 @@ const labResultBackupSchema = z
     unit: z.string().min(1),
     referenceLow: z.number().nullable().optional(),
     referenceHigh: z.number().nullable().optional(),
+    // Optional so a backup written before these columns existed still
+    // restores; absent reads as "this reading had no source window on file".
+    sourceReferenceLow: z.number().nullable().optional(),
+    sourceReferenceHigh: z.number().nullable().optional(),
+    sourceReferenceText: z.string().nullable().optional(),
     takenAt: isoDateTime,
     source: z.string().min(1),
     biomarkerName: z.string().nullable().optional(),
