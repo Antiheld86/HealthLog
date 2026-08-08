@@ -281,11 +281,7 @@ async function postMoodEntry(request: NextRequest) {
                 tz,
                 mood,
                 score,
-                moodA1: levelA.moodA1,
-                stressA2: levelA.stressA2,
-                energyA3: levelA.energyA3,
-                connectionA4: levelA.connectionA4,
-                stabilityA5: levelA.stabilityA5,
+                ...levelA,
                 tags: tags ? JSON.stringify(tags) : null,
                 note: null,
                 noteEncrypted: encryptNote(note ?? null),
@@ -293,20 +289,19 @@ async function postMoodEntry(request: NextRequest) {
                 externalId,
                 moodLoggedAt,
               },
-              // A re-post replaces the row, so the level-A values are restated
-              // here too. Omitting them would leave a stress reading from an
-              // earlier post sitting beside a mood the user has since changed
-              // — the same staleness the `score` restatement already avoids.
+              // A re-post restates pleasantness, because the label it carries
+              // always implies one and a stale A1 beside a changed mood would
+              // contradict the entry's own face. It does NOT restate the other
+              // four: `levelA` carries them only when this request did, so a
+              // client re-posting without sliders — the phone, whose build has
+              // none — leaves the stress and energy somebody answered on the
+              // web exactly where they were. An explicit null clears one.
               update: {
                 date,
                 tz,
                 mood,
                 score,
-                moodA1: levelA.moodA1,
-                stressA2: levelA.stressA2,
-                energyA3: levelA.energyA3,
-                connectionA4: levelA.connectionA4,
-                stabilityA5: levelA.stabilityA5,
+                ...levelA,
                 tags: tags ? JSON.stringify(tags) : null,
                 note: null,
                 noteEncrypted: encryptNote(note ?? null),
@@ -320,11 +315,9 @@ async function postMoodEntry(request: NextRequest) {
                 tz,
                 mood,
                 score,
-                moodA1: levelA.moodA1,
-                stressA2: levelA.stressA2,
-                energyA3: levelA.energyA3,
-                connectionA4: levelA.connectionA4,
-                stabilityA5: levelA.stabilityA5,
+                // A fresh row: an omitted dimension lands as NULL, which is
+                // the same thing the upsert's arms mean by omitting it.
+                ...levelA,
                 tags: tags ? JSON.stringify(tags) : null,
                 note: null,
                 noteEncrypted: encryptNote(note ?? null),

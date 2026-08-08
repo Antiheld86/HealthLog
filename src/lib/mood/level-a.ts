@@ -24,41 +24,63 @@ export interface LevelAInput {
   a5?: number | null;
 }
 
-/** Level-A values as they are written to `MoodEntry`. */
+/**
+ * Level-A values as they are written to `MoodEntry`.
+ *
+ * A1 is always stated, because it is always derivable from the label. The
+ * other four are present only when the request carried them: an absent key
+ * means the caller said nothing about that dimension, and on an upsert's
+ * `update:` arm saying nothing has to leave the stored answer alone.
+ */
 export interface LevelAColumns {
-  moodA1: number | null;
-  stressA2: number | null;
-  energyA3: number | null;
-  connectionA4: number | null;
-  stabilityA5: number | null;
+  moodA1: number;
+  stressA2?: number | null;
+  energyA3?: number | null;
+  connectionA4?: number | null;
+  stabilityA5?: number | null;
 }
 
 /**
  * The five columns for a write of `mood`, with any explicit client value
  * winning over the derivation.
  *
- * A client that sends only a label gets the derived A1 and four NULLs. A
- * client that sends `a1` gets its own number — that is what makes the detail
- * sliders a real capture surface rather than a suggestion the server overrides
- * on the way to the database.
+ * A client that sends only a label gets the derived A1 and says nothing at all
+ * about the other four. A client that sends `a1` gets its own number — that is
+ * what makes the detail sliders a real capture surface rather than a
+ * suggestion the server overrides on the way to the database.
  *
- * Every field is stated explicitly, including the NULLs, because the callers
- * are upserts: on the `update:` arm an omitted field keeps a value from an
- * earlier post, and a stale stress reading sitting beside a mood the user just
- * changed is exactly the mismatch these columns exist to avoid. Callers whose
- * write semantics are per-field rather than whole-row (the PATCH route) build
- * their own object and use `deriveA1` directly.
+ * **A2 to A5 are omitted when the request did not carry them, and that is the
+ * point.** The callers are upserts, so this same object feeds an `update:`
+ * arm: a phone re-posting an entry it holds — the label, the timestamp, the
+ * tags, and no sliders, because its own build has none — must not blank the
+ * stress and energy somebody answered on the web. Absence in a request means
+ * "nothing to say", never "set this to nothing". Clearing an answer is what an
+ * explicit `null` is for, and it travels here as a stated null.
+ *
+ * The asymmetry with A1 is deliberate rather than an oversight. A1 can always
+ * be derived from the label the request already carries, so there is no state
+ * in which restating it loses information; the other four have no such source,
+ * and a value invented for them would be indistinguishable from one somebody
+ * gave — which would poison the trend and anything later trained on it.
+ *
+ * On the `create:` arm an omitted column lands as NULL anyway, so one object
+ * serves both arms. Callers whose write semantics are per-field rather than
+ * whole-row (the edit route) build their own object and use `deriveA1`.
  */
 export function levelAForWrite(
   mood: string,
   explicit?: LevelAInput,
 ): LevelAColumns {
+  // Field by field, never a spread of the parsed body.
   return {
+    // An explicit null falls back to the derivation rather than clearing: an
+    // entry always carries a pleasantness value, because the five-point label
+    // it was saved with always implies one.
     moodA1: explicit?.a1 ?? getA1ForMood(mood),
-    stressA2: explicit?.a2 ?? null,
-    energyA3: explicit?.a3 ?? null,
-    connectionA4: explicit?.a4 ?? null,
-    stabilityA5: explicit?.a5 ?? null,
+    ...(explicit?.a2 === undefined ? {} : { stressA2: explicit.a2 }),
+    ...(explicit?.a3 === undefined ? {} : { energyA3: explicit.a3 }),
+    ...(explicit?.a4 === undefined ? {} : { connectionA4: explicit.a4 }),
+    ...(explicit?.a5 === undefined ? {} : { stabilityA5: explicit.a5 }),
   };
 }
 

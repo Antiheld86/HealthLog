@@ -264,6 +264,95 @@ describe("mood writers agree on the derived level-A value", () => {
     }
   });
 
+  it("leaves a dimension the re-post said nothing about exactly where it was", async () => {
+    await createUserSession();
+    const { POST: postSingle } = await import("@/app/api/mood-entries/route");
+    const { POST: postBulk } =
+      await import("@/app/api/mood-entries/bulk/route");
+
+    // Somebody answers the sliders on the web.
+    await postSingle(
+      jsonRequest("/api/mood-entries", {
+        mood: "OKAY",
+        moodLoggedAt: "2026-05-16T08:00:00.000Z",
+        externalId: "preserve-single",
+        a2: 9,
+        a3: 2,
+      }),
+    );
+
+    // The phone re-posts the same entry it holds: label, timestamp, id, and no
+    // sliders, because its build has none. This must not blank what the web
+    // wrote. Absence in a request means "nothing to say", not "set to
+    // nothing" — a request that cleared four columns by staying silent would
+    // destroy answers on every sync round.
+    await postSingle(
+      jsonRequest("/api/mood-entries", {
+        mood: "GUT",
+        moodLoggedAt: "2026-05-16T08:05:00.000Z",
+        externalId: "preserve-single",
+      }),
+    );
+
+    const afterRepost = await getPrismaClient().moodEntry.findFirstOrThrow({
+      where: { userId: USER, externalId: "preserve-single" },
+    });
+    expect(afterRepost.mood).toBe("GUT");
+    // Pleasantness DOES follow the label: the request carried one, and a
+    // stale A1 beside a changed face would contradict the entry itself.
+    expect(afterRepost.moodA1).toBe(7);
+    // The four the request said nothing about are untouched.
+    expect(afterRepost.stressA2).toBe(9);
+    expect(afterRepost.energyA3).toBe(2);
+    expect(afterRepost.connectionA4).toBeNull();
+    expect(afterRepost.stabilityA5).toBeNull();
+
+    // An explicit null is how an answer is taken back — the other route out of
+    // the same three-state contract.
+    await postSingle(
+      jsonRequest("/api/mood-entries", {
+        mood: "GUT",
+        moodLoggedAt: "2026-05-16T08:06:00.000Z",
+        externalId: "preserve-single",
+        a2: null,
+      }),
+    );
+    const afterClear = await getPrismaClient().moodEntry.findFirstOrThrow({
+      where: { userId: USER, externalId: "preserve-single" },
+    });
+    expect(afterClear.stressA2).toBeNull();
+    // Clearing one says nothing about the others.
+    expect(afterClear.energyA3).toBe(2);
+
+    // The batch path answers the same way, and always has: it carries no
+    // level-A input at all, so every re-import preserves.
+    await postSingle(
+      jsonRequest("/api/mood-entries", {
+        mood: "OKAY",
+        moodLoggedAt: "2026-05-16T12:00:00.000Z",
+        externalId: "preserve-bulk",
+        a4: 6,
+      }),
+    );
+    await postBulk(
+      jsonRequest("/api/mood-entries/bulk", {
+        entries: [
+          {
+            mood: "SUPER_GUT",
+            moodLoggedAt: "2026-05-16T12:30:00.000Z",
+            externalId: "preserve-bulk",
+          },
+        ],
+      }),
+    );
+    const afterBulk = await getPrismaClient().moodEntry.findFirstOrThrow({
+      where: { userId: USER, externalId: "preserve-bulk" },
+    });
+    expect(afterBulk.mood).toBe("SUPER_GUT");
+    expect(afterBulk.moodA1).toBe(9);
+    expect(afterBulk.connectionA4).toBe(6);
+  });
+
   it("lets an explicit client value win over the derivation, and stores the other four literally", async () => {
     await createUserSession();
     const { POST: postSingle } = await import("@/app/api/mood-entries/route");

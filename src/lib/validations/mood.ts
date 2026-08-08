@@ -128,14 +128,19 @@ export const createMoodEntrySchema = z
     // `MoodEntryTagLink.rating`. Out-of-scale or non-RATED keys are
     // rejected (422) / dropped server-side per the catalog.
     ratedFactors: ratedFactors.optional(),
-    // v1.37 — the five level-A values the detail sliders capture. Absent
-    // means the user did not answer; `a1` absent means the server derives it
-    // from `mood`, which keeps the one-tap check-in a full entry.
-    a1: levelADimension.optional(),
-    a2: levelADimension.optional(),
-    a3: levelADimension.optional(),
-    a4: levelADimension.optional(),
-    a5: levelADimension.optional(),
+    // v1.37 — the five level-A values the detail sliders capture. Three
+    // states, and they mean three different things, because this create can
+    // land on the `update:` arm of an `externalId` upsert:
+    //   absent  — nothing to say; a stored answer is left alone
+    //   number  — the answer, stored literally
+    //   null    — take the answer back
+    // `a1` is the exception: absent or null, the server derives it from
+    // `mood`, so a one-tap check-in is a full entry and never a degraded one.
+    a1: levelADimension.nullable().optional(),
+    a2: levelADimension.nullable().optional(),
+    a3: levelADimension.nullable().optional(),
+    a4: levelADimension.nullable().optional(),
+    a5: levelADimension.nullable().optional(),
     // v1.4.30 H-5 — first-class free-text note. Replaces the
     // `tags: ["note:<text>"]` workaround. Capped at 500 chars so the
     // Coach evidence shelf renders cleanly without truncating chips.
