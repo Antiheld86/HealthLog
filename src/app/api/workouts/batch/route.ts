@@ -39,7 +39,7 @@
  *     composite index. Re-posting the same batch surfaces duplicates
  *     rather than failing the call.
  *
- * Heart-rate series enrichment (v1.37.2): a re-post that matches a stored
+ * Heart-rate series enrichment: a re-post that matches a stored
  * workout and carries a `samples` array attaches that series when the
  * workout has none. The workout row itself stays first-write-wins —
  * nothing on it is written, not one column — and a workout that already

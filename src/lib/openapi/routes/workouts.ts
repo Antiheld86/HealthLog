@@ -24,8 +24,8 @@ import {
 // refused: an unusable external id, or a `samples` array that failed
 // validation (`reason: "invalid_samples"`).
 //
-// v1.37.2 — `enriched` says the entry matched a stored workout that had
-// no heart-rate series and the series it carried was attached. The
+// `enriched` says the entry matched a stored workout that had no
+// heart-rate series and the series it carried was attached. The
 // workout row itself was not written, so such an entry also counts
 // towards `duplicates`; the top-level counters count rows.
 const workoutBatchEntryResult = z
