@@ -188,11 +188,12 @@ describe("lookupIpAsn — offline ASN resolver (v1.4.27 B3)", () => {
   });
 });
 
-// v1.18.10 (W7) — online-first resolver. The `ipwho.is` HTTPS lookup is the
-// DEFAULT path; the bundled GeoLite2 offline tier is an OPTIONAL fallback
-// consulted only when the online lookup misses (provider down / non-ok) or
-// when egress is disabled via `IP_GEO_LOOKUP_DISABLED=1`.
-describe("lookupIpLocation — online-first city resolver (v1.18.10 W7)", () => {
+// Offline-first resolver: the GeoLite2 City MMDB answers when it is mounted
+// and holds the address, and the `ipwho.is` HTTPS lookup only sees what it
+// could not place. Between v1.18.10 and v1.37 it ran the other way round —
+// these two cases pinned that order, and they are the reason a host with the
+// databases mounted still sent every login IP to a third party.
+describe("lookupIpLocation — offline-first city resolver", () => {
   // Helper: a non-ok online response forces the offline fallback to run.
   function onlineMiss(): Response {
     return new Response("", {
@@ -201,7 +202,7 @@ describe("lookupIpLocation — online-first city resolver (v1.18.10 W7)", () => 
     });
   }
 
-  it("prefers the online provider even when the offline DB is present", async () => {
+  it("prefers the offline DB over the online provider, and sends nothing", async () => {
     readerState.cityExists = true;
     readerState.city = () => ({
       city: { names: { de: "München", en: "Munich" } },
@@ -221,12 +222,13 @@ describe("lookupIpLocation — online-first city resolver (v1.18.10 W7)", () => 
     vi.stubGlobal("fetch", fetchSpy);
     const { lookupIpLocation } = await import("../geo");
 
-    // Online wins by default; the offline München record is not consulted.
-    expect(await lookupIpLocation("85.214.0.1")).toBe("Berlin, DE");
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    // The mounted database answers, so the provider is never asked and the
+    // address never leaves the host.
+    expect(await lookupIpLocation("85.214.0.1")).toBe("München, DE");
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("falls back to the offline German exonym when the online lookup misses", async () => {
+  it("uses the German exonym the offline DB carries rather than the provider's fold", async () => {
     readerState.cityExists = true;
     readerState.city = () => ({
       city: { names: { de: "München", en: "Munich" } },
@@ -237,8 +239,7 @@ describe("lookupIpLocation — online-first city resolver (v1.18.10 W7)", () => 
     const { lookupIpLocation } = await import("../geo");
 
     expect(await lookupIpLocation("85.214.0.1")).toBe("München, DE");
-    // Online was tried first (and missed), then the offline tier resolved.
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("offline fallback uses the English city name when the German exonym is absent", async () => {
