@@ -67,6 +67,20 @@ describe("SettingsCard — the container owns the rhythm", () => {
     const html = render(<SettingsCard className="gap-2">body</SettingsCard>);
     expect(html).toContain("gap-2");
   });
+
+  it("drops the gap as well as the padding on a flush ledger card", () => {
+    // Dropping only the padding leaves the card's own gap standing between
+    // the rows as dead space the first row does not have. Both breakpoints
+    // are named because the `<Card>` primitive carries a `md:` gap that a
+    // bare `gap-0` loses to.
+    const html = render(<SettingsCard flush>rows</SettingsCard>);
+    expect(html).toContain("gap-0");
+    expect(html).toContain("md:gap-0");
+    expect(html).toContain("p-0");
+    expect(html).toContain("md:p-0");
+    expect(html).not.toMatch(/class="[^"]*\bgap-4\b/);
+    expect(html).not.toMatch(/class="[^"]*\bp-4\b/);
+  });
 });
 
 describe("SettingsCardHeader — one description sentence, one text run", () => {
