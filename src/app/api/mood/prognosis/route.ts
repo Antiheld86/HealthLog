@@ -36,13 +36,15 @@ import { requireModuleEnabled } from "@/lib/modules/gate";
 
 export const dynamic = "force-dynamic";
 
-// The request is declared although the handler reads nothing off it: the
-// wrapper takes the method and the path from it for the wide event, and
-// `requireRecordAuth` reads the method to decide whether a `read` declaration
-// really is a read. A handler with no parameter types as zero-arity, and a
-// caller that then omits the request turns every method check into "unknown",
-// which escalates a read to a write and refuses a delegate for the wrong
-// reason.
+// The parameter is declared although the handler body reads nothing off it,
+// and the reason is the exported type rather than the runtime. `apiHandler`
+// infers the type of `GET` from this callback, so a zero-argument handler
+// would type `GET` as taking no arguments — and Next.js, and the integration
+// tests, call it WITH the request. The wide event's method and path, and the
+// read-vs-write check `requireRecordAuth` runs, both come from the request the
+// wrapper receives from Next.js (not from this parameter), and both fall back
+// to `GET` when no request is present — so an absent request keeps a read a
+// read rather than escalating it.
 export const GET = apiHandler(async (_request: NextRequest) => {
   // `record`: see the file header. A scoped grant is refused here by
   // construction rather than served a narrowed payload.

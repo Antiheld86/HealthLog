@@ -1,10 +1,13 @@
 /**
  * The database read behind the fit, and nothing else.
  *
- * Separate from `features.ts` on purpose: that module is pure and is imported
- * by the surface that labels a stored feature key, and a Prisma import in it
- * would pull the database client towards a client bundle. The split is the
- * boundary, not a preference.
+ * Separate from `features.ts` on purpose. `features.ts` is pure, and it shares
+ * `feature-keys.ts` with the client component that labels a stored feature key
+ * (`components/insights/mood/prognosis-feature-label.ts` imports the parser
+ * from there) — so those two modules form a Prisma-free island the browser
+ * bundle can reach. A database import in `features.ts` would drag the client
+ * towards that bundle; keeping the read here is what holds the line. The split
+ * is the boundary, not a preference.
  *
  * **One row per day, taken whole from one entry.** A day with two entries
  * contributes the later one — its target, its dimensions and its context

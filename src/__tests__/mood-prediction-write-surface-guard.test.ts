@@ -23,6 +23,19 @@
  * the legitimate writer really does make. `describe("the matcher sees what it
  * looks for")` proves the regex against synthetic sources, including the
  * broken-across-lines form that defeated an earlier guard in this repository.
+ *
+ * **What this guard structurally cannot see, stated like the session-surface
+ * guard states its own limit.** The matcher keys on a literal `moodPrediction`
+ * delegate access. The "Delete All Data" wipe DOES delete this table — the
+ * model is in `WIPE_MODELS` (`src/lib/data-wipe/wipe-plan.ts`) — but it does so
+ * through a delegate resolved dynamically from the model name (`client[key]
+ * .deleteMany`), so no `moodPrediction.deleteMany(` literal exists for the
+ * matcher to catch, and that deletion is correctly NOT counted as a writer.
+ * The wipe path's own completeness is proven elsewhere, by
+ * `data-wipe-completeness.test.ts` enumerating the schema; this guard is only
+ * the one about request-time writers, and it cannot be the gate on a dynamic
+ * delegate. A future writer that reached the table through a computed property
+ * would slip this matcher for the same reason.
  */
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, sep } from "node:path";

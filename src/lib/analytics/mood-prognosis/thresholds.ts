@@ -86,11 +86,12 @@ export const MIN_ENTRIES_FOR_SEASONAL = 90;
  */
 export const MIN_TAG_OCCURRENCES = CONTEXT_MIN_PRESENT_DAYS;
 
-/**
- * Observations of one weekday before that weekday may be compared to the
- * others. Four is a month of Mondays.
- */
-export const MIN_WEEKDAY_OBSERVATIONS = 4;
+// A per-weekday observation floor was drafted here for a weekday-comparison
+// board built on the forecast. That board was not built — the forecast
+// publishes `seasonalUnlocked` and leaves the weekday view to the mood
+// insights page, which has its own floors — so the constant had no consumer
+// and was removed rather than left as a number nothing reads. If a weekday
+// comparison on THIS fit is ever built, reintroduce the floor with it.
 
 /** Where an account sits on the ladder. */
 export type PrognosisStage =
@@ -172,11 +173,6 @@ export function forecastGate(entries: number): PrognosisGate {
 /** Whether weekday and seasonal comparisons have unlocked for this account. */
 export function seasonalComparisonsUnlocked(entries: number): boolean {
   return entries >= MIN_ENTRIES_FOR_SEASONAL;
-}
-
-/** Whether one weekday has been seen often enough to be compared. */
-export function weekdayObservationsSuffice(observations: number): boolean {
-  return observations >= MIN_WEEKDAY_OBSERVATIONS;
 }
 
 /** Whether a tag or context value has been recorded often enough to name. */

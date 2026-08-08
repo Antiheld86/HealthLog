@@ -177,7 +177,24 @@ describe("level-A blocks reach the feature set with their own ages", () => {
 
   it("carries the day's forecast with its own age, and its own instruction", async () => {
     await seedUser();
-    await seedEntry(0, { mood: "GUT", score: 4, a1: 7, a2: 3 });
+    // Enough rated days that the account is above the forecast floor: the read
+    // path re-checks the ladder and refuses below it, stale row or not, so a
+    // one-entry account would (correctly) get an absence here rather than the
+    // present forecast this case is about. One statement rather than a loop of
+    // awaits, to keep the write short.
+    await getPrismaClient().moodEntry.createMany({
+      data: Array.from({ length: 35 }, (_, d) => ({
+        userId: USER,
+        date: shiftDateKey(todayKey(), -d),
+        tz: TZ,
+        mood: "GUT",
+        score: 4,
+        moodA1: 7,
+        stressA2: 3,
+        source: "MANUAL" as const,
+        moodLoggedAt: new Date(Date.now() - d * DAY_MS),
+      })),
+    });
     // A forecast about the day before yesterday. Written straight to the
     // table: the job's own path is proven in `mood-prognosis-ladder.test.ts`,
     // and what this case is about is what the assistant is handed.

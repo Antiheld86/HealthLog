@@ -27,12 +27,10 @@ import {
   MIN_ENTRIES_FOR_SEASONAL,
   MIN_ENTRIES_LEARNING_PHASE,
   MIN_TAG_OCCURRENCES,
-  MIN_WEEKDAY_OBSERVATIONS,
   forecastGate,
   occurrencesSuffice,
   prognosisStage,
   seasonalComparisonsUnlocked,
-  weekdayObservationsSuffice,
 } from "../thresholds";
 import { CONTEXT_MIN_PRESENT_DAYS } from "@/lib/insights/mood-context-crosstab";
 
@@ -42,7 +40,6 @@ describe("the ladder is ordered and its rungs are the documented numbers", () =>
     expect(MIN_ENTRIES_FOR_FORECAST).toBe(30);
     expect(MIN_ENTRIES_FOR_REGULAR_FORECAST).toBe(60);
     expect(MIN_ENTRIES_FOR_SEASONAL).toBe(90);
-    expect(MIN_WEEKDAY_OBSERVATIONS).toBe(4);
   });
 
   it("rises strictly, so no rung can be reached before the one below it", () => {
@@ -159,22 +156,6 @@ describe("MIN_ENTRIES_FOR_SEASONAL — below it, no weekday or seasonal view", (
       "MIN_ENTRIES_FOR_SEASONAL refused its own value",
     ).toBe(true);
     expect(prognosisStage(MIN_ENTRIES_FOR_SEASONAL)).toBe("seasonal");
-  });
-});
-
-describe("MIN_WEEKDAY_OBSERVATIONS — a weekday needs a month of itself", () => {
-  it(`refuses at ${MIN_WEEKDAY_OBSERVATIONS - 1}`, () => {
-    expect(
-      weekdayObservationsSuffice(MIN_WEEKDAY_OBSERVATIONS - 1),
-      "MIN_WEEKDAY_OBSERVATIONS admitted n-1 observations of one weekday",
-    ).toBe(false);
-  });
-
-  it(`admits at exactly ${MIN_WEEKDAY_OBSERVATIONS}`, () => {
-    expect(
-      weekdayObservationsSuffice(MIN_WEEKDAY_OBSERVATIONS),
-      "MIN_WEEKDAY_OBSERVATIONS refused its own value",
-    ).toBe(true);
   });
 });
 

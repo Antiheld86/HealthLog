@@ -20,6 +20,34 @@
  * the honest width. It widens when the model is bad, which is the property the
  * surface depends on to report low confidence instead of a confident wrong
  * number.
+ *
+ * **What is out-of-sample here, and what is not — stated exactly, because the
+ * boundary is easy to overclaim.** The RIDGE FIT is honest: within every fold
+ * the coefficients are solved on the training prefix alone and scored on
+ * validation rows the fit never saw, and no training fold holds a row dated
+ * after its validation fold. That is the claim `rolling-origin.test.ts`
+ * proves, and it is the one that matters for "does λ generalise".
+ *
+ * Two steps sit OUTSIDE that guarantee, on purpose:
+ *
+ *   * **Feature selection.** The screening in `features.ts` runs once over the
+ *     whole window before the split, so the feature set a fold trains on was
+ *     chosen with that fold's validation rows in view. This is the classic
+ *     "screen, then cross-validate" optimism.
+ *   * **Standardisation.** The per-user mean and spread are taken over the
+ *     whole window too, so a validation row is z-scored against statistics its
+ *     own value helped compute.
+ *
+ * Both make the reported error slightly better than a fully-nested procedure
+ * would — measured here at roughly one part in sixty on the mean absolute
+ * error and a couple of points of coverage, i.e. small enough that the band is
+ * not dishonest but not zero. Nesting the screening and the standardisation
+ * inside each fold would remove even that, at the cost of a per-fold feature
+ * set and a materially larger amount of machinery; the trade was taken the
+ * cheap way deliberately, and this comment is the price of taking it — a
+ * reader must not read "no fold sees ahead" as covering the SELECTION, only
+ * the FIT. If the feature set ever grows past a handful of strong columns, or
+ * the optimism is ever measured larger, nest it.
  */
 import { fitRidge, predictWithFit, type RidgeFit } from "./ridge";
 import type { FeatureMatrix } from "./features";
