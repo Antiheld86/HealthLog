@@ -59,10 +59,10 @@ export default function CheckupsPage() {
       <PullToRefreshIndicator {...pull} />
       <Tabs value={view} onValueChange={setView}>
         <TabsList aria-label={t("checkups.viewSwitchLabel")}>
-          <TabsTrigger value="vorsorge" data-slot="checkups-tab-vorsorge">
+          <TabsTrigger value="vorsorge" data-testid="checkups-tab-vorsorge">
             {t("checkups.tabVorsorge")}
           </TabsTrigger>
-          <TabsTrigger value="visits" data-slot="checkups-tab-visits">
+          <TabsTrigger value="visits" data-testid="checkups-tab-visits">
             {t("checkups.tabVisits")}
           </TabsTrigger>
         </TabsList>

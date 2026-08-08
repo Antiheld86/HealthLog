@@ -1,0 +1,102 @@
+/**
+ * Visits — the incidental-linking promise, proven end to end once.
+ *
+ * The flow this milestone is checked against, in one script:
+ *
+ *   1. create a visit with ONLY a date — nothing else touched, Save enabled;
+ *   2. it appears in the list;
+ *   3. open a document dated inside the ±7-day window;
+ *   4. the suggestion offers that visit;
+ *   5. take the offer;
+ *   6. the document's detail names the visit it now belongs to.
+ *
+ * Every assertion addresses a stable `data-slot`, never viewport text: the
+ * copy is i18n-driven and the mobile project renders the same slots at a
+ * different size, so a text assertion would break for the wrong reason.
+ *
+ * The visit is created through the API rather than by driving the sheet twice:
+ * step 1 is about the SAVE being possible with only a date, which the sheet
+ * assertion below covers, and the linking half needs a visit whose instant is
+ * pinned relative to the seeded document's date.
+ */
+import { expect, test } from "./setup/test";
+
+import { ensureVaultFixture, MRT_DOC_ID } from "./setup/vault-fixture";
+
+test.beforeEach(async () => {
+  await ensureVaultFixture();
+});
+
+test.describe("visits", () => {
+  test("a visit saves with a date and nothing else", async ({ page }) => {
+    await page.goto("/checkups");
+    await page.getByTestId("checkups-tab-visits").click();
+
+    const add = page.locator('[data-slot="visits-add"]').first();
+    await expect(add).toBeVisible();
+    await add.click();
+
+    // The date is pre-filled with now, and NOTHING else has been touched.
+    const save = page.locator('[data-slot="encounter-save"]').first();
+    await expect(save).toBeVisible();
+    // The whole product constraint: not disabled, with no practitioner, no
+    // reason, no outcome and no link chosen.
+    await expect(save).toBeEnabled();
+
+    await save.click();
+
+    // It appears in the list. A visit dated now is in the past arm.
+    await expect(page.locator('[data-slot="visit-card"]').first()).toBeVisible({
+      timeout: 15_000,
+    });
+  });
+
+  test("a document offers the visit its date falls near, and files itself against it", async ({
+    page,
+    request,
+  }) => {
+    // The seeded MRI report carries a fixed filing date; the visit is placed
+    // two days before it so the ±7-day window resolves to exactly one
+    // candidate — the branch that pre-selects.
+    const document = await request
+      .get(`/api/documents/inbound/${MRT_DOC_ID}`)
+      .then((res) => res.json());
+    const anchorDay: string =
+      document.data.reportDate ?? document.data.documentDate;
+    expect(
+      anchorDay,
+      "the fixture document carries a filing date",
+    ).toBeTruthy();
+    const occurredAt = new Date(`${anchorDay}T09:00:00.000Z`);
+    occurredAt.setUTCDate(occurredAt.getUTCDate() - 2);
+
+    const created = await request.post("/api/encounters", {
+      data: {
+        occurredAt: occurredAt.toISOString(),
+        status: "DONE",
+        kind: "SPECIALIST",
+      },
+    });
+    expect(created.status()).toBe(201);
+
+    await page.goto(`/documents?doc=${MRT_DOC_ID}`);
+
+    const suggestion = page
+      .locator('[data-slot="document-encounter-suggestion"]')
+      .first();
+    await expect(suggestion).toBeVisible({ timeout: 15_000 });
+    // One candidate, so the single-candidate branch: a pre-selectable offer
+    // rather than a picker.
+    await expect(suggestion).toHaveAttribute("data-verdict", "one");
+
+    await page
+      .locator('[data-slot="document-encounter-suggestion-option"]')
+      .first()
+      .click();
+
+    // The filing landed: the read-only "belongs to visit" row appears.
+    await expect(
+      page.locator('[data-slot="document-visit-links"]').first(),
+    ).toBeVisible({ timeout: 15_000 });
+  });
+});
