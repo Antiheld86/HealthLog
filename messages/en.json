@@ -6703,6 +6703,7 @@
         "restoreSkippedCycleSymptom": "Cycle symptom",
         "restoreSkippedIllnessSymptom": "Illness symptom",
         "restoreSkippedMoodFactor": "Mood factor",
+        "restoreSkippedMoodTag": "Mood tag",
         "docsLink": "Documentation"
       },
       "danger-zone": {

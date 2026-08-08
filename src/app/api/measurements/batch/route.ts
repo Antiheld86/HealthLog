@@ -620,6 +620,17 @@ async function postBatch(request: NextRequest): Promise<Response> {
           };
           failedCount++;
           continue;
+        case "rejected_range":
+          // The reconciler carries the same plausibility gate this route
+          // already applied above, so reaching here means the two disagreed —
+          // report it exactly as the earlier guard would have, and let the
+          // wide-event tally record which end refused.
+          results[p.index] = {
+            index: p.index,
+            status: "skipped",
+            reason: "value_out_of_range",
+          };
+          continue;
       }
 
       if (isMergeableSource(p.row.source as string)) {

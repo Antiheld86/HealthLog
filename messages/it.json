@@ -6703,6 +6703,7 @@
         "restoreSkippedCycleSymptom": "Sintomo del ciclo",
         "restoreSkippedIllnessSymptom": "Sintomo di malattia",
         "restoreSkippedMoodFactor": "Fattore dell'umore",
+        "restoreSkippedMoodTag": "Etichetta dell'umore",
         "docsLink": "Documentazione"
       },
       "danger-zone": {

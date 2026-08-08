@@ -15,6 +15,7 @@ import { getUserWithingsCredentials } from "./credentials";
 import { annotate, getEvent } from "@/lib/logging/context";
 import { isP2002 } from "@/lib/prisma-errors";
 import { emitInsertedMeasurementArrivals } from "@/lib/arrivals/measurement-emit";
+import { dropImplausibleMeasurements } from "@/lib/measurements/plausibility-gate";
 import {
   isReauthRequired,
   recordSyncFailure,
@@ -229,13 +230,23 @@ export async function syncUserMeasurements(
         )
       : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days back
 
-  let measures: Awaited<ReturnType<typeof fetchMeasurements>>;
+  let fetched: Awaited<ReturnType<typeof fetchMeasurements>>;
   try {
-    measures = await fetchMeasurements(tokenInfo.accessToken, startDate);
+    fetched = await fetchMeasurements(tokenInfo.accessToken, startDate);
   } catch (err) {
     await recordWithingsSyncFailure(userId, err, WITHINGS_LEG_MEASURES);
     throw err;
   }
+
+  // The app's own plausibility band applies to a provider reading exactly as
+  // it applies to a typed one. A remote that reports a pulse in the millions
+  // is reporting a decode slip, not a heartbeat, and the row would poison
+  // every mean and personal band derived from it. Refuse it here, before the
+  // update branch below can overwrite a good stored value with it.
+  const measures = dropImplausibleMeasurements("withings", fetched, (m) => ({
+    type: m.type,
+    value: m.value,
+  }));
 
   let imported = 0;
   // v1.4.39.1 — track every (type, measuredAt) we touched so the

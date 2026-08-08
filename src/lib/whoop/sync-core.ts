@@ -480,6 +480,10 @@ export async function upsertWhoopMeasurements(
     for (let index = chunkStart; index < chunkEnd; index++) {
       const reading = readings[index]!;
       const verdict = verdicts[index - chunkStart]!;
+      // Refused by the plausibility gate: nothing was written and nothing was
+      // touched, so the reading counts as neither imported nor a rollup dirt
+      // mark. The drop is already on the wide event.
+      if (verdict.status === "rejected_range") continue;
       for (const dirty of verdict.dirtyIdentities ?? []) {
         touched.push(dirty);
         touchedTypes.add(dirty.type);

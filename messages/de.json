@@ -6703,6 +6703,7 @@
         "restoreSkippedCycleSymptom": "Zyklussymptom",
         "restoreSkippedIllnessSymptom": "Krankheitssymptom",
         "restoreSkippedMoodFactor": "Stimmungsfaktor",
+        "restoreSkippedMoodTag": "Stimmungs-Tag",
         "docsLink": "Dokumentation"
       },
       "danger-zone": {

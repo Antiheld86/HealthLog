@@ -255,11 +255,29 @@ const moodEntrySchema = z
     mood: z.string().min(1),
     score: z.number().int().min(0).max(10),
     tags: moodEntryTagsSchema,
+    // The free text, in both storage shapes. A portable export carries the
+    // decrypted `note`; a disaster-recovery file carries `noteEncrypted` plus
+    // whatever legacy plaintext the row still holds. Same pair, and same
+    // handling on restore, as `Measurement.notes` / `notesEncrypted`.
+    note: z.string().nullable().optional(),
+    noteEncrypted: base64BytesSchema.nullable().optional(),
     source: z.string().min(1).optional(),
     externalId: z.string().nullable().optional(),
     loggedAt: isoDateTime,
+    // The IANA zone the `date` string is anchored to. Absent means the legacy
+    // Europe/Berlin reading, which is what a row written before v1.4.25 means
+    // by a NULL here — so an old file keeps its old meaning exactly.
+    tz: z.string().nullable().optional(),
+    syncedAt: isoDateTime.optional(),
+    syncVersion: z.number().int().optional(),
     deletedAt: isoDateTime.nullable().optional(),
+    createdAt: isoDateTime.optional(),
+    updatedAt: isoDateTime.optional(),
     factors: z.array(moodFactorSchema).default([]),
+    // BINARY structured-tag keys. Separate from `factors`, which keeps its
+    // RATED-only meaning, so every file written before this one parses
+    // unchanged and restores identically: absent reads as none.
+    structuredTags: z.array(z.string().min(1)).default([]),
   })
   .passthrough();
 
