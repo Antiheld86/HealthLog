@@ -9,6 +9,7 @@ import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DateField } from "@/components/ui/date-field";
+import { InfoPopover } from "@/components/ui/info-popover";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
@@ -190,6 +191,7 @@ export function GrantInviteCard() {
               onSelect={() => chooseAccess("WRITE")}
               label={t("recordSharing.invite.accessWriteLabel")}
               capability={t("recordSharing.invite.accessWriteCapability")}
+              detail={t("recordSharing.invite.accessWriteDetail")}
             />
             <AccessOption
               level="MANAGE"
@@ -197,6 +199,7 @@ export function GrantInviteCard() {
               onSelect={() => chooseAccess("MANAGE")}
               label={t("recordSharing.invite.accessManageLabel")}
               capability={t("recordSharing.invite.accessManageCapability")}
+              detail={t("recordSharing.invite.accessManageDetail")}
             />
           </div>
           {choice.mode === "manage" && (
@@ -431,13 +434,17 @@ export function resolveInviteScope({
 }
 
 /**
- * One level, with the sentence that says what it actually does.
+ * One level, with the one sentence that says what it actually does.
  *
- * The capability line is not decoration and it is not a tooltip: it is the
- * part the owner is consenting to, so it sits under the label where it has to
- * be read past rather than behind an info icon. Muted because it describes the
- * option rather than being the option (UI-STANDARDS §3), `text-xs` because
- * that is the meta floor.
+ * The capability line is the part the owner is consenting to, so it stays
+ * inline under the label rather than behind an icon — but it is one line, not a
+ * wall. Where a level has more to say than fits on a line (the exact list WRITE
+ * may add, the fence MANAGE does NOT reach), that detail rides an `InfoPopover`
+ * at the option-heading height. The (i) sits OUTSIDE the `<label>` on purpose:
+ * a button inside a label forwards its own tap to the label's control, so the
+ * radio and the popover would fight for the same click (the same reason
+ * `SectionOption` avoids the wrapping label). Muted, `text-xs` — the meta floor
+ * per UI-STANDARDS §3.
  */
 function AccessOption({
   level,
@@ -445,37 +452,51 @@ function AccessOption({
   onSelect,
   label,
   capability,
+  detail,
 }: {
   level: GrantAccessLevel;
   selected: boolean;
   onSelect: () => void;
   label: string;
   capability: string;
+  /** The full enumeration, shown behind the (i) when a line is not enough. */
+  detail?: string;
 }) {
+  const id = `grant-invite-access-${level}`;
   return (
-    <label
+    <div
       data-slot="grant-invite-access-option"
       data-access={level}
       data-selected={selected ? "true" : "false"}
       className={optionClass(selected)}
     >
-      <input
-        type="radio"
-        name="grant-invite-access"
-        value={level}
-        checked={selected}
-        onChange={onSelect}
-        className="sr-only"
-      />
-      <span className="space-y-1">
-        <span className="text-foreground block text-sm font-medium">
-          {label}
+      <label htmlFor={id} className="flex flex-1 cursor-pointer items-start">
+        <input
+          id={id}
+          type="radio"
+          name="grant-invite-access"
+          value={level}
+          checked={selected}
+          onChange={onSelect}
+          className="sr-only"
+        />
+        <span className="space-y-1">
+          <span className="text-foreground block text-sm font-medium">
+            {label}
+          </span>
+          <span className="text-muted-foreground block text-xs">
+            {capability}
+          </span>
         </span>
-        <span className="text-muted-foreground block text-xs">
-          {capability}
-        </span>
-      </span>
-    </label>
+      </label>
+      {detail ? (
+        <InfoPopover
+          content={detail}
+          label={label}
+          bodyDataSlot="grant-invite-access-detail"
+        />
+      ) : null}
+    </div>
   );
 }
 

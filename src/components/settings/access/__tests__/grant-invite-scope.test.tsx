@@ -134,15 +134,22 @@ describe("the bundle behind the expanded state", () => {
   });
 
   it("states the manage fence in the invitation copy itself", () => {
-    // Not in a tooltip and not in the docs: on the label, where somebody is
-    // deciding.
+    // The consent line stays one sentence and inline — what Manage lets someone
+    // do. The full fence (what it does NOT reach) rides the (i) detail rather
+    // than a wall of text, but it is still shipped copy, not docs.
     expect(invite.accessManageCapability).toContain(
       "add, change and remove entries",
     );
     expect(invite.accessManageCapability).toContain(
       "including ones you entered yourself",
     );
-    expect(invite.accessManageCapability).toContain("They cannot change your");
+    // The one-liner is a single sentence, not a paragraph.
+    expect(invite.accessManageCapability.split(". ").length).toBeLessThan(2);
+    expect(invite.accessManageDetail).toContain("They cannot change your");
+    // WRITE is split the same way: a one-line consent sentence, the full
+    // enumeration behind the (i).
+    expect(invite.accessWriteCapability.split(". ").length).toBeLessThan(2);
+    expect(invite.accessWriteDetail).toContain("mark a dose taken or skipped");
   });
 });
 
