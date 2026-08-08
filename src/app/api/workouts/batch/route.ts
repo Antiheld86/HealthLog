@@ -30,14 +30,21 @@
  *   - `Content-Length` ceiling at 5 MB before parsing — anything
  *     larger returns 413 so the iOS client falls back to one workout
  *     per call.
- *   - Per-entry status (`inserted | duplicate | skipped`) so the iOS
- *     sync cursor can checkpoint accurately.
+ *   - Per-entry status (`inserted | duplicate | enriched | skipped`) so
+ *     the iOS sync cursor can checkpoint accurately.
  *
  * Idempotency contract:
  *   - HTTP-level via `Idempotency-Key` (replays cached envelope).
  *   - Per-entry via the `@@unique([userId, source, externalId])`
  *     composite index. Re-posting the same batch surfaces duplicates
  *     rather than failing the call.
+ *
+ * Heart-rate series enrichment (v1.37.2): a re-post that matches a stored
+ * workout and carries a `samples` array attaches that series when the
+ * workout has none. The workout row itself stays first-write-wins —
+ * nothing on it is written, not one column — and a workout that already
+ * holds a series is a no-op, so the client's history sweep is repeatable
+ * as often as it likes. See the enrichment block below.
  *
  * Race reconciliation uses PostgreSQL's `INSERT ... RETURNING` through
  * Prisma's `createManyAndReturn`. The returned composite keys identify the
@@ -66,10 +73,11 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { enqueuePrDetection } from "@/lib/jobs/pr-detection";
 import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
 import { emitDataArrival } from "@/lib/arrivals/emit-shared";
+import { MAX_WORKOUTS_PER_BATCH } from "@/lib/validations/workout";
 import {
-  createBatchWorkoutSchema,
-  MAX_WORKOUTS_PER_BATCH,
-} from "@/lib/validations/workout";
+  INVALID_SAMPLES_REASON,
+  parseWorkoutBatch,
+} from "@/lib/workouts/batch-ingest-parse";
 import {
   classifyExternalId,
   unstableExternalIdMeta,
@@ -106,16 +114,14 @@ const MAX_BODY_BYTES = 5 * 1024 * 1024;
 
 /**
  * Per-entry outcome the iOS client uses to advance its sync cursor.
- * `inserted` and `duplicate` both indicate the row landed (or was
- * already present); the client can checkpoint past them identically.
- * `skipped` covers entries the server cannot durably store — currently
- * unused by this endpoint (the Zod schema rejects malformed entries
- * with a 422 before we reach the per-entry pass), but reserved on the
- * envelope so the response shape parallels the measurements batch and
- * future server-side validation can surface fine-grained skips without
- * breaking the iOS DTO.
+ * `inserted`, `duplicate` and `enriched` all indicate the row landed (or
+ * was already present); the client can checkpoint past them identically.
+ * `enriched` additionally says the entry's heart-rate series was attached
+ * to a workout that had none, which is what lets a history sweep count
+ * its own progress. `skipped` covers entries the server refused: an
+ * unusable external id, or a `samples` array that failed validation.
  */
-type EntryStatus = "inserted" | "duplicate" | "skipped";
+type EntryStatus = "inserted" | "duplicate" | "enriched" | "skipped";
 interface EntryResult {
   index: number;
   status: EntryStatus;
@@ -251,15 +257,18 @@ async function postBatch(request: NextRequest): Promise<Response> {
     );
   }
 
-  const parsed = createBatchWorkoutSchema.safeParse(rawBody);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    return apiError(issue?.message ?? "Invalid batch", 400, {
+  // Strict on every field, per-entry on `samples` alone — see
+  // `parseWorkoutBatch` for why the series is the one field whose
+  // failure must not take the rest of a history sweep down with it.
+  const parsed = parseWorkoutBatch(rawBody);
+  if (!parsed.ok) {
+    return apiError(parsed.message, 400, {
       errorCode: "workout.batch.invalid",
     });
   }
 
   const { workouts } = parsed.data;
+  const refusedSampleIndices = new Set(parsed.refusedSampleIndices);
 
   // Pre-flight duplicate detection so we can return per-entry status.
   // The composite unique index is `(userId, source, externalId)` —
@@ -289,6 +298,18 @@ async function postBatch(request: NextRequest): Promise<Response> {
   const results: EntryResult[] = new Array(workouts.length);
   const unstableShapes: UnstableExternalIdShape[] = [];
   const prepared: Prepared[] = workouts.flatMap((w, index) => {
+    // An entry whose series failed validation is refused whole. Storing
+    // the workout without the curve the caller asked us to keep would be
+    // a silent loss, and the row may well already exist anyway.
+    if (refusedSampleIndices.has(index)) {
+      results[index] = {
+        index,
+        status: "skipped",
+        reason: INVALID_SAMPLES_REASON,
+      };
+      return [];
+    }
+
     // The `(userId, source, externalId)` dedup key is only idempotent
     // while the id is STABLE across client launches. An id that rotates
     // per process (an object description carrying a memory address)
@@ -408,6 +429,7 @@ async function postBatch(request: NextRequest): Promise<Response> {
   const survivors = prepared.filter((p) => survivingIndices.has(p.index));
   let duplicateCount = droppedByWriteDedup.length;
   let insertedCount = 0;
+  let enrichedCount = 0;
   const insertedIdByIndex = new Map<number, string>();
 
   if (survivors.length > 0) {
@@ -418,6 +440,9 @@ async function postBatch(request: NextRequest): Promise<Response> {
       .map((p) => p.dedupKey)
       .filter((k): k is { source: string; externalId: string } => k !== null);
 
+    // The same probe answers both questions: does the row exist, and
+    // does it already carry a series. `id` comes along so an enrichment
+    // can address the stored workout without a second round trip.
     const existing = dedupCandidates.length
       ? await prisma.workout.findMany({
           where: {
@@ -427,30 +452,60 @@ async function postBatch(request: NextRequest): Promise<Response> {
               externalId: k.externalId,
             })),
           },
-          select: { source: true, externalId: true },
+          select: {
+            id: true,
+            source: true,
+            externalId: true,
+            samples: { select: { workoutId: true } },
+          },
         })
       : [];
 
-    const existingSet = new Set(
-      existing.map((row) => `${row.source}::${row.externalId}`),
-    );
+    const existingByKey = new Map<string, { id: string; hasSeries: boolean }>();
+    for (const row of existing) {
+      if (row.externalId === null) continue;
+      existingByKey.set(`${row.source}::${row.externalId}`, {
+        id: row.id,
+        hasSeries: row.samples !== null,
+      });
+    }
 
     const toInsert: Prepared[] = [];
+    /** Stored workouts this batch hands a heart-rate series to. */
+    const toEnrich: Array<{
+      index: number;
+      workoutId: string;
+      samples: NonNullable<Prepared["samples"]>;
+    }> = [];
     for (const p of survivors) {
       const keyTuple = p.dedupKey
         ? `${p.dedupKey.source}::${p.dedupKey.externalId}`
         : null;
-      if (keyTuple !== null && existingSet.has(keyTuple)) {
-        results[p.index] = { index: p.index, status: "duplicate" };
-        duplicateCount += 1;
+      const known = keyTuple !== null ? existingByKey.get(keyTuple) : undefined;
+      if (known) {
+        if (p.samples && !known.hasSeries) {
+          // Enrichment. The status is assigned after the write, because
+          // a concurrent writer may get the series in first — in which
+          // case this entry is the plain duplicate it always was.
+          toEnrich.push({
+            index: p.index,
+            workoutId: known.id,
+            samples: p.samples,
+          });
+        } else {
+          results[p.index] = { index: p.index, status: "duplicate" };
+          duplicateCount += 1;
+        }
       } else {
         results[p.index] = { index: p.index, status: "inserted" };
         toInsert.push(p);
       }
     }
 
-    if (toInsert.length > 0) {
+    if (toInsert.length > 0 || toEnrich.length > 0) {
       const CHUNK = 100;
+      /** Workout ids whose series row this request actually wrote. */
+      const seriesLanded = new Set<string>();
 
       await prisma.$transaction(async (tx) => {
         const withExternalId = toInsert.filter((p) => p.dedupKey !== null);
@@ -517,6 +572,19 @@ async function postBatch(request: NextRequest): Promise<Response> {
           }
         }
 
+        // Enrichment rides the SAME child write as a fresh workout's
+        // series — one mechanism, one place where a series is stored.
+        // The only difference is where the `workoutId` came from: the
+        // pre-flight probe instead of this request's INSERT ... RETURNING.
+        // Nothing here writes to the workout row.
+        for (const e of toEnrich) {
+          samplesToInsert.push({
+            workoutId: e.workoutId,
+            samples: e.samples.samples as Prisma.InputJsonValue,
+            sampleCount: e.samples.sampleCount,
+          });
+        }
+
         for (let i = 0; i < routesToInsert.length; i += CHUNK) {
           await tx.workoutRoute.createMany({
             data: routesToInsert.slice(i, i + CHUNK),
@@ -524,10 +592,16 @@ async function postBatch(request: NextRequest): Promise<Response> {
           });
         }
         for (let i = 0; i < samplesToInsert.length; i += CHUNK) {
-          await tx.workoutSamples.createMany({
+          // RETURNING names the rows that actually landed. `workoutId` is
+          // unique, so a workout that gained a series between the probe
+          // and this write is skipped here and reports as a duplicate —
+          // the re-post stays a no-op and never overwrites a stored curve.
+          const landed = await tx.workoutSamples.createManyAndReturn({
             data: samplesToInsert.slice(i, i + CHUNK),
             skipDuplicates: true,
+            select: { workoutId: true },
           });
+          for (const row of landed) seriesLanded.add(row.workoutId);
         }
       });
 
@@ -539,6 +613,18 @@ async function postBatch(request: NextRequest): Promise<Response> {
           results[p.index] = { index: p.index, status: "duplicate" };
           duplicateCount += 1;
         }
+      }
+
+      // An enriched entry is still a duplicate of the workout row: the
+      // top-level counters count rows, and no row was inserted for it.
+      // The per-entry status carries what happened to the series.
+      for (const e of toEnrich) {
+        results[e.index] = {
+          index: e.index,
+          status: seriesLanded.has(e.workoutId) ? "enriched" : "duplicate",
+        };
+        if (seriesLanded.has(e.workoutId)) enrichedCount += 1;
+        duplicateCount += 1;
       }
     }
   }
@@ -554,6 +640,7 @@ async function postBatch(request: NextRequest): Promise<Response> {
       processed: workouts.length,
       inserted: insertedCount,
       duplicates: duplicateCount,
+      enriched: enrichedCount,
       skipped: skipped.length,
     },
   });
@@ -584,12 +671,14 @@ async function postBatch(request: NextRequest): Promise<Response> {
     }
   }
 
+  // Counts only. The series itself never reaches a wide event.
   annotate({
     action: { name: "workout.batch.ingest" },
     meta: {
       processed: workouts.length,
       inserted: insertedCount,
       duplicates: duplicateCount,
+      enriched: enrichedCount,
       skipped: skipped.length,
     },
   });
@@ -598,11 +687,17 @@ async function postBatch(request: NextRequest): Promise<Response> {
   // caches when at least one row landed. Workouts ride on the
   // measurements bucket because achievements / analytics also touch
   // workout-derived metrics.
-  if (insertedCount > 0) {
+  // An enrichment changes what the workout reads as — the detail seam
+  // gains its curve, the list gains its glyph — so it busts the cache
+  // too, even though no workout row was written.
+  if (insertedCount > 0 || enrichedCount > 0) {
     invalidateUserMeasurements(user.id);
+  }
 
+  if (insertedCount > 0) {
     // One arrival per exact INSERT ... RETURNING winner. Historical rows still
     // stop at the shared salience classifier before any queue work.
+    // An enrichment raises none: the workout arrived when it was stored.
     void emitWorkoutArrivals(user.id, prepared, insertedIdByIndex).catch(
       () => {},
     );
