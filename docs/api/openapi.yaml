@@ -34915,8 +34915,10 @@ components:
         - labResults
         - conditions
       additionalProperties: false
-      description: The three link families of one visit, each ordered by when it was filed. Present on the detail response,
-        absent from the list.
+      description: "The three link families of one visit, each ordered by when it was filed. Present on BOTH the list and the
+        detail: a card shows counts of what the visit produced, and an edit opened from a list row seeds its pickers
+        from that row — a list without them would make the first read zero and the second unfile everything on save. The
+        list resolves them in three grouped queries for the whole page, not three per row."
     EncounterLinkedTarget:
       type: object
       properties:

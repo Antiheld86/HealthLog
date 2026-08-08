@@ -75,15 +75,6 @@ export function useEncounters(
   });
 }
 
-/** One visit with its three link families resolved. */
-export function useEncounter(id: string | null) {
-  return useQuery({
-    queryKey: queryKeys.encounter(id ?? ""),
-    queryFn: () => apiGet<Encounter>(`${BASE}/${id}`),
-    enabled: Boolean(id),
-  });
-}
-
 /**
  * "Does this belong to a visit?" for one anchor date.
  *

@@ -45,6 +45,7 @@ vi.mock("@/lib/api/api-fetch", async () => {
 import { I18nProvider } from "@/lib/i18n/context";
 import {
   EncounterForm,
+  draftFromEncounter,
   derivedStatus,
   draftInstant,
   draftToBody,
@@ -115,6 +116,39 @@ describe("nothing but the date is required", () => {
     expect(
       draftToBody(emptyDraft({ occurredAt: "not a date" }), { isEdit: false }),
     ).toBeNull();
+  });
+});
+
+describe("editing never unfiles what the visit already collected", () => {
+  it("seeds the link arrays from the row's own links", () => {
+    // The defect this pins: an edit seeded from a row that did not know its
+    // links would save a replace-set of three EMPTY arrays and silently
+    // unfile everything. The list carries the links so this cannot happen.
+    const draft = draftFromEncounter({
+      id: "e1",
+      occurredAt: "2026-08-01T09:00:00.000Z",
+      status: "DONE",
+      kind: "ROUTINE",
+      practitioner: null,
+      reason: null,
+      outcome: null,
+      reminderNextDueAt: null,
+      links: {
+        documents: [{ id: "d1", label: "Letter", date: null, redacted: false }],
+        labResults: [{ id: "l1", label: "LDL", date: null, redacted: false }],
+        conditions: [{ id: "c1", label: "Knee", date: null, redacted: false }],
+      },
+      createdAt: "2026-08-01T09:00:00.000Z",
+      updatedAt: "2026-08-01T09:00:00.000Z",
+    });
+    expect(draft.documentIds).toEqual(["d1"]);
+    expect(draft.labResultIds).toEqual(["l1"]);
+    expect(draft.episodeIds).toEqual(["c1"]);
+
+    const body = draftToBody(draft, { isEdit: true });
+    expect(body?.documentIds).toEqual(["d1"]);
+    expect(body?.labResultIds).toEqual(["l1"]);
+    expect(body?.episodeIds).toEqual(["c1"]);
   });
 });
 

@@ -120,6 +120,34 @@ describe("<VisitsSection>", () => {
     );
   });
 
+  it("counts what a visit produced, from the links the LIST carried", () => {
+    // The counts come off `links`, and the list used to omit them — every card
+    // then read zero for a visit with three documents. The fixture carries a
+    // populated `links` because the response now does.
+    const html = render({
+      upcoming: [],
+      past: [
+        visit({
+          id: "linked",
+          links: {
+            documents: [
+              { id: "d1", label: "Letter", date: null, redacted: false },
+              { id: "d2", label: "Scan", date: null, redacted: false },
+            ],
+            labResults: [
+              { id: "l1", label: "LDL", date: null, redacted: false },
+            ],
+            conditions: [],
+          },
+        }),
+      ],
+    });
+    expect(html).toContain("2 linked documents");
+    expect(html).toContain("1 linked lab results");
+    // The empty family renders no counter rather than a zero.
+    expect(html).not.toContain("0 linked conditions");
+  });
+
   it("offers the address book beside the add action", () => {
     const html = render({ upcoming: [], past: [] });
     expect(html).toContain('href="/checkups/practitioners"');

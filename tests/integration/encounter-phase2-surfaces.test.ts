@@ -414,6 +414,59 @@ describe("the visit list's condition filter", () => {
   });
 });
 
+describe("the visit list carries its links", () => {
+  it("resolves every family on a list row, not only on the detail", async () => {
+    const prisma = getPrismaClient();
+    const episode = await prisma.illnessEpisode.create({
+      data: {
+        userId: OWNER_ID,
+        label: "Knee",
+        type: "INJURY",
+        onsetAt: daysFromNow(-40),
+      },
+    });
+    const document = await prisma.inboundDocument.create({
+      data: {
+        userId: OWNER_ID,
+        kind: "OTHER",
+        filename: "letter.pdf",
+        mimeType: "application/pdf",
+        byteSize: 4,
+        status: "STORED",
+        contentEncrypted: Buffer.from("test"),
+        contentCodec: "v1",
+      },
+    });
+
+    await post({
+      occurredAt: daysFromNow(-3).toISOString(),
+      status: "DONE",
+      episodeIds: [episode.id],
+      documentIds: [document.id],
+    });
+
+    const list = await json<{
+      past: Array<{
+        links?: {
+          documents: unknown[];
+          labResults: unknown[];
+          conditions: unknown[];
+        };
+      }>;
+    }>(
+      await listEncounters(
+        new Request("http://localhost/api/encounters") as never,
+      ),
+    );
+    expect(list.past).toHaveLength(1);
+    // Without this the card counts read zero for a visit that produced two
+    // things, and an edit opened from the row would unfile both on save.
+    expect(list.past[0]!.links?.documents).toHaveLength(1);
+    expect(list.past[0]!.links?.conditions).toHaveLength(1);
+    expect(list.past[0]!.links?.labResults).toHaveLength(0);
+  });
+});
+
 describe("the suggestion, over real rows", () => {
   function suggest(anchor: string): Promise<Response> {
     return suggestEncounter(

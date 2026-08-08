@@ -36,6 +36,7 @@ import {
   ENCOUNTER_INCLUDE,
   actingDomainVisibility,
   applyEncounterLinks,
+  loadEncounterLinksForMany,
   closeCheckupForVisit,
   resolveClosableReminder,
   resolveOwnedPractitioner,
@@ -50,7 +51,7 @@ import {
 } from "@/lib/export/restore-skips";
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireRecordAuth("read", "profile");
+  const { user, grantId } = await requireRecordAuth("read", "profile");
 
   const params = new URL(request.url).searchParams;
   const parsed = encounterListQuerySchema.safeParse({
@@ -124,14 +125,26 @@ export const GET = apiHandler(async (request: NextRequest) => {
     }),
   ]);
 
+  // The links ride the list. The card counts what a visit produced, and the
+  // edit sheet seeds its pickers from the row it was handed — a list without
+  // them makes the first read zero and the second unfile everything on save.
+  // Three grouped queries for the page, not three per row.
+  const visible = await actingDomainVisibility(prisma, grantId);
+  const links = await loadEncounterLinksForMany(
+    prisma,
+    user.id,
+    [...upcoming, ...past].map((row) => row.id),
+    visible,
+  );
+
   annotate({
     action: { name: "encounter.visit.list", entity_type: "encounter" },
     meta: { upcoming: upcoming.length, past: past.length },
   });
 
   const body: EncounterListDTO = {
-    upcoming: upcoming.map((row) => toEncounterDTO(row)),
-    past: past.map((row) => toEncounterDTO(row)),
+    upcoming: upcoming.map((row) => toEncounterDTO(row, links.get(row.id))),
+    past: past.map((row) => toEncounterDTO(row, links.get(row.id))),
   };
   return apiSuccess(body);
 });
