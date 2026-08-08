@@ -1,9 +1,11 @@
 /**
  * Document vault: bulk actions over up to 100 owner-scoped documents.
  *
- * `{ ids[], action, kind?, episodeId? }` → a per-id result array. Actions:
- * `setKind` (recategorise), `linkEpisode` / `unlinkEpisode` (condition
- * links), `delete` (tombstone, undo-able), `restore` (clear tombstone). A
+ * `{ ids[], action, kind?, episodeId?, encounterId? }` → a per-id result
+ * array. Actions: `setKind` (recategorise), `linkEpisode` / `unlinkEpisode`
+ * (condition links), `linkEncounter` / `unlinkEncounter` (visit links, the
+ * same table the visit's own sheet writes from the other end),
+ * `delete` (tombstone, undo-able), `restore` (clear tombstone). A
  * partial failure never aborts the batch — each id reports `ok` or a short
  * machine reason. Every id is narrowed to the caller; a foreign id reads as
  * "notFound", exactly like the single-document routes.
@@ -68,7 +70,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   if (!parsed.success) {
     return returnAllZodIssues(parsed.error, 422);
   }
-  const { ids, action, kind, episodeId } = parsed.data;
+  const { ids, action, kind, episodeId, encounterId } = parsed.data;
   const uniqueIds = [...new Set(ids)];
 
   // Episode actions: the target episode must be a LIVE episode of the caller.
@@ -80,6 +82,21 @@ export const POST = apiHandler(async (request: NextRequest) => {
     if (!episode) {
       return apiError("Episode not found", 404, {
         errorCode: "documents.inbound.episodeNotFound",
+      });
+    }
+  }
+
+  // Visit actions: the target visit must be a LIVE visit of the caller. Same
+  // shape as the episode gate above — the endpoint is checked once, before the
+  // batch, so a foreign id costs one refusal rather than a hundred.
+  if (action === "linkEncounter" || action === "unlinkEncounter") {
+    const encounter = await prisma.encounter.findFirst({
+      where: { id: encounterId!, userId: user.id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!encounter) {
+      return apiError("Visit not found", 404, {
+        errorCode: "documents.inbound.encounterNotFound",
       });
     }
   }
@@ -133,6 +150,33 @@ export const POST = apiHandler(async (request: NextRequest) => {
             sourceId: id,
             targetKind: "conditionEpisode",
             targetIds: [episodeId!],
+          });
+          break;
+        }
+        case "linkEncounter": {
+          if (row.deletedAt !== null) {
+            results.push({ id, ok: false, error: "notFound" });
+            continue;
+          }
+          await linkTargets(prisma, {
+            userId: user.id,
+            sourceKind: "document",
+            sourceId: id,
+            targetKind: "encounter",
+            targetIds: [encounterId!],
+          });
+          break;
+        }
+        case "unlinkEncounter": {
+          // No tombstone check, matching `unlinkEpisode`: clearing a filing on
+          // a document the account has since deleted must stay possible, or
+          // the filing is unreachable.
+          await unlinkTargets(prisma, {
+            userId: user.id,
+            sourceKind: "document",
+            sourceId: id,
+            targetKind: "encounter",
+            targetIds: [encounterId!],
           });
           break;
         }

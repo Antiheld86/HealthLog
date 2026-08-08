@@ -9305,7 +9305,10 @@
       "previewUnavailable": "Brak podglądu dla tego typu pliku",
       "uploadedMeta": "Dodano {date} · {size}",
       "share": "Udostępnij",
-      "labValuesLink": "Zobacz {count} wyników laboratoryjnych"
+      "labValuesLink": "Zobacz {count} wyników laboratoryjnych",
+      "visitsLabel": "Należy do wizyty",
+      "visitSuggestion": "Czy to należy do tej wizyty?",
+      "visitSuggestionChoose": "Do której wizyty to należy?"
     },
     "dropOverlay": {
       "title": "Upuść pliki, aby je przesłać",
@@ -9322,7 +9325,8 @@
       "partialFailure": "Nie udało się zaktualizować {failed} z {total}",
       "failed": "Nie udało się wykonać akcji",
       "share": "Udostępnij",
-      "shareTooMany": "Link do udostępniania obejmuje maksymalnie {max} dokumentów. Odznacz kilka i spróbuj ponownie."
+      "shareTooMany": "Link do udostępniania obejmuje maksymalnie {max} dokumentów. Odznacz kilka i spróbuj ponownie.",
+      "linkVisit": "Przypisz do wizyty"
     },
     "episodeCard": {
       "title": "Dokumenty",

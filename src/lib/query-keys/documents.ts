@@ -22,6 +22,8 @@ export interface DocumentVaultFilters {
   kinds?: InboundDocumentKindValue[];
   /** Only documents linked to this illness/condition episode. */
   episodeId?: string;
+  /** Only documents linked to this visit. Arrives by deep link from it. */
+  encounterId?: string;
   /** Only documents whose filing date falls in this calendar year. */
   year?: number;
 }

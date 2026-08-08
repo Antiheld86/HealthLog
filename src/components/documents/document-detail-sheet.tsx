@@ -61,7 +61,9 @@ import {
   apiPatch,
   apiPost,
 } from "@/lib/api/api-fetch";
+import { encounterKindText } from "@/components/encounters/encounter-labels";
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
+import type { EncounterKind } from "@/generated/prisma/client";
 import { useCoachLaunch } from "@/lib/insights/coach-launch-context";
 import { invalidateKeys, queryKeys } from "@/lib/query-keys";
 import {
@@ -77,6 +79,7 @@ import {
   type InboundDocumentKindValue,
 } from "@/lib/validations/inbound-documents";
 import { DocumentAiSection } from "./document-ai-section";
+import { DocumentEncounterSuggestion } from "./document-encounter-suggestion";
 import { DocumentSummaryBlock } from "./document-summary-block";
 import type { DocumentAiTarget } from "./document-ai-transport";
 import { DocumentShareSheet } from "./document-share-sheet";
@@ -96,6 +99,7 @@ type PatchInput = {
   kind?: InboundDocumentKindValue;
   documentDate?: string | null;
   episodeIds?: string[];
+  encounterIds?: string[];
 };
 
 /**
@@ -396,6 +400,17 @@ export function DocumentDetailSheet({
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
+  /**
+   * The visit this SESSION filed the document against, if any.
+   *
+   * Kept beside the server state rather than derived from it, because the two
+   * answer different questions: `doc.encounterLinks` says what is filed, this
+   * says what the person just did here — which is what an undo can take back
+   * without touching a filing they made somewhere else.
+   */
+  const [pickedEncounterId, setPickedEncounterId] = useState<string | null>(
+    null,
+  );
   const [titleDraft, setTitleDraft] = useState("");
   const [suggestion, setSuggestion] = useState<DocumentSuggestionDto | null>(
     null,
@@ -497,6 +512,25 @@ export function DocumentDetailSheet({
       ? current.filter((id) => id !== episodeId)
       : [...current, episodeId];
     patch.mutate({ episodeIds: next });
+  };
+
+  /**
+   * File this document against a visit, or clear that filing again.
+   *
+   * A replace-set PATCH like the condition links, so the undo is the same
+   * write with the id removed rather than a second endpoint. Nothing here can
+   * fail the document: an unknown id is refused by the route before anything
+   * is written, and the sheet keeps showing what the server last confirmed.
+   */
+  const setSuggestedEncounter = (encounterId: string | null) => {
+    if (!doc) return;
+    const current = doc.encounterLinks.map((l) => l.encounterId);
+    const next =
+      encounterId === null
+        ? current.filter((id) => id !== pickedEncounterId)
+        : [...new Set([...current, encounterId])];
+    setPickedEncounterId(encounterId);
+    patch.mutate({ encounterIds: next });
   };
 
   // The affordance gate falls back to the capability probe when the sheet is
@@ -1000,6 +1034,48 @@ export function DocumentDetailSheet({
                   ) : null}
                 </div>
               </div>
+
+              <DocumentEncounterSuggestion
+                anchor={doc.reportDate ?? doc.documentDate}
+                alreadyLinked={
+                  doc.encounterLinks.length > 0 && pickedEncounterId === null
+                }
+                disabled={!canManage}
+                pickedId={pickedEncounterId}
+                onPick={(id) => setSuggestedEncounter(id)}
+                onUndo={() => setSuggestedEncounter(null)}
+              />
+
+              {/* "Belongs to visit" — read-only here on purpose. The filing
+                  happens at the moment the document arrives, or from the
+                  visit's own sheet; a second editor for the same link would
+                  be a second place the set can be changed. Each row deep-links
+                  to the vault filtered to that visit. */}
+              {doc.encounterLinks.length > 0 ? (
+                <div className="space-y-1.5" data-slot="document-visit-links">
+                  <p className="text-sm leading-none font-medium">
+                    {t("documents.detail.visitsLabel")}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {doc.encounterLinks.map((link) => (
+                      <Link
+                        key={link.encounterId}
+                        href={`/documents?encounter=${encodeURIComponent(link.encounterId)}`}
+                        className="bg-muted text-foreground hover:bg-muted/70 focus-visible:ring-ring/50 inline-flex max-w-64 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs focus-visible:ring-[3px] focus-visible:outline-none"
+                      >
+                        <span className="truncate">
+                          {encounterKindText(t, link.kind as EncounterKind)}
+                        </span>
+                        {link.occurredAt ? (
+                          <span className="text-muted-foreground shrink-0">
+                            {format.date(link.occurredAt)}
+                          </span>
+                        ) : null}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               {labsModuleEnabled && labFactCount > 0 ? (
                 <Link

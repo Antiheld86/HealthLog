@@ -83,11 +83,21 @@ export async function actingDomainVisibility(
   return (domain) => grantCoversDomain(grant, domain);
 }
 
-/** Which section of the record each link family's TARGET belongs to. */
+/**
+ * Which section of the record each link family's TARGET belongs to.
+ *
+ * Exhaustive over `LinkTargetKind` by the compiler, so a link kind added to
+ * the service cannot reach a visit's link list without somebody deciding which
+ * domain governs its names. `encounter` is here for that reason and is never
+ * read from this side — a visit does not point at another visit — but a
+ * `Partial` here would turn "nobody classified it" into "undefined", and an
+ * undefined domain read as a falsy check is a leak.
+ */
 const TARGET_DOMAIN: Record<LinkTargetKind, ShareDomain> = {
   document: "documents",
   labResult: "labs",
   conditionEpisode: "illness",
+  encounter: "profile",
 };
 
 /**

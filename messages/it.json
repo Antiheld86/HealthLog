@@ -9305,7 +9305,10 @@
       "previewUnavailable": "Nessuna anteprima integrata per questo tipo di file",
       "uploadedMeta": "Aggiunto il {date} · {size}",
       "share": "Condividi",
-      "labValuesLink": "Vedi {count} valori di laboratorio"
+      "labValuesLink": "Vedi {count} valori di laboratorio",
+      "visitsLabel": "Appartiene all'appuntamento",
+      "visitSuggestion": "Appartiene a questo appuntamento?",
+      "visitSuggestionChoose": "A quale appuntamento appartiene?"
     },
     "dropOverlay": {
       "title": "Rilascia i file per caricarli",
@@ -9322,7 +9325,8 @@
       "partialFailure": "Impossibile aggiornare {failed} su {total}",
       "failed": "Impossibile completare l'azione",
       "share": "Condividi",
-      "shareTooMany": "Un link di condivisione contiene al massimo {max} documenti. Deseleziona alcuni documenti e riprova."
+      "shareTooMany": "Un link di condivisione contiene al massimo {max} documenti. Deseleziona alcuni documenti e riprova.",
+      "linkVisit": "Assegna a un appuntamento"
     },
     "episodeCard": {
       "title": "Documenti",

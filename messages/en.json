@@ -9305,7 +9305,10 @@
       "previewUnavailable": "No inline preview for this file type",
       "uploadedMeta": "Added {date} · {size}",
       "share": "Share",
-      "labValuesLink": "View {count} lab values"
+      "labValuesLink": "View {count} lab values",
+      "visitsLabel": "Belongs to visit",
+      "visitSuggestion": "Does this belong to this visit?",
+      "visitSuggestionChoose": "Which visit does this belong to?"
     },
     "dropOverlay": {
       "title": "Drop files to upload",
@@ -9322,7 +9325,8 @@
       "partialFailure": "{failed} of {total} could not be updated",
       "failed": "The action could not be completed",
       "share": "Share",
-      "shareTooMany": "A share link can hold at most {max} documents. Deselect some and try again."
+      "shareTooMany": "A share link can hold at most {max} documents. Deselect some and try again.",
+      "linkVisit": "File against visit"
     },
     "episodeCard": {
       "title": "Documents",

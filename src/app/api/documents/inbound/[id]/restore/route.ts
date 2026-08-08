@@ -15,7 +15,10 @@ import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiError, apiSuccess, getClientIp } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
-import { loadConditionLinks } from "@/lib/documents/links";
+import {
+  loadConditionLinks,
+  loadDocumentEncounterLinks,
+} from "@/lib/documents/links";
 import { serialiseDocumentDetail } from "@/lib/documents/store";
 import { annotate } from "@/lib/logging/context";
 import { requireModuleEnabled } from "@/lib/modules/gate";
@@ -83,9 +86,20 @@ export const POST = apiHandler(
     if (row.deletedAt === null) {
       // Already live — restoring twice is a no-op, not an error (the undo
       // toast may fire after a concurrent restore).
-      const links = await loadConditionLinks(user.id, [row.id]);
+      const [links, visitLinks] = await Promise.all([
+        loadConditionLinks(user.id, [row.id]),
+        loadDocumentEncounterLinks(user.id, [row.id]),
+      ]);
       return apiSuccess(
-        serialiseDocumentDetail(row, row.facts, links.get(row.id) ?? []),
+        serialiseDocumentDetail(
+          row,
+          row.facts,
+          links.get(row.id) ?? [],
+          false,
+          null,
+          false,
+          visitLinks.get(row.id) ?? [],
+        ),
       );
     }
 
@@ -131,7 +145,10 @@ export const POST = apiHandler(
       omit: { contentEncrypted: true },
       include: { facts: { orderBy: { createdAt: "asc" } } },
     });
-    const links = await loadConditionLinks(user.id, [restored.id]);
+    const [links, visitLinks] = await Promise.all([
+      loadConditionLinks(user.id, [restored.id]),
+      loadDocumentEncounterLinks(user.id, [restored.id]),
+    ]);
 
     await auditLog("documents.inbound.restore", {
       userId: user.id,
@@ -149,6 +166,10 @@ export const POST = apiHandler(
         restored,
         restored.facts,
         links.get(restored.id) ?? [],
+        false,
+        null,
+        false,
+        visitLinks.get(restored.id) ?? [],
       ),
     );
   },

@@ -9305,7 +9305,10 @@
       "previewUnavailable": "Sin vista previa integrada para este tipo de archivo",
       "uploadedMeta": "Añadido el {date} · {size}",
       "share": "Compartir",
-      "labValuesLink": "Ver {count} valores de laboratorio"
+      "labValuesLink": "Ver {count} valores de laboratorio",
+      "visitsLabel": "Pertenece a la cita",
+      "visitSuggestion": "¿Pertenece a esta cita?",
+      "visitSuggestionChoose": "¿A qué cita pertenece?"
     },
     "dropOverlay": {
       "title": "Suelta los archivos para subirlos",
@@ -9322,7 +9325,8 @@
       "partialFailure": "No se pudieron actualizar {failed} de {total}",
       "failed": "No se pudo completar la acción",
       "share": "Compartir",
-      "shareTooMany": "Un enlace para compartir admite como máximo {max} documentos. Deselecciona algunos e inténtalo de nuevo."
+      "shareTooMany": "Un enlace para compartir admite como máximo {max} documentos. Deselecciona algunos e inténtalo de nuevo.",
+      "linkVisit": "Asignar a una cita"
     },
     "episodeCard": {
       "title": "Documentos",

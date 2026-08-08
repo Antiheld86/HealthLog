@@ -4,8 +4,13 @@
  * Floating bulk-action bar for the vault's multi-select mode. Appears once
  * at least one document is selected, pinned above the bottom nav on phones
  * and near the bottom edge on desktop. Carries the selected count and the
- * bulk verbs — set type, link condition, share (one link for the whole
- * selection), delete (undo-able), clear — all driving the page's handlers.
+ * bulk verbs — set type, link condition, file against a visit, share (one
+ * link for the whole selection), delete (undo-able), clear — all driving the
+ * page's handlers.
+ *
+ * The two link verbs are the same shape and stay that way: each renders only
+ * when the account HAS something to link to, so an empty menu is never
+ * offered.
  *
  * A `role="toolbar"` with proper labels; the destructive verb sits last
  * before Clear so a stray tap sequence never ends on Delete. Share sits just
@@ -13,7 +18,14 @@
  * shell (a floating toolbar is not a Card surface): dense-tile padding `p-3`
  * per the standards.
  */
-import { FolderPlus, Share2, Tag, Trash2, X } from "lucide-react";
+import {
+  CalendarClock,
+  FolderPlus,
+  Share2,
+  Tag,
+  Trash2,
+  X,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -32,12 +44,20 @@ export interface BulkEpisodeOption {
   label: string;
 }
 
+/** One visit the selection can be filed against. Label resolved by the page. */
+export interface BulkEncounterOption {
+  id: string;
+  label: string;
+}
+
 export function DocumentBulkBar({
   selectedCount,
   episodes,
+  encounters,
   busy,
   onSetKind,
   onLinkEpisode,
+  onLinkEncounter,
   onShare,
   onDelete,
   onClear,
@@ -45,10 +65,13 @@ export function DocumentBulkBar({
   selectedCount: number;
   /** The caller's live illness episodes — the link-condition targets. */
   episodes: BulkEpisodeOption[];
+  /** The caller's recent visits — the file-against-a-visit targets. */
+  encounters: BulkEncounterOption[];
   /** A bulk call is in flight — the verbs disable, Clear stays live. */
   busy: boolean;
   onSetKind: (kind: InboundDocumentKindValue) => void;
   onLinkEpisode: (episodeId: string) => void;
+  onLinkEncounter: (encounterId: string) => void;
   /**
    * Share the whole selection as ONE documents-only link. The page caps the
    * selection at `SHARE_LINK_MAX_DOCUMENTS` and surfaces the over-cap hint —
@@ -129,6 +152,35 @@ export function DocumentBulkBar({
                   onSelect={() => onLinkEpisode(episode.id)}
                 >
                   <span className="max-w-56 truncate">{episode.label}</span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
+
+        {encounters.length > 0 ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                data-slot="document-bulk-link-visit"
+                aria-label={t("documents.bulk.linkVisit")}
+              >
+                <CalendarClock className="size-4" aria-hidden />
+                <span className="hidden sm:inline">
+                  {t("documents.bulk.linkVisit")}
+                </span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {encounters.map((encounter) => (
+                <DropdownMenuItem
+                  key={encounter.id}
+                  onSelect={() => onLinkEncounter(encounter.id)}
+                >
+                  <span className="max-w-56 truncate">{encounter.label}</span>
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>

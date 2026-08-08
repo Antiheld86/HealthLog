@@ -9305,7 +9305,10 @@
       "previewUnavailable": "Keine Inline-Vorschau für diesen Dateityp",
       "uploadedMeta": "Hinzugefügt am {date} · {size}",
       "share": "Teilen",
-      "labValuesLink": "{count} Laborwerte ansehen"
+      "labValuesLink": "{count} Laborwerte ansehen",
+      "visitsLabel": "Gehört zu Termin",
+      "visitSuggestion": "Gehört zu diesem Termin?",
+      "visitSuggestionChoose": "Zu welchem Termin gehört das?"
     },
     "dropOverlay": {
       "title": "Zum Hochladen ablegen",
@@ -9322,7 +9325,8 @@
       "partialFailure": "{failed} von {total} konnten nicht aktualisiert werden",
       "failed": "Die Aktion konnte nicht ausgeführt werden",
       "share": "Teilen",
-      "shareTooMany": "Ein Freigabelink fasst höchstens {max} Dokumente. Wähle einige ab und versuche es erneut."
+      "shareTooMany": "Ein Freigabelink fasst höchstens {max} Dokumente. Wähle einige ab und versuche es erneut.",
+      "linkVisit": "Termin zuordnen"
     },
     "episodeCard": {
       "title": "Dokumente",

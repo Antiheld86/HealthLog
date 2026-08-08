@@ -9305,7 +9305,10 @@
       "previewUnavailable": "Pas d'aperçu intégré pour ce type de fichier",
       "uploadedMeta": "Ajouté le {date} · {size}",
       "share": "Partager",
-      "labValuesLink": "Voir {count} valeurs de laboratoire"
+      "labValuesLink": "Voir {count} valeurs de laboratoire",
+      "visitsLabel": "Rattaché au rendez-vous",
+      "visitSuggestion": "Cela concerne-t-il ce rendez-vous ?",
+      "visitSuggestionChoose": "À quel rendez-vous cela se rattache-t-il ?"
     },
     "dropOverlay": {
       "title": "Déposez les fichiers pour les téléverser",
@@ -9322,7 +9325,8 @@
       "partialFailure": "Impossible de mettre à jour {failed} sur {total}",
       "failed": "L'action n'a pas pu être effectuée",
       "share": "Partager",
-      "shareTooMany": "Un lien de partage contient au maximum {max} documents. Désélectionnez-en quelques-uns et réessayez."
+      "shareTooMany": "Un lien de partage contient au maximum {max} documents. Désélectionnez-en quelques-uns et réessayez.",
+      "linkVisit": "Classer sous un rendez-vous"
     },
     "episodeCard": {
       "title": "Documents",

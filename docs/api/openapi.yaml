@@ -11427,6 +11427,12 @@ paths:
           schema:
             type: string
           description: Only documents linked to this illness/condition episode.
+        - name: encounterId
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Only documents linked to this visit.
         - name: year
           in: query
           required: false
@@ -11545,6 +11551,12 @@ paths:
                   type: array
                   items:
                     type: string
+                encounterIds:
+                  description: Optional visit pre-links (repeat the field per id). Every id must be a live visit of the caller; an unknown
+                    one refuses the upload rather than dropping the link the person asked for.
+                  type: array
+                  items:
+                    type: string
               required:
                 - file
       responses:
@@ -11648,6 +11660,8 @@ paths:
                     - setKind
                     - linkEpisode
                     - unlinkEpisode
+                    - linkEncounter
+                    - unlinkEncounter
                     - delete
                     - restore
                 kind:
@@ -11663,6 +11677,10 @@ paths:
                     - VACCINATION
                     - OTHER
                 episodeId:
+                  type: string
+                  minLength: 1
+                  maxLength: 40
+                encounterId:
                   type: string
                   minLength: 1
                   maxLength: 40
@@ -11744,6 +11762,13 @@ paths:
                       pattern: ^\d{4}-\d{2}-\d{2}$
                     - type: "null"
                 episodeIds:
+                  maxItems: 20
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
+                encounterIds:
                   maxItems: 20
                   type: array
                   items:
@@ -36481,6 +36506,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DocumentConditionLink"
+        encounterLinks:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentEncounterLink"
         servingClass:
           type: string
           enum:
@@ -36518,6 +36547,7 @@ components:
         - factCount
         - pendingCount
         - conditionLinks
+        - encounterLinks
         - servingClass
         - hasContentIndex
         - contentIndexSource
@@ -36547,6 +36577,26 @@ components:
         - name
       additionalProperties: false
       description: A link to one of the caller's illness/condition episodes. `name` is the episode's user-facing label.
+    DocumentEncounterLink:
+      type: object
+      properties:
+        encounterId:
+          type: string
+        kind:
+          type: string
+        occurredAt:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - encounterId
+        - kind
+        - occurredAt
+      additionalProperties: false
+      description: "A link to one of the caller's visits — \"this letter belongs to that appointment\". `kind` is the
+        visit-kind ENUM CONSTANT rather than a rendered name: unlike a condition label, which is the person's own words,
+        a visit kind is one of eight closed values whose human name the reader's own bundle owns, so publishing the
+        constant is what lets a German reader and an English one each see it named correctly."
     InboundDocumentEnvelope:
       type: object
       properties:
@@ -36804,6 +36854,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DocumentConditionLink"
+        encounterLinks:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentEncounterLink"
         servingClass:
           type: string
           enum:
@@ -36861,6 +36915,7 @@ components:
         - factCount
         - pendingCount
         - conditionLinks
+        - encounterLinks
         - servingClass
         - hasContentIndex
         - contentIndexSource
