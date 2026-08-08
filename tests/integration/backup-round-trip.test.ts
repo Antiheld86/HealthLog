@@ -140,6 +140,14 @@ const COUNT_BACK: Record<
     p.nutrientIntakeDay.count({ where: { userId } }),
   InboundDocument: (p, userId) =>
     p.inboundDocument.count({ where: { userId } }),
+  Practitioner: (p, userId) => p.practitioner.count({ where: { userId } }),
+  Encounter: (p, userId) => p.encounter.count({ where: { userId } }),
+  EncounterDocumentLink: (p, userId) =>
+    p.encounterDocumentLink.count({ where: { userId } }),
+  EncounterLabLink: (p, userId) =>
+    p.encounterLabLink.count({ where: { userId } }),
+  EncounterConditionLink: (p, userId) =>
+    p.encounterConditionLink.count({ where: { userId } }),
 };
 
 /**
@@ -239,7 +247,7 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
   const biomarker = await prisma.biomarker.create({
     data: { userId: OWNER_ID, name: "Ferritin", unit: "ng/mL" },
   });
-  await prisma.labResult.create({
+  const labResult = await prisma.labResult.create({
     data: {
       userId: OWNER_ID,
       biomarkerId: biomarker.id,
@@ -390,7 +398,7 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
     new ArrayBuffer(documentBytes.byteLength),
   );
   contentEncrypted.set(documentBytes);
-  await prisma.inboundDocument.create({
+  const document = await prisma.inboundDocument.create({
     data: {
       userId: OWNER_ID,
       kind: "LAB_RESULT",
@@ -400,6 +408,55 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       byteSize: documentBytes.byteLength,
       contentEncrypted,
       contentCodec: "binary2",
+    },
+  });
+
+  // One visit, the practice it was at, and one link of each of the three
+  // kinds. The links reach the document, the lab result and the condition
+  // episode seeded above rather than fresh rows, because a link to something
+  // the restore did not put back is the exact case the restore reports as a
+  // skip — seeding it against a row that does come back is what makes a
+  // returning count mean the filing survived.
+  const practitioner = await prisma.practitioner.create({
+    data: {
+      userId: OWNER_ID,
+      name: "Round-trip practice",
+      specialty: "Internal medicine",
+      noteEncrypted: encryptToBytes("ring the upper bell"),
+    },
+  });
+  const encounter = await prisma.encounter.create({
+    data: {
+      userId: OWNER_ID,
+      occurredAt: AT("2026-06-30T08:00:00.000Z"),
+      status: "DONE",
+      kind: "ROUTINE",
+      practitionerId: practitioner.id,
+      reasonEncrypted: encryptToBytes("annual check"),
+      outcomeEncrypted: encryptToBytes(
+        "ferritin back in range, recheck in a year",
+      ),
+    },
+  });
+  await prisma.encounterDocumentLink.create({
+    data: {
+      userId: OWNER_ID,
+      encounterId: encounter.id,
+      documentId: document.id,
+    },
+  });
+  await prisma.encounterLabLink.create({
+    data: {
+      userId: OWNER_ID,
+      encounterId: encounter.id,
+      labResultId: labResult.id,
+    },
+  });
+  await prisma.encounterConditionLink.create({
+    data: {
+      userId: OWNER_ID,
+      encounterId: encounter.id,
+      episodeId: episode.id,
     },
   });
 }

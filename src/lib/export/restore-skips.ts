@@ -28,9 +28,24 @@
  * edge rather than a record.
  */
 
-/** Which seeded catalogue a key failed to resolve against. */
+/**
+ * Which lookup a key failed to resolve against.
+ *
+ * Four are seeded catalogues, as described above. The fifth, `visitReference`,
+ * is a different kind of unresolvable and is here rather than in its own
+ * mechanism because the cost and the honest response are identical: an edge is
+ * lost, the record it hangs off survives, and the operator is told which one.
+ * What it names is a row the file pointed at that the restore did not put
+ * back — a reminder, which is on the coverage-pending register and never
+ * travels, or a document, lab result or condition episode whose id a portable
+ * export does not carry.
+ */
 export type SkippedCatalogue =
-  "cycleSymptom" | "illnessSymptom" | "moodFactor" | "moodTag";
+  | "cycleSymptom"
+  | "illnessSymptom"
+  | "moodFactor"
+  | "moodTag"
+  | "visitReference";
 
 /** One key this instance does not know, and the links it cost. */
 export interface SkippedCatalogueKey {

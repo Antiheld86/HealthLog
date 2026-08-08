@@ -247,6 +247,14 @@ function makePrisma() {
       ]),
     },
     healthScoreRecord: { findMany: vi.fn().mockResolvedValue([]) },
+    // The visit tables. Empty here: this file asserts the sections it seeds,
+    // and an account with no visits is the ordinary case the builder must
+    // still answer for.
+    practitioner: { findMany: vi.fn().mockResolvedValue([]) },
+    encounter: { findMany: vi.fn().mockResolvedValue([]) },
+    encounterDocumentLink: { findMany: vi.fn().mockResolvedValue([]) },
+    encounterLabLink: { findMany: vi.fn().mockResolvedValue([]) },
+    encounterConditionLink: { findMany: vi.fn().mockResolvedValue([]) },
     // Left unmocked on purpose: `buildProfileBackupSection` runs for real
     // against these, so the assertions below exercise the builder rather than
     // a stand-in that would agree with whatever the payload happened to do.

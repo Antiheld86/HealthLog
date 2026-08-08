@@ -6739,6 +6739,7 @@
         "restoreSkippedIllnessSymptom": "Objaw choroby",
         "restoreSkippedMoodFactor": "Czynnik nastroju",
         "restoreSkippedMoodTag": "Tag nastroju",
+        "restoreSkippedVisitReference": "Odwołanie wizyty",
         "docsLink": "Dokumentacja"
       },
       "danger-zone": {

@@ -6739,6 +6739,7 @@
         "restoreSkippedIllnessSymptom": "Symptôme de maladie",
         "restoreSkippedMoodFactor": "Facteur d'humeur",
         "restoreSkippedMoodTag": "Étiquette d'humeur",
+        "restoreSkippedVisitReference": "Référence de visite",
         "docsLink": "Documentation"
       },
       "danger-zone": {

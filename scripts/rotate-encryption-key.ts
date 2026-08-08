@@ -534,6 +534,23 @@ async function main() {
     ),
   );
 
+  // ───── v1.38.0 visit free text (Bytes columns) ─────
+  // Why the person went, what came out of it, and the practice note. Always
+  // encrypted on write, so every non-null row rotates.
+  results.push(
+    await rotateBytesColumn("Encounter", "reasonEncrypted", prisma.encounter),
+  );
+  results.push(
+    await rotateBytesColumn("Encounter", "outcomeEncrypted", prisma.encounter),
+  );
+  results.push(
+    await rotateBytesColumn(
+      "Practitioner",
+      "noteEncrypted",
+      prisma.practitioner,
+    ),
+  );
+
   // ───── Inbound clinical document (Bytes column, codec-dispatched) ─────
   // The raw uploaded document. Two layouts recorded per row in
   // `contentCodec` ("base64v1" string codec | "binary2" binary codec), so

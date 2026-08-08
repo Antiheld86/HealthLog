@@ -282,6 +282,14 @@ function sourceClient() {
         },
       ]),
     },
+    // The visit tables. Empty here: this file asserts the sections it seeds,
+    // and an account with no visits is the ordinary case the builder must
+    // still answer for.
+    practitioner: { findMany: vi.fn().mockResolvedValue([]) },
+    encounter: { findMany: vi.fn().mockResolvedValue([]) },
+    encounterDocumentLink: { findMany: vi.fn().mockResolvedValue([]) },
+    encounterLabLink: { findMany: vi.fn().mockResolvedValue([]) },
+    encounterConditionLink: { findMany: vi.fn().mockResolvedValue([]) },
     customMetric: {
       findMany: vi.fn().mockResolvedValue([
         {

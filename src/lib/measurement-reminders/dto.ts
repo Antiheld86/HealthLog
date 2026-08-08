@@ -24,6 +24,13 @@ export interface MeasurementReminderDtoShape {
   /**
    * v1.18.1 — provenance: `VORSORGE` (user-created) or `COACH` (minted from
    * a Coach cadence suggestion). The UI labels the source.
+   *
+   * Deliberately two members, while `ReminderOrigin` in the schema has three.
+   * The third, `ENCOUNTER`, belongs to a booked visit and never reaches a
+   * Vorsorge surface: every query that feeds this mapper excludes it, and the
+   * published enum stays closed at these two so the reminder contract does not
+   * move. Widening this union is the wrong repair for a type error here — the
+   * right one is finding the read site that lost its exclusion.
    */
   origin: "VORSORGE" | "COACH";
   notifyHour: number;
@@ -35,9 +42,27 @@ export interface MeasurementReminderDtoShape {
   updatedAt: string;
 }
 
+/**
+ * The invariant this mapper enforces: an `ENCOUNTER`-origin row is a booked
+ * visit's one-shot reminder and belongs to no Vorsorge surface. Four read
+ * sites exclude it — the reminder list route, the daily digest, the insights
+ * preventive-care block and the MCP preventive-care tool. Reaching here means
+ * one of them lost its filter, and the honest outcome is a loud failure rather
+ * than an appointment relabelled as a checkup.
+ *
+ * Proven by `src/__tests__/encounter-reminder-exclusion.test.ts`.
+ */
 export function toMeasurementReminderDto(
   row: MeasurementReminder,
 ): MeasurementReminderDtoShape {
+  if (row.origin === "ENCOUNTER") {
+    throw new Error(
+      `toMeasurementReminderDto received an ENCOUNTER-origin reminder (${row.id}). ` +
+        "Appointment reminders are excluded from every Vorsorge read surface; " +
+        "a read site has lost its origin filter. See " +
+        "src/__tests__/encounter-reminder-exclusion.test.ts.",
+    );
+  }
   return {
     id: row.id,
     label: row.label,

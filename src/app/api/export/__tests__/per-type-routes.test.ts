@@ -28,6 +28,14 @@ vi.mock("@/lib/db", () => ({
     // `buildIntradayProfileBackupSection`.
     intradayCumulativeProfile: { findMany: vi.fn().mockResolvedValue([]) },
     healthScoreRecord: { findMany: vi.fn().mockResolvedValue([]) },
+    // The visit tables. Empty here: this file asserts the sections it seeds,
+    // and an account with no visits is the ordinary case the builder must
+    // still answer for.
+    practitioner: { findMany: vi.fn().mockResolvedValue([]) },
+    encounter: { findMany: vi.fn().mockResolvedValue([]) },
+    encounterDocumentLink: { findMany: vi.fn().mockResolvedValue([]) },
+    encounterLabLink: { findMany: vi.fn().mockResolvedValue([]) },
+    encounterConditionLink: { findMany: vi.fn().mockResolvedValue([]) },
     // v1.15.0 — cycle tables read by the full-backup helper.
     cycleProfile: { findUnique: vi.fn() },
     menstrualCycle: { findMany: vi.fn() },
@@ -98,6 +106,15 @@ beforeEach(() => {
     [] as never,
   );
   vi.mocked(prisma.healthScoreRecord.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.practitioner.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.encounter.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.encounterDocumentLink.findMany).mockResolvedValue(
+    [] as never,
+  );
+  vi.mocked(prisma.encounterLabLink.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.encounterConditionLink.findMany).mockResolvedValue(
+    [] as never,
+  );
 });
 
 afterEach(() => {
