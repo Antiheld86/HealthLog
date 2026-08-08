@@ -4,7 +4,6 @@
 
 ## [1.37.2] — 2026-08-08
 
-
 ### Added
 
 - Doctor visits and the practices behind them have a home now. A visit records
