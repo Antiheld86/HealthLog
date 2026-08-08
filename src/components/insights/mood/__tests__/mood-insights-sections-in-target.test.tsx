@@ -3,7 +3,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { I18nProvider } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
 
 /**
  * v1.8.6 QA — the in-target share must appear exactly once on the mood
@@ -11,10 +10,18 @@ import { queryKeys } from "@/lib/query-keys";
  * (inTargetPct present) the same-number `in-target` takeaway is dropped
  * from the narrative feed so the percentage is not duplicated one row
  * below the headline tile.
+ *
+ * Driven against `<MoodInsightsBreakdowns>` rather than its parent since the
+ * breakdown cluster moved into its own `next/dynamic` chunk: under a static
+ * render the parent paints the loader skeleton and nothing this file is about
+ * is in the markup. The breakdown module takes the resolved payload as a prop,
+ * so the aggregate no longer has to be seeded into a query cache to reach the
+ * assertion. The provider and the auth stub stay because the "what stands
+ * out" card inside the cluster fetches the discovery surface itself.
  */
 
 // `useAuth` runs its own /me query; stub it to a signed-in user so the
-// section's `enabled: isAuthenticated` gate opens without a fetch.
+// self-fetching card inside the cluster resolves without a request.
 vi.mock("@/hooks/use-auth", () => ({
   useAuth: () => ({
     user: { id: "u1" },
@@ -25,7 +32,8 @@ vi.mock("@/hooks/use-auth", () => ({
   }),
 }));
 
-import { MoodInsightsSections } from "../mood-insights-sections";
+import { MoodInsightsBreakdowns } from "../mood-insights-breakdowns";
+import type { MoodInsightsResponse } from "../mood-insights-shared";
 
 type Response = {
   summary: { totalEntries: number; inTargetPct: number | null };
@@ -62,12 +70,12 @@ function renderWithData(data: Response) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
-  // Seed the cache so the synchronous SSR render sees resolved data.
-  queryClient.setQueryData(queryKeys.moodInsights(), data);
   return renderToStaticMarkup(
     <QueryClientProvider client={queryClient}>
       <I18nProvider initialLocale="en">
-        <MoodInsightsSections />
+        <MoodInsightsBreakdowns
+          data={data as unknown as MoodInsightsResponse}
+        />
       </I18nProvider>
     </QueryClientProvider>,
   );
@@ -105,7 +113,7 @@ function baseData(inTargetPct: number | null): Response {
   };
 }
 
-describe("<MoodInsightsSections> — in-target dedup", () => {
+describe("<MoodInsightsBreakdowns> — in-target dedup", () => {
   it("renders the tile and drops the duplicate in-target narrative", () => {
     const html = renderWithData(baseData(72));
     // The tile carries the percentage exactly once.
