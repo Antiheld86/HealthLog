@@ -1556,6 +1556,25 @@ manageContract("POST /api/vaccinations/[id]/restore", {
     )?.deletedAt === null,
 });
 
+proveWriteRoute("POST /api/vaccinations/[id]/booster", {
+  route: "/api/vaccinations/[id]/booster",
+  // The dose the booster is planned against. `makeVaccination` records a
+  // monovalent tetanus dose, so the mint keys the reminder on the tetanus
+  // antigen and `applied` can prove exactly one reminder now carries it.
+  prepare: async (ownerId) => ({
+    ownerId,
+    vaccination: await makeVaccination(ownerId),
+  }),
+  params: ({ vaccination }) => ({ id: vaccination.id }),
+  body: () => ({ intervalMonths: 120, label: "Tetanus booster" }),
+  ok: 201,
+  auditAction: "vaccination.booster.planned",
+  applied: async ({ ownerId }) =>
+    (await getPrismaClient().measurementReminder.count({
+      where: { userId: ownerId, vaccinationAntigen: "tetanus" },
+    })) === 1,
+});
+
 manageContract("POST /api/illness/episodes/[id]/day-logs", {
   contract: ADMITTED_MUTATING_HANDLERS.find(
     (entry) =>
