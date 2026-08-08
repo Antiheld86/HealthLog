@@ -320,6 +320,10 @@ export function MoodForm({ onSuccess, onCancel, footerSlot }: MoodFormProps) {
   // Keyed on the timestamp field, so moving the entry to yesterday shows
   // yesterday's night. Only fetched once a face is picked: an unopened sheet
   // must not cost four modules a query.
+  // No third argument, and deliberately: this entry does not exist yet, so it
+  // has no stored zone. It will be anchored to the browser's, which is the
+  // zone the hook falls back to — the figures shown here are the figures the
+  // saved row will sit beside.
   const linked = useLinkedDayContext(dayOfLocalInput(moodLoggedAt), moodPicked);
 
   // v1.17.0 — the "Note & details" badge counts the free-text tags entered

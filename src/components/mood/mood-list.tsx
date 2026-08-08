@@ -130,6 +130,12 @@ interface MoodEntry {
   note: string | null;
   // v1.38 — the day context, null on entries that carry none.
   context: MoodContextWire | null;
+  /**
+   * The IANA zone this entry's `date` is anchored to, or null on a legacy row.
+   * Read by the linked-day block so an entry logged in another country is
+   * looked up under ITS day rather than under the corrector's.
+   */
+  tz: string | null;
   source: string;
   moodLoggedAt: string;
 }
@@ -505,6 +511,11 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
   const editLinked = useLinkedDayContext(
     dayOfLocalInput(editMoodLoggedAt),
     editing !== null,
+    // The entry's OWN zone, not the browser's. An entry logged abroad decided
+    // which day it belongs to when it was written; re-reading that day under
+    // whichever zone the correction is being made from would shift the night
+    // beside it by hours with nothing on screen saying so.
+    editing?.tz ?? null,
   );
 
   const totalPages = data ? Math.ceil(data.meta.total / PAGE_SIZE) : 0;
