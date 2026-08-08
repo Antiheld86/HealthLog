@@ -8527,6 +8527,43 @@
     "row": {
       "lot": "Lot {lot}"
     },
+    "form": {
+      "date": "Date",
+      "catalogLabel": "Vaccin (catalogue)",
+      "identityHint": "Choisissez dans le catalogue ou saisissez ci-dessous : l'un suffit.",
+      "catalogNone": "Choisir un vaccin",
+      "catalogSearch": "Rechercher des vaccins",
+      "catalogNoMatch": "Aucune entrée du catalogue trouvée",
+      "catalogClear": "Effacer la sélection",
+      "freeTextLabel": "Texte libre",
+      "freeTextPlaceholder": "comme indiqué sur le carnet",
+      "seriesToggle": "Ajouter les détails de la série",
+      "doseNumber": "N° de dose",
+      "seriesDoses": "Doses dans la série",
+      "lot": "Numéro de lot",
+      "site": "Site d'injection",
+      "siteNone": "Non précisé",
+      "practitioner": "Cabinet / médecin",
+      "note": "Note"
+    },
+    "site": {
+      "LEFT_ARM": "Bras gauche",
+      "RIGHT_ARM": "Bras droit",
+      "LEFT_THIGH": "Cuisse gauche",
+      "RIGHT_THIGH": "Cuisse droite",
+      "ORAL": "Oral",
+      "NASAL": "Nasal",
+      "OTHER": "Autre"
+    },
+    "createTitle": "Enregistrer une vaccination",
+    "editTitle": "Modifier la vaccination",
+    "formDescription": "Une date et le vaccin suffisent ; tout le reste est facultatif.",
+    "created": "Vaccination enregistrée",
+    "updated": "Vaccination mise à jour",
+    "saveFailed": "La vaccination n'a pas pu être enregistrée.",
+    "deleteTitle": "Supprimer cette vaccination ?",
+    "deleteDescription": "L'entrée est retirée de votre carnet. Un rappel programmé est conservé.",
+    "deleteFailed": "La vaccination n'a pas pu être supprimée.",
     "empty": {
       "title": "Aucune vaccination enregistrée",
       "description": "Recopiez votre carnet de vaccination ligne par ligne : une date et le vaccin suffisent."

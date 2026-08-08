@@ -8527,6 +8527,43 @@
     "row": {
       "lot": "Seria {lot}"
     },
+    "form": {
+      "date": "Data",
+      "catalogLabel": "Szczepionka (katalog)",
+      "identityHint": "Wybierz z katalogu lub wpisz poniżej — wystarczy jedno.",
+      "catalogNone": "Wybierz szczepionkę",
+      "catalogSearch": "Szukaj szczepionek",
+      "catalogNoMatch": "Nie znaleziono wpisu w katalogu",
+      "catalogClear": "Wyczyść wybór",
+      "freeTextLabel": "Tekst dowolny",
+      "freeTextPlaceholder": "jak podano w karcie szczepień",
+      "seriesToggle": "Dodaj szczegóły serii",
+      "doseNumber": "Nr dawki",
+      "seriesDoses": "Dawki w serii",
+      "lot": "Numer serii",
+      "site": "Miejsce podania",
+      "siteNone": "Nie podano",
+      "practitioner": "Gabinet / lekarz",
+      "note": "Notatka"
+    },
+    "site": {
+      "LEFT_ARM": "Lewe ramię",
+      "RIGHT_ARM": "Prawe ramię",
+      "LEFT_THIGH": "Lewe udo",
+      "RIGHT_THIGH": "Prawe udo",
+      "ORAL": "Doustnie",
+      "NASAL": "Donosowo",
+      "OTHER": "Inne"
+    },
+    "createTitle": "Zarejestruj szczepienie",
+    "editTitle": "Edytuj szczepienie",
+    "formDescription": "Wystarczą data i szczepionka; cała reszta jest opcjonalna.",
+    "created": "Szczepienie zapisane",
+    "updated": "Szczepienie zaktualizowane",
+    "saveFailed": "Nie udało się zapisać szczepienia.",
+    "deleteTitle": "Usunąć to szczepienie?",
+    "deleteDescription": "Wpis zostanie usunięty z Twojej karty. Zaplanowane przypomnienie o dawce przypominającej pozostaje.",
+    "deleteFailed": "Nie udało się usunąć szczepienia.",
     "empty": {
       "title": "Nie zarejestrowano jeszcze żadnego szczepienia",
       "description": "Przepisz swoją kartę szczepień wiersz po wierszu — wystarczą data i szczepionka."

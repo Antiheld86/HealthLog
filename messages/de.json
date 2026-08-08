@@ -8527,6 +8527,43 @@
     "row": {
       "lot": "Charge {lot}"
     },
+    "form": {
+      "date": "Datum",
+      "catalogLabel": "Impfstoff (Katalog)",
+      "identityHint": "Katalog wählen oder unten frei eintragen — eins genügt.",
+      "catalogNone": "Impfstoff wählen",
+      "catalogSearch": "Impfstoff suchen",
+      "catalogNoMatch": "Kein Katalogeintrag gefunden",
+      "catalogClear": "Auswahl entfernen",
+      "freeTextLabel": "Freitext",
+      "freeTextPlaceholder": "wie im Impfpass angegeben",
+      "seriesToggle": "Serie angeben",
+      "doseNumber": "Dosis-Nr.",
+      "seriesDoses": "Dosen in Serie",
+      "lot": "Chargennummer",
+      "site": "Impfstelle",
+      "siteNone": "Keine Angabe",
+      "practitioner": "Praxis / Arzt",
+      "note": "Notiz"
+    },
+    "site": {
+      "LEFT_ARM": "Linker Oberarm",
+      "RIGHT_ARM": "Rechter Oberarm",
+      "LEFT_THIGH": "Linker Oberschenkel",
+      "RIGHT_THIGH": "Rechter Oberschenkel",
+      "ORAL": "Oral",
+      "NASAL": "Nasal",
+      "OTHER": "Andere"
+    },
+    "createTitle": "Impfung erfassen",
+    "editTitle": "Impfung bearbeiten",
+    "formDescription": "Datum und Impfstoff genügen; alles andere ist optional.",
+    "created": "Impfung gespeichert",
+    "updated": "Impfung aktualisiert",
+    "saveFailed": "Impfung konnte nicht gespeichert werden.",
+    "deleteTitle": "Impfung löschen?",
+    "deleteDescription": "Der Eintrag wird aus deinem Impfpass entfernt. Ein geplanter Auffrischungs-Reminder bleibt bestehen.",
+    "deleteFailed": "Impfung konnte nicht gelöscht werden.",
     "empty": {
       "title": "Noch keine Impfung erfasst",
       "description": "Übertrage deinen Impfpass Zeile für Zeile — Datum und Impfstoff genügen."

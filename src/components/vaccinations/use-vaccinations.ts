@@ -12,13 +12,34 @@
  * `vaccinationDependentKeys`, which evicts the preventive-care root alongside
  * the dose list because logging a dose re-anchors the booster it answers.
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiGet } from "@/lib/api/api-fetch";
-import { queryKeys } from "@/lib/query-keys";
+import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api/api-fetch";
+import { invalidateReminderReads } from "@/hooks/use-measurement-reminders";
+import { invalidateKeys, queryKeys, vaccinationDependentKeys } from "@/lib/query-keys";
 import type { VaccinationDTO, VaccinationListDTO } from "@/lib/vaccinations/dto";
 
 export type Vaccination = VaccinationDTO;
+
+/**
+ * The write body — every field optional but the identity pair and the date.
+ * `userId` is never here; the route narrows it from the session.
+ */
+export interface VaccinationWriteBody {
+  occurredAt?: string;
+  antigenSlug?: string | null;
+  vaccineName?: string | null;
+  doseNumber?: number | null;
+  seriesDoses?: number | null;
+  lotNumber?: string | null;
+  site?: string | null;
+  practitionerId?: string | null;
+  encounterId?: string | null;
+  note?: string | null;
+  documentIds?: string[];
+}
+
+const BASE = "/api/vaccinations";
 
 /**
  * The account's immunization log, newest dose first.
@@ -37,8 +58,56 @@ export function useVaccinations(
     queryFn: () =>
       apiGet<VaccinationListDTO>(
         antigenSlug
-          ? `/api/vaccinations?antigenSlug=${encodeURIComponent(antigenSlug)}`
-          : "/api/vaccinations",
+          ? `${BASE}?antigenSlug=${encodeURIComponent(antigenSlug)}`
+          : BASE,
       ),
   });
+}
+
+/**
+ * Create / edit / soft-delete / restore a dose.
+ *
+ * Every write fans out through `vaccinationDependentKeys` AND the reminder
+ * reads: logging a dose runs the server's satisfy matcher, which re-anchors any
+ * booster the dose answers, so the preventive-care list must repaint in the
+ * same tick — the exact pairing the encounter mutations use, through the same
+ * helper rather than a second sweep that could drift from it.
+ */
+export function useVaccinationMutations() {
+  const qc = useQueryClient();
+  const invalidate = () =>
+    Promise.all([
+      invalidateKeys(qc, vaccinationDependentKeys),
+      invalidateReminderReads(qc),
+    ]);
+
+  const create = useMutation({
+    mutationKey: queryKeys.vaccinationCreate(),
+    mutationFn: (body: VaccinationWriteBody) =>
+      apiPost<Vaccination>(BASE, body),
+    onSuccess: invalidate,
+  });
+
+  const update = useMutation({
+    mutationKey: queryKeys.vaccinationUpdate(),
+    mutationFn: ({ id, body }: { id: string; body: VaccinationWriteBody }) =>
+      apiPatch<Vaccination>(`${BASE}/${id}`, body),
+    onSuccess: invalidate,
+  });
+
+  const remove = useMutation({
+    mutationKey: queryKeys.vaccinationDelete(),
+    mutationFn: (id: string) =>
+      apiDelete<{ deleted: boolean }>(`${BASE}/${id}`),
+    onSuccess: invalidate,
+  });
+
+  const restore = useMutation({
+    mutationKey: queryKeys.vaccinationRestore(),
+    mutationFn: (id: string) =>
+      apiPost<Vaccination>(`${BASE}/${id}/restore`, {}),
+    onSuccess: invalidate,
+  });
+
+  return { create, update, remove, restore };
 }

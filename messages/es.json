@@ -8527,6 +8527,43 @@
     "row": {
       "lot": "Lote {lot}"
     },
+    "form": {
+      "date": "Fecha",
+      "catalogLabel": "Vacuna (catálogo)",
+      "identityHint": "Elige del catálogo o escríbela abajo: basta con una.",
+      "catalogNone": "Elegir una vacuna",
+      "catalogSearch": "Buscar vacunas",
+      "catalogNoMatch": "No se encontró ninguna entrada del catálogo",
+      "catalogClear": "Quitar selección",
+      "freeTextLabel": "Texto libre",
+      "freeTextPlaceholder": "tal como figura en la cartilla",
+      "seriesToggle": "Añadir datos de la serie",
+      "doseNumber": "N.º de dosis",
+      "seriesDoses": "Dosis en la serie",
+      "lot": "Número de lote",
+      "site": "Lugar de aplicación",
+      "siteNone": "Sin especificar",
+      "practitioner": "Consulta / médico",
+      "note": "Nota"
+    },
+    "site": {
+      "LEFT_ARM": "Brazo izquierdo",
+      "RIGHT_ARM": "Brazo derecho",
+      "LEFT_THIGH": "Muslo izquierdo",
+      "RIGHT_THIGH": "Muslo derecho",
+      "ORAL": "Oral",
+      "NASAL": "Nasal",
+      "OTHER": "Otro"
+    },
+    "createTitle": "Registrar una vacuna",
+    "editTitle": "Editar vacuna",
+    "formDescription": "Bastan una fecha y la vacuna; todo lo demás es opcional.",
+    "created": "Vacuna guardada",
+    "updated": "Vacuna actualizada",
+    "saveFailed": "No se pudo guardar la vacuna.",
+    "deleteTitle": "¿Eliminar esta vacuna?",
+    "deleteDescription": "La entrada se elimina de tu registro. Un recordatorio de refuerzo programado se mantiene.",
+    "deleteFailed": "No se pudo eliminar la vacuna.",
     "empty": {
       "title": "Aún no hay ninguna vacuna registrada",
       "description": "Transcribe tu cartilla de vacunación línea por línea: bastan una fecha y la vacuna."

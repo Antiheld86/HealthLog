@@ -8527,6 +8527,43 @@
     "row": {
       "lot": "Lotto {lot}"
     },
+    "form": {
+      "date": "Data",
+      "catalogLabel": "Vaccino (catalogo)",
+      "identityHint": "Scegli dal catalogo o scrivilo sotto: ne basta uno.",
+      "catalogNone": "Scegli un vaccino",
+      "catalogSearch": "Cerca vaccini",
+      "catalogNoMatch": "Nessuna voce del catalogo trovata",
+      "catalogClear": "Rimuovi selezione",
+      "freeTextLabel": "Testo libero",
+      "freeTextPlaceholder": "come indicato sul libretto",
+      "seriesToggle": "Aggiungi dettagli della serie",
+      "doseNumber": "N. dose",
+      "seriesDoses": "Dosi nella serie",
+      "lot": "Numero di lotto",
+      "site": "Sede di iniezione",
+      "siteNone": "Non specificato",
+      "practitioner": "Studio / medico",
+      "note": "Nota"
+    },
+    "site": {
+      "LEFT_ARM": "Braccio sinistro",
+      "RIGHT_ARM": "Braccio destro",
+      "LEFT_THIGH": "Coscia sinistra",
+      "RIGHT_THIGH": "Coscia destra",
+      "ORAL": "Orale",
+      "NASAL": "Nasale",
+      "OTHER": "Altro"
+    },
+    "createTitle": "Registra una vaccinazione",
+    "editTitle": "Modifica vaccinazione",
+    "formDescription": "Bastano una data e il vaccino; tutto il resto è facoltativo.",
+    "created": "Vaccinazione salvata",
+    "updated": "Vaccinazione aggiornata",
+    "saveFailed": "Impossibile salvare la vaccinazione.",
+    "deleteTitle": "Eliminare questa vaccinazione?",
+    "deleteDescription": "La voce viene rimossa dal tuo libretto. Un promemoria di richiamo programmato rimane.",
+    "deleteFailed": "Impossibile eliminare la vaccinazione.",
     "empty": {
       "title": "Nessuna vaccinazione registrata",
       "description": "Trascrivi il tuo libretto vaccinale riga per riga: bastano una data e il vaccino."

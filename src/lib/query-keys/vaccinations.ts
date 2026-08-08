@@ -42,4 +42,9 @@ export const vaccinationKeys = {
   vaccinationList: (antigenSlug?: string | null) =>
     ["vaccinations", "list", antigenSlug ?? null] as const,
   vaccination: (id: string) => ["vaccinations", "detail", id] as const,
+  /** Mutation keys — the factory is the only legal source of these too. */
+  vaccinationCreate: () => ["vaccinations", "create"] as const,
+  vaccinationUpdate: () => ["vaccinations", "update"] as const,
+  vaccinationDelete: () => ["vaccinations", "delete"] as const,
+  vaccinationRestore: () => ["vaccinations", "restore"] as const,
 } as const;

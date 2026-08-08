@@ -129,7 +129,13 @@ function groupByAntigen(records: readonly Vaccination[]): AntigenGroup[] {
   });
 }
 
-function DoseRow({ row }: { row: GroupRow }) {
+function DoseRow({
+  row,
+  onEdit,
+}: {
+  row: GroupRow;
+  onEdit?: (record: Vaccination) => void;
+}) {
   const { t } = useTranslations();
   const format = useFormatters();
   const { record, position } = row;
@@ -143,9 +149,22 @@ function DoseRow({ row }: { row: GroupRow }) {
 
   return (
     <Card
-      className="gap-0"
+      className="hover:bg-muted/40 gap-0 transition-colors"
       data-slot="vaccination-row"
       data-vaccination-id={record.id}
+      onClick={onEdit ? () => onEdit(record) : undefined}
+      role={onEdit ? "button" : undefined}
+      tabIndex={onEdit ? 0 : undefined}
+      onKeyDown={
+        onEdit
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onEdit(record);
+              }
+            }
+          : undefined
+      }
     >
       <CardContent className="flex items-center justify-between gap-3 px-4 py-2.5">
         <div className="min-w-0 space-y-0.5">
@@ -176,7 +195,13 @@ function DoseRow({ row }: { row: GroupRow }) {
   );
 }
 
-export function VaccinationList({ records }: { records: readonly Vaccination[] }) {
+export function VaccinationList({
+  records,
+  onEdit,
+}: {
+  records: readonly Vaccination[];
+  onEdit?: (record: Vaccination) => void;
+}) {
   const { t } = useTranslations();
   const groups = groupByAntigen(records);
 
@@ -198,7 +223,11 @@ export function VaccinationList({ records }: { records: readonly Vaccination[] }
           </h2>
           <div className="space-y-2">
             {group.rows.map((row, index) => (
-              <DoseRow key={`${row.record.id}:${index}`} row={row} />
+              <DoseRow
+                key={`${row.record.id}:${index}`}
+                row={row}
+                onEdit={onEdit}
+              />
             ))}
           </div>
         </section>

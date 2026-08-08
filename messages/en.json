@@ -8527,6 +8527,43 @@
     "row": {
       "lot": "Lot {lot}"
     },
+    "form": {
+      "date": "Date",
+      "catalogLabel": "Vaccine (catalogue)",
+      "identityHint": "Pick from the catalogue or type it in below — either is enough.",
+      "catalogNone": "Choose a vaccine",
+      "catalogSearch": "Search vaccines",
+      "catalogNoMatch": "No catalogue entry found",
+      "catalogClear": "Clear selection",
+      "freeTextLabel": "Free text",
+      "freeTextPlaceholder": "as written on the record",
+      "seriesToggle": "Add series details",
+      "doseNumber": "Dose no.",
+      "seriesDoses": "Doses in series",
+      "lot": "Lot number",
+      "site": "Injection site",
+      "siteNone": "Not specified",
+      "practitioner": "Practice / doctor",
+      "note": "Note"
+    },
+    "site": {
+      "LEFT_ARM": "Left upper arm",
+      "RIGHT_ARM": "Right upper arm",
+      "LEFT_THIGH": "Left thigh",
+      "RIGHT_THIGH": "Right thigh",
+      "ORAL": "Oral",
+      "NASAL": "Nasal",
+      "OTHER": "Other"
+    },
+    "createTitle": "Log a vaccination",
+    "editTitle": "Edit vaccination",
+    "formDescription": "A date and the vaccine are enough; everything else is optional.",
+    "created": "Vaccination saved",
+    "updated": "Vaccination updated",
+    "saveFailed": "The vaccination could not be saved.",
+    "deleteTitle": "Delete this vaccination?",
+    "deleteDescription": "The entry is removed from your record. A planned booster reminder stays.",
+    "deleteFailed": "The vaccination could not be deleted.",
     "empty": {
       "title": "No vaccination logged yet",
       "description": "Transcribe your vaccination card line by line — a date and the vaccine are enough."

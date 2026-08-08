@@ -10,6 +10,7 @@
  * badge only — no red card, no overdue tint. It reproduces the record; it does
  * not adjudicate what is due.
  */
+import { useState } from "react";
 import { Plus, Syringe } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -20,12 +21,30 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useTranslations } from "@/lib/i18n/context";
 
 import { VaccinationList } from "./vaccination-list";
-import { useVaccinations } from "./use-vaccinations";
+import { VaccinationSheet } from "./vaccination-sheet";
+import { useVaccinations, type Vaccination } from "./use-vaccinations";
 
 export function VaccinationsView() {
   const { t } = useTranslations();
   const { data, isLoading, isError, refetch } = useVaccinations();
   const records = data?.vaccinations ?? [];
+
+  // One sheet for create and edit. Bumped `session` remounts it so a second
+  // open never shows the first's values.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [editing, setEditing] = useState<Vaccination | null>(null);
+  const [session, setSession] = useState(0);
+
+  const openCreate = () => {
+    setEditing(null);
+    setSession((n) => n + 1);
+    setSheetOpen(true);
+  };
+  const openEdit = (record: Vaccination) => {
+    setEditing(record);
+    setSession((n) => n + 1);
+    setSheetOpen(true);
+  };
 
   return (
     <div className="space-y-6">
@@ -35,11 +54,22 @@ export function VaccinationsView() {
         }
         description={t("vaccinations.subtitle")}
         actions={
-          <Button className="min-h-11 sm:min-h-9" disabled>
+          <Button
+            className="min-h-11 sm:min-h-9"
+            data-slot="vaccination-add"
+            onClick={openCreate}
+          >
             <Plus className="size-4" />
             {t("common.add")}
           </Button>
         }
+      />
+
+      <VaccinationSheet
+        key={session}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        vaccination={editing}
       />
 
       {isLoading ? (
@@ -55,14 +85,18 @@ export function VaccinationsView() {
           onRetry={() => void refetch()}
         />
       ) : records.length > 0 ? (
-        <VaccinationList records={records} />
+        <VaccinationList records={records} onEdit={openEdit} />
       ) : (
         <EmptyState
           icon={<Syringe className="size-6" />}
           title={t("vaccinations.empty.title")}
           description={t("vaccinations.empty.description")}
           action={
-            <Button className="min-h-11 sm:min-h-9" disabled>
+            <Button
+              className="min-h-11 sm:min-h-9"
+              data-slot="vaccination-add-empty"
+              onClick={openCreate}
+            >
               <Plus className="size-4" />
               {t("common.add")}
             </Button>
