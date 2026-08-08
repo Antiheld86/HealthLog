@@ -891,7 +891,7 @@
     "quickTagsHelp": "Twoje częste tagi — jedno dotknięcie",
     "quickTagsExpand": "Więcej",
     "loadError": "Nie udało się załadować wpisów nastroju.",
-    "sectionLevelA": "Pięć skal",
+    "sectionLevelA": "Samopoczucie",
     "sectionLevelAHelp": "Opcjonalne. To, czego nie ruszysz, zostaje puste.",
     "dimensionNotAnswered": "nie podano",
     "dimensionClear": "wyczyść",
@@ -3246,8 +3246,6 @@
     "navRecovery": "Regeneracja",
     "workouts": {
       "title": "Treningi",
-      "askWhy": "Dlaczego",
-      "askWhyPrompt": "Dlaczego ta sesja wypadła w ten sposób? Wyjaśnij mi moje własne wyniki.",
       "description": "Ostatnie biegi, jazdy, marsze i treningi siłowe — zdeduplikowane między Apple Watch a Withings.",
       "emptyState": {
         "title": "Brak treningów",
@@ -3772,8 +3770,8 @@
       },
       "inTargetTitle": "W Twoim zakresie",
       "dimensions": {
-        "title": "Pięć skal",
-        "none": "Dla tych pięciu skal nie ma jeszcze żadnych danych.",
+        "title": "Samopoczucie",
+        "none": "Nie zapisano jeszcze żadnych danych o samopoczuciu.",
         "window": "{days} dni",
         "noneInWindow": "brak w tym okresie",
         "higherIsMore": "wyżej = {anchor}",

@@ -891,7 +891,7 @@
     "quickTagsHelp": "Tus etiquetas frecuentes: un toque",
     "quickTagsExpand": "Más",
     "loadError": "No se pudieron cargar tus registros de estado de ánimo.",
-    "sectionLevelA": "Cinco escalas",
+    "sectionLevelA": "Estado emocional",
     "sectionLevelAHelp": "Opcional. Lo que no toques queda vacío.",
     "dimensionNotAnswered": "sin indicar",
     "dimensionClear": "borrar",
@@ -3246,8 +3246,6 @@
     "navRecovery": "Recuperación",
     "workouts": {
       "title": "Entrenamientos",
-      "askWhy": "Por qué",
-      "askWhyPrompt": "¿Por qué salió así esta sesión? Explícame mis propios datos de ella.",
       "description": "Carreras, salidas en bici, paseos y sesiones de fuerza recientes, deduplicados entre Apple Watch y Withings.",
       "emptyState": {
         "title": "Aún no hay entrenamientos",
@@ -3772,8 +3770,8 @@
       },
       "inTargetTitle": "En tu rango",
       "dimensions": {
-        "title": "Cinco escalas",
-        "none": "Todavía no hay nada registrado en estas cinco escalas.",
+        "title": "Estado emocional",
+        "none": "Todavía no hay nada registrado sobre tu estado emocional.",
         "window": "{days} días",
         "noneInWindow": "nada en este periodo",
         "higherIsMore": "más alto = {anchor}",

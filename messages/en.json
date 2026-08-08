@@ -891,7 +891,7 @@
     "quickTagsHelp": "Your frequent tags — one tap",
     "quickTagsExpand": "More",
     "loadError": "Could not load your mood entries.",
-    "sectionLevelA": "Five scales",
+    "sectionLevelA": "State of mind",
     "sectionLevelAHelp": "Optional. Anything you leave alone stays empty.",
     "dimensionNotAnswered": "not recorded",
     "dimensionClear": "clear",
@@ -3246,8 +3246,6 @@
     "navRecovery": "Recovery",
     "workouts": {
       "title": "Workouts",
-      "askWhy": "Ask why",
-      "askWhyPrompt": "Why did this session read the way it did? Walk me through my own numbers from it.",
       "description": "Recent runs, rides, walks and strength sessions, deduped across Apple Watch and Withings sources.",
       "emptyState": {
         "title": "No workouts yet",
@@ -3772,8 +3770,8 @@
       },
       "inTargetTitle": "In your range",
       "dimensions": {
-        "title": "Five scales",
-        "none": "Nothing recorded for these five scales yet.",
+        "title": "State of mind",
+        "none": "Nothing recorded on your state of mind yet.",
         "window": "{days} days",
         "noneInWindow": "nothing in this range",
         "higherIsMore": "higher = {anchor}",

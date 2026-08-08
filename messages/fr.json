@@ -891,7 +891,7 @@
     "quickTagsHelp": "Vos tags fréquents — en un geste",
     "quickTagsExpand": "Plus",
     "loadError": "Impossible de charger vos entrées d'humeur.",
-    "sectionLevelA": "Cinq échelles",
+    "sectionLevelA": "État d'esprit",
     "sectionLevelAHelp": "Facultatif. Ce que vous ne touchez pas reste vide.",
     "dimensionNotAnswered": "non renseigné",
     "dimensionClear": "effacer",
@@ -3246,8 +3246,6 @@
     "navRecovery": "Récupération",
     "workouts": {
       "title": "Entraînements",
-      "askWhy": "Pourquoi",
-      "askWhyPrompt": "Pourquoi cette séance s'est-elle passée ainsi ? Explique-moi mes propres chiffres.",
       "description": "Courses, sorties à vélo, marches et séances de musculation récentes, dédupliquées entre Apple Watch et Withings.",
       "emptyState": {
         "title": "Aucun entraînement",
@@ -3772,8 +3770,8 @@
       },
       "inTargetTitle": "Dans votre plage",
       "dimensions": {
-        "title": "Cinq échelles",
-        "none": "Rien n'est encore enregistré pour ces cinq échelles.",
+        "title": "État d'esprit",
+        "none": "Rien n'est encore enregistré pour l'état d'esprit.",
         "window": "{days} jours",
         "noneInWindow": "rien sur cette période",
         "higherIsMore": "plus haut = {anchor}",

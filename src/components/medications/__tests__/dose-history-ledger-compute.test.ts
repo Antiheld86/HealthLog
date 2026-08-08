@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyOptimisticSlotMark,
+  slotMarkRequestBody,
   complianceFromLedger,
   formatSlotDelta,
   groupLedgerByDay,
@@ -193,5 +194,25 @@ describe("applyOptimisticSlotMark", () => {
       "skipped",
     );
     expect(next.rows[0].status).toBe("taken_late");
+  });
+});
+
+describe("slotMarkRequestBody", () => {
+  const row = { at: "2026-08-04T07:00:00.000Z" };
+
+  it("anchors takenAt on the slot instant, not on now", () => {
+    const body = slotMarkRequestBody(row, "taken");
+    expect(body).toEqual({
+      skipped: false,
+      scheduledFor: "2026-08-04T07:00:00.000Z",
+      takenAt: "2026-08-04T07:00:00.000Z",
+    });
+  });
+
+  it("keeps the skipped arm free of takenAt", () => {
+    expect(slotMarkRequestBody(row, "skipped")).toEqual({
+      skipped: true,
+      scheduledFor: "2026-08-04T07:00:00.000Z",
+    });
   });
 });
