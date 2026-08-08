@@ -9,9 +9,10 @@ import { SlidersHorizontal, TrendingUp } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { queryKeys } from "@/lib/query-keys";
 import { apiGet } from "@/lib/api/api-fetch";
-// Pure constant — importing it here does NOT pull the dynamically-loaded ECG
-// component into this bundle, which is exactly why it lives in the lib module.
-import { ECG_OVERVIEW_LIMIT } from "@/lib/insights/ecg-classification";
+// Bare number — its own React- and label-map-free module, so importing it here
+// pulls neither the ECG label map/helpers nor the dynamically-loaded ECG
+// component into this eager bundle.
+import { ECG_OVERVIEW_LIMIT } from "@/lib/insights/ecg-overview-limit";
 import { useFeatureFlags } from "@/hooks/use-feature-flags";
 import { useInsightsLayoutQuery } from "@/hooks/use-insights-layout";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";

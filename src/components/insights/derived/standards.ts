@@ -23,6 +23,7 @@
  * covers has to live in `insights.healthScore.method` — the standard entry
  * alone would say it to nobody.
  */
+import { HEALTH_SCORE_PROVENANCE } from "./health-score-provenance";
 import type { ProvenanceStandard } from "./provenance-explainer";
 import type { DerivedMetricId } from "@/lib/insights/derived/registry";
 
@@ -198,21 +199,8 @@ export const METRIC_PROVENANCE: Record<DerivedMetricId, MetricProvenanceMeta> =
       },
       caveatKey: "insights.derived.composite.SAME_TIME_BASELINE.caveat",
     },
-    HEALTH_SCORE: {
-      methodKey: "insights.healthScore.method",
-      standard: {
-        // Cited for the risk-factor set the pillars are drawn from, and for
-        // nothing beyond it. HEARTS names the cardiometabolic factors worth
-        // following; it does not prescribe an equal-weighted average of
-        // them, and since v1.35.0 it could not, because which pillars enter
-        // that average is the account's own selection. Naming the package
-        // plainly, as this entry used to, reads as a standard endorsing
-        // whatever recipe the person happens to have chosen, which is a
-        // claim nobody can make. The pillar-level citations elsewhere in
-        // this map are unaffected: each of those really does describe the
-        // band its pillar is graded against.
-        name: "WHO HEARTS technical package (risk-factor set)",
-        url: "https://www.who.int/publications/i/item/9789240001367",
-      },
-    },
+    // The HEALTH_SCORE entry lives in its own module so the eager insights
+    // overview can import just this metric's citation without pulling the whole
+    // map; the rationale for its wording is documented there.
+    HEALTH_SCORE: HEALTH_SCORE_PROVENANCE,
   };
