@@ -3120,8 +3120,6 @@
     "navRecovery": "Erholung",
     "workouts": {
       "title": "Workouts",
-      "askWhy": "Warum?",
-      "askWhyPrompt": "Warum ist diese Einheit so ausgefallen? Erkläre mir meine eigenen Werte dazu.",
       "description": "Letzte Läufe, Touren, Spaziergänge und Krafteinheiten — quellenübergreifend entdoppelt zwischen Apple Watch und Withings.",
       "emptyState": {
         "title": "Noch keine Workouts",

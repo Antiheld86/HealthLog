@@ -3120,8 +3120,6 @@
     "navRecovery": "Recuperación",
     "workouts": {
       "title": "Entrenamientos",
-      "askWhy": "Por qué",
-      "askWhyPrompt": "¿Por qué salió así esta sesión? Explícame mis propios datos de ella.",
       "description": "Carreras, salidas en bici, paseos y sesiones de fuerza recientes, deduplicados entre Apple Watch y Withings.",
       "emptyState": {
         "title": "Aún no hay entrenamientos",
