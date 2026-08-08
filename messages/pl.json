@@ -8497,23 +8497,23 @@
     },
     "mcp": {
       "label": "Dostęp asystenta zewnętrznego (MCP)",
-      "description": "Pozwól asystentowi obsługującemu MCP czytać Twoje dane zdrowotne za pomocą tokena o ograniczonym zakresie. Domyślnie wyłączone."
+      "description": "Dostęp do odczytu dla asystenta obsługującego MCP, przez token o ograniczonym zakresie."
     },
     "environment": {
       "label": "Środowisko",
-      "description": "Pobieraj dzienną pogodę i długość dnia dla swojej lokalizacji, aby powiązać je z nastrojem, snem i parametrami życiowymi. Domyślnie wyłączone."
+      "description": "Dzienna pogoda i długość dnia dla Twojej lokalizacji, obok nastroju, snu i parametrów życiowych."
     },
     "inboundDocuments": {
       "label": "Dokumenty",
-      "description": "Przechowuj każde pismo lekarskie, wynik i skan w jednym zaszyfrowanym, przeszukiwalnym miejscu — powiązane z Twoimi schorzeniami. Domyślnie wyłączone."
+      "description": "Pisma lekarskie, wyniki i skany w jednym zaszyfrowanym, przeszukiwalnym miejscu."
     },
     "mentalHealth": {
       "label": "Dobrostan psychiczny",
-      "description": "Dobrowolne testy PHQ-9 i GAD-7 obok dziennika nastroju. Domyślnie wyłączone; odpowiedzi są szyfrowane i pozostają poza Coachem AI."
+      "description": "Cztery dobrowolne testy obok dziennika nastroju."
     },
     "nutrients": {
       "label": "Spożycie składników odżywczych",
-      "description": "Zapisuje dzienne sumy mikroskładników (witaminy, minerały, woda, kofeina) synchronizowane z Apple Health. Domyślnie wyłączone."
+      "description": "Dzienne sumy mikroskładników synchronizowane z Apple Health."
     }
   },
   "illness": {
@@ -9010,7 +9010,8 @@
     },
     "openDetail": "Pokaż szczegóły",
     "historyLoadError": "Nie udało się wczytać historii testów",
-    "historyLoadErrorHint": "To nie znaczy, że nie masz wyników — nie udało się pobrać listy. Spróbuj ponownie."
+    "historyLoadErrorHint": "To nie znaczy, że nie masz wyników — nie udało się pobrać listy. Spróbuj ponownie.",
+    "privacyNote": "Twoje odpowiedzi są przechowywane w postaci zaszyfrowanej i nigdy nie trafiają do Coacha AI."
   },
   "records": {
     "aiInclusion": {

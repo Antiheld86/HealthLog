@@ -142,6 +142,17 @@ export function MentalWellbeing() {
             description={t("mentalHealth.pageDescription")}
           />
 
+          {/* What happens to the answers. The Modules hub used to carry this
+              as the second sentence of the module's one-line description,
+              which was the only place in the app that said it — so it moved
+              to the screen where somebody is about to answer. */}
+          <p
+            data-slot="mental-health-privacy-note"
+            className="text-muted-foreground -mt-3 text-xs"
+          >
+            {t("mentalHealth.privacyNote")}
+          </p>
+
           <section aria-label={t("mentalHealth.choosePrompt")}>
             <h2 className="sr-only">{t("mentalHealth.choosePrompt")}</h2>
             {historyError ? (

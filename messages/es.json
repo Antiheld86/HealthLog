@@ -8497,23 +8497,23 @@
     },
     "mcp": {
       "label": "Acceso de asistente externo (MCP)",
-      "description": "Permite que un asistente compatible con MCP lea tus datos de salud mediante un token con alcance limitado. Desactivado de forma predeterminada."
+      "description": "Acceso de lectura para un asistente compatible con MCP, mediante un token limitado."
     },
     "environment": {
       "label": "Entorno",
-      "description": "Incorpora el tiempo y las horas de luz diarias de tu ubicación para correlacionarlos con el ánimo, el sueño y las constantes. Desactivado por defecto."
+      "description": "El tiempo y las horas de luz diarias de tu ubicación, junto al ánimo, el sueño y las constantes."
     },
     "inboundDocuments": {
       "label": "Documentos",
-      "description": "Guarda cada carta médica, informe y escaneo en un solo lugar cifrado y con búsqueda — vinculado a tus afecciones. Desactivado por defecto."
+      "description": "Cartas médicas, informes y escaneos en un lugar cifrado y con búsqueda."
     },
     "mentalHealth": {
       "label": "Bienestar mental",
-      "description": "Cuestionarios PHQ-9 y GAD-7 opcionales, junto al registro de ánimo. Desactivado por defecto; las respuestas se cifran y se mantienen fuera del Coach de IA."
+      "description": "Cuatro cuestionarios opcionales, junto al registro de ánimo."
     },
     "nutrients": {
       "label": "Ingesta de nutrientes",
-      "description": "Guarda los totales diarios de micronutrientes (vitaminas, minerales, agua, cafeína) sincronizados desde Apple Health. Desactivado por defecto."
+      "description": "Totales diarios de micronutrientes sincronizados desde Apple Health."
     }
   },
   "illness": {
@@ -9010,7 +9010,8 @@
     },
     "openDetail": "Ver detalles",
     "historyLoadError": "No se pudo cargar tu historial de evaluaciones",
-    "historyLoadErrorHint": "Esto no significa que no tengas resultados: no se pudo obtener la lista. Vuelve a intentarlo."
+    "historyLoadErrorHint": "Esto no significa que no tengas resultados: no se pudo obtener la lista. Vuelve a intentarlo.",
+    "privacyNote": "Tus respuestas se guardan cifradas y nunca llegan al Coach de IA."
   },
   "records": {
     "aiInclusion": {

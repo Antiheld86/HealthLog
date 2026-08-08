@@ -8497,23 +8497,23 @@
     },
     "mcp": {
       "label": "Accesso assistente esterno (MCP)",
-      "description": "Consente a un assistente compatibile con MCP di leggere i tuoi dati sanitari tramite un token con ambito limitato. Disattivato per impostazione predefinita."
+      "description": "Accesso in lettura per un assistente compatibile con MCP, tramite un token limitato."
     },
     "environment": {
       "label": "Ambiente",
-      "description": "Integra il meteo e le ore di luce giornaliere della tua posizione per correlarli con umore, sonno e parametri vitali. Disattivato di default."
+      "description": "Meteo e ore di luce giornaliere della tua posizione, accanto a umore, sonno e parametri vitali."
     },
     "inboundDocuments": {
       "label": "Documenti",
-      "description": "Conserva ogni lettera medica, referto e scansione in un unico archivio cifrato e ricercabile — collegato alle tue patologie. Disattivato di default."
+      "description": "Lettere mediche, referti e scansioni in un archivio cifrato e ricercabile."
     },
     "mentalHealth": {
       "label": "Benessere mentale",
-      "description": "Questionari PHQ-9 e GAD-7 facoltativi, accanto al diario dell'umore. Disattivato per impostazione predefinita; le risposte sono cifrate e tenute fuori dal Coach IA."
+      "description": "Quattro questionari facoltativi, accanto al diario dell'umore."
     },
     "nutrients": {
       "label": "Assunzione di nutrienti",
-      "description": "Salva i totali giornalieri di micronutrienti (vitamine, minerali, acqua, caffeina) sincronizzati da Apple Health. Disattivato per impostazione predefinita."
+      "description": "Totali giornalieri di micronutrienti sincronizzati da Apple Health."
     }
   },
   "illness": {
@@ -9010,7 +9010,8 @@
     },
     "openDetail": "Mostra dettagli",
     "historyLoadError": "Non è stato possibile caricare la cronologia dei test",
-    "historyLoadErrorHint": "Questo non significa che non ci siano risultati: non è stato possibile recuperare l'elenco. Riprova."
+    "historyLoadErrorHint": "Questo non significa che non ci siano risultati: non è stato possibile recuperare l'elenco. Riprova.",
+    "privacyNote": "Le tue risposte sono salvate cifrate e non raggiungono mai il Coach IA."
   },
   "records": {
     "aiInclusion": {

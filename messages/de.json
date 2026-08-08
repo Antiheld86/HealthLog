@@ -8497,23 +8497,23 @@
     },
     "mcp": {
       "label": "Externer Assistentenzugriff (MCP)",
-      "description": "Einem MCP-fähigen Assistenten Lesezugriff auf deine Gesundheitsdaten über ein begrenztes Token erlauben. Standardmäßig aus."
+      "description": "Lesezugriff für einen MCP-fähigen Assistenten, über ein begrenztes Token."
     },
     "environment": {
       "label": "Umwelt",
-      "description": "Tägliches Wetter und Tageslicht für deinen Ort einbeziehen, um Zusammenhänge mit Stimmung, Schlaf und Vitalwerten zu erkennen. Standardmäßig aus."
+      "description": "Tägliches Wetter und Tageslicht für deinen Ort, neben Stimmung, Schlaf und Vitalwerten."
     },
     "inboundDocuments": {
       "label": "Dokumente",
-      "description": "Bewahre jedes medizinische Schreiben, jeden Befund und Scan an einem verschlüsselten, durchsuchbaren Ort auf — verknüpft mit deinen Erkrankungen. Standardmäßig aus."
+      "description": "Arztbriefe, Befunde und Scans verschlüsselt und durchsuchbar an einem Ort."
     },
     "mentalHealth": {
       "label": "Seelisches Wohlbefinden",
-      "description": "Freiwillige PHQ-9- und GAD-7-Selbsttests ergänzend zum Stimmungstagebuch. Standardmäßig aus; Antworten sind verschlüsselt und bleiben aus dem KI-Coach heraus."
+      "description": "Vier freiwillige Selbsttests neben dem Stimmungstagebuch."
     },
     "nutrients": {
       "label": "Nährstoffzufuhr",
-      "description": "Speichert tägliche Mikronährstoff-Summen (Vitamine, Mineralstoffe, Wasser, Koffein) aus Apple Health. Standardmäßig aus."
+      "description": "Tägliche Mikronährstoff-Summen aus Apple Health."
     }
   },
   "illness": {
@@ -9010,7 +9010,8 @@
     },
     "openDetail": "Details anzeigen",
     "historyLoadError": "Dein Testverlauf konnte nicht geladen werden",
-    "historyLoadErrorHint": "Das heißt nicht, dass keine Ergebnisse vorliegen — die Liste konnte nicht abgerufen werden. Versuche es erneut."
+    "historyLoadErrorHint": "Das heißt nicht, dass keine Ergebnisse vorliegen — die Liste konnte nicht abgerufen werden. Versuche es erneut.",
+    "privacyNote": "Deine Antworten sind verschlüsselt gespeichert und erreichen den KI-Coach nicht."
   },
   "records": {
     "aiInclusion": {

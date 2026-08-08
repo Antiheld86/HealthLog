@@ -8497,23 +8497,23 @@
     },
     "mcp": {
       "label": "Accès assistant externe (MCP)",
-      "description": "Autorise un assistant compatible MCP à lire vos données de santé via un jeton à portée limitée. Désactivé par défaut."
+      "description": "Accès en lecture pour un assistant compatible MCP, via un jeton limité."
     },
     "environment": {
       "label": "Environnement",
-      "description": "Intégrez la météo et la durée du jour quotidiennes de votre lieu pour les corréler à l'humeur, au sommeil et aux constantes. Désactivé par défaut."
+      "description": "Météo et durée du jour quotidiennes de votre lieu, à côté de l'humeur, du sommeil et des constantes."
     },
     "inboundDocuments": {
       "label": "Documents",
-      "description": "Conservez chaque courrier médical, compte rendu et scan dans un espace chiffré et consultable — lié à vos affections. Désactivé par défaut."
+      "description": "Courriers médicaux, comptes rendus et scans dans un espace chiffré et consultable."
     },
     "mentalHealth": {
       "label": "Bien-être mental",
-      "description": "Questionnaires PHQ-9 et GAD-7 facultatifs, en complément du suivi de l'humeur. Désactivé par défaut ; les réponses sont chiffrées et tenues à l'écart du Coach IA."
+      "description": "Quatre questionnaires facultatifs, à côté du suivi de l'humeur."
     },
     "nutrients": {
       "label": "Apports en nutriments",
-      "description": "Enregistre les totaux quotidiens de micronutriments (vitamines, minéraux, eau, caféine) synchronisés depuis Apple Health. Désactivé par défaut."
+      "description": "Totaux quotidiens de micronutriments synchronisés depuis Apple Health."
     }
   },
   "illness": {
@@ -9010,7 +9010,8 @@
     },
     "openDetail": "Voir les détails",
     "historyLoadError": "Ton historique d'évaluations n'a pas pu être chargé",
-    "historyLoadErrorHint": "Cela ne veut pas dire que tu n'as aucun résultat : la liste n'a pas pu être récupérée. Réessaie."
+    "historyLoadErrorHint": "Cela ne veut pas dire que tu n'as aucun résultat : la liste n'a pas pu être récupérée. Réessaie.",
+    "privacyNote": "Vos réponses sont stockées chiffrées et n'atteignent jamais le Coach IA."
   },
   "records": {
     "aiInclusion": {
