@@ -187,6 +187,7 @@ const HERO_ITEM_LABEL_KEYS: Record<PriorityItemKind, string> = {
   ecg_new_recording: "dashboard.heroItems.ecg_new_recording",
   tension_window: "dashboard.heroItems.tension_window",
   same_time_baseline: "dashboard.heroItems.same_time_baseline",
+  upcoming_visit: "dashboard.heroItems.upcoming_visit",
 };
 
 export function DashboardLayoutSection({ id }: { id: string }) {

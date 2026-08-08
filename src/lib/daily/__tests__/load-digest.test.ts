@@ -20,6 +20,7 @@ vi.mock("@/lib/db", () => ({
     dismissedPriorityItem: { findMany: vi.fn().mockResolvedValue([]) },
     personalRecord: { findMany: vi.fn().mockResolvedValue([]) },
     arrivalReaction: { findMany: vi.fn().mockResolvedValue([]) },
+    encounter: { findFirst: vi.fn().mockResolvedValue(null) },
   },
 }));
 

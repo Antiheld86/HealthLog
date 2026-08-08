@@ -20,6 +20,7 @@
 import Link from "next/link";
 import {
   Activity,
+  CalendarCheck,
   Award,
   CalendarClock,
   Footprints,
@@ -55,6 +56,7 @@ const KIND_ICON: Record<PriorityItemKind, LucideIcon> = {
   ecg_new_recording: HeartPulse,
   tension_window: Activity,
   same_time_baseline: Footprints,
+  upcoming_visit: CalendarCheck,
 };
 
 /**

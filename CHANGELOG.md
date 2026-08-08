@@ -4,6 +4,24 @@
 
 ### Added
 
+- The mood module can now say what a day would have looked like on your own
+  past patterns, and how far the day you recorded sits from that. It is a
+  second, separate reading: your own rating stays the leading one, it is
+  stored exactly as you gave it, and nothing overwrites it. The comparison
+  appears only once there are enough days to say anything honest, it always
+  carries the number of days it was built from and a range rather than a
+  single figure, and it names which of the things you recorded weighed most on
+  that day. It describes a connection between things you wrote down. It never
+  claims a cause.
+
+  Below fifteen days there is nothing at all. Between fifteen and thirty the
+  page says how far along it is instead of guessing. Between thirty and sixty
+  the comparison is there and is labelled as provisional. Where the days are
+  there but nothing in them is steady enough to compare against, it says that
+  too, rather than producing a number to fill the space. The comparison is
+  rebuilt overnight from your entries, and if you delete enough of them it
+  goes away again instead of standing there with a fresh date on it.
+
 - A mood entry can now carry the shape of the day around it. Four sections sit
   below the sliders — work, contacts, leisure, and one notable event — and
   every one of them is closed until you open it, so a quick check-in is still

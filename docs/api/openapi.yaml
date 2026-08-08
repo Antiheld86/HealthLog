@@ -932,7 +932,7 @@ paths:
                       type: number
                       const: 2
                     leaves:
-                      maxItems: 91
+                      maxItems: 92
                       type: array
                       items:
                         type: string
@@ -1037,7 +1037,7 @@ paths:
                       type: number
                       const: 2
                     leaves:
-                      maxItems: 91
+                      maxItems: 92
                       type: array
                       items:
                         type: string
@@ -8357,6 +8357,29 @@ paths:
         "403": *a6
         "422": *a3
         "429": *a4
+  /api/mood/prognosis:
+    get:
+      tags:
+        - Mood
+      summary: The day's own rating and what the account's days imply (v1.38)
+      description: "The newest stored comparison for the account, with the person's own rating for that day beside it. Written
+        nightly by a job and never by a request: the value cannot be overwritten, which is what keeps the two readings
+        separate. Absence is explicit (`present: false` with a reason and a count) and is a normal answer, not an error
+        — the comparison refuses when the history does not support one. Whole-record read: the fit takes the day's
+        context AND the sleep, activity and recovery figures the owning modules hold, and it names them, so a
+        section-scoped grant is refused rather than served a filtered list. Gated: `module.disabled` 403 when the mood
+        module is off."
+      responses:
+        "200":
+          description: The day's two readings, or an explained absence.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodPrognosisEnvelope"
+        "401": *a1
+        "403": *a7
+        "422": *a3
+        "429": *a4
   /api/mood-entries/bulk:
     post:
       tags:
@@ -9176,6 +9199,10 @@ paths:
                   enum:
                     - MANUAL
                     - OCR
+                encounterId:
+                  type: string
+                  minLength: 1
+                  maxLength: 40
               required:
                 - takenAt
       responses:
@@ -9477,6 +9504,10 @@ paths:
                   type: string
                   minLength: 1
                   maxLength: 64
+                encounterId:
+                  type: string
+                  minLength: 1
+                  maxLength: 40
               required:
                 - rows
       responses:
@@ -9714,6 +9745,12 @@ paths:
             minLength: 1
             maxLength: 40
         - in: query
+          name: episodeId
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 40
+        - in: query
           name: limit
           schema:
             type: integer
@@ -9821,6 +9858,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CreateEncounterEnvelope"
+        "401": *a1
+        "403": *a6
+        "422": *a3
+        "429": *a4
+  /api/encounters/suggest:
+    get:
+      tags:
+        - Records
+      summary: Which visit does a record dated around this day belong to?
+      description: "Resolves the caller's live DONE or PLANNED visits within ±7 days of `anchor` into a verdict, so the three
+        capture moments that ask the question — a document arriving, a lab panel committed from an extraction, a lab
+        panel typed by hand — all read the same answer. `one` means pre-select it visibly with one undo; `many` means
+        offer a picker with NOTHING pre-selected, because pre-selecting the first of two teaches a person to stop
+        reading suggestions; `none` means offer nothing at all. Cancelled visits and no-shows are never candidates:
+        neither happened, so neither produced the record being filed. No AI provider is involved and none is required."
+      parameters:
+        - in: query
+          name: anchor
+          schema:
+            type: string
+            format: date-time
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          required: true
+      responses:
+        "200":
+          description: The verdict.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuggestEncounterEnvelope"
         "401": *a1
         "403": *a6
         "422": *a3
@@ -11397,6 +11464,12 @@ paths:
           schema:
             type: string
           description: Only documents linked to this illness/condition episode.
+        - name: encounterId
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Only documents linked to this visit.
         - name: year
           in: query
           required: false
@@ -11515,6 +11588,12 @@ paths:
                   type: array
                   items:
                     type: string
+                encounterIds:
+                  description: Optional visit pre-links (repeat the field per id). Every id must be a live visit of the caller; an unknown
+                    one refuses the upload rather than dropping the link the person asked for.
+                  type: array
+                  items:
+                    type: string
               required:
                 - file
       responses:
@@ -11618,6 +11697,8 @@ paths:
                     - setKind
                     - linkEpisode
                     - unlinkEpisode
+                    - linkEncounter
+                    - unlinkEncounter
                     - delete
                     - restore
                 kind:
@@ -11633,6 +11714,10 @@ paths:
                     - VACCINATION
                     - OTHER
                 episodeId:
+                  type: string
+                  minLength: 1
+                  maxLength: 40
+                encounterId:
                   type: string
                   minLength: 1
                   maxLength: 40
@@ -11714,6 +11799,13 @@ paths:
                       pattern: ^\d{4}-\d{2}-\d{2}$
                     - type: "null"
                 episodeIds:
+                  maxItems: 20
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
+                encounterIds:
                   maxItems: 20
                   type: array
                   items:
@@ -15647,7 +15739,7 @@ components:
           type: number
           const: 2
         leaves:
-          maxItems: 91
+          maxItems: 92
           type: array
           items:
             type: string
@@ -16919,7 +17011,7 @@ components:
         enabledHeroItemKinds:
           description: Today-highlight item kinds in catalogue order. Missing means every current kind is enabled; an empty array
             disables all kinds.
-          maxItems: 8
+          maxItems: 9
           type: array
           items:
             type: string
@@ -16932,6 +17024,7 @@ components:
               - ecg_new_recording
               - tension_window
               - same_time_baseline
+              - upcoming_visit
         baseUpdatedAt:
           description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
             legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
@@ -32815,6 +32908,184 @@ components:
         - generatedAt
       additionalProperties: false
       description: Per-analyte change between the two most-recent numeric lab panels. Neutral framing, never a diagnosis.
+    MoodPrognosisEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/MoodPrognosis"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    MoodPrognosis:
+      anyOf:
+        - type: object
+          properties:
+            present:
+              type: boolean
+              const: true
+            date:
+              type: string
+              description: The local day this is about, `YYYY-MM-DD`.
+            predicted:
+              type: number
+              description: The expected pleasantness (A1) for that day, 0-10, on the account's own past pattern. A counterfactual,
+                never a measurement — and never to be displayed without `n` and the band.
+            ciLow:
+              anyOf:
+                - type: number
+                - type: "null"
+            ciHigh:
+              anyOf:
+                - type: number
+                - type: "null"
+              description: The band, from the validation residuals. It widens when the model fits badly, so a wide band is the signal
+                to present the value cautiously.
+            n:
+              type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+              description: "Complete days the fit used. Display it WHEREVER `predicted` is displayed: a value built from 30 days and
+                one built from 300 look identical otherwise."
+            modelVersion:
+              type: string
+            computedAt:
+              type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            ageDays:
+              anyOf:
+                - type: integer
+                  minimum: -9007199254740991
+                  maximum: 9007199254740991
+                - type: "null"
+              description: Whole days between that day and the reader's today.
+            current:
+              type: boolean
+              description: Whether it is fresh enough to back a present-tense sentence. False means the copy must name the day it is
+                about.
+            provisional:
+              type: boolean
+              description: "True below 60 days of history: label it as provisional."
+            stage:
+              type: string
+              enum:
+                - provisional
+                - regular
+                - seasonal
+            entries:
+              type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+              description: Days of history behind the ladder.
+            seasonalUnlocked:
+              type: boolean
+            selfAssessment:
+              anyOf:
+                - type: integer
+                  minimum: -9007199254740991
+                  maximum: 9007199254740991
+                - type: "null"
+              description: "The person's own rating for that day, stored exactly as they gave it. It LEADS: it is the primary value on
+                any surface that shows both, and it is never merged with `predicted`."
+            deviation:
+              anyOf:
+                - type: string
+                  enum:
+                    - within
+                    - above
+                    - below
+                - type: "null"
+              description: Where the self-assessment sat against the BAND, not against `predicted`. `within` means the day went as the
+                account's own past days suggest.
+            deviationAmount:
+              anyOf:
+                - type: number
+                - type: "null"
+              description: How far outside the band, in scale points. `0` when inside.
+            contributions:
+              type: array
+              items:
+                $ref: "#/components/schemas/MoodPrognosisContribution"
+          required:
+            - present
+            - date
+            - predicted
+            - ciLow
+            - ciHigh
+            - n
+            - modelVersion
+            - computedAt
+            - ageDays
+            - current
+            - provisional
+            - stage
+            - entries
+            - seasonalUnlocked
+            - selfAssessment
+            - deviation
+            - deviationAmount
+            - contributions
+          additionalProperties: false
+        - type: object
+          properties:
+            present:
+              type: boolean
+              const: false
+            reason:
+              type: string
+              enum:
+                - no-output-yet
+                - learning-phase
+                - no-pattern
+              description: "`no-output-yet`: too few days for anything. `learning-phase`: enough to describe, not to compare.
+                `no-pattern`: enough days, nothing steady enough in them. None of the three is an error and none is a
+                zero."
+            entries:
+              type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            nextThreshold:
+              anyOf:
+                - type: integer
+                  minimum: -9007199254740991
+                  maximum: 9007199254740991
+                - type: "null"
+              description: Days at which the next step unlocks, when a count is missing.
+          required:
+            - present
+            - reason
+            - entries
+            - nextThreshold
+          additionalProperties: false
+      description: "Two separate readings of one day: what the person recorded, and what a comparison with their own past days
+        would have expected. They are never merged — the distance between them is the finding, and a single blended
+        figure destroys it. The comparison is a regularised regression over the account's own history: observational
+        only, never causal. Any copy built on it must state the value as a counterfactual (a value around X would have
+        been expected), must carry `n`, and must not say that anything caused anything."
+    MoodPrognosisContribution:
+      type: object
+      properties:
+        feature:
+          type: string
+          description: "Stable feature identifier: `dimension:a2`, `context:workLoad`, `context:workStatus=off` or `linked:steps`.
+            A client that does not recognise one skips it — an older row can name a feature a later model dropped."
+        contribution:
+          type: number
+          description: "Signed: how far this feature moved the expected value away from the account's own average day. Ordered by
+            absolute size, largest first."
+      required:
+        - feature
+        - contribution
+      additionalProperties: false
     BulkMoodResponseEnvelope:
       type: object
       properties:
@@ -34845,8 +35116,10 @@ components:
         - labResults
         - conditions
       additionalProperties: false
-      description: The three link families of one visit, each ordered by when it was filed. Present on the detail response,
-        absent from the list.
+      description: "The three link families of one visit, each ordered by when it was filed. Present on BOTH the list and the
+        detail: a card shows counts of what the visit produced, and an edit opened from a list row seeds its pickers
+        from that row — a list without them would make the first read zero and the second unfile everything on save. The
+        list resolves them in three grouped queries for the whole page, not three per row."
     EncounterLinkedTarget:
       type: object
       properties:
@@ -34923,6 +35196,99 @@ components:
         - data
         - error
       additionalProperties: false
+    SuggestEncounterEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/EncounterSuggestion"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    EncounterSuggestion:
+      oneOf:
+        - type: object
+          properties:
+            kind:
+              type: string
+              const: one
+            encounter:
+              $ref: "#/components/schemas/EncounterSuggestionCandidate"
+          required:
+            - kind
+            - encounter
+          additionalProperties: false
+        - type: object
+          properties:
+            kind:
+              type: string
+              const: many
+            encounters:
+              type: array
+              items:
+                $ref: "#/components/schemas/EncounterSuggestionCandidate"
+          required:
+            - kind
+            - encounters
+          additionalProperties: false
+        - type: object
+          properties:
+            kind:
+              type: string
+              const: none
+          required:
+            - kind
+          additionalProperties: false
+      description: "The verdict, as a shape rather than a best guess. There is deliberately no field on the `many` arm a
+        client could read as a pre-selection: collapsing two candidates into one is the failure this union exists to
+        make impossible."
+      type: object
+    EncounterSuggestionCandidate:
+      type: object
+      properties:
+        id:
+          type: string
+        occurredAt:
+          type: string
+        status:
+          type: string
+          enum:
+            - PLANNED
+            - DONE
+            - CANCELLED
+            - NO_SHOW
+        kind:
+          type: string
+          enum:
+            - ROUTINE
+            - ACUTE
+            - SPECIALIST
+            - PREVENTIVE
+            - EMERGENCY
+            - HOSPITAL
+            - THERAPY
+            - OTHER
+        practitionerName:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - id
+        - occurredAt
+        - status
+        - kind
+        - practitionerName
+      additionalProperties: false
+      description: One visit a record might belong to, resolved far enough to render a row without a second round trip.
+        `practitionerName` is null when the visit names no practice, which is an absence rather than a gap.
     GetEncounterEnvelope:
       type: object
       properties:
@@ -36358,6 +36724,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DocumentConditionLink"
+        encounterLinks:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentEncounterLink"
         servingClass:
           type: string
           enum:
@@ -36395,6 +36765,7 @@ components:
         - factCount
         - pendingCount
         - conditionLinks
+        - encounterLinks
         - servingClass
         - hasContentIndex
         - contentIndexSource
@@ -36424,6 +36795,26 @@ components:
         - name
       additionalProperties: false
       description: A link to one of the caller's illness/condition episodes. `name` is the episode's user-facing label.
+    DocumentEncounterLink:
+      type: object
+      properties:
+        encounterId:
+          type: string
+        kind:
+          type: string
+        occurredAt:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - encounterId
+        - kind
+        - occurredAt
+      additionalProperties: false
+      description: "A link to one of the caller's visits — \"this letter belongs to that appointment\". `kind` is the
+        visit-kind ENUM CONSTANT rather than a rendered name: unlike a condition label, which is the person's own words,
+        a visit kind is one of eight closed values whose human name the reader's own bundle owns, so publishing the
+        constant is what lets a German reader and an English one each see it named correctly."
     InboundDocumentEnvelope:
       type: object
       properties:
@@ -36681,6 +37072,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DocumentConditionLink"
+        encounterLinks:
+          type: array
+          items:
+            $ref: "#/components/schemas/DocumentEncounterLink"
         servingClass:
           type: string
           enum:
@@ -36738,6 +37133,7 @@ components:
         - factCount
         - pendingCount
         - conditionLinks
+        - encounterLinks
         - servingClass
         - hasContentIndex
         - contentIndexSource
@@ -38434,6 +38830,7 @@ components:
             - ecg_new_recording
             - tension_window
             - same_time_baseline
+            - upcoming_visit
           description: Closed rail-item kind.
         itemKey:
           description: Stable dismiss identity, namespaced `<kind>:...`. Present only on the observational kinds (milestone /
@@ -38716,7 +39113,7 @@ components:
         enabledHeroItemKinds:
           description: Today-highlight item kinds in catalogue order. Missing means every current kind is enabled; an empty array
             disables all kinds.
-          maxItems: 8
+          maxItems: 9
           type: array
           items:
             type: string
@@ -38729,6 +39126,7 @@ components:
               - ecg_new_recording
               - tension_window
               - same_time_baseline
+              - upcoming_visit
         updatedAt:
           description: "Optimistic-concurrency token: the stored row's `updatedAt` at read/write time. Echo it back as
             `baseUpdatedAt` on the next write. Opaque."

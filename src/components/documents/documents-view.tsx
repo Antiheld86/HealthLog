@@ -42,7 +42,10 @@ import { useAuth } from "@/hooks/use-auth";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { PullToRefreshIndicator } from "@/components/ui/pull-to-refresh-indicator";
 import { apiGet, apiPost } from "@/lib/api/api-fetch";
-import { useTranslations } from "@/lib/i18n/context";
+import { encounterKindText } from "@/components/encounters/encounter-labels";
+import { useEncounters } from "@/hooks/use-encounters";
+import { useFormatters, useTranslations } from "@/lib/i18n/context";
+import type { EncounterKind } from "@/generated/prisma/client";
 import {
   type CoachCloseIntent,
   useCoachLaunch,
@@ -85,6 +88,13 @@ interface ListPage {
 }
 
 // Strict end-of-input: `$` also accepts a trailing newline in JavaScript.
+/**
+ * How many visits the bulk bar offers. A menu is a picker, not a history: past
+ * the first screenful a person scrolls rather than reads, and filing against a
+ * visit older than this belongs on the visit's own sheet.
+ */
+const BULK_VISIT_OPTIONS = 12;
+
 const DOCUMENT_QUERY_ID_PATTERN = /^[a-zA-Z0-9_-]{1,40}(?![\s\S])/;
 const DOCUMENT_SELECTION_HISTORY_KEY = "__healthlogPushedDocumentSelection";
 
@@ -226,6 +236,7 @@ export function closeDocumentSelectionAfterCoachHandoff(
 
 export function DocumentsView() {
   const { t } = useTranslations();
+  const format = useFormatters();
   const { user, isLoading: authLoading, isAuthenticated } = useAuth();
   // v1.36.x — uploading a document, filing it, sharing it and asking the AI
   // about it are none of them delegated verbs. Inside somebody else's record
@@ -476,6 +487,27 @@ export function DocumentsView() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [usage.data?.linkedEpisodes, filters.episodeId, episodes.data]);
 
+  // The visits the bulk bar can file a selection against: the account's own,
+  // read through the same list the checkups page shows. Labelled here rather
+  // than in the bar so the label uses the reader's locale for the kind and the
+  // reader's timezone for the date — both presentation, both this side's job.
+  const visits = useEncounters(
+    !inSharedRecord || sections === null || sections.includes("profile"),
+  );
+  const bulkEncounterOptions = useMemo(
+    () =>
+      [...(visits.data?.upcoming ?? []), ...(visits.data?.past ?? [])]
+        .slice(0, BULK_VISIT_OPTIONS)
+        .map((visit) => ({
+          id: visit.id,
+          label: `${
+            visit.practitioner?.name ??
+            encounterKindText(t, visit.kind as EncounterKind)
+          } · ${format.date(visit.occurredAt)}`,
+        })),
+    [visits.data, t, format],
+  );
+
   // Year segmenter: years present in the loaded corpus (+ the active year).
   const years = useMemo(() => {
     const set = new Set<number>();
@@ -589,7 +621,11 @@ export function DocumentsView() {
   const runBulk = useCallback(
     (
       action: Exclude<DocumentBulkAction, "delete" | "restore">,
-      extra: { kind?: InboundDocumentKindValue; episodeId?: string },
+      extra: {
+        kind?: InboundDocumentKindValue;
+        episodeId?: string;
+        encounterId?: string;
+      },
     ) => {
       const ids = [...selectedIds];
       bulk.mutate(
@@ -957,6 +993,10 @@ export function DocumentsView() {
           busy={bulk.isPending}
           onSetKind={(kind) => runBulk("setKind", { kind })}
           onLinkEpisode={(episodeId) => runBulk("linkEpisode", { episodeId })}
+          encounters={bulkEncounterOptions}
+          onLinkEncounter={(encounterId) =>
+            runBulk("linkEncounter", { encounterId })
+          }
           onShare={openBulkShare}
           onDelete={() => deleteBulk([...selectedIds])}
           onClear={clearSelection}

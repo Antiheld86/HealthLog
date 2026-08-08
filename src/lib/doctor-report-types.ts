@@ -274,6 +274,28 @@ export interface DoctorReportData {
    * module is off or no episode overlaps the window; both builders then skip
    * the section. Optional so pre-v1.18.1 fixtures still typecheck.
    */
+  /**
+   * Visits inside the window — the contacts with the healthcare system this
+   * period held. Null when the leaf was not selected or none fell inside the
+   * window; both builders then skip the section. Optional so pre-v1.38
+   * fixtures still typecheck.
+   *
+   * `kind` rides as the enum constant: the renderer names it in the REPORT's
+   * language, which is the reading clinician's, not whoever generated it.
+   * `reason` and `outcome` are the decrypted free text and are null on a
+   * key-rotation gap — an absence rather than a fabricated line.
+   */
+  visits?: Array<{
+    occurredAt: string;
+    kind: string;
+    status: string;
+    practitionerName: string | null;
+    practitionerSpecialty: string | null;
+    reason: string | null;
+    outcome: string | null;
+    /** Labels of the conditions this visit was filed against. */
+    conditionLabels: string[];
+  }> | null;
   illnessEpisodes?: Array<{
     /** User-facing condition label (e.g. "Erkältung"). */
     label: string;

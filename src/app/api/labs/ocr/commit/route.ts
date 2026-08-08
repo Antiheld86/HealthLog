@@ -39,6 +39,7 @@ import {
   linkOcrLabsToVaultDocument,
   type InsertedLabForLink,
 } from "@/lib/labs/vault-link";
+import { linkTargets } from "@/lib/links";
 import { annotate } from "@/lib/logging/context";
 import { classifyWrittenOutcome } from "@/lib/outcome/written-outcome";
 import {
@@ -217,6 +218,23 @@ async function commitOcrRows(request: NextRequest) {
     ).catch(() => {});
   }
 
+  // The visit the review step offered, if it offered one. ONE LINK PER RESULT
+  // ROW rather than one for the panel: a marker re-run on a different day
+  // belongs to its own visit, which is exactly why the join is m:n and not a
+  // scalar column on the result. Best-effort like the vault cross-link — the
+  // readings are the authoritative write and must not be lost to a link that
+  // could not be made. The link service narrows both ends to this record, so
+  // an id naming nothing writes nothing.
+  if (parsed.data.encounterId && linkable.length > 0) {
+    await linkTargets(prisma, {
+      userId: user.id,
+      sourceKind: "encounter",
+      sourceId: parsed.data.encounterId,
+      targetKind: "labResult",
+      targetIds: linkable.map((row) => row.labResultId),
+    }).catch(() => {});
+  }
+
   await auditLog("labs.ocr.commit", {
     userId: user.id,
     ipAddress: getClientIp(request),
@@ -225,7 +243,11 @@ async function commitOcrRows(request: NextRequest) {
 
   annotate({
     action: { name: "labs.ocr.committed" },
-    meta: { inserted: inserted.length, skipped: skipped.length },
+    meta: {
+      inserted: inserted.length,
+      skipped: skipped.length,
+      linkedVisit: parsed.data.encounterId ? 1 : 0,
+    },
   });
 
   // A lab panel just landed — resolve any "annual blood panel" reminders now

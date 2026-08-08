@@ -11,6 +11,7 @@
 import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useState } from "react";
 
+import { EpisodeVisitsCard } from "@/components/illness/episode-visits-card";
 import { EpisodeDocumentsCard } from "@/components/documents/episode-documents-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -155,6 +156,12 @@ export function IllnessEpisodeDetail({ episodeId }: { episodeId: string }) {
           linked documents plus link/upload entries into the vault. Renders
           nothing when the documents module is off for this account. */}
       {episode ? <EpisodeDocumentsCard episodeId={episode.id} /> : null}
+
+      {/* Condition ⇄ visits linking, condition side ONLY. A visit never
+          suggests an episode: an episode spans weeks and a visit is a point,
+          so the reverse match would be wrong often enough to train the person
+          to ignore every suggestion in the product. */}
+      {episode ? <EpisodeVisitsCard episodeId={episode.id} /> : null}
 
       {episode ? (
         <>

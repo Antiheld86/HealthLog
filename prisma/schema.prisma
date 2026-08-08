@@ -751,6 +751,7 @@ model User {
   googleHealthOAuthStates                   GoogleHealthOAuthState[]
   moodEntries                               MoodEntry[]
   moodContexts                              MoodContext[]
+  moodPredictions                           MoodPrediction[]
   mentalHealthAssessments                   MentalHealthAssessment[]
   moodTagsCustom                            MoodTag[]                         @relation("UserMoodTags")
   moodTagCategoriesCustom                   MoodTagCategory[]                 @relation("UserMoodTagCategories")
@@ -4240,6 +4241,68 @@ model MoodContext {
 
   @@index([userId])
   @@map("mood_contexts")
+}
+
+/// What the account's own past days say a day like this one usually looks
+/// like — one row per local day, written by a job and never by a person.
+///
+/// Four things about this table that a later reader would otherwise have to
+/// infer, and would infer wrongly:
+///
+/// 1. **Written by the `mood-prognosis-refresh` job only. Never by a route,
+///    and the user cannot overwrite it.** The self-assessment on `MoodEntry`
+///    and the value here are two separate readings of the same day and they
+///    stay separate: the deviation between them is the entire finding, and a
+///    surface that let somebody correct the prognosis into agreement would
+///    destroy it. Two tables make that structural rather than a convention,
+///    and `src/__tests__/mood-prediction-write-surface-guard.test.ts` holds
+///    the writer set to one file.
+/// 2. **`features` holds the evidence, not a hint.** It is the JSON list of
+///    the standardised contributions the fit actually used for that day, so
+///    the "what the model weighted" line is generated from what happened
+///    rather than recomputed at render time against a model that may since
+///    have been re-fitted.
+/// 3. **Deliberately not in the disaster-recovery backup.** It is a derived
+///    artefact, recomputable in full from `MoodEntry` + `MoodContext` and the
+///    linked modules, and the nightly job rebuilds it after a restore. The
+///    verdict is written down in `DERIVED_MODELS`
+///    (`src/lib/export/backup-plan.ts`), where the completeness guard reads
+///    it, so this is a decision rather than an omission. It IS in the wipe
+///    plan: a derived row is still a statement about somebody's days.
+/// 4. **`n` and the band are part of the value.** A consumer that renders
+///    `predicted` without `ciLow` / `ciHigh` / `n` is a defect: a forecast
+///    built from thirty days and one built from three hundred look identical
+///    on screen and mean very different things.
+model MoodPrediction {
+  userId String @map("user_id")
+  /// YYYY-MM-DD in the account's own zone — the same day key and the same
+  /// anchoring `MoodEntry.date` carries, so the two readings of a day join
+  /// without a second timezone derivation.
+  date   String
+
+  /// The expected pleasantness (A1) for that day, 0-10, on the account's own
+  /// past pattern. A counterfactual, never a measurement.
+  predicted Float
+  /// The band around it, from the rolling-origin validation residuals. Null
+  /// only when the validation produced no residuals at all, which the write
+  /// path treats as "no forecast" rather than as a bare point estimate.
+  ciLow     Float? @map("ci_low")
+  ciHigh    Float? @map("ci_high")
+  /// Complete days the fit was built from. Shown wherever `predicted` is.
+  n         Int
+
+  /// Bumped whenever the feature set or the fit changes, so a re-fit is
+  /// legible in the stored rows instead of silently changing their meaning.
+  modelVersion String   @map("model_version")
+  /// JSON array of `{ feature, contribution }` — the standardised coefficient
+  /// times that day's standardised value, per feature.
+  features     String
+  computedAt   DateTime @map("computed_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, date])
+  @@map("mood_predictions")
 }
 
 // ─── Mood Tag Taxonomy (v1.8.5 W6-tax) ────────────────────────

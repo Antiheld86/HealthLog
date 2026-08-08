@@ -18,6 +18,7 @@ import { toastWrittenOutcome } from "@/components/outcome/outcome-toast";
 import { Button } from "@/components/ui/button";
 import { ResponsiveSheet } from "@/components/ui/responsive-sheet";
 import { ApiError } from "@/lib/api/api-fetch";
+import { EncounterSuggestionField } from "@/components/encounters/encounter-suggestion-field";
 import { useTranslations } from "@/lib/i18n/context";
 
 import { OcrRowEditor } from "./ocr-row-editor";
@@ -128,6 +129,12 @@ export function OcrReviewDialog({
   // filed into the Documents vault and cross-linked to the committed labs. Text
   // mode keeps the image on-device, so nothing is retained there.
   const [pickedFile, setPickedFile] = useState<File | null>(null);
+  /**
+   * The visit this panel came out of, if the review step offered one and the
+   * person took the offer. Never blocks the save and never pre-fills anything
+   * else: the panel commits with it unset exactly as before.
+   */
+  const [visitId, setVisitId] = useState<string | null>(null);
 
   // Text mode OCR's the image in the browser then POSTs the text; vision mode
   // uploads the image. Both resolve with the same proposed-rows DTO.
@@ -143,10 +150,24 @@ export function OcrReviewDialog({
     [rows],
   );
 
+  /**
+   * The draw date the whole panel hangs off — the earliest `takenAt` the scan
+   * read. A panel is one draw; asking the suggestion about each row separately
+   * would ask the same question a dozen times and could answer it a dozen ways.
+   */
+  const panelAnchor = useMemo(() => {
+    const dates = rows
+      .map((row) => row.takenAt)
+      .filter((value): value is string => Boolean(value))
+      .sort();
+    return dates.length > 0 ? `${dates[0]}T12:00:00.000Z` : null;
+  }, [rows]);
+
   function reset() {
     setStage("pick");
     setRows([]);
     setPickedFile(null);
+    setVisitId(null);
     extract.reset();
     commit.reset();
   }
@@ -183,7 +204,7 @@ export function OcrReviewDialog({
       return;
     }
     commit.mutate(
-      { rows: payload, file: pickedFile },
+      { rows: payload, file: pickedFile, encounterId: visitId },
       {
         onSuccess: (result) => {
           // The commit re-checks each confirmed row against what is already
@@ -307,6 +328,16 @@ export function OcrReviewDialog({
           <p className="text-muted-foreground text-sm">
             {t("labs.ocr.foundCount", { count: rows.length })}
           </p>
+
+          {/* Anchored on the draw date the scan read, so the offer is about
+              the panel rather than about today. */}
+          <EncounterSuggestionField
+            anchor={panelAnchor}
+            value={visitId}
+            onChange={setVisitId}
+            slot="labs-ocr-encounter-suggestion"
+          />
+
           {rows.map((row) => (
             <OcrRowEditor
               key={row.key}

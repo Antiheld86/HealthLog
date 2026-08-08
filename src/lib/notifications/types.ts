@@ -319,6 +319,23 @@ export interface NotificationPayload {
    * Normal events leave `urgent` unset and behave exactly as before.
    */
   urgent?: boolean;
+  /**
+   * The nudge carries no completion affordance.
+   *
+   * A reminder push normally ships a Done / Later pair — the Telegram inline
+   * keyboard and the APNs category whose actions the iOS app registers. Both
+   * resolve the reminder by id and both are refused for an appointment: an
+   * appointment reminder belongs to a visit, is managed through the visit
+   * routes, and every by-id reminder surface answers "not found" for one. An
+   * offered button the server will refuse is worse than no button, so the
+   * producer that knows the origin says so here and each channel drops its own
+   * affordance rather than each channel re-deriving the rule.
+   *
+   * The reminder's id still rides `metadata` — it identifies the dispatch for
+   * the client-managed suppression tag and the wide event; what this flag
+   * removes is the OFFER to act on it.
+   */
+  suppressActions?: boolean;
 }
 
 /**

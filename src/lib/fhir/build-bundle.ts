@@ -261,6 +261,14 @@ export function buildFhirDocumentBundle(
 
   // --- Condition + Encounter per illness/condition episode (opt-in) ------
   // v1.18.1 — present only when the illness module is enabled AND the window
+  // No visits section, and the absence is a decision written at the
+  // `Encounter` model in `prisma/schema.prisma`: FHIR splits the future from
+  // the past across `Appointment` and `Encounter`, which is a serialisation
+  // question this release does not answer. `FHIR_REST_RESOURCE_TYPES` stays
+  // untouched for the same reason — a capability statement naming a type with
+  // no route module lies. The PDF carries the visits; the Bundle does not, and
+  // a reader who notices the gap should find this comment rather than a bug.
+  //
   // held an episode (the aggregator gates `data.illnessEpisodes`). Each
   // episode emits a patient-reported Condition (generic SNOMED root, label on
   // `code.text`) plus a bounding Encounter that references it.

@@ -381,6 +381,26 @@ const REGISTRY: DestructiveEntry[] = [
     confirm: ["AlertDialog"],
   },
 
+  // ── Visits and the address book ─────────────────────────────────────────
+  {
+    file: "hooks/use-encounters.ts",
+    destroys:
+      "a visit with its reason, outcome and the links it collected — and, for a booked one, the appointment reminder that would have nudged about it",
+    triggers: ["components/encounters/encounter-sheet.tsx"],
+    // The route soft-deletes and a restore route exists, but nothing in the
+    // product reaches it yet, so from a person's side the visit is gone. This
+    // becomes "restorable" the day a surface offers the undo, not before.
+    recovery: "tombstoned-no-restore",
+    confirm: ["AlertDialog"],
+  },
+  {
+    file: "hooks/use-practitioners.ts",
+    destroys: "one address-book entry",
+    triggers: ["components/practitioners/practitioner-list.tsx"],
+    recovery: "tombstoned-no-restore",
+    confirm: ["AlertDialog"],
+  },
+
   // ── Cycle ───────────────────────────────────────────────────────────────
   {
     file: "components/cycle/use-cycle.ts",

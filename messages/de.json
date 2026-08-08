@@ -283,7 +283,14 @@
     "familyHistoryColCondition": "Erkrankung",
     "familyHistoryColAgeAtOnset": "Alter bei Beginn",
     "labsSourceRangeNote": "* Der Referenzbereich stammt aus dem Befund und weicht vom gespeicherten Bereich ab:",
-    "labsCatalogRangeLabel": "gespeicherter Bereich"
+    "labsCatalogRangeLabel": "gespeicherter Bereich",
+    "visitsTitle": "Arztbesuche",
+    "visitsColDate": "Datum",
+    "visitsColPractice": "Praxis",
+    "visitsColKind": "Art",
+    "visitsColReason": "Anlass",
+    "visitsColOutcome": "Ergebnis",
+    "visitsColConditions": "Erkrankungen"
   },
   "errorBoundary": {
     "title": "Da ist etwas schiefgelaufen",
@@ -478,7 +485,8 @@
       "milestone": "Meilensteine",
       "ecg_new_recording": "Neue EKG-Aufzeichnungen",
       "tension_window": "Anspannungsphasen",
-      "same_time_baseline": "Aktivität zur gleichen Tageszeit"
+      "same_time_baseline": "Aktivität zur gleichen Tageszeit",
+      "upcoming_visit": "Termine"
     },
     "layoutReset": "Auf Defaults zurücksetzen",
     "layoutResetTitle": "Dashboard-Layout zurücksetzen?",
@@ -3764,6 +3772,25 @@
         "statement": "An Tagen mit „{label}“ lag die Stimmung im Durchschnitt {direction}: {withAvg} gegenüber {withoutAvg}.",
         "counts": "{withDays} Tage mit, {withoutDays} Tage ohne",
         "caveat": "Das zeigt einen Zusammenhang, keine Ursache."
+      },
+      "prognosis": {
+        "title": "Deine Einschätzung und was deine bisherigen Tage nahelegen",
+        "selfLabel": "Deine Einschätzung",
+        "expectedLabel": "Auf Basis deiner Muster erwartet",
+        "band": "Bereich {low} bis {high}",
+        "statement": "Auf Basis deiner bisherigen Muster wäre für {date} ein Wert um {value} zu erwarten gewesen. Ermittelt aus {n} Tagen, die alles enthalten, was der Vergleich braucht.",
+        "provisional": "Noch vorläufig: das Muster stützt sich auf eine kurze Strecke von Tagen.",
+        "notToday": "Das beschreibt {date}, nicht heute.",
+        "deviationWithin": "Deine eigene Einschätzung liegt in diesem Bereich.",
+        "deviationAbove": "Deine eigene Einschätzung liegt {amount} Punkte über diesem Bereich.",
+        "deviationBelow": "Deine eigene Einschätzung liegt {amount} Punkte unter diesem Bereich.",
+        "weightedTitle": "Was an diesem Tag am stärksten gewichtet wurde",
+        "weightedUp": "{label} — zählte in Richtung eines höheren erwarteten Werts",
+        "weightedDown": "{label} — zählte in Richtung eines niedrigeren erwarteten Werts",
+        "caveat": "Das ist ein Vergleich mit deinen eigenen bisherigen Tagen, keine Aussage darüber, wie ein Tag zustande gekommen ist.",
+        "learning": "Lernphase: {entries} von {threshold} Tagen erfasst. Ein Vergleich erscheint, sobald genug davon zusammengekommen sind.",
+        "noPattern": "In den bisher erfassten {entries} Tagen ist nichts gleichmäßig genug, um einen Tag damit zu vergleichen. Wer den Kontext eines Tages mit erfasst, macht mehr davon vergleichbar.",
+        "featureValue": "{field}: {value}"
       }
     },
     "derived": {
@@ -5941,7 +5968,9 @@
       "rangeCustomEnd": "Bis",
       "errorGeneric": "Der Export konnte nicht erstellt werden. Bitte erneut versuchen.",
       "errorRateLimit": "Das Exportlimit für diese Stunde ist erreicht.",
-      "errorModuleDisabled": "Der Gesundheitsakten-Export ist für dieses Konto ausgeschaltet."
+      "errorModuleDisabled": "Der Gesundheitsakten-Export ist für dieses Konto ausgeschaltet.",
+      "visitOffer": "Am {when} steht ein Termin an: {what}.",
+      "visitOfferApply": "Bericht bis dahin"
     },
     "globalExcludedInjectionSitesLabel": "Global ausgeschlossene Injektionsstellen",
     "globalExcludedInjectionSitesHint": "Nie angeboten und beim Erfassen abgelehnt, auch wenn eine Medikation sie bevorzugt.",
@@ -8107,7 +8136,8 @@
       "openLink": "Vorsorge öffnen"
     },
     "showMeasurements": "Messergebnisse anzeigen",
-    "loadError": "Erinnerungen konnten nicht geladen werden."
+    "loadError": "Erinnerungen konnten nicht geladen werden.",
+    "fileVisit": "Termin eintragen"
   },
   "moduleList": {
     "viewToggleLabel": "Ansicht",
@@ -9261,7 +9291,8 @@
       "previewUnavailable": "Keine Inline-Vorschau für diesen Dateityp",
       "uploadedMeta": "Hinzugefügt am {date} · {size}",
       "share": "Teilen",
-      "labValuesLink": "{count} Laborwerte ansehen"
+      "labValuesLink": "{count} Laborwerte ansehen",
+      "visitsLabel": "Gehört zu Termin"
     },
     "dropOverlay": {
       "title": "Zum Hochladen ablegen",
@@ -9278,7 +9309,8 @@
       "partialFailure": "{failed} von {total} konnten nicht aktualisiert werden",
       "failed": "Die Aktion konnte nicht ausgeführt werden",
       "share": "Teilen",
-      "shareTooMany": "Ein Freigabelink fasst höchstens {max} Dokumente. Wähle einige ab und versuche es erneut."
+      "shareTooMany": "Ein Freigabelink fasst höchstens {max} Dokumente. Wähle einige ab und versuche es erneut.",
+      "linkVisit": "Termin zuordnen"
     },
     "episodeCard": {
       "title": "Dokumente",
@@ -9571,6 +9603,11 @@
           "below": "Bis {time} stehst du bei {today} Schritten. An einem üblichen Tag sind es um diese Zeit etwa {typical}.",
           "above": "Bis {time} stehst du bei {today} Schritten — mehr als die {typical}, die um diese Zeit für dich üblich sind."
         }
+      },
+      "upcomingVisit": {
+        "title": "Termin steht an",
+        "bodyToday": "{what} — heute",
+        "bodyTomorrow": "{what} — morgen"
       }
     },
     "action": {
@@ -9666,7 +9703,8 @@
     "sensitiveHint": "Hier ist nie etwas vorausgewählt. Wählen Sie jeden Eintrag selbst.",
     "scopeNone": "Noch nichts ausgewählt. Wählen Sie aus, was enthalten sein soll, oder übernehmen Sie den Standardbericht.",
     "scopeCount": "{count} Einträge aus {groups} Bereichen",
-    "scopeSensitive": "inkl. {names}"
+    "scopeSensitive": "inkl. {names}",
+    "leafVisits": "Arztbesuche"
   },
   "recordSharing": {
     "banner": {
@@ -10027,6 +10065,98 @@
       "hospital": "Krankenhaus",
       "therapy": "Therapietermin",
       "other": "Arzttermin"
+    },
+    "sectionTitle": "Termine",
+    "sectionDescription": "Arztbesuche und gebuchte Termine an einem Ort.",
+    "add": "Termin",
+    "loadError": "Termine konnten nicht geladen werden.",
+    "emptyTitle": "Noch kein Termin erfasst",
+    "emptyDescription": "Ein Datum genügt. Alles andere ist freiwillig.",
+    "upcomingHeading": "Anstehend",
+    "pastHeading": "Vergangen",
+    "createTitle": "Termin erfassen",
+    "editTitle": "Termin bearbeiten",
+    "formDescription": "Nur das Datum ist Pflicht.",
+    "created": "Termin gespeichert.",
+    "updated": "Termin aktualisiert.",
+    "saveFailed": "Termin konnte nicht gespeichert werden.",
+    "checkupNotClosed": "Termin gespeichert. Die Vorsorge bleibt offen — dafür reicht deine Freigabe nicht.",
+    "status": {
+      "planned": "Geplant",
+      "done": "Stattgefunden",
+      "cancelled": "Abgesagt",
+      "noShow": "Nicht wahrgenommen"
+    },
+    "card": {
+      "documentCount": "verknüpfte Dokumente",
+      "labCount": "verknüpfte Laborwerte",
+      "conditionCount": "verknüpfte Erkrankungen"
+    },
+    "form": {
+      "date": "Datum und Uhrzeit",
+      "dateDerivesStatusHint": "Ein Datum in der Zukunft ist ein gebuchter Termin.",
+      "status": "Status",
+      "practitioner": "Praxis oder Ärztin",
+      "practitionerHint": "Optional — du kannst den Namen später nachtragen.",
+      "practitionerNone": "Keine Angabe",
+      "practitionerSearch": "Name oder Praxis suchen",
+      "practitionerNoMatch": "Kein Eintrag gefunden.",
+      "practitionerAdd": "Neu anlegen",
+      "practitionerClear": "Auswahl entfernen",
+      "kind": "Art",
+      "reason": "Anlass",
+      "outcome": "Ergebnis",
+      "outcomeReveal": "Ergebnis eintragen",
+      "linkDocuments": "Dokumente",
+      "linkLabResults": "Laborwerte",
+      "linkConditions": "Erkrankungen",
+      "linkNothingToOffer": "Nichts zum Verknüpfen vorhanden."
+    },
+    "deleteTitle": "Termin löschen?",
+    "deleteDescription": "Der Eintrag wird entfernt. Ist der Termin gebucht, entfällt auch die Erinnerung dazu.",
+    "deleteFailed": "Termin konnte nicht gelöscht werden.",
+    "suggestion": {
+      "single": "Gehört zu diesem Termin?",
+      "choose": "Zu welchem Termin gehört das?"
+    },
+    "episodeCard": {
+      "title": "Termine dazu",
+      "emptyLine": "Noch kein Termin mit dieser Erkrankung verknüpft.",
+      "add": "Termin hinzufügen"
+    },
+    "dashboard": {
+      "nextVisit": "Nächster Termin: {what} am {when}"
     }
+  },
+  "checkups": {
+    "viewSwitchLabel": "Vorsorge oder Termine anzeigen",
+    "tabVorsorge": "Vorsorge",
+    "tabVisits": "Termine"
+  },
+  "practitioners": {
+    "title": "Praxen und Ärzte",
+    "description": "Dein eigenes Adressbuch — einmal tippen, überall auswählen.",
+    "linkLabel": "Adressbuch",
+    "add": "Eintrag",
+    "searchPlaceholder": "Name oder Praxis suchen",
+    "loadError": "Adressbuch konnte nicht geladen werden.",
+    "emptyTitle": "Noch kein Eintrag",
+    "emptyDescription": "Lege eine Praxis an, damit du sie beim Termin auswählen kannst.",
+    "noMatchTitle": "Kein Treffer",
+    "noMatchDescription": "Zu dieser Suche gibt es keinen Eintrag.",
+    "createTitle": "Eintrag anlegen",
+    "editTitle": "Eintrag bearbeiten",
+    "formDescription": "Nur der Name ist Pflicht.",
+    "name": "Name",
+    "specialty": "Fachrichtung",
+    "practice": "Praxis",
+    "location": "Adresse",
+    "phone": "Telefon",
+    "note": "Notiz",
+    "noteHint": "Verschlüsselt gespeichert.",
+    "saveFailed": "Eintrag konnte nicht gespeichert werden.",
+    "deleteTitle": "Eintrag löschen?",
+    "deleteDescription": "Deine bisherigen Termine bleiben erhalten und behalten diesen Namen.",
+    "deleteFailed": "Eintrag konnte nicht gelöscht werden."
   }
 }

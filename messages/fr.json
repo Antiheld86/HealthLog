@@ -283,7 +283,14 @@
     "familyHistoryColCondition": "Affection",
     "familyHistoryColAgeAtOnset": "Âge au début",
     "labsSourceRangeNote": "* La plage de référence provient du compte rendu lui-même et diffère de la plage enregistrée :",
-    "labsCatalogRangeLabel": "plage enregistrée"
+    "labsCatalogRangeLabel": "plage enregistrée",
+    "visitsTitle": "Consultations",
+    "visitsColDate": "Date",
+    "visitsColPractice": "Cabinet",
+    "visitsColKind": "Type",
+    "visitsColReason": "Motif",
+    "visitsColOutcome": "Résultat",
+    "visitsColConditions": "Maladies"
   },
   "errorBoundary": {
     "title": "Une erreur est survenue",
@@ -478,7 +485,8 @@
       "milestone": "Étapes franchies",
       "ecg_new_recording": "Nouveaux enregistrements ECG",
       "tension_window": "Périodes de tension",
-      "same_time_baseline": "Activité à la même heure"
+      "same_time_baseline": "Activité à la même heure",
+      "upcoming_visit": "Rendez-vous"
     },
     "layoutReset": "Rétablir les valeurs par défaut",
     "layoutResetTitle": "Réinitialiser la disposition du tableau de bord ?",
@@ -3764,6 +3772,25 @@
         "statement": "Les jours avec « {label} », l'humeur était en moyenne {direction} : {withAvg} contre {withoutAvg}.",
         "counts": "{withDays} jours avec, {withoutDays} jours sans",
         "caveat": "Cela montre un lien, pas une cause."
+      },
+      "prognosis": {
+        "title": "Ton évaluation et ce que suggèrent tes journées passées",
+        "selfLabel": "Ton évaluation",
+        "expectedLabel": "Attendu selon tes propres habitudes",
+        "band": "Plage de {low} à {high}",
+        "statement": "D'après tes habitudes jusqu'ici, une valeur autour de {value} aurait été attendue pour {date}. Établi à partir de {n} journées réunissant tout ce dont la comparaison a besoin.",
+        "provisional": "Encore provisoire : le motif repose sur une courte série de journées.",
+        "notToday": "Cela décrit {date}, pas aujourd'hui.",
+        "deviationWithin": "Ta propre évaluation se situe dans cette plage.",
+        "deviationAbove": "Ta propre évaluation se situe {amount} points au-dessus de cette plage.",
+        "deviationBelow": "Ta propre évaluation se situe {amount} points en dessous de cette plage.",
+        "weightedTitle": "Ce qui a le plus pesé dans la comparaison de cette journée",
+        "weightedUp": "{label} — comptait vers une valeur attendue plus élevée",
+        "weightedDown": "{label} — comptait vers une valeur attendue plus basse",
+        "caveat": "C'est une comparaison avec tes propres journées passées, pas une affirmation sur la manière dont une journée s'est déroulée.",
+        "learning": "Phase d'apprentissage : {entries} journées sur {threshold} enregistrées. La comparaison apparaît une fois qu'il y en a assez.",
+        "noPattern": "Dans les {entries} journées enregistrées jusqu'ici, rien n'est assez régulier pour comparer une journée. Noter le contexte d'une journée en rend davantage comparable.",
+        "featureValue": "{field} : {value}"
       }
     },
     "derived": {
@@ -5941,7 +5968,9 @@
       "rangeCustomEnd": "Au",
       "errorGeneric": "L'export n'a pas pu être généré. Veuillez réessayer.",
       "errorRateLimit": "Vous avez atteint la limite d'exports pour cette heure.",
-      "errorModuleDisabled": "L'export du dossier est désactivé pour ce compte."
+      "errorModuleDisabled": "L'export du dossier est désactivé pour ce compte.",
+      "visitOffer": "Un rendez-vous est prévu le {when} : {what}.",
+      "visitOfferApply": "Rapport jusque-là"
     },
     "globalExcludedInjectionSitesLabel": "Sites d'injection exclus globalement",
     "globalExcludedInjectionSitesHint": "Jamais proposés et refusés à l'enregistrement, même si un médicament les privilégie.",
@@ -8107,7 +8136,8 @@
       "openLink": "Ouvrir les examens"
     },
     "showMeasurements": "Afficher les mesures",
-    "loadError": "Impossible de charger vos rappels."
+    "loadError": "Impossible de charger vos rappels.",
+    "fileVisit": "Enregistrer un rendez-vous"
   },
   "moduleList": {
     "viewToggleLabel": "Affichage",
@@ -9261,7 +9291,8 @@
       "previewUnavailable": "Pas d'aperçu intégré pour ce type de fichier",
       "uploadedMeta": "Ajouté le {date} · {size}",
       "share": "Partager",
-      "labValuesLink": "Voir {count} valeurs de laboratoire"
+      "labValuesLink": "Voir {count} valeurs de laboratoire",
+      "visitsLabel": "Rattaché au rendez-vous"
     },
     "dropOverlay": {
       "title": "Déposez les fichiers pour les téléverser",
@@ -9278,7 +9309,8 @@
       "partialFailure": "Impossible de mettre à jour {failed} sur {total}",
       "failed": "L'action n'a pas pu être effectuée",
       "share": "Partager",
-      "shareTooMany": "Un lien de partage contient au maximum {max} documents. Désélectionnez-en quelques-uns et réessayez."
+      "shareTooMany": "Un lien de partage contient au maximum {max} documents. Désélectionnez-en quelques-uns et réessayez.",
+      "linkVisit": "Classer sous un rendez-vous"
     },
     "episodeCard": {
       "title": "Documents",
@@ -9571,6 +9603,11 @@
           "below": "À {time} vous en êtes à {today} pas. Un jour habituel, vous tournez autour de {typical} à cette heure.",
           "above": "À {time} vous en êtes à {today} pas, au-dessus des {typical} habituels à cette heure."
         }
+      },
+      "upcomingVisit": {
+        "title": "Rendez-vous à venir",
+        "bodyToday": "{what} — aujourd'hui",
+        "bodyTomorrow": "{what} — demain"
       }
     },
     "action": {
@@ -9666,7 +9703,8 @@
     "sensitiveHint": "Rien n'est jamais présélectionné ici. Choisissez chaque élément vous-même.",
     "scopeNone": "Rien de sélectionné pour l'instant. Choisissez ce qui doit figurer, ou appliquez le compte rendu standard.",
     "scopeCount": "{count} éléments issus de {groups} domaines",
-    "scopeSensitive": "dont {names}"
+    "scopeSensitive": "dont {names}",
+    "leafVisits": "Consultations"
   },
   "recordSharing": {
     "banner": {
@@ -10027,6 +10065,98 @@
       "hospital": "Hôpital",
       "therapy": "Séance de thérapie",
       "other": "Rendez-vous médical"
+    },
+    "sectionTitle": "Rendez-vous",
+    "sectionDescription": "Consultations et rendez-vous pris, au même endroit.",
+    "add": "Rendez-vous",
+    "loadError": "Impossible de charger les rendez-vous.",
+    "emptyTitle": "Aucun rendez-vous enregistré",
+    "emptyDescription": "Une date suffit. Le reste est facultatif.",
+    "upcomingHeading": "À venir",
+    "pastHeading": "Passés",
+    "createTitle": "Enregistrer un rendez-vous",
+    "editTitle": "Modifier le rendez-vous",
+    "formDescription": "Seule la date est obligatoire.",
+    "created": "Rendez-vous enregistré.",
+    "updated": "Rendez-vous mis à jour.",
+    "saveFailed": "Le rendez-vous n'a pas pu être enregistré.",
+    "checkupNotClosed": "Rendez-vous enregistré. Le dépistage reste ouvert : votre accès ne le couvre pas.",
+    "status": {
+      "planned": "Prévu",
+      "done": "Effectué",
+      "cancelled": "Annulé",
+      "noShow": "Non honoré"
+    },
+    "card": {
+      "documentCount": "documents liés",
+      "labCount": "résultats de laboratoire liés",
+      "conditionCount": "maladies liées"
+    },
+    "form": {
+      "date": "Date et heure",
+      "dateDerivesStatusHint": "Une date à venir correspond à un rendez-vous pris.",
+      "status": "Statut",
+      "practitioner": "Cabinet ou médecin",
+      "practitionerHint": "Facultatif : vous pourrez ajouter le nom plus tard.",
+      "practitionerNone": "Non précisé",
+      "practitionerSearch": "Rechercher un nom ou un cabinet",
+      "practitionerNoMatch": "Aucune entrée trouvée.",
+      "practitionerAdd": "Créer une entrée",
+      "practitionerClear": "Retirer la sélection",
+      "kind": "Type",
+      "reason": "Motif",
+      "outcome": "Résultat",
+      "outcomeReveal": "Ajouter un résultat",
+      "linkDocuments": "Documents",
+      "linkLabResults": "Résultats de laboratoire",
+      "linkConditions": "Maladies",
+      "linkNothingToOffer": "Rien à lier pour le moment."
+    },
+    "deleteTitle": "Supprimer ce rendez-vous ?",
+    "deleteDescription": "L'entrée est supprimée. Si le rendez-vous est pris, son rappel disparaît avec elle.",
+    "deleteFailed": "Le rendez-vous n'a pas pu être supprimé.",
+    "suggestion": {
+      "single": "Cela concerne-t-il ce rendez-vous ?",
+      "choose": "À quel rendez-vous cela se rattache-t-il ?"
+    },
+    "episodeCard": {
+      "title": "Rendez-vous liés",
+      "emptyLine": "Aucun rendez-vous n'est encore rattaché à cette maladie.",
+      "add": "Ajouter un rendez-vous"
+    },
+    "dashboard": {
+      "nextVisit": "Prochain rendez-vous : {what} le {when}"
     }
+  },
+  "checkups": {
+    "viewSwitchLabel": "Afficher les dépistages ou les rendez-vous",
+    "tabVorsorge": "Dépistages",
+    "tabVisits": "Rendez-vous"
+  },
+  "practitioners": {
+    "title": "Cabinets et médecins",
+    "description": "Votre carnet d'adresses : saisissez un cabinet une fois, choisissez-le partout.",
+    "linkLabel": "Carnet d'adresses",
+    "add": "Entrée",
+    "searchPlaceholder": "Rechercher un nom ou un cabinet",
+    "loadError": "Impossible de charger le carnet d'adresses.",
+    "emptyTitle": "Aucune entrée",
+    "emptyDescription": "Ajoutez un cabinet pour pouvoir le choisir lors d'un rendez-vous.",
+    "noMatchTitle": "Aucun résultat",
+    "noMatchDescription": "Aucune entrée ne correspond à cette recherche.",
+    "createTitle": "Ajouter une entrée",
+    "editTitle": "Modifier l'entrée",
+    "formDescription": "Seul le nom est obligatoire.",
+    "name": "Nom",
+    "specialty": "Spécialité",
+    "practice": "Cabinet",
+    "location": "Adresse",
+    "phone": "Téléphone",
+    "note": "Note",
+    "noteHint": "Enregistrée chiffrée.",
+    "saveFailed": "L'entrée n'a pas pu être enregistrée.",
+    "deleteTitle": "Supprimer cette entrée ?",
+    "deleteDescription": "Vos rendez-vous existants restent et conservent ce nom.",
+    "deleteFailed": "L'entrée n'a pas pu être supprimée."
   }
 }

@@ -18,7 +18,7 @@ import type { DocumentVaultFilters } from "@/lib/query-keys/documents";
 const KIND_SET = new Set<string>(INBOUND_DOCUMENT_KINDS);
 
 /**
- * Parse the vault's URL search params (`?q&kind&episode&year`) into the
+ * Parse the vault's URL search params (`?q&kind&episode&encounter&year`) into the
  * filter object. Unknown kinds are dropped (a hand-edited URL never 422s the
  * page), `kind` accepts repeats AND comma-separated values, and the result is
  * normalised (kinds sorted, empties omitted) so the same view always produces
@@ -42,6 +42,13 @@ export function parseVaultSearchParams(
   const episode = params.get("episode")?.trim();
   if (episode) filters.episodeId = episode.slice(0, 40);
 
+  // `?encounter=` is how a visit's own detail row reaches the vault filtered
+  // to what that visit produced. No chip in the filter bar backs it: the facet
+  // arrives by deep link from the visit and clears with the clear-all pill,
+  // which is exactly what a one-way link needs and no more.
+  const encounter = params.get("encounter")?.trim();
+  if (encounter) filters.encounterId = encounter.slice(0, 40);
+
   const yearRaw = params.get("year");
   if (yearRaw && /^\d{4}$/.test(yearRaw)) {
     const year = Number(yearRaw);
@@ -64,6 +71,7 @@ export function vaultFiltersToSearch(filters: DocumentVaultFilters): string {
     sp.set("kind", [...filters.kinds].sort().join(","));
   }
   if (filters.episodeId) sp.set("episode", filters.episodeId);
+  if (filters.encounterId) sp.set("encounter", filters.encounterId);
   if (filters.year !== undefined) sp.set("year", String(filters.year));
   return sp.toString();
 }
@@ -74,6 +82,7 @@ export function countActiveFilters(filters: DocumentVaultFilters): number {
   if (filters.q) count += 1;
   if (filters.kinds && filters.kinds.length > 0) count += filters.kinds.length;
   if (filters.episodeId) count += 1;
+  if (filters.encounterId) count += 1;
   if (filters.year !== undefined) count += 1;
   return count;
 }
@@ -95,6 +104,7 @@ export function buildVaultListApiSearch(
     sp.set("kind", filters.kinds.join(","));
   }
   if (filters.episodeId) sp.set("episodeId", filters.episodeId);
+  if (filters.encounterId) sp.set("encounterId", filters.encounterId);
   if (filters.year !== undefined) sp.set("year", String(filters.year));
   sp.set("sort", "documentDate");
   sp.set("order", "desc");

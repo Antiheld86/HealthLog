@@ -138,6 +138,15 @@ export const encounterListQuerySchema = z
     to: z.iso.datetime({ offset: true }).optional(),
     status: encounterStatusEnum.optional(),
     practitionerId: id.optional(),
+    /**
+     * Only visits filed against this condition episode.
+     *
+     * The condition side of the link, and the only direction it is offered in:
+     * an episode spans weeks and a visit is a point, so matching from the visit
+     * side would produce false positives at a rate that trains a person to
+     * ignore every suggestion in the product.
+     */
+    episodeId: id.optional(),
     limit: z.coerce.number().int().min(1).max(200).optional(),
   })
   .strict()
@@ -147,6 +156,22 @@ export const encounterListQuerySchema = z
   });
 
 export type EncounterListQuery = z.infer<typeof encounterListQuerySchema>;
+
+/**
+ * The suggestion query.
+ *
+ * One input, and it is a date rather than an id: the answer is derived from the
+ * caller's own visits and the anchor only says where to look. Bounded by the
+ * same instant rule the visit itself carries, so an anchor a client mis-parsed
+ * into the year 12000 is a 422 rather than a full-table scan.
+ */
+export const encounterSuggestQuerySchema = z
+  .object({
+    anchor: visitInstant,
+  })
+  .strict();
+
+export type EncounterSuggestQuery = z.infer<typeof encounterSuggestQuerySchema>;
 
 /* ── links ────────────────────────────────────────────────────────── */
 

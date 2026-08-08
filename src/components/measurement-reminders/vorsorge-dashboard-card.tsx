@@ -20,7 +20,14 @@ import { useRouter } from "next/navigation";
 import { CalendarClock, CheckCircle2, Plus } from "lucide-react";
 
 import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
-import { useTranslations, useDisplayTimezone } from "@/lib/i18n/context";
+import { encounterKindText } from "@/components/encounters/encounter-labels";
+import { useEncounters } from "@/hooks/use-encounters";
+import {
+  useFormatters,
+  useTranslations,
+  useDisplayTimezone,
+} from "@/lib/i18n/context";
+import type { EncounterKind } from "@/generated/prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,6 +45,15 @@ import {
 
 const SUMMARY_LIMIT = 3;
 
+/**
+ * How far ahead an appointment has to be before this card stops mentioning it.
+ *
+ * A dashboard summary answers "what is coming", and two weeks is the horizon a
+ * person plans in. Further out and the line is noise that pushes the checkups
+ * it sits under off the card.
+ */
+const APPOINTMENT_HORIZON_DAYS = 14;
+
 function resolveLabel(
   reminder: MeasurementReminder,
   t: (key: string) => string,
@@ -54,6 +70,7 @@ export function VorsorgeDashboardCard() {
   // Issue #490 — the same profile zone the checkups page derives its due
   // phrase in, so the two screens still agree when the device sits elsewhere.
   const displayTz = useDisplayTimezone();
+  const format = useFormatters();
   const router = useRouter();
   // The same answer `/checkups` gives the same action. Satisfying a reminder
   // is not one of the verbs a delegation admits at any level
@@ -72,6 +89,26 @@ export function VorsorgeDashboardCard() {
   const showLoading = !reminders && !isError;
   const { satisfy } = useMeasurementReminderMutations();
   const [now] = useState(() => Date.now());
+
+  /**
+   * The next appointment, read from the VISIT list and never from the reminder
+   * table.
+   *
+   * An ENCOUNTER-origin reminder is excluded from every preventive-care read,
+   * which is correct — an appointment is not a checkup, and relaxing that
+   * filter here would put one in the due list. But a notification about
+   * something invisible in the app is worse than no notification, so the
+   * appointment appears where a person looks, sourced from the record it
+   * actually lives in. A diff in this file that touches `origin` is the wrong
+   * fix.
+   */
+  const visits = useEncounters();
+  const nextAppointment = (visits.data?.upcoming ?? []).find(
+    (visit) =>
+      visit.status === "PLANNED" &&
+      new Date(visit.occurredAt).getTime() - now <=
+        APPOINTMENT_HORIZON_DAYS * 24 * 60 * 60 * 1000,
+  );
   const [capturing, setCapturing] = useState<MeasurementReminder | null>(null);
   const [captureFooterEl, setCaptureFooterEl] = useState<HTMLDivElement | null>(
     null,
@@ -183,6 +220,27 @@ export function VorsorgeDashboardCard() {
             })}
           </ul>
         )}
+
+        {/* Visually distinct from a due checkup: a quiet line under the block
+            rather than a fourth row with an action, because there is nothing
+            to do about an appointment except keep it. */}
+        {nextAppointment ? (
+          <Link
+            href="/checkups"
+            data-slot="vorsorge-dashboard-next-visit"
+            className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex items-center gap-2 rounded-md border-t pt-2 text-xs transition-colors focus-visible:ring-[3px] focus-visible:outline-none"
+          >
+            <CalendarClock className="size-3.5 shrink-0" aria-hidden />
+            <span className="truncate">
+              {t("encounters.dashboard.nextVisit", {
+                what:
+                  nextAppointment.practitioner?.name ??
+                  encounterKindText(t, nextAppointment.kind as EncounterKind),
+                when: format.date(nextAppointment.occurredAt),
+              })}
+            </span>
+          </Link>
+        ) : null}
       </CardContent>
 
       <ResponsiveSheet

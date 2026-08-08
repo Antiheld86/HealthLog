@@ -123,6 +123,78 @@ export async function loadIllnessEpisodes(
 }
 
 /**
+ * Visits inside the window, with the conditions each was filed against.
+ *
+ * The two free-text columns are `Bytes` ciphertext and decrypt fail-soft, the
+ * same stance the allergy reaction takes: a key-rotation gap on one row reads
+ * as a visit with no reason recorded rather than as a failed report. `kind` and
+ * `status` cross as enum constants — the renderer names them in the REPORT's
+ * language, which is the reading clinician's.
+ *
+ * The condition labels come off the link rows directly rather than through the
+ * link service: this is a read of the OWNER's own record for the owner's own
+ * report, with no grant to narrow against and no redaction to apply, and the
+ * service's per-family visibility predicate has no meaning here.
+ */
+export async function loadVisits(
+  userId: string,
+  start: Date,
+  end: Date,
+): Promise<DoctorReportData["visits"]> {
+  const rows = await prisma.encounter.findMany({
+    where: {
+      userId,
+      deletedAt: null,
+      occurredAt: { gte: start, lte: end },
+    },
+    orderBy: { occurredAt: "asc" },
+    select: {
+      occurredAt: true,
+      kind: true,
+      status: true,
+      reasonEncrypted: true,
+      outcomeEncrypted: true,
+      practitioner: { select: { name: true, specialty: true } },
+      conditionLinks: {
+        select: { episode: { select: { label: true, deletedAt: true } } },
+      },
+    },
+  });
+
+  const decrypt = (
+    value: Uint8Array | null,
+    field: "reason" | "outcome",
+  ): string | null => {
+    if (!value || value.byteLength === 0) return null;
+    try {
+      return decryptFromBytes(value);
+    } catch {
+      getEvent()?.addWarning(
+        `doctor-report: visit ${field} decrypt failed for ${userId}`,
+      );
+      return null;
+    }
+  };
+
+  const mapped = rows.map((row) => ({
+    occurredAt: row.occurredAt.toISOString(),
+    kind: row.kind,
+    status: row.status,
+    practitionerName: row.practitioner?.name ?? null,
+    practitionerSpecialty: row.practitioner?.specialty ?? null,
+    reason: decrypt(row.reasonEncrypted, "reason"),
+    outcome: decrypt(row.outcomeEncrypted, "outcome"),
+    // A condition the person has since deleted is not named in a clinical
+    // document: the link row survives the soft delete, and printing a label
+    // they removed would put a withdrawn diagnosis in front of a doctor.
+    conditionLabels: row.conditionLinks
+      .filter((link) => link.episode?.deletedAt === null)
+      .map((link) => link.episode.label),
+  }));
+  return mapped.length > 0 ? mapped : null;
+}
+
+/**
  * Structured allergy records. Reference data, not time-windowed — a
  * penicillin allergy does not expire with the report window.
  *

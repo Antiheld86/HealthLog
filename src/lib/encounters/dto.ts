@@ -64,7 +64,15 @@ export interface EncounterDTO {
    * happened, or once the one-shot reminder is spent.
    */
   reminderNextDueAt: string | null;
-  /** Present on the detail response; omitted from the list. */
+  /**
+   * The three link families, resolved.
+   *
+   * Present on the list as well as the detail. Omitting them from the list
+   * would break two things at once: the card counts what a visit produced, and
+   * the edit sheet seeds its pickers from the row it was handed — an edit
+   * opened from a linkless row would save three empty arrays and unfile
+   * everything. The list pays three grouped queries for the whole page.
+   */
   links?: EncounterLinksDTO;
   /**
    * What the write could not do, named.
@@ -130,7 +138,8 @@ export function toEncounterDTO(
  * Two arrays rather than one sorted list, resolved server-side: "what is
  * coming up" and "what happened" are read in opposite directions, and making
  * the client split and re-sort one array would put that decision in two
- * places.
+ * places. Each row carries its links, for the reasons stated at
+ * `EncounterDTO.links`.
  */
 export interface EncounterListDTO {
   upcoming: EncounterDTO[];
