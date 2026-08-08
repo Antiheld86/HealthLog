@@ -70,6 +70,7 @@ interface AccountAccessEntry {
   accountId: string;
   username: string;
   displayName: string | null;
+  fullName: string | null;
   /**
    * The legacy name, and deliberately narrower than `level`: it carries only
    * `read` and `write`, because that is the union v1.36.0 published and
@@ -173,6 +174,7 @@ describe("accountAccess — what the payload publishes", () => {
         accountId: owner.id,
         username: owner.username,
         displayName: owner.displayName,
+        fullName: owner.fullName,
         access: "read",
         level: "read",
         // An adult who shared their own record. `managed` is reserved for a
@@ -334,6 +336,7 @@ describe("accountAccess — the active record", () => {
       accountId: owner.id,
       username: owner.username,
       displayName: owner.displayName,
+      fullName: owner.fullName,
       access: "read",
       level: "read",
       recordKind: "shared",
