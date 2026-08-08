@@ -122,6 +122,18 @@ describe("level-A blocks reach the feature set with their own ages", () => {
     // arriving pre-flipped.
     expect(a2.inverse).toBe(true);
     expect(a2.count).toBe(1);
+
+    // The block-level asOf the snapshot stamps on top of this comes from
+    // coverage.newestDaysAgo — the newest ENTRY, which is today, because a
+    // face was tapped this morning. Read as covering the dimensions it would
+    // make the six-day-old stress look current, so the block says which age
+    // governs which claim.
+    expect(features.mood?.coverage.newestDaysAgo).toBe(0);
+    expect(
+      features.mood?.dimensionsAsOfNote,
+      "the block carries two ages that disagree and nothing says which one governs the dimensions",
+    ).toBeTruthy();
+    expect(features.mood?.dimensionsAsOfNote).toContain("newestDaysAgo");
   });
 
   it("never ships a latest without an age beside it, and names the scale", async () => {
@@ -157,8 +169,10 @@ describe("level-A blocks reach the feature set with their own ages", () => {
     // The mood aggregate is still there — the five-point axis is unaffected.
     expect(features.mood).toBeDefined();
     expect(features.mood?.latest).toBe(4);
-    // But nothing claims a self-state that was never recorded.
+    // But nothing claims a self-state that was never recorded — and no note
+    // explaining a block that is not there.
     expect(features.mood?.dimensions).toBeUndefined();
+    expect(features.mood?.dimensionsAsOfNote).toBeUndefined();
   });
 
   it("leaves the legacy scale line untouched", async () => {

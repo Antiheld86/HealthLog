@@ -187,6 +187,27 @@ async function buildMoodDimensionFeatures(
   return blocks.length > 0 ? blocks : undefined;
 }
 
+/**
+ * The dimensions block and the note that says how to read it beside the
+ * block-level `asOf`. Absent entirely when nobody has answered a dimension,
+ * so an account that only ever taps a face carries neither key.
+ */
+async function buildMoodDimensionBlock(userId: string): Promise<{
+  dimensions?: MoodDimensionFeature[];
+  dimensionsAsOfNote?: string;
+}> {
+  const dimensions = await buildMoodDimensionFeatures(userId);
+  if (!dimensions) return {};
+  return {
+    dimensions,
+    dimensionsAsOfNote:
+      "The block-level asOf describes the newest mood ENTRY on the 1-5 axis. " +
+      "For the five dimensions below, each carries its own newestDaysAgo and " +
+      "current, and those are the ones that govern what may be said about " +
+      "them today; they are often older than the entry itself.",
+  };
+}
+
 export interface AggregatedFeatures {
   weight?: {
     latest: number;
@@ -295,6 +316,23 @@ export interface AggregatedFeatures {
      * given one age for the pair narrates the stale one as today's.
      */
     dimensions?: MoodDimensionFeature[];
+    /**
+     * Says which age governs which claim, because two of them ride in the
+     * same block and they disagree by design.
+     *
+     * `annotateSnapshotFreshness` stamps every metric block with an `asOf`
+     * built from `coverage.newestDaysAgo`, which for mood is the age of the
+     * newest ENTRY — the 1-5 axis. Somebody who taps a face each morning and
+     * opens the sliders once a week has `asOf.daysAgo` of 0 and a stress
+     * reading six days old, so a reader taking the block-level stamp as
+     * covering the dimensions would state last week's answer as today's.
+     * That is the exact sentence this milestone exists to prevent, and it is
+     * cheaper to name the precedence than to leave two true numbers looking
+     * like a contradiction.
+     *
+     * Present only alongside `dimensions`.
+     */
+    dimensionsAsOfNote?: string;
   };
   sleep?: {
     avg7: number | null;
@@ -1189,7 +1227,7 @@ export async function extractFeatures(
       latest: moodLatestScore,
       trend30,
       totalEntries: moodTotalEntries,
-      dimensions: await buildMoodDimensionFeatures(userId),
+      ...(await buildMoodDimensionBlock(userId)),
       coverage: {
         count: moodTotalEntries,
         spanDays,
