@@ -35,6 +35,14 @@ export const encounterKeys = {
     ["encounters", "list", from, to, status ?? null] as const,
   encounter: (id: string) => ["encounters", "detail", id] as const,
   /**
+   * The "which visit does this belong to" verdict for one anchor date. The
+   * anchor is part of the key because it IS the question: a document dated the
+   * 3rd and one dated the 20th get different answers, and one overwriting the
+   * other would pre-select the wrong visit on the second review step.
+   */
+  encounterSuggestion: (anchor: string) =>
+    ["encounters", "suggest", anchor] as const,
+  /**
    * The address book. Under its own root rather than nested beneath
    * `["encounters"]`: a practitioner outlives the visits that name it, and a
    * visit write should not evict a list that did not change.

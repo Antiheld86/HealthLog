@@ -148,6 +148,22 @@ export const encounterListQuerySchema = z
 
 export type EncounterListQuery = z.infer<typeof encounterListQuerySchema>;
 
+/**
+ * The suggestion query.
+ *
+ * One input, and it is a date rather than an id: the answer is derived from the
+ * caller's own visits and the anchor only says where to look. Bounded by the
+ * same instant rule the visit itself carries, so an anchor a client mis-parsed
+ * into the year 12000 is a 422 rather than a full-table scan.
+ */
+export const encounterSuggestQuerySchema = z
+  .object({
+    anchor: visitInstant,
+  })
+  .strict();
+
+export type EncounterSuggestQuery = z.infer<typeof encounterSuggestQuerySchema>;
+
 /* ── links ────────────────────────────────────────────────────────── */
 
 export const encounterLinkTargetEnum = z.enum([

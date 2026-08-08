@@ -9825,6 +9825,36 @@ paths:
         "403": *a6
         "422": *a3
         "429": *a4
+  /api/encounters/suggest:
+    get:
+      tags:
+        - Records
+      summary: Which visit does a record dated around this day belong to?
+      description: "Resolves the caller's live DONE or PLANNED visits within ±7 days of `anchor` into a verdict, so the three
+        capture moments that ask the question — a document arriving, a lab panel committed from an extraction, a lab
+        panel typed by hand — all read the same answer. `one` means pre-select it visibly with one undo; `many` means
+        offer a picker with NOTHING pre-selected, because pre-selecting the first of two teaches a person to stop
+        reading suggestions; `none` means offer nothing at all. Cancelled visits and no-shows are never candidates:
+        neither happened, so neither produced the record being filed. No AI provider is involved and none is required."
+      parameters:
+        - in: query
+          name: anchor
+          schema:
+            type: string
+            format: date-time
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          required: true
+      responses:
+        "200":
+          description: The verdict.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuggestEncounterEnvelope"
+        "401": *a1
+        "403": *a6
+        "422": *a3
+        "429": *a4
   /api/encounters/{id}:
     get:
       tags:
@@ -34923,6 +34953,99 @@ components:
         - data
         - error
       additionalProperties: false
+    SuggestEncounterEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/EncounterSuggestion"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    EncounterSuggestion:
+      oneOf:
+        - type: object
+          properties:
+            kind:
+              type: string
+              const: one
+            encounter:
+              $ref: "#/components/schemas/EncounterSuggestionCandidate"
+          required:
+            - kind
+            - encounter
+          additionalProperties: false
+        - type: object
+          properties:
+            kind:
+              type: string
+              const: many
+            encounters:
+              type: array
+              items:
+                $ref: "#/components/schemas/EncounterSuggestionCandidate"
+          required:
+            - kind
+            - encounters
+          additionalProperties: false
+        - type: object
+          properties:
+            kind:
+              type: string
+              const: none
+          required:
+            - kind
+          additionalProperties: false
+      description: "The verdict, as a shape rather than a best guess. There is deliberately no field on the `many` arm a
+        client could read as a pre-selection: collapsing two candidates into one is the failure this union exists to
+        make impossible."
+      type: object
+    EncounterSuggestionCandidate:
+      type: object
+      properties:
+        id:
+          type: string
+        occurredAt:
+          type: string
+        status:
+          type: string
+          enum:
+            - PLANNED
+            - DONE
+            - CANCELLED
+            - NO_SHOW
+        kind:
+          type: string
+          enum:
+            - ROUTINE
+            - ACUTE
+            - SPECIALIST
+            - PREVENTIVE
+            - EMERGENCY
+            - HOSPITAL
+            - THERAPY
+            - OTHER
+        practitionerName:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - id
+        - occurredAt
+        - status
+        - kind
+        - practitionerName
+      additionalProperties: false
+      description: One visit a record might belong to, resolved far enough to render a row without a second round trip.
+        `practitionerName` is null when the visit names no practice, which is an absence rather than a gap.
     GetEncounterEnvelope:
       type: object
       properties:
