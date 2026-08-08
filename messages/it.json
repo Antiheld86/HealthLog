@@ -922,6 +922,115 @@
         "low": "completamente sopraffatto",
         "high": "pienamente capace di agire"
       }
+    },
+    "context": {
+      "section": {
+        "work": "Lavoro",
+        "contacts": "Contatti",
+        "leisure": "Tempo libero",
+        "events": "Evento"
+      },
+      "field": {
+        "workStatus": "Giornata lavorativa",
+        "workMinutes": "Tempo lavorato",
+        "overtimeMinutes": "Straordinari",
+        "workLoad": "Carico di lavoro",
+        "workSatisfaction": "Soddisfazione per il lavoro",
+        "contactCircles": "Con chi c'è stato contatto",
+        "contactForm": "Forma del contatto",
+        "contactExtent": "Durata",
+        "contactQuality": "Qualità del contatto",
+        "contactSupport": "Sostegno percepito",
+        "leisureCategories": "Come è stato speso il tempo libero",
+        "leisureMinutes": "Tempo per sé",
+        "leisureJoy": "Piacere",
+        "leisureRecovery": "Recupero",
+        "eventType": "Che cosa è successo",
+        "eventValence": "Come è stato vissuto",
+        "eventAt": "Quando",
+        "notes": "Nota"
+      },
+      "workStatus": {
+        "off": "Nessun lavoro",
+        "partial": "Parte della giornata",
+        "regular": "Giornata regolare",
+        "overtime": "Più del solito"
+      },
+      "contactCircles": {
+        "partner": "Partner",
+        "child": "Figlio o figlia",
+        "family": "Famiglia",
+        "friends": "Amici",
+        "colleagues": "Colleghi",
+        "acquaintances": "Conoscenti",
+        "professional": "Supporto professionale",
+        "other": "Altre persone"
+      },
+      "contactForm": {
+        "inPerson": "Di persona",
+        "phone": "Telefono",
+        "video": "Videochiamata",
+        "written": "Per iscritto"
+      },
+      "contactExtent": {
+        "brief": "Breve",
+        "medium": "Medio",
+        "extended": "Prolungato"
+      },
+      "leisureCategories": {
+        "film": "Film o serie",
+        "reading": "Lettura",
+        "gaming": "Videogiochi",
+        "music": "Musica",
+        "creative": "Attività creativa",
+        "outing": "Uscita",
+        "garden": "Giardino",
+        "cooking": "Cucinare",
+        "timeWithChild": "Tempo con il figlio o la figlia",
+        "relaxation": "Riposo",
+        "other": "Altro"
+      },
+      "eventType": {
+        "goodNews": "Buona notizia",
+        "badNews": "Cattiva notizia",
+        "success": "Qualcosa è riuscito",
+        "disappointment": "Una delusione",
+        "conflict": "Un conflitto",
+        "appointment": "Un appuntamento",
+        "familyEvent": "Un evento familiare",
+        "change": "Un cambiamento",
+        "unexpected": "Qualcosa di inaspettato"
+      },
+      "rating": {
+        "workLoad": {
+          "low": "nessuna pressione",
+          "high": "sotto forte pressione"
+        },
+        "workSatisfaction": {
+          "low": "per niente soddisfatto",
+          "high": "molto soddisfatto"
+        },
+        "contactQuality": {
+          "low": "non ha fatto bene",
+          "high": "ha fatto molto bene"
+        },
+        "contactSupport": {
+          "low": "senza sostegno",
+          "high": "ben sostenuto"
+        },
+        "leisureJoy": {
+          "low": "nessun piacere",
+          "high": "molto piacere"
+        },
+        "leisureRecovery": {
+          "low": "per niente rigenerante",
+          "high": "molto rigenerante"
+        },
+        "eventValence": {
+          "low": "chiaramente negativo",
+          "high": "chiaramente positivo"
+        }
+      }
     }
   },
   "medications": {

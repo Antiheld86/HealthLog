@@ -922,6 +922,115 @@
         "low": "completely overwhelmed",
         "high": "fully able to act"
       }
+    },
+    "context": {
+      "section": {
+        "work": "Work",
+        "contacts": "Contact",
+        "leisure": "Free time",
+        "events": "Event"
+      },
+      "field": {
+        "workStatus": "Working day",
+        "workMinutes": "Time worked",
+        "overtimeMinutes": "Overtime",
+        "workLoad": "Workload",
+        "workSatisfaction": "Satisfaction with the work",
+        "contactCircles": "Who the contact was with",
+        "contactForm": "Form of contact",
+        "contactExtent": "How long it lasted",
+        "contactQuality": "Quality of the contact",
+        "contactSupport": "Support felt",
+        "leisureCategories": "What the free time went into",
+        "leisureMinutes": "Time for yourself",
+        "leisureJoy": "Enjoyment",
+        "leisureRecovery": "Recovery",
+        "eventType": "What happened",
+        "eventValence": "How it landed",
+        "eventAt": "When",
+        "notes": "Note"
+      },
+      "workStatus": {
+        "off": "Not working",
+        "partial": "Part of the day",
+        "regular": "A regular day",
+        "overtime": "Longer than usual"
+      },
+      "contactCircles": {
+        "partner": "Partner",
+        "child": "Child",
+        "family": "Family",
+        "friends": "Friends",
+        "colleagues": "Colleagues",
+        "acquaintances": "Acquaintances",
+        "professional": "Professional support",
+        "other": "Others"
+      },
+      "contactForm": {
+        "inPerson": "In person",
+        "phone": "Phone",
+        "video": "Video call",
+        "written": "Written"
+      },
+      "contactExtent": {
+        "brief": "Brief",
+        "medium": "Medium",
+        "extended": "Extended"
+      },
+      "leisureCategories": {
+        "film": "Film or series",
+        "reading": "Reading",
+        "gaming": "Gaming",
+        "music": "Music",
+        "creative": "Something creative",
+        "outing": "Out and about",
+        "garden": "Garden",
+        "cooking": "Cooking",
+        "timeWithChild": "Time with the child",
+        "relaxation": "Rest",
+        "other": "Something else"
+      },
+      "eventType": {
+        "goodNews": "Good news",
+        "badNews": "Bad news",
+        "success": "Something worked out",
+        "disappointment": "A disappointment",
+        "conflict": "A conflict",
+        "appointment": "An appointment",
+        "familyEvent": "A family occasion",
+        "change": "A change",
+        "unexpected": "Something unexpected"
+      },
+      "rating": {
+        "workLoad": {
+          "low": "no pressure",
+          "high": "under heavy pressure"
+        },
+        "workSatisfaction": {
+          "low": "not satisfied at all",
+          "high": "very satisfied"
+        },
+        "contactQuality": {
+          "low": "did not do me good",
+          "high": "did me a lot of good"
+        },
+        "contactSupport": {
+          "low": "not supported",
+          "high": "well supported"
+        },
+        "leisureJoy": {
+          "low": "no enjoyment",
+          "high": "a lot of enjoyment"
+        },
+        "leisureRecovery": {
+          "low": "not restorative",
+          "high": "very restorative"
+        },
+        "eventValence": {
+          "low": "clearly bad",
+          "high": "clearly good"
+        }
+      }
     }
   },
   "medications": {

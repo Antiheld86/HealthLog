@@ -922,6 +922,115 @@
         "low": "vollständig überfordert",
         "high": "sehr handlungsfähig"
       }
+    },
+    "context": {
+      "section": {
+        "work": "Arbeit",
+        "contacts": "Kontakte",
+        "leisure": "Freizeit",
+        "events": "Ereignis"
+      },
+      "field": {
+        "workStatus": "Arbeitstag",
+        "workMinutes": "Arbeitszeit",
+        "overtimeMinutes": "Überstunden",
+        "workLoad": "Arbeitsbelastung",
+        "workSatisfaction": "Zufriedenheit mit der Arbeit",
+        "contactCircles": "Mit wem Kontakt bestand",
+        "contactForm": "Art des Kontakts",
+        "contactExtent": "Dauer",
+        "contactQuality": "Qualität des Kontakts",
+        "contactSupport": "Empfundene Unterstützung",
+        "leisureCategories": "Womit die Freizeit verbracht wurde",
+        "leisureMinutes": "Zeit für dich",
+        "leisureJoy": "Freude",
+        "leisureRecovery": "Erholung",
+        "eventType": "Was passiert ist",
+        "eventValence": "Wie es angekommen ist",
+        "eventAt": "Wann",
+        "notes": "Notiz"
+      },
+      "workStatus": {
+        "off": "Nicht gearbeitet",
+        "partial": "Teilweise gearbeitet",
+        "regular": "Regulär gearbeitet",
+        "overtime": "Länger als üblich"
+      },
+      "contactCircles": {
+        "partner": "Partnerschaft",
+        "child": "Kind",
+        "family": "Familie",
+        "friends": "Freundeskreis",
+        "colleagues": "Kollegium",
+        "acquaintances": "Bekannte",
+        "professional": "Professionelle Begleitung",
+        "other": "Sonstige"
+      },
+      "contactForm": {
+        "inPerson": "Persönlich",
+        "phone": "Telefon",
+        "video": "Videoanruf",
+        "written": "Schriftlich"
+      },
+      "contactExtent": {
+        "brief": "Kurz",
+        "medium": "Mittel",
+        "extended": "Ausgedehnt"
+      },
+      "leisureCategories": {
+        "film": "Film oder Serie",
+        "reading": "Lesen",
+        "gaming": "Spielen",
+        "music": "Musik",
+        "creative": "Kreatives",
+        "outing": "Unterwegs",
+        "garden": "Garten",
+        "cooking": "Kochen",
+        "timeWithChild": "Zeit mit dem Kind",
+        "relaxation": "Ausruhen",
+        "other": "Sonstiges"
+      },
+      "eventType": {
+        "goodNews": "Gute Nachricht",
+        "badNews": "Schlechte Nachricht",
+        "success": "Etwas ist gelungen",
+        "disappointment": "Eine Enttäuschung",
+        "conflict": "Ein Konflikt",
+        "appointment": "Ein Termin",
+        "familyEvent": "Ein Familienereignis",
+        "change": "Eine Veränderung",
+        "unexpected": "Etwas Unerwartetes"
+      },
+      "rating": {
+        "workLoad": {
+          "low": "kein Druck",
+          "high": "unter starkem Druck"
+        },
+        "workSatisfaction": {
+          "low": "gar nicht zufrieden",
+          "high": "sehr zufrieden"
+        },
+        "contactQuality": {
+          "low": "hat nicht gutgetan",
+          "high": "hat sehr gutgetan"
+        },
+        "contactSupport": {
+          "low": "nicht unterstützt",
+          "high": "gut unterstützt"
+        },
+        "leisureJoy": {
+          "low": "keine Freude",
+          "high": "viel Freude"
+        },
+        "leisureRecovery": {
+          "low": "nicht erholsam",
+          "high": "sehr erholsam"
+        },
+        "eventValence": {
+          "low": "deutlich schlecht",
+          "high": "deutlich gut"
+        }
+      }
     }
   },
   "medications": {
