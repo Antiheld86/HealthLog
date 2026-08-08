@@ -103,9 +103,11 @@ describe("mood writers agree on the derived level-A value", () => {
     );
     expect(single.status).toBe(201);
 
-    // 2 — bulk backfill. The request shape carries no level-A field; the
-    // server derives it, which is the whole point of this phase being
-    // invisible on the wire.
+    // 2 — bulk backfill. The request shape carries no level-A field and the
+    // server derives it, which is why the published contract does not move:
+    // this batch path is the one in `docs/api/openapi.yaml`, and it is
+    // byte-identical. The unpublished single routes DO answer five new keys
+    // on their reads, which is additive and which the client ignores.
     const bulk = await postBulk(
       jsonRequest("/api/mood-entries/bulk", {
         entries: [
@@ -370,12 +372,27 @@ describe("mood writers agree on the derived level-A value", () => {
     );
     expect(res.status).toBe(201);
     const json = (await res.json()) as {
-      data: { a1: number; a2: number; a3: number; a4: null; a5: null };
+      data: Record<string, unknown> & {
+        a1: number;
+        a2: number;
+        a3: number;
+        a4: null;
+        a5: null;
+      };
     };
     // The response echoes the values under the keys the request used.
     expect(json.data.a1).toBe(4);
     expect(json.data.a2).toBe(9);
     expect(json.data.a5).toBeNull();
+    // And under those keys ONLY. The routes spread the whole row, so simply
+    // adding the wire keys shipped every value twice under two spellings; a
+    // client would then have picked one and been stuck with it.
+    const keys = Object.keys(json.data as Record<string, unknown>);
+    expect(keys).not.toContain("moodA1");
+    expect(keys).not.toContain("stressA2");
+    expect(keys).not.toContain("energyA3");
+    expect(keys).not.toContain("connectionA4");
+    expect(keys).not.toContain("stabilityA5");
 
     const row = await getPrismaClient().moodEntry.findFirstOrThrow({
       where: { userId: USER },

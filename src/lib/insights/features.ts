@@ -117,6 +117,19 @@ export interface MoodDimensionFeature {
  *
  * Only dimensions somebody answered are returned. An empty block would invite
  * a sentence about a question that was never asked.
+ *
+ * A STALE dimension is still returned, carrying its age and an instruction,
+ * rather than filtered out the way the health-status surfaces drop a reading
+ * too old to describe. That is a deliberate difference and worth the sentence:
+ * those surfaces write one line about one metric, so a value they cannot
+ * narrate has nothing left to contribute and dropping it is the whole fix.
+ * This block is context for an open conversation, where "your stress was 9 on
+ * the third, and you have not answered it since" is a useful and true thing to
+ * say — and where silence is worse than history, because the reader then has
+ * no way to tell an unanswered dimension from one nobody has looked at in a
+ * week. The safety therefore rides on `current` plus `staleNotice` rather than
+ * on absence, and both are asserted at the shipped composition in
+ * `tests/integration/mood-dimension-features.test.ts`.
  */
 async function buildMoodDimensionFeatures(
   userId: string,

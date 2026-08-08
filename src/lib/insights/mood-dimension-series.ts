@@ -15,9 +15,8 @@
  * gives on a genuinely average day.
  */
 import { MOOD_DIMENSIONS, type MoodDimensionKey } from "@/lib/mood/dimensions";
+import { dayKeyAgeInDays } from "@/lib/insights/measurement-freshness";
 import { round } from "@/lib/insights/status-shared";
-
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /** Windows the trend reports, in days. Concept §10.1. */
 export const MOOD_DIMENSION_WINDOWS = [7, 30, 90] as const;
@@ -69,13 +68,6 @@ function meanOf(values: number[]): number | null {
   return round(sum / values.length, 1);
 }
 
-function dayKeyDaysAgo(dayKey: string, todayKey: string): number | null {
-  const then = Date.parse(`${dayKey}T00:00:00.000Z`);
-  const today = Date.parse(`${todayKey}T00:00:00.000Z`);
-  if (!Number.isFinite(then) || !Number.isFinite(today)) return null;
-  return Math.round((today - then) / MS_PER_DAY);
-}
-
 /**
  * Summarise each of the five dimensions over the rows given.
  *
@@ -96,7 +88,7 @@ export function computeMoodDimensionSeries(
     for (const row of rows) {
       const value = row[dimension.key];
       if (typeof value !== "number" || !Number.isFinite(value)) continue;
-      const age = dayKeyDaysAgo(row.date, todayKey);
+      const age = dayKeyAgeInDays(row.date, todayKey);
       if (age === null || age < 0 || age >= longest) continue;
       const bucket = byDay.get(row.date);
       if (bucket) bucket.push(value);
@@ -116,7 +108,7 @@ export function computeMoodDimensionSeries(
     const windowMean = (days: number): number | null => {
       const values: number[] = [];
       for (const point of series) {
-        const age = dayKeyDaysAgo(point.date, todayKey);
+        const age = dayKeyAgeInDays(point.date, todayKey);
         if (age === null || age >= days) continue;
         values.push(point.value);
       }
@@ -139,7 +131,7 @@ export function computeMoodDimensionSeries(
       avg90: windowMean(90),
       latest: newest?.value ?? null,
       latestDate: newest?.date ?? null,
-      newestDaysAgo: newest ? dayKeyDaysAgo(newest.date, todayKey) : null,
+      newestDaysAgo: newest ? dayKeyAgeInDays(newest.date, todayKey) : null,
       series,
     };
   });

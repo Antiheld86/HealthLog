@@ -15,7 +15,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
-import { deriveA1, levelAForWire } from "@/lib/mood/level-a";
+import { deriveA1, shapeLevelA } from "@/lib/mood/level-a";
 import { encryptNote, shapeMoodNote } from "@/lib/crypto/note-cipher";
 import { invalidateUserMood } from "@/lib/cache/invalidate";
 import { recomputeMoodBucketsForEntry } from "@/lib/rollups/mood-rollups";
@@ -59,9 +59,8 @@ export const GET = apiHandler(
     });
 
     return apiSuccess({
-      ...shapeMoodNote(entry),
       // v1.37 — level-A values under the keys the write path takes.
-      ...levelAForWire(entry),
+      ...shapeLevelA(shapeMoodNote(entry)),
       tags: parseTags(entry.tags),
     });
   },
@@ -321,9 +320,8 @@ export const PUT = apiHandler(
     }
 
     return apiSuccess({
-      ...entry,
       // v1.37 — level-A values under the keys the write path takes.
-      ...levelAForWire(entry),
+      ...shapeLevelA(entry),
       tags: parseTags(entry.tags),
       // v1.8.5 — surface the persisted structured-tag keys so a client
       // hydrating from the update response renders the tag set without a

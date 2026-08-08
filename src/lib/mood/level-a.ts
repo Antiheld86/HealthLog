@@ -98,6 +98,15 @@ export interface LevelAWire {
   a5: number | null;
 }
 
+/** The five columns as they sit on a `MoodEntry` row. */
+export interface LevelARow {
+  moodA1: number | null;
+  stressA2: number | null;
+  energyA3: number | null;
+  connectionA4: number | null;
+  stabilityA5: number | null;
+}
+
 /**
  * Turn a stored row's five columns into the wire keys the client sends.
  *
@@ -105,18 +114,39 @@ export interface LevelAWire {
  * form mapping the pair by hand, and one of them would eventually map it
  * wrong. The names match in both directions.
  */
-export function levelAForWire(row: {
-  moodA1: number | null;
-  stressA2: number | null;
-  energyA3: number | null;
-  connectionA4: number | null;
-  stabilityA5: number | null;
-}): LevelAWire {
+export function levelAForWire(row: LevelARow): LevelAWire {
   return {
     a1: row.moodA1,
     a2: row.stressA2,
     a3: row.energyA3,
     a4: row.connectionA4,
     a5: row.stabilityA5,
+  };
+}
+
+/**
+ * A row shaped for a response: the five columns replaced by their wire keys,
+ * not joined by them.
+ *
+ * The mood routes spread the whole row into their responses, so simply adding
+ * the wire keys left every entry carrying the same five values twice under two
+ * spellings. Two names for one number is a decision nobody made, and the one a
+ * client picks is the one it gets stuck with. This strips the column spelling
+ * and keeps the wire one, which is the spelling the write path accepts.
+ */
+export function shapeLevelA<T extends LevelARow>(
+  row: T,
+): Omit<T, keyof LevelARow> & LevelAWire {
+  const { moodA1, stressA2, energyA3, connectionA4, stabilityA5, ...rest } =
+    row;
+  return {
+    ...rest,
+    ...levelAForWire({
+      moodA1,
+      stressA2,
+      energyA3,
+      connectionA4,
+      stabilityA5,
+    }),
   };
 }

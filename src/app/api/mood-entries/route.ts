@@ -24,7 +24,7 @@ import { annotate } from "@/lib/logging/context";
 import { withIdempotency } from "@/lib/idempotency";
 import { encryptNote, shapeMoodNote } from "@/lib/crypto/note-cipher";
 import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
-import { levelAForWire, levelAForWrite } from "@/lib/mood/level-a";
+import { levelAForWrite, shapeLevelA } from "@/lib/mood/level-a";
 import { invalidateUserMood } from "@/lib/cache/invalidate";
 import { recomputeMoodBucketsForEntry } from "@/lib/rollups/mood-rollups";
 import {
@@ -126,11 +126,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   const entriesWithParsedTags = entries.map(({ tagLinks, ...e }) => ({
     // v1.23 — decrypt `noteEncrypted` onto `note`, strip the ciphertext.
-    ...shapeMoodNote(e),
     // v1.37 — the five level-A values under the keys the create path takes,
     // so the edit form reads back what it wrote instead of mapping column
-    // names to wire names by hand.
-    ...levelAForWire(e),
+    // names to wire names by hand. The column spelling is stripped, not
+    // joined: one number under two names is a choice nobody made.
+    ...shapeLevelA(shapeMoodNote(e)),
     tags: parseTags(e.tags),
     // v1.8.5 — flat list of binary structured-tag keys attached to the
     // entry (rated factors are surfaced separately below).
@@ -402,9 +402,8 @@ async function postMoodEntry(request: NextRequest) {
     return apiSuccess(
       {
         // v1.23 — decrypt `noteEncrypted` onto `note`, strip the ciphertext.
-        ...shapeMoodNote(entry),
         // v1.37 — level-A values under their wire keys (see the list read).
-        ...levelAForWire(entry),
+        ...shapeLevelA(shapeMoodNote(entry)),
         tags: parseTags(entry.tags),
         // v1.8.5 — surface the persisted structured-tag keys so a client
         // hydrating from the create response renders the tag set without a
