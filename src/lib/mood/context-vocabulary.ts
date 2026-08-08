@@ -57,7 +57,6 @@ export const WORK_STATUS_KEYS = [
   "regular",
   "overtime",
 ] as const;
-export type WorkStatus = (typeof WORK_STATUS_KEYS)[number];
 
 /**
  * Who the day's contact was with. Multi-select: a day is rarely one circle.
@@ -75,7 +74,6 @@ export const CONTACT_CIRCLE_KEYS = [
   "professional",
   "other",
 ] as const;
-export type ContactCircle = (typeof CONTACT_CIRCLE_KEYS)[number];
 
 /** How the contact happened. */
 export const CONTACT_FORM_KEYS = [
@@ -84,11 +82,9 @@ export const CONTACT_FORM_KEYS = [
   "video",
   "written",
 ] as const;
-export type ContactForm = (typeof CONTACT_FORM_KEYS)[number];
 
 /** Roughly how long it lasted, in the coarse bands people actually recall. */
 export const CONTACT_EXTENT_KEYS = ["brief", "medium", "extended"] as const;
-export type ContactExtent = (typeof CONTACT_EXTENT_KEYS)[number];
 
 /** What the free time was spent on. Multi-select. */
 export const LEISURE_CATEGORY_KEYS = [
@@ -104,7 +100,6 @@ export const LEISURE_CATEGORY_KEYS = [
   "relaxation",
   "other",
 ] as const;
-export type LeisureCategory = (typeof LEISURE_CATEGORY_KEYS)[number];
 
 /**
  * The kind of thing that happened. One per entry: a day with two notable
@@ -122,7 +117,6 @@ export const EVENT_TYPE_KEYS = [
   "change",
   "unexpected",
 ] as const;
-export type EventType = (typeof EVENT_TYPE_KEYS)[number];
 
 /**
  * Every 0-10 self-rating on the context row, in capture order.
@@ -144,12 +138,6 @@ export const CONTEXT_RATING_FIELDS = [
   "leisureJoy",
   "leisureRecovery",
 ] as const;
-export type ContextRatingField = (typeof CONTEXT_RATING_FIELDS)[number];
-
-/** The rating fields where a higher number is a heavier day, not a better one. */
-export const CONTEXT_INVERSE_RATING_FIELDS: readonly ContextRatingField[] = [
-  "workLoad",
-];
 
 /** The four sections, in capture order. */
 export const CONTEXT_SECTION_KEYS = [
