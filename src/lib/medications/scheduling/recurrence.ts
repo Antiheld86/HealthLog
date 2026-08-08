@@ -316,7 +316,24 @@ export function nextOccurrenceAfter(
     const floor = new Date(
       Math.min(dayFloor.getTime(), rollingDoseDayFloor(schedule, ctx)),
     );
-    const slots = expandRolling(schedule, ctx, floor, limit);
+    // The rolling slot is a single deterministic instant — `lastIntakeAt + N`
+    // (or the anchor) — not an open-ended walk, so the 10-year anti-spin
+    // `hardCap` must never gate it. It collides at the fencepost: a reminder at
+    // the maximum ten-year rolling interval, satisfied so that `after ===
+    // lastIntakeAt`, produces a next slot exactly `after + 3650 days` — equal
+    // to `hardCap` to the millisecond, so the notify-hour slot spills a few
+    // hours past the raw boundary and `expandRolling` clips it to nothing
+    // (a ten-year booster silently lost its next due on the very dose that
+    // should re-anchor it). Bound the search by the deterministic slot's own
+    // day instead; `endsOn` stays enforced inside `expandRolling`, so a
+    // course-window reminder still self-expires.
+    const rollingCeil = new Date(
+      Math.max(
+        limit.getTime(),
+        endOfUtcDay(rollingDoseAnchor(schedule, ctx)).getTime(),
+      ),
+    );
+    const slots = expandRolling(schedule, ctx, floor, rollingCeil);
     for (const s of slots) {
       if (s.at.getTime() < floor.getTime()) continue;
       if (cyclic && !isInCyclicOnWeek(s.at, schedule, ctx)) continue;
