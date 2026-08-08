@@ -478,7 +478,8 @@
       "milestone": "Meilensteine",
       "ecg_new_recording": "Neue EKG-Aufzeichnungen",
       "tension_window": "Anspannungsphasen",
-      "same_time_baseline": "Aktivität zur gleichen Tageszeit"
+      "same_time_baseline": "Aktivität zur gleichen Tageszeit",
+      "upcoming_visit": "Termine"
     },
     "layoutReset": "Auf Defaults zurücksetzen",
     "layoutResetTitle": "Dashboard-Layout zurücksetzen?",
@@ -8152,7 +8153,8 @@
       "openLink": "Vorsorge öffnen"
     },
     "showMeasurements": "Messergebnisse anzeigen",
-    "loadError": "Erinnerungen konnten nicht geladen werden."
+    "loadError": "Erinnerungen konnten nicht geladen werden.",
+    "fileVisit": "Termin eintragen"
   },
   "moduleList": {
     "viewToggleLabel": "Ansicht",
@@ -9306,9 +9308,7 @@
       "uploadedMeta": "Hinzugefügt am {date} · {size}",
       "share": "Teilen",
       "labValuesLink": "{count} Laborwerte ansehen",
-      "visitsLabel": "Gehört zu Termin",
-      "visitSuggestion": "Gehört zu diesem Termin?",
-      "visitSuggestionChoose": "Zu welchem Termin gehört das?"
+      "visitsLabel": "Gehört zu Termin"
     },
     "dropOverlay": {
       "title": "Zum Hochladen ablegen",
@@ -9619,6 +9619,11 @@
           "below": "Bis {time} stehst du bei {today} Schritten. An einem üblichen Tag sind es um diese Zeit etwa {typical}.",
           "above": "Bis {time} stehst du bei {today} Schritten — mehr als die {typical}, die um diese Zeit für dich üblich sind."
         }
+      },
+      "upcomingVisit": {
+        "title": "Termin steht an",
+        "bodyToday": "{what} — heute",
+        "bodyTomorrow": "{what} — morgen"
       }
     },
     "action": {
@@ -10126,7 +10131,19 @@
     },
     "deleteTitle": "Termin löschen?",
     "deleteDescription": "Der Eintrag wird entfernt. Ist der Termin gebucht, entfällt auch die Erinnerung dazu.",
-    "deleteFailed": "Termin konnte nicht gelöscht werden."
+    "deleteFailed": "Termin konnte nicht gelöscht werden.",
+    "suggestion": {
+      "single": "Gehört zu diesem Termin?",
+      "choose": "Zu welchem Termin gehört das?"
+    },
+    "episodeCard": {
+      "title": "Termine dazu",
+      "emptyLine": "Noch kein Termin mit dieser Erkrankung verknüpft.",
+      "add": "Termin hinzufügen"
+    },
+    "dashboard": {
+      "nextVisit": "Nächster Termin: {what} am {when}"
+    }
   },
   "checkups": {
     "viewSwitchLabel": "Vorsorge oder Termine anzeigen",

@@ -478,7 +478,8 @@
       "milestone": "Kamienie milowe",
       "ecg_new_recording": "Nowe zapisy EKG",
       "tension_window": "Okresy napięcia",
-      "same_time_baseline": "Aktywność o tej samej porze"
+      "same_time_baseline": "Aktywność o tej samej porze",
+      "upcoming_visit": "Wizyty"
     },
     "layoutReset": "Przywróć wartości domyślne",
     "layoutResetTitle": "Zresetować układ pulpitu?",
@@ -8152,7 +8153,8 @@
       "openLink": "Otwórz badania"
     },
     "showMeasurements": "Pokaż pomiary",
-    "loadError": "Nie udało się załadować przypomnień."
+    "loadError": "Nie udało się załadować przypomnień.",
+    "fileVisit": "Zapisz wizytę"
   },
   "moduleList": {
     "viewToggleLabel": "Widok",
@@ -9306,9 +9308,7 @@
       "uploadedMeta": "Dodano {date} · {size}",
       "share": "Udostępnij",
       "labValuesLink": "Zobacz {count} wyników laboratoryjnych",
-      "visitsLabel": "Należy do wizyty",
-      "visitSuggestion": "Czy to należy do tej wizyty?",
-      "visitSuggestionChoose": "Do której wizyty to należy?"
+      "visitsLabel": "Należy do wizyty"
     },
     "dropOverlay": {
       "title": "Upuść pliki, aby je przesłać",
@@ -9619,6 +9619,11 @@
           "below": "Do {time} masz {today} kroków. W zwykły dzień o tej porze jesteś w okolicach {typical}.",
           "above": "Do {time} masz {today} kroków, powyżej zwykłych {typical} o tej porze."
         }
+      },
+      "upcomingVisit": {
+        "title": "Zbliża się wizyta",
+        "bodyToday": "{what} — dzisiaj",
+        "bodyTomorrow": "{what} — jutro"
       }
     },
     "action": {
@@ -10126,7 +10131,19 @@
     },
     "deleteTitle": "Usunąć tę wizytę?",
     "deleteDescription": "Wpis zostanie usunięty. Jeśli wizyta jest umówiona, przypomnienie o niej też zniknie.",
-    "deleteFailed": "Nie udało się usunąć wizyty."
+    "deleteFailed": "Nie udało się usunąć wizyty.",
+    "suggestion": {
+      "single": "Czy to należy do tej wizyty?",
+      "choose": "Do której wizyty to należy?"
+    },
+    "episodeCard": {
+      "title": "Powiązane wizyty",
+      "emptyLine": "Do tej choroby nie przypisano jeszcze żadnej wizyty.",
+      "add": "Dodaj wizytę"
+    },
+    "dashboard": {
+      "nextVisit": "Najbliższa wizyta: {what}, {when}"
+    }
   },
   "checkups": {
     "viewSwitchLabel": "Pokaż badania profilaktyczne lub wizyty",

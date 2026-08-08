@@ -478,7 +478,8 @@
       "milestone": "Hitos",
       "ecg_new_recording": "Nuevos registros de ECG",
       "tension_window": "Periodos de tensión",
-      "same_time_baseline": "Actividad a la misma hora"
+      "same_time_baseline": "Actividad a la misma hora",
+      "upcoming_visit": "Citas"
     },
     "layoutReset": "Restablecer valores por defecto",
     "layoutResetTitle": "¿Restablecer el diseño del panel?",
@@ -8152,7 +8153,8 @@
       "openLink": "Abrir revisiones"
     },
     "showMeasurements": "Ver mediciones",
-    "loadError": "No se pudieron cargar tus recordatorios."
+    "loadError": "No se pudieron cargar tus recordatorios.",
+    "fileVisit": "Registrar una cita"
   },
   "moduleList": {
     "viewToggleLabel": "Vista",
@@ -9306,9 +9308,7 @@
       "uploadedMeta": "Añadido el {date} · {size}",
       "share": "Compartir",
       "labValuesLink": "Ver {count} valores de laboratorio",
-      "visitsLabel": "Pertenece a la cita",
-      "visitSuggestion": "¿Pertenece a esta cita?",
-      "visitSuggestionChoose": "¿A qué cita pertenece?"
+      "visitsLabel": "Pertenece a la cita"
     },
     "dropOverlay": {
       "title": "Suelta los archivos para subirlos",
@@ -9619,6 +9619,11 @@
           "below": "A las {time} llevas {today} pasos. En un día habitual rondas los {typical} a esta hora.",
           "above": "A las {time} llevas {today} pasos, por encima de los {typical} habituales a esta hora."
         }
+      },
+      "upcomingVisit": {
+        "title": "Cita próxima",
+        "bodyToday": "{what}: hoy",
+        "bodyTomorrow": "{what}: mañana"
       }
     },
     "action": {
@@ -10126,7 +10131,19 @@
     },
     "deleteTitle": "¿Eliminar esta cita?",
     "deleteDescription": "Se elimina la entrada. Si la cita está reservada, su recordatorio también desaparece.",
-    "deleteFailed": "No se pudo eliminar la cita."
+    "deleteFailed": "No se pudo eliminar la cita.",
+    "suggestion": {
+      "single": "¿Pertenece a esta cita?",
+      "choose": "¿A qué cita pertenece?"
+    },
+    "episodeCard": {
+      "title": "Citas relacionadas",
+      "emptyLine": "Todavía no hay ninguna cita vinculada a esta enfermedad.",
+      "add": "Añadir una cita"
+    },
+    "dashboard": {
+      "nextVisit": "Próxima cita: {what} el {when}"
+    }
   },
   "checkups": {
     "viewSwitchLabel": "Mostrar revisiones o citas",

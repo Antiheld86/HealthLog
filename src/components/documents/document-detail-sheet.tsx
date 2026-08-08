@@ -1041,9 +1041,8 @@ export function DocumentDetailSheet({
                   doc.encounterLinks.length > 0 && pickedEncounterId === null
                 }
                 disabled={!canManage}
-                pickedId={pickedEncounterId}
-                onPick={(id) => setSuggestedEncounter(id)}
-                onUndo={() => setSuggestedEncounter(null)}
+                value={pickedEncounterId}
+                onChange={setSuggestedEncounter}
               />
 
               {/* "Belongs to visit" — read-only here on purpose. The filing

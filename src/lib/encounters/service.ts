@@ -26,14 +26,6 @@ import {
 
 const DEFAULT_TIMEZONE = "Europe/Berlin";
 
-export async function resolveTimezone(userId: string): Promise<string> {
-  const row = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { timezone: true },
-  });
-  return row?.timezone || DEFAULT_TIMEZONE;
-}
-
 /**
  * The record owner's zone AND language, read together.
  *

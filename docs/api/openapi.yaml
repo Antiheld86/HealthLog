@@ -9176,6 +9176,10 @@ paths:
                   enum:
                     - MANUAL
                     - OCR
+                encounterId:
+                  type: string
+                  minLength: 1
+                  maxLength: 40
               required:
                 - takenAt
       responses:
@@ -9477,6 +9481,10 @@ paths:
                   type: string
                   minLength: 1
                   maxLength: 64
+                encounterId:
+                  type: string
+                  minLength: 1
+                  maxLength: 40
               required:
                 - rows
       responses:
@@ -9709,6 +9717,12 @@ paths:
               - NO_SHOW
         - in: query
           name: practitionerId
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 40
+        - in: query
+          name: episodeId
           schema:
             type: string
             minLength: 1
@@ -16974,7 +16988,7 @@ components:
         enabledHeroItemKinds:
           description: Today-highlight item kinds in catalogue order. Missing means every current kind is enabled; an empty array
             disables all kinds.
-          maxItems: 8
+          maxItems: 9
           type: array
           items:
             type: string
@@ -16987,6 +17001,7 @@ components:
               - ecg_new_recording
               - tension_window
               - same_time_baseline
+              - upcoming_visit
         baseUpdatedAt:
           description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
             legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
@@ -38612,6 +38627,7 @@ components:
             - ecg_new_recording
             - tension_window
             - same_time_baseline
+            - upcoming_visit
           description: Closed rail-item kind.
         itemKey:
           description: Stable dismiss identity, namespaced `<kind>:...`. Present only on the observational kinds (milestone /
@@ -38894,7 +38910,7 @@ components:
         enabledHeroItemKinds:
           description: Today-highlight item kinds in catalogue order. Missing means every current kind is enabled; an empty array
             disables all kinds.
-          maxItems: 8
+          maxItems: 9
           type: array
           items:
             type: string
@@ -38907,6 +38923,7 @@ components:
               - ecg_new_recording
               - tension_window
               - same_time_baseline
+              - upcoming_visit
         updatedAt:
           description: "Optimistic-concurrency token: the stored row's `updatedAt` at read/write time. Echo it back as
             `baseUpdatedAt` on the next write. Opaque."

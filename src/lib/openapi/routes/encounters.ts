@@ -54,7 +54,7 @@ encounterUpdateSchema.meta({
 encounterListQuerySchema.meta({
   id: "ListEncountersQuery",
   description:
-    "Window and filters for the visit list: `from` / `to` (ISO-8601 instants), `status`, `practitionerId`, and `limit` (1–200, default 100).",
+    "Window and filters for the visit list: `from` / `to` (ISO-8601 instants), `status`, `practitionerId`, `episodeId` (only visits filed against that condition episode — the condition side of the link, and the only direction it is offered in), and `limit` (1–200, default 100).",
 });
 
 encounterSuggestQuerySchema.meta({

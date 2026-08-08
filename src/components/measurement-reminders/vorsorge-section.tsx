@@ -35,6 +35,7 @@ import { useRouter } from "next/navigation";
 import {
   Activity,
   CalendarClock,
+  CalendarPlus,
   CheckCircle2,
   Plus,
   RefreshCw,
@@ -50,6 +51,7 @@ import { relativeCalendarDate } from "@/lib/i18n/relative-time";
 import { relativeDueKey } from "@/lib/measurement-reminders/due-day";
 import { cn } from "@/lib/utils";
 import { applyOrder, useModuleListPrefs } from "@/lib/module-list-prefs";
+import { EncounterSheet } from "@/components/encounters/encounter-sheet";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import {
   AlertDialog,
@@ -238,6 +240,19 @@ export function VorsorgeSection({
   const [editing, setEditing] = useState<MeasurementReminder | "new" | null>(
     null,
   );
+  /**
+   * The due checkup a visit is being filed against, if any.
+   *
+   * The visit sheet does the rest: saving it as DONE satisfies this reminder
+   * through the server's forward-only, idempotent path, so filing a visit AND
+   * ticking the box is one satisfaction rather than an error.
+   */
+  const [visitForReminder, setVisitForReminder] = useState<string | null>(null);
+  const [visitSession, setVisitSession] = useState(0);
+  const openVisitFor = (reminder: MeasurementReminder) => {
+    setVisitForReminder(reminder.id);
+    setVisitSession((n) => n + 1);
+  };
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   // The value-capture sheet: holds the reminder whose measurement we are
   // entering. Non-null ⇒ the MeasurementForm sheet is open for that row.
@@ -738,6 +753,7 @@ export function VorsorgeSection({
                   now={now}
                   view={prefs.view}
                   onPrimaryAction={() => onPrimaryAction(reminder)}
+                  onFileVisit={() => openVisitFor(reminder)}
                   onRemove={() => remove.mutate(reminder.id)}
                   onEdit={() => openEdit(reminder)}
                   busy={
@@ -749,6 +765,18 @@ export function VorsorgeSection({
           )}
         </ul>
       )}
+      <EncounterSheet
+        key={visitSession}
+        open={visitForReminder !== null}
+        onOpenChange={(open) => {
+          if (!open) setVisitForReminder(null);
+        }}
+        encounter={null}
+        reminderId={visitForReminder}
+        // The reminder list repaints from the encounter write's own
+        // invalidation; nothing extra to do here.
+        onSaved={() => setVisitForReminder(null)}
+      />
     </section>
   );
 }
@@ -779,6 +807,7 @@ function VorsorgeCard({
   now,
   view,
   onPrimaryAction,
+  onFileVisit,
   onRemove,
   onEdit,
   busy,
@@ -787,6 +816,8 @@ function VorsorgeCard({
   now: number;
   view: "cards" | "list";
   onPrimaryAction: () => void;
+  /** Open the visit sheet with this checkup pre-filled, closing it on save. */
+  onFileVisit: () => void;
   onRemove: () => void;
   onEdit: () => void;
   busy: boolean;
@@ -912,6 +943,30 @@ function VorsorgeCard({
   // "do it now" wash; a button that changes colour by schedule state reads as
   // a different control). Due-ness is communicated by the discreet coloured
   // next-due text above.
+  /**
+   * "Termin eintragen" — the second way to close a checkup.
+   *
+   * Beside "erledigt" rather than instead of it, because the two answer
+   * different questions: one says the thing happened, the other says WHERE it
+   * happened and files the record of it. Saving the visit as DONE satisfies
+   * this reminder through the same forward-only, idempotent primitive the
+   * checkbox uses, so a person who does both gets one satisfaction and no
+   * error.
+   */
+  const fileVisitButton = canManage ? (
+    <Button
+      type="button"
+      variant="outline"
+      className="min-h-11 w-full"
+      data-slot="vorsorge-file-visit"
+      onClick={onFileVisit}
+      disabled={busy}
+    >
+      <CalendarPlus className="h-4 w-4" />
+      {t("measurementReminders.fileVisit")}
+    </Button>
+  ) : null;
+
   const primaryButton = canManage ? (
     <Button
       type="button"
@@ -1001,6 +1056,24 @@ function VorsorgeCard({
                           : "measurementReminders.measureNow",
                       )
                     : t("measurementReminders.markDone")}
+                </Button>
+              ) : null}
+              {/* Icon-only in the dense list, labelled in the cards branch —
+                  the same action either way, never one branch offering what
+                  the other withholds. */}
+              {canManage ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="size-11 sm:size-9"
+                  data-slot="vorsorge-file-visit"
+                  aria-label={t("measurementReminders.fileVisit")}
+                  title={t("measurementReminders.fileVisit")}
+                  onClick={onFileVisit}
+                  disabled={busy}
+                >
+                  <CalendarPlus className="h-4 w-4" aria-hidden />
                 </Button>
               ) : null}
               {headerActions}
@@ -1129,7 +1202,10 @@ function VorsorgeCard({
 
           {/* Bottom-pinned single primary action — green when due (MOD-06). */}
           {primaryButton ? (
-            <div className="mt-auto pt-0">{primaryButton}</div>
+            <div className="mt-auto space-y-1.5 pt-0">
+              {primaryButton}
+              {fileVisitButton}
+            </div>
           ) : null}
         </CardContent>
       </Card>

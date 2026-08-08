@@ -67,7 +67,7 @@ function render(list: { upcoming: EncounterDTO[]; past: EncounterDTO[] }) {
     defaultOptions: { queries: { retry: false } },
   });
   queryClient.setQueryData(
-    queryKeys.encounterList(null, null, undefined),
+    queryKeys.encounterList(null, null, undefined, undefined),
     list,
   );
   return renderToStaticMarkup(

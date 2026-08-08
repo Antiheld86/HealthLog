@@ -15,6 +15,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api/api-fetch";
+import { invalidateReminderReads } from "@/hooks/use-measurement-reminders";
 import {
   encounterDependentKeys,
   invalidateKeys,
@@ -44,17 +45,29 @@ const BASE = "/api/encounters";
 
 export function useEncounters(
   enabled = true,
-  window?: { from?: string; to?: string; status?: string },
+  window?: {
+    from?: string;
+    to?: string;
+    status?: string;
+    /** Only visits filed against this condition episode. */
+    episodeId?: string;
+  },
 ) {
   const from = window?.from ?? null;
   const to = window?.to ?? null;
   return useQuery({
-    queryKey: queryKeys.encounterList(from, to, window?.status),
+    queryKey: queryKeys.encounterList(
+      from,
+      to,
+      window?.status,
+      window?.episodeId,
+    ),
     queryFn: () => {
       const sp = new URLSearchParams();
       if (from) sp.set("from", from);
       if (to) sp.set("to", to);
       if (window?.status) sp.set("status", window.status);
+      if (window?.episodeId) sp.set("episodeId", window.episodeId);
       const qs = sp.toString();
       return apiGet<EncounterList>(qs ? `${BASE}?${qs}` : BASE);
     },
@@ -91,7 +104,24 @@ export function useEncounterSuggestion(anchor: string | null, enabled = true) {
 
 export function useEncounterMutations() {
   const qc = useQueryClient();
-  const invalidate = () => invalidateKeys(qc, encounterDependentKeys);
+  /**
+   * A visit write reaches further than the visit list.
+   *
+   * Filing one against a due checkup satisfies that reminder, which moves its
+   * next-due date on the preventive-care list, on the dashboard card and on the
+   * Today rail — three surfaces that read the reminder table and would
+   * otherwise keep showing it due until their own poll. Booking one moves the
+   * same reads the other way: a new appointment is a row the digest surfaces.
+   *
+   * So the fan-out is the visit roots PLUS the reminder reads, through the same
+   * helper the Vorsorge surfaces use, rather than a second sweep that could
+   * drift from it.
+   */
+  const invalidate = () =>
+    Promise.all([
+      invalidateKeys(qc, encounterDependentKeys),
+      invalidateReminderReads(qc),
+    ]);
 
   const create = useMutation({
     mutationKey: queryKeys.encounterCreate(),

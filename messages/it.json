@@ -478,7 +478,8 @@
       "milestone": "Traguardi",
       "ecg_new_recording": "Nuove registrazioni ECG",
       "tension_window": "Periodi di tensione",
-      "same_time_baseline": "Attività alla stessa ora"
+      "same_time_baseline": "Attività alla stessa ora",
+      "upcoming_visit": "Appuntamenti"
     },
     "layoutReset": "Ripristina i valori predefiniti",
     "layoutResetTitle": "Reimpostare il layout della dashboard?",
@@ -8152,7 +8153,8 @@
       "openLink": "Apri controlli"
     },
     "showMeasurements": "Mostra le misurazioni",
-    "loadError": "Impossibile caricare i promemoria."
+    "loadError": "Impossibile caricare i promemoria.",
+    "fileVisit": "Registra un appuntamento"
   },
   "moduleList": {
     "viewToggleLabel": "Vista",
@@ -9306,9 +9308,7 @@
       "uploadedMeta": "Aggiunto il {date} · {size}",
       "share": "Condividi",
       "labValuesLink": "Vedi {count} valori di laboratorio",
-      "visitsLabel": "Appartiene all'appuntamento",
-      "visitSuggestion": "Appartiene a questo appuntamento?",
-      "visitSuggestionChoose": "A quale appuntamento appartiene?"
+      "visitsLabel": "Appartiene all'appuntamento"
     },
     "dropOverlay": {
       "title": "Rilascia i file per caricarli",
@@ -9619,6 +9619,11 @@
           "below": "Alle {time} sei a {today} passi. In una giornata tipo a quest'ora sei intorno a {typical}.",
           "above": "Alle {time} sei a {today} passi, sopra i {typical} che per te sono abituali a quest'ora."
         }
+      },
+      "upcomingVisit": {
+        "title": "Appuntamento in arrivo",
+        "bodyToday": "{what} — oggi",
+        "bodyTomorrow": "{what} — domani"
       }
     },
     "action": {
@@ -10126,7 +10131,19 @@
     },
     "deleteTitle": "Eliminare questo appuntamento?",
     "deleteDescription": "La voce viene rimossa. Se l'appuntamento è fissato, anche il promemoria sparisce.",
-    "deleteFailed": "Non è stato possibile eliminare l'appuntamento."
+    "deleteFailed": "Non è stato possibile eliminare l'appuntamento.",
+    "suggestion": {
+      "single": "Appartiene a questo appuntamento?",
+      "choose": "A quale appuntamento appartiene?"
+    },
+    "episodeCard": {
+      "title": "Appuntamenti collegati",
+      "emptyLine": "Nessun appuntamento ancora collegato a questa malattia.",
+      "add": "Aggiungi un appuntamento"
+    },
+    "dashboard": {
+      "nextVisit": "Prossimo appuntamento: {what} il {when}"
+    }
   },
   "checkups": {
     "viewSwitchLabel": "Mostra controlli o appuntamenti",

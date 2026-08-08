@@ -143,6 +143,12 @@ export interface OcrCommitInput {
    * image stays on-device.
    */
   file?: File | null;
+  /**
+   * The visit this panel came out of, when the review step offered one and the
+   * person took the offer. Optional always — a commit with none named succeeds
+   * unchanged.
+   */
+  encounterId?: string | null;
 }
 
 /**
@@ -166,13 +172,14 @@ async function fileScanToVault(file: File): Promise<string | undefined> {
 export function useOcrCommit() {
   const queryClient = useQueryClient();
   return useMutation<OcrCommitResult, Error, OcrCommitInput>({
-    mutationFn: async ({ rows, file }: OcrCommitInput) => {
+    mutationFn: async ({ rows, file, encounterId }: OcrCommitInput) => {
       const documentId = file
         ? await fileScanToVault(file).catch(() => undefined)
         : undefined;
       return apiPost<OcrCommitResult>("/api/labs/ocr/commit", {
         rows,
         ...(documentId ? { documentId } : {}),
+        ...(encounterId ? { encounterId } : {}),
       });
     },
     onSuccess: (_result, { file }) => {

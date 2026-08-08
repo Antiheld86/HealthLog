@@ -31,8 +31,20 @@ export const encounterKeys = {
    * year at a time, and two windows are two different answers rather than one
    * answer that overwrites the other.
    */
-  encounterList: (from: string | null, to: string | null, status?: string) =>
-    ["encounters", "list", from, to, status ?? null] as const,
+  encounterList: (
+    from: string | null,
+    to: string | null,
+    status?: string,
+    episodeId?: string,
+  ) =>
+    [
+      "encounters",
+      "list",
+      from,
+      to,
+      status ?? null,
+      episodeId ?? null,
+    ] as const,
   encounter: (id: string) => ["encounters", "detail", id] as const,
   /**
    * The "which visit does this belong to" verdict for one anchor date. The

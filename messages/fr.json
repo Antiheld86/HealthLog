@@ -478,7 +478,8 @@
       "milestone": "Étapes franchies",
       "ecg_new_recording": "Nouveaux enregistrements ECG",
       "tension_window": "Périodes de tension",
-      "same_time_baseline": "Activité à la même heure"
+      "same_time_baseline": "Activité à la même heure",
+      "upcoming_visit": "Rendez-vous"
     },
     "layoutReset": "Rétablir les valeurs par défaut",
     "layoutResetTitle": "Réinitialiser la disposition du tableau de bord ?",
@@ -8152,7 +8153,8 @@
       "openLink": "Ouvrir les examens"
     },
     "showMeasurements": "Afficher les mesures",
-    "loadError": "Impossible de charger vos rappels."
+    "loadError": "Impossible de charger vos rappels.",
+    "fileVisit": "Enregistrer un rendez-vous"
   },
   "moduleList": {
     "viewToggleLabel": "Affichage",
@@ -9306,9 +9308,7 @@
       "uploadedMeta": "Ajouté le {date} · {size}",
       "share": "Partager",
       "labValuesLink": "Voir {count} valeurs de laboratoire",
-      "visitsLabel": "Rattaché au rendez-vous",
-      "visitSuggestion": "Cela concerne-t-il ce rendez-vous ?",
-      "visitSuggestionChoose": "À quel rendez-vous cela se rattache-t-il ?"
+      "visitsLabel": "Rattaché au rendez-vous"
     },
     "dropOverlay": {
       "title": "Déposez les fichiers pour les téléverser",
@@ -9619,6 +9619,11 @@
           "below": "À {time} vous en êtes à {today} pas. Un jour habituel, vous tournez autour de {typical} à cette heure.",
           "above": "À {time} vous en êtes à {today} pas, au-dessus des {typical} habituels à cette heure."
         }
+      },
+      "upcomingVisit": {
+        "title": "Rendez-vous à venir",
+        "bodyToday": "{what} — aujourd'hui",
+        "bodyTomorrow": "{what} — demain"
       }
     },
     "action": {
@@ -10126,7 +10131,19 @@
     },
     "deleteTitle": "Supprimer ce rendez-vous ?",
     "deleteDescription": "L'entrée est supprimée. Si le rendez-vous est pris, son rappel disparaît avec elle.",
-    "deleteFailed": "Le rendez-vous n'a pas pu être supprimé."
+    "deleteFailed": "Le rendez-vous n'a pas pu être supprimé.",
+    "suggestion": {
+      "single": "Cela concerne-t-il ce rendez-vous ?",
+      "choose": "À quel rendez-vous cela se rattache-t-il ?"
+    },
+    "episodeCard": {
+      "title": "Rendez-vous liés",
+      "emptyLine": "Aucun rendez-vous n'est encore rattaché à cette maladie.",
+      "add": "Ajouter un rendez-vous"
+    },
+    "dashboard": {
+      "nextVisit": "Prochain rendez-vous : {what} le {when}"
+    }
   },
   "checkups": {
     "viewSwitchLabel": "Afficher les dépistages ou les rendez-vous",

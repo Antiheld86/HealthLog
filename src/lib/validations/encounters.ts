@@ -138,6 +138,15 @@ export const encounterListQuerySchema = z
     to: z.iso.datetime({ offset: true }).optional(),
     status: encounterStatusEnum.optional(),
     practitionerId: id.optional(),
+    /**
+     * Only visits filed against this condition episode.
+     *
+     * The condition side of the link, and the only direction it is offered in:
+     * an episode spans weeks and a visit is a point, so matching from the visit
+     * side would produce false positives at a rate that trains a person to
+     * ignore every suggestion in the product.
+     */
+    episodeId: id.optional(),
     limit: z.coerce.number().int().min(1).max(200).optional(),
   })
   .strict()

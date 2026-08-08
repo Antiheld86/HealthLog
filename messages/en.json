@@ -478,7 +478,8 @@
       "milestone": "Milestones",
       "ecg_new_recording": "New ECG recordings",
       "tension_window": "Tension windows",
-      "same_time_baseline": "Same-time activity"
+      "same_time_baseline": "Same-time activity",
+      "upcoming_visit": "Appointments"
     },
     "layoutReset": "Reset to defaults",
     "layoutResetTitle": "Reset the dashboard layout?",
@@ -8152,7 +8153,8 @@
       "openLink": "Open checkups"
     },
     "showMeasurements": "Show measurements",
-    "loadError": "Could not load your reminders."
+    "loadError": "Could not load your reminders.",
+    "fileVisit": "Record a visit"
   },
   "moduleList": {
     "viewToggleLabel": "View",
@@ -9306,9 +9308,7 @@
       "uploadedMeta": "Added {date} · {size}",
       "share": "Share",
       "labValuesLink": "View {count} lab values",
-      "visitsLabel": "Belongs to visit",
-      "visitSuggestion": "Does this belong to this visit?",
-      "visitSuggestionChoose": "Which visit does this belong to?"
+      "visitsLabel": "Belongs to visit"
     },
     "dropOverlay": {
       "title": "Drop files to upload",
@@ -9619,6 +9619,11 @@
           "below": "By {time} you are at {today} steps. On a usual day you are around {typical} by now.",
           "above": "By {time} you are at {today} steps, ahead of the {typical} that is usual for you by now."
         }
+      },
+      "upcomingVisit": {
+        "title": "Appointment coming up",
+        "bodyToday": "{what} — today",
+        "bodyTomorrow": "{what} — tomorrow"
       }
     },
     "action": {
@@ -10126,7 +10131,19 @@
     },
     "deleteTitle": "Delete this visit?",
     "deleteDescription": "The entry is removed. If the visit is booked, its reminder stops with it.",
-    "deleteFailed": "The visit could not be deleted."
+    "deleteFailed": "The visit could not be deleted.",
+    "suggestion": {
+      "single": "Does this belong to this visit?",
+      "choose": "Which visit does this belong to?"
+    },
+    "episodeCard": {
+      "title": "Visits about this",
+      "emptyLine": "No visit linked to this condition yet.",
+      "add": "Add a visit"
+    },
+    "dashboard": {
+      "nextVisit": "Next appointment: {what} on {when}"
+    }
   },
   "checkups": {
     "viewSwitchLabel": "Show checkups or visits",

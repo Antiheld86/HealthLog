@@ -58,6 +58,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     to: params.get("to") ?? undefined,
     status: params.get("status") ?? undefined,
     practitionerId: params.get("practitionerId") ?? undefined,
+    episodeId: params.get("episodeId") ?? undefined,
     limit: params.get("limit") ?? undefined,
   });
   if (!parsed.success) {
@@ -75,6 +76,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
     deletedAt: null,
     ...(query.status ? { status: query.status } : {}),
     ...(query.practitionerId ? { practitionerId: query.practitionerId } : {}),
+    // Filtered in SQL rather than in Node: the two arms are separately
+    // `take`-bounded, so narrowing after the read would page wrongly.
+    ...(query.episodeId
+      ? { conditionLinks: { some: { episodeId: query.episodeId } } }
+      : {}),
     ...(query.from || query.to
       ? {
           occurredAt: {
