@@ -213,6 +213,33 @@ describe("POST /api/workouts/batch — HR series enrichment (real Postgres)", ()
     ).toBe(1);
   });
 
+  it("reports one enrichment when two entries in one batch aim at the same workout", async () => {
+    await post({ workouts: [baseWorkout("hk-uuid-enrich-007")] });
+
+    // Same external id twice, far enough apart in time that the
+    // write-time twin dedup keeps both entries. Only one series can land.
+    const res = await post({
+      workouts: [
+        baseWorkout("hk-uuid-enrich-007", { samples: SERIES }),
+        baseWorkout("hk-uuid-enrich-007", {
+          startedAt: "2026-05-14T09:00:00.000Z",
+          endedAt: "2026-05-14T09:45:00.000Z",
+          samples: [{ t: "2026-05-14T09:00:00.000Z", hr: 155 }],
+        }),
+      ],
+    });
+
+    expect(res.status).toBe(200);
+    expect(
+      res.data.entries.filter((e) => e.status === "enriched"),
+    ).toHaveLength(1);
+    expect(
+      await getPrismaClient().workoutSamples.count({
+        where: { workout: { userId: TEST_USER_ID } },
+      }),
+    ).toBe(1);
+  });
+
   it("leaves every workout column byte-identical across an enrichment", async () => {
     await post({
       workouts: [

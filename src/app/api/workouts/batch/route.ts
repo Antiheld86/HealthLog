@@ -477,16 +477,21 @@ async function postBatch(request: NextRequest): Promise<Response> {
       workoutId: string;
       samples: NonNullable<Prepared["samples"]>;
     }> = [];
+    /** Workouts already claimed by an earlier entry of THIS batch. */
+    const enrichClaimed = new Set<string>();
     for (const p of survivors) {
       const keyTuple = p.dedupKey
         ? `${p.dedupKey.source}::${p.dedupKey.externalId}`
         : null;
       const known = keyTuple !== null ? existingByKey.get(keyTuple) : undefined;
       if (known) {
-        if (p.samples && !known.hasSeries) {
+        if (p.samples && !known.hasSeries && !enrichClaimed.has(known.id)) {
+          enrichClaimed.add(known.id);
           // Enrichment. The status is assigned after the write, because
           // a concurrent writer may get the series in first — in which
-          // case this entry is the plain duplicate it always was.
+          // case this entry is the plain duplicate it always was. A
+          // second entry of this batch naming the same workout takes the
+          // duplicate arm above: one workout, one series, one `enriched`.
           toEnrich.push({
             index: p.index,
             workoutId: known.id,
