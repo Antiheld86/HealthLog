@@ -30,25 +30,35 @@ import {
 } from "@/lib/api-response";
 import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 import { encounterUpdateSchema } from "@/lib/validations/encounters";
+import { encounterKindLabel } from "@/lib/encounters/kind-label";
 import { toEncounterDTO } from "@/lib/encounters/dto";
 import {
   ENCOUNTER_INCLUDE,
+  actingDomainVisibility,
   applyEncounterLinks,
   closeCheckupForVisit,
+  findOwnAppointmentReminderId,
   loadEncounterLinks,
   resolveClosableReminder,
   resolveOwnedPractitioner,
-  resolveTimezone,
+  resolveOwnerNotificationContext,
+  retireAppointmentReminderForVisit,
+  retireOrphanedAppointmentReminders,
   shouldHaveReminder,
   syncAppointmentReminder,
 } from "@/lib/encounters/service";
+import {
+  recordUnknownKeys,
+  summarizeRestoreSkips,
+  type RestoreSkipLog,
+} from "@/lib/export/restore-skips";
 import type { Prisma } from "@/generated/prisma/client";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
 export const GET = apiHandler(
   async (_request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireRecordAuth("read", "profile");
+    const { user, grantId } = await requireRecordAuth("read", "profile");
 
     const { id } = await params;
     const row = await prisma.encounter.findUnique({
@@ -59,7 +69,8 @@ export const GET = apiHandler(
       return apiError("Visit not found", 404);
     }
 
-    const links = await loadEncounterLinks(prisma, user.id, id);
+    const visible = await actingDomainVisibility(prisma, grantId);
+    const links = await loadEncounterLinks(prisma, user.id, id, visible);
 
     annotate({
       action: {
@@ -75,7 +86,7 @@ export const GET = apiHandler(
 
 export const PATCH = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireRecordAuth("manage", "profile");
+    const { user, grantId } = await requireRecordAuth("manage", "profile");
 
     const { id } = await params;
     const existing = await prisma.encounter.findUnique({ where: { id } });
@@ -100,7 +111,7 @@ export const PATCH = apiHandler(
     }
 
     const entry = parsed.data;
-    const timezone = await resolveTimezone(user.id);
+    const { timezone, locale } = await resolveOwnerNotificationContext(user.id);
     const now = new Date();
 
     // The state the visit will be in once this edit lands. Both the reminder
@@ -112,7 +123,10 @@ export const PATCH = apiHandler(
       : existing.occurredAt;
     const nextStatus = entry.status ?? existing.status;
 
+    const skips: RestoreSkipLog = [];
+
     const outcome = await prisma.$transaction(async (tx) => {
+      const visible = await actingDomainVisibility(tx, grantId);
       let practitionerId = existing.practitionerId;
       let practitionerName: string | null = null;
       let practitionerLocation: string | null = null;
@@ -161,22 +175,24 @@ export const PATCH = apiHandler(
           : { disconnect: true };
       }
 
-      // Whether the visit's own appointment reminder — the ENCOUNTER-origin
-      // row this code minted — is the thing `reminderId` currently holds. A
-      // checkup the visit closes lives in the same column and must not be
-      // re-anchored onto the appointment's date.
-      const currentReminder = existing.reminderId
-        ? await tx.measurementReminder.findUnique({
-            where: { id: existing.reminderId },
-            select: { id: true, origin: true },
-          })
-        : null;
-      const ownAppointmentReminderId =
-        currentReminder?.origin === "ENCOUNTER" ? currentReminder.id : null;
+      // The appointment reminder this visit OWNS, resolved through the engine
+      // table rather than by reading the visit's own foreign key. Reading the
+      // key answers a different question — what the visit points at — and the
+      // two stop agreeing the moment the key is re-pointed at a checkup.
+      const ownAppointmentReminderId = await findOwnAppointmentReminderId(
+        tx,
+        user.id,
+        id,
+      );
 
       let reminderId = existing.reminderId;
 
       if (shouldHaveReminder(nextStatus, nextOccurredAt, now)) {
+        // The same contradiction the create arm refuses, and it has to be
+        // refused here too: a body that books a visit AND names the checkup it
+        // closed would walk the foreign key off the visit's own reminder,
+        // leaving it live, armed and unreachable.
+        if (entry.reminderId) return "contradictory-reminder" as const;
         reminderId = await syncAppointmentReminder(
           tx,
           {
@@ -184,7 +200,7 @@ export const PATCH = apiHandler(
             occurredAt: nextOccurredAt,
             practitionerName,
             practitionerLocation,
-            kindLabel: entry.kind ?? existing.kind,
+            kindLabel: encounterKindLabel(entry.kind ?? existing.kind, locale),
             status: nextStatus,
             existingReminderId: ownAppointmentReminderId,
           },
@@ -200,7 +216,7 @@ export const PATCH = apiHandler(
             occurredAt: nextOccurredAt,
             practitionerName,
             practitionerLocation,
-            kindLabel: entry.kind ?? existing.kind,
+            kindLabel: encounterKindLabel(entry.kind ?? existing.kind, locale),
             status: nextStatus,
             existingReminderId: ownAppointmentReminderId,
           },
@@ -246,12 +262,44 @@ export const PATCH = apiHandler(
         nextStatus === "DONE" && existing.status !== "DONE";
       if (closesCheckupNow && reminderId) {
         const checkup = await resolveClosableReminder(tx, user.id, reminderId);
-        if (checkup) await closeCheckupForVisit(tx, checkup, timezone, now);
+        if (checkup) {
+          // Same domain fence as the create arm: closing a checkup is a
+          // measurements write, and a health-background delegate may edit the
+          // visit without being able to perform it.
+          if (visible("measurements")) {
+            await closeCheckupForVisit(
+              tx,
+              checkup,
+              timezone,
+              nextOccurredAt,
+              now,
+            );
+          } else {
+            recordUnknownKeys(
+              skips,
+              "checkupClosure",
+              [checkup.id],
+              [checkup.id],
+            );
+          }
+        }
       }
+
+      // Nothing this account owns may be left armed for a visit that does not
+      // point at it. Runs after the write so the row just minted, whose key is
+      // set one statement earlier, is never mistaken for a stray.
+      await retireOrphanedAppointmentReminders(tx, user.id, now);
 
       return { updated };
     });
 
+    if (outcome === "contradictory-reminder") {
+      return apiError(
+        "A booked visit cannot also close a checkup — it has not happened yet",
+        422,
+        { errorCode: "encounter.reminder-conflict" },
+      );
+    }
     if (outcome === "unknown-practitioner") {
       return apiError("Practitioner not found", 404, {
         errorCode: "encounter.practitioner-not-found",
@@ -267,7 +315,8 @@ export const PATCH = apiHandler(
       where: { id },
       include: ENCOUNTER_INCLUDE,
     });
-    const links = await loadEncounterLinks(prisma, user.id, id);
+    const visible = await actingDomainVisibility(prisma, grantId);
+    const links = await loadEncounterLinks(prisma, user.id, id, visible);
 
     await auditLog("encounter.visit.update", {
       userId: user.id,
@@ -302,7 +351,7 @@ export const PATCH = apiHandler(
       meta: { status: row.status },
     });
 
-    return apiSuccess(toEncounterDTO(row, links));
+    return apiSuccess(toEncounterDTO(row, links, summarizeRestoreSkips(skips)));
   },
 );
 
@@ -320,21 +369,16 @@ export const DELETE = apiHandler(
     if (existing.deletedAt === null) {
       const at = new Date();
       await prisma.$transaction(async (tx) => {
+        // Only the visit's OWN appointment reminder goes with it, and it is
+        // found by the relation rather than by the foreign key: a visit whose
+        // key points at a checkup still owns its appointment row, and reading
+        // the key would leave that row armed for a visit that no longer exists.
+        // Retired BEFORE the tombstone, while the relation still resolves.
+        await retireAppointmentReminderForVisit(tx, user.id, id, at);
         await tx.encounter.update({ where: { id }, data: { deletedAt: at } });
-        // Only the visit's OWN appointment reminder goes with it. A checkup the
-        // visit closed belongs to the person's Vorsorge list and outlives it.
-        if (existing.reminderId) {
-          const reminder = await tx.measurementReminder.findUnique({
-            where: { id: existing.reminderId },
-            select: { id: true, origin: true },
-          });
-          if (reminder?.origin === "ENCOUNTER") {
-            await tx.measurementReminder.update({
-              where: { id: reminder.id },
-              data: { deletedAt: at, enabled: false, nextDueAt: null },
-            });
-          }
-        }
+        // A checkup the visit closed belongs to the person's preventive-care
+        // list and outlives it; the sweep below only reaps appointment rows.
+        await retireOrphanedAppointmentReminders(tx, user.id, at);
       });
     }
 

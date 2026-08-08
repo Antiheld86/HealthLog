@@ -27,6 +27,12 @@ export interface ResolvableReminder {
   anchorDate: Date | null;
   lastSatisfiedAt: Date | null;
   createdAt: Date;
+  /**
+   * Optional so the many callers that construct this shape by hand keep
+   * compiling; absent means "an ordinary reminder", which is the safe reading.
+   * Only `ENCOUNTER` changes the answer.
+   */
+  origin?: import("@/generated/prisma/client").ReminderOrigin;
 }
 
 /**
@@ -50,6 +56,17 @@ export async function findSatisfyingEvent(
   userId: string,
   reminder: ResolvableReminder,
 ): Promise<Date | null> {
+  // An appointment is not satisfied by a measurement, and refusing it here is
+  // not a filter — it is the absence of a question worth asking.
+  //
+  // An appointment reminder is free-text by construction: there is no reading
+  // that means "you went". The free-text arm below resolves from ANY lab
+  // result, so without this a routine blood panel would mark next month's
+  // cardiology appointment as attended and silence its nudge. Going is the only
+  // thing that satisfies a visit, and that is recorded by moving the visit to
+  // DONE through the encounter routes.
+  if (reminder.origin === "ENCOUNTER") return null;
+
   const floor = satisfactionFloor(reminder);
 
   if (reminder.measurementType !== null) {

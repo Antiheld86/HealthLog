@@ -6740,6 +6740,7 @@
         "restoreSkippedMoodFactor": "Mood factor",
         "restoreSkippedMoodTag": "Mood tag",
         "restoreSkippedVisitReference": "Visit reference",
+        "restoreSkippedCheckupClosure": "Checkup closure",
         "docsLink": "Documentation"
       },
       "danger-zone": {
@@ -9927,6 +9928,18 @@
     },
     "anamnesis": {
       "relativeNote": "A family history entry describes this person's relatives. Add it only when they would want it recorded here."
+    }
+  },
+  "encounters": {
+    "kind": {
+      "routine": "Routine visit",
+      "acute": "Acute visit",
+      "specialist": "Specialist visit",
+      "preventive": "Preventive check",
+      "emergency": "Emergency",
+      "hospital": "Hospital",
+      "therapy": "Therapy session",
+      "other": "Appointment"
     }
   }
 }

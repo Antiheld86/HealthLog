@@ -823,8 +823,19 @@ export async function handleCallback(update: TelegramUpdate) {
     // v1.19.0 — mark a Vorsorge/measurement reminder done; satisfy the
     // cadence via the shared primitive.
     const reminderId = data.slice("measure_done:".length).trim();
+    // An appointment reminder is not addressable here, the same refusal the
+    // by-id HTTP family makes: it belongs to a visit, is managed through the
+    // visit routes, and sits in a different sharing domain. The lookup answers
+    // "not found" rather than acting on it — satisfying one would mark an
+    // appointment attended from a chat button, and postponing one would move a
+    // date the visit record still believes it owns.
     const reminder = await prisma.measurementReminder.findFirst({
-      where: { id: reminderId, userId: user.id, deletedAt: null },
+      where: {
+        id: reminderId,
+        userId: user.id,
+        deletedAt: null,
+        origin: { not: "ENCOUNTER" },
+      },
       select: {
         id: true,
         // v1.19.2 — the target metric; drives the optional numeric capture.
@@ -912,8 +923,19 @@ export async function handleCallback(update: TelegramUpdate) {
       );
       return;
     }
+    // An appointment reminder is not addressable here, the same refusal the
+    // by-id HTTP family makes: it belongs to a visit, is managed through the
+    // visit routes, and sits in a different sharing domain. The lookup answers
+    // "not found" rather than acting on it — satisfying one would mark an
+    // appointment attended from a chat button, and postponing one would move a
+    // date the visit record still believes it owns.
     const reminder = await prisma.measurementReminder.findFirst({
-      where: { id: reminderId, userId: user.id, deletedAt: null },
+      where: {
+        id: reminderId,
+        userId: user.id,
+        deletedAt: null,
+        origin: { not: "ENCOUNTER" },
+      },
       select: { id: true },
     });
     if (!reminder) {

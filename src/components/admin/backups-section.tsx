@@ -201,6 +201,9 @@ function catalogueLabel(
   if (catalogue === "visitReference") {
     return t("admin.section.backups.restoreSkippedVisitReference");
   }
+  if (catalogue === "checkupClosure") {
+    return t("admin.section.backups.restoreSkippedCheckupClosure");
+  }
   return t("admin.section.backups.restoreSkippedMoodFactor");
 }
 

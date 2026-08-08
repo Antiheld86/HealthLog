@@ -6740,6 +6740,7 @@
         "restoreSkippedMoodFactor": "Fattore dell'umore",
         "restoreSkippedMoodTag": "Etichetta dell'umore",
         "restoreSkippedVisitReference": "Riferimento alla visita",
+        "restoreSkippedCheckupClosure": "Chiusura del controllo",
         "docsLink": "Documentazione"
       },
       "danger-zone": {
@@ -9927,6 +9928,18 @@
     },
     "anamnesis": {
       "relativeNote": "Una voce di anamnesi familiare descrive i parenti di questa persona. Aggiungila solo se vorrebbe vederla registrata qui."
+    }
+  },
+  "encounters": {
+    "kind": {
+      "routine": "Visita di routine",
+      "acute": "Visita urgente",
+      "specialist": "Visita specialistica",
+      "preventive": "Controllo preventivo",
+      "emergency": "Emergenza",
+      "hospital": "Ospedale",
+      "therapy": "Seduta di terapia",
+      "other": "Appuntamento medico"
     }
   }
 }

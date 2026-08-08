@@ -101,13 +101,14 @@ const practitioner = z
 const linkedTarget = z
   .object({
     id: z.string(),
-    label: z.string(),
+    label: z.string().nullable(),
     date: z.string().nullable(),
+    redacted: z.boolean(),
   })
   .meta({
     id: "EncounterLinkedTarget",
     description:
-      "One thing filed against a visit, resolved. The label and date are computed server-side from the target itself — a document's title and filing date, a lab result's panel and analyte and draw date, a condition's label and onset — so the client never re-derives them and the two cannot drift.",
+      "One thing filed against a visit, resolved. The label and date are computed server-side from the target itself — a document's title and filing date, a lab result's panel and analyte and draw date, a condition's label and onset — so the client never re-derives them and the two cannot drift. Both go null together, with `redacted: true`, when the caller's grant does not cover the target's own domain: a visit lives in the health background but points at the vault, the labs and the illness journal, and a grant that opened only the first was never consent for the names in the other three. The link itself is still listed — the caller may know the visit produced a lab result — and `redacted` is what tells a withheld name apart from a target that simply has no date.",
   });
 
 const encounterLinks = z
@@ -122,6 +123,23 @@ const encounterLinks = z
       "The three link families of one visit, each ordered by when it was filed. Present on the detail response, absent from the list.",
   });
 
+const skipReport = z
+  .object({
+    catalogueKeys: z.array(
+      z.object({
+        catalogue: z.string(),
+        key: z.string(),
+        links: z.number(),
+      }),
+    ),
+    links: z.number(),
+  })
+  .meta({
+    id: "EncounterSkipReport",
+    description:
+      "What the write could not do, named. `links: 0` with an empty list is the ordinary answer. Anything else is a side effect the caller's grant did not reach — today only `checkupClosure`, the closing of a preventive-care checkup, which is a measurements-domain write a health-background delegate cannot perform. The visit still saves; the checkup stays due and the response says so, because somebody who believes a checkup was closed will not look at it again.",
+  });
+
 const encounter = z
   .object({
     id: z.string(),
@@ -133,6 +151,7 @@ const encounter = z
     outcome: z.string().nullable(),
     reminderNextDueAt: z.string().nullable(),
     links: encounterLinks.optional(),
+    skipped: skipReport.optional(),
     createdAt: z.string(),
     updatedAt: z.string(),
   })

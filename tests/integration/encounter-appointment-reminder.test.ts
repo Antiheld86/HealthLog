@@ -153,6 +153,50 @@ describe("booking a visit", () => {
   });
 });
 
+describe("what the notification will say", () => {
+  it("labels a practice-less appointment in the person's own language", async () => {
+    const prisma = getPrismaClient();
+    await prisma.user.update({
+      where: { id: OWNER_ID },
+      data: { locale: "de" },
+    });
+
+    await post({
+      occurredAt: daysFromNow(10).toISOString(),
+      status: "PLANNED",
+      kind: "SPECIALIST",
+    });
+
+    const reminder = await prisma.measurementReminder.findFirstOrThrow({
+      where: { userId: OWNER_ID, origin: "ENCOUNTER" },
+    });
+    // The label IS the push body. A raw enum constant reaching a lock screen
+    // is not a fallback, it is a leak of the schema into the product.
+    expect(reminder.label).not.toBe("SPECIALIST");
+    expect(reminder.label).not.toMatch(/^[A-Z_]+$/);
+    expect(reminder.label).toBe("Facharzttermin");
+  });
+
+  it("prefers the practice name when there is one", async () => {
+    const prisma = getPrismaClient();
+    const practitioner = await prisma.practitioner.create({
+      data: { userId: OWNER_ID, name: "Praxis Nord" },
+    });
+
+    await post({
+      occurredAt: daysFromNow(10).toISOString(),
+      status: "PLANNED",
+      kind: "SPECIALIST",
+      practitionerId: practitioner.id,
+    });
+
+    const reminder = await prisma.measurementReminder.findFirstOrThrow({
+      where: { userId: OWNER_ID, origin: "ENCOUNTER" },
+    });
+    expect(reminder.label).toBe("Praxis Nord");
+  });
+});
+
 describe("rescheduling", () => {
   it("moves the same row and never mints a second", async () => {
     const prisma = getPrismaClient();
@@ -228,6 +272,144 @@ describe("rescheduling", () => {
   });
 });
 
+/**
+ * The orphan class, replayed as the sequence that produced it.
+ *
+ * A reminder nobody points at still fires: the cron reads the engine table, not
+ * the visit list. So an ENCOUNTER-origin row that no encounter owns pushes
+ * notifications for an appointment the person can no longer see, edit or
+ * cancel, and deleting the visit does not reach it. Every assertion below
+ * counts LIVE ENCOUNTER rows rather than checking that some particular row
+ * moved, because the defect was an extra row rather than a wrong one.
+ */
+async function liveEncounterReminders() {
+  return getPrismaClient().measurementReminder.findMany({
+    where: { userId: OWNER_ID, origin: "ENCOUNTER", deletedAt: null },
+  });
+}
+
+describe("an appointment reminder can never be orphaned", () => {
+  async function seedCheckup() {
+    return getPrismaClient().measurementReminder.create({
+      data: {
+        userId: OWNER_ID,
+        label: "Annual blood panel",
+        intervalDays: 365,
+        anchorDate: daysFromNow(-370),
+        notifyHour: 9,
+        nextDueAt: daysFromNow(-5),
+      },
+    });
+  }
+
+  it("refuses to point a still-booked visit at a checkup", async () => {
+    const created = (
+      await body(
+        await post({
+          occurredAt: daysFromNow(14).toISOString(),
+          status: "PLANNED",
+        }),
+      )
+    ).data;
+    const checkup = await seedCheckup();
+
+    const res = await patch(created.id as string, { reminderId: checkup.id });
+
+    // The same contradiction the create arm already refuses: a visit that has
+    // not happened cannot have closed anything.
+    expect(res.status).toBe(422);
+    expect(await liveEncounterReminders()).toHaveLength(1);
+  });
+
+  it("keeps exactly one live reminder across the sequence that produced the orphan", async () => {
+    const created = (
+      await body(
+        await post({
+          occurredAt: daysFromNow(14).toISOString(),
+          status: "PLANNED",
+        }),
+      )
+    ).data;
+    const checkup = await seedCheckup();
+    const first = await liveEncounterReminders();
+    expect(first).toHaveLength(1);
+
+    // 1. Re-point at a checkup — refused while the visit is still booked.
+    await patch(created.id as string, { reminderId: checkup.id });
+    expect(await liveEncounterReminders()).toHaveLength(1);
+
+    // 2. Move the date. Before the fix this minted a SECOND reminder, because
+    //    the re-anchor path looked only at the visit's foreign key and that key
+    //    had been walked off its own row by step 1.
+    const moved = daysFromNow(21);
+    expect(
+      (await patch(created.id as string, { occurredAt: moved.toISOString() }))
+        .status,
+    ).toBe(200);
+
+    const after = await liveEncounterReminders();
+    expect(after).toHaveLength(1);
+    expect(after[0]!.nextDueAt?.toISOString()).toBe(moved.toISOString());
+  });
+
+  it("leaves nothing live behind when the visit is deleted", async () => {
+    const created = (
+      await body(
+        await post({
+          occurredAt: daysFromNow(14).toISOString(),
+          status: "PLANNED",
+        }),
+      )
+    ).data;
+    const checkup = await seedCheckup();
+    await patch(created.id as string, { reminderId: checkup.id });
+    await patch(created.id as string, {
+      occurredAt: daysFromNow(21).toISOString(),
+    });
+
+    await deleteEncounter(
+      new Request(`http://localhost/api/encounters/${created.id}`, {
+        method: "DELETE",
+      }) as never,
+      { params: Promise.resolve({ id: created.id as string }) } as never,
+    );
+
+    // Nothing may still be armed for a visit that no longer exists.
+    expect(await liveEncounterReminders()).toEqual([]);
+    // The person's own checkup is untouched — it was never this visit's to retire.
+    expect(
+      (
+        await getPrismaClient().measurementReminder.findUniqueOrThrow({
+          where: { id: checkup.id },
+        })
+      ).deletedAt,
+    ).toBeNull();
+  });
+
+  it("switching a booked visit to done leaves no live appointment reminder", async () => {
+    const created = (
+      await body(
+        await post({
+          occurredAt: daysFromNow(14).toISOString(),
+          status: "PLANNED",
+        }),
+      )
+    ).data;
+
+    await patch(created.id as string, {
+      status: "DONE",
+      occurredAt: daysFromNow(-1).toISOString(),
+    });
+
+    // The row may survive as history, but it must not still be armed.
+    const live = await liveEncounterReminders();
+    for (const row of live) {
+      expect(row.enabled).toBe(false);
+      expect(row.nextDueAt).toBeNull();
+    }
+  });
+});
+
 describe("closing a checkup by filing a visit", () => {
   async function seedCheckup() {
     return getPrismaClient().measurementReminder.create({
@@ -291,6 +473,66 @@ describe("closing a checkup by filing a visit", () => {
     );
   });
 
+  it("anchors the checkup on the visit date, not on when it was typed in", async () => {
+    const prisma = getPrismaClient();
+    const checkup = await seedCheckup();
+    const visitAt = daysFromNow(-30);
+
+    await post({
+      occurredAt: visitAt.toISOString(),
+      status: "DONE",
+      reminderId: checkup.id,
+    });
+
+    const after = await prisma.measurementReminder.findUniqueOrThrow({
+      where: { id: checkup.id },
+    });
+    // A yearly panel drawn thirty days ago is next due 335 days from now, not
+    // 365. Satisfying at "now" would quietly move every backdated entry's next
+    // due date forward by however long the person took to record it.
+    expect(after.lastSatisfiedAt?.toISOString()).toBe(visitAt.toISOString());
+    const daysOut =
+      (after.nextDueAt!.getTime() - Date.now()) / (24 * 60 * 60 * 1000);
+    expect(daysOut).toBeGreaterThan(330);
+    expect(daysOut).toBeLessThan(340);
+  });
+
+  it("does not advance the checkup again when a visit re-enters DONE", async () => {
+    const prisma = getPrismaClient();
+    const checkup = await seedCheckup();
+    const created = (
+      await body(
+        await post({
+          occurredAt: daysFromNow(-1).toISOString(),
+          status: "DONE",
+          reminderId: checkup.id,
+        }),
+      )
+    ).data;
+    const first = await prisma.measurementReminder.findUniqueOrThrow({
+      where: { id: checkup.id },
+    });
+
+    // Correcting a mis-filed visit is an ordinary thing to do, and the round
+    // trip is a transition each way — so the status gate alone does not stop
+    // the second satisfy. Satisfying at the VISIT instant does: it is not
+    // strictly after the last one, and the primitive is forward-only.
+    await patch(created.id as string, { status: "NO_SHOW" });
+    expect((await patch(created.id as string, { status: "DONE" })).status).toBe(
+      200,
+    );
+
+    const second = await prisma.measurementReminder.findUniqueOrThrow({
+      where: { id: checkup.id },
+    });
+    expect(second.lastSatisfiedAt?.toISOString()).toBe(
+      first.lastSatisfiedAt?.toISOString(),
+    );
+    expect(second.nextDueAt?.toISOString()).toBe(
+      first.nextDueAt?.toISOString(),
+    );
+  });
+
   it("refuses a planned visit that also claims to close a checkup", async () => {
     const checkup = await seedCheckup();
     const res = await post({
@@ -319,6 +561,158 @@ describe("closing a checkup by filing a visit", () => {
     });
     // Accepting it would let one visit re-point another visit's reminder.
     expect(res.status).toBe(404);
+  });
+});
+
+describe("the list window", () => {
+  it("honours an upper bound that is earlier than now", async () => {
+    // The past arm bounds itself at `now`, and the user's own `to` used to be
+    // overwritten by that bound rather than combined with it, so every
+    // narrower window silently widened to "everything up to today".
+    await post({ occurredAt: daysFromNow(-2).toISOString(), status: "DONE" });
+
+    const { GET: listVisits } = await import("@/app/api/encounters/route");
+    const res = await listVisits(
+      new Request(
+        `http://localhost/api/encounters?to=${daysFromNow(-30).toISOString()}`,
+      ) as never,
+    );
+    expect(res.status).toBe(200);
+    const listed = (await res.json()) as {
+      data: { upcoming: unknown[]; past: unknown[] };
+    };
+    expect(listed.data.past).toEqual([]);
+    expect(listed.data.upcoming).toEqual([]);
+  });
+
+  it("still returns a visit inside the window", async () => {
+    // The counterpart, so the fix cannot be "return nothing".
+    await post({ occurredAt: daysFromNow(-2).toISOString(), status: "DONE" });
+
+    const { GET: listVisits } = await import("@/app/api/encounters/route");
+    const res = await listVisits(
+      new Request(
+        `http://localhost/api/encounters?from=${daysFromNow(-5).toISOString()}&to=${daysFromNow(-1).toISOString()}`,
+      ) as never,
+    );
+    const listed = (await res.json()) as { data: { past: unknown[] } };
+    expect(listed.data.past).toHaveLength(1);
+  });
+});
+
+describe("an appointment is not addressable through the reminder API", () => {
+  async function bookedReminder() {
+    await post({
+      occurredAt: daysFromNow(14).toISOString(),
+      status: "PLANNED",
+    });
+    return getPrismaClient().measurementReminder.findFirstOrThrow({
+      where: { userId: OWNER_ID, origin: "ENCOUNTER" },
+    });
+  }
+
+  it("404s the read, and does not leak the appointment", async () => {
+    const reminder = await bookedReminder();
+    const { GET } = await import("@/app/api/measurement-reminders/[id]/route");
+    const res = await GET(
+      new Request(
+        `http://localhost/api/measurement-reminders/${reminder.id}`,
+      ) as never,
+      { params: Promise.resolve({ id: reminder.id }) } as never,
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("404s complete WITHOUT committing the satisfy", async () => {
+    // The shape that mattered most: this is the endpoint behind the Done
+    // button on an appointment push. It used to write, then 500 on the mapper.
+    const reminder = await bookedReminder();
+    const { POST: complete } =
+      await import("@/app/api/measurement-reminders/[id]/complete/route");
+    const res = await complete(
+      new Request(
+        `http://localhost/api/measurement-reminders/${reminder.id}/complete`,
+        { method: "POST" },
+      ) as never,
+      { params: Promise.resolve({ id: reminder.id }) } as never,
+    );
+
+    expect(res.status).toBe(404);
+    const after = await getPrismaClient().measurementReminder.findUniqueOrThrow(
+      { where: { id: reminder.id } },
+    );
+    expect(after.lastSatisfiedAt).toBeNull();
+    expect(after.nextDueAt?.toISOString()).toBe(
+      reminder.nextDueAt?.toISOString(),
+    );
+  });
+
+  it("404s satisfy WITHOUT committing it", async () => {
+    const reminder = await bookedReminder();
+    const { POST: satisfy } =
+      await import("@/app/api/measurement-reminders/[id]/satisfy/route");
+    const res = await satisfy(
+      new Request(
+        `http://localhost/api/measurement-reminders/${reminder.id}/satisfy`,
+        { method: "POST" },
+      ) as never,
+      { params: Promise.resolve({ id: reminder.id }) } as never,
+    );
+
+    expect(res.status).toBe(404);
+    expect(
+      (
+        await getPrismaClient().measurementReminder.findUniqueOrThrow({
+          where: { id: reminder.id },
+        })
+      ).lastSatisfiedAt,
+    ).toBeNull();
+  });
+
+  it("404s the edit, so a one-shot cannot be given a cadence", async () => {
+    const reminder = await bookedReminder();
+    const { PATCH: editReminder } =
+      await import("@/app/api/measurement-reminders/[id]/route");
+    const res = await editReminder(
+      new Request(`http://localhost/api/measurement-reminders/${reminder.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ intervalDays: 7 }),
+      }) as never,
+      { params: Promise.resolve({ id: reminder.id }) } as never,
+    );
+
+    expect(res.status).toBe(404);
+    // A cadence here would turn a spent one-shot into a permanent re-nag that
+    // shows up in no list the person can reach.
+    expect(
+      (
+        await getPrismaClient().measurementReminder.findUniqueOrThrow({
+          where: { id: reminder.id },
+        })
+      ).intervalDays,
+    ).toBeNull();
+  });
+
+  it("404s the delete, so the row survives for the visit that owns it", async () => {
+    const reminder = await bookedReminder();
+    const { DELETE: destroy } =
+      await import("@/app/api/measurement-reminders/[id]/route");
+    const res = await destroy(
+      new Request(`http://localhost/api/measurement-reminders/${reminder.id}`, {
+        method: "DELETE",
+      }) as never,
+      { params: Promise.resolve({ id: reminder.id }) } as never,
+    );
+
+    expect(res.status).toBe(404);
+    // This verb hard-deletes. A delegate holding only the measurements domain
+    // reaching it would destroy a row belonging to the profile domain.
+    expect(
+      await getPrismaClient().measurementReminder.count({
+        where: { id: reminder.id },
+      }),
+    ).toBe(1);
   });
 });
 

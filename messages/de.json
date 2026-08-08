@@ -6740,6 +6740,7 @@
         "restoreSkippedMoodFactor": "Stimmungsfaktor",
         "restoreSkippedMoodTag": "Stimmungs-Tag",
         "restoreSkippedVisitReference": "Besuchsverknüpfung",
+        "restoreSkippedCheckupClosure": "Vorsorge-Abschluss",
         "docsLink": "Dokumentation"
       },
       "danger-zone": {
@@ -9927,6 +9928,18 @@
     },
     "anamnesis": {
       "relativeNote": "Ein Eintrag zur Familienanamnese beschreibt die Angehörigen dieser Person. Trage ihn nur ein, wenn sie das hier festgehalten haben möchte."
+    }
+  },
+  "encounters": {
+    "kind": {
+      "routine": "Routinetermin",
+      "acute": "Akuttermin",
+      "specialist": "Facharzttermin",
+      "preventive": "Vorsorgetermin",
+      "emergency": "Notfall",
+      "hospital": "Krankenhaus",
+      "therapy": "Therapietermin",
+      "other": "Arzttermin"
     }
   }
 }

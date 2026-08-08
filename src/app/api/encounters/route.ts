@@ -30,17 +30,24 @@ import {
   encounterCreateSchema,
   encounterListQuerySchema,
 } from "@/lib/validations/encounters";
+import { encounterKindLabel } from "@/lib/encounters/kind-label";
 import { toEncounterDTO, type EncounterListDTO } from "@/lib/encounters/dto";
 import {
   ENCOUNTER_INCLUDE,
+  actingDomainVisibility,
   applyEncounterLinks,
   closeCheckupForVisit,
   resolveClosableReminder,
   resolveOwnedPractitioner,
-  resolveTimezone,
+  resolveOwnerNotificationContext,
   shouldHaveReminder,
   syncAppointmentReminder,
 } from "@/lib/encounters/service";
+import {
+  recordUnknownKeys,
+  summarizeRestoreSkips,
+  type RestoreSkipLog,
+} from "@/lib/export/restore-skips";
 
 export const GET = apiHandler(async (request: NextRequest) => {
   const { user } = await requireRecordAuth("read", "profile");
@@ -78,19 +85,33 @@ export const GET = apiHandler(async (request: NextRequest) => {
       : {}),
   };
 
+  // The past arm's own upper bound is `now`, and the caller may have asked for
+  // an earlier one. Both have to hold, so they COMBINE to the tighter of the
+  // two rather than one overwriting the other — spreading the caller's
+  // `occurredAt` and then restating `lte` silently widened every window that
+  // ended before today back out to "everything up to now".
+  const requestedTo = query.to ? new Date(query.to) : null;
+  const pastCeiling =
+    requestedTo && requestedTo.getTime() < now.getTime() ? requestedTo : now;
+
   // Two queries rather than one sorted list. Upcoming reads soonest-first and
   // past reads newest-first, which is the opposite direction; resolving both
   // here means the client renders two lists instead of splitting and
   // re-sorting one, and the ordering lives in one place.
   const [upcoming, past] = await Promise.all([
     prisma.encounter.findMany({
+      // `gt` and `gte` are different keys, so the caller's lower bound and this
+      // arm's floor both survive the spread; only the `lte` pair collided.
       where: { ...where, occurredAt: { ...where.occurredAt, gt: now } },
       orderBy: { occurredAt: "asc" },
       take,
       include: ENCOUNTER_INCLUDE,
     }),
     prisma.encounter.findMany({
-      where: { ...where, occurredAt: { ...where.occurredAt, lte: now } },
+      where: {
+        ...where,
+        occurredAt: { ...where.occurredAt, lte: pastCeiling },
+      },
       orderBy: { occurredAt: "desc" },
       take,
       include: ENCOUNTER_INCLUDE,
@@ -113,7 +134,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
 export const POST = apiHandler(withIdempotency<[NextRequest]>(postEncounter));
 
 async function postEncounter(request: NextRequest): Promise<Response> {
-  const { user } = await requireRecordAuth("write", "profile");
+  const { user, grantId } = await requireRecordAuth("write", "profile");
 
   const { data: rawBody, error: jsonError } = await safeJson(request, {
     maxBytes: 32 * 1024,
@@ -133,10 +154,13 @@ async function postEncounter(request: NextRequest): Promise<Response> {
 
   const entry = parsed.data;
   const occurredAt = new Date(entry.occurredAt);
-  const timezone = await resolveTimezone(user.id);
+  const { timezone, locale } = await resolveOwnerNotificationContext(user.id);
   const now = new Date();
 
+  const skips: RestoreSkipLog = [];
+
   const created = await prisma.$transaction(async (tx) => {
+    const visible = await actingDomainVisibility(tx, grantId);
     // A practitioner the caller does not own is a refusal rather than a
     // silently dropped field: the person named a practice and would otherwise
     // see the visit save without it.
@@ -183,7 +207,7 @@ async function postEncounter(request: NextRequest): Promise<Response> {
           occurredAt,
           practitionerName: practitioner?.name ?? null,
           practitionerLocation: practitioner?.location ?? null,
-          kindLabel: entry.kind,
+          kindLabel: encounterKindLabel(entry.kind, locale),
           status: entry.status,
           existingReminderId: null,
         },
@@ -198,10 +222,24 @@ async function postEncounter(request: NextRequest): Promise<Response> {
       );
       if (!checkup) return "unknown-reminder" as const;
       reminderId = checkup.id;
-      // Filing a visit as done against a due checkup closes it. Forward-only
-      // and idempotent, so re-filing the same visit changes nothing.
+      // Filing a visit as done against a due checkup closes it — but closing
+      // one re-anchors a preventive-care cadence, which is a write in the
+      // measurements domain. A delegate holding only the health background may
+      // file the visit and may not perform that side effect, so the visit
+      // saves and the closure is reported as skipped rather than done in
+      // silence: somebody who believes a checkup was closed will not look at
+      // it again.
       if (entry.status === "DONE") {
-        await closeCheckupForVisit(tx, checkup, timezone, now);
+        if (visible("measurements")) {
+          await closeCheckupForVisit(tx, checkup, timezone, occurredAt, now);
+        } else {
+          recordUnknownKeys(
+            skips,
+            "checkupClosure",
+            [checkup.id],
+            [checkup.id],
+          );
+        }
       }
     }
 
@@ -251,5 +289,8 @@ async function postEncounter(request: NextRequest): Promise<Response> {
     meta: { status: created.status, kind: created.kind },
   });
 
-  return apiSuccess(toEncounterDTO(created), 201);
+  return apiSuccess(
+    toEncounterDTO(created, undefined, summarizeRestoreSkips(skips)),
+    201,
+  );
 }

@@ -20,17 +20,33 @@ import type {
   MeasurementReminder,
   Practitioner,
 } from "@/generated/prisma/client";
-import type { LinkedTarget } from "@/lib/links";
+import type { RestoreSkipSummary } from "@/lib/export/restore-skips";
 import {
   toPractitionerDTO,
   type PractitionerDTO,
 } from "@/lib/practitioners/dto";
 
+/**
+ * One thing a visit produced, as the caller is allowed to see it.
+ *
+ * `label` and `date` go null together when the caller's grant does not cover
+ * the target's own domain — a health-background delegate may know the visit
+ * produced a lab result without being told which analyte. `redacted` says
+ * which of those nulls is a withholding and which is simply a target with no
+ * date, so a client never has to guess.
+ */
+export interface EncounterLinkDTO {
+  id: string;
+  label: string | null;
+  date: string | null;
+  redacted: boolean;
+}
+
 /** The three link families a visit can carry, each already resolved. */
 export interface EncounterLinksDTO {
-  documents: LinkedTarget[];
-  labResults: LinkedTarget[];
-  conditions: LinkedTarget[];
+  documents: EncounterLinkDTO[];
+  labResults: EncounterLinkDTO[];
+  conditions: EncounterLinkDTO[];
 }
 
 export interface EncounterDTO {
@@ -50,6 +66,17 @@ export interface EncounterDTO {
   reminderNextDueAt: string | null;
   /** Present on the detail response; omitted from the list. */
   links?: EncounterLinksDTO;
+  /**
+   * What the write could not do, named.
+   *
+   * Present on create and edit. `links: 0` is the ordinary answer and says so.
+   * Anything else is a side effect the caller's grant did not reach — today
+   * only the closing of a checkup, which is a measurements-domain write that a
+   * health-background delegate cannot perform. Reported rather than skipped in
+   * silence, because a person who believes a checkup was closed will not look
+   * at it again.
+   */
+  skipped?: RestoreSkipSummary;
   createdAt: string;
   updatedAt: string;
 }
@@ -79,6 +106,7 @@ export type EncounterWithRelations = Encounter & {
 export function toEncounterDTO(
   row: EncounterWithRelations,
   links?: EncounterLinksDTO,
+  skipped?: RestoreSkipSummary,
 ): EncounterDTO {
   return {
     id: row.id,
@@ -90,6 +118,7 @@ export function toEncounterDTO(
     outcome: decryptField(row.outcomeEncrypted, "outcome"),
     reminderNextDueAt: row.reminder?.nextDueAt?.toISOString() ?? null,
     ...(links ? { links } : {}),
+    ...(skipped ? { skipped } : {}),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

@@ -101,6 +101,82 @@ function reminderRow(
   };
 }
 
+/**
+ * The BY-ID family: the published measurement-reminder surface.
+ *
+ * The list reads above answer "what preventive care is due". These answer
+ * "this reminder", by id, and they were the larger hole. An appointment row is
+ * not addressable here at all — it belongs to a visit, is managed through the
+ * visit routes, and is classified under a different sharing domain — so each
+ * of these treats one as not found rather than filtering it out of a list.
+ *
+ * What reaching them actually cost, before the fix:
+ *
+ *   - `complete` and `satisfy` committed the mutation and THEN threw in the
+ *     DTO mapper, answering 500 after the write had already landed. `complete`
+ *     is the documented flow behind the iOS notification's Done button, so
+ *     every appointment push a person acknowledged ended in an error.
+ *   - `PATCH` could give a one-shot a cadence, turning a spent appointment
+ *     into an eternal re-nag that appears in no list, or flip `enabled` back
+ *     on for a cancelled one.
+ *   - `DELETE` hard-deletes, so a delegate holding only the measurements
+ *     domain could destroy a reminder belonging to a visit in the profile
+ *     domain — a cross-domain reach the sharing model refuses everywhere else.
+ *
+ * The count per file is part of the expectation: three of these live in one
+ * module, and a matcher that only asked "does this file mention the exclusion"
+ * would stay green after two of the three lost it.
+ */
+const BY_ID_SITES: ReadonlyArray<{
+  file: string;
+  sites: number;
+  surface: string;
+}> = [
+  {
+    file: "src/app/api/measurement-reminders/[id]/route.ts",
+    sites: 3,
+    surface: "the by-id read, edit and delete verbs",
+  },
+  {
+    file: "src/app/api/measurement-reminders/[id]/complete/route.ts",
+    sites: 1,
+    surface:
+      "the explicit complete action behind the notification's Done button",
+  },
+  {
+    file: "src/app/api/measurement-reminders/[id]/satisfy/route.ts",
+    sites: 1,
+    surface: "the manual satisfy action",
+  },
+  {
+    file: "src/lib/telegram-webhook-handlers.ts",
+    sites: 2,
+    surface: "the chat buttons that mark a reminder done or postpone it",
+  },
+];
+
+describe("an appointment reminder is not addressable by id", () => {
+  it("names a by-id set that is not empty (no vacuous pass)", () => {
+    expect(BY_ID_SITES.length).toBe(4);
+    expect(BY_ID_SITES.reduce((total, entry) => total + entry.sites, 0)).toBe(
+      7,
+    );
+  });
+
+  for (const { file, sites, surface } of BY_ID_SITES) {
+    it(`refuses an ENCOUNTER row on ${surface}`, () => {
+      const matches = read(file).match(EXCLUSION) ?? [];
+      expect(
+        matches.length,
+        `${file} owns ${sites} by-id lookup(s) for ${surface}; ` +
+          `${matches.length} of them exclude ENCOUNTER-origin rows. An ` +
+          "appointment reminder reaching this family commits a write it should " +
+          "have refused, or 500s after committing one.",
+      ).toBe(sites);
+    });
+  }
+});
+
 describe("appointment reminders are excluded from every Vorsorge read", () => {
   it("names a read set that is not empty (no vacuous pass)", () => {
     expect(VORSORGE_READ_SITES.length).toBe(4);

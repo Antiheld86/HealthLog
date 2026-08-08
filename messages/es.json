@@ -6740,6 +6740,7 @@
         "restoreSkippedMoodFactor": "Factor de ánimo",
         "restoreSkippedMoodTag": "Etiqueta de ánimo",
         "restoreSkippedVisitReference": "Referencia de visita",
+        "restoreSkippedCheckupClosure": "Cierre de revisión",
         "docsLink": "Documentación"
       },
       "danger-zone": {
@@ -9927,6 +9928,18 @@
     },
     "anamnesis": {
       "relativeNote": "Una entrada de antecedentes familiares describe a los familiares de esta persona. Añádela solo si querría que quedara registrada aquí."
+    }
+  },
+  "encounters": {
+    "kind": {
+      "routine": "Visita de rutina",
+      "acute": "Visita por urgencia",
+      "specialist": "Visita al especialista",
+      "preventive": "Revisión preventiva",
+      "emergency": "Urgencia",
+      "hospital": "Hospital",
+      "therapy": "Sesión de terapia",
+      "other": "Cita médica"
     }
   }
 }

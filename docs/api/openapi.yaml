@@ -34495,6 +34495,8 @@ components:
             - type: "null"
         links:
           $ref: "#/components/schemas/EncounterLinks"
+        skipped:
+          $ref: "#/components/schemas/EncounterSkipReport"
         createdAt:
           type: string
         updatedAt:
@@ -34587,19 +34589,59 @@ components:
         id:
           type: string
         label:
-          type: string
+          anyOf:
+            - type: string
+            - type: "null"
         date:
           anyOf:
             - type: string
             - type: "null"
+        redacted:
+          type: boolean
       required:
         - id
         - label
         - date
+        - redacted
       additionalProperties: false
-      description: One thing filed against a visit, resolved. The label and date are computed server-side from the target
+      description: "One thing filed against a visit, resolved. The label and date are computed server-side from the target
         itself — a document's title and filing date, a lab result's panel and analyte and draw date, a condition's label
-        and onset — so the client never re-derives them and the two cannot drift.
+        and onset — so the client never re-derives them and the two cannot drift. Both go null together, with `redacted:
+        true`, when the caller's grant does not cover the target's own domain: a visit lives in the health background
+        but points at the vault, the labs and the illness journal, and a grant that opened only the first was never
+        consent for the names in the other three. The link itself is still listed — the caller may know the visit
+        produced a lab result — and `redacted` is what tells a withheld name apart from a target that simply has no
+        date."
+    EncounterSkipReport:
+      type: object
+      properties:
+        catalogueKeys:
+          type: array
+          items:
+            type: object
+            properties:
+              catalogue:
+                type: string
+              key:
+                type: string
+              links:
+                type: number
+            required:
+              - catalogue
+              - key
+              - links
+            additionalProperties: false
+        links:
+          type: number
+      required:
+        - catalogueKeys
+        - links
+      additionalProperties: false
+      description: "What the write could not do, named. `links: 0` with an empty list is the ordinary answer. Anything else is
+        a side effect the caller's grant did not reach — today only `checkupClosure`, the closing of a preventive-care
+        checkup, which is a measurements-domain write a health-background delegate cannot perform. The visit still
+        saves; the checkup stays due and the response says so, because somebody who believes a checkup was closed will
+        not look at it again."
     CreateEncounterEnvelope:
       type: object
       properties:

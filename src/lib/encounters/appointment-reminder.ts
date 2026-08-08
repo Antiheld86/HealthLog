@@ -159,9 +159,10 @@ export async function deleteAppointmentReminder(
 /**
  * What a one-shot appointment reminder's next slot becomes once it has fired.
  *
- * Exported for the test that proves the never-nag property rather than
- * asserting it in prose: the answer must be NULL, and it must come from the
- * same function the cron uses.
+ * Exported for `__tests__/appointment-reminder.test.ts`, which proves the
+ * never-nag property rather than asserting it in prose: the answer must be
+ * NULL, and it must come from the same function the cron uses to advance a
+ * reminder it has just fired.
  */
 export function appointmentNextDueAfterFiring(
   reminder: Pick<

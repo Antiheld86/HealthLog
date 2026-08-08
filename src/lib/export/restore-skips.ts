@@ -39,13 +39,22 @@
  * back — a reminder, which is on the coverage-pending register and never
  * travels, or a document, lab result or condition episode whose id a portable
  * export does not carry.
+ *
+ * The sixth, `checkupClosure`, is not about a restore at all, and it borrows
+ * this shape deliberately rather than growing a second reporting mechanism
+ * beside it. The situation is the same one: something a write was asked to do
+ * could not be done, the record itself survives, and the person is told which
+ * one rather than left to assume it worked. It is filed when a delegate files
+ * a visit against a preventive-care checkup their grant does not reach — the
+ * visit saves, the checkup stays due, and the response says so.
  */
 export type SkippedCatalogue =
   | "cycleSymptom"
   | "illnessSymptom"
   | "moodFactor"
   | "moodTag"
-  | "visitReference";
+  | "visitReference"
+  | "checkupClosure";
 
 /** One key this instance does not know, and the links it cost. */
 export interface SkippedCatalogueKey {

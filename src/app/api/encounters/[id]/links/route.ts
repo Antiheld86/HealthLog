@@ -27,7 +27,10 @@ import {
 } from "@/lib/api-response";
 import { encounterLinkSchema } from "@/lib/validations/encounters";
 import { linkTargets, unlinkTargets } from "@/lib/links";
-import { loadEncounterLinks } from "@/lib/encounters/service";
+import {
+  actingDomainVisibility,
+  loadEncounterLinks,
+} from "@/lib/encounters/service";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -78,7 +81,11 @@ async function handle(
     },
   });
 
-  const links = await loadEncounterLinks(prisma, user.id, id);
+  // Bare `requireAuth()` resolves the caller's OWN record — this route is
+  // not delegable — so there is no narrowed grant to honour and every
+  // domain is the caller's own.
+  const visible = await actingDomainVisibility(prisma, null);
+  const links = await loadEncounterLinks(prisma, user.id, id, visible);
   return apiSuccess({ links, unknown: result.unknownTargetIds });
 }
 

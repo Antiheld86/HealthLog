@@ -6740,6 +6740,7 @@
         "restoreSkippedMoodFactor": "Czynnik nastroju",
         "restoreSkippedMoodTag": "Tag nastroju",
         "restoreSkippedVisitReference": "Odwołanie wizyty",
+        "restoreSkippedCheckupClosure": "Zamknięcie badania",
         "docsLink": "Dokumentacja"
       },
       "danger-zone": {
@@ -9927,6 +9928,18 @@
     },
     "anamnesis": {
       "relativeNote": "Wpis w wywiadzie rodzinnym opisuje bliskich tej osoby. Dodaj go tylko wtedy, gdy chciałaby, żeby został tu zapisany."
+    }
+  },
+  "encounters": {
+    "kind": {
+      "routine": "Wizyta kontrolna",
+      "acute": "Wizyta pilna",
+      "specialist": "Wizyta u specjalisty",
+      "preventive": "Badanie profilaktyczne",
+      "emergency": "Nagły przypadek",
+      "hospital": "Szpital",
+      "therapy": "Sesja terapeutyczna",
+      "other": "Wizyta lekarska"
     }
   }
 }

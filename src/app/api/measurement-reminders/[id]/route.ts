@@ -48,8 +48,13 @@ export const GET = apiHandler(
     const { user } = await requireRecordAuth("read", "measurements");
     const { id } = await params;
 
+    // An appointment reminder is not addressable here. It belongs to a visit,
+    // is managed through the visit routes, and sits in a different sharing
+    // domain — so this family treats one as not found rather than acting on
+    // it. Filtering in the lookup rather than after it is what keeps a write
+    // from committing before the refusal.
     const reminder = await prisma.measurementReminder.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, origin: { not: "ENCOUNTER" } },
     });
     if (!reminder || reminder.userId !== user.id) {
       return apiError("Measurement reminder not found", 404);
@@ -71,8 +76,13 @@ export const PATCH = apiHandler(
     const { user } = await requireRecordAuth("manage", "measurements");
     const { id } = await params;
 
+    // An appointment reminder is not addressable here. It belongs to a visit,
+    // is managed through the visit routes, and sits in a different sharing
+    // domain — so this family treats one as not found rather than acting on
+    // it. Filtering in the lookup rather than after it is what keeps a write
+    // from committing before the refusal.
     const existing = await prisma.measurementReminder.findFirst({
-      where: { id, deletedAt: null },
+      where: { id, deletedAt: null, origin: { not: "ENCOUNTER" } },
     });
     if (!existing || existing.userId !== user.id) {
       return apiError("Measurement reminder not found", 404);
@@ -234,8 +244,15 @@ export const DELETE = apiHandler(
     const { user } = await requireRecordAuth("manage", "measurements");
     const { id } = await params;
 
-    const existing = await prisma.measurementReminder.findUnique({
-      where: { id },
+    // An appointment reminder is not addressable here. It belongs to a visit,
+    // is managed through the visit routes, and sits in a different sharing
+    // domain — so this family treats one as not found rather than acting on
+    // it. Filtering in the lookup rather than after it is what keeps a write
+    // from committing before the refusal.
+    // `findFirst` rather than `findUnique`: the origin is not part of any
+    // unique key, so the predicate cannot ride a unique lookup.
+    const existing = await prisma.measurementReminder.findFirst({
+      where: { id, origin: { not: "ENCOUNTER" } },
     });
     if (!existing || existing.userId !== user.id) {
       return apiError("Measurement reminder not found", 404);

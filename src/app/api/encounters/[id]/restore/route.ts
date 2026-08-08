@@ -17,11 +17,13 @@ import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import { apiSuccess, apiError, getClientIp } from "@/lib/api-response";
+import { encounterKindLabel } from "@/lib/encounters/kind-label";
 import { toEncounterDTO } from "@/lib/encounters/dto";
 import {
   ENCOUNTER_INCLUDE,
+  actingDomainVisibility,
   loadEncounterLinks,
-  resolveTimezone,
+  resolveOwnerNotificationContext,
   shouldHaveReminder,
 } from "@/lib/encounters/service";
 import { reanchorAppointmentReminder } from "@/lib/encounters/appointment-reminder";
@@ -30,7 +32,7 @@ type RouteParams = { params: Promise<{ id: string }> };
 
 export const POST = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireRecordAuth("manage", "profile");
+    const { user, grantId } = await requireRecordAuth("manage", "profile");
 
     const { id } = await params;
     const existing = await prisma.encounter.findUnique({
@@ -42,7 +44,9 @@ export const POST = apiHandler(
     }
 
     if (existing.deletedAt !== null) {
-      const timezone = await resolveTimezone(user.id);
+      const { timezone, locale } = await resolveOwnerNotificationContext(
+        user.id,
+      );
       const now = new Date();
       await prisma.$transaction(async (tx) => {
         await tx.encounter.update({
@@ -66,7 +70,7 @@ export const POST = apiHandler(
                 occurredAt: existing.occurredAt,
                 practitionerName: existing.practitioner?.name ?? null,
                 practitionerLocation: existing.practitioner?.location ?? null,
-                kindLabel: existing.kind,
+                kindLabel: encounterKindLabel(existing.kind, locale),
               },
               timezone,
             );
@@ -79,7 +83,8 @@ export const POST = apiHandler(
       where: { id },
       include: ENCOUNTER_INCLUDE,
     });
-    const links = await loadEncounterLinks(prisma, user.id, id);
+    const visible = await actingDomainVisibility(prisma, grantId);
+    const links = await loadEncounterLinks(prisma, user.id, id, visible);
 
     await auditLog("encounter.visit.restore", {
       userId: user.id,
