@@ -281,7 +281,7 @@ const ROUTE_IMPORTS = import.meta.glob<Record<string, unknown>>(
 
 describe("the complete MANAGE handler matrix", () => {
   it("starts with a non-empty, exact handler inventory", () => {
-    expect(ADMITTED_MUTATING_HANDLERS.length).toBe(74);
+    expect(ADMITTED_MUTATING_HANDLERS.length).toBe(75);
   });
 });
 
@@ -2496,13 +2496,13 @@ describe("the conditions the admissions were granted on", () => {
 describe("the complete MANAGE handler matrix", () => {
   it("registers one strict actor-and-effect driver for every admission", () => {
     const expected = ADMITTED_MUTATING_HANDLERS.map(matrixKey).sort();
-    expect(STRICT_DRIVER_KEYS.size).toBe(74);
+    expect(STRICT_DRIVER_KEYS.size).toBe(75);
     expect([...STRICT_DRIVER_KEYS].sort()).toEqual(expected);
   });
 
   it("executes every registered driver through its owned effect and actor audit", () => {
     const expected = ADMITTED_MUTATING_HANDLERS.map(matrixKey).sort();
-    expect(REAL_EFFECT_KEYS.size).toBe(74);
+    expect(REAL_EFFECT_KEYS.size).toBe(75);
     expect([...REAL_EFFECT_KEYS].sort()).toEqual(expected);
   });
 });
