@@ -107,6 +107,19 @@ export const MOOD_DIMENSIONS: readonly MoodDimension[] = [
   },
 ] as const;
 
+/**
+ * Windows the per-dimension trend reports, in days. Concept §10.1.
+ *
+ * Here rather than beside the calculator that averages over them, because the
+ * chart offering the choice needs the same three numbers and cannot import
+ * that module: it reaches Prisma two hops down, and a client component that
+ * pulled it in would drag the database client into the browser bundle. This
+ * module is pure by construction, which is what makes it the one place both
+ * ends can agree on.
+ */
+export const MOOD_DIMENSION_WINDOWS = [7, 30, 90] as const;
+export type MoodDimensionWindow = (typeof MOOD_DIMENSION_WINDOWS)[number];
+
 /** Lowest value any dimension accepts. */
 export const MOOD_DIMENSION_MIN = 0;
 /** Highest value any dimension accepts. */

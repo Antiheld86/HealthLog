@@ -41,7 +41,6 @@ import {
 } from "@/lib/insights/mood-dimension-series";
 export {
   computeMoodDimensionSeries,
-  MOOD_DIMENSION_WINDOWS,
   type MoodDimensionPoint,
   type MoodDimensionSummary,
 } from "@/lib/insights/mood-dimension-series";

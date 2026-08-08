@@ -14,13 +14,13 @@
  * is indistinguishable from a given one — and five is the answer somebody
  * gives on a genuinely average day.
  */
-import { MOOD_DIMENSIONS, type MoodDimensionKey } from "@/lib/mood/dimensions";
+import {
+  MOOD_DIMENSIONS,
+  MOOD_DIMENSION_WINDOWS,
+  type MoodDimensionKey,
+} from "@/lib/mood/dimensions";
 import { dayKeyAgeInDays } from "@/lib/insights/measurement-freshness";
 import { round } from "@/lib/insights/status-shared";
-
-/** Windows the trend reports, in days. Concept §10.1. */
-export const MOOD_DIMENSION_WINDOWS = [7, 30, 90] as const;
-export type MoodDimensionWindow = (typeof MOOD_DIMENSION_WINDOWS)[number];
 
 /** One day's mean for one dimension. */
 export interface MoodDimensionPoint {

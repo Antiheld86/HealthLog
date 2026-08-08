@@ -12,7 +12,11 @@ import {
 } from "recharts";
 
 import { useTranslations } from "@/lib/i18n/context";
-import { MOOD_DIMENSIONS } from "@/lib/mood/dimensions";
+import {
+  MOOD_DIMENSIONS,
+  MOOD_DIMENSION_WINDOWS,
+  type MoodDimensionWindow,
+} from "@/lib/mood/dimensions";
 import { cn } from "@/lib/utils";
 
 /**
@@ -50,9 +54,6 @@ export interface MoodDimensionSummaryData {
   series: MoodDimensionPointData[];
 }
 
-const WINDOWS = [7, 30, 90] as const;
-type Window = (typeof WINDOWS)[number];
-
 /** One colour per dimension, from the same semantic set the other charts use. */
 const COLOR_BY_KEY: Record<string, string> = {
   a1: "var(--chart-1)",
@@ -64,7 +65,7 @@ const COLOR_BY_KEY: Record<string, string> = {
 
 function meanForWindow(
   summary: MoodDimensionSummaryData,
-  window: Window,
+  window: MoodDimensionWindow,
 ): number | null {
   if (window === 7) return summary.avg7;
   if (window === 30) return summary.avg30;
@@ -77,7 +78,7 @@ export function MoodDimensionTrends({
   dimensions: MoodDimensionSummaryData[];
 }) {
   const { t } = useTranslations();
-  const [window, setWindow] = useState<Window>(30);
+  const [window, setWindow] = useState<MoodDimensionWindow>(30);
 
   const present = dimensions.filter((d) => d.present);
   const missing = dimensions.filter((d) => !d.present);
@@ -115,7 +116,7 @@ export function MoodDimensionTrends({
   return (
     <div className="space-y-3" data-slot="mood-dimension-trends">
       <div className="flex flex-wrap items-center gap-1.5">
-        {WINDOWS.map((option) => (
+        {MOOD_DIMENSION_WINDOWS.map((option) => (
           <button
             key={option}
             type="button"
