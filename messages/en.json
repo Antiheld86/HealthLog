@@ -10145,7 +10145,8 @@
       "documentUpdate": "{name} changed a document",
       "documentDiscard": "{name} discarded a document",
       "medicationIntakeImportFinished": "The dose import {name} started has finished",
-      "medicationOneShotReconciled": "A one-off medication was opened or closed after a dose {name} recorded"
+      "medicationOneShotReconciled": "A one-off medication was opened or closed after a dose {name} recorded",
+      "vaccinationBoosterPlanned": "{name} planned a booster"
     },
     "section": {
       "measurements": {

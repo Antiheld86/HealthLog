@@ -303,6 +303,12 @@ const EXEMPT_ROUTES: ReadonlyArray<string> = [
   "src/app/api/vaccinations/[id]/route.ts",
   "src/app/api/vaccinations/[id]/restore/route.ts",
   "src/app/api/vaccinations/[id]/links/route.ts",
+  // The booster mint and the upload suggestion are the same posture: a restore
+  // or an import that arms a booster, or a document review that files a scan,
+  // must keep working with the surface hidden, so the data routes stay exempt
+  // while the nav entry, the picker and the report leaf hide.
+  "src/app/api/vaccinations/[id]/booster/route.ts",
+  "src/app/api/vaccinations/suggest/route.ts",
 ];
 
 const MODULE_GATE_NEEDLE = "requireModuleEnabled(";

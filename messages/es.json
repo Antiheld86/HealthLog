@@ -10145,7 +10145,8 @@
       "documentUpdate": "{name} cambió un documento",
       "documentDiscard": "{name} descartó un documento",
       "medicationIntakeImportFinished": "La importación de dosis que inició {name} ha terminado",
-      "medicationOneShotReconciled": "Un medicamento de una sola toma se abrió o se cerró tras una dosis que registró {name}"
+      "medicationOneShotReconciled": "Un medicamento de una sola toma se abrió o se cerró tras una dosis que registró {name}",
+      "vaccinationBoosterPlanned": "{name} planificó un refuerzo"
     },
     "section": {
       "measurements": {

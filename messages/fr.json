@@ -10145,7 +10145,8 @@
       "documentUpdate": "{name} a modifié un document",
       "documentDiscard": "{name} a écarté un document",
       "medicationIntakeImportFinished": "L'import de prises lancé par {name} est terminé",
-      "medicationOneShotReconciled": "Un médicament à prise unique a été rouvert ou clos après une prise enregistrée par {name}"
+      "medicationOneShotReconciled": "Un médicament à prise unique a été rouvert ou clos après une prise enregistrée par {name}",
+      "vaccinationBoosterPlanned": "{name} a planifié un rappel"
     },
     "section": {
       "measurements": {

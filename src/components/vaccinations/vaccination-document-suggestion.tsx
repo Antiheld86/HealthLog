@@ -21,6 +21,7 @@ import { Check, Syringe } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { toastWrittenOutcome } from "@/components/outcome/outcome-toast";
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
 import {
   useLinkDocumentToVaccination,
@@ -68,7 +69,7 @@ export function VaccinationDocumentSuggestion({
       {
         onSuccess: () => {
           setLinkedId(candidate.id);
-          toast.success(t("vaccinations.suggestion.linked"));
+          toastWrittenOutcome("success", t("vaccinations.suggestion.linked"));
         },
         onError: () => toast.error(t("vaccinations.suggestion.failed")),
       },

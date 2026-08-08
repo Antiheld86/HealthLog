@@ -19,6 +19,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { toastWrittenOutcome } from "@/components/outcome/outcome-toast";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -84,7 +85,7 @@ export function BoosterMintPrompt({
         id: record.id,
         body: { intervalMonths: months, label: label.trim() || defaultLabel },
       });
-      toast.success(t("vaccinations.booster.planned"));
+      toastWrittenOutcome("success", t("vaccinations.booster.planned"));
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : t("vaccinations.booster.failed"),

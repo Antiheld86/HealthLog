@@ -951,6 +951,14 @@ const DELEGABLE_ROUTES: Record<string, DelegableEntry> = {
     domain: "profile",
     why: "One dose of the record, fetch-then-guard against the resolved user. The pages it resolves are read through the link service, which narrows both ends to the same resolved id, and their names are withheld from a grant that does not reach the vault — the filename of a scanned page is itself the sensitive part.",
   },
+  "app/api/vaccinations/[id]/booster/route.ts": {
+    domain: "profile",
+    why: "Arming the booster reminder a logged dose suggests. The antigen is read from the dose's own catalogue entry server-side, never from the body, so a delegate cannot key a reminder onto an antigen the dose does not contain, and the reminder is minted under the RECORD — it is the owner's booster plan and the owner's phone it rings, which is correct even when a helper transcribes the Impfpass.",
+  },
+  "app/api/vaccinations/suggest/route.ts": {
+    domain: "profile",
+    why: "Which of the record's doses a scanned page dated around a given day belongs to. A read over the same rows the immunization list serves, reduced to a verdict — the caller learns nothing it could not learn from the list itself, and the anchor it passes is a date rather than an id, so it cannot address a row.",
+  },
   "app/api/practitioners/route.ts": {
     domain: "profile",
     why: "The record's own address book of doctors and practices. Record content, not account configuration — it touches no credential, no integration and no notification channel, which is the fence the classification turns on. The create arm is a delegable write.",
@@ -1401,6 +1409,8 @@ const DELEGABLE_WRITE_ROUTES: Record<string, string> = {
     "Adding a doctor or practice to the record's address book. Nothing is unique across accounts here by design, so a delegate adding a practice the owner already has produces a second row rather than a collision with somebody else's namespace.",
   "app/api/vaccinations/route.ts":
     "Logging a dose. Every id the body may carry — the practitioner, the visit, the pages to file it against — is re-narrowed to the resolved record before anything is written, so a delegate cannot attach one record's scan to another's dose. The booster reminders it clears are the RECORD's, which is correct: it is the owner's booster plan, and a helper transcribing an Impfpass is doing exactly the work that should settle it.",
+  "app/api/vaccinations/[id]/booster/route.ts":
+    "Confirming the booster reminder a dose suggests. The reminder is minted under the RECORD and keyed on the antigen the server reads from the dose's catalogue entry, never from the body, so a delegate cannot point it at an antigen the dose does not contain; a second confirmation re-anchors the one reminder rather than minting another.",
   "app/api/medications/[id]/side-effects/route.ts":
     "Recording a side effect. Admitted on one condition, met at the call site: the POST rate bucket keys on the ACTOR, so a delegate burns their own allowance rather than the owner's and cannot collect a fresh one by switching records.",
   "app/api/medications/route.ts":
@@ -1902,7 +1912,7 @@ const ACTOR_ROUTES: Record<string, string> = {
  * record list, one create on the write literal, and the edit/delete pair plus
  * the restore on the manage literal. 215 -> 221.
  */
-const FROZEN_ENTRY_COUNT = 221;
+const FROZEN_ENTRY_COUNT = 224;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —
@@ -2663,7 +2673,7 @@ describe("(g) the MANAGE route set is frozen", () => {
 
   it("keeps the admitted mutation inventory complete and discoverable", () => {
     expect(ADMITTED_MUTATING_HANDLERS.length).toBeGreaterThan(0);
-    expect(ADMITTED_MUTATING_HANDLERS.length).toBe(74);
+    expect(ADMITTED_MUTATING_HANDLERS.length).toBe(75);
 
     const expected = ADMITTED_MUTATING_HANDLERS.map(
       ({ handlerModule, action, level }) =>

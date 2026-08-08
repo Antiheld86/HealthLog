@@ -10145,7 +10145,8 @@
       "documentUpdate": "{name} hat ein Dokument geändert",
       "documentDiscard": "{name} hat ein Dokument verworfen",
       "medicationIntakeImportFinished": "Der von {name} gestartete Einnahme-Import ist fertig",
-      "medicationOneShotReconciled": "Ein einmaliges Medikament wurde nach einer Einnahme von {name} geöffnet oder geschlossen"
+      "medicationOneShotReconciled": "Ein einmaliges Medikament wurde nach einer Einnahme von {name} geöffnet oder geschlossen",
+      "vaccinationBoosterPlanned": "{name} hat eine Auffrischung geplant"
     },
     "section": {
       "measurements": {

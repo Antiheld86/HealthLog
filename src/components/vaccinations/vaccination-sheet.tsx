@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { ResponsiveSheet } from "@/components/ui/responsive-sheet";
+import { toastWrittenOutcome } from "@/components/outcome/outcome-toast";
 import { useTranslations } from "@/lib/i18n/context";
 import { useVaccinationMutations, type Vaccination } from "./use-vaccinations";
 import {
@@ -73,11 +74,11 @@ export function VaccinationSheet({
     try {
       if (isEdit) {
         await update.mutateAsync({ id: vaccination.id, body });
-        toast.success(t("vaccinations.updated"));
+        toastWrittenOutcome("success", t("vaccinations.updated"));
         onOpenChange(false);
       } else {
         const created = await create.mutateAsync(body);
-        toast.success(t("vaccinations.created"));
+        toastWrittenOutcome("success", t("vaccinations.created"));
         onOpenChange(false);
         onCreated?.(created);
       }

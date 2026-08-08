@@ -932,7 +932,7 @@ paths:
                       type: number
                       const: 2
                     leaves:
-                      maxItems: 92
+                      maxItems: 93
                       type: array
                       items:
                         type: string
@@ -1037,7 +1037,7 @@ paths:
                       type: number
                       const: 2
                     leaves:
-                      maxItems: 92
+                      maxItems: 93
                       type: array
                       items:
                         type: string
@@ -16157,7 +16157,7 @@ components:
           type: number
           const: 2
         leaves:
-          maxItems: 92
+          maxItems: 93
           type: array
           items:
             type: string

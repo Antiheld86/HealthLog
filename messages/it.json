@@ -10145,7 +10145,8 @@
       "documentUpdate": "{name} ha modificato un documento",
       "documentDiscard": "{name} ha scartato un documento",
       "medicationIntakeImportFinished": "L'importazione delle dosi avviata da {name} è terminata",
-      "medicationOneShotReconciled": "Un farmaco monodose è stato riaperto o chiuso dopo una dose registrata da {name}"
+      "medicationOneShotReconciled": "Un farmaco monodose è stato riaperto o chiuso dopo una dose registrata da {name}",
+      "vaccinationBoosterPlanned": "{name} ha pianificato un richiamo"
     },
     "section": {
       "measurements": {

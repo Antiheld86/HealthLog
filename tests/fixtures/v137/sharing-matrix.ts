@@ -434,6 +434,14 @@ export const ADMITTED_MUTATING_HANDLERS = [
     "restore",
   ),
   handler(
+    "app/api/vaccinations/[id]/booster/route.ts",
+    "/api/vaccinations/[id]/booster",
+    "POST",
+    "profile",
+    "write",
+    "upsert",
+  ),
+  handler(
     "app/api/illness/episodes/[id]/day-logs/route.ts",
     "/api/illness/episodes/[id]/day-logs",
     "POST",

@@ -10145,7 +10145,8 @@
       "documentUpdate": "{name} zmienił dokument",
       "documentDiscard": "{name} odrzucił dokument",
       "medicationIntakeImportFinished": "Import przyjęć rozpoczęty przez {name} zakończył się",
-      "medicationOneShotReconciled": "Lek jednorazowy został otwarty lub zamknięty po dawce zapisanej przez {name}"
+      "medicationOneShotReconciled": "Lek jednorazowy został otwarty lub zamknięty po dawce zapisanej przez {name}",
+      "vaccinationBoosterPlanned": "{name} zaplanował dawkę przypominającą"
     },
     "section": {
       "measurements": {
