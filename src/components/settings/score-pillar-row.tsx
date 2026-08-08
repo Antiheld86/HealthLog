@@ -60,7 +60,7 @@ export function ScorePillarRow({
       data-domain={row.domain}
       data-counts={row.counts ? "true" : "false"}
       data-eligibility={row.eligibility}
-      className="flex min-h-11 items-center justify-between gap-4"
+      className="flex min-h-11 items-center justify-between gap-4 py-3"
     >
       <div className="min-w-0 space-y-0.5">
         <Label htmlFor={inputId} className="text-sm font-medium">

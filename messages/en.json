@@ -5207,13 +5207,6 @@
         "axis": {
           "countsFor": "Count {pillar} toward the score"
         },
-        "domain": {
-          "cardiometabolic": "Heart and metabolism",
-          "activity": "Activity",
-          "sleep": "Sleep",
-          "adiposity": "Body shape",
-          "wellbeing": "Wellbeing"
-        },
         "state": {
           "counting": "Counting toward your score",
           "waiting": "Selected, waiting for data",
@@ -9764,9 +9757,11 @@
       "accessReadLabel": "Can view",
       "accessReadCapability": "They can read everything this record shares. They cannot add or change anything.",
       "accessWriteLabel": "Can view and add",
-      "accessWriteCapability": "They can also add to the record: readings, lab results, a new analyte to track, an illness entry, a side effect against a drug, a new medication, and marking a dose taken or skipped. They cannot edit or delete anything, not even what they added, and they cannot defer one of your reminders. Only you can.",
+      "accessWriteCapability": "They can add to the record but cannot edit or delete anything, not even what they added.",
+      "accessWriteDetail": "They can add readings, lab results, a new analyte to track, an illness entry, a side effect against a drug, a new medication, and mark a dose taken or skipped. They cannot edit or delete anything, not even what they added, and they cannot defer one of your reminders. Only you can.",
       "accessManageLabel": "Can manage",
-      "accessManageCapability": "They can add, change and remove entries in your record, including ones you entered yourself, and they can read the insights generated from it. They cannot change your login, your security settings, your connections, or who else has access. You can end this at any time.",
+      "accessManageCapability": "They can add, change and remove entries, including ones you entered yourself.",
+      "accessManageDetail": "They can also read the insights generated from your record. They cannot change your login, your security settings, your connections, or who else has access. You can end this at any time.",
       "manageStepUpNote": "Offering this asks for your second factor, so it can only be done in a browser.",
       "scopeLegend": "What they can open",
       "scopeAllLabel": "Entire record",
@@ -9778,6 +9773,7 @@
       "scopeAggregateNote": "The dashboard overview, health score and daily digest only appear when the entire record is shared.",
       "scopeDocumentsNote": "A document can contain anything. Share this only if they may read all of it.",
       "scopeEmptyHint": "Pick at least one section, or go back to sharing the entire record.",
+      "scopeChooseHint": "Choose whether to share the entire record or only selected sections.",
       "expiresLabel": "Access ends on (optional)",
       "expiresHint": "Leave this empty for access that lasts until somebody ends it. A date here is checked on every request, so access stops on its own at the end of that day.",
       "submit": "Send invitation",

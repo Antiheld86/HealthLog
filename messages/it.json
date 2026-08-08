@@ -5207,13 +5207,6 @@
         "axis": {
           "countsFor": "Conta {pillar} nel punteggio"
         },
-        "domain": {
-          "cardiometabolic": "Cuore e metabolismo",
-          "activity": "Attività",
-          "sleep": "Sonno",
-          "adiposity": "Forma corporea",
-          "wellbeing": "Benessere"
-        },
         "state": {
           "counting": "Conta nel tuo punteggio",
           "waiting": "Selezionato, in attesa di dati",
@@ -9764,9 +9757,11 @@
       "accessReadLabel": "Può vedere",
       "accessReadCapability": "Può leggere tutto ciò che questa cartella condivide. Non può aggiungere né modificare nulla.",
       "accessWriteLabel": "Può vedere e aggiungere",
-      "accessWriteCapability": "Può anche aggiungere alla cartella: misurazioni, risultati di laboratorio, un nuovo analita da seguire, una voce di malattia, un effetto collaterale di un farmaco, un nuovo farmaco e segnare una dose come presa o saltata. Non può modificare né eliminare nulla, nemmeno ciò che ha aggiunto, e non può rimandare uno dei tuoi promemoria. Solo tu puoi.",
+      "accessWriteCapability": "Può aggiungere alla cartella, ma non può modificare né eliminare nulla, nemmeno ciò che ha aggiunto.",
+      "accessWriteDetail": "Può aggiungere misurazioni, risultati di laboratorio, un nuovo analita da seguire, una voce di malattia, un effetto collaterale di un farmaco e un nuovo farmaco, e segnare una dose come presa o saltata. Non può modificare né eliminare nulla, nemmeno ciò che ha aggiunto, e non può rimandare uno dei tuoi promemoria. Solo tu puoi.",
       "accessManageLabel": "Può gestire",
-      "accessManageCapability": "Può aggiungere, modificare ed eliminare voci della tua cartella, comprese quelle inserite da te, e può leggere le analisi generate a partire da essa. Non può cambiare il tuo accesso, le tue impostazioni di sicurezza, i tuoi servizi collegati né chi altro ha accesso. Puoi terminare tutto questo in qualsiasi momento.",
+      "accessManageCapability": "Può aggiungere, modificare ed eliminare voci, comprese quelle inserite da te.",
+      "accessManageDetail": "Può anche leggere le analisi generate dalla tua cartella. Non può cambiare il tuo accesso, le tue impostazioni di sicurezza, i tuoi servizi collegati né chi altro ha accesso. Puoi terminare tutto questo in qualsiasi momento.",
       "manageStepUpNote": "Per offrirlo viene richiesto il tuo secondo fattore, quindi si può fare solo da browser.",
       "scopeLegend": "Che cosa può aprire",
       "scopeAllLabel": "Intera cartella",
@@ -9778,6 +9773,7 @@
       "scopeAggregateNote": "La panoramica della dashboard, il punteggio di salute e il riepilogo giornaliero compaiono solo se viene condivisa l'intera cartella.",
       "scopeDocumentsNote": "Un documento può contenere qualsiasi cosa. Condividi questa sezione solo se quella persona può leggere tutto.",
       "scopeEmptyHint": "Scegli almeno una sezione oppure torna a condividere l'intera cartella.",
+      "scopeChooseHint": "Scegli se condividere l'intera cartella o solo alcune sezioni.",
       "expiresLabel": "L'accesso termina il (facoltativo)",
       "expiresHint": "Lascia vuoto per un accesso che dura finché qualcuno non lo termina. Una data qui viene controllata a ogni richiesta, quindi l'accesso si interrompe da solo alla fine di quel giorno.",
       "submit": "Invia invito",

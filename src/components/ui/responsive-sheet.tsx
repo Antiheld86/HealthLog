@@ -320,7 +320,16 @@ export function ResponsiveSheet({
             // Content that genuinely needs to scroll sideways (a wide table)
             // owns its own `overflow-x-auto` wrapper — that is the correct
             // place for it, and it still works inside a clipped port.
-            "flex min-h-0 flex-1 flex-col gap-4 overflow-x-clip overflow-y-auto",
+            //
+            // `-mr-3 pr-3` reclaims a 12 px scroll gutter from the dialog's own
+            // `p-6` padding: the vertical scrollbar would otherwise render flush
+            // against the body's right edge, exactly where a right-aligned child
+            // (a slider's high anchor label) sits, painting on top of the last
+            // characters. The margin gives the padding straight back, so content
+            // alignment is unchanged — the scrollbar just lives beside the text
+            // now, not on it. The mobile Sheet branch has its own `p-4` and
+            // needs nothing.
+            "-mr-3 flex min-h-0 flex-1 flex-col gap-4 overflow-x-clip overflow-y-auto pr-3",
             bodyClassName,
           )}
         >

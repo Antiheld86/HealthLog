@@ -105,7 +105,11 @@ describe("<SliderField>", () => {
   it("offers to clear an answer only when there is one to clear", () => {
     const set = field({ onClear: () => {}, clearLabel: "zurücksetzen" });
     expect(set).toContain('data-slot="slider-field-clear"');
-    expect(set).toContain("zurücksetzen");
+    // The clear affordance is icon-only: the label rides the accessible name,
+    // not visible text beside the value, so a set slider never reads "4 leeren".
+    expect(set).toContain('aria-label="zurücksetzen"');
+    // The value span holds only the bare number, never the clear-action label.
+    expect(set).toMatch(/data-slot="slider-field-value"[^>]*>7<\/span>/);
 
     const unanswered = field({
       value: null,

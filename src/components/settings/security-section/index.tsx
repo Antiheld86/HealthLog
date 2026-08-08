@@ -50,13 +50,6 @@ export function SecuritySection() {
     <div className="space-y-6">
       {showNudge && <PasskeyUpgradeNudge />}
 
-      {/* The password leads, and it renders before the factor status has
-          landed — it depends on nothing this page fetches. It is also the
-          only way to change a password now that the Account card is gone, so
-          a `/api/auth/me/mfa` that never answers must not take it down with
-          the cards that do need it. */}
-      <PasswordCard />
-
       {isLoading || !status ? (
         <>
           <Skeleton className="h-40 w-full rounded-xl" />
@@ -75,6 +68,14 @@ export function SecuritySection() {
           <PasskeyListSection isAuthenticated={isAuthenticated} />
         </>
       )}
+
+      {/* The password comes last: authenticator, then security keys, then
+          passkeys, then the password. It sits OUTSIDE the status conditional
+          on purpose — it depends on nothing this page fetches and is the only
+          way to change a password now that the Account card is gone, so a
+          `/api/auth/me/mfa` that never answers must not take it down with the
+          cards that do need the status. */}
+      <PasswordCard />
     </div>
   );
 }

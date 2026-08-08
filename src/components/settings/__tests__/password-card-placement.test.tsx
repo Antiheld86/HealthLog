@@ -72,12 +72,28 @@ describe("change-password card placement", () => {
     expect(render(<PasswordCard />)).toContain(SLOT);
   });
 
-  it("is mounted by Settings → Security before the factor status lands", () => {
+  it("is mounted by Settings → Security even before the factor status lands", () => {
     // The mocked query never resolves, which is the case that matters: the
     // MFA read is still in flight (or failing) and the password card is
-    // reachable regardless.
+    // reachable regardless — it sits outside the status conditional.
     const html = render(<SecuritySection />);
     expect(html).toContain(SLOT);
+  });
+
+  it("orders the password card last, after the passkey list", () => {
+    // The section reads authenticator → security keys → passkeys → password.
+    // The order lives in one component and the resolved cards only render once
+    // the status query settles (the render mock keeps it in flight), so the
+    // guard reads the source: the password card must come after the passkey
+    // list. Re-reported once as an order regression; this pins it.
+    const source = readFileSync(
+      join(ROOT, "src/components/settings/security-section/index.tsx"),
+      "utf8",
+    );
+    const passkeyIdx = source.indexOf("<PasskeyListSection");
+    const passwordIdx = source.indexOf("<PasswordCard");
+    expect(passkeyIdx).toBeGreaterThan(-1);
+    expect(passwordIdx).toBeGreaterThan(passkeyIdx);
   });
 
   it("has exactly one home in the tree", () => {
