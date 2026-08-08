@@ -198,6 +198,12 @@ function catalogueLabel(
   if (catalogue === "moodTag") {
     return t("admin.section.backups.restoreSkippedMoodTag");
   }
+  if (catalogue === "visitReference") {
+    return t("admin.section.backups.restoreSkippedVisitReference");
+  }
+  if (catalogue === "checkupClosure") {
+    return t("admin.section.backups.restoreSkippedCheckupClosure");
+  }
   return t("admin.section.backups.restoreSkippedMoodFactor");
 }
 

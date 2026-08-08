@@ -72,6 +72,12 @@ export function recordActivityVerbLine(
       return t("recordSharing.activityVerb.familyHistoryCreate", { name });
     case "illness.episode.create":
       return t("recordSharing.activityVerb.illnessEpisodeCreate", { name });
+    case "encounter.visit.create":
+      return t("recordSharing.activityVerb.encounterVisitCreate", { name });
+    case "practitioner.contact.create":
+      return t("recordSharing.activityVerb.practitionerContactCreate", {
+        name,
+      });
     case "biomarker.create":
       return t("recordSharing.activityVerb.biomarkerCreate", { name });
     case "customMetricEntry.create":
@@ -174,6 +180,25 @@ export function recordActivityVerbLine(
       return t("recordSharing.activityVerb.illnessEpisodeRestore", { name });
     case "illness.day-log.upsert":
       return t("recordSharing.activityVerb.illnessDayLogUpsert", { name });
+
+    case "encounter.visit.update":
+      return t("recordSharing.activityVerb.encounterVisitUpdate", { name });
+    case "encounter.visit.delete":
+      return t("recordSharing.activityVerb.encounterVisitDelete", { name });
+    case "encounter.visit.restore":
+      return t("recordSharing.activityVerb.encounterVisitRestore", { name });
+    case "practitioner.contact.update":
+      return t("recordSharing.activityVerb.practitionerContactUpdate", {
+        name,
+      });
+    case "practitioner.contact.delete":
+      return t("recordSharing.activityVerb.practitionerContactDelete", {
+        name,
+      });
+    case "practitioner.contact.restore":
+      return t("recordSharing.activityVerb.practitionerContactRestore", {
+        name,
+      });
 
     case "medication.update":
       return t("recordSharing.activityVerb.medicationUpdate", { name });

@@ -6872,6 +6872,8 @@
         "restoreSkippedIllnessSymptom": "Symptôme de maladie",
         "restoreSkippedMoodFactor": "Facteur d'humeur",
         "restoreSkippedMoodTag": "Étiquette d'humeur",
+        "restoreSkippedVisitReference": "Référence de visite",
+        "restoreSkippedCheckupClosure": "Clôture d'un examen",
         "docsLink": "Documentation"
       },
       "danger-zone": {
@@ -9937,6 +9939,14 @@
       "illnessEpisodeDelete": "{name} a supprimé une maladie",
       "illnessEpisodeResolve": "{name} a marqué une maladie comme terminée",
       "illnessEpisodeRestore": "{name} a restauré une maladie",
+      "encounterVisitCreate": "{name} a ajouté une consultation",
+      "encounterVisitUpdate": "{name} a modifié une consultation",
+      "encounterVisitDelete": "{name} a supprimé une consultation",
+      "encounterVisitRestore": "{name} a restauré une consultation",
+      "practitionerContactCreate": "{name} a ajouté un cabinet au carnet d'adresses",
+      "practitionerContactUpdate": "{name} a modifié une entrée du carnet d'adresses",
+      "practitionerContactDelete": "{name} a supprimé une entrée du carnet d'adresses",
+      "practitionerContactRestore": "{name} a restauré une entrée du carnet d'adresses",
       "illnessDayLogUpsert": "{name} a enregistré une journée de maladie",
       "medicationUpdate": "{name} a modifié un médicament",
       "medicationDelete": "{name} a supprimé un médicament",
@@ -10012,7 +10022,7 @@
       },
       "profile": {
         "label": "Antécédents de santé",
-        "detail": "Allergies, antécédents familiaux et les informations de votre profil de santé."
+        "detail": "Allergies, antécédents familiaux, les informations de votre profil de santé, ainsi que vos consultations et cabinets."
       },
       "illness": {
         "label": "Maladies",
@@ -10051,6 +10061,18 @@
     },
     "anamnesis": {
       "relativeNote": "Un antécédent familial décrit les proches de cette personne. Ne l'ajoutez que si elle voudrait le voir consigné ici."
+    }
+  },
+  "encounters": {
+    "kind": {
+      "routine": "Consultation de routine",
+      "acute": "Consultation urgente",
+      "specialist": "Consultation spécialisée",
+      "preventive": "Examen de prévention",
+      "emergency": "Urgence",
+      "hospital": "Hôpital",
+      "therapy": "Séance de thérapie",
+      "other": "Rendez-vous médical"
     }
   }
 }

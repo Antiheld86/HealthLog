@@ -135,6 +135,13 @@ export const BACKED_UP_MODELS = [
   "DocumentConditionLink",
   "ExtractedFact",
 
+  // ── Visits ────────────────────────────────────────────────────────────────
+  "Practitioner",
+  "Encounter",
+  "EncounterDocumentLink",
+  "EncounterLabLink",
+  "EncounterConditionLink",
+
   // ── Coach ─────────────────────────────────────────────────────────────────
   "CoachConversation",
   "CoachMessage",
@@ -177,6 +184,12 @@ export const BACKUP_WRITER_FILES: readonly string[] = [
   "src/lib/export/profile-backup.ts",
   "src/lib/export/intraday-profile-backup.ts",
   "src/lib/export/health-score-backup.ts",
+  // Visits, the address book and the three link tables. Each model reads
+  // through its OWN delegate here rather than riding a relation, because
+  // `documentLinks` is a field name on two different models and a
+  // relation-shaped proof would be attributed to whichever one a matcher found
+  // first — the `symptomLinks` confusion, avoided by construction.
+  "src/lib/export/visits-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 
@@ -185,6 +198,7 @@ export const BACKUP_RESTORE_FILES: readonly string[] = [
   "src/lib/export/profile-backup.ts",
   "src/lib/export/intraday-profile-backup.ts",
   "src/lib/export/health-score-backup.ts",
+  "src/lib/export/visits-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 
@@ -237,6 +251,17 @@ export const TWO_ENDED_MODELS = [
   "Workout",
   "NutrientIntakeDay",
   "InboundDocument",
+  // Visits travel both ways from the release that introduces them. Two
+  // COVERAGE_PENDING neighbours already say what the alternative costs:
+  // reminders restore silent, and the filing between documents and conditions
+  // is lost. Leaving the visit links pending would return visits and documents
+  // with nothing between them — the same loss, one layer deeper — so the links
+  // land carried rather than owed.
+  "Practitioner",
+  "Encounter",
+  "EncounterDocumentLink",
+  "EncounterLabLink",
+  "EncounterConditionLink",
 ] as const;
 
 /** One model claimed to travel both ways. */

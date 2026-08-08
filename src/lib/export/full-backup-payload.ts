@@ -38,6 +38,12 @@ import {
   type HealthScoreBackupSection,
 } from "@/lib/export/health-score-backup";
 import {
+  buildVisitsBackupSection,
+  countVisitsBackupSection,
+  type VisitsBackupCounts,
+  type VisitsBackupSection,
+} from "@/lib/export/visits-backup";
+import {
   buildIntradayProfileBackupSection,
   countIntradayProfileBackupSection,
   type IntradayProfileBackupCounts,
@@ -49,7 +55,8 @@ export interface FullBackupCounts
     RecordsBackupCounts,
     ProfileBackupCounts,
     IntradayProfileBackupCounts,
-    HealthScoreBackupCounts {
+    HealthScoreBackupCounts,
+    VisitsBackupCounts {
   measurements: number;
   medications: number;
   intakeEvents: number;
@@ -261,6 +268,7 @@ export async function buildFullBackupPayload(
     profile,
     intradayProfiles,
     healthScoreRecords,
+    visits,
     nutrientDays,
   ] = await Promise.all([
     disasterRecovery
@@ -388,6 +396,12 @@ export async function buildFullBackupPayload(
     buildHealthScoreBackupSection(prisma, userId, {
       purpose: disasterRecovery ? "disaster-recovery" : "portable-export",
     }),
+    // Visits, the address book behind them, and the three link tables. Both
+    // ends live in `src/lib/export/visits-backup.ts` beside each other, so a
+    // grep of the restore route alone will not find them.
+    buildVisitsBackupSection(prisma, userId, {
+      purpose: disasterRecovery ? "disaster-recovery" : "portable-export",
+    }),
     // Nutrient day totals were absent from every export path, which
     // contradicted the schema's own reason for denormalising the unit column
     // ("rows stay self-describing in exports even if the catalog ever drifts").
@@ -414,6 +428,7 @@ export async function buildFullBackupPayload(
   const profileSection: ProfileBackupSection = profile;
   const intradaySection: IntradayProfileBackupSection = intradayProfiles;
   const healthScoreSection: HealthScoreBackupSection = healthScoreRecords;
+  const visitsSection: VisitsBackupSection = visits;
 
   const payload = {
     schemaVersion: BACKUP_SCHEMA_VERSION,
@@ -643,6 +658,7 @@ export async function buildFullBackupPayload(
     ...profileSection,
     ...intradaySection,
     ...healthScoreSection,
+    ...visitsSection,
     nutrientDays: nutrientDays.map((n) => ({
       day: n.day,
       nutrient: n.nutrient,
@@ -670,6 +686,7 @@ export async function buildFullBackupPayload(
       ...countProfileBackupSection(profile),
       ...countIntradayProfileBackupSection(intradayProfiles),
       ...countHealthScoreBackupSection(healthScoreRecords),
+      ...countVisitsBackupSection(visits),
     },
   };
 }

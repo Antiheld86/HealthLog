@@ -6872,6 +6872,8 @@
         "restoreSkippedIllnessSymptom": "Objaw choroby",
         "restoreSkippedMoodFactor": "Czynnik nastroju",
         "restoreSkippedMoodTag": "Tag nastroju",
+        "restoreSkippedVisitReference": "Odwołanie wizyty",
+        "restoreSkippedCheckupClosure": "Zamknięcie badania",
         "docsLink": "Dokumentacja"
       },
       "danger-zone": {
@@ -9937,6 +9939,14 @@
       "illnessEpisodeDelete": "{name} usunął wpis o chorobie",
       "illnessEpisodeResolve": "{name} oznaczył chorobę jako zakończoną",
       "illnessEpisodeRestore": "{name} przywrócił wpis o chorobie",
+      "encounterVisitCreate": "{name} dodał wizytę lekarską",
+      "encounterVisitUpdate": "{name} zmienił wizytę lekarską",
+      "encounterVisitDelete": "{name} usunął wizytę lekarską",
+      "encounterVisitRestore": "{name} przywrócił wizytę lekarską",
+      "practitionerContactCreate": "{name} dodał gabinet do książki adresowej",
+      "practitionerContactUpdate": "{name} zmienił wpis w książce adresowej",
+      "practitionerContactDelete": "{name} usunął wpis w książce adresowej",
+      "practitionerContactRestore": "{name} przywrócił wpis w książce adresowej",
       "illnessDayLogUpsert": "{name} zapisał dzień choroby",
       "medicationUpdate": "{name} zmienił lek",
       "medicationDelete": "{name} usunął lek",
@@ -10012,7 +10022,7 @@
       },
       "profile": {
         "label": "Historia zdrowia",
-        "detail": "Alergie, wywiad rodzinny i dane z Twojego profilu zdrowia."
+        "detail": "Alergie, wywiad rodzinny, dane z Twojego profilu zdrowotnego oraz wizyty lekarskie i gabinety."
       },
       "illness": {
         "label": "Choroby",
@@ -10051,6 +10061,18 @@
     },
     "anamnesis": {
       "relativeNote": "Wpis w wywiadzie rodzinnym opisuje bliskich tej osoby. Dodaj go tylko wtedy, gdy chciałaby, żeby został tu zapisany."
+    }
+  },
+  "encounters": {
+    "kind": {
+      "routine": "Wizyta kontrolna",
+      "acute": "Wizyta pilna",
+      "specialist": "Wizyta u specjalisty",
+      "preventive": "Badanie profilaktyczne",
+      "emergency": "Nagły przypadek",
+      "hospital": "Szpital",
+      "therapy": "Sesja terapeutyczna",
+      "other": "Wizyta lekarska"
     }
   }
 }

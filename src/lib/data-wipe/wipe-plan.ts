@@ -80,6 +80,17 @@ export const WIPE_MODELS = [
   "MoodReminderDispatch",
   "MoodTagHidden",
 
+  // ── Visits ──────────────────────────────────────────────────────────────
+  // The three link tables cascade from the encounter AND from the far side
+  // they point at — a lab result, a document, a condition episode — so they
+  // are deleted before any of those, or their per-model counts read zero on an
+  // audit row that claims to say what was removed. The encounter follows its
+  // own links; the address book it points at is a parent and goes last.
+  "EncounterDocumentLink",
+  "EncounterLabLink",
+  "EncounterConditionLink",
+  "Encounter",
+
   // ── Clinical record ─────────────────────────────────────────────────────
   "MentalHealthAssessment",
   "LabResult",
@@ -192,6 +203,9 @@ export const WIPE_MODELS = [
   "IllnessEpisode",
   "Workout",
   "InboundDocument",
+  // Encounters point here with SetNull, so the address book outlives the
+  // visits it is attached to and is removed after them.
+  "Practitioner",
   "ApiToken",
 ] as const;
 

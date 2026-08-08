@@ -112,4 +112,43 @@ describe("findSatisfyingEvent", () => {
     });
     expect(at).toBeNull();
   });
+
+  it("never auto-satisfies a booked visit, whatever landed", async () => {
+    // An appointment reminder is free-text by construction (there is nothing a
+    // person could measure that means "you went"), and the free-text arm above
+    // resolves from ANY lab result. Left alone, a routine blood panel would
+    // mark next month's cardiology appointment as attended and silence it.
+    //
+    // Going is the only thing that satisfies a visit, and the visit routes are
+    // where that is recorded, so this matcher must refuse the row outright
+    // rather than look for evidence it cannot have.
+    const takenAt = new Date("2026-07-04T09:00:00Z");
+    const prisma = makePrisma({ lab: { takenAt } });
+
+    const at = await findSatisfyingEvent(prisma as never, "u1", {
+      ...base,
+      measurementType: null,
+      origin: "ENCOUNTER",
+    });
+
+    expect(at).toBeNull();
+    // Refused before the query, not filtered after it: an appointment is not a
+    // question this matcher should be asking the database.
+    expect(prisma.labResult.findFirst).not.toHaveBeenCalled();
+    expect(prisma.measurement.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("still auto-satisfies an ordinary free-text checkup", async () => {
+    // The counterpart, so the refusal above cannot be "never resolve anything".
+    const takenAt = new Date("2026-07-04T09:00:00Z");
+    const prisma = makePrisma({ lab: { takenAt } });
+
+    const at = await findSatisfyingEvent(prisma as never, "u1", {
+      ...base,
+      measurementType: null,
+      origin: "VORSORGE",
+    });
+
+    expect(at).toEqual(takenAt);
+  });
 });

@@ -6872,6 +6872,8 @@
         "restoreSkippedIllnessSymptom": "Síntoma de enfermedad",
         "restoreSkippedMoodFactor": "Factor de ánimo",
         "restoreSkippedMoodTag": "Etiqueta de ánimo",
+        "restoreSkippedVisitReference": "Referencia de visita",
+        "restoreSkippedCheckupClosure": "Cierre de revisión",
         "docsLink": "Documentación"
       },
       "danger-zone": {
@@ -9937,6 +9939,14 @@
       "illnessEpisodeDelete": "{name} eliminó una enfermedad",
       "illnessEpisodeResolve": "{name} marcó una enfermedad como terminada",
       "illnessEpisodeRestore": "{name} restauró una enfermedad",
+      "encounterVisitCreate": "{name} añadió una visita médica",
+      "encounterVisitUpdate": "{name} editó una visita médica",
+      "encounterVisitDelete": "{name} eliminó una visita médica",
+      "encounterVisitRestore": "{name} restauró una visita médica",
+      "practitionerContactCreate": "{name} añadió una consulta a la agenda",
+      "practitionerContactUpdate": "{name} editó una entrada de la agenda",
+      "practitionerContactDelete": "{name} eliminó una entrada de la agenda",
+      "practitionerContactRestore": "{name} restauró una entrada de la agenda",
       "illnessDayLogUpsert": "{name} registró un día de enfermedad",
       "medicationUpdate": "{name} cambió un medicamento",
       "medicationDelete": "{name} eliminó un medicamento",
@@ -10012,7 +10022,7 @@
       },
       "profile": {
         "label": "Antecedentes de salud",
-        "detail": "Alergias, antecedentes familiares y los datos de tu perfil de salud."
+        "detail": "Alergias, antecedentes familiares, los datos de tu perfil de salud y tus visitas médicas y consultas."
       },
       "illness": {
         "label": "Enfermedades",
@@ -10051,6 +10061,18 @@
     },
     "anamnesis": {
       "relativeNote": "Una entrada de antecedentes familiares describe a los familiares de esta persona. Añádela solo si querría que quedara registrada aquí."
+    }
+  },
+  "encounters": {
+    "kind": {
+      "routine": "Visita de rutina",
+      "acute": "Visita por urgencia",
+      "specialist": "Visita al especialista",
+      "preventive": "Revisión preventiva",
+      "emergency": "Urgencia",
+      "hospital": "Hospital",
+      "therapy": "Sesión de terapia",
+      "other": "Cita médica"
     }
   }
 }

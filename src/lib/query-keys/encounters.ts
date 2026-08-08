@@ -1,0 +1,46 @@
+/**
+ * Query keys — visits and the address book behind them.
+ * Part of the centralized factory; aggregated in `./index.ts`.
+ *
+ * These exist before any client reads them, because the in-repo
+ * `healthlog/queryKey-factory` rule errors on a bare array: the first
+ * component that lists visits cannot compile without a slot here. Same key
+ * with a different `queryFn` shape silently poisons the cache, which is the
+ * whole reason the factory is the only legal source.
+ *
+ * There is deliberately no matching `invalidateUserVisits` in
+ * `src/lib/cache/invalidate.ts`. That module evicts SERVER-side cached
+ * payloads, and no cached payload reads a visit: the dashboard snapshot, the
+ * insights targets and the analytics buckets are all computed from
+ * measurements, medications and mood. Adding a sweep over caches nothing reads
+ * would be a placeholder that looks like coverage. It belongs in the release
+ * that puts visits into one of those payloads, alongside the reader that makes
+ * it necessary.
+ */
+export const encounterKeys = {
+  /**
+   * The root prefix every visit write invalidates through
+   * (`encounterDependentKeys` in `./index.ts`). TanStack's hierarchical
+   * prefix semantics mean evicting `["encounters"]` clears the windowed list
+   * and every open detail in one tick, so a visit edited in a sheet and the
+   * list behind it never disagree.
+   */
+  encounters: () => ["encounters"] as const,
+  /**
+   * The windowed list. The window is part of the key: the page can ask for a
+   * year at a time, and two windows are two different answers rather than one
+   * answer that overwrites the other.
+   */
+  encounterList: (from: string | null, to: string | null, status?: string) =>
+    ["encounters", "list", from, to, status ?? null] as const,
+  encounter: (id: string) => ["encounters", "detail", id] as const,
+  /**
+   * The address book. Under its own root rather than nested beneath
+   * `["encounters"]`: a practitioner outlives the visits that name it, and a
+   * visit write should not evict a list that did not change.
+   */
+  practitioners: () => ["practitioners"] as const,
+  practitionerList: (q?: string) =>
+    ["practitioners", "list", q ?? null] as const,
+  practitioner: (id: string) => ["practitioners", "detail", id] as const,
+};

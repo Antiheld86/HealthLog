@@ -6872,6 +6872,8 @@
         "restoreSkippedIllnessSymptom": "Sintomo di malattia",
         "restoreSkippedMoodFactor": "Fattore dell'umore",
         "restoreSkippedMoodTag": "Etichetta dell'umore",
+        "restoreSkippedVisitReference": "Riferimento alla visita",
+        "restoreSkippedCheckupClosure": "Chiusura del controllo",
         "docsLink": "Documentazione"
       },
       "danger-zone": {
@@ -9937,6 +9939,14 @@
       "illnessEpisodeDelete": "{name} ha eliminato una malattia",
       "illnessEpisodeResolve": "{name} ha segnato una malattia come conclusa",
       "illnessEpisodeRestore": "{name} ha ripristinato una malattia",
+      "encounterVisitCreate": "{name} ha aggiunto una visita medica",
+      "encounterVisitUpdate": "{name} ha modificato una visita medica",
+      "encounterVisitDelete": "{name} ha eliminato una visita medica",
+      "encounterVisitRestore": "{name} ha ripristinato una visita medica",
+      "practitionerContactCreate": "{name} ha aggiunto uno studio alla rubrica",
+      "practitionerContactUpdate": "{name} ha modificato una voce della rubrica",
+      "practitionerContactDelete": "{name} ha eliminato una voce della rubrica",
+      "practitionerContactRestore": "{name} ha ripristinato una voce della rubrica",
       "illnessDayLogUpsert": "{name} ha registrato una giornata di malattia",
       "medicationUpdate": "{name} ha modificato un farmaco",
       "medicationDelete": "{name} ha eliminato un farmaco",
@@ -10012,7 +10022,7 @@
       },
       "profile": {
         "label": "Anamnesi",
-        "detail": "Allergie, storia familiare e i dati del tuo profilo di salute."
+        "detail": "Allergie, anamnesi familiare, i dati del tuo profilo sanitario e le tue visite mediche e studi."
       },
       "illness": {
         "label": "Malattie",
@@ -10051,6 +10061,18 @@
     },
     "anamnesis": {
       "relativeNote": "Una voce di anamnesi familiare descrive i parenti di questa persona. Aggiungila solo se vorrebbe vederla registrata qui."
+    }
+  },
+  "encounters": {
+    "kind": {
+      "routine": "Visita di routine",
+      "acute": "Visita urgente",
+      "specialist": "Visita specialistica",
+      "preventive": "Controllo preventivo",
+      "emergency": "Emergenza",
+      "hospital": "Ospedale",
+      "therapy": "Seduta di terapia",
+      "other": "Appuntamento medico"
     }
   }
 }

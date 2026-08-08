@@ -6872,6 +6872,8 @@
         "restoreSkippedIllnessSymptom": "Illness symptom",
         "restoreSkippedMoodFactor": "Mood factor",
         "restoreSkippedMoodTag": "Mood tag",
+        "restoreSkippedVisitReference": "Visit reference",
+        "restoreSkippedCheckupClosure": "Checkup closure",
         "docsLink": "Documentation"
       },
       "danger-zone": {
@@ -9937,6 +9939,14 @@
       "illnessEpisodeDelete": "{name} removed an illness entry",
       "illnessEpisodeResolve": "{name} marked an illness as over",
       "illnessEpisodeRestore": "{name} restored an illness entry",
+      "encounterVisitCreate": "{name} added a visit",
+      "encounterVisitUpdate": "{name} edited a visit",
+      "encounterVisitDelete": "{name} deleted a visit",
+      "encounterVisitRestore": "{name} restored a visit",
+      "practitionerContactCreate": "{name} added a practice to the address book",
+      "practitionerContactUpdate": "{name} edited an address book entry",
+      "practitionerContactDelete": "{name} deleted an address book entry",
+      "practitionerContactRestore": "{name} restored an address book entry",
       "illnessDayLogUpsert": "{name} recorded an illness day",
       "medicationUpdate": "{name} changed a medication",
       "medicationDelete": "{name} removed a medication",
@@ -10012,7 +10022,7 @@
       },
       "profile": {
         "label": "Health background",
-        "detail": "Allergies, family history and the facts in your health profile."
+        "detail": "Allergies, family history, the facts in your health profile, and your visits and practices."
       },
       "illness": {
         "label": "Illness",
@@ -10051,6 +10061,18 @@
     },
     "anamnesis": {
       "relativeNote": "A family history entry describes this person's relatives. Add it only when they would want it recorded here."
+    }
+  },
+  "encounters": {
+    "kind": {
+      "routine": "Routine visit",
+      "acute": "Acute visit",
+      "specialist": "Specialist visit",
+      "preventive": "Preventive check",
+      "emergency": "Emergency",
+      "hospital": "Hospital",
+      "therapy": "Therapy session",
+      "other": "Appointment"
     }
   }
 }

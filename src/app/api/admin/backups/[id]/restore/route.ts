@@ -48,6 +48,7 @@ import {
 import { restoreProfileData } from "@/lib/export/profile-backup";
 import { restoreIntradayProfileData } from "@/lib/export/intraday-profile-backup";
 import { restoreHealthScoreData } from "@/lib/export/health-score-backup";
+import { restoreVisitsData } from "@/lib/export/visits-backup";
 import { invalidateUserData } from "@/lib/cache/invalidate";
 
 export const dynamic = "force-dynamic";
@@ -88,6 +89,9 @@ interface RestoreResponse {
     correlationPatterns: number;
     intradayProfiles: number;
     healthScoreRecords: number;
+    practitioners: number;
+    encounters: number;
+    encounterLinks: number;
   };
 }
 
@@ -1315,6 +1319,19 @@ const handler = apiHandler(
             });
           }
 
+          // Visits, the address book and the three link tables. Last on
+          // purpose: a link is written only when both of its ends exist, and
+          // the documents above are the final far side to land. Both ends of
+          // this section live in `src/lib/export/visits-backup.ts`, so a grep
+          // of THIS file alone will not find them — the same delegation as the
+          // cycle, profile, intraday and score restores above.
+          const visitsCleared = await restoreVisitsData(
+            tx,
+            ownerId,
+            payload,
+            skips,
+          );
+
           const cleared = {
             measurements: measurements.count,
             medications: meds.count,
@@ -1341,6 +1358,9 @@ const handler = apiHandler(
             correlationPatterns: profileCleared.correlationPatterns,
             intradayProfiles: intradayCleared.intradayProfiles,
             healthScoreRecords: healthScoreCleared.healthScoreRecords,
+            practitioners: visitsCleared.practitioners,
+            encounters: visitsCleared.encounters,
+            encounterLinks: visitsCleared.encounterLinks,
           };
           return { cleared, skipped: summarizeRestoreSkips(skips) };
         },

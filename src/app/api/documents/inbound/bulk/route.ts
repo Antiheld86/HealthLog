@@ -20,6 +20,7 @@ import {
 } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
+import { linkTargets, unlinkTargets } from "@/lib/links";
 import { annotate } from "@/lib/logging/context";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import { isP2002 } from "@/lib/prisma-errors";
@@ -116,15 +117,22 @@ export const POST = apiHandler(async (request: NextRequest) => {
             results.push({ id, ok: false, error: "notFound" });
             continue;
           }
-          await prisma.documentConditionLink.createMany({
-            data: [{ documentId: id, episodeId: episodeId!, userId: user.id }],
-            skipDuplicates: true,
+          await linkTargets(prisma, {
+            userId: user.id,
+            sourceKind: "document",
+            sourceId: id,
+            targetKind: "conditionEpisode",
+            targetIds: [episodeId!],
           });
           break;
         }
         case "unlinkEpisode": {
-          await prisma.documentConditionLink.deleteMany({
-            where: { documentId: id, episodeId: episodeId!, userId: user.id },
+          await unlinkTargets(prisma, {
+            userId: user.id,
+            sourceKind: "document",
+            sourceId: id,
+            targetKind: "conditionEpisode",
+            targetIds: [episodeId!],
           });
           break;
         }

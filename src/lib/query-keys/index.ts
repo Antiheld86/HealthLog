@@ -25,6 +25,7 @@ import { dailyKeys } from "./daily";
 import { dashboardKeys } from "./dashboard";
 import { environmentKeys } from "./environment";
 import { documentKeys } from "./documents";
+import { encounterKeys } from "./encounters";
 import { illnessKeys } from "./illness";
 import { insightsKeys } from "./insights";
 import { integrationKeys } from "./integrations";
@@ -63,6 +64,7 @@ export const queryKeys = {
   ...familyHistoryKeys,
   ...environmentKeys,
   ...documentKeys,
+  ...encounterKeys,
   ...customMetrics,
   ...nutrientKeys,
   ...recordSettingsKeys,
@@ -235,6 +237,20 @@ export const medicationDependentKeys = [
  * on the same rows.
  */
 export const cycleDependentKeys = [queryKeys.cycle(), queryKeys.insightsRoot()];
+
+/**
+ * Keys invalidated when a visit or an address-book entry changes.
+ *
+ * Both roots ride together in one bundle rather than two, because the two
+ * writes reach each other: renaming a practice changes the label every visit
+ * that names it renders, and deleting one nulls the reference on visits that
+ * stay. A bundle that evicted only the surface being written would leave the
+ * other showing the pre-write name.
+ */
+export const encounterDependentKeys = [
+  queryKeys.encounters(),
+  queryKeys.practitioners(),
+];
 
 /**
  * Invalidate every key in the bundle in parallel. Use this from mutation
