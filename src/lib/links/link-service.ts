@@ -12,7 +12,7 @@ import type { Prisma } from "@/generated/prisma/client";
 export const MAX_TARGETS_PER_CALL = 100;
 
 /** The record a link hangs off. */
-export type LinkSourceKind = "encounter" | "document";
+export type LinkSourceKind = "encounter" | "document" | "vaccination";
 
 /** The record a link points at. */
 export type LinkTargetKind = "document" | "labResult" | "conditionEpisode";
@@ -137,6 +137,10 @@ const SOURCES: Record<
     delegate: (tx) => narrow<OwnedRowDelegate>(tx.inboundDocument),
     relationField: "document",
   },
+  vaccination: {
+    delegate: (tx) => narrow<OwnedRowDelegate>(tx.vaccinationRecord),
+    relationField: "vaccination",
+  },
 };
 
 const DOCUMENT_ENDPOINT: EndpointSpec = {
@@ -183,6 +187,13 @@ const CONDITION_ENDPOINT: EndpointSpec = {
  * than a result field. Three is the number of encounter link tables this
  * design allows; a fourth is the point at which this stops being a small set
  * of named relations and starts being a general edge store.
+ *
+ * That ceiling is per source, and the `vaccination` source owns exactly ONE
+ * pair. A dose is administered once, so the practitioner and the visit attach
+ * by scalar FK rather than through a table; the many-to-many argument that
+ * justifies the lab and condition links does not transfer. A second
+ * vaccination pair is this becoming the edge store, and is the point to stop
+ * and raise it rather than to add a row here.
  */
 const LINK_TABLES: Partial<
   Record<`${LinkSourceKind}:${LinkTargetKind}`, LinkTableSpec>
@@ -210,6 +221,12 @@ const LINK_TABLES: Partial<
     sourceColumn: "documentId",
     targetColumn: "episodeId",
     target: CONDITION_ENDPOINT,
+  },
+  "vaccination:document": {
+    delegate: (tx) => narrow<LinkRowDelegate>(tx.vaccinationDocumentLink),
+    sourceColumn: "vaccinationId",
+    targetColumn: "documentId",
+    target: DOCUMENT_ENDPOINT,
   },
 };
 
