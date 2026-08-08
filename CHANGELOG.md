@@ -22,8 +22,16 @@
   the corrected figure the next time you open it, because nothing was copied.
   A figure nobody recorded reads as not recorded rather than as zero, and a
   module you have switched off leaves its block out entirely instead of
-  showing empty rows. Body symptoms stay in the illness journal, linked rather
-  than duplicated.
+  showing empty rows: sleep answers to the sleep module, resting heart rate
+  and heart-rate variability to recovery, the body line to the illness
+  journal. Steps and active energy have no module of their own and are always
+  shown, which is how the rest of the app already treats them. Body symptoms
+  stay in the illness journal, linked rather than duplicated.
+
+  Where two devices reported the same day, the figures follow the source order
+  you set rather than adding both together. A phone and a watch both counting
+  your steps is the ordinary case, and summing the pair would have shown a day
+  you did not walk.
 
 - Where the app compares the day's context to the day's mood, it names how
   many days each side of the comparison rests on, right beside the sentence,
