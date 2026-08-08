@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- The mood sliders no longer read their value fused with the reset control, so a
+  slider set to 4 shows the number on its own instead of "4 leeren". The reset
+  is a small icon beside the value now.
+- Date and time fields wear the same focus highlight as every other input. The
+  ring hugs the field instead of painting wider than it or jumping to the left
+  when you click in, and the fields no longer set off the zoom on iOS.
+- The add-mood sheet keeps its scrollbar clear of the endpoint labels, so the
+  longest wording is never clipped by the scroll track.
+- The health-score configuration lists its topics as one flat set with dividers
+  instead of grouping them under headings.
+- In Settings, under Security, password reset now sits last, after the
+  authenticator app, security keys and passkeys.
+- Sharing a record again with someone whose access had expired works. The old
+  lapsed grant no longer blocks a fresh invitation with a false report that the
+  person still has access.
+- The scope options when inviting someone start with nothing preselected, so the
+  choice between the whole record and single sections is one you make rather than
+  one already made for you.
+- The write and manage descriptions on the invite form are one line each now,
+  with the full detail behind the info icon instead of a wall of text.
+
 ## [1.37.2] — 2026-08-08
 
 ### Added
