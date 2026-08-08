@@ -18,7 +18,7 @@ export function ServicesSection() {
         title={t("admin.servicesGlobal")}
         description={t("admin.servicesGlobalDescription")}
       />
-      <div className="mt-4 space-y-3 pl-7">
+      <div className="space-y-3">
         <SettingsToggle
           label="Telegram"
           description={t("admin.telegramGlobal")}

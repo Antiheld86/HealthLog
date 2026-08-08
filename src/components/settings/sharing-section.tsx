@@ -23,7 +23,7 @@
  */
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, KeyRound, Share2, Trash2 } from "lucide-react";
+import { FileText, KeyRound, Link2, Trash2 } from "lucide-react";
 
 import {
   AlertDialog,
@@ -132,12 +132,13 @@ function ShareLinksCard() {
   );
 
   return (
-    <SettingsCard className="space-y-6">
+    <SettingsCard>
       <SettingsCardHeader
-        icon={Share2}
+        icon={Link2}
         title={t("settings.sharing.createTitle")}
         description={t("settings.sharing.createDescription")}
       />
+      <p className="text-sm">{t("settings.sharing.createDetail")}</p>
 
       <ShareLinkCreateForm
         key={prefill?.key ?? "new"}
@@ -220,9 +221,9 @@ function ShareLinksCard() {
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button
-                      variant="outline"
+                      variant="destructive"
                       size="sm"
-                      className="text-destructive border-destructive/30 min-h-11 w-full sm:min-h-9"
+                      className="min-h-11 w-full sm:min-h-9"
                     >
                       <Trash2 className="mr-2 h-3.5 w-3.5" />
                       {t("settings.sharing.revoke")}
@@ -242,7 +243,6 @@ function ShareLinksCard() {
                         {t("common.cancel")}
                       </AlertDialogCancel>
                       <AlertDialogAction
-                        className="bg-destructive dark:bg-destructive/60 hover:bg-destructive/90 text-white"
                         onClick={() => revokeMutation.mutate(link.id)}
                       >
                         {t("settings.sharing.revoke")}

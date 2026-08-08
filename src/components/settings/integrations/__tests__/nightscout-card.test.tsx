@@ -80,13 +80,13 @@ describe("NightscoutCard — parked + test + data-link + invalidation", () => {
     expect(html).toContain('href="/insights/blood-glucose"');
   });
 
-  it("carries the shared card divider like every sibling", () => {
+  it("carries no card divider — the card gap does that job", () => {
     const html = render({
       connected: true,
       configured: true,
       syncHealth: { verdict: "fresh", since: null },
     });
-    expect(html).toContain('data-testid="integration-card-divider"');
+    expect(html).not.toContain('data-testid="integration-card-divider"');
   });
 
   it("renders the per-metric freshness disclosure with a stale row", () => {

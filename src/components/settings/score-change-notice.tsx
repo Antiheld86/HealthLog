@@ -76,7 +76,6 @@ export function ScoreChangeNotice({
       data-slot="score-change-notice"
       data-kind={kind}
       aria-labelledby="score-change-notice-title"
-      className="space-y-4"
     >
       <SettingsCardHeader
         icon={Info}

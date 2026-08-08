@@ -256,7 +256,7 @@ function ProfileSettingsForm({
   }
 
   return (
-    <form className="mt-4 grid gap-4 sm:grid-cols-2" onSubmit={submit}>
+    <form className="grid gap-4 sm:grid-cols-2" onSubmit={submit}>
       <label className="grid gap-1 text-sm" htmlFor="managed-display-name">
         {t("settings.sharedRecord.managedSettings.profile.displayName")}
         <input
@@ -437,7 +437,7 @@ function ModulesSettingsForm({
   }
 
   return (
-    <form className="mt-4 space-y-3" onSubmit={submit}>
+    <form className="space-y-3" onSubmit={submit}>
       {entries.map(([key, defaultEnabled]) => (
         <label className="flex items-center gap-3 text-sm" key={key}>
           <input
@@ -488,7 +488,7 @@ function NotificationsSettingsForm({
   }
 
   return (
-    <form className="mt-4 grid gap-4 sm:grid-cols-2" onSubmit={submit}>
+    <form className="grid gap-4 sm:grid-cols-2" onSubmit={submit}>
       <label className="flex items-center gap-3 text-sm sm:col-span-2">
         <input
           defaultChecked={settings.moodReminderEnabled === true}
@@ -588,7 +588,7 @@ function ThresholdsSettingsForm({
   }
 
   return (
-    <form className="mt-4 grid gap-4 sm:grid-cols-3" onSubmit={submit}>
+    <form className="grid gap-4 sm:grid-cols-3" onSubmit={submit}>
       <label className="grid gap-1 text-sm" htmlFor="managed-threshold-metric">
         {t("settings.sharedRecord.managedSettings.thresholds.metric")}
         <select
@@ -675,7 +675,7 @@ function CoachSettingsForm({
   }
 
   return (
-    <form className="mt-4 space-y-4" onSubmit={submit}>
+    <form className="space-y-4" onSubmit={submit}>
       <label className="flex items-center gap-3 text-sm">
         <input
           defaultChecked={settings.disableCoach === true}
@@ -897,7 +897,7 @@ function InsightsSettingsForm({
   );
 
   return (
-    <form className="mt-4 space-y-5" onSubmit={submit}>
+    <form className="space-y-4" onSubmit={submit}>
       {renderItems("section", sections)}
       {renderItems("tile", tiles)}
       <SaveButton disabled={disabled} label={saveLabel} />
@@ -1011,7 +1011,7 @@ export function ManagedRecordSettingsSection({
             settings={query.data.settings}
           />
           {save.isError || validationFailed ? (
-            <p className="text-destructive mt-3 text-sm" role="alert">
+            <p className="text-destructive text-sm" role="alert">
               {t("common.networkError")}
             </p>
           ) : null}

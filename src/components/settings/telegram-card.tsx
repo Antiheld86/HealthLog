@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, MessageCircle, Save } from "lucide-react";
+import { Info, Loader2, MessageCircle, Save } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SettingsInfoTile } from "@/components/settings/_info-tile";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -139,7 +141,7 @@ export function TelegramCard({
         description={t("settings.telegramDescription")}
       />
 
-      <div className="mt-4 space-y-4 pl-7">
+      <div className="space-y-4">
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
@@ -190,11 +192,13 @@ export function TelegramCard({
             </Label>
           </div>
 
-          <div className="bg-muted/50 text-muted-foreground rounded-lg p-3 text-xs">
-            <p>{t("settings.telegramStep1")}</p>
-            <p>{t("settings.telegramStep2")}</p>
-            <p>{t("settings.telegramStep3")}</p>
-          </div>
+          <SettingsInfoTile icon={Info} tone="neutral">
+            <ol className="list-decimal space-y-1 pl-4">
+              <li>{t("settings.telegramStep1")}</li>
+              <li>{t("settings.telegramStep2")}</li>
+              <li>{t("settings.telegramStep3")}</li>
+            </ol>
+          </SettingsInfoTile>
 
           {msg && (
             <p
@@ -207,7 +211,7 @@ export function TelegramCard({
             </p>
           )}
 
-          <div className="flex flex-wrap items-start justify-end gap-2">
+          <SettingsCardActions>
             <TestConnectionButton
               endpoint="/api/settings/telegram/test"
               disabled={!settings?.hasBotToken}
@@ -224,7 +228,7 @@ export function TelegramCard({
               )}
               {t("common.save")}
             </Button>
-          </div>
+          </SettingsCardActions>
         </form>
       </div>
     </SettingsCard>

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRight, CalendarDays, Moon, Smile } from "lucide-react";
 
 import { ChartSkeleton } from "@/components/charts/chart-skeleton";
-import { SectionHeading } from "@/components/insights/section-heading";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { Card, CardContent } from "@/components/ui/card";
 import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { Skeleton } from "@/components/ui/skeleton";

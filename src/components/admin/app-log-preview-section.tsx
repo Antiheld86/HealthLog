@@ -116,15 +116,16 @@ export function AppLogPreviewSection() {
   const events = data?.events ?? [];
 
   return (
-    <SettingsCard className="space-y-4">
+    <SettingsCard>
       <SettingsCardHeader
         icon={FileText}
         title={t("admin.section.app-logs.title")}
         description={t("admin.section.app-logs.processNote")}
         status={
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
+            className="min-h-11 sm:min-h-9"
             onClick={() => refetch()}
             disabled={isFetching}
             aria-label={t("admin.section.app-logs.refresh")}
@@ -132,6 +133,9 @@ export function AppLogPreviewSection() {
             <RefreshCw
               className={`h-4 w-4 ${isFetching ? "animate-spin" : ""} motion-reduce:animate-none`}
             />
+            <p className="text-sm">
+              {t("admin.section.app-logs.processDetail")}
+            </p>
           </Button>
         }
       />
@@ -280,7 +284,7 @@ export function AppLogPreviewSection() {
             </table>
           </div>
           <div
-            className="text-muted-foreground mt-3 flex items-center justify-between text-xs"
+            className="text-muted-foreground flex items-center justify-between text-xs"
             data-testid="app-log-preview-summary"
           >
             <span>

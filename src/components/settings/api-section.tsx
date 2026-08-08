@@ -75,7 +75,7 @@ function ApiEndpointsCard() {
       />
 
       {/* Desktop table — verbatim layout for md+. */}
-      <div className="border-border mt-4 hidden overflow-x-auto rounded-lg border md:block">
+      <div className="border-border hidden overflow-x-auto rounded-lg border md:block">
         <table className="w-full min-w-[760px] text-xs md:min-w-0">
           <thead>
             <tr className="bg-muted/40 text-muted-foreground border-b">
@@ -109,7 +109,7 @@ function ApiEndpointsCard() {
       {/* Mobile card list — each endpoint stacks its columns vertically
           with a labelled meta row. No horizontal scroll. */}
       <ul
-        className="mt-4 space-y-2 md:hidden"
+        className="space-y-2 md:hidden"
         data-testid="settings-api-endpoints-mobile-list"
       >
         {endpoints.map((endpoint) => (
@@ -206,16 +206,14 @@ function ApiTokensCard() {
         }
       />
 
-      <div className="mt-4 space-y-4 pl-7">
+      <div className="space-y-4">
         {/* Tokens are no longer minted here. The generic mint issued a
             `medication:ingest` token that the ingest endpoint refused (it
             gates on the per-medication grant too) and that every other
             authenticated route accepted. The per-medication API-endpoint
             toggle issues the pair that actually works, scoped to one
             medication. This card lists and revokes. */}
-        <p className="text-muted-foreground text-sm">
-          {t("settings.tokenMintMovedDescription")}
-        </p>
+        <p className="text-sm">{t("settings.tokenMintMovedDescription")}</p>
 
         <div>
           <p className="mb-2 text-sm font-medium">

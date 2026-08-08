@@ -11,7 +11,7 @@ import type { DataSummary } from "@/lib/analytics/trends";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { LearningGate } from "@/components/ui/learning-gate";
 import { HealthChartDynamicMini } from "@/components/charts/health-chart-dynamic";
-import { SectionHeading } from "@/components/insights/section-heading";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { TileHeader } from "@/components/insights/tile-header";
 
 /**

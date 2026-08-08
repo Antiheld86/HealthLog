@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -292,7 +293,7 @@ export function SourcesSection() {
   // card, below the ladder.
   return (
     <div className="space-y-6">
-      <SettingsCard className="space-y-4">
+      <SettingsCard>
         <SettingsCardHeader
           icon={Layers}
           title={t("settings.sections.sources.cardTitle")}
@@ -313,6 +314,8 @@ export function SourcesSection() {
             />
           }
         />
+
+        <p className="text-sm">{t("settings.sections.sources.helpDetail")}</p>
 
         {isLoading || !priority ? (
           <SourcesSkeletonList />
@@ -548,35 +551,9 @@ export function SourcesSection() {
           </div>
         )}
 
-        {/* `flex-col-reverse` mirrors the DialogFooter idiom: the primary
-            action stacks on top on mobile, row order stays Cancel → Save
-            on `sm+`. */}
-        {dirty && priority && (
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setDraft(null)}
-              disabled={saveMutation.isPending}
-            >
-              {t("common.cancel")}
-            </Button>
-            <Button
-              type="button"
-              onClick={() => saveMutation.mutate(priority)}
-              disabled={saveMutation.isPending}
-            >
-              {saveMutation.isPending && (
-                <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-              )}
-              {t("common.save")}
-            </Button>
-          </div>
-        )}
-
         {/* v1.18.6 (W9) — quiet pointer back to Integrationen, where the
-            sources this ladder ranks are connected / removed. Folded into
-            the card so the page top stays the standard heading + subtitle. */}
+            sources this ladder ranks are connected / removed. Above the
+            action row: nothing follows a card's actions. */}
         <p className="text-muted-foreground border-border border-t pt-3 text-xs">
           {t("settings.sections.sources.integrationsHint")}{" "}
           <Link
@@ -587,6 +564,33 @@ export function SourcesSection() {
             {t("settings.sections.sources.integrationsHintLink")}
           </Link>
         </p>
+
+        {dirty && priority && (
+          <SettingsCardActions>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-11 sm:min-h-9"
+              onClick={() => setDraft(null)}
+              disabled={saveMutation.isPending}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="min-h-11 sm:min-h-9"
+              onClick={() => saveMutation.mutate(priority)}
+              disabled={saveMutation.isPending}
+            >
+              {saveMutation.isPending && (
+                <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+              )}
+              {t("common.save")}
+            </Button>
+          </SettingsCardActions>
+        )}
       </SettingsCard>
 
       {/* v1.28 shipped `<NutrientIntakeCard>` here; the 2026-07-17 UX/IA

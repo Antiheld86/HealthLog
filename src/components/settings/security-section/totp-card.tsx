@@ -23,6 +23,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -210,7 +211,7 @@ export function TotpCard({
         }
       />
 
-      <div className="mt-4">
+      <div>
         {/* ── Not enabled, no wizard: the enable CTA ── */}
         {!enabled && !setup && !freshCodes && (
           <Button
@@ -231,7 +232,7 @@ export function TotpCard({
         {/* ── Enable wizard ── */}
         {setup && (
           <div className="space-y-4">
-            <ol className="text-muted-foreground list-decimal space-y-3 pl-5 text-sm">
+            <ol className="text-muted-foreground list-decimal space-y-3 pl-6 text-sm">
               <li>{t("settings.security.totp.step1")}</li>
               <li>{t("settings.security.totp.step2")}</li>
             </ol>
@@ -326,7 +327,7 @@ export function TotpCard({
         {freshCodes && (
           <div>
             <RecoveryCodesPanel codes={freshCodes} />
-            <div className="mt-3 flex justify-end">
+            <SettingsCardActions className="mt-3">
               <Button
                 type="button"
                 variant="outline"
@@ -335,7 +336,7 @@ export function TotpCard({
               >
                 {t("settings.security.recovery.savedIt")}
               </Button>
-            </div>
+            </SettingsCardActions>
           </div>
         )}
 

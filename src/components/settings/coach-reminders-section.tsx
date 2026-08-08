@@ -155,7 +155,6 @@ export function CoachRemindersSection({
       as="section"
       aria-labelledby="settings-ai-coach-reminders-title"
       data-testid="settings-coach-reminders-card"
-      className="space-y-4"
     >
       <SettingsCardHeader
         icon={BellRing}
@@ -163,6 +162,7 @@ export function CoachRemindersSection({
         title={t("settings.ai.coachReminders.title")}
         description={t("settings.ai.coachReminders.description")}
       />
+      <p className="text-sm">{t("settings.ai.coachReminders.detail")}</p>
 
       {query.isError && (
         <p

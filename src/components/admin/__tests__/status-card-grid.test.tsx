@@ -6,7 +6,10 @@ import { renderToStaticMarkup } from "react-dom/server";
  * `StatusCardGrid` (the section-card grid the maintainer described as redundant
  * with the sidebar nav). The status-card component itself was removed
  * from the codebase. This test guards the *new* overview composition:
- * a welcome card, the system snapshot, and the recent-audit preview.
+ * the version tile, the system snapshot, and the recent-audit preview. The
+ * welcome card went with the grid: it greeted the reader and told them they
+ * were signed in as an administrator, on a route only an administrator can
+ * reach.
  *
  * The file kept its old name so git history follows it. Nothing else
  * imports `status-card-grid`.
@@ -71,12 +74,10 @@ describe("/admin overview composition", () => {
     expect(html).not.toContain("Open backups");
   });
 
-  it("renders the welcome card with the admin's username", () => {
+  it("renders no welcome card", () => {
     const html = render(<AdminOverviewPage />);
-    // `welcomeTitle` interpolates the username; the mocked auth hook
-    // returns "testuser".
-    expect(html).toContain("Welcome, testuser");
-    expect(html).toContain("admin-overview-welcome-heading");
+    expect(html).not.toContain("Welcome, testuser");
+    expect(html).not.toContain("admin-overview-welcome-heading");
   });
 
   it("renders the system snapshot section heading", () => {

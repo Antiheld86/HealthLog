@@ -34,6 +34,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -216,12 +217,7 @@ export function NightscoutCard({
         }
       />
 
-      <hr
-        data-testid="integration-card-divider"
-        className="border-border/60 mt-4"
-      />
-
-      <div className="mt-4 space-y-4 pl-7">
+      <div className="space-y-4">
         {errorMessage && <IntegrationErrorMessage message={errorMessage} />}
         {operatorApprovalRequired && (
           <div
@@ -326,7 +322,7 @@ export function NightscoutCard({
             </p>
           </div>
 
-          <div className="flex justify-end">
+          <SettingsCardActions>
             <Button
               type="submit"
               variant="outline"
@@ -345,7 +341,7 @@ export function NightscoutCard({
                 ? t("settings.nightscoutUpdate")
                 : t("settings.nightscoutConnect")}
             </Button>
-          </div>
+          </SettingsCardActions>
 
           {msg && (
             <p

@@ -26,6 +26,7 @@ import {
   type IntakeImportResultState,
 } from "@/components/medications/intake-import-result";
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
@@ -215,6 +216,10 @@ export function DoseHistoryImportCard() {
       title={t("settings.sections.export.import.doseHistory.title")}
       description={t("settings.sections.export.import.doseHistory.description")}
     >
+      <p className="text-sm">
+        {t("settings.sections.export.import.doseHistory.detail")}
+      </p>
+
       <div className="space-y-1.5">
         <Label htmlFor={textareaId} className="text-xs">
           {t("settings.sections.export.import.doseHistory.pasteLabel")}
@@ -270,7 +275,7 @@ export function DoseHistoryImportCard() {
         )}
       </div>
 
-      <div className="mt-auto flex flex-wrap items-center gap-3 pt-1">
+      <SettingsCardActions className="mt-auto" align="start">
         <Button
           type="button"
           variant="outline"
@@ -284,7 +289,7 @@ export function DoseHistoryImportCard() {
         </Button>
         <Button
           type="button"
-          variant="secondary"
+          variant="outline"
           size="sm"
           className="min-h-11 sm:min-h-9"
           disabled={busy || text.trim().length === 0}
@@ -311,7 +316,7 @@ export function DoseHistoryImportCard() {
           )}
           {t("settings.sections.export.import.doseHistory.import")}
         </Button>
-      </div>
+      </SettingsCardActions>
     </ImportCardShell>
   );
 }

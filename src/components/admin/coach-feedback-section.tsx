@@ -71,7 +71,7 @@ export function CoachFeedbackSection() {
   // /admin/coach-feedback. Mirrors the canonical structure used by
   // <SystemStatusSection> (header outside the fetch-state branch).
   return (
-    <SettingsCard className="space-y-4">
+    <SettingsCard>
       <SettingsCardHeader
         icon={Sparkles}
         title={t("admin.coachFeedback.title")}

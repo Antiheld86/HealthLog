@@ -61,7 +61,7 @@ describe("<AppleHealthCard>", () => {
 
     expect(html).toContain('data-testid="apple-health-card"');
     expect(html).toContain("HealthLog iOS app");
-    expect(html).toContain("not a web or OAuth connection");
+    expect(html).toContain("not from a web or OAuth connection");
     expect(html).toContain("Settings → Apple Health");
     expect(html).toContain("when iOS grants background time");
     expect(html).not.toContain(">Connected<");
@@ -146,12 +146,12 @@ describe("<AppleHealthCard>", () => {
     expect(html).toContain("quiet");
   });
 
-  it("carries the shared card divider like every sibling", () => {
+  it("carries no card divider — the card gap does that job", () => {
     statusPayload = {
       lastSyncedAt: null,
       syncHealth: { verdict: "pending_first_sync", since: null },
     };
-    expect(render()).toContain('data-testid="integration-card-divider"');
+    expect(render()).not.toContain('data-testid="integration-card-divider"');
   });
 
   it("links to the existing one-shot Apple Health import fallback", () => {

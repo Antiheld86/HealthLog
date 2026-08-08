@@ -27,8 +27,8 @@
 import { Share2 } from "lucide-react";
 
 import { useTranslations } from "@/lib/i18n/context";
-import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { HealthRecordExportPanel } from "@/components/settings/report-selection/selection-panel";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { SharingSection } from "@/components/settings/sharing-section";
 
 export function GesundheitsakteSection() {
@@ -42,10 +42,10 @@ export function GesundheitsakteSection() {
       <HealthRecordExportPanel />
 
       <section id="sharing" className="scroll-mt-28 space-y-4">
-        <SettingsCardHeader
+        <SectionHeading
           icon={Share2}
           title={t("settings.sections.sharing.title")}
-          description={t("settings.sections.sharing.subtitle")}
+          subtitle={t("settings.sections.sharing.subtitle")}
         />
         <SharingSection />
       </section>

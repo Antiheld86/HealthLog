@@ -4,6 +4,7 @@ import { useState } from "react";
 import { UserPlus } from "lucide-react";
 
 import { SettingsCard } from "@/components/settings/settings-card";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -148,7 +149,7 @@ export function GrantInviteCard() {
         title={t("recordSharing.invite.title")}
         description={t("recordSharing.invite.description")}
       />
-      <form onSubmit={submit} className="mt-4 space-y-3">
+      <form onSubmit={submit} className="space-y-3">
         <div className="space-y-1.5">
           <Label htmlFor="grant-invite-identifier">
             {t("recordSharing.invite.identifierLabel")}
@@ -318,21 +319,6 @@ export function GrantInviteCard() {
             {t("recordSharing.invite.expiresHint")}
           </p>
         </div>
-        <Button
-          type="submit"
-          data-slot="grant-invite-submit"
-          // A narrowed invitation with nothing ticked would be a grant that
-          // opens nothing, which the server refuses. The button is inert and
-          // the sentence above says why, rather than sending a request whose
-          // only purpose is to come back as an error.
-          disabled={
-            invite.isPending || identifier.trim().length === 0 || choice.blocked
-          }
-        >
-          {invite.isPending
-            ? t("recordSharing.invite.submitting")
-            : t("recordSharing.invite.submit")}
-        </Button>
         {error && (
           <p role="alert" className="text-destructive text-sm">
             {error}
@@ -343,6 +329,27 @@ export function GrantInviteCard() {
             {t("recordSharing.invite.sent", { name: invited })}
           </p>
         )}
+        <SettingsCardActions>
+          <Button
+            type="submit"
+            size="sm"
+            className="min-h-11 sm:min-h-9"
+            data-slot="grant-invite-submit"
+            // A narrowed invitation with nothing ticked would be a grant that
+            // opens nothing, which the server refuses. The button is inert and
+            // the sentence above says why, rather than sending a request whose
+            // only purpose is to come back as an error.
+            disabled={
+              invite.isPending ||
+              identifier.trim().length === 0 ||
+              choice.blocked
+            }
+          >
+            {invite.isPending
+              ? t("recordSharing.invite.submitting")
+              : t("recordSharing.invite.submit")}
+          </Button>
+        </SettingsCardActions>
       </form>
     </SettingsCard>
   );

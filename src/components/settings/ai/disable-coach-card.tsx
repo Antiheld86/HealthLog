@@ -169,8 +169,8 @@ export function DisableCoachCard({
           aria-live="polite"
           className={
             msgType === "error"
-              ? "text-destructive mt-3 pl-7 text-xs"
-              : "text-muted-foreground mt-3 pl-7 text-xs"
+              ? "text-destructive mt-3 text-xs"
+              : "text-muted-foreground mt-3 text-xs"
           }
         >
           {msg}

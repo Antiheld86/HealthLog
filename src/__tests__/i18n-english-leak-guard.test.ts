@@ -102,7 +102,6 @@ const LEGIT_IDENTICAL = new Set<string>([
   "admin.overview.snapshotOfflineGeoOff",
   "admin.overview.snapshotOfflineGeoOn",
   "admin.webPushVapidTitle",
-  "insights.healthScore.provenance.sources.appleHealth",
   "measurements.sourceAppleHealth",
   "onboarding.source.more.appleHealth",
   "settings.ai.providerChain.types.anthropic",
@@ -114,7 +113,6 @@ const LEGIT_IDENTICAL = new Set<string>([
   "mood.tag.fastFood",
   // Technical / config labels conventionally kept verbatim.
   "admin.hostMetrics.diskBusyPercent",
-  "admin.overview.snapshotBuildSha",
   "admin.servicesGlobal",
   "admin.webPushVapidPublicKeyPlaceholder",
   "settings.ai.baseUrlLabel",
@@ -231,4 +229,21 @@ describe("i18n English-leak guard", () => {
       ).toEqual([]);
     },
   );
+
+  it("carries no stale LEGIT_IDENTICAL entry", () => {
+    // An allowlist that outlives the key it excused is an allowlist nobody
+    // can reason about: the next reader cannot tell which entries are load-
+    // bearing. Two were already dead when this assertion was written — one
+    // from a key removed long before, one from the duplicated version fields
+    // that came off `/admin`. The sibling allowlists in
+    // `card-description-length.test.ts` and `account-payload-consumer-guard`
+    // carry the same check; this one did not.
+    const stale = [...LEGIT_IDENTICAL].filter(
+      (key) => typeof enMap.get(key) !== "string",
+    );
+    expect(
+      stale,
+      "these keys no longer exist in en.json — drop them from LEGIT_IDENTICAL",
+    ).toEqual([]);
+  });
 });

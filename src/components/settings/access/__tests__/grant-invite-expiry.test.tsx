@@ -82,7 +82,10 @@ describe("grant invitation lapse date", () => {
     expect(onError).not.toContain("setIdentifier");
     expect(onError).not.toContain("setExpiresOn");
     expect(source).toContain('role="alert"');
-    expect(source).toContain(
+    // The submit stays inert while a name is missing or a request is in
+    // flight. Matched whitespace-tolerantly: the predicate is the contract,
+    // its line wrapping is not.
+    expect(source.replace(/\s+/g, " ")).toContain(
       "invite.isPending || identifier.trim().length === 0",
     );
   });

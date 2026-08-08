@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Droplets } from "lucide-react";
 
 import { useTranslations } from "@/lib/i18n/context";
-import { SectionHeading } from "@/components/insights/section-heading";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { CyclePhaseHeadline } from "./cycle-phase-crosstab";
 import { PHASE_HUE } from "./phase-tokens";
 import { localYmd, useCycleCalendar, useCycleInsights } from "./use-cycle";

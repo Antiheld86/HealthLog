@@ -219,7 +219,7 @@ export function LowStockCard({
       // (`/settings/notifications#low-stock`) — keep it stable.
       id="low-stock"
       aria-labelledby="settings-low-stock-title"
-      className="scroll-mt-20"
+      className="scroll-mt-28"
     >
       <SettingsCardHeader
         icon={PackageOpen}
@@ -234,6 +234,8 @@ export function LowStockCard({
               disabled={!isAuthenticated || saving}
               aria-label={t("notifications.lowStock.toggleAria")}
             />
+            <p className="text-sm">{t("notifications.lowStock.detail")}</p>
+
             <span className="text-muted-foreground text-xs">
               {enabled
                 ? t("notifications.lowStock.statusOn")
@@ -243,7 +245,7 @@ export function LowStockCard({
         }
       />
       {enabled && (
-        <div className="mt-4 flex min-h-11 items-center gap-3 pl-7">
+        <div className="flex min-h-11 items-center gap-3">
           <label htmlFor="low-stock-days" className="text-sm font-medium">
             {t("notifications.lowStock.daysLabel")}
           </label>
@@ -273,7 +275,7 @@ export function LowStockCard({
           users never touch. A single medication can override this on its
           own supply tab. */}
       {enabled && (
-        <div className="mt-4 pl-7">
+        <div>
           <div className="flex min-h-11 items-center gap-3">
             <label htmlFor="low-stock-lead" className="text-sm font-medium">
               {t("notifications.lowStock.leadLabel")}
@@ -309,8 +311,8 @@ export function LowStockCard({
           aria-live="polite"
           className={
             msgType === "error"
-              ? "text-destructive mt-3 pl-7 text-sm"
-              : "text-muted-foreground mt-3 pl-7 text-sm"
+              ? "text-destructive text-sm"
+              : "text-muted-foreground text-sm"
           }
         >
           {msg}
@@ -318,7 +320,7 @@ export function LowStockCard({
       )}
       {/* v1.16.11 — back-link to the medications list, the surface the
           alert is about (the supply tab links here the same way). */}
-      <p className="mt-3 pl-7">
+      <p>
         <Link
           href="/medications"
           className="text-muted-foreground hover:text-foreground text-xs underline-offset-2 hover:underline"

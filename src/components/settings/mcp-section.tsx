@@ -107,8 +107,9 @@ function McpConnectionsCard() {
         title={t("settings.mcp.connectionsTitle")}
         description={t("settings.mcp.connectionsDescription")}
       />
+      <p className="text-sm">{t("settings.mcp.connectionsDetail")}</p>
 
-      <div className="mt-4 space-y-4 pl-7">
+      <div className="space-y-4">
         {list.length === 0 ? (
           <p className="text-muted-foreground rounded-lg border border-dashed px-3 py-4 text-center text-sm">
             {t("settings.mcp.noConnections")}
@@ -223,7 +224,7 @@ function McpEnableCard() {
         }
       />
 
-      <div className="mt-4 space-y-4 pl-7">
+      <div className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <span className="text-sm font-medium">
             {t("settings.mcp.enableToggleLabel")}
@@ -336,8 +337,9 @@ function McpTokensCard() {
         title={t("settings.mcp.tokensTitle")}
         description={t("settings.mcp.tokensDescription")}
       />
+      <p className="text-sm">{t("settings.mcp.tokensDetail")}</p>
 
-      <div className="mt-4 space-y-4 pl-7">
+      <div className="space-y-4">
         <p className="text-muted-foreground text-xs leading-relaxed">
           {t("settings.mcp.scopeNote")}
         </p>

@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { QueryErrorCard } from "@/components/ui/query-error-card";
+import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
 
@@ -67,13 +68,11 @@ export function IllnessEpisodeDetail({ episodeId }: { episodeId: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="truncate text-2xl font-bold tracking-tight">
-            {episode?.label ?? <Skeleton className="h-7 w-40" />}
-          </h1>
-          {episode ? (
-            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+      <PageHeader
+        title={episode?.label ?? <Skeleton className="h-7 w-40" />}
+        description={
+          episode ? (
+            <span className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary">
                 {t(`illness.type.${episode.type}`)}
               </Badge>
@@ -94,32 +93,34 @@ export function IllnessEpisodeDetail({ episodeId }: { episodeId: string }) {
                     })}`
                   : ""}
               </span>
-            </div>
-          ) : null}
-        </div>
-        {canManage && (
-          <div className="flex shrink-0 items-center gap-1">
-            <Button
-              onClick={() => setLogOpen(true)}
-              className="min-h-11 sm:min-h-9"
-            >
-              {t("illness.logDay")}
-            </Button>
-            {episode ? (
-              <EpisodeMenu
-                episode={episode}
-                onEdit={() => setEditOpen(true)}
-                onResolve={
-                  active && !isChronic
-                    ? () => resolve.mutate(episode.id)
-                    : undefined
-                }
-                resolving={resolve.isPending}
-              />
-            ) : null}
-          </div>
-        )}
-      </div>
+            </span>
+          ) : undefined
+        }
+        actions={
+          canManage ? (
+            <>
+              <Button
+                onClick={() => setLogOpen(true)}
+                className="min-h-11 sm:min-h-9"
+              >
+                {t("illness.logDay")}
+              </Button>
+              {episode ? (
+                <EpisodeMenu
+                  episode={episode}
+                  onEdit={() => setEditOpen(true)}
+                  onResolve={
+                    active && !isChronic
+                      ? () => resolve.mutate(episode.id)
+                      : undefined
+                  }
+                  resolving={resolve.isPending}
+                />
+              ) : null}
+            </>
+          ) : undefined
+        }
+      />
 
       {episode?.note ? (
         <Card>

@@ -13,6 +13,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, ShieldCheck } from "lucide-react";
 
 import { SettingsCard } from "@/components/settings/settings-card";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
@@ -90,9 +91,8 @@ export function TrustedDevicesCard({
       <SettingsCardHeader
         icon={ShieldCheck}
         title={t("settings.security.trustedDevices.title")}
-        className="mb-4"
       />
-      <div className="space-y-4 pl-7">
+      <div className="space-y-4">
         <p className="text-muted-foreground text-xs">
           {t("settings.security.trustedDevices.description")}
         </p>
@@ -149,7 +149,7 @@ export function TrustedDevicesCard({
         )}
 
         {devices.length > 0 && (
-          <div className="flex justify-end">
+          <SettingsCardActions>
             <ConfirmButton
               slot="revoke-all-trusted-devices"
               className="min-h-11 sm:min-h-9"
@@ -162,7 +162,7 @@ export function TrustedDevicesCard({
               onConfirm={() => revokeAll.mutate()}
               pending={revokeAll.isPending}
             />
-          </div>
+          </SettingsCardActions>
         )}
 
         {status && (

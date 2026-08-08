@@ -8,6 +8,7 @@ import {
   isLayoutGroupId,
 } from "@/components/settings/layout-groups";
 import { SettingsShell } from "@/components/settings/settings-shell";
+import { SettingsHubBackLink } from "@/components/settings/settings-hub-back-link";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 
@@ -67,6 +68,17 @@ export default async function SettingsLayoutModulePage({ params }: PageProps) {
         title: t(group.titleKey),
         subtitle: t(group.descriptionKey),
         headingId,
+        // The way back to the hub. `SettingsHubBackLink` and its string have
+        // existed since the sub-pages were split out, but the only thing that
+        // mounted them was the shell's slug FALLBACK — and these pages pass an
+        // explicit `heading`, so the fallback never ran and no child route
+        // ever painted a back link. Both ends existed; nothing connected them.
+        topSlot: (
+          <SettingsHubBackLink
+            href="/settings/layout"
+            labelKey="settings.sections.layout.backToHub"
+          />
+        ),
       }}
     >
       <RecordSettingsSectionGate section="layout">

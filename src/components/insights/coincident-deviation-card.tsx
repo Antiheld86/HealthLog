@@ -4,7 +4,7 @@ import { AlertTriangle, Activity } from "lucide-react";
 
 import { useTranslations } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
-import { SectionHeading } from "@/components/insights/section-heading";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { MEASUREMENT_TYPE_LABEL_KEYS } from "@/components/measurements/measurement-list-meta";
 import { CoverageMeter } from "@/components/insights/derived/coverage-meter";
 import { ProvenanceExplainer } from "@/components/insights/derived/provenance-explainer";

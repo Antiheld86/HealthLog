@@ -24,6 +24,7 @@ import { Loader2, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -120,10 +121,7 @@ export function CoachPrefsSection({ isAuthenticated }: CoachPrefsSectionProps) {
         description={t("insights.coach.settingsDescription")}
       />
       {isLoading ? (
-        <div
-          data-slot="coach-prefs-skeleton"
-          className="mt-4 flex flex-col gap-4 pl-7"
-        >
+        <div data-slot="coach-prefs-skeleton" className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
             <Skeleton className="h-3 w-20" />
             <Skeleton className="h-9 w-full" />
@@ -139,7 +137,7 @@ export function CoachPrefsSection({ isAuthenticated }: CoachPrefsSectionProps) {
           </div>
         </div>
       ) : (
-        <div className="mt-4 flex flex-col gap-4 pl-7">
+        <div className="flex flex-col gap-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {/* Tone */}
             <div className="flex flex-col gap-2">
@@ -338,7 +336,7 @@ export function CoachPrefsSection({ isAuthenticated }: CoachPrefsSectionProps) {
           </div>
         </div>
       )}
-      <div className="mt-4 flex justify-end pl-7">
+      <SettingsCardActions>
         <Button
           type="button"
           size="sm"
@@ -355,7 +353,7 @@ export function CoachPrefsSection({ isAuthenticated }: CoachPrefsSectionProps) {
           ) : null}
           {t("insights.coach.settingsSave")}
         </Button>
-      </div>
+      </SettingsCardActions>
     </SettingsCard>
   );
 }

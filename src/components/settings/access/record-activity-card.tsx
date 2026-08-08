@@ -50,7 +50,7 @@ export function RecordActivityCard() {
         title={t("recordSharing.activity.title")}
         description={t("recordSharing.activity.description")}
       />
-      <div className="mt-4 space-y-3">
+      <div className="space-y-3">
         {/* The window, stated. Rendered only once the server has said what it
             is — a placeholder number here would be exactly the invented value
             the sentence exists to avoid. */}

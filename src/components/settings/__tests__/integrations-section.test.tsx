@@ -21,7 +21,7 @@
  *   3. Withings reauth: pill carries the "Error — reconnect" label.
  *   4. Mood Log disconnected: pill says "Not connected", no other
  *      status display surfaces.
- *   5. Mood Log card has the visual divider that Withings always had
+ *   5. no card paints a divider under its header
  *      — consistency the maintainer explicitly called out.
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
@@ -254,7 +254,7 @@ describe("IntegrationsSection — single-status-display contract (A5)", () => {
     expect(html).toContain("Withings activity error: 293");
   });
 
-  it("every integration card carries the visual divider (consistency)", () => {
+  it("no integration card paints a divider under its header", () => {
     setIntegrationStatus({
       threshold: 3,
       integrations: [
@@ -274,10 +274,10 @@ describe("IntegrationsSection — single-status-display contract (A5)", () => {
     });
 
     const html = render();
-    // Every integration card includes the section divider data-testid so the
-    // header → body separation is visually consistent: the four legacy cards,
-    // Apple Health, the three OAuth cards, and Nightscout.
-    expect(count(html, 'data-testid="integration-card-divider"')).toBe(9);
+    // The `<hr>` under the header existed only in `integrations/` — nine
+    // cards carrying a rule no other Settings card has. The card's own gap
+    // does the separating now, identically here and everywhere else.
+    expect(count(html, 'data-testid="integration-card-divider"')).toBe(0);
   });
 
   // v1.17.1 — every integration card carries the same discreet "Setup guide"

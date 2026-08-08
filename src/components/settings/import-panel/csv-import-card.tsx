@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useTranslations } from "@/lib/i18n/context";
@@ -112,6 +113,10 @@ export function CsvImportCard() {
       title={t("settings.sections.export.import.csv.title")}
       description={t("settings.sections.export.import.csv.description")}
     >
+      <p className="text-sm">
+        {t("settings.sections.export.import.csv.detail")}
+      </p>
+
       <div className="space-y-1.5">
         <Label htmlFor={textareaId} className="text-xs">
           {t("settings.sections.export.import.csv.pasteLabel")}
@@ -170,7 +175,7 @@ export function CsvImportCard() {
         )}
       </div>
 
-      <div className="mt-auto flex flex-wrap items-center gap-3 pt-1">
+      <SettingsCardActions className="mt-auto" align="start">
         <Button
           type="button"
           variant="outline"
@@ -184,7 +189,7 @@ export function CsvImportCard() {
         </Button>
         <Button
           type="button"
-          variant="ghost"
+          variant="outline"
           size="sm"
           className="min-h-11 sm:min-h-9"
           onClick={downloadExample}
@@ -195,7 +200,7 @@ export function CsvImportCard() {
         </Button>
         <Button
           type="button"
-          variant="secondary"
+          variant="outline"
           size="sm"
           className="min-h-11 sm:min-h-9"
           disabled={busy || text.trim().length === 0}
@@ -222,7 +227,7 @@ export function CsvImportCard() {
           )}
           {t("settings.sections.export.import.csv.import")}
         </Button>
-      </div>
+      </SettingsCardActions>
     </ImportCardShell>
   );
 }

@@ -16,7 +16,6 @@ import Link from "next/link";
 import {
   Database,
   Download,
-  Lock,
   ShieldCheck,
   Trash2,
   Clock,
@@ -25,6 +24,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
@@ -66,24 +66,13 @@ export function PrivacySection() {
 
   return (
     <div className="space-y-6">
-      {/* Intro */}
-      <SettingsInfoTile
-        icon={Lock}
-        tone="info"
-        title={t("settings.privacy.intro.title")}
-      >
-        {t("settings.privacy.intro.body")}
-      </SettingsInfoTile>
-
       {/* Encryption at rest */}
       <SettingsCard>
         <SettingsCardHeader
           icon={ShieldCheck}
           title={t("settings.privacy.encryption.title")}
-          description={t("settings.privacy.encryption.description")}
-          className="mb-4"
         />
-        <div className="space-y-3 pl-7">
+        <div className="space-y-3">
           <p className="text-sm">
             {summary
               ? t("settings.privacy.encryption.summary", {
@@ -101,10 +90,8 @@ export function PrivacySection() {
         <SettingsCardHeader
           icon={Database}
           title={t("settings.privacy.stored.title")}
-          description={t("settings.privacy.stored.description")}
-          className="mb-4"
         />
-        <ul className="text-muted-foreground list-disc space-y-1 pl-7 text-sm">
+        <ul className="text-muted-foreground list-disc space-y-1 text-sm">
           <li>{t("settings.privacy.stored.measurements")}</li>
           <li>{t("settings.privacy.stored.medications")}</li>
           <li>{t("settings.privacy.stored.moodLabs")}</li>
@@ -120,20 +107,19 @@ export function PrivacySection() {
           icon={Clock}
           title={t("settings.privacy.retention.title")}
           description={t("settings.privacy.retention.description")}
-          className="mb-4"
         />
         {summaryLoading ? (
-          <div className="space-y-2 pl-7">
+          <div className="space-y-2">
             <Skeleton className="h-4 w-3/4" />
             <Skeleton className="h-4 w-2/3" />
             <Skeleton className="h-4 w-1/2" />
           </div>
         ) : summaryError || !summary ? (
-          <p className="text-muted-foreground pl-7 text-sm">
+          <p className="text-muted-foreground text-sm">
             {t("settings.privacy.retention.unavailable")}
           </p>
         ) : (
-          <ul className="text-muted-foreground space-y-1 pl-7 text-sm">
+          <ul className="text-muted-foreground space-y-1 text-sm">
             <li>
               {t("settings.privacy.retention.coach", {
                 days: summary.retention.coachMessagesDays,
@@ -159,9 +145,8 @@ export function PrivacySection() {
           icon={Download}
           title={t("settings.privacy.export.title")}
           description={t("settings.privacy.export.description")}
-          className="mb-4"
         />
-        <div className="flex flex-wrap gap-2 pl-7">
+        <SettingsCardActions align="start">
           <Button asChild variant="outline" size="sm">
             <Link href="/settings/export">
               {t("settings.privacy.export.openExport")}
@@ -172,7 +157,7 @@ export function PrivacySection() {
               {t("settings.privacy.export.openHealthRecord")}
             </Link>
           </Button>
-        </div>
+        </SettingsCardActions>
       </SettingsCard>
 
       {/* Delete / reset — with the honest backup lag disclosure */}
@@ -181,18 +166,17 @@ export function PrivacySection() {
           icon={Trash2}
           title={t("settings.privacy.delete.title")}
           description={t("settings.privacy.delete.description")}
-          className="mb-4"
         />
-        <div className="space-y-3 pl-7">
-          <SettingsInfoTile icon={Info} tone="warning">
-            {t("settings.privacy.delete.backupLag")}
-          </SettingsInfoTile>
+        <SettingsInfoTile icon={Info} tone="warning">
+          {t("settings.privacy.delete.backupLag")}
+        </SettingsInfoTile>
+        <SettingsCardActions align="start">
           <Button asChild variant="outline" size="sm">
             <Link href="/settings/advanced">
               {t("settings.privacy.delete.openAdvanced")}
             </Link>
           </Button>
-        </div>
+        </SettingsCardActions>
       </SettingsCard>
 
       {/* Privacy posture (AI privacy mode + research mode live on their pages) */}
@@ -201,9 +185,8 @@ export function PrivacySection() {
           icon={Sparkles}
           title={t("settings.privacy.posture.title")}
           description={t("settings.privacy.posture.description")}
-          className="mb-4"
         />
-        <div className="flex flex-wrap gap-2 pl-7">
+        <SettingsCardActions align="start">
           <Button asChild variant="outline" size="sm">
             <Link href="/settings/ai">
               {t("settings.privacy.posture.openAi")}
@@ -214,7 +197,7 @@ export function PrivacySection() {
               {t("settings.privacy.posture.openResearch")}
             </Link>
           </Button>
-        </div>
+        </SettingsCardActions>
       </SettingsCard>
 
       {/* Active sessions + trusted devices + security activity (embedded) */}

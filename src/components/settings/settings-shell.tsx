@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/ui/page-header";
 import { SUB_SHELL_GRID_FLOOR } from "@/components/layout/shell-metrics";
 import { useAuth } from "@/hooks/use-auth";
 import { useMounted } from "@/hooks/use-mounted";
@@ -533,40 +534,25 @@ export function SettingsShell({
         }
       : null);
 
+  // The shell paints the heading twice — above the mobile chip strip and
+  // inside the desktop grid row — so only the desktop copy may be a real
+  // `<h1>`. Both go through `PageHeader`: the block used to be hand-rolled
+  // here and in `admin-shell.tsx`, which is how Settings and Admin ended up
+  // a step off every module page (and off each other).
   const headingBlock = (mobile = false) =>
     resolvedHeading ? (
-      <div className="space-y-6">
-        {resolvedHeading.topSlot ? <div>{resolvedHeading.topSlot}</div> : null}
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            {mobile ? (
-              <div
-                id={`${resolvedHeading.headingId}-mobile`}
-                role="heading"
-                aria-level={1}
-                className="text-2xl font-bold tracking-tight"
-              >
-                {resolvedHeading.title}
-              </div>
-            ) : (
-              <h1
-                id={resolvedHeading.headingId}
-                className="text-2xl font-bold tracking-tight"
-              >
-                {resolvedHeading.title}
-              </h1>
-            )}
-            {resolvedHeading.subtitle ? (
-              <p className="text-muted-foreground text-sm">
-                {resolvedHeading.subtitle}
-              </p>
-            ) : null}
-          </div>
-          {resolvedHeading.headingAccessory ? (
-            <div className="shrink-0">{resolvedHeading.headingAccessory}</div>
-          ) : null}
-        </div>
-      </div>
+      <PageHeader
+        headingAs={mobile ? "div" : "h1"}
+        titleId={
+          mobile
+            ? `${resolvedHeading.headingId}-mobile`
+            : resolvedHeading.headingId
+        }
+        title={resolvedHeading.title}
+        description={resolvedHeading.subtitle}
+        topSlot={resolvedHeading.topSlot}
+        actions={resolvedHeading.headingAccessory}
+      />
     ) : null;
 
   // v1.4.25 W8 — AuthShell wraps the page in `px-4 py-6 md:px-6`

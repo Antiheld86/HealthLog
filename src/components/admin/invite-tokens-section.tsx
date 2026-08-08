@@ -28,16 +28,7 @@
  */
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Ban,
-  Check,
-  Copy,
-  Loader2,
-  Plus,
-  ShieldCheck,
-  Ticket,
-  Users,
-} from "lucide-react";
+import { Ban, Check, Copy, Loader2, Plus, Ticket, Users } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -51,6 +42,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
+import { SettingsCardHeader } from "@/components/settings/_card-header";
+import { SettingsCard } from "@/components/settings/settings-card";
 import {
   Dialog,
   DialogContent,
@@ -305,64 +299,30 @@ export function InviteTokensSection() {
   }
 
   return (
-    <section
+    <SettingsCard
+      as="section"
       aria-labelledby="admin-invites-title"
-      className="bg-card border-border rounded-xl border"
       data-testid="admin-invites-card"
     >
-      {/* Header — copy left, the one action right. */}
-      <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:justify-between sm:p-6">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <Ticket
-              className="text-muted-foreground h-5 w-5"
-              aria-hidden="true"
-            />
-            <h2 id="admin-invites-title" className="text-lg font-semibold">
-              {t("admin.invites.title")}
-            </h2>
-          </div>
-          <p className="text-muted-foreground mt-1 pl-7 text-xs">
-            {t("admin.invites.description")}
-          </p>
-          <p className="text-muted-foreground mt-1 flex items-center gap-1.5 pl-7 text-xs">
-            <ShieldCheck className="size-3.5 shrink-0" aria-hidden="true" />
-            {t("admin.invites.adminOnlyHint")}
-          </p>
-        </div>
-        <Button
-          type="button"
-          onClick={openCreateDialog}
-          data-testid="admin-invites-open-create"
-          className="shrink-0"
-        >
-          <Plus className="size-4" aria-hidden="true" />
-          {t("admin.invites.create")}
-        </Button>
-      </div>
+      <SettingsCardHeader
+        icon={Ticket}
+        titleId="admin-invites-title"
+        title={t("admin.invites.title")}
+        description={t("admin.invites.description")}
+      />
 
       {isError && (
-        <p className="text-destructive px-4 pb-4 text-sm sm:px-6">
+        <p className="text-destructive text-sm">
           {t("admin.invites.loadError")}
         </p>
       )}
 
       {invites && invites.length === 0 && (
-        <div className="px-4 pb-4 sm:px-6 sm:pb-6">
+        <div>
           <EmptyState
             icon={<Ticket className="size-6" aria-hidden="true" />}
             title={t("admin.invites.emptyTitle")}
             description={t("admin.invites.emptyDescription")}
-            action={
-              <Button
-                type="button"
-                variant="outline"
-                onClick={openCreateDialog}
-              >
-                <Plus className="size-4" aria-hidden="true" />
-                {t("admin.invites.create")}
-              </Button>
-            }
           />
         </div>
       )}
@@ -370,7 +330,7 @@ export function InviteTokensSection() {
       {invites && invites.length > 0 && (
         <>
           {/* Desktop table (md+) */}
-          <div className="hidden px-2 pb-2 md:block">
+          <div className="hidden md:block">
             <Table data-testid="admin-invites-table">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -470,7 +430,7 @@ export function InviteTokensSection() {
           </div>
 
           {/* Mobile cards (<md) */}
-          <ul className="space-y-2 px-4 pb-4 md:hidden">
+          <ul className="space-y-2 md:hidden">
             {invites.map((invite) => {
               const status = deriveInviteStatus(invite, now);
               const relative = expiryRelative(invite, status);
@@ -718,7 +678,20 @@ export function InviteTokensSection() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </section>
+
+      <SettingsCardActions>
+        <Button
+          type="button"
+          size="sm"
+          className="min-h-11 sm:min-h-9"
+          onClick={openCreateDialog}
+          data-testid="admin-invites-open-create"
+        >
+          <Plus className="size-4" aria-hidden="true" />
+          {t("admin.invites.create")}
+        </Button>
+      </SettingsCardActions>
+    </SettingsCard>
   );
 }
 

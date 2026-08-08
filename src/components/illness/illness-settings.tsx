@@ -48,7 +48,7 @@ export function IllnessSettings() {
 
   return (
     <div className="space-y-6">
-      <SettingsCard id="illness-view" className="scroll-mt-28 space-y-4">
+      <SettingsCard id="illness-view" className="scroll-mt-28">
         <SettingsCardHeader
           icon={Eye}
           title={t("moduleList.viewHeading")}
@@ -57,7 +57,7 @@ export function IllnessSettings() {
         />
       </SettingsCard>
 
-      <SettingsCard id="illness-order" className="scroll-mt-28 space-y-4">
+      <SettingsCard id="illness-order" className="scroll-mt-28">
         <SettingsCardHeader
           icon={ListOrdered}
           title={t("moduleList.reorder.heading")}

@@ -85,7 +85,7 @@ export function GeneralSettingsSection() {
         title={t("admin.appSettings")}
         description={t("admin.appSettingsDescription")}
       />
-      <div className="mt-4 space-y-4 pl-7">
+      <div className="space-y-4">
         <SettingsToggle
           label={t("admin.registrationEnabled")}
           description={t("admin.registrationEnabledDescription")}
@@ -103,7 +103,7 @@ export function GeneralSettingsSection() {
         {(settings?.registrationEnabled ?? true) && (
           <p
             data-slot="registration-open-hint"
-            className="text-muted-foreground -mt-2 text-xs"
+            className="text-muted-foreground text-xs"
           >
             {t("admin.registrationOpenHint")}
           </p>

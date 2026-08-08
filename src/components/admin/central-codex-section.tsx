@@ -21,6 +21,8 @@ import { Loader2, ShieldAlert, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
+import { SettingsInfoTile } from "@/components/settings/_info-tile";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Button } from "@/components/ui/button";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { SettingsCard } from "@/components/settings/settings-card";
@@ -166,11 +168,10 @@ export function CentralCodexSection() {
         }
       />
 
-      <div className="mt-4 space-y-4 pl-7">
-        <div className="text-muted-foreground flex items-start gap-2 text-xs">
-          <ShieldAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          <p className="min-w-0">{t("admin.centralCodex.honesty")}</p>
-        </div>
+      <div className="space-y-4">
+        <SettingsInfoTile icon={ShieldAlert} tone="warning">
+          <p className="text-foreground">{t("admin.centralCodex.honesty")}</p>
+        </SettingsInfoTile>
 
         {data?.connectedAt && isConnected && (
           <p className="text-muted-foreground text-xs">
@@ -181,25 +182,27 @@ export function CentralCodexSection() {
         )}
 
         {isConnected ? (
-          <ConfirmButton
-            slot="admin-central-codex-disconnect"
-            variant="outline"
-            size="sm"
-            className="text-destructive min-h-11 shrink-0 sm:min-h-9"
-            icon={<Trash2 className="h-4 w-4" />}
-            label={t("admin.centralCodex.disconnectButton")}
-            title={t("admin.centralCodex.disconnectTitle")}
-            body={t("admin.centralCodex.disconnectBody")}
-            confirmLabel={t("admin.centralCodex.disconnectConfirm")}
-            pending={disconnecting}
-            onConfirm={handleDisconnect}
-          />
+          <SettingsCardActions>
+            <ConfirmButton
+              slot="admin-central-codex-disconnect"
+              variant="destructive"
+              size="sm"
+              className="min-h-11 shrink-0 sm:min-h-9"
+              icon={<Trash2 className="h-4 w-4" />}
+              label={t("admin.centralCodex.disconnectButton")}
+              title={t("admin.centralCodex.disconnectTitle")}
+              body={t("admin.centralCodex.disconnectBody")}
+              confirmLabel={t("admin.centralCodex.disconnectConfirm")}
+              pending={disconnecting}
+              onConfirm={handleDisconnect}
+            />
+          </SettingsCardActions>
         ) : deviceCode ? (
           <div className="border-primary bg-primary/5 space-y-3 rounded-lg border-l-4 p-4">
             <p className="text-sm font-medium">
               {t("settings.ai.deviceCodeHeading")}
             </p>
-            <ol className="text-muted-foreground list-decimal space-y-2 pl-5 text-sm">
+            <ol className="text-muted-foreground list-decimal space-y-2 pl-6 text-sm">
               <li>
                 {t("settings.ai.deviceCodeStep1")}{" "}
                 <a
@@ -248,20 +251,22 @@ export function CentralCodexSection() {
             </div>
           </div>
         ) : (
-          <Button
-            variant="outline"
-            onClick={handleConnect}
-            disabled={devicePolling}
-            className="min-h-11 w-full sm:min-h-9 sm:w-auto"
-            data-slot="admin-central-codex-connect"
-          >
-            {devicePolling ? (
-              <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-            ) : (
-              <Sparkles className="h-4 w-4" />
-            )}
-            {t("admin.centralCodex.connectButton")}
-          </Button>
+          <SettingsCardActions>
+            <Button
+              size="sm"
+              onClick={handleConnect}
+              disabled={devicePolling}
+              className="min-h-11 w-full sm:min-h-9 sm:w-auto"
+              data-slot="admin-central-codex-connect"
+            >
+              {devicePolling ? (
+                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              {t("admin.centralCodex.connectButton")}
+            </Button>
+          </SettingsCardActions>
         )}
       </div>
     </SettingsCard>

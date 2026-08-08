@@ -5,8 +5,8 @@ import { Bell } from "lucide-react";
 
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
-import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { LowStockCard } from "@/components/settings/low-stock-card";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { MoodReminderCard } from "@/components/settings/mood-reminder-card";
 import { Button } from "@/components/ui/button";
 
@@ -46,35 +46,14 @@ export function NotificationsSection() {
 
   return (
     <div className="space-y-10">
-      {/* Cross-links to the other two notification surfaces so this screen
-          names them — the per-event matrix and the delivery channels. */}
-      <div
-        className="flex flex-wrap gap-2"
-        data-slot="notifications-crosslinks"
-      >
-        <Button asChild variant="outline" size="sm">
-          <Link href="/notifications">
-            {t("settings.sections.notifications.matrixLink")}
-          </Link>
-        </Button>
-        <Button asChild variant="outline" size="sm">
-          <Link href="/settings/integrations#channels">
-            {t("settings.sections.notifications.channelsLink")}
-          </Link>
-        </Button>
-      </div>
-
       {/* Group 1 — Reminders ("what you receive"). Rendered only when at
           least one reminder-type card is visible, so a fully-disabled
           account never shows an empty heading. */}
       {anyReminder ? (
         <section className="space-y-4">
-          <SettingsCardHeader
+          <SectionHeading
             icon={Bell}
             title={t("settings.sections.notifications.remindersHeading")}
-            description={t(
-              "settings.sections.notifications.remindersDescription",
-            )}
           />
 
           {/* Mood check-in reminder — only when the mood module is enabled. */}
@@ -93,6 +72,24 @@ export function NotificationsSection() {
           ) : null}
         </section>
       ) : null}
+      {/* Cross-links to the other two notification surfaces. At the END of
+          the page: a screen that opens with two ways off it never says what
+          it is for. */}
+      <div
+        className="flex flex-wrap gap-2"
+        data-slot="notifications-crosslinks"
+      >
+        <Button asChild variant="outline" size="sm">
+          <Link href="/notifications">
+            {t("settings.sections.notifications.matrixLink")}
+          </Link>
+        </Button>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/settings/integrations#channels">
+            {t("settings.sections.notifications.channelsLink")}
+          </Link>
+        </Button>
+      </div>
     </div>
   );
 }

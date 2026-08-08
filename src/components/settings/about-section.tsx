@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
@@ -193,22 +194,17 @@ export function AboutSection() {
           which read as a separate field even though the two values belong
           on the same row. */}
       <SettingsCard>
-        <SettingsCardHeader
-          icon={Info}
-          title="HealthLog"
-          description={t("settings.about.identityDescription")}
-          className="mb-4"
-        />
+        <SettingsCardHeader icon={Info} title="HealthLog" />
 
         {isLoading || !version ? (
-          <div className="flex items-center gap-2 pl-7">
+          <div className="flex items-center gap-2">
             <Loader2 className="text-muted-foreground h-4 w-4 animate-spin motion-reduce:animate-none" />
             <span className="text-muted-foreground text-sm">
               {t("common.loading")}
             </span>
           </div>
         ) : (
-          <dl className="flex flex-wrap items-baseline gap-x-6 gap-y-3 pl-7 text-sm">
+          <dl className="flex flex-wrap items-baseline gap-x-6 gap-y-3 text-sm">
             <div className="flex items-baseline gap-2">
               <dt className="text-muted-foreground text-xs tracking-wide uppercase">
                 {t("settings.about.version")}
@@ -271,10 +267,8 @@ export function AboutSection() {
           <SettingsCardHeader
             icon={BookOpen}
             title={t("settings.about.linksHeading")}
-            description={t("settings.about.linksDescription")}
-            className="mb-4"
           />
-          <div className="flex flex-col gap-2 pl-7 sm:flex-row sm:flex-wrap">
+          <SettingsCardActions align="start">
             <Button
               asChild
               variant="outline"
@@ -319,7 +313,7 @@ export function AboutSection() {
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
             </Button>
-          </div>
+          </SettingsCardActions>
         </SettingsCard>
       )}
 

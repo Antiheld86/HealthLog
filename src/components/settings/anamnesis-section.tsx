@@ -44,7 +44,7 @@ export function AnamnesisSection() {
   return (
     <div className="space-y-6">
       {(coachEnabled || insightsEnabled) && (
-        <SettingsCard className="space-y-4">
+        <SettingsCard>
           <SettingsCardHeader
             icon={EyeOff}
             title={t("records.aiInclusion.cardTitle")}
@@ -55,7 +55,7 @@ export function AnamnesisSection() {
       )}
 
       {coachEnabled && (
-        <SettingsCard className="space-y-4">
+        <SettingsCard>
           <SettingsCardHeader
             icon={HeartPulse}
             title={t("records.conditions.cardTitle")}
@@ -64,7 +64,7 @@ export function AnamnesisSection() {
           <ConditionsManager />
         </SettingsCard>
       )}
-      <SettingsCard className="space-y-4">
+      <SettingsCard>
         <SettingsCardHeader
           icon={ClipboardList}
           title={t("records.profileFacts.cardTitle")}
@@ -73,7 +73,7 @@ export function AnamnesisSection() {
         <HealthProfileFactsManager />
       </SettingsCard>
 
-      <SettingsCard className="space-y-4">
+      <SettingsCard>
         <SettingsCardHeader
           icon={ShieldAlert}
           title={t("records.allergies.cardTitle")}
@@ -82,7 +82,7 @@ export function AnamnesisSection() {
         <AllergyManager />
       </SettingsCard>
 
-      <SettingsCard className="space-y-4">
+      <SettingsCard>
         <SettingsCardHeader
           icon={Users}
           title={t("records.family.cardTitle")}

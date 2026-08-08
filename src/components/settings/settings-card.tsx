@@ -14,17 +14,22 @@ import { cn } from "@/lib/utils";
  * `sm:` (640 px) instead of `md:` (768 px), so on a ~700 px tablet Settings
  * cards read denser than every other surface.
  *
- * The default renders the ui `<Card>` so the surface composes from one shape.
- * Unlike the bare `<Card>` it does NOT impose the `flex flex-col gap` layout:
- * Settings card bodies own their internal rhythm (`SettingsCardHeader` +
- * `mt-4`/`space-y-*` bodies), so the container only owns the border, radius,
- * background, and padding. Pass `className` for per-card extras
- * (`scroll-mt-28`, `space-y-4`, `flex h-full flex-col`, …).
+ * The default renders the ui `<Card>` so the surface composes from one shape,
+ * and like `<Card>` the card owns its internal rhythm: `flex flex-col gap-4`.
+ * The header→body distance therefore comes from the container's gap, never
+ * from a margin a call site remembers to add. It used to come from three
+ * competing techniques at once — `mt-4` on the first body child (20 files),
+ * `space-y-4` on the card (9), `mb-3`/`mb-4` on the header (2) — which is
+ * exactly the drift that made neighbouring cards read as different systems.
+ * A denser card overrides the gap on the card itself (`className="gap-2"`),
+ * as `<Card>` documents; nothing else may re-declare the header→body step.
+ *
+ * Pass `className` for per-card extras (`scroll-mt-28`, `flex h-full`, …).
  *
  * `as="section"` keeps a card's semantic landmark element (a `<section>` with
- * an `aria-labelledby`) while painting the same shape and padding contract.
+ * an `aria-labelledby`) while painting the same shape, rhythm, and padding.
  */
-const SETTINGS_CARD_SHELL = "block gap-0 p-4 md:p-6";
+const SETTINGS_CARD_SHELL = "flex flex-col gap-4 p-4 md:p-6";
 
 type SettingsCardOwnProps = { className?: string };
 
@@ -45,7 +50,7 @@ export function SettingsCard<E extends React.ElementType = typeof Card>({
         // Mirror the ui Card shell so a semantic landmark card paints
         // identically to the default <Card>-backed one.
         className={cn(
-          "bg-card text-card-foreground rounded-xl border p-4 shadow-sm md:p-6",
+          "bg-card text-card-foreground flex flex-col gap-4 rounded-xl border p-4 shadow-sm md:gap-6 md:p-6",
           className,
         )}
         {...props}

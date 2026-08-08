@@ -6,6 +6,7 @@ import { BellRing, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TestConnectionButton } from "@/components/settings/test-connection-button";
 import { SettingsCard } from "@/components/settings/settings-card";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useTranslations } from "@/lib/i18n/context";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
@@ -161,17 +162,20 @@ export function WebPushCard() {
     }
   }
 
-  // The primary action sits in the header row (right of the title) rather than
-  // bottom-left, so an inactive card does not waste a wide empty band before
-  // its enable button. The loading spinner rides the same slot; the
-  // unsupported / denied notices stay in the body.
-  const headerAction = loading ? (
+  // The subscribe / unsubscribe control is this card's primary action, so it
+  // sits where every other card's does: the bottom action row. It used to ride
+  // the header status slot as an `outline`, which made the one card in the
+  // channel group that carries an enable button look like the one card that
+  // carries a status badge.
+  const cardAction = loading ? (
     <Loader2 className="text-muted-foreground h-4 w-4 animate-spin motion-reduce:animate-none" />
   ) : !isSupported || isDenied ? null : (
-    <div className="flex flex-wrap items-center justify-end gap-2">
+    <SettingsCardActions>
+      {isSubscribed && (
+        <TestConnectionButton endpoint="/api/notifications/web-push/test" />
+      )}
       {isSubscribed ? (
         <Button
-          variant="outline"
           size="sm"
           className="min-h-11"
           onClick={handleUnsubscribe}
@@ -184,7 +188,6 @@ export function WebPushCard() {
         </Button>
       ) : (
         <Button
-          variant="outline"
           size="sm"
           className="min-h-11"
           onClick={handleSubscribe}
@@ -198,10 +201,7 @@ export function WebPushCard() {
           {t("settings.webPushSubscribe")}
         </Button>
       )}
-      {isSubscribed && (
-        <TestConnectionButton endpoint="/api/notifications/web-push/test" />
-      )}
-    </div>
+    </SettingsCardActions>
   );
 
   return (
@@ -210,11 +210,10 @@ export function WebPushCard() {
         icon={BellRing}
         title={t("settings.webPush")}
         description={t("settings.webPushDescription")}
-        status={headerAction}
       />
 
       {(!loading && !isSupported) || (!loading && isDenied) || msg ? (
-        <div className="mt-4 space-y-4 pl-7">
+        <div className="space-y-4">
           {!loading && !isSupported ? (
             <p className="text-muted-foreground text-sm">
               {t("settings.webPushNotSupported")}
@@ -235,6 +234,8 @@ export function WebPushCard() {
           )}
         </div>
       ) : null}
+
+      {cardAction}
     </SettingsCard>
   );
 }

@@ -206,7 +206,7 @@ export function ModulesSection() {
         title={t("settings.sections.modules.toggleable.title")}
         description={t("settings.sections.modules.toggleable.description")}
       />
-      <div className="divide-border mt-4 divide-y pl-7">
+      <div className="divide-border divide-y">
         {(Object.keys(MODULE_REGISTRY) as ModuleKey[])
           // Modules switched off in code (pending a rebuild) carry no live
           // toggle — drop the row entirely so a user can't turn one on.

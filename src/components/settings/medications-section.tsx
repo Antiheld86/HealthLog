@@ -80,7 +80,7 @@ export function MedicationsSection() {
     <div className="space-y-6">
       {/* View preference — cards vs table. The shared header toggle
           writes optimistically, so there is no Save button here. */}
-      <SettingsCard id="medications-view" className="scroll-mt-28 space-y-4">
+      <SettingsCard id="medications-view" className="scroll-mt-28">
         <SettingsCardHeader
           icon={LayoutGrid}
           title={t("medications.viewToggleLabel")}
@@ -98,7 +98,7 @@ export function MedicationsSection() {
       </SettingsCard>
 
       {/* Manual order — applies to both list views. */}
-      <SettingsCard id="medications-order" className="scroll-mt-28 space-y-4">
+      <SettingsCard id="medications-order" className="scroll-mt-28">
         <SettingsCardHeader
           icon={Pill}
           title={t("medications.reorderTitle")}

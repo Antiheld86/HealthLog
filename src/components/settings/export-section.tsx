@@ -34,6 +34,8 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { DateField } from "@/components/ui/date-field";
 import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -80,14 +82,13 @@ export function ExportSection() {
           CSV/JSON data-out paths and the import surface. */}
       <section
         aria-labelledby="settings-section-export-other-title"
-        className="space-y-3"
+        className="space-y-4"
       >
-        <h2
+        <SectionHeading
+          icon={Download}
           id="settings-section-export-other-title"
-          className="text-base font-semibold tracking-tight"
-        >
-          {t("settings.sections.export.otherOptionsHeading")}
-        </h2>
+          title={t("settings.sections.export.otherOptionsHeading")}
+        />
         <div className="grid gap-4 md:grid-cols-2">
           <MeasurementsCsvCard />
           <MedicationsCsvCard />
@@ -113,7 +114,7 @@ interface ExportCardShellProps {
   description: string;
   format: ExportFormat;
   children?: React.ReactNode;
-  /** Footer slot — typically the "Download" button + status text. */
+  /** The card's action row — the "Download" button, and nothing after it. */
   footer: React.ReactNode;
   /** Extra grid-position classes applied to the outer card div. */
   outerClassName?: string;
@@ -144,8 +145,8 @@ function ExportCardShell({
           </span>
         }
       />
-      {children && <div className="mt-3 space-y-3">{children}</div>}
-      <div className="mt-4 flex flex-wrap items-center gap-3">{footer}</div>
+      {children && <div className="space-y-3">{children}</div>}
+      <SettingsCardActions>{footer}</SettingsCardActions>
     </SettingsCard>
   );
 }
@@ -258,7 +259,6 @@ function CsvCard({
       footer={
         <Button
           data-testid={actionTestId}
-          variant="outline"
           size="sm"
           className="min-h-11 sm:min-h-9"
           onClick={handleDownload}
@@ -346,7 +346,6 @@ function MedicationsCsvCard() {
       footer={
         <Button
           data-testid="export-action-medications-csv"
-          variant="outline"
           size="sm"
           className="min-h-11 sm:min-h-9"
           onClick={handleDownload}
@@ -471,7 +470,6 @@ function FullBackupCard() {
       footer={
         <Button
           data-testid="export-action-full-backup"
-          variant="outline"
           size="sm"
           className="min-h-11 sm:min-h-9"
           onClick={handleDownload}
@@ -486,7 +484,16 @@ function FullBackupCard() {
         </Button>
       }
     >
-      {/* v1.28 backup-completeness — the description above lists what's
+      {/* What is in the file, and the shape it has. This used to be the
+          card's description — twelve enumerated record types in a muted
+          `text-xs` meta slot, which is neither the tier nor the length that
+          slot is for. */}
+      <p className="text-sm">
+        {t("settings.sections.export.cards.fullBackup.contents")}{" "}
+        {t("settings.sections.export.cards.fullBackup.detail")}
+      </p>
+
+      {/* v1.28 backup-completeness — the paragraph above lists what's
           included; this line honestly discloses what isn't (document
           binaries, workout GPS/sample series) rather than implying
           "everything" is in the file. Always visible, not gated on the

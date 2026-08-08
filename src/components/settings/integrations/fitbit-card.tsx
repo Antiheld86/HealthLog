@@ -32,6 +32,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -243,12 +244,7 @@ export function FitbitCard({
         }
       />
 
-      <hr
-        data-testid="integration-card-divider"
-        className="border-border/60 mt-4"
-      />
-
-      <div className="mt-4 space-y-4 pl-7">
+      <div className="space-y-4">
         {errorMessage && <IntegrationErrorMessage message={errorMessage} />}
         {/* Parked-integration resume CTA. Surfaces only when the row
             state is `parked` (>24h of persistent failures). The button
@@ -363,10 +359,7 @@ export function FitbitCard({
                 />
               </div>
             </div>
-            <p className="text-muted-foreground text-xs">
-              {t("settings.integrationCredentialsHint")}
-            </p>
-            <div className="flex justify-end">
+            <SettingsCardActions>
               <Button
                 type="submit"
                 variant="outline"
@@ -383,7 +376,7 @@ export function FitbitCard({
                 )}
                 {t("settings.fitbitSaveCredentials")}
               </Button>
-            </div>
+            </SettingsCardActions>
             {credsMsg && (
               <p
                 role="alert"
@@ -506,19 +499,26 @@ export function FitbitCard({
             </Link>
           </>
         ) : status?.configured ? (
-          <Button
-            variant="outline"
-            onClick={() => {
-              window.location.href = "/api/fitbit/connect";
-            }}
-          >
-            <Link2 className="h-4 w-4" />
-            {t("settings.fitbitConnect")}
-          </Button>
+          <SettingsCardActions>
+            <Button
+              size="sm"
+              className="min-h-11 w-full sm:w-auto"
+              data-testid="fitbit-connect"
+              onClick={() => {
+                window.location.href = "/api/fitbit/connect";
+              }}
+            >
+              <Link2 className="h-3.5 w-3.5" />
+              {t("settings.fitbitConnect")}
+            </Button>
+          </SettingsCardActions>
         ) : (
-          <div className="bg-muted/50 text-muted-foreground rounded-lg p-3 text-sm">
+          <p
+            className="text-muted-foreground text-xs"
+            data-testid="integration-unavailable"
+          >
             {t("settings.fitbitNoCredentials")}
-          </div>
+          </p>
         )}
       </div>
     </SettingsCard>

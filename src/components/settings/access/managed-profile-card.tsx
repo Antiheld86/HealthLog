@@ -75,7 +75,7 @@ export function ManagedProfileCard() {
         title={t("recordSharing.managed.title")}
         description={t("recordSharing.managed.description")}
       />
-      <div className="mt-4 space-y-4">
+      <div className="space-y-4">
         {/* Content, not meta: this is what somebody is consenting to take on,
             and UI-STANDARDS §3 reserves muted for the incidental. */}
         <p data-slot="managed-profile-explainer" className="text-sm">

@@ -28,6 +28,7 @@ export function SettingsHubBackLink({
   return (
     <Link
       href={href}
+      data-slot="settings-hub-back-link"
       className={cn(
         "text-muted-foreground hover:text-foreground -mx-1 inline-flex w-fit items-center gap-1 rounded-md px-1 py-0.5 text-xs font-medium transition-colors",
       )}

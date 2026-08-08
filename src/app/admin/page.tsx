@@ -41,22 +41,6 @@ export default function AdminOverviewPage() {
           </div>
         )}
 
-        {/* Welcome card — greeting with admin context indicator. */}
-        <section
-          aria-labelledby="admin-overview-welcome-heading"
-          className="bg-card border-border rounded-xl border p-6"
-        >
-          <h2
-            id="admin-overview-welcome-heading"
-            className="text-lg font-semibold"
-          >
-            {t("admin.overview.welcomeTitle", { name: user.username })}
-          </h2>
-          <p className="text-muted-foreground mt-1 text-sm">
-            {t("admin.overview.welcomeSubtitle")}
-          </p>
-        </section>
-
         <VersionTileSection />
 
         <SystemStatusSummary />

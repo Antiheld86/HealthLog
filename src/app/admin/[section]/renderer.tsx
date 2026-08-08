@@ -15,7 +15,6 @@
 import type { JSX } from "react";
 
 import { useAuth } from "@/hooks/use-auth";
-import { useTranslations } from "@/lib/i18n/context";
 import { AboutSection } from "@/components/settings/about-section";
 import { AiQualitySection } from "@/components/admin/ai-quality-section";
 import { AiServerKeySection } from "@/components/admin/ai-server-key-section";
@@ -46,7 +45,6 @@ export function AdminSectionRenderer({
   slug,
 }: RendererProps): JSX.Element | null {
   const { user } = useAuth();
-  const { t } = useTranslations();
 
   // The admin shell layout already gates non-admins via `<AuthShell>`,
   // but the auth hook is async — return nothing on the first render so
@@ -57,37 +55,25 @@ export function AdminSectionRenderer({
   switch (slug) {
     case "system-status":
       return (
-        <SectionFrame
-          title={t("admin.section.system-status.title")}
-          subtitle={t("admin.section.system-status.subtitle")}
-        >
+        <SectionFrame>
           <SystemStatusSection />
         </SectionFrame>
       );
     case "general":
       return (
-        <SectionFrame
-          title={t("admin.section.general.title")}
-          subtitle={t("admin.section.general.subtitle")}
-        >
+        <SectionFrame>
           <GeneralSettingsSection />
         </SectionFrame>
       );
     case "services":
       return (
-        <SectionFrame
-          title={t("admin.section.services.title")}
-          subtitle={t("admin.section.services.subtitle")}
-        >
+        <SectionFrame>
           <ServicesSection />
         </SectionFrame>
       );
     case "integrations":
       return (
-        <SectionFrame
-          title={t("admin.section.integrations.title")}
-          subtitle={t("admin.section.integrations.subtitle")}
-        >
+        <SectionFrame>
           <IntegrationsGroupSection />
         </SectionFrame>
       );
@@ -99,10 +85,7 @@ export function AdminSectionRenderer({
       // `module-availability` section: it gates EVERY module, not just the
       // coach, so it no longer belongs stacked under Coach.
       return (
-        <SectionFrame
-          title={t("admin.section.coach.title")}
-          subtitle={t("admin.section.coach.subtitle")}
-        >
+        <SectionFrame>
           <AssistantSection />
           <AiServerKeySection />
           <CentralCodexSection />
@@ -115,28 +98,19 @@ export function AdminSectionRenderer({
       // admin section (was stacked under Coach). Reconciled name: the
       // user-facing "Module" settings pick from what is available here.
       return (
-        <SectionFrame
-          title={t("admin.section.module-availability.title")}
-          subtitle={t("admin.section.module-availability.subtitle")}
-        >
+        <SectionFrame>
           <ModuleAvailabilitySection />
         </SectionFrame>
       );
     case "reminders":
       return (
-        <SectionFrame
-          title={t("admin.section.reminders.title")}
-          subtitle={t("admin.section.reminders.subtitle")}
-        >
+        <SectionFrame>
           <RemindersSection />
         </SectionFrame>
       );
     case "users":
       return (
-        <SectionFrame
-          title={t("admin.section.users.title")}
-          subtitle={t("admin.section.users.subtitle")}
-        >
+        <SectionFrame>
           <UserManagementSection />
         </SectionFrame>
       );
@@ -145,64 +119,43 @@ export function AdminSectionRenderer({
       // the full table (status, redemptions, revocation) is a workflow
       // of its own and was drowning under the account list.
       return (
-        <SectionFrame
-          title={t("admin.section.invites.title")}
-          subtitle={t("admin.section.invites.subtitle")}
-        >
+        <SectionFrame>
           <InviteTokensSection />
         </SectionFrame>
       );
     case "api-tokens":
       return (
-        <SectionFrame
-          title={t("admin.section.api-tokens.title")}
-          subtitle={t("admin.section.api-tokens.subtitle")}
-        >
+        <SectionFrame>
           <ApiTokenOverviewSection />
         </SectionFrame>
       );
     case "login-overview":
       return (
-        <SectionFrame
-          title={t("admin.section.login-overview.title")}
-          subtitle={t("admin.section.login-overview.subtitle")}
-        >
+        <SectionFrame>
           <LoginOverviewSection />
         </SectionFrame>
       );
     case "app-logs":
       return (
-        <SectionFrame
-          title={t("admin.section.app-logs.title")}
-          subtitle={t("admin.section.app-logs.subtitle")}
-        >
+        <SectionFrame>
           <AppLogPreviewSection />
         </SectionFrame>
       );
     case "backups":
       return (
-        <SectionFrame
-          title={t("admin.section.backups.title")}
-          subtitle={t("admin.section.backups.subtitle")}
-        >
+        <SectionFrame>
           <BackupsSection />
         </SectionFrame>
       );
     case "encryption":
       return (
-        <SectionFrame
-          title={t("admin.section.encryption.title")}
-          subtitle={t("admin.section.encryption.subtitle")}
-        >
+        <SectionFrame>
           <EncryptionSection />
         </SectionFrame>
       );
     case "danger-zone":
       return (
-        <SectionFrame
-          title={t("admin.section.danger-zone.title")}
-          subtitle={t("admin.section.danger-zone.subtitle")}
-        >
+        <SectionFrame>
           <DangerZoneSection />
         </SectionFrame>
       );
@@ -212,10 +165,7 @@ export function AdminSectionRenderer({
       // section so it gets the same visible heading + subtitle (the one admin
       // page that was bypassing the frame and showing no heading).
       return (
-        <SectionFrame
-          title={t("admin.section.about.title")}
-          subtitle={t("admin.section.about.subtitle")}
-        >
+        <SectionFrame>
           <AboutSection />
         </SectionFrame>
       );
@@ -225,17 +175,13 @@ export function AdminSectionRenderer({
   }
 }
 
-interface SectionFrameProps {
-  // v1.18.6.1 — the visible heading + subtitle moved to `<AdminShell>`, which
-  // places them in their own grid row so the left nav lines up with the first
-  // card. `title` / `subtitle` are still passed by every call site (and remain
-  // the i18n source of truth the shell reads), but the frame no longer paints
-  // them — it is now just the `space-y-6` card-stack wrapper.
-  title?: string;
-  subtitle?: string;
-  children: React.ReactNode;
-}
-
-function SectionFrame({ children }: SectionFrameProps) {
+/**
+ * The card-stack wrapper for a section. It took a `title` and a `subtitle`
+ * from all seventeen call sites and rendered neither — the visible heading
+ * moved to `<AdminShell>` in v1.18.6.1, which reads the same i18n keys
+ * itself. A prop contract nothing honours is a promise a later reader
+ * believes, so it is gone.
+ */
+function SectionFrame({ children }: { children: React.ReactNode }) {
   return <div className="space-y-6">{children}</div>;
 }

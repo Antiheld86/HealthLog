@@ -6,6 +6,7 @@ import { KeyRound, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Button } from "@/components/ui/button";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { Input } from "@/components/ui/input";
@@ -98,13 +99,7 @@ export function AiServerKeySection() {
       <SettingsCardHeader
         icon={KeyRound}
         title={t("admin.aiServerKey.title")}
-        description={
-          <>
-            <p>{t("admin.aiServerKey.description")}</p>
-            <p>{t("admin.aiServerKey.byokHint")}</p>
-            <p>{t("admin.aiServerKey.consentHint")}</p>
-          </>
-        }
+        description={t("admin.aiServerKey.description")}
         status={
           <Badge variant={configured ? "default" : "outline"}>
             {configured
@@ -114,7 +109,12 @@ export function AiServerKeySection() {
         }
       />
 
-      <div className="mt-4 space-y-4 pl-7">
+      <div className="space-y-4">
+        <div className="space-y-2 text-sm">
+          <p>{t("admin.aiServerKey.byokHint")}</p>
+          <p>{t("admin.aiServerKey.consentHint")}</p>
+        </div>
+
         <div className="space-y-1.5">
           <Label htmlFor="admin-ai-server-key-input">
             {t("admin.aiServerKey.keyLabel")}
@@ -159,8 +159,23 @@ export function AiServerKeySection() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <SettingsCardActions>
+          {configured && (
+            <ConfirmButton
+              slot="admin-ai-server-key-remove"
+              variant="outline"
+              size="sm"
+              label={t("admin.aiServerKey.remove")}
+              title={t("admin.aiServerKey.removeTitle")}
+              body={t("admin.aiServerKey.removeBody")}
+              confirmLabel={t("admin.aiServerKey.removeConfirm")}
+              pending={save.isPending}
+              onConfirm={handleRemove}
+            />
+          )}
           <Button
+            size="sm"
+            className="min-h-11 sm:min-h-9"
             onClick={handleSave}
             disabled={save.isPending}
             data-slot="admin-ai-server-key-save"
@@ -170,19 +185,7 @@ export function AiServerKeySection() {
             )}
             {t("admin.aiServerKey.save")}
           </Button>
-          {configured && (
-            <ConfirmButton
-              slot="admin-ai-server-key-remove"
-              variant="outline"
-              label={t("admin.aiServerKey.remove")}
-              title={t("admin.aiServerKey.removeTitle")}
-              body={t("admin.aiServerKey.removeBody")}
-              confirmLabel={t("admin.aiServerKey.removeConfirm")}
-              pending={save.isPending}
-              onConfirm={handleRemove}
-            />
-          )}
-        </div>
+        </SettingsCardActions>
       </div>
     </SettingsCard>
   );

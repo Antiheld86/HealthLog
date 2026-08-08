@@ -22,6 +22,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { cn } from "@/lib/utils";
 import { prefersReducedMotion } from "@/lib/charts/reduced-motion";
 import { useTranslations } from "@/lib/i18n/context";
@@ -257,28 +258,14 @@ export function InsightsPillOrderSection({ id }: { id?: string }) {
       id={id}
       data-slot="insights-pill-order-section"
       aria-labelledby="insights-pill-order-title"
-      className="space-y-4"
     >
       <SettingsCardHeader
         icon={ListOrdered}
         titleId="insights-pill-order-title"
         title={t("insights.pillOrder.title")}
         description={t("insights.pillOrder.description")}
-        status={
-          <Button
-            size="sm"
-            onClick={() => saveMutation.mutate(draftTiles)}
-            disabled={busy || !dirty}
-            data-slot="insights-pill-order-save"
-            className="min-h-11 self-end sm:min-h-9 sm:self-auto"
-          >
-            {saveMutation.isPending && (
-              <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-            )}
-            {t("insights.pillOrder.save")}
-          </Button>
-        }
       />
+      <p className="text-sm">{t("insights.pillOrder.detail")}</p>
 
       {isLoading ? (
         <p
@@ -351,6 +338,20 @@ export function InsightsPillOrderSection({ id }: { id?: string }) {
           ))}
         </div>
       )}
+      <SettingsCardActions>
+        <Button
+          size="sm"
+          onClick={() => saveMutation.mutate(draftTiles)}
+          disabled={busy || !dirty}
+          data-slot="insights-pill-order-save"
+          className="min-h-11 self-end sm:min-h-9 sm:self-auto"
+        >
+          {saveMutation.isPending && (
+            <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+          )}
+          {t("insights.pillOrder.save")}
+        </Button>
+      </SettingsCardActions>
     </SettingsCard>
   );
 }

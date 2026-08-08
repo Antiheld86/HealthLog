@@ -14,6 +14,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Loader2, MonitorSmartphone } from "lucide-react";
 
 import { SettingsCard } from "@/components/settings/settings-card";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
+import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
@@ -86,36 +88,30 @@ export function SecuritySessionsCard({
 
   return (
     <SettingsCard data-slot="settings-security-sessions-card">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-controls={regionId}
-        data-slot="settings-security-sessions-toggle"
-        className="hover:bg-muted/40 focus-visible:ring-ring/50 -m-2 mb-2 flex w-full items-start gap-2 rounded-md p-2 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
-      >
-        <MonitorSmartphone
-          className="text-muted-foreground mt-0.5 h-5 w-5 shrink-0"
-          aria-hidden="true"
-        />
-        <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">
+      <SettingsCardHeader
+        icon={MonitorSmartphone}
+        title={
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            aria-controls={regionId}
+            data-slot="settings-security-sessions-toggle"
+            className="hover:text-foreground focus-visible:ring-ring/50 -m-1 flex min-h-11 items-center gap-2 rounded-md p-1 text-left focus-visible:ring-2 focus-visible:outline-none"
+          >
             {t("settings.security.sessionsTitle")}
-          </h2>
-          <ChevronDown
-            aria-hidden="true"
-            className={cn(
-              "text-muted-foreground h-4 w-4 shrink-0 transition-transform",
-              open && "rotate-180",
-            )}
-          />
-        </div>
-      </button>
-      <div id={regionId} hidden={!open} className="space-y-4 pl-7">
-        <p className="text-muted-foreground text-xs">
-          {t("settings.security.sessionsDescription")}
-        </p>
-
+            <ChevronDown
+              aria-hidden="true"
+              className={cn(
+                "text-muted-foreground size-4 shrink-0 transition-transform",
+                open && "rotate-180",
+              )}
+            />
+          </button>
+        }
+        description={t("settings.security.sessionsDescription")}
+      />
+      <div id={regionId} hidden={!open} className="space-y-4">
         {isLoading && (
           <Loader2 className="text-muted-foreground h-5 w-5 animate-spin motion-reduce:animate-none" />
         )}
@@ -188,7 +184,7 @@ export function SecuritySessionsCard({
         )}
 
         {hasOthers && (
-          <div className="flex justify-end">
+          <SettingsCardActions>
             <ConfirmButton
               slot="sign-out-everywhere"
               className="min-h-11 sm:min-h-9"
@@ -199,7 +195,7 @@ export function SecuritySessionsCard({
               onConfirm={() => revokeOthers.mutate()}
               pending={revokeOthers.isPending}
             />
-          </div>
+          </SettingsCardActions>
         )}
 
         {status && (

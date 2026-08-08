@@ -66,7 +66,9 @@ export function CycleTrackingCard({
         title={t("settings.cycleTracking.title")}
         description={t("settings.cycleTracking.description")}
       />
-      <div className="mt-4 space-y-4 pl-7">
+      <p className="text-sm">{t("settings.cycleTracking.detail")}</p>
+
+      <div className="space-y-4">
         <div className="flex items-start justify-between gap-4">
           <Label htmlFor="cycle-tracking-enable" className="text-sm">
             {t("settings.cycleTracking.enable")}

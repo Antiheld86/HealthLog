@@ -48,7 +48,7 @@ export function RecordAnamnesisSection() {
 
   return (
     <div className="space-y-6" data-slot="record-anamnesis-section">
-      <SettingsCard className="space-y-4">
+      <SettingsCard>
         <SettingsCardHeader
           icon={ShieldAlert}
           title={t("records.allergies.cardTitle")}
@@ -57,7 +57,7 @@ export function RecordAnamnesisSection() {
         <AllergyManager />
       </SettingsCard>
 
-      <SettingsCard className="space-y-4">
+      <SettingsCard>
         <SettingsCardHeader
           icon={Users}
           title={t("records.family.cardTitle")}

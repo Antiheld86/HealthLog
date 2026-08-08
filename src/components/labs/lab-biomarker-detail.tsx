@@ -27,6 +27,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { ResponsiveSheet } from "@/components/ui/responsive-sheet";
+import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { InsightStatusCard } from "@/components/insights/insight-status-card";
 import { MetricStatStrip } from "@/components/insights/metric-stat-strip";
@@ -303,14 +304,10 @@ export function LabBiomarkerDetail({ biomarkerId }: { biomarkerId: string }) {
   if (markerError || listError) {
     return (
       <div className="space-y-6">
-        <header className="space-y-1.5">
-          <h1 className="text-2xl font-bold tracking-tight">
-            {marker?.name ?? t("labs.detail.title")}
-          </h1>
-          <p className="text-foreground text-sm leading-relaxed">
-            {description}
-          </p>
-        </header>
+        <PageHeader
+          title={marker?.name ?? t("labs.detail.title")}
+          description={description}
+        />
         <QueryErrorCard
           title={t("labs.loadError")}
           onRetry={() => {
@@ -324,91 +321,88 @@ export function LabBiomarkerDetail({ biomarkerId }: { biomarkerId: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight">
-            {marker?.name ?? <Skeleton className="h-7 w-32" />}
-          </h1>
-          {marker?.unit ? (
-            <p className="text-muted-foreground text-xs sm:text-sm">
-              {marker.unit}
-              {marker.panel ? ` · ${marker.panel}` : ""}
-            </p>
-          ) : null}
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {/* v1.25.3 — header control cluster, left → right:
+      <PageHeader
+        title={marker?.name ?? <Skeleton className="h-7 w-32" />}
+        description={description}
+        actions={
+          <>
+            {/* v1.25.3 — header control cluster, left → right:
               Delete · Edit · Show-all-values · Add. The icon controls share one
               ghost-icon treatment (the target-range editing lives inside the
               full marker editor behind the pencil, so the separate range
               control was dropped). */}
-          <DeleteButton
-            onConfirm={() => deleteMarker.mutate()}
-            title={t("labs.biomarker.deleteConfirmTitle")}
-            description={t("labs.biomarker.deleteConfirmDescription")}
-            confirmLabel={t("labs.biomarker.delete")}
-            triggerTitle={t("labs.biomarker.delete")}
-            className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
-            iconClassName="h-4 w-4"
-          />
-          {canManage && (
-            <Button
-              variant="ghost"
-              size="icon"
+            <DeleteButton
+              onConfirm={() => deleteMarker.mutate()}
+              title={t("labs.biomarker.deleteConfirmTitle")}
+              description={t("labs.biomarker.deleteConfirmDescription")}
+              confirmLabel={t("labs.biomarker.delete")}
+              triggerTitle={t("labs.biomarker.delete")}
               className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
-              onClick={() => setEditOpen(true)}
-              disabled={!marker}
-              aria-label={t("labs.biomarker.edit")}
-              title={t("labs.biomarker.edit")}
-            >
-              <Pencil className="h-4 w-4" />
-            </Button>
-          )}
-          {/* "Show all readings" mirrors the metric sub-pages' `<SubPageShell>`
+              iconClassName="h-4 w-4"
+            />
+            {canManage && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
+                onClick={() => setEditOpen(true)}
+                disabled={!marker}
+                aria-label={t("labs.biomarker.edit")}
+                title={t("labs.biomarker.edit")}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            )}
+            {/* "Show all readings" mirrors the metric sub-pages' `<SubPageShell>`
               control. The full reading feed lives on
               `/labs/[biomarkerId]/values`; the detail page keeps the
               numbers-first spine. */}
-          {readings.length > 0 ? (
-            <Button
-              asChild
-              variant="ghost"
-              size="icon"
-              data-slot="lab-show-all-values"
-              className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
-            >
-              <Link
-                href={`/labs/${biomarkerId}/values`}
-                aria-label={t("insights.subPage.showAllValues")}
-                title={t("insights.subPage.showAllValues")}
+            {readings.length > 0 ? (
+              <Button
+                asChild
+                variant="ghost"
+                size="icon"
+                data-slot="lab-show-all-values"
+                className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
               >
-                <ListOrdered className="h-4 w-4" aria-hidden="true" />
-              </Link>
-            </Button>
-          ) : null}
-          {/* v1.36.x — entering a result is an admitted delegated write;
+                <Link
+                  href={`/labs/${biomarkerId}/values`}
+                  aria-label={t("insights.subPage.showAllValues")}
+                  title={t("insights.subPage.showAllValues")}
+                >
+                  <ListOrdered className="h-4 w-4" aria-hidden="true" />
+                </Link>
+              </Button>
+            ) : null}
+            {/* v1.36.x — entering a result is an admitted delegated write;
               renaming or removing the marker is not. */}
-          {canAdd && (
-            <Button
-              onClick={() => setAddOpen(true)}
-              // v1.18.10 (W10) — on the narrowest phones the h1 + Edit + Delete +
-              // text "Add" button crowd the row and truncate the title hard.
-              // Drop the Add button to icon-only under `sm` (label kept for
-              // screen readers via `aria-label`); the full text returns at `sm+`.
-              className="min-h-11 min-w-11 shrink-0 sm:min-h-9 sm:min-w-0"
-              aria-label={t("labs.addResult")}
-            >
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">{t("labs.addResult")}</span>
-            </Button>
-          )}
-        </div>
-      </div>
+            {canAdd && (
+              <Button
+                onClick={() => setAddOpen(true)}
+                // v1.18.10 (W10) — on the narrowest phones the h1 + Edit + Delete +
+                // text "Add" button crowd the row and truncate the title hard.
+                // Drop the Add button to icon-only under `sm` (label kept for
+                // screen readers via `aria-label`); the full text returns at `sm+`.
+                className="min-h-11 min-w-11 shrink-0 sm:min-h-9 sm:min-w-0"
+                aria-label={t("labs.addResult")}
+              >
+                <Plus className="h-4 w-4" />
+                <span className="hidden sm:inline">{t("labs.addResult")}</span>
+              </Button>
+            )}
+          </>
+        }
+      />
 
-      {/* v1.25.1 — the static description leads the page, directly beneath the
-          heading, mirroring the metric sub-pages' explainer caption. Computed
-          once above (catalog desc → user `context` → generic fallback) so a
-          catalog-less marker still carries a description. */}
-      <p className="text-foreground text-sm leading-relaxed">{description}</p>
+      {/* Unit + panel are meta about the marker, not its explainer, so they
+          read below the header block rather than competing with it for the
+          one description line every page header carries. */}
+      {marker?.unit ? (
+        <p className="text-muted-foreground text-sm">
+          {marker.unit}
+          {marker.panel ? ` · ${marker.panel}` : ""}
+        </p>
+      ) : null}
 
       {/* Bridge to the source report PDFs. There is no per-value document
           relation in the data model yet, so this links to the vault filtered

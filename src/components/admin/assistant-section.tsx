@@ -103,7 +103,7 @@ export function AssistantSection() {
         title={t("admin.assistant.title")}
         description={t("admin.assistant.description")}
       />
-      <div className="mt-4 space-y-4 pl-7">
+      <div className="space-y-4">
         <SettingsToggle
           label={t("admin.assistant.master.title")}
           description={t("admin.assistant.master.description")}

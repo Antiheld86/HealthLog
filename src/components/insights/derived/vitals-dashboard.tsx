@@ -13,7 +13,7 @@ import {
   MEASUREMENT_TYPE_LABEL_KEYS,
 } from "@/components/measurements/measurement-list-meta";
 import { TileHeader } from "@/components/insights/tile-header";
-import { SectionHeading } from "@/components/insights/section-heading";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { SparklineDeltaTile } from "./sparkline-delta-tile";
 import { LearnMoreLink } from "@/components/ui/learn-more-link";
 import { CoverageMeter } from "./coverage-meter";

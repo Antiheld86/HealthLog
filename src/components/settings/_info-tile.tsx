@@ -43,7 +43,10 @@ const TONE_ICON: Record<SettingsInfoTileTone, string> = {
   neutral: "text-muted-foreground",
 };
 
-export interface SettingsInfoTileProps {
+export interface SettingsInfoTileProps extends Omit<
+  React.ComponentProps<"div">,
+  "title"
+> {
   /** Lucide icon component; rendered in the tone colour. */
   icon: LucideIcon;
   /** Visual tone — routes through the semantic colour tokens. */
@@ -62,6 +65,7 @@ export function SettingsInfoTile({
   title,
   children,
   className,
+  ...props
 }: SettingsInfoTileProps) {
   return (
     <div
@@ -70,6 +74,7 @@ export function SettingsInfoTile({
         TONE_SURFACE[tone],
         className,
       )}
+      {...props}
     >
       <Icon
         className={cn("mt-0.5 h-4 w-4 shrink-0", TONE_ICON[tone])}

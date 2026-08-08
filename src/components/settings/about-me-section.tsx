@@ -49,6 +49,7 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { SettingsInfoTile } from "@/components/settings/_info-tile";
 import { Label } from "@/components/ui/label";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { SettingsCard } from "@/components/settings/settings-card";
@@ -195,7 +196,6 @@ export function AboutMeSection({
       as="section"
       aria-labelledby="settings-ai-about-me-title"
       data-testid="settings-about-me-card"
-      className="space-y-4"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <SettingsCardHeader
@@ -229,7 +229,7 @@ export function AboutMeSection({
         </div>
       </div>
 
-      <div className="pl-7">
+      <div>
         {structuredField(
           "allergies",
           t("settings.ai.aboutMe.allergiesLabel"),
@@ -237,7 +237,7 @@ export function AboutMeSection({
         )}
       </div>
 
-      <div className="space-y-1.5 pl-7">
+      <div className="space-y-1.5">
         <Label htmlFor="settings-about-me-freetext">
           {t("settings.ai.aboutMe.freeTextLabel")}
         </Label>
@@ -255,7 +255,7 @@ export function AboutMeSection({
         />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 pl-7">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <p
           data-testid="settings-about-me-count"
           className="text-muted-foreground text-xs tabular-nums"
@@ -302,18 +302,13 @@ export function AboutMeSection({
       </div>
 
       {pendingQuestions.length > 0 && (
-        <div
+        <SettingsInfoTile
+          icon={MessageCircleQuestion}
+          tone="primary"
           data-testid="settings-about-me-questions"
-          className="border-primary/30 bg-primary/5 rounded-lg border p-4"
+          title={t("settings.ai.aboutMe.questionsTitle")}
         >
-          <p className="flex items-center gap-2 text-sm font-medium">
-            <MessageCircleQuestion
-              className="text-primary size-4 shrink-0"
-              aria-hidden="true"
-            />
-            {t("settings.ai.aboutMe.questionsTitle")}
-          </p>
-          <ul className="text-muted-foreground mt-2 list-disc space-y-1 pl-5 text-sm">
+          <ul className="list-disc space-y-1 pl-6">
             {pendingQuestions.map((q) => (
               <li key={q}>{q}</li>
             ))}
@@ -326,7 +321,7 @@ export function AboutMeSection({
               {t("settings.ai.aboutMe.questionsOpenCoach")}
             </Link>
           </p>
-        </div>
+        </SettingsInfoTile>
       )}
 
       {query.isError && (
@@ -339,14 +334,14 @@ export function AboutMeSection({
         </p>
       )}
 
-      <p className="text-muted-foreground border-border border-t pt-3 pl-7 text-xs">
+      <p className="text-muted-foreground border-border border-t pt-3 text-xs">
         {t("settings.ai.aboutMe.hint")} {t("settings.ai.aboutMe.profileHint")}
       </p>
 
       {/* v1.25.12 — cross-link to the Anamnese (medical-history) home, where the
           chronic conditions the Coach watches now live alongside allergies +
           family history as one coherent medical history. */}
-      <p className="text-muted-foreground pl-7 text-xs">
+      <p className="text-muted-foreground text-xs">
         {t("settings.ai.aboutMe.recordsLink")}{" "}
         <Link
           href="/settings/anamnesis"

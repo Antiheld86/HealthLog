@@ -19,6 +19,7 @@ import { makeFormatters } from "@/lib/format-locale";
 import type { Locale } from "@/lib/i18n/config";
 import type { ShareViewDocument } from "@/lib/clinician-share/share-view-data";
 import type { ReportSelection } from "@/lib/report-selection/selection";
+import { PageHeader } from "@/components/ui/page-header";
 import { DocumentEntry } from "./documents-list";
 import { ShareDownloadActions } from "./download-actions";
 import {
@@ -98,13 +99,8 @@ export function ClinicianView({
       className="mx-auto min-h-dvh w-full max-w-3xl px-4 py-8"
     >
       {/* ── Provenance header ───────────────────────────────────────── */}
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">
-          {t("clinicianView.title")}
-        </h1>
-        {label ? (
-          <p className="text-muted-foreground mt-1 text-sm">{label}</p>
-        ) : null}
+      <header className="mb-6 space-y-1.5">
+        <PageHeader title={t("clinicianView.title")} description={label} />
         {report && !documentOnly ? (
           <p className="text-muted-foreground mt-3 text-sm">
             {t("clinicianView.period", {

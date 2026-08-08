@@ -2984,7 +2984,8 @@
       "valuesBack": "Retour aux Insights",
       "valuesBackToMetric": "Retour à {metric}",
       "scoresBack": "Retour aux Insights",
-      "ecgDescription": "Enregistrements ECG à dérivation unique de votre appareil, chacun accompagné du résultat de l'appareil. HealthLog affiche le tracé et l'enregistrement, mais n'interprète pas la courbe."
+      "ecgDescription": "Enregistrements ECG à dérivation unique de votre appareil, chacun accompagné du résultat de l'appareil.",
+      "ecgDisclaimer": "HealthLog affiche le tracé et l'enregistrement, mais n'interprète pas la courbe."
     },
     "units": {
       "steps": "pas",
@@ -3971,12 +3972,13 @@
     },
     "pillOrder": {
       "title": "Trier les onglets de navigation",
-      "description": "Faites glisser les onglets dans l'ordre souhaité et affichez-les ou masquez-les via l'icône en forme d'œil. Les pages de détail masquées disparaissent aussi de la navigation supérieure.",
+      "description": "Faites glisser les onglets dans l'ordre souhaité et affichez-les ou masquez-les via l'icône en forme d'œil.",
       "dragHandle": "Réorganiser",
       "saveSuccess": "Ordre des onglets enregistré.",
       "saveError": "L'enregistrement de l'ordre des onglets a échoué.",
       "save": "Enregistrer",
-      "empty": "Aucun onglet de navigation disponible pour le moment."
+      "empty": "Aucun onglet de navigation disponible pour le moment.",
+      "detail": "Les pages de détail masquées disparaissent aussi de la navigation supérieure."
     },
     "customize": "Personnaliser les Analyses",
     "regenerateRateLimited": "Limite d'actualisation atteinte — réessayez plus tard.",
@@ -4458,7 +4460,7 @@
   "settings": {
     "researchMode": {
       "sectionTitle": "Mode Recherche",
-      "subtitle": "Affichage optionnel d'une courbe de niveau estimé de médicament GLP-1, dérivée de la pharmacocinétique de population publiée par l'EMA. Lecture seule — jamais une mesure ni un conseil médical.",
+      "subtitle": "Courbe optionnelle du niveau estimé de GLP-1, d'après les données de l'EMA.",
       "toggleLabel": "Afficher la courbe estimée du niveau de médicament",
       "disabledStatus": "Désactivé. La courbe est masquée.",
       "enabledStaleStatus": "Le disclaimer a été mis à jour. Reconfirmez ci-dessous pour réafficher la courbe.",
@@ -4466,7 +4468,8 @@
       "rePromptTitle": "Disclaimer mis à jour",
       "rePromptBody": "Le disclaimer du mode Recherche a été mis à jour depuis votre dernière confirmation. Relisez-le et reconfirmez pour garder la courbe visible.",
       "rePromptCta": "Reconfirmer le disclaimer",
-      "disableError": "Impossible de désactiver le mode Recherche. Veuillez réessayer."
+      "disableError": "Impossible de désactiver le mode Recherche. Veuillez réessayer.",
+      "subtitleDetail": "Lecture seule — jamais une mesure ni un conseil médical."
     },
     "shell": {
       "sectionsNav": "Sections des réglages",
@@ -4593,7 +4596,8 @@
       },
       "unavailableTitle": "Indisponible dans ce dossier partagé",
       "unavailableDescription": "Cette section des réglages est volontairement indisponible lorsque vous consultez le dossier d’une autre personne.",
-      "integrationStatusDescription": "État de connexion pour ce dossier géré. Les commandes de connexion ne sont pas disponibles."
+      "integrationStatusDescription": "État de connexion pour ce dossier géré.",
+      "integrationStatusDetail": "Les commandes de connexion ne sont pas disponibles."
     },
     "sections": {
       "account": {
@@ -4606,7 +4610,6 @@
         "description": "Services connectés, canaux de diffusion et priorité des sources au même endroit.",
         "subtitle": "Connectez et gérez vos sources de données et appareils.",
         "connectionsHeading": "Connexions",
-        "connectionsDescription": "Connectez et gérez vos sources de données et appareils.",
         "channelsHeading": "Canaux de diffusion",
         "channelsDescription": "Où sont envoyés les rappels et alertes.",
         "matrixLink": "Notifications par canal"
@@ -4616,7 +4619,6 @@
         "description": "Tous les rappels au même endroit — quoi et quand, et où c'est envoyé.",
         "subtitle": "Choisissez les rappels que vous recevez et où ils sont envoyés.",
         "remindersHeading": "Rappels",
-        "remindersDescription": "Ce que vous recevez.",
         "matrixLink": "Notifications par canal",
         "channelsLink": "Canaux de diffusion"
       },
@@ -4670,7 +4672,7 @@
         "integrationsHint": "Connectez ou déconnectez des sources de données sur la page Intégrations.",
         "integrationsHintLink": "Ouvrir les intégrations",
         "cardTitle": "Priorité des sources par métrique",
-        "help": "Si plusieurs sources fournissent la même valeur le même jour, la source en tête compte comme canonique. Les autres restent enregistrées pour la piste d’audit.",
+        "help": "Si plusieurs sources fournissent la même valeur le même jour, la source en tête compte comme canonique.",
         "resetDefaults": "Rétablir les valeurs par défaut",
         "resetDefaultsTitle": "Réinitialiser l’ordre des sources ?",
         "resetDefaultsBody": "Chaque classement que vous avez défini revient à l’ordre par défaut, pour toutes les mesures et tous les types d’appareil à la fois. L’enregistrement est immédiat et irréversible.",
@@ -4730,13 +4732,15 @@
         "subtitle": "Choisissez la source prioritaire en cas de doublon de mesure.",
         "nutrients": {
           "title": "Apports en nutriments synchronisés",
-          "description": "Totaux quotidiens synchronisés depuis Apple Health sur les {days} derniers jours. Lecture seule : l'app source reste propriétaire des valeurs.",
+          "description": "Totaux quotidiens synchronisés depuis Apple Health sur les {days} derniers jours.",
           "empty": "Aucune donnée de nutriments synchronisée pour l'instant.",
           "latest": "{amount} {unit} le {date}",
           "daysWithData": "{count} jours sur {days}",
           "moduleHint": "La synchronisation est contrôlée par le module Apports en nutriments.",
-          "moduleHintLink": "Gérer les modules"
-        }
+          "moduleHintLink": "Gérer les modules",
+          "detail": "Lecture seule : l'app source reste propriétaire des valeurs."
+        },
+        "helpDetail": "Les autres restent enregistrées pour la piste d’audit."
       },
       "ai": {
         "title": "Fournisseur d'IA",
@@ -4781,13 +4785,15 @@
           },
           "fullBackup": {
             "title": "Sauvegarde complète",
-            "description": "Vos mesures, médicaments, humeur, cycle, analyses, épisodes de maladie, allergies, antécédents familiaux, nutriments, séances, votre profil de santé et vos mesures personnalisées dans un seul fichier JSON. Même format que la sauvegarde automatique hebdomadaire. Certains types d'enregistrement ne sont pas encore inclus : le manifeste du fichier indique ce qu'il contient.",
+            "description": "L'ensemble de votre dossier dans un fichier JSON.",
             "scopeNote": "Les métadonnées des documents et le résumé IA, s'il existe, sont inclus en texte clair ; les fichiers originaux des documents ainsi que les tracés GPS/données d'échantillons des entraînements ne le sont pas — téléchargez-les séparément depuis le coffre de documents ou l'export des entraînements.",
             "encryptToggle": "Chiffrer avec une phrase secrète",
             "passphrasePlaceholder": "Phrase secrète (12 caractères min.)",
             "passphraseHelp": "Dérive la clé de l'archive avec Argon2id et la scelle avec AES-256-GCM. Enregistrez le fichier avec l'extension .hlx.",
             "noRecoveryWarning": "Aucune récupération possible : si vous perdez cette phrase secrète, l'archive ne pourra pas être ouverte. Conservez-la en lieu sûr.",
-            "stepUpNeeded": "Confirmez votre second facteur, puis réessayez."
+            "stepUpNeeded": "Confirmez votre second facteur, puis réessayez.",
+            "detail": "Même format que la sauvegarde automatique hebdomadaire. Certains types d'enregistrement ne sont pas encore inclus : le manifeste du fichier indique ce qu'il contient.",
+            "contents": "Vos mesures, médicaments, humeur, cycle, analyses, épisodes de maladie, allergies, antécédents familiaux, nutriments, séances, votre profil de santé et vos mesures personnalisées dans un seul fichier JSON."
           }
         },
         "import": {
@@ -4841,7 +4847,7 @@
           },
           "csv": {
             "title": "Fichier CSV",
-            "description": "Importez des mesures depuis un tableur ou l'export d'un appareil. Une ligne par relevé.",
+            "description": "Importez des mesures depuis un tableur ou l'export d'un appareil.",
             "pasteLabel": "Coller le CSV",
             "fileInputLabel": "Choisir un fichier CSV à importer",
             "schemaHint": "Colonnes : type, value, unit, measuredAt (avec décalage horaire) et, en option, glucoseContext, notes, externalId.",
@@ -4881,11 +4887,12 @@
             "reasonExternalIdTooLong": "l'identifiant externe est trop long",
             "reasonUnstableExternalId": "l'identifiant externe n'est pas stable d'un export à l'autre",
             "reasonDuplicate": "déjà importée",
-            "reasonUnknown": "ignorée"
+            "reasonUnknown": "ignorée",
+            "detail": "Une ligne par relevé."
           },
           "doseHistory": {
             "title": "Historique des prises",
-            "description": "Un historique de prises exporté depuis une autre application de suivi, lu tel quel. Un fichier couvre tous les médicaments qu'il contient.",
+            "description": "Un historique de prises exporté depuis une autre application de suivi, lu tel quel.",
             "pasteLabel": "Coller l'export",
             "fileInputLabel": "Choisir un fichier d'historique des prises",
             "uploadFile": "Choisir un fichier",
@@ -4935,7 +4942,8 @@
               "jsonNotAnArray": "Ce JSON ne contient aucune liste de prises.",
               "jsonNoIntakeTime": "L'export JSON consigne le moment où une dose était due, pas celui où elle a été prise, et une heure prévue ne sera pas écrite comme si c'était la prise. Exportez le CSV, qui porte les deux.",
               "tooManyRows": "Ce fichier contient plus de lignes qu'un import peut en prendre. Découpez-le et importez les parties."
-            }
+            },
+            "detail": "Un fichier couvre tous les médicaments qu'il contient."
           }
         },
         "subtitle": "Exportez vos données ou importez depuis une sauvegarde."
@@ -4986,7 +4994,7 @@
         "error": "Échec de l'enregistrement. Veuillez réessayer.",
         "toggleable": {
           "title": "Ce que vous suivez",
-          "description": "Domaines optionnels. Les modules désactivés disparaissent de la navigation, des tuiles et des analyses ; vos données sont conservées."
+          "description": "Les modules désactivés disparaissent de la navigation, des tuiles et des analyses ; vos données sont conservées."
         },
         "manageIn": "Gérer dans {section}",
         "operatorDisabled": "Désactivé sur tout le serveur",
@@ -5374,7 +5382,7 @@
       "testReasonUnreachable": "Impossible de joindre le fournisseur d’IA.",
       "coachMemory": {
         "title": "Ce dont le Coach se souvient",
-        "description": "Les informations durables que vous avez confiées au Coach. Il s'en sert pour garder ses réponses pertinentes. Supprimez tout ce qu'il vaut mieux qu'il oublie.",
+        "description": "Les informations durables que vous avez confiées au Coach.",
         "empty": "Le Coach n'a encore enregistré aucune information. Au fil de vos échanges, il retient les détails durables que vous partagez — vos objectifs, vos affections, vos préférences — et vous pouvez les effacer ici à tout moment.",
         "learnedPrefix": "appris {when}",
         "categoryPreference": "Préférences",
@@ -5397,11 +5405,12 @@
         "forgotToast": "Information oubliée.",
         "forgotError": "Impossible d'oublier cette information. Veuillez réessayer.",
         "clearedToast": "{count} informations enregistrées oubliées.",
-        "clearError": "Impossible d'effacer les informations enregistrées. Veuillez réessayer."
+        "clearError": "Impossible d'effacer les informations enregistrées. Veuillez réessayer.",
+        "detail": "Il s'en sert pour garder ses réponses pertinentes. Supprimez tout ce qu'il vaut mieux qu'il oublie."
       },
       "coachReminders": {
         "title": "Tes rappels",
-        "description": "Les choses que tu as demandé au Coach de te rappeler plus tard. Celles qui arrivent à échéance apparaissent ici et chez le Coach.",
+        "description": "Les choses que tu as demandé au Coach de te rappeler plus tard.",
         "empty": "Aucun rappel pour l'instant. Demande au Coach de te rappeler quelque chose et cela apparaîtra ici.",
         "loadError": "Impossible de charger tes rappels.",
         "dueHeading": "À échéance",
@@ -5422,7 +5431,8 @@
         },
         "deleteConfirmTitle": "Supprimer ce rappel ?",
         "deleteConfirmBody": "Il ne se déclenchera plus. Ce que tu as déjà enregistré reste intact.",
-        "deleteConfirmAction": "Supprimer"
+        "deleteConfirmAction": "Supprimer",
+        "detail": "Celles qui arrivent à échéance apparaissent ici et chez le Coach."
       },
       "aboutMe": {
         "title": "À propos de moi",
@@ -5596,7 +5606,6 @@
     "googleHealthTag": "Fitbit et Pixel",
     "googleHealthBetaBadge": "Bêta",
     "googleHealthDescription": "Connecte Fitbit, Pixel Watch et Fitbit Air via ton compte Google — poids, fréquence cardiaque, sommeil et activité. Cela remplace la connexion Fitbit classique, que Google arrête en septembre 2026.",
-    "googleHealthDescriptionSecondary": "Tu enregistres ton propre client Google Cloud et saisis les identifiants ici. L'API ne fournit ni stress ni disponibilité, et Google peut te demander de te reconnecter de temps en temps. Première configuration ? Suis le",
     "googleHealthCredentials": "Identifiants d'API",
     "googleHealthClientId": "ID client",
     "googleHealthClientSecret": "Secret client",
@@ -5696,7 +5705,7 @@
       "workouts": "Séances"
     },
     "integrationFallback": {
-      "description": "Configuré sur ce compte sans carte de réglages dédiée. Cette ligne existe pour qu'une connexion ne puisse pas cesser de fonctionner sans que personne ne le voie.",
+      "description": "Configuré sur ce compte sans carte de réglages dédiée.",
       "lastAttempt": "Dernière tentative {relative}",
       "noAttempt": "Aucune tentative de synchronisation enregistrée"
     },
@@ -5705,7 +5714,7 @@
     "fitbitViewData": "Voir votre sommeil",
     "googleHealthViewData": "Voir vos pas",
     "apiTokens": "Jetons API",
-    "apiTokensDescription": "Consultez et révoquez les jetons API pour l’enregistrement externe des prises de médicaments. Les jetons sont émis par médicament depuis son interrupteur de point de terminaison API.",
+    "apiTokensDescription": "Consultez et révoquez les jetons API pour l’enregistrement externe des prises de médicaments.",
     "tokenMintMovedDescription": "Les jetons sont émis par médicament. Ouvrez un médicament et activez son point de terminaison API pour obtenir un jeton limité à ce seul médicament.",
     "tokenNamePlaceholder": "Nom du jeton (par exemple Raccourci iPhone)",
     "tokenCreated": "Jeton créé — copiez-le maintenant ! Il ne sera plus affiché.",
@@ -5736,14 +5745,14 @@
     "apiEndpointAuth": "Authentification",
     "apiEndpointExample": "Exemple de corps",
     "dangerZone": "Supprimer toutes les données",
-    "dangerZoneDescription": "Efface l’intégralité de votre dossier de santé et toutes les connexions d’intégration. Votre compte et vos identifiants de connexion sont conservés.",
+    "dangerZoneDescription": "Efface l’intégralité de votre dossier de santé et toutes les connexions d’intégration.",
     "dangerZoneConfirm": "Supprimer toutes les données ?",
     "dangerZoneConfirmDescription": "Cette action supprime définitivement tout ce que contient votre dossier : mesures, médicaments, entrées d’humeur, résultats de laboratoire, entrées de cycle, documents, conversations avec l’IA et toutes les connexions d’intégration, ainsi que tout ce qui en découle et tout ce que vous aviez supprimé auparavant. Les liens de partage remis à un cabinet cessent aussitôt de fonctionner. Votre compte reste en place, de même que vos identifiants de connexion et vos réglages d’affichage comme la langue, le fuseau horaire et les unités. Cette action est irréversible.",
     "dangerZoneSuccess": "Votre dossier de santé a été supprimé. Votre compte et votre connexion sont inchangés.",
     "dangerZoneDeleteFailed": "Échec de la suppression",
     "finalDelete": "Supprimer définitivement",
     "deleteAccountCardTitle": "Supprimer entièrement le compte",
-    "deleteAccountCardDescription": "Supprime votre compte ainsi que les clés d’accès, le journal d’audit et les sessions. Cette action est irréversible.",
+    "deleteAccountCardDescription": "Supprime votre compte ainsi que les clés d’accès, le journal d’audit et les sessions.",
     "deleteAccountCta": "Supprimer le compte",
     "deleteAccountConfirmTitle": "Supprimer définitivement le compte ?",
     "deleteAccountConfirmDescription": "Votre compte, toutes vos données de santé, vos clés d’accès, vos sessions et vos entrées d’audit seront définitivement supprimés. Vous serez déconnecté immédiatement après.",
@@ -5761,8 +5770,6 @@
       "changelog": "Changelog",
       "docs": "Documentation",
       "linksHeading": "Sources et documentation",
-      "identityDescription": "Version, licence et détails de build de cette instance.",
-      "linksDescription": "Code source, journal des modifications et documentation.",
       "newerAvailable": "Nouvelle version : {tag}"
     },
     "testConnection": {
@@ -5790,7 +5797,7 @@
     "notificationStatus": {
       "title": "Fiabilité des canaux",
       "description": "État par canal ; « Désactivé automatiquement » arrête les nouvelles tentatives après des erreurs permanentes.",
-      "emptyDescription": "Aucun canal configuré pour l’instant. Ajoutez-en un dans Canaux de diffusion pour suivre la distribution.",
+      "emptyDescription": "Ajoutez un canal dans Paramètres › Intégrations › Canaux de diffusion.",
       "stateActive": "Actif",
       "stateAutoDisabled": "Désactivé automatiquement",
       "stateSendingPaused": "Envoi en pause",
@@ -5801,7 +5808,8 @@
       "disabledReason": "Raison",
       "nextRetry": "Prochaine tentative",
       "reEnable": "Réactiver",
-      "sendTest": "Envoyer un test"
+      "sendTest": "Envoyer un test",
+      "emptyTitle": "Aucun canal configuré pour l’instant"
     },
     "identity": {
       "description": "Informations facultatives pour l’export du dossier de santé (couverture PDF + export FHIR). Tous les champs sont facultatifs.",
@@ -5814,7 +5822,7 @@
     },
     "healthRecord": {
       "title": "Exporter le dossier de santé",
-      "description": "Générez un dossier de santé complet pour votre médecin — en PDF, structuré (FHIR) ou en paquet combiné.",
+      "description": "Un dossier complet pour votre médecin — en PDF, en FHIR ou les deux.",
       "format": "Format",
       "format_pdf": "PDF",
       "format_fhir": "Structuré (FHIR)",
@@ -5839,10 +5847,10 @@
       "errorModuleDisabled": "L'export du dossier est désactivé pour ce compte."
     },
     "globalExcludedInjectionSitesLabel": "Sites d'injection exclus globalement",
-    "globalExcludedInjectionSitesHint": "Les sites listés ici ne sont proposés pour aucun médicament et sont refusés lors de l'enregistrement d'une dose, même si un médicament les privilégie.",
+    "globalExcludedInjectionSitesHint": "Jamais proposés et refusés à l'enregistrement, même si un médicament les privilégie.",
     "sharing": {
       "createTitle": "Nouveau lien de partage",
-      "createDescription": "Le lien est en lecture seule et limité dans le temps. Le jeton n'est affiché qu'une fois à la création — conservez-le alors ; il ne peut pas être récupéré.",
+      "createDescription": "Le lien est en lecture seule et limité dans le temps.",
       "label": "Libellé",
       "labelPlaceholder": "ex. Dr Martin — bilan annuel",
       "range": "Jours d'historique",
@@ -5892,15 +5900,17 @@
       "scopeInsuranceExcluded": "Les données d'assurance ne sont jamais partagées via un lien.",
       "statusNeedsReselect": "Choisir à nouveau le contenu",
       "reselectReason": "Ce lien diffusait un périmètre que personne n'avait choisi ; il a donc été fermé. Créez-en un nouveau et choisissez son contenu.",
-      "reselectAction": "Créer un remplacement"
+      "reselectAction": "Créer un remplacement",
+      "createDetail": "Le jeton n'est affiché qu'une fois à la création — conservez-le alors ; il ne peut pas être récupéré."
     },
     "genderOther": "Autre",
     "cycleTracking": {
       "title": "Suivi du cycle",
-      "description": "Suivez votre cycle menstruel, les prédictions, les symptômes et les analyses de phases. Activé par défaut pour les comptes définis comme féminins ; disponible pour tous.",
+      "description": "Suivez votre cycle menstruel, les prédictions, les symptômes et les analyses de phases.",
       "enable": "Activer le suivi du cycle",
       "manage": "Ouvrir le suivi du cycle",
-      "error": "Impossible de mettre à jour le suivi du cycle."
+      "error": "Impossible de mettre à jour le suivi du cycle.",
+      "detail": "Activé par défaut pour les comptes définis comme féminins ; disponible pour tous."
     },
     "nightscout": "Nightscout",
     "nightscoutTag": "CGM",
@@ -5986,20 +5996,13 @@
     "coach": {
       "activate": {
         "title": "Activer le Coach",
-        "description": "Affiche le bouton et le panneau du Coach. Activé par défaut — désactivez-le pour masquer le Coach partout.",
+        "description": "Affiche le bouton et le panneau du Coach.",
         "toggleAria": "Activer le bouton et le panneau du Coach",
         "savedOn": "Coach activé.",
         "savedOff": "Coach masqué.",
         "saveError": "Impossible d enregistrer la modification. Veuillez réessayer."
       }
     },
-    "withingsDescriptionSecondary": "Les mesures arrivent dans ton tableau de bord en arrière-plan. Première fois ? Suis le",
-    "whoopDescriptionSecondary": "Les mesures arrivent dans ton tableau de bord en arrière-plan. Première fois ? Suis le",
-    "fitbitDescriptionSecondary": "Les mesures arrivent dans ton tableau de bord en arrière-plan. Première fois ? Suis le",
-    "polarDescriptionSecondary": "Les mesures arrivent dans ton tableau de bord en arrière-plan. Première fois ? Suis le",
-    "ouraDescriptionSecondary": "Les mesures arrivent dans ton tableau de bord en arrière-plan. Première fois ? Suis le",
-    "nightscoutDescriptionSecondary": "Les mesures arrivent dans ton tableau de bord en arrière-plan. Première fois ? Suis le",
-    "integrationCredentialsHint": "Où trouver ces identifiants et comment enregistrer ta propre application est expliqué dans le guide de configuration ci-dessus.",
     "integrationRedirectGuide": {
       "intro": "Cette connexion passe par votre propre application développeur {provider} — environ 5 minutes de configuration :",
       "step1": "Créez une application dans le portail développeur {provider}.",
@@ -6113,19 +6116,13 @@
       "signOutEverywhereConfirmBody": "Chaque appareil sauf celui-ci devra se reconnecter. Celui-ci reste connecté. Rien de ce que tu as enregistré n'est affecté."
     },
     "privacy": {
-      "intro": {
-        "title": "Vos données vous appartiennent",
-        "body": "HealthLog est auto-hébergé. Cette page réunit la façon dont vos données sont protégées, leur durée de conservation, comment les exporter et comment les supprimer."
-      },
       "encryption": {
         "title": "Chiffré au repos",
-        "description": "Les champs sensibles sont chiffrés dans la base de données.",
         "summary": "Vos données sensibles sont chiffrées au repos avec {algorithm} sur {columns} champs dans {models} types d'enregistrement.",
         "statement": "Vos données sensibles sont chiffrées au repos avec AES-256-GCM."
       },
       "stored": {
         "title": "Ce qui est stocké",
-        "description": "Les catégories de données que contient ce compte.",
         "measurements": "Mesures (poids, tension, pouls, glycémie, sommeil, composition corporelle)",
         "medications": "Médicaments et historique des prises",
         "moodLabs": "Entrées d'humeur et résultats de laboratoire",
@@ -6143,7 +6140,7 @@
       },
       "export": {
         "title": "Télécharger mes données",
-        "description": "Exportez vos enregistrements en CSV ou JSON, éventuellement chiffrés par phrase secrète, ou générez un dossier médical complet.",
+        "description": "Vos enregistrements en CSV ou JSON, ou un dossier complet pour votre médecin.",
         "openExport": "Export et sauvegarde",
         "openHealthRecord": "Dossier médical"
       },
@@ -6162,30 +6159,31 @@
     },
     "mcp": {
       "enableTitle": "Point de terminaison MCP distant",
-      "enableDescription": "Autorisez un assistant compatible MCP (Claude.ai, ChatGPT) à lire vos données de santé via un jeton restreint. Désactivé par défaut.",
+      "enableDescription": "Autorisez un assistant compatible MCP (Claude.ai, ChatGPT) à lire vos données de santé via un jeton restreint.",
       "enabled": "Activé",
       "disabled": "Désactivé",
       "enableToggleLabel": "Activer le point de terminaison MCP",
       "endpointLabel": "URL du connecteur",
       "connectDescription": "Collez cette URL dans la configuration du connecteur personnalisé de votre assistant, puis autorisez avec le jeton ci-dessous ou connectez-vous lorsque vous y êtes invité.",
       "tokensTitle": "Jetons du connecteur",
-      "tokensDescription": "Générez un jeton en lecture seule pour connecter un assistant. Le jeton n'est affiché qu'une seule fois.",
+      "tokensDescription": "Générez un jeton en lecture seule pour connecter un assistant.",
       "scopeNote": "Les jetons sont limités à health:read : accès en lecture seule à vos propres données. Ils ne peuvent jamais atteindre les fonctions d'administration.",
       "writeScopeToggleLabel": "Autoriser l'enregistrement (health:write)",
       "writeScopeNote": "Ajoute la portée health:write pour que l'assistant puisse enregistrer de nouvelles mesures et entrées d'humeur dans votre compte. Chaque écriture est d'abord confirmée. Le jeton ne peut toujours pas supprimer ni modifier des entrées existantes, changer les médicaments, ni atteindre les fonctions REST ou d'administration. Laissez désactivé pour un accès en lecture seule.",
       "connectionsTitle": "Assistants connectés",
-      "connectionsDescription": "Assistants que vous avez autorisés via la connexion. Révoquer une connexion met fin à son accès immédiatement, y compris sa capacité à se renouveler.",
+      "connectionsDescription": "Assistants que vous avez autorisés via la connexion.",
       "noConnections": "Aucun assistant connecté.",
       "connectionConnected": "Connecté",
       "connectionLastUsed": "Dernière utilisation",
       "connectionNeverUsed": "Jamais utilisé",
       "connectionRevoke": "Déconnecter",
       "connectionRevokeDescription": "Cela met fin immédiatement à l'accès de l'assistant et l'empêche de se renouveler. Une nouvelle autorisation sera nécessaire pour le reconnecter.",
-      "connectionRevokeFailed": "Impossible de déconnecter l'assistant."
+      "connectionRevokeFailed": "Impossible de déconnecter l'assistant.",
+      "tokensDetail": "Le jeton n'est affiché qu'une seule fois.",
+      "connectionsDetail": "Révoquer une connexion met fin à son accès immédiatement, y compris sa capacité à se renouveler."
     },
     "strava": "Strava",
     "stravaDescription": "Connecte ton compte Strava pour synchroniser tes activités avec ton historique d'entraînement.",
-    "stravaDescriptionSecondary": "Les activités arrivent sur ton tableau de bord en arrière-plan. Nouveau dans la configuration ? Suis le",
     "stravaViewData": "Voir tes entraînements",
     "stravaCredentials": "Identifiants API",
     "stravaClientId": "ID client",
@@ -6251,7 +6249,9 @@
       "explainer": "Désactivé, les valeurs sont comparées à la plage de référence générale non diabétique. Activé, elles sont comparées à la plage cible glycémique plus stricte des ADA Standards of Care, et le Coach fonde ses remarques sur le glucose sur cette plage. Vos propres valeurs cibles personnalisées ci-dessous restent prioritaires.",
       "disclaimer": "Ceci sélectionne une plage de référence. Ce n'est pas un diagnostic, ce n'est jamais déduit d'une mesure, et l'application n'en tire aucune conséquence clinique. Les cibles qui s'appliquent à vous relèvent de votre médecin.",
       "error": "Le réglage n'a pas pu être enregistré."
-    }
+    },
+    "dangerZoneDetail": "Votre compte et vos identifiants de connexion sont conservés.",
+    "deleteAccountCardDetail": "Cette action est irréversible."
   },
   "admin": {
     "title": "Administration",
@@ -6282,7 +6282,7 @@
     },
     "aiServerKey": {
       "title": "Clé IA du serveur",
-      "description": "Une clé de fournisseur à l'échelle de l'opérateur sur laquelle chaque compte peut se rabattre lorsqu'aucune clé personnelle n'est configurée.",
+      "description": "Une clé de l'opérateur pour les comptes qui n'en ont pas configuré une.",
       "byokHint": "La clé personnelle de l'utilisateur (BYOK, connexion ChatGPT ou fournisseur local) a toujours la priorité — la clé du serveur est la dernière étape de la chaîne de fournisseurs.",
       "consentHint": "Les requêtes via la clé du serveur nécessitent le consentement IA actif de l'utilisateur ; sans justificatif de consentement, rien n'est envoyé.",
       "statusConfigured": "Configurée",
@@ -6388,7 +6388,7 @@
     "monitoringTestFailed": "Échec du test de surveillance",
     "assistant": {
       "title": "Surfaces d'assistance",
-      "description": "Chaque bascule masque une surface pilotée par le modèle dans toute l'application sans retirer la configuration du fournisseur. Le commutateur principal force chaque option secondaire à off.",
+      "description": "Chaque bascule masque une surface pilotée par le modèle dans toute l'application sans retirer la configuration du fournisseur.",
       "master": {
         "title": "Assistant activé",
         "description": "Commutateur principal pour chaque surface pilotée par le modèle. Lorsqu'il est désactivé, toutes les options secondaires ci-dessous sont forcées à off."
@@ -6412,13 +6412,13 @@
     },
     "modules": {
       "title": "Disponibilité des modules",
-      "description": "Désactivez un module pour tout le serveur. Un module désactivé ici est coupé pour chaque compte, quelle que soit la préférence personnelle. Les domaines essentiels (poids, tension, pouls, médicaments) restent toujours actifs et ne peuvent pas être désactivés.",
-      "saveError": "Impossible de mettre à jour la disponibilité des modules."
+      "description": "Désactivez un module pour tout le serveur.",
+      "saveError": "Impossible de mettre à jour la disponibilité des modules.",
+      "detail": "Un module désactivé ici est coupé pour chaque compte, quelle que soit la préférence personnelle. Les domaines essentiels (poids, tension, pouls, médicaments) restent toujours actifs et ne peuvent pas être désactivés."
     },
     "invites": {
       "title": "Invitations",
-      "description": "Liens d'invitation pour l'inscription — ils fonctionnent même lorsque les inscriptions sont fermées. Le lien n'est affiché qu'une seule fois.",
-      "adminOnlyHint": "Seuls les administrateurs peuvent créer et révoquer des invitations.",
+      "description": "Liens d'invitation pour l'inscription — ils fonctionnent même lorsque les inscriptions sont fermées.",
       "create": "Créer une invitation",
       "createTitle": "Créer une invitation",
       "createDescription": "Le lien permet une inscription même lorsque les inscriptions sont fermées.",
@@ -6524,7 +6524,7 @@
     "outcomeFailed": "Échec",
     "auditDetails": "Détails",
     "deleteAllData": "Supprimer toutes les données globalement",
-    "deleteAllDescription": "Supprime tous les enregistrements de tous les comptes : mesures, médicaments, résultats de laboratoire, documents, journaux de cycle, humeur, entraînements, sommeil, conversations du Coach, intégrations et historique d'audit. Les comptes et les identifiants de connexion sont conservés.",
+    "deleteAllDescription": "Supprime tous les enregistrements de tous les comptes ; les comptes et leurs identifiants de connexion sont conservés.",
     "deleteAllConfirm": "Vraiment supprimer toutes les données ?",
     "deleteAllConfirmDescription": "Cette action supprime définitivement tous les enregistrements de tous les comptes dans l'ensemble de la base de données, et non une sélection de tables. Sont conservés : les comptes utilisateurs et leurs identifiants de connexion, la configuration de l'instance et les délégations qui gardent les profils gérés accessibles. Un reçu de cet effacement est ensuite écrit dans le journal d'audit ; l'historique antérieur part avec le reste.",
     "deleteButton": "Supprimer toutes les données",
@@ -6573,15 +6573,10 @@
       "sectionsNav": "Sections d'administration"
     },
     "overview": {
-      "welcomeTitle": "Bienvenue,{name}",
-      "welcomeSubtitle": "Vous êtes connecté en tant qu'administrateur. Choisissez une section pour gérer HealthLog.",
       "snapshotTitle": "Instantané du système",
-      "snapshotVersion": "Version",
       "snapshotDatabase": "Base de données",
       "snapshotWorker": "Worker",
       "snapshotStarted": "Démarré",
-      "snapshotBuildSha": "Build SHA",
-      "snapshotBuiltAt": "Compilé le",
       "snapshotOfflineGeo": "Données géographiques",
       "snapshotOfflineGeoOn": "Hors ligne (GeoLite2)",
       "snapshotOfflineGeoOff": "En ligne ({host})",
@@ -6618,7 +6613,7 @@
       },
       "coach": {
         "title": "Coach",
-        "subtitle": "Surfaces d'assistance, clé du serveur et les tableaux de qualité des retours du Coach et des analyses, au même endroit."
+        "subtitle": "Surfaces d'assistance, clé du serveur et qualité des retours."
       },
       "reminders": {
         "title": "Rappels",
@@ -6674,7 +6669,7 @@
       "app-logs": {
         "title": "Journaux de l'app",
         "subtitle": "Affichez les wide-events structurés les plus récents émis par ce processus.",
-        "processNote": "Seuls les journaux du processus de l'app sont affichés — ceux du processus worker vont vers Loki lorsque cette intégration est configurée. Le tampon est volatil et limité à 500 entrées.",
+        "processNote": "Seuls les journaux du processus de l'app sont affichés — ceux du processus worker vont vers Loki lorsque cette intégration est configurée.",
         "filterTraceId": "ID de trace",
         "filterAction": "L'action contient…",
         "filterLevel": "Niveau",
@@ -6695,7 +6690,8 @@
         "emptyDescription": "Aucun événement ne correspond encore aux filtres actuels. Cliquez sur Actualiser après avoir généré du trafic.",
         "refresh": "Actualiser",
         "eventDetails": "Détails de l'événement",
-        "closeDetails": "Fermer les détails"
+        "closeDetails": "Fermer les détails",
+        "processDetail": "Le tampon est volatil et limité à 500 entrées."
       },
       "backups": {
         "title": "Sauvegardes",
@@ -6763,7 +6759,7 @@
         "loading": "Chargement de l'état du chiffrement...",
         "loadError": "Échec du chargement de l'état du chiffrement.",
         "coverageTitle": "Couverture",
-        "coverageDescription": "Combien de lignes chiffrées relèvent de chaque id de clé. Seuls les id de clé et les décomptes sont affichés, jamais le matériel de clé.",
+        "coverageDescription": "Combien de lignes chiffrées relèvent de chaque id de clé.",
         "activeKeyId": "Id de clé active",
         "configuredKeys": "Clés configurées",
         "totalRows": "Lignes chiffrées",
@@ -6771,7 +6767,7 @@
         "safeToDropLegacy": "La clé ancienne peut être retirée",
         "rotationIncomplete": "{count} lignes restent à faire tourner",
         "rotationTitle": "Rotation des clés",
-        "rotationDescription": "Re-chiffre chaque colonne chiffrée avec la clé active. L'outil en ligne de commande reste la voie canonique ; ce déclencheur est un confort.",
+        "rotationDescription": "Re-chiffre chaque colonne chiffrée avec la clé active.",
         "rotationState": "État",
         "lastRun": "Dernière exécution : {scanned} analysées, {rotated} tournées, {errors} erreurs.",
         "rotateNow": "Faire tourner maintenant",
@@ -6794,7 +6790,8 @@
           "running": "En cours",
           "completed": "Terminé",
           "failed": "Échoué"
-        }
+        },
+        "coverageDetail": "Seuls les id de clé et les décomptes sont affichés, jamais le matériel de clé."
       }
     },
     "carrier": "Opérateur",
@@ -6840,7 +6837,8 @@
       "countFew": "{count} échecs",
       "countOther": "{count} échecs",
       "lastFailed": "Dernier échec {when}"
-    }
+    },
+    "deleteAllDetail": "Les comptes utilisateurs sont conservés."
   },
   "achievements": {
     "title": "Réussites",
@@ -7166,7 +7164,7 @@
     },
     "moodReminder": {
       "title": "Rappel quotidien d’humeur",
-      "description": "Petit rappel à l’heure que tu as choisie si tu n’as pas encore noté ton humeur du jour. Utilise uniquement les canaux déjà configurés (Telegram, ntfy, Web Push, Apple Push) et reste silencieux dès que tu as noté ton humeur aujourd’hui.",
+      "description": "Petit rappel à l’heure que tu as choisie si tu n’as pas encore noté ton humeur du jour.",
       "toggleAria": "Activer / désactiver le rappel quotidien d’humeur",
       "statusOn": "Actif à l’heure que tu as choisie",
       "statusOff": "Désactivé",
@@ -7175,11 +7173,12 @@
       "saveError": "Échec de l’enregistrement. Réessayez.",
       "hourLabel": "Heure du rappel",
       "hourAria": "Heure du rappel d’humeur",
-      "hourSavedToast": "Heure du rappel mise à jour."
+      "hourSavedToast": "Heure du rappel mise à jour.",
+      "detail": "Utilise uniquement les canaux déjà configurés (Telegram, ntfy, Web Push, Apple Push) et reste silencieux dès que tu as noté ton humeur aujourd’hui."
     },
     "coachNudge": {
       "title": "Coach proactif",
-      "description": "Vous contacte lorsque vos données suggèrent de consulter le Coach — par exemple une faible observance ou une moyenne hebdomadaire de tension élevée. Les thèmes et la fréquence sont réglables.",
+      "description": "Vous contacte lorsque vos données suggèrent de consulter le Coach.",
       "toggleAria": "Activer ou désactiver les rappels proactifs du Coach",
       "statusOn": "Actif",
       "groupsLabel": "Thèmes",
@@ -7206,7 +7205,7 @@
     },
     "lowStock": {
       "title": "Alerte de stock faible",
-      "description": "Vérifie une fois par jour les stocks suivis de vos médicaments et vous prévient quand l’un d’eux couvre moins de jours que ce seuil. Une notification par pénurie ; elle se réarme après un réapprovisionnement.",
+      "description": "Signale chaque jour un stock couvrant moins de jours que ce seuil.",
       "toggleAria": "Activer ou désactiver les alertes de stock faible",
       "statusOn": "Actif",
       "statusOff": "Désactivé",
@@ -7220,7 +7219,8 @@
       "enabledToast": "Alertes de stock faible activées.",
       "disabledToast": "Alertes de stock faible désactivées.",
       "saveError": "Échec de l’enregistrement. Réessayez.",
-      "medicationsLink": "Voir tes médicaments"
+      "medicationsLink": "Voir tes médicaments",
+      "detail": "Une notification par pénurie ; elle se réarme après un réapprovisionnement."
     },
     "eventMedicationReminder": "Rappel de médicament",
     "eventMedicationReminderDesc": "Envoyé à chaque heure de prise prévue.",
@@ -8049,7 +8049,8 @@
     "customize": "Personnaliser les analyses",
     "localOcr": {
       "heading": "Lire les scans sur cet appareil",
-      "description": "Permet de scanner un compte rendu de laboratoire même si votre fournisseur d'IA ne peut pas lire les images : la photo est lue sur votre appareil et seul le texte extrait est envoyé à votre fournisseur. Moins précis — vérifiez chaque valeur avant d'enregistrer."
+      "description": "Lit la photo sur votre appareil et n'envoie que le texte extrait à votre fournisseur.",
+      "detail": "Utile quand votre fournisseur d'IA ne lit pas les images. Moins précis — vérifiez chaque valeur avant d'enregistrer."
     },
     "sort": {
       "heading": "Tri",
@@ -9623,7 +9624,7 @@
     },
     "invite": {
       "title": "Inviter quelqu'un",
-      "description": "Rien n'est partagé avant son acceptation. D'ici là, l'invitation reste dans ses réglages et ne lui donne rien.",
+      "description": "Rien n'est partagé avant son acceptation.",
       "identifierLabel": "Nom d'utilisateur ou e-mail",
       "identifierPlaceholder": "Le nom avec lequel elle se connecte",
       "identifierHint": "Cette personne a besoin d'un compte sur cette instance. Une invitation ne peut pas être envoyée à une adresse non inscrite.",
@@ -9677,7 +9678,7 @@
     },
     "received": {
       "title": "Dossiers que je peux ouvrir",
-      "description": "Une invitation ne vous donne rien avant que vous l'acceptiez. Vous pouvez rendre l'accès quand vous voulez.",
+      "description": "Une invitation ne vous donne rien avant que vous l'acceptiez.",
       "emptyTitle": "Personne n'a partagé de dossier avec vous",
       "emptyDescription": "Quand quelqu'un vous invite, l'invitation apparaît ici.",
       "loadError": "La liste n'a pas pu être chargée.",
@@ -9689,7 +9690,8 @@
       "renounce": "Rendre",
       "renounceTitle": "Rendre le dossier de {name} ?",
       "renounceBody": "Vous perdez l'accès immédiatement. Cette personne peut vous inviter de nouveau à tout moment.",
-      "renounceConfirm": "Rendre"
+      "renounceConfirm": "Rendre",
+      "detail": "Vous pouvez rendre l'accès quand vous voulez."
     },
     "activity": {
       "title": "Quand mon dossier a été ouvert",
@@ -9707,13 +9709,8 @@
       "addOnlyNote": "Vous pouvez ajouter des éléments à ce dossier. Seul {name} peut modifier ou supprimer des entrées."
     },
     "lookingAfter": {
-      "title": "Je m'occupe de",
-      "description": "Les dossiers que d'autres personnes partagent avec vous.",
-      "levelRead": "Peut consulter",
-      "levelWrite": "Peut consulter et ajouter",
       "kindShared": "Dossier partagé",
-      "kindManaged": "Profil géré",
-      "open": "Ouvrir le dossier de {name}"
+      "kindManaged": "Profil géré"
     },
     "managed": {
       "title": "Profils dont vous vous occupez",

@@ -1,6 +1,5 @@
 "use client";
 
-import { LookingAfterCard } from "@/components/dashboard/looking-after-card";
 import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import React, { Suspense, useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -931,12 +930,10 @@ export default function DashboardPageClient({
       <PullToRefreshIndicator {...pull} />
       <DashboardHeader onQuickEntry={setQuickEntryDialog} />
 
-      {/* v1.36.x — the caregiver's front door, directly under the greeting
-          and above this account's own day. Somebody who opens the app to
-          check on a parent should not have to go through settings to get
-          there. Renders nothing for an account nobody has shared with, and
-          nothing while a switch is already on. */}
-      <LookingAfterCard />
+      {/* Records other people share with you are reached from the account
+          switcher in the top bar and the sidebar, not from a card here. The
+          dashboard is this account's own day; a permanent block about other
+          people's records sat above it and pushed it down. */}
 
       {/* S2 — the Today hero, promoted above the tile strip (MARC sign-off
           decision 1). Renders the S1 daily digest: the day's read, the

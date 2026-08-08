@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpenCheck, Loader2, Trash2 } from "lucide-react";
+import { AlertTriangle, BookOpenCheck, Loader2, Trash2 } from "lucide-react";
 
 import {
   AlertDialog,
@@ -16,6 +16,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { SettingsInfoTile } from "@/components/settings/_info-tile";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Switch } from "@/components/ui/switch";
 import { ResearchModeAcknowledgmentDialog } from "@/components/medications/research-mode-acknowledgment-dialog";
 import { formatDateTime } from "@/lib/format";
@@ -146,19 +148,17 @@ function ResearchModeCard() {
         title={t("settings.researchMode.sectionTitle")}
         description={t("settings.researchMode.subtitle")}
       />
+      <p className="text-sm">{t("settings.researchMode.subtitleDetail")}</p>
 
       {showRePrompt && (
-        <div
+        <SettingsInfoTile
+          icon={AlertTriangle}
+          tone="warning"
           role="alert"
           data-slot="settings-research-mode-reprompt"
-          className="border-warning/40 bg-warning/10 mt-4 rounded-md border-l-4 px-3 py-2 text-sm"
+          title={t("settings.researchMode.rePromptTitle")}
         >
-          <p className="text-foreground font-medium">
-            {t("settings.researchMode.rePromptTitle")}
-          </p>
-          <p className="text-muted-foreground mt-1 text-xs">
-            {t("settings.researchMode.rePromptBody")}
-          </p>
+          <p>{t("settings.researchMode.rePromptBody")}</p>
           <Button
             size="sm"
             variant="outline"
@@ -168,10 +168,10 @@ function ResearchModeCard() {
           >
             {t("settings.researchMode.rePromptCta")}
           </Button>
-        </div>
+        </SettingsInfoTile>
       )}
 
-      <div className="mt-4 flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3">
         <div className="space-y-0.5">
           <p className="text-sm font-medium">
             {t("settings.researchMode.toggleLabel")}
@@ -197,7 +197,7 @@ function ResearchModeCard() {
       {errorMessage && (
         <p
           role="alert"
-          className="text-destructive mt-3 text-sm"
+          className="text-destructive text-sm"
           data-slot="settings-research-mode-error"
         >
           {errorMessage}
@@ -262,65 +262,8 @@ function DataResetCard() {
         icon={Trash2}
         title={t("settings.dangerZone")}
         description={t("settings.dangerZoneDescription")}
-        status={
-          <AlertDialog
-            open={confirmOpen}
-            onOpenChange={(open) => {
-              // Hold the dialog open while the destructive mutation is in
-              // flight so the in-dialog pending state stays visible and a
-              // stray backdrop tap can't dismiss it mid-request.
-              if (deleting) return;
-              setConfirmOpen(open);
-            }}
-          >
-            <AlertDialogTrigger asChild>
-              <Button
-                variant="destructive"
-                size="sm"
-                disabled={deleting}
-                className="min-h-11 w-full shrink-0 sm:min-h-9 sm:w-auto"
-              >
-                {deleting ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-                ) : (
-                  <Trash2 className="h-3.5 w-3.5" />
-                )}
-                {t("settings.dangerZone")}
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>
-                  {t("settings.dangerZoneConfirm")}
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  {t("settings.dangerZoneConfirmDescription")}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel disabled={deleting}>
-                  {t("common.cancel")}
-                </AlertDialogCancel>
-                <AlertDialogAction
-                  variant="destructive"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    void handleDeleteAllData();
-                  }}
-                  disabled={deleting}
-                  aria-busy={deleting || undefined}
-                  data-slot="settings-data-reset-confirm"
-                >
-                  {deleting && (
-                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-                  )}
-                  {t("settings.finalDelete")}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        }
       />
+      <p className="text-sm">{t("settings.dangerZoneDetail")}</p>
 
       {msg && (
         <p
@@ -330,6 +273,64 @@ function DataResetCard() {
           {msg}
         </p>
       )}
+      <SettingsCardActions>
+        <AlertDialog
+          open={confirmOpen}
+          onOpenChange={(open) => {
+            // Hold the dialog open while the destructive mutation is in
+            // flight so the in-dialog pending state stays visible and a
+            // stray backdrop tap can't dismiss it mid-request.
+            if (deleting) return;
+            setConfirmOpen(open);
+          }}
+        >
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={deleting}
+              className="min-h-11 w-full shrink-0 sm:min-h-9 sm:w-auto"
+            >
+              {deleting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
+              {t("settings.dangerZone")}
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {t("settings.dangerZoneConfirm")}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {t("settings.dangerZoneConfirmDescription")}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>
+                {t("common.cancel")}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={(e) => {
+                  e.preventDefault();
+                  void handleDeleteAllData();
+                }}
+                disabled={deleting}
+                aria-busy={deleting || undefined}
+                data-slot="settings-data-reset-confirm"
+              >
+                {deleting && (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+                )}
+                {t("settings.finalDelete")}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </SettingsCardActions>
     </SettingsCard>
   );
 }
@@ -399,66 +400,8 @@ function AccountDeleteCard() {
         icon={Trash2}
         title={t("settings.deleteAccountCardTitle")}
         description={t("settings.deleteAccountCardDescription")}
-        status={
-          <AlertDialog
-            open={confirmOpen}
-            onOpenChange={(open) => {
-              // Hold the dialog open while the irreversible delete runs so
-              // the pending state stays on screen and a stray dismissal
-              // can't fire a second request.
-              if (deleting) return;
-              setConfirmOpen(open);
-            }}
-          >
-            <AlertDialogTrigger asChild>
-              <Button
-                variant="destructive"
-                size="sm"
-                disabled={deleting}
-                className="min-h-11 w-full shrink-0 sm:min-h-9 sm:w-auto"
-                data-slot="settings-account-delete-trigger"
-              >
-                {deleting ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-                ) : (
-                  <Trash2 className="h-3.5 w-3.5" />
-                )}
-                {t("settings.deleteAccountCta")}
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>
-                  {t("settings.deleteAccountConfirmTitle")}
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  {t("settings.deleteAccountConfirmDescription")}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel disabled={deleting}>
-                  {t("common.cancel")}
-                </AlertDialogCancel>
-                <AlertDialogAction
-                  variant="destructive"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    void handleDeleteAccount();
-                  }}
-                  disabled={deleting}
-                  aria-busy={deleting || undefined}
-                  data-slot="settings-account-delete-confirm"
-                >
-                  {deleting && (
-                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-                  )}
-                  {t("settings.deleteAccountFinal")}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        }
       />
+      <p className="text-sm">{t("settings.deleteAccountCardDetail")}</p>
 
       {msg && (
         <p
@@ -468,6 +411,65 @@ function AccountDeleteCard() {
           {msg}
         </p>
       )}
+      <SettingsCardActions>
+        <AlertDialog
+          open={confirmOpen}
+          onOpenChange={(open) => {
+            // Hold the dialog open while the irreversible delete runs so
+            // the pending state stays on screen and a stray dismissal
+            // can't fire a second request.
+            if (deleting) return;
+            setConfirmOpen(open);
+          }}
+        >
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={deleting}
+              className="min-h-11 w-full shrink-0 sm:min-h-9 sm:w-auto"
+              data-slot="settings-account-delete-trigger"
+            >
+              {deleting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
+              {t("settings.deleteAccountCta")}
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {t("settings.deleteAccountConfirmTitle")}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {t("settings.deleteAccountConfirmDescription")}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>
+                {t("common.cancel")}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={(e) => {
+                  e.preventDefault();
+                  void handleDeleteAccount();
+                }}
+                disabled={deleting}
+                aria-busy={deleting || undefined}
+                data-slot="settings-account-delete-confirm"
+              >
+                {deleting && (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+                )}
+                {t("settings.deleteAccountFinal")}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </SettingsCardActions>
     </SettingsCard>
   );
 }

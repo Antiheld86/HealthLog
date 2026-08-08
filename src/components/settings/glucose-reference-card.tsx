@@ -70,7 +70,7 @@ export function GlucoseReferenceCard() {
         title={t("settings.glucoseReference.title")}
         description={t("settings.glucoseReference.description")}
       />
-      <div className="mt-4 space-y-4 pl-7">
+      <div className="space-y-4">
         <div className="flex items-start justify-between gap-4">
           <Label htmlFor="glucose-reference-diabetes" className="text-sm">
             {t("settings.glucoseReference.enable")}

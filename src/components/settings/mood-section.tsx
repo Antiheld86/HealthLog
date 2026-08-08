@@ -46,7 +46,7 @@ export function MoodSection() {
   return (
     <div className="space-y-6">
       {/* Groups — picker group order + own groups. */}
-      <SettingsCard id="mood-groups" className="scroll-mt-28 space-y-4">
+      <SettingsCard id="mood-groups" className="scroll-mt-28">
         <SettingsCardHeader
           icon={Folders}
           title={t("mood.manage.groupsTitle")}
@@ -55,13 +55,13 @@ export function MoodSection() {
       </SettingsCard>
 
       {/* Tags — visibility, order, edit, move, create. */}
-      <SettingsCard id="mood-tags" className="scroll-mt-28 space-y-4">
+      <SettingsCard id="mood-tags" className="scroll-mt-28">
         <SettingsCardHeader icon={Tags} title={t("mood.manage.tagsTitle")} />
         {isLoading || !catalog ? loading : <TagManagerCard catalog={catalog} />}
       </SettingsCard>
 
       {/* Archived custom tags — restore / hard delete. */}
-      <SettingsCard id="mood-archived" className="scroll-mt-28 space-y-4">
+      <SettingsCard id="mood-archived" className="scroll-mt-28">
         <SettingsCardHeader
           icon={Archive}
           title={t("mood.manage.archivedTitle")}

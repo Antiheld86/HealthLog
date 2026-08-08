@@ -182,11 +182,13 @@ test.describe("/settings/integrations Pixel-5 layout", () => {
       fallback.locator('[data-testid="integration-status-pill"]'),
     ).toHaveAttribute("data-state", "stalled");
 
-    // Card anatomy is uniform now that Nightscout, the OAuth cards and Apple
-    // Health all carry the divider.
+    // Card anatomy is uniform because no integration card paints a rule under
+    // its header any more. The `<hr>` existed only in this folder — nine cards
+    // carrying a separator no other Settings card has — and the card's own gap
+    // does the separating now.
     await expect(
       page.locator('[data-testid="integration-card-divider"]'),
-    ).toHaveCount(9);
+    ).toHaveCount(0);
 
     // Withings is connected in this fixture; WHOOP is a BYO-keys card that
     // stays dormant until an operator adds credentials, so assert the one
@@ -251,8 +253,18 @@ test.describe("Apple Health guidance", () => {
 
     const card = page.getByTestId("apple-health-card");
     await expect(card).toBeVisible();
+    // The product name is a proper noun and stays assertable; the sentence
+    // around it is not. The description SLOT is the stable target — this spec
+    // is about the card rendering its explainer, not about its wording, and
+    // the wording is pinned by `apple-health-card.test.tsx` against the same
+    // i18n bundle it renders from.
     await expect(card).toContainText("HealthLog iOS app");
-    await expect(card).toContainText("not a web or OAuth connection");
+    const description = card.locator('[data-slot="settings-card-description"]');
+    await expect(description).toBeVisible();
+    await expect(description).not.toHaveText("");
+    // A raw key means the bundle lookup failed, which is the failure this
+    // assertion can actually see from a browser.
+    await expect(description).not.toContainText("settings.appleHealth");
     await expect(page.getByTestId("apple-health-status")).toHaveAttribute(
       "data-state",
       "pending-setup",

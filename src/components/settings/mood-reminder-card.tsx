@@ -193,6 +193,8 @@ export function MoodReminderCard({
               disabled={!isAuthenticated || saving}
               aria-label={t("notifications.moodReminder.toggleAria")}
             />
+            <p className="text-sm">{t("notifications.moodReminder.detail")}</p>
+
             <span className="text-muted-foreground text-xs">
               {enabled
                 ? t("notifications.moodReminder.statusOn")
@@ -202,7 +204,7 @@ export function MoodReminderCard({
         }
       />
       {enabled && (
-        <div className="mt-4 flex min-h-11 items-center gap-3 pl-7">
+        <div className="flex min-h-11 items-center gap-3">
           <label htmlFor="mood-reminder-hour" className="text-sm font-medium">
             {t("notifications.moodReminder.hourLabel")}
           </label>
@@ -228,8 +230,8 @@ export function MoodReminderCard({
           aria-live="polite"
           className={
             msgType === "error"
-              ? "text-destructive mt-3 pl-7 text-sm"
-              : "text-muted-foreground mt-3 pl-7 text-sm"
+              ? "text-destructive mt-3 text-sm"
+              : "text-muted-foreground mt-3 text-sm"
           }
         >
           {msg}

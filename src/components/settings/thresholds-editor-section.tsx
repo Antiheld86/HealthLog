@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { SlidersHorizontal, RotateCcw, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmButton, ConfirmDialog } from "@/components/ui/confirm-button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
+import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -119,32 +121,15 @@ export function ThresholdsEditorSection({ id }: { id: string }) {
   });
 
   return (
-    <SettingsCard id={id} className="scroll-mt-28 space-y-4">
-      {/* v1.4.19 A8 / F-07: page header `settings.sections.thresholds.*`
-          already provides the title + description for this route, so the
-          card-level title + subtitle were a duplicate of the page header.
-          Keep the icon + reset action so the card still has a visible
-          control affordance. */}
-      <div className="flex items-center justify-between">
-        <SlidersHorizontal
-          className="text-muted-foreground h-5 w-5"
-          aria-hidden="true"
-        />
-        {data && Object.keys(data.overrides).length > 0 && (
-          <ConfirmButton
-            slot="settings-thresholds-reset-all"
-            variant="ghost"
-            size="sm"
-            icon={<RotateCcw className="h-3.5 w-3.5" />}
-            label={t("thresholds.resetAllAction")}
-            title={t("thresholds.resetAllTitle")}
-            body={t("thresholds.resetAllBody")}
-            confirmLabel={t("thresholds.resetAllConfirm")}
-            pending={resetMutation.isPending}
-            onConfirm={() => resetMutation.mutate(null)}
-          />
-        )}
-      </div>
+    <SettingsCard id={id} className="scroll-mt-28">
+      {/* The card carries a real title. It used to render a naked icon and
+          a reset button, on the grounds that the page header already said
+          the same thing — which left one card in the tree with no heading
+          at all. The page subtitle is the one that goes. */}
+      <SettingsCardHeader
+        icon={SlidersHorizontal}
+        title={t("settings.sections.thresholds.title")}
+      />
 
       {isLoading || !data ? (
         <ThresholdsSkeletonList />
@@ -163,6 +148,23 @@ export function ThresholdsEditorSection({ id }: { id: string }) {
           ))}
         </div>
       )}
+
+      {data && Object.keys(data.overrides).length > 0 ? (
+        <SettingsCardActions>
+          <ConfirmButton
+            slot="settings-thresholds-reset-all"
+            variant="outline"
+            size="sm"
+            icon={<RotateCcw className="h-3.5 w-3.5" />}
+            label={t("thresholds.resetAllAction")}
+            title={t("thresholds.resetAllTitle")}
+            body={t("thresholds.resetAllBody")}
+            confirmLabel={t("thresholds.resetAllConfirm")}
+            pending={resetMutation.isPending}
+            onConfirm={() => resetMutation.mutate(null)}
+          />
+        </SettingsCardActions>
+      ) : null}
     </SettingsCard>
   );
 }

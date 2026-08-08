@@ -91,6 +91,9 @@ export function ManagedIntegrationStatus() {
           title={t("settings.sections.integrations.title")}
           description={t("settings.sharedRecord.integrationStatusDescription")}
         />
+        <p className="text-sm">
+          {t("settings.sharedRecord.integrationStatusDetail")}
+        </p>
       </SettingsCard>
     );
   }
@@ -108,7 +111,7 @@ export function ManagedIntegrationStatus() {
         description={t("settings.sharedRecord.integrationStatusDescription")}
       />
       <ul
-        className="mt-4 space-y-3"
+        className="space-y-3"
         aria-label={activeRecord?.displayName ?? undefined}
       >
         {statusQuery.data.integrations.map((integration) => (

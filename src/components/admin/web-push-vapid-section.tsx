@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { BellRing, KeyRound, Loader2 } from "lucide-react";
 import { SettingsCard } from "@/components/settings/settings-card";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { Button } from "@/components/ui/button";
 import {
@@ -128,7 +129,7 @@ export function WebPushVapidSection() {
         status={configured ? <ConfiguredBadge /> : null}
       />
 
-      <div className="mt-4 grid gap-3 pl-7 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="admin-web-push-public-key" className="text-xs">
             {t("admin.webPushVapidPublicKey")}
@@ -191,7 +192,7 @@ export function WebPushVapidSection() {
         </div>
       </div>
 
-      <div className="mt-4 flex justify-end gap-2">
+      <SettingsCardActions>
         <Button
           variant="outline"
           size="sm"
@@ -217,7 +218,7 @@ export function WebPushVapidSection() {
           )}
           {t("common.save")}
         </Button>
-      </div>
+      </SettingsCardActions>
 
       <AlertDialog
         open={overwriteConfirmOpen}

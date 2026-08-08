@@ -33,6 +33,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
+import { PageHeader } from "@/components/ui/page-header";
 import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -359,14 +360,10 @@ export default function MedicationsPageClient() {
   if (!isAuthenticated) {
     return (
       <div className="space-y-6">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight">
-            {t("medications.title")}
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            {t("medications.loginRequired")}
-          </p>
-        </div>
+        <PageHeader
+          title={t("medications.title")}
+          description={t("medications.loginRequired")}
+        />
       </div>
     );
   }
@@ -407,90 +404,83 @@ export default function MedicationsPageClient() {
   return (
     <div className="space-y-6">
       <PullToRefreshIndicator {...pull} />
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <h1
-            data-tour-id="medications-hero"
-            className="text-2xl font-bold tracking-tight"
-          >
-            {t("medications.title")}
-          </h1>
-          {/* v1.4.34 IW-G — subtitle stays visible on mobile so the
-              H1 isn't an unframed label. */}
-          <p className="text-muted-foreground truncate text-xs sm:text-sm">
-            {t("medications.subtitle")}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {/* v1.16.11 (#316) — "Alle fälligen einnehmen". Contextual, not a
+      <PageHeader
+        title={
+          <span data-tour-id="medications-hero">{t("medications.title")}</span>
+        }
+        description={t("medications.subtitle")}
+        actions={
+          <>
+            {/* v1.16.11 (#316) — "Alle fälligen einnehmen". Contextual, not a
               permanent fixture: it renders only while at least TWO
               medications are currently due (a single due dose is the
               card's own one-tap job). Calm outline variant so the primary
               Add button keeps the visual lead; same responsive 44-px
               mobile tap floor as its neighbours. */}
-          {canAdd && dueMeds.length >= 2 && (
-            <Button
-              variant="outline"
-              onClick={() => setTakeAllOpen(true)}
-              className="min-h-11 sm:min-h-9"
-            >
-              <CheckCheck className="h-4 w-4" aria-hidden="true" />
-              {t("medications.takeAllDue.button")}
-            </Button>
-          )}
-          {/* v1.16.11 — the wrench is the one customize entry point:
+            {canAdd && dueMeds.length >= 2 && (
+              <Button
+                variant="outline"
+                onClick={() => setTakeAllOpen(true)}
+                className="min-h-11 sm:min-h-9"
+              >
+                <CheckCheck className="h-4 w-4" aria-hidden="true" />
+                {t("medications.takeAllDue.button")}
+              </Button>
+            )}
+            {/* v1.16.11 — the wrench is the one customize entry point:
               it links to /settings/medications, which owns the view
               preference (cards ⇄ table) and the manual-order editor.
               Same glyph, slot (left of the add button) and responsive
               44-px mobile tap floor as the dashboard and insights
               headers. */}
-          {canManage && (
-            <Button
-              asChild
-              variant="ghost"
-              size="icon"
-              className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
-            >
-              <Link
-                href="/settings/layout/medications"
-                aria-label={t("medications.customize")}
-                title={t("medications.customize")}
+            {canManage && (
+              <Button
+                asChild
+                variant="ghost"
+                size="icon"
+                className="min-h-11 min-w-11 sm:min-h-9 sm:min-w-9"
               >
-                <Wrench className="h-4 w-4" aria-hidden="true" />
-              </Link>
-            </Button>
-          )}
-          {/* v1.14.0 — the "Add" button is now a choice: log an intake
+                <Link
+                  href="/settings/layout/medications"
+                  aria-label={t("medications.customize")}
+                  title={t("medications.customize")}
+                >
+                  <Wrench className="h-4 w-4" aria-hidden="true" />
+                </Link>
+              </Button>
+            )}
+            {/* v1.14.0 — the "Add" button is now a choice: log an intake
               (incl. a backdated one) against an existing medication, or
               create a new medication. v1.12.2 — match the dashboard Add
               button's responsive tap-target floor (`min-h-11 sm:min-h-9`) so
               both primary "add" entry points clear the WCAG 2.5.5 44px mobile
               minimum identically. */}
-          {canAdd && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button className="min-h-11 sm:min-h-9">
-                  <Plus className="h-4 w-4" />
-                  {t("medications.addMedication")}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onSelect={() => setLogIntakeOpen(true)}
-                  disabled={activeMeds.length === 0}
-                >
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                  {t("medications.addChoice.logIntake")}
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={openCreate}>
-                  <Pill className="mr-2 h-4 w-4" />
-                  {t("medications.addChoice.newMedication")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-      </div>
+            {canAdd && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button className="min-h-11 sm:min-h-9">
+                    <Plus className="h-4 w-4" />
+                    {t("medications.addMedication")}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onSelect={() => setLogIntakeOpen(true)}
+                    disabled={activeMeds.length === 0}
+                  >
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    {t("medications.addChoice.logIntake")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={openCreate}>
+                    <Pill className="mr-2 h-4 w-4" />
+                    {t("medications.addChoice.newMedication")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </>
+        }
+      />
 
       {isLoading || isLayoutLoading ? (
         // v1.11.3 C4 — skeletons instead of a bare centred spinner so the

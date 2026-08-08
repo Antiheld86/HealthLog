@@ -76,7 +76,7 @@ export function AiQualitySection() {
   // resolves. Mirrors <CoachFeedbackSection> (header outside the
   // fetch-state branch).
   return (
-    <SettingsCard className="space-y-4">
+    <SettingsCard>
       <SettingsCardHeader
         icon={Sparkles}
         title={t("admin.aiQuality.title")}

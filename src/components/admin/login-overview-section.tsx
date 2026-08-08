@@ -227,7 +227,7 @@ export function LoginOverviewSection() {
         description={t("admin.loginOverviewDescription")}
       />
 
-      <div className="mt-4 space-y-3">
+      <div className="space-y-3">
         {/* Quick-filter pills. Failed-only is the most common
               admin "is something wrong" question — keep the one-tap shortcut. */}
         <div className="flex gap-1">

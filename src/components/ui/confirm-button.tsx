@@ -107,7 +107,7 @@ export function ConfirmButton({
   label: string;
   disabled?: boolean;
   size?: "sm" | "icon";
-  variant?: "outline" | "ghost";
+  variant?: "outline" | "ghost" | "destructive";
   className?: string;
   /** For an icon-only control, where `label` renders as an icon. */
   ariaLabel?: string;

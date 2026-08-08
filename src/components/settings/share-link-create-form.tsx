@@ -26,6 +26,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Copy, FileText, Loader2, ScanLine, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -453,22 +454,25 @@ export function ShareLinkCreateForm({
             a page with nothing on it. The scope line above says so and says
             what to do about it, and describes the button so the disabled state
             is not silent for a screen reader. */}
-        <Button
-          type="submit"
-          disabled={
-            createMutation.isPending ||
-            !label.trim() ||
-            (!documentOnly && selectedLeaves.size === 0)
-          }
-          aria-describedby={documentOnly ? undefined : scopeSummaryId}
-          data-testid="share-create-submit"
-          className="min-h-11 sm:min-h-9"
-        >
-          {createMutation.isPending && (
-            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-          )}
-          {t("settings.sharing.create")}
-        </Button>
+        <SettingsCardActions>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={
+              createMutation.isPending ||
+              !label.trim() ||
+              (!documentOnly && selectedLeaves.size === 0)
+            }
+            aria-describedby={documentOnly ? undefined : scopeSummaryId}
+            data-testid="share-create-submit"
+            className="min-h-11 sm:min-h-9"
+          >
+            {createMutation.isPending && (
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+            )}
+            {t("settings.sharing.create")}
+          </Button>
+        </SettingsCardActions>
       </form>
 
       <ShareDocumentPicker

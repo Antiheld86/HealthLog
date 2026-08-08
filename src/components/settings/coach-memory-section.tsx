@@ -34,6 +34,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatDateOrRelative } from "@/lib/format";
@@ -141,66 +142,14 @@ export function CoachMemorySection({
       as="section"
       aria-labelledby="settings-ai-coach-memory-title"
       data-testid="settings-coach-memory-card"
-      className="space-y-4"
     >
       <SettingsCardHeader
         icon={Brain}
         titleId="settings-ai-coach-memory-title"
         title={t("settings.ai.coachMemory.title")}
         description={t("settings.ai.coachMemory.description")}
-        status={
-          facts.length > 0 ? (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="min-h-11 sm:min-h-9"
-                  data-testid="settings-coach-memory-forget-all"
-                  disabled={!isAuthenticated || forgetAll.isPending}
-                >
-                  {forgetAll.isPending ? (
-                    <Loader2
-                      className="size-4 animate-spin motion-reduce:animate-none"
-                      aria-hidden
-                    />
-                  ) : (
-                    <Trash2 className="size-4" aria-hidden />
-                  )}
-                  {t("settings.ai.coachMemory.forgetAll")}
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>
-                    {t("settings.ai.coachMemory.forgetAllConfirmTitle")}
-                  </AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {t("settings.ai.coachMemory.forgetAllConfirmBody")}
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>
-                    {t("settings.ai.coachMemory.cancel")}
-                  </AlertDialogCancel>
-                  <AlertDialogAction
-                    data-testid="settings-coach-memory-forget-all-confirm"
-                    disabled={forgetAll.isPending}
-                    aria-busy={forgetAll.isPending || undefined}
-                    onClick={() => forgetAll.mutate()}
-                  >
-                    {forgetAll.isPending && (
-                      <Loader2 className="mr-1 size-3.5 animate-spin motion-reduce:animate-none" />
-                    )}
-                    {t("settings.ai.coachMemory.forgetAllConfirmAction")}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          ) : null
-        }
       />
+      <p className="text-sm">{t("settings.ai.coachMemory.detail")}</p>
 
       {query.isError && (
         <p
@@ -277,6 +226,58 @@ export function CoachMemorySection({
       <p className="text-muted-foreground border-border border-t pt-3 text-xs">
         {t("settings.ai.coachMemory.summaryNote")}
       </p>
+      <SettingsCardActions>
+        {facts.length > 0 ? (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-11 sm:min-h-9"
+                data-testid="settings-coach-memory-forget-all"
+                disabled={!isAuthenticated || forgetAll.isPending}
+              >
+                {forgetAll.isPending ? (
+                  <Loader2
+                    className="size-4 animate-spin motion-reduce:animate-none"
+                    aria-hidden
+                  />
+                ) : (
+                  <Trash2 className="size-4" aria-hidden />
+                )}
+                {t("settings.ai.coachMemory.forgetAll")}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {t("settings.ai.coachMemory.forgetAllConfirmTitle")}
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  {t("settings.ai.coachMemory.forgetAllConfirmBody")}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>
+                  {t("settings.ai.coachMemory.cancel")}
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  data-testid="settings-coach-memory-forget-all-confirm"
+                  disabled={forgetAll.isPending}
+                  aria-busy={forgetAll.isPending || undefined}
+                  onClick={() => forgetAll.mutate()}
+                >
+                  {forgetAll.isPending && (
+                    <Loader2 className="mr-1 size-3.5 animate-spin motion-reduce:animate-none" />
+                  )}
+                  {t("settings.ai.coachMemory.forgetAllConfirmAction")}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        ) : null}
+      </SettingsCardActions>
     </SettingsCard>
   );
 }

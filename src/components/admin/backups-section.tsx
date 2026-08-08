@@ -36,6 +36,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -225,7 +226,7 @@ export function RestoreSkipReport({
     <div
       role="status"
       data-slot="restore-skip-report"
-      className="border-warning/40 bg-warning/10 mt-4 rounded-md border px-3 py-2 text-sm"
+      className="border-warning/40 bg-warning/10 rounded-md border px-3 py-2 text-sm"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2">
@@ -496,13 +497,8 @@ export function BackupsSection() {
 
   return (
     <SettingsCard>
-      {/* v1.18.1 E3 — the snapshot count leads (numbers first), the
-          "Run now" button follows, and the explainer + docs link move
-          into the header's description slot. Previously the description
-          sat in a separate `mt-1 pl-7` paragraph that crowded the button
-          directly above it; routing it through the header's `space-y-1`
-          stack restores breathing room and left-aligns it under the
-          title. */}
+      {/* v1.18.1 E3 — the snapshot count leads (numbers first) and the
+          "Run now" button follows. */}
       <SettingsCardHeader
         icon={Database}
         title={t("admin.section.backups.title")}
@@ -512,21 +508,6 @@ export function BackupsSection() {
               {rows.length}
             </Badge>
           ) : null
-        }
-        status={
-          <Button
-            size="sm"
-            disabled={runBackup.isPending}
-            onClick={() => runBackup.mutate()}
-            className="min-h-11"
-          >
-            {runBackup.isPending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-            ) : (
-              <PlayCircle className="h-3.5 w-3.5" />
-            )}
-            {t("admin.section.backups.runNow")}
-          </Button>
         }
         description={
           <p>
@@ -550,7 +531,7 @@ export function BackupsSection() {
           backup file independently of any existing rows. The visible
           button proxies a hidden file input so the layout stays clean
           while keyboard / screen-reader users keep a labelled control. */}
-      <div className="bg-muted/30 border-border mt-4 flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="bg-muted/30 border-border flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="text-sm font-medium">
             {t("admin.section.backups.uploadTitle")}
@@ -599,7 +580,7 @@ export function BackupsSection() {
       ) : null}
 
       {isLoading ? (
-        <div className="mt-4 flex items-center gap-2">
+        <div className="flex items-center gap-2">
           <Loader2 className="text-muted-foreground h-4 w-4 animate-spin motion-reduce:animate-none" />
           <span className="text-muted-foreground text-sm">
             {t("admin.section.backups.loading")}
@@ -608,7 +589,7 @@ export function BackupsSection() {
       ) : isError ? (
         <div
           role="alert"
-          className="text-destructive bg-destructive/10 border-destructive/30 mt-4 rounded-md border px-3 py-2 text-sm"
+          className="text-destructive bg-destructive/10 border-destructive/30 rounded-md border px-3 py-2 text-sm"
         >
           {t("admin.section.backups.loadError")}
         </div>
@@ -617,7 +598,7 @@ export function BackupsSection() {
         // primitive. The header already exposes "Backup now" but a
         // brand-new admin lands inside the card and benefits from a
         // duplicate CTA right next to the explanation.
-        <div className="mt-4">
+        <div>
           <EmptyState
             icon={<Database className="size-6" />}
             title={t("admin.section.backups.emptyTitle")}
@@ -640,7 +621,7 @@ export function BackupsSection() {
           />
         </div>
       ) : (
-        <div className="mt-4">
+        <div>
           {/* Wide layout: the canonical table. Hidden below `md`, where the
               five columns push Download / Restore off-screen behind a
               horizontal scroll; the card list below takes over there. */}
@@ -784,6 +765,22 @@ export function BackupsSection() {
           </p>
         </div>
       )}
+
+      <SettingsCardActions>
+        <Button
+          size="sm"
+          disabled={runBackup.isPending}
+          onClick={() => runBackup.mutate()}
+          className="min-h-11"
+        >
+          {runBackup.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+          ) : (
+            <PlayCircle className="h-3.5 w-3.5" />
+          )}
+          {t("admin.section.backups.runNow")}
+        </Button>
+      </SettingsCardActions>
     </SettingsCard>
   );
 }
