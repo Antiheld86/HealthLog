@@ -353,8 +353,9 @@ describe("a refused invitation keeps what was typed", () => {
     const split = INVITE_CARD.indexOf("onError:", start);
     // The options object ends at the first `      },` after the error arm, so
     // the slice stops at the mutation rather than running into the JSX below,
-    // where a `setNarrowed(false)` on a radio would satisfy the matcher for
-    // the wrong reason.
+    // where a `setNarrowed(false)` / `setNarrowed(true)` on a radio would
+    // satisfy the matcher for the wrong reason. The success reset returns the
+    // scope to unset (`null`), which the JSX never writes.
     const end = INVITE_CARD.indexOf("\n      },", split);
     const onSuccess = INVITE_CARD.slice(start, split);
     const onError = INVITE_CARD.slice(split, end);
@@ -367,7 +368,7 @@ describe("a refused invitation keeps what was typed", () => {
       'setIdentifier("")',
       'setExpiresOn("")',
       'setAccess("READ")',
-      "setNarrowed(false)",
+      "setNarrowed(null)",
       "setSections([])",
     ]) {
       expect(onSuccess, reset).toContain(reset);
