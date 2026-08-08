@@ -364,10 +364,17 @@ export async function loadDailyDigest(
       orderBy: { integration: "asc" },
     }),
     prisma.measurementReminder.findMany({
+      // A booked visit's one-shot reminder rides this same engine with
+      // `origin: ENCOUNTER`. It is not a checkup and must not appear on a
+      // Vorsorge surface, or the list fills with appointments. Four read
+      // sites carry this exclusion; `encounter-reminder-exclusion.test.ts`
+      // proves every one of them, and the DTO mapper refuses such a row
+      // outright so a site that lost its filter fails loudly.
       where: {
         userId: user.id,
         enabled: true,
         deletedAt: null,
+        origin: { not: "ENCOUNTER" },
         nextDueAt: { not: null, lte: now },
       },
       select: { label: true },
