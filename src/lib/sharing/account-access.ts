@@ -109,6 +109,10 @@ export async function resolveAccountAccess(auth: {
           id: true,
           username: true,
           displayName: true,
+          // v1.37.2 — shown in front of a delegate on the switcher + banner,
+          // ahead of the greeting name. A deliberate disclosure of the owner's
+          // full name to everyone they share with; see `accountLabel`.
+          fullName: true,
           managedProfileAt: true,
         },
       },
@@ -126,6 +130,7 @@ export async function resolveAccountAccess(auth: {
         accountId: grant.grantor.id,
         username: grant.grantor.username,
         displayName: grant.grantor.displayName,
+        fullName: grant.grantor.fullName,
         access: level === "read" ? "read" : "write",
         level,
         recordKind:

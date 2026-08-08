@@ -4,6 +4,24 @@
 
 ### Added
 
+- The mood module can now say what a day would have looked like on your own
+  past patterns, and how far the day you recorded sits from that. It is a
+  second, separate reading: your own rating stays the leading one, it is
+  stored exactly as you gave it, and nothing overwrites it. The comparison
+  appears only once there are enough days to say anything honest, it always
+  carries the number of days it was built from and a range rather than a
+  single figure, and it names which of the things you recorded weighed most on
+  that day. It describes a connection between things you wrote down. It never
+  claims a cause.
+
+  Below fifteen days there is nothing at all. Between fifteen and thirty the
+  page says how far along it is instead of guessing. Between thirty and sixty
+  the comparison is there and is labelled as provisional. Where the days are
+  there but nothing in them is steady enough to compare against, it says that
+  too, rather than producing a number to fill the space. The comparison is
+  rebuilt overnight from your entries, and if you delete enough of them it
+  goes away again instead of standing there with a fresh date on it.
+
 - A mood entry can now carry the shape of the day around it. Four sections sit
   below the sliders — work, contacts, leisure, and one notable event — and
   every one of them is closed until you open it, so a quick check-in is still
@@ -64,6 +82,54 @@
   the current moment; the recorded time now matches the claim being made. The
   optimistic paint had promised this all along, and the skipped-to-taken flip
   in the same view already behaved this way.
+
+- The Appearance list in Settings had a strip of dead space above every row
+  that the first row did not have — 24 px on a desktop, 16 px on a phone,
+  unclickable, sitting between one module and the next. The rows read a step
+  apart from the top of their own list. They now sit the same distance from
+  the line above them, and the geometry sweep measures it so it cannot drift
+  back.
+
+- The Account settings page is the profile again. Cycle tracking is a module
+  and its switch lives in the Modules hub, so the second on-ramp here is gone
+  along with the "manage in Account" link beside that switch, which pointed at
+  an anchor nothing rendered. Changing the password moved to Security, where
+  the second factors and the passkeys already are, and it leads that page.
+
+- Five module rows ran two to three times longer than their thirteen
+  neighbours: environment, external assistant access, documents, mental
+  wellbeing and nutrient intake. Every one of them ended in "off by default",
+  restating what the switch beside the row already shows. They are one
+  sentence now, like the rest. The mental-wellbeing row also named two
+  screeners where the module ships four, and what happens to your answers is
+  now said on the mental-wellbeing page itself, where you are about to give
+  them.
+
+- Research Mode is retired. It was an opt-in for the estimated GLP-1 level
+  curve, but that chart stopped consulting the flag several releases ago and
+  has been visible to everyone since — so the switch on the Advanced page
+  changed no screen in either position. The curve is simply part of the
+  medication page, and the switch, its acknowledgment dialog, and the stored
+  acknowledgment are gone. Advanced is now what it reads as: reset the data,
+  delete the account.
+
+- The ECG page opened with three lines about what HealthLog does not do
+  before showing a single recording, two of them saying the same thing. They
+  are gone; the recording's own page still states that the result shown is
+  the device's. The device's verdict now rides the timestamp as a tag instead
+  of taking a line of its own. The overview teaser shows the five most recent
+  strips rather than every one ever recorded, while the ECG page itself still
+  lists them all, so nothing is hidden where you go to look. A recording has
+  its own address now, with the back link above the heading, so a strip can be
+  linked to and the browser's own Back works.
+
+- An entry in the record switcher no longer carries the access level on a
+  line of its own. In a menu that narrow it was truncated more often than it
+  was read, and the banner states it in full once you are inside the record.
+
+- The record owner's name reads in full on the switcher and the banner when
+  they have set one, ahead of the greeting name — so a delegate entering
+  somebody's record sees whose it is by who they are.
 
 ## [1.37.1] — 2026-08-08
 

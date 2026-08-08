@@ -230,9 +230,6 @@ const PINNED_AFFORDANCES: Record<
   "src/components/medications/intake-history-list-v2.tsx": {
     "text-success": 2,
   },
-  "src/components/medications/research-mode-acknowledgment-dialog.tsx": {
-    "toast.success": 1,
-  },
   "src/components/medications/scheduling/schedule-history-timeline.tsx": {
     "toast.success": 2,
   },
@@ -286,7 +283,7 @@ const PINNED_AFFORDANCES: Record<
   "src/components/settings/account-section/avatar-section.tsx": {
     "text-success": 1,
   },
-  "src/components/settings/account-section/index.tsx": { "text-success": 2 },
+  "src/components/settings/account-section/index.tsx": { "text-success": 1 },
   "src/components/settings/advanced-section.tsx": { "text-success": 2 },
   "src/components/settings/ai/ai-insights-card.tsx": { "text-success": 1 },
   "src/components/settings/ai/anthropic-provider-form.tsx": {
@@ -341,6 +338,9 @@ const PINNED_AFFORDANCES: Record<
     "text-success": 1,
   },
   "src/components/settings/ntfy-card.tsx": { "text-success": 1 },
+  // The one that used to sit inside `account-section/index.tsx` — the card
+  // moved to Settings → Security, the line moved with it.
+  "src/components/settings/password-card.tsx": { "text-success": 1 },
   "src/components/settings/security-sessions-card.tsx": { "text-success": 1 },
   "src/components/settings/share-link-create-form.tsx": { "text-success": 3 },
   "src/components/settings/sharing-section.tsx": { "text-success": 1 },

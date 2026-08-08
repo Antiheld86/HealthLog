@@ -39,7 +39,7 @@ import type { BrowserContext, Page } from "@playwright/test";
 import { expect, test } from "./setup/test";
 import {
   DELEGATE_STORAGE_STATE_PATH,
-  E2E_OWNER,
+  E2E_OWNER_FULL_NAME,
   E2E_USER,
   OWNER_STORAGE_STATE_PATH,
 } from "./setup/test-helpers";
@@ -149,7 +149,8 @@ test.describe("delegated writes", () => {
 
     const banner = page.locator('[data-slot="shared-record-banner"]');
     await expect(banner).toBeVisible();
-    await expect(banner).toContainText(E2E_OWNER.username);
+    // v1.37.2 — the owner set a full name, so the banner names them by it.
+    await expect(banner).toContainText(E2E_OWNER_FULL_NAME);
     // The banner drops its read-only clause on its own once the level says so.
     await expect(banner).not.toContainText("read it, not change it");
   });

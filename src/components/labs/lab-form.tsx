@@ -1,7 +1,7 @@
 "use client";
 
 import { useActiveRecordName } from "@/hooks/use-record-capabilities";
-import { useId, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
@@ -25,6 +25,7 @@ import { localizedApiError } from "@/lib/api/localized-error";
 import { parseReferenceRange } from "@/lib/labs/parse-reference-range";
 import { formatReferenceRange } from "@/lib/labs/reference-range";
 import { formatLabValue } from "@/lib/labs/format-value";
+import { EncounterSuggestionField } from "@/components/encounters/encounter-suggestion-field";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -118,6 +119,21 @@ export function LabForm({
   const [value, setValue] = useState("");
   const [valueText, setValueText] = useState("");
   const [takenAt, setTakenAt] = useState(defaultTakenAtValue);
+  /**
+   * The visit this reading came out of, when the suggestion offered one.
+   *
+   * Deliberately NOT cleared by the keep-open reset below: a real lab report
+   * shares one draw date and one visit across every analyte, so the next row
+   * off the same report keeps both rather than asking again.
+   */
+  const [visitId, setVisitId] = useState<string | null>(null);
+  // The `DateTimeField` value is a local `yyyy-MM-ddTHH:mm`; the suggestion
+  // asks the server in ISO-8601, so it is converted once here rather than in
+  // the shared field, which must not know about this form's input format.
+  const takenAtAnchor = useMemo(() => {
+    const parsed = new Date(takenAt);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  }, [takenAt]);
   const [note, setNote] = useState("");
   // The window the paper report printed for THIS reading. Optional and folded
   // away by default: most entries are typed against a catalog marker and never
@@ -224,6 +240,7 @@ export function LabForm({
           : {}),
         takenAt: new Date(takenAt).toISOString(),
         ...(note.trim() ? { note: note.trim() } : {}),
+        ...(visitId ? { encounterId: visitId } : {}),
       });
       toast.success(
         t("labs.form.savedToast"),
@@ -448,6 +465,15 @@ export function LabForm({
             />
           </div>
         </div>
+
+        {/* Anchored on the draw date, not on now: backdating a reading moves
+            the offer with it. */}
+        <EncounterSuggestionField
+          anchor={takenAtAnchor}
+          value={visitId}
+          onChange={setVisitId}
+          slot="lab-form-encounter-suggestion"
+        />
 
         {resultType === "numeric" && selected && referenceText ? (
           <p className="text-muted-foreground text-xs">

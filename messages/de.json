@@ -283,7 +283,14 @@
     "familyHistoryColCondition": "Erkrankung",
     "familyHistoryColAgeAtOnset": "Alter bei Beginn",
     "labsSourceRangeNote": "* Der Referenzbereich stammt aus dem Befund und weicht vom gespeicherten Bereich ab:",
-    "labsCatalogRangeLabel": "gespeicherter Bereich"
+    "labsCatalogRangeLabel": "gespeicherter Bereich",
+    "visitsTitle": "Arztbesuche",
+    "visitsColDate": "Datum",
+    "visitsColPractice": "Praxis",
+    "visitsColKind": "Art",
+    "visitsColReason": "Anlass",
+    "visitsColOutcome": "Ergebnis",
+    "visitsColConditions": "Erkrankungen"
   },
   "errorBoundary": {
     "title": "Da ist etwas schiefgelaufen",
@@ -478,7 +485,8 @@
       "milestone": "Meilensteine",
       "ecg_new_recording": "Neue EKG-Aufzeichnungen",
       "tension_window": "Anspannungsphasen",
-      "same_time_baseline": "Aktivität zur gleichen Tageszeit"
+      "same_time_baseline": "Aktivität zur gleichen Tageszeit",
+      "upcoming_visit": "Termine"
     },
     "layoutReset": "Auf Defaults zurücksetzen",
     "layoutResetTitle": "Dashboard-Layout zurücksetzen?",
@@ -1604,26 +1612,6 @@
       }
     },
     "researchMode": {
-      "dialog": {
-        "title": "Forschungsmodus aktivieren",
-        "intro": "Der Forschungsmodus ergänzt deine GLP-1-Medikamentenseite um eine geschätzte Wirkstoff-Verlaufskurve. Lies die Abgrenzung unten, bevor du den Modus einschaltest — die Kurve ist eine Lernhilfe, niemals eine Messung und nie ein medizinischer Rat.",
-        "whatItIsHeader": "Was das ist",
-        "whatItIs": "Eine Sägezahnkurve, die die Überlagerung deiner protokollierten Dosen über die Zeit simuliert. Grundlage ist das Ein-Kompartment-Modell nach Bateman mit Absorptions- und Halbwertszeit-Parametern aus den EMA-EPARs der zugelassenen GLP-1-Rezeptoragonisten. Die Y-Achse ist einheitenlos und ohne Beschriftung. Die Form, nicht der Zahlenwert, ist die Aussage der Kurve.",
-        "whatItIsntHeader": "Was das nicht ist",
-        "whatItIsnt": "Kein Blutspiegel. Keine Messung. Keine Vorhersage, wie dein Körper tatsächlich reagiert. Keine Grundlage für Dosierungs-, Zeitpunkt- oder Eskalationsentscheidungen. Für alles, was deine Therapie betrifft, sprich mit deiner verschreibenden Ärztin oder deinem Arzt.",
-        "whyEstimateHeader": "Warum es eine Schätzung ist",
-        "whyEstimate": "Populations-Pharmakokinetik beschreibt den typischen Patienten. Die individuelle Streuung ist groß — das Tirzepatid-Modell Schneck/Urva 2024 weist rund 22 % interindividuelle Variabilität bei der Absorption und rund 49 % beim Verteilungsvolumen aus. Eine Lehrbuchkurve kann weder dein Gewicht, deine Nierenfunktion, deine Injektionstechnik noch deine Zeitgenauigkeit abbilden. Lies die Kurve als Rhythmus deiner Dosierung, nicht als deinen Spiegel.",
-        "mdrBoundaryHeader": "Regulatorische Abgrenzung",
-        "mdrBoundary": "HealthLog stellt öffentliche regulatorische Daten und deine eigenen Einträge dar. Die App stellt keine Prognose, Diagnose, Behandlung oder Therapieempfehlung. Die EU-Verordnung 2017/745 (Medical Device Regulation, MDR) und das Leitfadenpapier MDCG 2021-24 ziehen die Grenze bei Software, die Daten für medizinische Zwecke interpretiert — diese Kurve bleibt klar auf der edukativen Seite dieser Linie. Wenn du das Gefühl hast, die Kurve dränge dich zu einer klinischen Entscheidung, schließe sie.",
-        "citationsHeader": "Quellen",
-        "citations": "EMA European Public Assessment Reports für Mounjaro, Ozempic, Wegovy, Saxenda, Trulicity, Byetta und Bydureon (Abschnitt 5.2). Schneck K, Urva S. Population pharmacokinetics of the GIP/GLP receptor agonist tirzepatide. CPT Pharmacometrics Syst Pharmacol 2024;13(3):494-503 (DOI 10.1002/psp4.13099).",
-        "versionLine": "Disclaimer-Version: {version}",
-        "acknowledgeCta": "Verstanden — aktivieren",
-        "cancelCta": "Abbrechen",
-        "successToast": "Forschungsmodus aktiviert. Die Wirkstoff-Verlaufskurve ist jetzt auf deiner GLP-1-Medikamentenseite sichtbar.",
-        "errorToast": "Forschungsmodus konnte nicht aktiviert werden. Bitte erneut versuchen.",
-        "staleVersionToast": "Der Disclaimer wurde aktualisiert, seit diese Seite geladen wurde. Lade die Seite neu, um die aktuelle Fassung zu lesen."
-      },
       "chart": {
         "title": "Geschätzter Wirkstoffverlauf",
         "axisLabel": "Geschätzter Spiegel (relativ)",
@@ -3110,8 +3098,7 @@
       "valuesBack": "Zurück zu Insights",
       "valuesBackToMetric": "Zurück zu {metric}",
       "scoresBack": "Zurück zu Insights",
-      "ecgDescription": "Einkanal-EKG-Aufzeichnungen deines Geräts, jeweils mit dem Ergebnis des Geräts.",
-      "ecgDisclaimer": "HealthLog zeigt die Kurve und die Aufzeichnung – die Kurve wird nicht interpretiert."
+      "ecgDescription": "Einkanal-EKG-Aufzeichnungen deines Geräts, jeweils mit dem Ergebnis des Geräts."
     },
     "units": {
       "steps": "Schritte",
@@ -3785,6 +3772,25 @@
         "statement": "An Tagen mit „{label}“ lag die Stimmung im Durchschnitt {direction}: {withAvg} gegenüber {withoutAvg}.",
         "counts": "{withDays} Tage mit, {withoutDays} Tage ohne",
         "caveat": "Das zeigt einen Zusammenhang, keine Ursache."
+      },
+      "prognosis": {
+        "title": "Deine Einschätzung und was deine bisherigen Tage nahelegen",
+        "selfLabel": "Deine Einschätzung",
+        "expectedLabel": "Auf Basis deiner Muster erwartet",
+        "band": "Bereich {low} bis {high}",
+        "statement": "Auf Basis deiner bisherigen Muster wäre für {date} ein Wert um {value} zu erwarten gewesen. Ermittelt aus {n} Tagen, die alles enthalten, was der Vergleich braucht.",
+        "provisional": "Noch vorläufig: das Muster stützt sich auf eine kurze Strecke von Tagen.",
+        "notToday": "Das beschreibt {date}, nicht heute.",
+        "deviationWithin": "Deine eigene Einschätzung liegt in diesem Bereich.",
+        "deviationAbove": "Deine eigene Einschätzung liegt {amount} Punkte über diesem Bereich.",
+        "deviationBelow": "Deine eigene Einschätzung liegt {amount} Punkte unter diesem Bereich.",
+        "weightedTitle": "Was an diesem Tag am stärksten gewichtet wurde",
+        "weightedUp": "{label} — zählte in Richtung eines höheren erwarteten Werts",
+        "weightedDown": "{label} — zählte in Richtung eines niedrigeren erwarteten Werts",
+        "caveat": "Das ist ein Vergleich mit deinen eigenen bisherigen Tagen, keine Aussage darüber, wie ein Tag zustande gekommen ist.",
+        "learning": "Lernphase: {entries} von {threshold} Tagen erfasst. Ein Vergleich erscheint, sobald genug davon zusammengekommen sind.",
+        "noPattern": "In den bisher erfassten {entries} Tagen ist nichts gleichmäßig genug, um einen Tag damit zu vergleichen. Wer den Kontext eines Tages mit erfasst, macht mehr davon vergleichbar.",
+        "featureValue": "{field}: {value}"
       }
     },
     "derived": {
@@ -4255,10 +4261,8 @@
     },
     "ecg": {
       "sectionTitle": "EKG-Aufzeichnungen",
-      "sectionIntro": "Einkanal-EKG-Streifen, die dein Gerät aufgezeichnet hat. HealthLog zeigt nur die Aufzeichnung und das von deinem Gerät erstellte Ergebnis – die Kurve wird nicht gelesen oder ausgewertet.",
       "loadError": "Deine EKG-Aufzeichnungen konnten nicht geladen werden.",
       "backToList": "Zurück zu den Aufzeichnungen",
-      "disclaimer": "Dies ist das Ergebnis, das dein Aufzeichnungsgerät erstellt hat. HealthLog liest oder interpretiert EKG-Aufzeichnungen nicht und stellt keine Diagnose.",
       "clinicianNote": "Wenn dich dieses Ergebnis beunruhigt, besprich diese Aufzeichnung mit einer Ärztin oder einem Arzt.",
       "resultAttribution": "Aufgezeichnetes Ergebnis: {result}, wie vom Aufzeichnungsgerät gemeldet.",
       "result": {
@@ -4591,19 +4595,6 @@
     "remainingMany": "Noch {count} Messungen bis zum Trend."
   },
   "settings": {
-    "researchMode": {
-      "sectionTitle": "Forschungsmodus",
-      "subtitle": "Optionale Kurve des geschätzten GLP-1-Wirkstoffspiegels nach EMA-Daten.",
-      "toggleLabel": "Geschätzte Wirkstoffkurve anzeigen",
-      "disabledStatus": "Deaktiviert. Die Wirkstoffkurve ist ausgeblendet.",
-      "enabledStaleStatus": "Der Disclaimer wurde aktualisiert. Bestätige unten erneut, um die Kurve wieder anzuzeigen.",
-      "acknowledgedOn": "Bestätigt am {date}.",
-      "rePromptTitle": "Disclaimer aktualisiert",
-      "rePromptBody": "Der Disclaimer des Forschungsmodus wurde seit deiner letzten Bestätigung aktualisiert. Lies ihn erneut und bestätige, damit die Kurve sichtbar bleibt.",
-      "rePromptCta": "Disclaimer erneut bestätigen",
-      "disableError": "Forschungsmodus konnte nicht deaktiviert werden. Bitte erneut versuchen.",
-      "subtitleDetail": "Nur zur Anschauung — niemals eine Messung oder ein medizinischer Rat."
-    },
     "shell": {
       "sectionsNav": "Einstellungs-Bereiche",
       "groups": {
@@ -4887,8 +4878,8 @@
       },
       "advanced": {
         "title": "Erweitert",
-        "description": "Opt-in-Schalter für den Forschungsmodus sowie der Notausgang zum unwiderruflichen Löschen aller Gesundheitsdaten.",
-        "subtitle": "Research-Modus, Daten zurücksetzen und Konto löschen."
+        "description": "Der Notausgang: alle Gesundheitsdaten unwiderruflich löschen oder das Konto auflösen.",
+        "subtitle": "Daten zurücksetzen und Konto löschen."
       },
       "export": {
         "title": "Export & Import",
@@ -5977,7 +5968,9 @@
       "rangeCustomEnd": "Bis",
       "errorGeneric": "Der Export konnte nicht erstellt werden. Bitte erneut versuchen.",
       "errorRateLimit": "Das Exportlimit für diese Stunde ist erreicht.",
-      "errorModuleDisabled": "Der Gesundheitsakten-Export ist für dieses Konto ausgeschaltet."
+      "errorModuleDisabled": "Der Gesundheitsakten-Export ist für dieses Konto ausgeschaltet.",
+      "visitOffer": "Am {when} steht ein Termin an: {what}.",
+      "visitOfferApply": "Bericht bis dahin"
     },
     "globalExcludedInjectionSitesLabel": "Global ausgeschlossene Injektionsstellen",
     "globalExcludedInjectionSitesHint": "Nie angeboten und beim Erfassen abgelehnt, auch wenn eine Medikation sie bevorzugt.",
@@ -6037,14 +6030,6 @@
       "createDetail": "Der Token wird nur einmal bei der Erstellung angezeigt — sichere ihn dann; er lässt sich nicht wiederherstellen."
     },
     "genderOther": "Divers",
-    "cycleTracking": {
-      "title": "Zyklus-Tracking",
-      "description": "Verfolge deinen Menstruationszyklus, Vorhersagen, Symptome und Phasen-Insights.",
-      "enable": "Zyklus-Tracking aktivieren",
-      "manage": "Zyklus-Tracking öffnen",
-      "error": "Zyklus-Tracking konnte nicht aktualisiert werden.",
-      "detail": "Standardmäßig an für als weiblich eingestellte Konten; für alle verfügbar."
-    },
     "nightscout": "Nightscout",
     "nightscoutTag": "CGM",
     "nightscoutDescription": "Verbinde deine eigene Nightscout-Seite, um kontinuierliche Glukosewerte ins Glukose-Panel zu synchronisieren.",
@@ -6285,9 +6270,8 @@
       },
       "posture": {
         "title": "Datenschutz-Einstellung",
-        "description": "Steuere, wie viele deiner Daten an KI-Funktionen und die freiwillige Forschung weitergegeben werden.",
-        "openAi": "KI-Datenschutzmodus",
-        "openResearch": "Forschungsmodus"
+        "description": "Steuere, wie viele deiner Daten an KI-Funktionen weitergegeben werden.",
+        "openAi": "KI-Datenschutzmodus"
       }
     },
     "mcp": {
@@ -8153,7 +8137,8 @@
       "openLink": "Vorsorge öffnen"
     },
     "showMeasurements": "Messergebnisse anzeigen",
-    "loadError": "Erinnerungen konnten nicht geladen werden."
+    "loadError": "Erinnerungen konnten nicht geladen werden.",
+    "fileVisit": "Termin eintragen"
   },
   "moduleList": {
     "viewToggleLabel": "Ansicht",
@@ -8506,27 +8491,27 @@
     },
     "mcp": {
       "label": "Externer Assistentenzugriff (MCP)",
-      "description": "Einem MCP-fähigen Assistenten Lesezugriff auf deine Gesundheitsdaten über ein begrenztes Token erlauben. Standardmäßig aus."
+      "description": "Lesezugriff für einen MCP-fähigen Assistenten, über ein begrenztes Token."
     },
     "environment": {
       "label": "Umwelt",
-      "description": "Tägliches Wetter und Tageslicht für deinen Ort einbeziehen, um Zusammenhänge mit Stimmung, Schlaf und Vitalwerten zu erkennen. Standardmäßig aus."
+      "description": "Tägliches Wetter und Tageslicht für deinen Ort, neben Stimmung, Schlaf und Vitalwerten."
     },
     "inboundDocuments": {
       "label": "Dokumente",
-      "description": "Bewahre jedes medizinische Schreiben, jeden Befund und Scan an einem verschlüsselten, durchsuchbaren Ort auf — verknüpft mit deinen Erkrankungen. Standardmäßig aus."
+      "description": "Arztbriefe, Befunde und Scans verschlüsselt und durchsuchbar an einem Ort."
     },
     "mentalHealth": {
       "label": "Seelisches Wohlbefinden",
-      "description": "Freiwillige PHQ-9- und GAD-7-Selbsttests ergänzend zum Stimmungstagebuch. Standardmäßig aus; Antworten sind verschlüsselt und bleiben aus dem KI-Coach heraus."
+      "description": "Vier freiwillige Selbsttests neben dem Stimmungstagebuch."
     },
     "nutrients": {
       "label": "Nährstoffzufuhr",
-      "description": "Speichert tägliche Mikronährstoff-Summen (Vitamine, Mineralstoffe, Wasser, Koffein) aus Apple Health. Standardmäßig aus."
+      "description": "Tägliche Mikronährstoff-Summen aus Apple Health."
     },
     "vaccinations": {
       "label": "Impfungen",
-      "description": "Der Impfpass in strukturierter Form: welche Dosis wann gegeben wurde, in welcher Serie sie steht und wann die nächste Auffrischung ansteht."
+      "description": "Der Impfpass in strukturierter Form: Dosis, Serie, nächste Auffrischung."
     }
   },
   "illness": {
@@ -9023,7 +9008,8 @@
     },
     "openDetail": "Details anzeigen",
     "historyLoadError": "Dein Testverlauf konnte nicht geladen werden",
-    "historyLoadErrorHint": "Das heißt nicht, dass keine Ergebnisse vorliegen — die Liste konnte nicht abgerufen werden. Versuche es erneut."
+    "historyLoadErrorHint": "Das heißt nicht, dass keine Ergebnisse vorliegen — die Liste konnte nicht abgerufen werden. Versuche es erneut.",
+    "privacyNote": "Deine Antworten sind verschlüsselt gespeichert und erreichen den KI-Coach nicht."
   },
   "records": {
     "aiInclusion": {
@@ -9310,7 +9296,8 @@
       "previewUnavailable": "Keine Inline-Vorschau für diesen Dateityp",
       "uploadedMeta": "Hinzugefügt am {date} · {size}",
       "share": "Teilen",
-      "labValuesLink": "{count} Laborwerte ansehen"
+      "labValuesLink": "{count} Laborwerte ansehen",
+      "visitsLabel": "Gehört zu Termin"
     },
     "dropOverlay": {
       "title": "Zum Hochladen ablegen",
@@ -9327,7 +9314,8 @@
       "partialFailure": "{failed} von {total} konnten nicht aktualisiert werden",
       "failed": "Die Aktion konnte nicht ausgeführt werden",
       "share": "Teilen",
-      "shareTooMany": "Ein Freigabelink fasst höchstens {max} Dokumente. Wähle einige ab und versuche es erneut."
+      "shareTooMany": "Ein Freigabelink fasst höchstens {max} Dokumente. Wähle einige ab und versuche es erneut.",
+      "linkVisit": "Termin zuordnen"
     },
     "episodeCard": {
       "title": "Dokumente",
@@ -9620,6 +9608,11 @@
           "below": "Bis {time} stehst du bei {today} Schritten. An einem üblichen Tag sind es um diese Zeit etwa {typical}.",
           "above": "Bis {time} stehst du bei {today} Schritten — mehr als die {typical}, die um diese Zeit für dich üblich sind."
         }
+      },
+      "upcomingVisit": {
+        "title": "Termin steht an",
+        "bodyToday": "{what} — heute",
+        "bodyTomorrow": "{what} — morgen"
       }
     },
     "action": {
@@ -9715,7 +9708,8 @@
     "sensitiveHint": "Hier ist nie etwas vorausgewählt. Wählen Sie jeden Eintrag selbst.",
     "scopeNone": "Noch nichts ausgewählt. Wählen Sie aus, was enthalten sein soll, oder übernehmen Sie den Standardbericht.",
     "scopeCount": "{count} Einträge aus {groups} Bereichen",
-    "scopeSensitive": "inkl. {names}"
+    "scopeSensitive": "inkl. {names}",
+    "leafVisits": "Arztbesuche"
   },
   "recordSharing": {
     "banner": {
@@ -9726,9 +9720,7 @@
     },
     "switcher": {
       "label": "Akte öffnen",
-      "ownRecord": "Meine eigene Akte",
-      "readOnly": "Nur lesen",
-      "canWrite": "Darf Einträge anlegen"
+      "ownRecord": "Meine eigene Akte"
     },
     "switch": {
       "failed": "Die Akte konnte nicht geöffnet werden. Bitte noch einmal versuchen.",
@@ -10082,6 +10074,98 @@
       "hospital": "Krankenhaus",
       "therapy": "Therapietermin",
       "other": "Arzttermin"
+    },
+    "sectionTitle": "Termine",
+    "sectionDescription": "Arztbesuche und gebuchte Termine an einem Ort.",
+    "add": "Termin",
+    "loadError": "Termine konnten nicht geladen werden.",
+    "emptyTitle": "Noch kein Termin erfasst",
+    "emptyDescription": "Ein Datum genügt. Alles andere ist freiwillig.",
+    "upcomingHeading": "Anstehend",
+    "pastHeading": "Vergangen",
+    "createTitle": "Termin erfassen",
+    "editTitle": "Termin bearbeiten",
+    "formDescription": "Nur das Datum ist Pflicht.",
+    "created": "Termin gespeichert.",
+    "updated": "Termin aktualisiert.",
+    "saveFailed": "Termin konnte nicht gespeichert werden.",
+    "checkupNotClosed": "Termin gespeichert. Die Vorsorge bleibt offen — dafür reicht deine Freigabe nicht.",
+    "status": {
+      "planned": "Geplant",
+      "done": "Stattgefunden",
+      "cancelled": "Abgesagt",
+      "noShow": "Nicht wahrgenommen"
+    },
+    "card": {
+      "documentCount": "verknüpfte Dokumente",
+      "labCount": "verknüpfte Laborwerte",
+      "conditionCount": "verknüpfte Erkrankungen"
+    },
+    "form": {
+      "date": "Datum und Uhrzeit",
+      "dateDerivesStatusHint": "Ein Datum in der Zukunft ist ein gebuchter Termin.",
+      "status": "Status",
+      "practitioner": "Praxis oder Ärztin",
+      "practitionerHint": "Optional — du kannst den Namen später nachtragen.",
+      "practitionerNone": "Keine Angabe",
+      "practitionerSearch": "Name oder Praxis suchen",
+      "practitionerNoMatch": "Kein Eintrag gefunden.",
+      "practitionerAdd": "Neu anlegen",
+      "practitionerClear": "Auswahl entfernen",
+      "kind": "Art",
+      "reason": "Anlass",
+      "outcome": "Ergebnis",
+      "outcomeReveal": "Ergebnis eintragen",
+      "linkDocuments": "Dokumente",
+      "linkLabResults": "Laborwerte",
+      "linkConditions": "Erkrankungen",
+      "linkNothingToOffer": "Nichts zum Verknüpfen vorhanden."
+    },
+    "deleteTitle": "Termin löschen?",
+    "deleteDescription": "Der Eintrag wird entfernt. Ist der Termin gebucht, entfällt auch die Erinnerung dazu.",
+    "deleteFailed": "Termin konnte nicht gelöscht werden.",
+    "suggestion": {
+      "single": "Gehört zu diesem Termin?",
+      "choose": "Zu welchem Termin gehört das?"
+    },
+    "episodeCard": {
+      "title": "Termine dazu",
+      "emptyLine": "Noch kein Termin mit dieser Erkrankung verknüpft.",
+      "add": "Termin hinzufügen"
+    },
+    "dashboard": {
+      "nextVisit": "Nächster Termin: {what} am {when}"
     }
+  },
+  "checkups": {
+    "viewSwitchLabel": "Vorsorge oder Termine anzeigen",
+    "tabVorsorge": "Vorsorge",
+    "tabVisits": "Termine"
+  },
+  "practitioners": {
+    "title": "Praxen und Ärzte",
+    "description": "Dein eigenes Adressbuch — einmal tippen, überall auswählen.",
+    "linkLabel": "Adressbuch",
+    "add": "Eintrag",
+    "searchPlaceholder": "Name oder Praxis suchen",
+    "loadError": "Adressbuch konnte nicht geladen werden.",
+    "emptyTitle": "Noch kein Eintrag",
+    "emptyDescription": "Lege eine Praxis an, damit du sie beim Termin auswählen kannst.",
+    "noMatchTitle": "Kein Treffer",
+    "noMatchDescription": "Zu dieser Suche gibt es keinen Eintrag.",
+    "createTitle": "Eintrag anlegen",
+    "editTitle": "Eintrag bearbeiten",
+    "formDescription": "Nur der Name ist Pflicht.",
+    "name": "Name",
+    "specialty": "Fachrichtung",
+    "practice": "Praxis",
+    "location": "Adresse",
+    "phone": "Telefon",
+    "note": "Notiz",
+    "noteHint": "Verschlüsselt gespeichert.",
+    "saveFailed": "Eintrag konnte nicht gespeichert werden.",
+    "deleteTitle": "Eintrag löschen?",
+    "deleteDescription": "Deine bisherigen Termine bleiben erhalten und behalten diesen Namen.",
+    "deleteFailed": "Eintrag konnte nicht gelöscht werden."
   }
 }

@@ -150,7 +150,15 @@ export async function sendViaTelegram(
       interactiveKeyboard = buildMoodKeyboard(
         await resolveSenderLocale(userId),
       );
-    } else if (payload.eventType === "MEASUREMENT_REMINDER" && reminderId) {
+    } else if (
+      payload.eventType === "MEASUREMENT_REMINDER" &&
+      reminderId &&
+      // An appointment nudge is dispatched with the affordance suppressed:
+      // `measure_done` / `measure_later` both refuse an ENCOUNTER-origin row,
+      // so offering the pair would put two buttons in the chat that can only
+      // answer "not found".
+      !payload.suppressActions
+    ) {
       interactiveKeyboard = buildMeasurementKeyboard(
         reminderId,
         await resolveSenderLocale(userId),

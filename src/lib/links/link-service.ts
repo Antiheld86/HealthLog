@@ -15,7 +15,8 @@ export const MAX_TARGETS_PER_CALL = 100;
 export type LinkSourceKind = "encounter" | "document" | "vaccination";
 
 /** The record a link points at. */
-export type LinkTargetKind = "document" | "labResult" | "conditionEpisode";
+export type LinkTargetKind =
+  "document" | "labResult" | "conditionEpisode" | "encounter";
 
 export interface LinkRequest {
   userId: string;
@@ -172,6 +173,20 @@ const LAB_RESULT_ENDPOINT: EndpointSpec = {
   date: (row) => asDate(row.takenAt),
 };
 
+const ENCOUNTER_ENDPOINT: EndpointSpec = {
+  delegate: (tx) => narrow<OwnedRowDelegate>(tx.encounter),
+  select: { id: true, kind: true, occurredAt: true },
+  // The visit's KIND, as the enum constant, and this is the one endpoint whose
+  // label is deliberately not prose. A document title and an analyte name are
+  // the person's own words and mean the same thing in every language; a visit
+  // kind is one of eight closed values whose human name is a presentation
+  // choice. Publishing the constant is what lets a German reader and an
+  // English one each see it named correctly from their own bundle, which a
+  // server-side string chosen once could not do.
+  label: (row) => String(row.kind),
+  date: (row) => asDate(row.occurredAt),
+};
+
 const CONDITION_ENDPOINT: EndpointSpec = {
   delegate: (tx) => narrow<OwnedRowDelegate>(tx.illnessEpisode),
   select: { id: true, label: true, onsetAt: true },
@@ -221,6 +236,18 @@ const LINK_TABLES: Partial<
     sourceColumn: "documentId",
     targetColumn: "episodeId",
     target: CONDITION_ENDPOINT,
+  },
+  // The SAME table as `encounter:document`, read from the other end. A
+  // document's detail sheet answers "which visits is this filed against"
+  // and the visit's own sheet answers "what did this visit produce"; both
+  // questions live in `encounter_document_links`, so this is a second
+  // direction rather than a fourth table. The three-table ceiling counts
+  // tables.
+  "document:encounter": {
+    delegate: (tx) => narrow<LinkRowDelegate>(tx.encounterDocumentLink),
+    sourceColumn: "documentId",
+    targetColumn: "encounterId",
+    target: ENCOUNTER_ENDPOINT,
   },
   "vaccination:document": {
     delegate: (tx) => narrow<LinkRowDelegate>(tx.vaccinationDocumentLink),

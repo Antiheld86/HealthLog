@@ -67,28 +67,6 @@
 import { GLP1_DRUGS, type Glp1DrugId } from "@/lib/medications/glp1-knowledge";
 
 /**
- * Version stamp of the MDR-disclaimer copy that the Research Mode
- * dialog displays. The API endpoint at
- * `/api/auth/me/research-mode` records this exact string on the
- * user row at acknowledgment time; the Settings UI re-prompts the
- * user when the persisted value drifts behind this constant.
- *
- * Format: `YYYY-MM-DD.N` — date the copy was finalised, plus a
- * single-digit counter so two updates on the same day stay
- * distinct.
- *
- * BUMP THIS STRING when:
- *   - the disclaimer wording changes (any user-facing text edit),
- *   - a new drug joins the catalog (the disclaimer enumerates them),
- *   - the EMA EPAR cited as source changes version.
- *
- * Do NOT change it silently for cosmetic edits — every bump forces
- * every user to re-acknowledge on next chart open, which is the
- * desired behaviour but also visible friction.
- */
-export const RESEARCH_MODE_DISCLAIMER_VERSION = "2026-05-14.1";
-
-/**
  * A logged GLP-1 intake event reduced to the two fields the PK
  * math actually needs. The caller adapts from the project's richer
  * `MedicationIntakeEvent` row — keeping the input minimal makes the

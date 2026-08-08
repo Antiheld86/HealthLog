@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, BookOpenCheck, Loader2, Trash2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Loader2, Trash2 } from "lucide-react";
 
 import {
   AlertDialog,
@@ -16,19 +16,10 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { SettingsInfoTile } from "@/components/settings/_info-tile";
 import { SettingsCardActions } from "@/components/settings/_card-actions";
-import { Switch } from "@/components/ui/switch";
-import { ResearchModeAcknowledgmentDialog } from "@/components/medications/research-mode-acknowledgment-dialog";
-import { formatDateTime } from "@/lib/format";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useTranslations } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
-import {
-  type ResearchModeStatus,
-  researchModeGateState,
-} from "@/lib/medications/research-mode-types";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
 
 /**
@@ -40,176 +31,25 @@ import { apiFetchRaw } from "@/lib/api/api-fetch";
  * data" surface that should never live next to a single-click export
  * button.
  *
- * v1.4.25 W19c-Frontend adds the Research Mode toggle on this page.
- * Research Mode and the data-reset are both opt-in / version-gated
- * controls; they share a semantic shelf even though they touch
- * different parts of the user record. Toggle ON opens the
- * acknowledgment dialog (the user reads + confirms before the server
- * stamps the version). Toggle OFF fires DELETE directly. A separate
- * amber banner above the toggle catches the version-mismatch case
- * (server bumped the disclaimer while the user was still
- * acknowledged) and surfaces a Re-acknowledge CTA that re-opens the
- * dialog.
+ * v1.4.25 added a Research Mode opt-in here, gating the estimated GLP-1
+ * drug-level curve behind an acknowledged disclaimer version. The chart
+ * stopped reading the flag some releases ago and has painted for everyone
+ * since, so the toggle governed nothing: flipping it off changed no screen.
+ * The curve is simply part of the medication page now, and the switch, its
+ * acknowledgment dialog, the endpoint behind it and the three user columns
+ * it stamped are gone. This page is the destructive controls.
  */
 export function AdvancedSection() {
   // v1.18.6 (W9) — the visible heading + subtitle now come from the shared
   // `<SettingsSectionFrame>` in the route; this body is the advanced cards.
   // v1.18.6.1 — the guided tour replay card was removed: the tour now exists
   // only as the first-time auto-start after onboarding. This page is the
-  // research-mode + data/account destructive controls.
+  // data/account destructive controls.
   return (
     <div className="space-y-6">
-      <ResearchModeCard />
       <DataResetCard />
       <AccountDeleteCard />
     </div>
-  );
-}
-
-/**
- * v1.4.25 W21 Fix-N (simp-H3) — pull the nested ternary that decided
- * the toggle's caption out of the JSX. The four-way ladder (loading /
- * enabled-open / enabled-stale / disabled) is dense to read inline,
- * and the surface stays open to a fifth state ("never queried") when
- * we wire the offline shell in v1.4.26.
- */
-function researchModeStatusLabel(
-  status: ResearchModeStatus | null | undefined,
-  isLoading: boolean,
-  t: (key: string, params?: Record<string, string | number>) => string,
-): string {
-  if (isLoading) return t("common.loading");
-  const gate = researchModeGateState(status);
-  if (gate === "off") return t("settings.researchMode.disabledStatus");
-  if (gate === "stale") return t("settings.researchMode.enabledStaleStatus");
-  return t("settings.researchMode.acknowledgedOn", {
-    date: status?.acknowledgedAt ? formatDateTime(status.acknowledgedAt) : "—",
-  });
-}
-
-function ResearchModeCard() {
-  const { t } = useTranslations();
-  const queryClient = useQueryClient();
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [toggleBusy, setToggleBusy] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const { data: status, isLoading } = useQuery<ResearchModeStatus | null>({
-    queryKey: queryKeys.researchMode(),
-    queryFn: async () => {
-      const res = await apiFetchRaw("/api/auth/me/research-mode");
-      if (!res.ok) return null;
-      const json = await res.json();
-      return json.data as ResearchModeStatus;
-    },
-    staleTime: 60 * 1000,
-  });
-
-  const gateState = researchModeGateState(status);
-  const showRePrompt = gateState === "stale";
-  // The Switch's `checked` mirrors the server flag exactly — even when
-  // the version is stale we keep the toggle "on" so the user sees that
-  // their previous choice is preserved; the banner above the toggle
-  // explains why the chart isn't painting.
-  const switchChecked = !!status?.enabled;
-
-  async function handleToggle(next: boolean) {
-    if (toggleBusy) return;
-    setErrorMessage(null);
-    if (next) {
-      // Toggle ON → open the acknowledgment dialog. The dialog owns
-      // the POST; on success it invalidates the `research-mode` query
-      // and the toggle reflects the new state.
-      setDialogOpen(true);
-      return;
-    }
-    // Toggle OFF → fire DELETE directly.
-    setToggleBusy(true);
-    try {
-      const res = await apiFetchRaw("/api/auth/me/research-mode", {
-        method: "DELETE",
-      });
-      if (!res.ok) {
-        setErrorMessage(t("settings.researchMode.disableError"));
-        return;
-      }
-      queryClient.invalidateQueries({ queryKey: queryKeys.researchMode() });
-    } catch {
-      setErrorMessage(t("settings.researchMode.disableError"));
-    } finally {
-      setToggleBusy(false);
-    }
-  }
-
-  return (
-    <SettingsCard data-slot="settings-research-mode-card">
-      <SettingsCardHeader
-        icon={BookOpenCheck}
-        title={t("settings.researchMode.sectionTitle")}
-        description={t("settings.researchMode.subtitle")}
-      />
-      <p className="text-sm">{t("settings.researchMode.subtitleDetail")}</p>
-
-      {showRePrompt && (
-        <SettingsInfoTile
-          icon={AlertTriangle}
-          tone="warning"
-          role="alert"
-          data-slot="settings-research-mode-reprompt"
-          title={t("settings.researchMode.rePromptTitle")}
-        >
-          <p>{t("settings.researchMode.rePromptBody")}</p>
-          <Button
-            size="sm"
-            variant="outline"
-            className="mt-2 min-h-11 sm:min-h-9"
-            onClick={() => setDialogOpen(true)}
-            data-slot="settings-research-mode-reprompt-cta"
-          >
-            {t("settings.researchMode.rePromptCta")}
-          </Button>
-        </SettingsInfoTile>
-      )}
-
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-0.5">
-          <p className="text-sm font-medium">
-            {t("settings.researchMode.toggleLabel")}
-          </p>
-          <p
-            className="text-muted-foreground text-xs"
-            data-slot="settings-research-mode-status"
-          >
-            {researchModeStatusLabel(status, isLoading, t)}
-          </p>
-        </div>
-        <Switch
-          checked={switchChecked}
-          disabled={isLoading || toggleBusy}
-          onCheckedChange={(next) => {
-            void handleToggle(next);
-          }}
-          aria-label={t("settings.researchMode.toggleLabel")}
-          data-slot="settings-research-mode-toggle"
-        />
-      </div>
-
-      {errorMessage && (
-        <p
-          role="alert"
-          className="text-destructive text-sm"
-          data-slot="settings-research-mode-error"
-        >
-          {errorMessage}
-        </p>
-      )}
-
-      <ResearchModeAcknowledgmentDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        currentDisclaimerVersion={status?.currentDisclaimerVersion ?? null}
-      />
-    </SettingsCard>
   );
 }
 

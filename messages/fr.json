@@ -283,7 +283,14 @@
     "familyHistoryColCondition": "Affection",
     "familyHistoryColAgeAtOnset": "Âge au début",
     "labsSourceRangeNote": "* La plage de référence provient du compte rendu lui-même et diffère de la plage enregistrée :",
-    "labsCatalogRangeLabel": "plage enregistrée"
+    "labsCatalogRangeLabel": "plage enregistrée",
+    "visitsTitle": "Consultations",
+    "visitsColDate": "Date",
+    "visitsColPractice": "Cabinet",
+    "visitsColKind": "Type",
+    "visitsColReason": "Motif",
+    "visitsColOutcome": "Résultat",
+    "visitsColConditions": "Maladies"
   },
   "errorBoundary": {
     "title": "Une erreur est survenue",
@@ -478,7 +485,8 @@
       "milestone": "Étapes franchies",
       "ecg_new_recording": "Nouveaux enregistrements ECG",
       "tension_window": "Périodes de tension",
-      "same_time_baseline": "Activité à la même heure"
+      "same_time_baseline": "Activité à la même heure",
+      "upcoming_visit": "Rendez-vous"
     },
     "layoutReset": "Rétablir les valeurs par défaut",
     "layoutResetTitle": "Réinitialiser la disposition du tableau de bord ?",
@@ -1604,26 +1612,6 @@
       }
     },
     "researchMode": {
-      "dialog": {
-        "title": "Activer le mode Recherche",
-        "intro": "Le mode Recherche ajoute un graphique estimé du niveau de médicament à votre page GLP-1. Lisez la limite ci-dessous avant de l'activer — le graphique est un outil d'apprentissage, jamais une mesure, jamais un conseil médical.",
-        "whatItIsHeader": "Ce que c'est",
-        "whatItIs": "Une courbe en dents de scie qui simule la superposition de vos doses enregistrées dans le temps, à partir du modèle Bateman à un compartiment avec les paramètres d'absorption et de demi-vie publiés dans l'EPAR EMA de chaque agoniste GLP-1 approuvé. L'axe vertical est sans unité et non étiqueté. C'est la forme, pas la valeur, qui est l'information de la courbe.",
-        "whatItIsntHeader": "Ce que ce n'est pas",
-        "whatItIsnt": "Pas un taux sanguin. Pas une mesure. Pas une prévision de la réponse réelle de votre corps. Pas une base pour une décision de dose, de timing ou d'escalade. Pour tout ce qui touche à votre traitement, parlez-en à votre médecin prescripteur.",
-        "whyEstimateHeader": "Pourquoi c'est une estimation",
-        "whyEstimate": "La pharmacocinétique de population décrit le patient typique. La variabilité individuelle est grande — le modèle Schneck/Urva 2024 du tirzépatide rapporte environ 22 % de variabilité interindividuelle sur l'absorption et environ 49 % sur le volume de distribution. Une courbe de manuel ne peut capturer ni votre poids, ni votre fonction rénale, ni votre technique d'injection, ni la précision de vos horaires. Lisez la courbe comme le rythme de votre dosage, pas comme votre niveau.",
-        "mdrBoundaryHeader": "Limite réglementaire",
-        "mdrBoundary": "HealthLog affiche des données réglementaires publiques et vos propres enregistrements. L'application ne prédit, ne diagnostique, ne traite et ne recommande aucune thérapie. Le règlement UE 2017/745 (Medical Device Regulation, MDR) et le document de guidance MDCG 2021-24 tracent la limite à partir des logiciels qui interprètent des données à des fins médicales — cette courbe reste résolument du côté éducatif de cette limite. Si vous avez le sentiment qu'elle vous pousse vers une décision clinique, fermez-la.",
-        "citationsHeader": "Sources",
-        "citations": "Rapports européens publics d'évaluation (EPAR) de l'EMA pour Mounjaro, Ozempic, Wegovy, Saxenda, Trulicity, Byetta et Bydureon (section 5.2). Schneck K, Urva S. Population pharmacokinetics of the GIP/GLP receptor agonist tirzepatide. CPT Pharmacometrics Syst Pharmacol 2024;13(3):494-503 (DOI 10.1002/psp4.13099).",
-        "versionLine": "Version du disclaimer : {version}",
-        "acknowledgeCta": "J'ai compris — activer",
-        "cancelCta": "Annuler",
-        "successToast": "Mode Recherche activé. La courbe de niveau de médicament est maintenant visible sur votre page GLP-1.",
-        "errorToast": "Impossible d'activer le mode Recherche. Veuillez réessayer.",
-        "staleVersionToast": "Le disclaimer a été mis à jour depuis le chargement de cette page. Rechargez pour lire la version actuelle."
-      },
       "chart": {
         "title": "Niveau de médicament estimé",
         "axisLabel": "Niveau estimé (relatif)",
@@ -3110,8 +3098,7 @@
       "valuesBack": "Retour aux Insights",
       "valuesBackToMetric": "Retour à {metric}",
       "scoresBack": "Retour aux Insights",
-      "ecgDescription": "Enregistrements ECG à dérivation unique de votre appareil, chacun accompagné du résultat de l'appareil.",
-      "ecgDisclaimer": "HealthLog affiche le tracé et l'enregistrement, mais n'interprète pas la courbe."
+      "ecgDescription": "Enregistrements ECG à dérivation unique de votre appareil, chacun accompagné du résultat de l'appareil."
     },
     "units": {
       "steps": "pas",
@@ -3785,6 +3772,25 @@
         "statement": "Les jours avec « {label} », l'humeur était en moyenne {direction} : {withAvg} contre {withoutAvg}.",
         "counts": "{withDays} jours avec, {withoutDays} jours sans",
         "caveat": "Cela montre un lien, pas une cause."
+      },
+      "prognosis": {
+        "title": "Ton évaluation et ce que suggèrent tes journées passées",
+        "selfLabel": "Ton évaluation",
+        "expectedLabel": "Attendu selon tes propres habitudes",
+        "band": "Plage de {low} à {high}",
+        "statement": "D'après tes habitudes jusqu'ici, une valeur autour de {value} aurait été attendue pour {date}. Établi à partir de {n} journées réunissant tout ce dont la comparaison a besoin.",
+        "provisional": "Encore provisoire : le motif repose sur une courte série de journées.",
+        "notToday": "Cela décrit {date}, pas aujourd'hui.",
+        "deviationWithin": "Ta propre évaluation se situe dans cette plage.",
+        "deviationAbove": "Ta propre évaluation se situe {amount} points au-dessus de cette plage.",
+        "deviationBelow": "Ta propre évaluation se situe {amount} points en dessous de cette plage.",
+        "weightedTitle": "Ce qui a le plus pesé dans la comparaison de cette journée",
+        "weightedUp": "{label} — comptait vers une valeur attendue plus élevée",
+        "weightedDown": "{label} — comptait vers une valeur attendue plus basse",
+        "caveat": "C'est une comparaison avec tes propres journées passées, pas une affirmation sur la manière dont une journée s'est déroulée.",
+        "learning": "Phase d'apprentissage : {entries} journées sur {threshold} enregistrées. La comparaison apparaît une fois qu'il y en a assez.",
+        "noPattern": "Dans les {entries} journées enregistrées jusqu'ici, rien n'est assez régulier pour comparer une journée. Noter le contexte d'une journée en rend davantage comparable.",
+        "featureValue": "{field} : {value}"
       }
     },
     "derived": {
@@ -4255,10 +4261,8 @@
     },
     "ecg": {
       "sectionTitle": "Enregistrements ECG",
-      "sectionIntro": "Tracés ECG à une seule dérivation enregistrés par votre appareil. HealthLog affiche uniquement l'enregistrement et le résultat produit par votre appareil ; il ne lit ni n'interprète le tracé.",
       "loadError": "Impossible de charger vos enregistrements ECG.",
       "backToList": "Retour aux enregistrements",
-      "disclaimer": "Il s'agit du résultat produit par votre appareil d'enregistrement. HealthLog ne lit ni n'interprète les enregistrements ECG et ne fournit aucun diagnostic.",
       "clinicianNote": "Si ce résultat vous préoccupe, parlez de cet enregistrement à un professionnel de santé.",
       "resultAttribution": "Résultat enregistré : {result}, tel que signalé par l'appareil d'enregistrement.",
       "result": {
@@ -4591,19 +4595,6 @@
     "remainingMany": "Encore {count} mesures avant la tendance."
   },
   "settings": {
-    "researchMode": {
-      "sectionTitle": "Mode Recherche",
-      "subtitle": "Courbe optionnelle du niveau estimé de GLP-1, d'après les données de l'EMA.",
-      "toggleLabel": "Afficher la courbe estimée du niveau de médicament",
-      "disabledStatus": "Désactivé. La courbe est masquée.",
-      "enabledStaleStatus": "Le disclaimer a été mis à jour. Reconfirmez ci-dessous pour réafficher la courbe.",
-      "acknowledgedOn": "Confirmé le {date}.",
-      "rePromptTitle": "Disclaimer mis à jour",
-      "rePromptBody": "Le disclaimer du mode Recherche a été mis à jour depuis votre dernière confirmation. Relisez-le et reconfirmez pour garder la courbe visible.",
-      "rePromptCta": "Reconfirmer le disclaimer",
-      "disableError": "Impossible de désactiver le mode Recherche. Veuillez réessayer.",
-      "subtitleDetail": "Lecture seule — jamais une mesure ni un conseil médical."
-    },
     "shell": {
       "sectionsNav": "Sections des réglages",
       "groups": {
@@ -4887,8 +4878,8 @@
       },
       "advanced": {
         "title": "Avancé",
-        "description": "Bouton opt-in du mode Recherche et zone dangereuse pour effacer irrévocablement toutes les données de santé.",
-        "subtitle": "Mode recherche, réinitialisation des données et suppression du compte."
+        "description": "La sortie : effacer définitivement toutes les données de santé ou fermer le compte.",
+        "subtitle": "Réinitialisation des données et suppression du compte."
       },
       "export": {
         "title": "Export et import",
@@ -5977,7 +5968,9 @@
       "rangeCustomEnd": "Au",
       "errorGeneric": "L'export n'a pas pu être généré. Veuillez réessayer.",
       "errorRateLimit": "Vous avez atteint la limite d'exports pour cette heure.",
-      "errorModuleDisabled": "L'export du dossier est désactivé pour ce compte."
+      "errorModuleDisabled": "L'export du dossier est désactivé pour ce compte.",
+      "visitOffer": "Un rendez-vous est prévu le {when} : {what}.",
+      "visitOfferApply": "Rapport jusque-là"
     },
     "globalExcludedInjectionSitesLabel": "Sites d'injection exclus globalement",
     "globalExcludedInjectionSitesHint": "Jamais proposés et refusés à l'enregistrement, même si un médicament les privilégie.",
@@ -6037,14 +6030,6 @@
       "createDetail": "Le jeton n'est affiché qu'une fois à la création — conservez-le alors ; il ne peut pas être récupéré."
     },
     "genderOther": "Autre",
-    "cycleTracking": {
-      "title": "Suivi du cycle",
-      "description": "Suivez votre cycle menstruel, les prédictions, les symptômes et les analyses de phases.",
-      "enable": "Activer le suivi du cycle",
-      "manage": "Ouvrir le suivi du cycle",
-      "error": "Impossible de mettre à jour le suivi du cycle.",
-      "detail": "Activé par défaut pour les comptes définis comme féminins ; disponible pour tous."
-    },
     "nightscout": "Nightscout",
     "nightscoutTag": "CGM",
     "nightscoutDescription": "Connecte ton propre site Nightscout pour synchroniser les mesures de glucose en continu dans le panneau glucose.",
@@ -6285,9 +6270,8 @@
       },
       "posture": {
         "title": "Posture de confidentialité",
-        "description": "Contrôlez la quantité de données partagées avec les fonctions d'IA et la recherche optionnelle.",
-        "openAi": "Mode confidentialité IA",
-        "openResearch": "Mode recherche"
+        "description": "Contrôlez la quantité de données partagées avec les fonctions d'IA.",
+        "openAi": "Mode confidentialité IA"
       }
     },
     "mcp": {
@@ -8153,7 +8137,8 @@
       "openLink": "Ouvrir les examens"
     },
     "showMeasurements": "Afficher les mesures",
-    "loadError": "Impossible de charger vos rappels."
+    "loadError": "Impossible de charger vos rappels.",
+    "fileVisit": "Enregistrer un rendez-vous"
   },
   "moduleList": {
     "viewToggleLabel": "Affichage",
@@ -8506,27 +8491,27 @@
     },
     "mcp": {
       "label": "Accès assistant externe (MCP)",
-      "description": "Autorise un assistant compatible MCP à lire vos données de santé via un jeton à portée limitée. Désactivé par défaut."
+      "description": "Accès en lecture pour un assistant compatible MCP, via un jeton limité."
     },
     "environment": {
       "label": "Environnement",
-      "description": "Intégrez la météo et la durée du jour quotidiennes de votre lieu pour les corréler à l'humeur, au sommeil et aux constantes. Désactivé par défaut."
+      "description": "Météo et durée du jour quotidiennes de votre lieu, à côté de l'humeur, du sommeil et des constantes."
     },
     "inboundDocuments": {
       "label": "Documents",
-      "description": "Conservez chaque courrier médical, compte rendu et scan dans un espace chiffré et consultable — lié à vos affections. Désactivé par défaut."
+      "description": "Courriers médicaux, comptes rendus et scans dans un espace chiffré et consultable."
     },
     "mentalHealth": {
       "label": "Bien-être mental",
-      "description": "Questionnaires PHQ-9 et GAD-7 facultatifs, en complément du suivi de l'humeur. Désactivé par défaut ; les réponses sont chiffrées et tenues à l'écart du Coach IA."
+      "description": "Quatre questionnaires facultatifs, à côté du suivi de l'humeur."
     },
     "nutrients": {
       "label": "Apports en nutriments",
-      "description": "Enregistre les totaux quotidiens de micronutriments (vitamines, minéraux, eau, caféine) synchronisés depuis Apple Health. Désactivé par défaut."
+      "description": "Totaux quotidiens de micronutriments synchronisés depuis Apple Health."
     },
     "vaccinations": {
       "label": "Vaccinations",
-      "description": "Le carnet de vaccination sous forme structurée : quelle dose a été administrée et quand, sa place dans la série, et la date du prochain rappel."
+      "description": "Le carnet de vaccination structuré : dose, série, prochain rappel."
     }
   },
   "illness": {
@@ -9023,7 +9008,8 @@
     },
     "openDetail": "Voir les détails",
     "historyLoadError": "Ton historique d'évaluations n'a pas pu être chargé",
-    "historyLoadErrorHint": "Cela ne veut pas dire que tu n'as aucun résultat : la liste n'a pas pu être récupérée. Réessaie."
+    "historyLoadErrorHint": "Cela ne veut pas dire que tu n'as aucun résultat : la liste n'a pas pu être récupérée. Réessaie.",
+    "privacyNote": "Vos réponses sont stockées chiffrées et n'atteignent jamais le Coach IA."
   },
   "records": {
     "aiInclusion": {
@@ -9310,7 +9296,8 @@
       "previewUnavailable": "Pas d'aperçu intégré pour ce type de fichier",
       "uploadedMeta": "Ajouté le {date} · {size}",
       "share": "Partager",
-      "labValuesLink": "Voir {count} valeurs de laboratoire"
+      "labValuesLink": "Voir {count} valeurs de laboratoire",
+      "visitsLabel": "Rattaché au rendez-vous"
     },
     "dropOverlay": {
       "title": "Déposez les fichiers pour les téléverser",
@@ -9327,7 +9314,8 @@
       "partialFailure": "Impossible de mettre à jour {failed} sur {total}",
       "failed": "L'action n'a pas pu être effectuée",
       "share": "Partager",
-      "shareTooMany": "Un lien de partage contient au maximum {max} documents. Désélectionnez-en quelques-uns et réessayez."
+      "shareTooMany": "Un lien de partage contient au maximum {max} documents. Désélectionnez-en quelques-uns et réessayez.",
+      "linkVisit": "Classer sous un rendez-vous"
     },
     "episodeCard": {
       "title": "Documents",
@@ -9620,6 +9608,11 @@
           "below": "À {time} vous en êtes à {today} pas. Un jour habituel, vous tournez autour de {typical} à cette heure.",
           "above": "À {time} vous en êtes à {today} pas, au-dessus des {typical} habituels à cette heure."
         }
+      },
+      "upcomingVisit": {
+        "title": "Rendez-vous à venir",
+        "bodyToday": "{what} — aujourd'hui",
+        "bodyTomorrow": "{what} — demain"
       }
     },
     "action": {
@@ -9715,7 +9708,8 @@
     "sensitiveHint": "Rien n'est jamais présélectionné ici. Choisissez chaque élément vous-même.",
     "scopeNone": "Rien de sélectionné pour l'instant. Choisissez ce qui doit figurer, ou appliquez le compte rendu standard.",
     "scopeCount": "{count} éléments issus de {groups} domaines",
-    "scopeSensitive": "dont {names}"
+    "scopeSensitive": "dont {names}",
+    "leafVisits": "Consultations"
   },
   "recordSharing": {
     "banner": {
@@ -9726,9 +9720,7 @@
     },
     "switcher": {
       "label": "Ouvrir un dossier",
-      "ownRecord": "Mon propre dossier",
-      "readOnly": "Lecture seule",
-      "canWrite": "Peut ajouter des entrées"
+      "ownRecord": "Mon propre dossier"
     },
     "switch": {
       "failed": "Impossible d'ouvrir ce dossier. Veuillez réessayer.",
@@ -10082,6 +10074,98 @@
       "hospital": "Hôpital",
       "therapy": "Séance de thérapie",
       "other": "Rendez-vous médical"
+    },
+    "sectionTitle": "Rendez-vous",
+    "sectionDescription": "Consultations et rendez-vous pris, au même endroit.",
+    "add": "Rendez-vous",
+    "loadError": "Impossible de charger les rendez-vous.",
+    "emptyTitle": "Aucun rendez-vous enregistré",
+    "emptyDescription": "Une date suffit. Le reste est facultatif.",
+    "upcomingHeading": "À venir",
+    "pastHeading": "Passés",
+    "createTitle": "Enregistrer un rendez-vous",
+    "editTitle": "Modifier le rendez-vous",
+    "formDescription": "Seule la date est obligatoire.",
+    "created": "Rendez-vous enregistré.",
+    "updated": "Rendez-vous mis à jour.",
+    "saveFailed": "Le rendez-vous n'a pas pu être enregistré.",
+    "checkupNotClosed": "Rendez-vous enregistré. Le dépistage reste ouvert : votre accès ne le couvre pas.",
+    "status": {
+      "planned": "Prévu",
+      "done": "Effectué",
+      "cancelled": "Annulé",
+      "noShow": "Non honoré"
+    },
+    "card": {
+      "documentCount": "documents liés",
+      "labCount": "résultats de laboratoire liés",
+      "conditionCount": "maladies liées"
+    },
+    "form": {
+      "date": "Date et heure",
+      "dateDerivesStatusHint": "Une date à venir correspond à un rendez-vous pris.",
+      "status": "Statut",
+      "practitioner": "Cabinet ou médecin",
+      "practitionerHint": "Facultatif : vous pourrez ajouter le nom plus tard.",
+      "practitionerNone": "Non précisé",
+      "practitionerSearch": "Rechercher un nom ou un cabinet",
+      "practitionerNoMatch": "Aucune entrée trouvée.",
+      "practitionerAdd": "Créer une entrée",
+      "practitionerClear": "Retirer la sélection",
+      "kind": "Type",
+      "reason": "Motif",
+      "outcome": "Résultat",
+      "outcomeReveal": "Ajouter un résultat",
+      "linkDocuments": "Documents",
+      "linkLabResults": "Résultats de laboratoire",
+      "linkConditions": "Maladies",
+      "linkNothingToOffer": "Rien à lier pour le moment."
+    },
+    "deleteTitle": "Supprimer ce rendez-vous ?",
+    "deleteDescription": "L'entrée est supprimée. Si le rendez-vous est pris, son rappel disparaît avec elle.",
+    "deleteFailed": "Le rendez-vous n'a pas pu être supprimé.",
+    "suggestion": {
+      "single": "Cela concerne-t-il ce rendez-vous ?",
+      "choose": "À quel rendez-vous cela se rattache-t-il ?"
+    },
+    "episodeCard": {
+      "title": "Rendez-vous liés",
+      "emptyLine": "Aucun rendez-vous n'est encore rattaché à cette maladie.",
+      "add": "Ajouter un rendez-vous"
+    },
+    "dashboard": {
+      "nextVisit": "Prochain rendez-vous : {what} le {when}"
     }
+  },
+  "checkups": {
+    "viewSwitchLabel": "Afficher les dépistages ou les rendez-vous",
+    "tabVorsorge": "Dépistages",
+    "tabVisits": "Rendez-vous"
+  },
+  "practitioners": {
+    "title": "Cabinets et médecins",
+    "description": "Votre carnet d'adresses : saisissez un cabinet une fois, choisissez-le partout.",
+    "linkLabel": "Carnet d'adresses",
+    "add": "Entrée",
+    "searchPlaceholder": "Rechercher un nom ou un cabinet",
+    "loadError": "Impossible de charger le carnet d'adresses.",
+    "emptyTitle": "Aucune entrée",
+    "emptyDescription": "Ajoutez un cabinet pour pouvoir le choisir lors d'un rendez-vous.",
+    "noMatchTitle": "Aucun résultat",
+    "noMatchDescription": "Aucune entrée ne correspond à cette recherche.",
+    "createTitle": "Ajouter une entrée",
+    "editTitle": "Modifier l'entrée",
+    "formDescription": "Seul le nom est obligatoire.",
+    "name": "Nom",
+    "specialty": "Spécialité",
+    "practice": "Cabinet",
+    "location": "Adresse",
+    "phone": "Téléphone",
+    "note": "Note",
+    "noteHint": "Enregistrée chiffrée.",
+    "saveFailed": "L'entrée n'a pas pu être enregistrée.",
+    "deleteTitle": "Supprimer cette entrée ?",
+    "deleteDescription": "Vos rendez-vous existants restent et conservent ce nom.",
+    "deleteFailed": "L'entrée n'a pas pu être supprimée."
   }
 }

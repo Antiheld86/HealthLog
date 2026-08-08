@@ -12,7 +12,12 @@ import {
   satisfyReminder,
   type SatisfiableReminder,
 } from "@/lib/measurement-reminders/satisfy";
-import { listTargets, replaceTargets, type LinkTargetKind } from "@/lib/links";
+import {
+  listTargets,
+  listTargetsBySource,
+  replaceTargets,
+  type LinkTargetKind,
+} from "@/lib/links";
 import { grantCoversDomain } from "@/lib/sharing/grants";
 import type { ShareDomain } from "@/lib/sharing/scope";
 import type { EncounterLinksDTO } from "@/lib/encounters/dto";
@@ -75,11 +80,21 @@ export async function actingDomainVisibility(
   return (domain) => grantCoversDomain(grant, domain);
 }
 
-/** Which section of the record each link family's TARGET belongs to. */
+/**
+ * Which section of the record each link family's TARGET belongs to.
+ *
+ * Exhaustive over `LinkTargetKind` by the compiler, so a link kind added to
+ * the service cannot reach a visit's link list without somebody deciding which
+ * domain governs its names. `encounter` is here for that reason and is never
+ * read from this side — a visit does not point at another visit — but a
+ * `Partial` here would turn "nobody classified it" into "undefined", and an
+ * undefined domain read as a falsy check is a leak.
+ */
 const TARGET_DOMAIN: Record<LinkTargetKind, ShareDomain> = {
   document: "documents",
   labResult: "labs",
   conditionEpisode: "illness",
+  encounter: "profile",
 };
 
 /**
@@ -132,6 +147,71 @@ export async function loadEncounterLinks(
     read("conditionEpisode"),
   ]);
   return { documents, labResults, conditions };
+}
+
+/**
+ * The same three families for a PAGE of visits, in three grouped queries.
+ *
+ * Two grouped reads per family rather than two per visit — `listTargetsBySource`
+ * is the batched arm of the same service, so the list pays six round trips for
+ * a page instead of six per row.
+ *
+ * The list carries links for two reasons that are both defects when it does
+ * not. The card shows counts of what a visit produced, and a card reading zero
+ * for a visit with three documents is a lie the person cannot see past. And the
+ * edit sheet seeds its pickers from the row it was handed: an edit opened from a
+ * list row that did not know its links would save a replace-set of three empty
+ * arrays and silently unfile everything the visit had collected.
+ *
+ * Redaction is the same rule, applied per family, from the same predicate.
+ */
+export async function loadEncounterLinksForMany(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  encounterIds: string[],
+  visible: (domain: ShareDomain) => boolean,
+): Promise<Map<string, EncounterLinksDTO>> {
+  const out = new Map<string, EncounterLinksDTO>();
+  if (encounterIds.length === 0) return out;
+
+  const read = async (targetKind: LinkTargetKind) =>
+    listTargetsBySource(tx, {
+      userId,
+      sourceKind: "encounter",
+      sourceIds: encounterIds,
+      targetKind,
+    });
+  const [documents, labResults, conditions] = await Promise.all([
+    read("document"),
+    read("labResult"),
+    read("conditionEpisode"),
+  ]);
+
+  const family = (
+    map: Map<string, { id: string; label: string; date: string | null }[]>,
+    id: string,
+    targetKind: LinkTargetKind,
+  ) => {
+    const rows = map.get(id) ?? [];
+    if (visible(TARGET_DOMAIN[targetKind])) {
+      return rows.map((row) => ({ ...row, redacted: false }));
+    }
+    return rows.map((row) => ({
+      id: row.id,
+      label: null,
+      date: null,
+      redacted: true,
+    }));
+  };
+
+  for (const id of encounterIds) {
+    out.set(id, {
+      documents: family(documents, id, "document"),
+      labResults: family(labResults, id, "labResult"),
+      conditions: family(conditions, id, "conditionEpisode"),
+    });
+  }
+  return out;
 }
 
 /**

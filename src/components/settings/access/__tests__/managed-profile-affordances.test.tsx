@@ -213,6 +213,7 @@ function entry(partial: Partial<AccountAccessEntry> = {}): AccountAccessEntry {
     accountId: "p1",
     username: "managed-abc",
     displayName: "Managed record",
+    fullName: null,
     access: "write",
     level: "manage",
     recordKind: "managed",

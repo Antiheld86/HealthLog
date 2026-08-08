@@ -222,12 +222,9 @@ export const MODULE_REGISTRY: Readonly<Record<ModuleKey, ModuleDefinition>> =
       descriptionKey: "modules.cycle.description",
       category: "tracking",
       delegatesTo: "cycle",
-      // The hub switch drives `cycleTrackingEnabled`; the fuller cycle-tracking
-      // card (goal, predictions, cycle lengths) lives in the Account section.
-      managedAt: {
-        href: "/settings/account#cycle-tracking",
-        labelKey: "settings.sections.account.title",
-      },
+      // No `managedAt`. The switch here drives `cycleTrackingEnabled`, and
+      // that is the whole of the decision; the goal, predictions and cycle
+      // lengths live on the /cycle page itself, not in Settings.
     },
     mood: {
       key: "mood",

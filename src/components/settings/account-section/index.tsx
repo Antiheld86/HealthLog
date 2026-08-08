@@ -2,11 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, Save, Shield, User } from "lucide-react";
+import { Loader2, Save, User } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { SettingsCardActions } from "@/components/settings/_card-actions";
-import { ResponsiveSheet } from "@/components/ui/responsive-sheet";
 import {
   SeededFormDiscardDialog,
   useSeededFormDismissal,
@@ -15,7 +14,6 @@ import { Input } from "@/components/ui/input";
 import { DateField } from "@/components/ui/date-field";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
-import { PasswordInput } from "@/components/ui/password-input";
 import { HeightFieldControl } from "@/components/profile/height-field-control";
 import { useAuth } from "@/hooks/use-auth";
 import { useMounted } from "@/hooks/use-mounted";
@@ -35,7 +33,6 @@ import { storeTimezone } from "@/lib/timezone-mirror";
 import { TimeFormatSelect } from "@/components/settings/time-format-select";
 import { DateFormatSelect } from "@/components/settings/date-format-select";
 import { UnitPreferenceSelect } from "@/components/settings/unit-preference-select";
-import { CycleTrackingCard } from "@/components/settings/cycle-tracking-card";
 import { detectBrowserTimezone } from "@/lib/tz/format";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
 import {
@@ -93,17 +90,6 @@ export function AccountSection() {
   const [saveMsgType, setSaveMsgType] = useState<
     "success" | "warning" | "error" | null
   >(null);
-
-  // Password change dialog state.
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [passwordSaving, setPasswordSaving] = useState(false);
-  const [passwordMsg, setPasswordMsg] = useState<StatusMessage | null>(null);
-  const [passwordMsgType, setPasswordMsgType] = useState<
-    "success" | "error" | null
-  >(null);
-  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
 
   // v1.23 — passkey + second-factor management moved to the dedicated
   // /settings/security hub so "how I secure my account" reads as one place.
@@ -296,52 +282,6 @@ export function AccountSection() {
       setSaveMsgType("error");
     }
     setSaving(false);
-  }
-
-  async function handleChangePassword(e: React.FormEvent) {
-    e.preventDefault();
-    setPasswordSaving(true);
-    setPasswordMsg(null);
-    setPasswordMsgType(null);
-
-    if (newPassword !== confirmPassword) {
-      setPasswordMsg({ key: "settings.passwordMismatch" });
-      setPasswordMsgType("error");
-      setPasswordSaving(false);
-      return;
-    }
-
-    try {
-      const res = await apiFetchRaw("/api/auth/password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          currentPassword,
-          newPassword,
-          confirmPassword,
-        }),
-      });
-      const json = await res.json();
-
-      if (!res.ok) {
-        setPasswordMsg(
-          json.error ? { text: json.error } : { key: "settings.savingError" },
-        );
-        setPasswordMsgType("error");
-        return;
-      }
-
-      setPasswordMsg({ key: "settings.passwordUpdated" });
-      setPasswordMsgType("success");
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-    } catch {
-      setPasswordMsg({ key: "common.networkError" });
-      setPasswordMsgType("error");
-    } finally {
-      setPasswordSaving(false);
-    }
   }
 
   if (!mounted || isLoading) {
@@ -584,32 +524,12 @@ export function AccountSection() {
           provider-configuration screen. */}
       <AboutMeSection isAuthenticated={isAuthenticated} />
 
-      {/* Cycle-tracking enable on-ramp — auto-on for female accounts, but this
-          lets any account opt in (or opt out) before the gated /cycle page is
-          reachable. */}
-      <CycleTrackingCard isAuthenticated={isAuthenticated} />
+      {/* Cycle tracking is a module, and the Modules hub carries its switch.
+          The second enable surface that used to sit here asked the same
+          question in a second place. */}
 
-      {/* Password card. The action is this card's only one, so it sits in
-          the card's action row like every other primary. It stays full-width
-          under `sm` — the German "Passwort ändern" is long enough that a
-          right-hugging button used to break through the card's right border
-          on a narrow phone. */}
-      <SettingsCard>
-        <SettingsCardHeader
-          icon={Shield}
-          title={t("settings.passwordReset")}
-          description={t("settings.changePasswordDescription")}
-        />
-        <SettingsCardActions>
-          <Button
-            type="button"
-            onClick={() => setPasswordDialogOpen(true)}
-            className="min-h-11 w-full sm:min-h-9 sm:w-auto"
-          >
-            {t("settings.changePassword")}
-          </Button>
-        </SettingsCardActions>
-      </SettingsCard>
+      {/* Changing the password is a security control, so the card lives in
+          Settings → Security beside the second factors and the passkeys. */}
 
       {/* v1.25.7 — active-session management + the security-activity feed
           live only under Settings → Data & Privacy now; the duplicate cards
@@ -619,85 +539,6 @@ export function AccountSection() {
           Erweitert. It is a maintenance / reset action, not a profile or
           security control, so it sits beside Research Mode + the danger zone. */}
 
-      <ResponsiveSheet
-        open={passwordDialogOpen}
-        onOpenChange={(open) => {
-          setPasswordDialogOpen(open);
-          if (!open) {
-            setCurrentPassword("");
-            setNewPassword("");
-            setConfirmPassword("");
-            setPasswordMsg(null);
-            setPasswordMsgType(null);
-          }
-        }}
-        title={t("settings.passwordReset")}
-        description={t("settings.changePasswordDescription")}
-        className="sm:max-w-xl"
-      >
-        <form onSubmit={handleChangePassword} className="space-y-4">
-          <div className="grid gap-3 lg:grid-cols-3">
-            <div className="space-y-2">
-              <Label htmlFor="current-password">
-                {t("settings.currentPassword")}
-              </Label>
-              <PasswordInput
-                id="current-password"
-                autoComplete="current-password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="new-password">{t("settings.newPassword")}</Label>
-              <PasswordInput
-                id="new-password"
-                autoComplete="new-password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="confirm-password">
-                {t("settings.confirmNewPassword")}
-              </Label>
-              <PasswordInput
-                id="confirm-password"
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {passwordMsg && (
-            <p
-              role="alert"
-              className={`text-sm ${
-                passwordMsgType === "success"
-                  ? "text-success"
-                  : "text-destructive"
-              }`}
-            >
-              {statusText(passwordMsg, t)}
-            </p>
-          )}
-
-          <Button
-            type="submit"
-            variant="outline"
-            className="min-h-11 sm:min-h-9"
-            disabled={passwordSaving}
-          >
-            {passwordSaving ? (
-              <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
-            ) : (
-              <Save className="h-4 w-4" />
-            )}
-            {t("settings.changePassword")}
-          </Button>
-        </form>
-      </ResponsiveSheet>
       <SeededFormDiscardDialog
         open={profileDismissal.discardDialogOpen}
         onConfirm={profileDismissal.confirmDiscard}

@@ -106,6 +106,8 @@ describe("evaluateMeasurementReminderDue — window boundary", () => {
 
 interface FakeReminder {
   id: string;
+  /** Absent on a checkup fixture; `"ENCOUNTER"` on an appointment's row. */
+  origin?: string;
   measurementType: string | null;
   intervalDays: number | null;
   rrule: string | null;
@@ -246,6 +248,46 @@ describe("runMeasurementReminderTick", () => {
     expect(updates).toHaveLength(1);
     const advanced = updates[0].data.nextDueAt as Date;
     expect(advanced.getTime()).toBeGreaterThan(NINE_LOCAL.getTime());
+  });
+
+  it("dispatches an appointment nudge with its completion affordance suppressed", async () => {
+    // `measure_done` / `measure_later` and the iOS "Erledigt" action all
+    // resolve the reminder by id, and every by-id surface refuses an
+    // ENCOUNTER-origin row. The producer knows the origin, so it is the
+    // producer that says the dispatch carries no action; the channels drop
+    // their own affordance from the flag.
+    const { prisma } = makePrisma({
+      reminders: [
+        reminder({ origin: "ENCOUNTER", measurementType: null, id: "appt-1" }),
+      ],
+      measurementMatch: null,
+      labMatch: null,
+    });
+    const dispatch = vi.fn<DispatchFn>(async () => OK);
+
+    await runMeasurementReminderTick(prisma as never, NINE_LOCAL, { dispatch });
+
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    const payload = dispatch.mock.calls[0][0];
+    expect(payload.suppressActions).toBe(true);
+    // The id still rides the dispatch — it identifies the nudge for the
+    // client-managed suppression tag. What is withheld is the offer to act.
+    expect(payload.metadata?.reminderId).toBe("appt-1");
+  });
+
+  it("leaves a checkup nudge actionable", async () => {
+    // The negative control. Without it the assertion above would still pass
+    // against a producer that suppressed every reminder's affordance.
+    const { prisma } = makePrisma({
+      reminders: [reminder({})],
+      measurementMatch: null,
+    });
+    const dispatch = vi.fn<DispatchFn>(async () => OK);
+
+    await runMeasurementReminderTick(prisma as never, NINE_LOCAL, { dispatch });
+
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(dispatch.mock.calls[0][0].suppressActions).toBeUndefined();
   });
 
   it("free-text reminder never queries Measurement (matches on LabResult instead)", async () => {

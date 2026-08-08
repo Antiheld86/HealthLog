@@ -36,6 +36,21 @@ const MoodChart = dynamic(
   { ssr: false, loading: () => <ChartSkeleton /> },
 );
 
+/**
+ * The day's two readings. Deferred like every other block on this route that
+ * is not the first paint: it reads its own endpoint and renders below the
+ * calendar, so nothing about it belongs in the eager graph of a page whose
+ * first paint is a heatmap. This route sits close to its bundle ceiling and
+ * every addition to it goes through the same treatment.
+ */
+const MoodPrognosisCard = dynamic(
+  () =>
+    import("@/components/insights/mood/mood-prognosis-card").then((mod) => ({
+      default: mod.MoodPrognosisCard,
+    })),
+  { ssr: false, loading: () => null },
+);
+
 interface ComprehensiveMoodData {
   moodSummary: { count: number } | null;
 }
@@ -136,6 +151,12 @@ export default function InsightsStimmungPage() {
       <MoodChart chartKey="mood" compareBaseline={compareBaseline} />
 
       <MetricTargetSummary slug="mood" />
+
+      {/* The day's own rating beside what the account's past days imply. It
+          sits high because the self-assessment is the leading value on this
+          page, and directly under the line chart because that is where a
+          reader has just seen the rating it leads with. */}
+      <MoodPrognosisCard />
 
       {/* The better-days Einschätzung sits directly under the Ziel card,
           ahead of the classification tiles and breakdowns. */}

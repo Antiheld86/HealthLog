@@ -283,7 +283,14 @@
     "familyHistoryColCondition": "Condition",
     "familyHistoryColAgeAtOnset": "Age at onset",
     "labsSourceRangeNote": "* The reference range comes from the report itself and differs from the saved range:",
-    "labsCatalogRangeLabel": "saved range"
+    "labsCatalogRangeLabel": "saved range",
+    "visitsTitle": "Visits",
+    "visitsColDate": "Date",
+    "visitsColPractice": "Practice",
+    "visitsColKind": "Kind",
+    "visitsColReason": "Reason",
+    "visitsColOutcome": "Outcome",
+    "visitsColConditions": "Conditions"
   },
   "errorBoundary": {
     "title": "Something went wrong",
@@ -478,7 +485,8 @@
       "milestone": "Milestones",
       "ecg_new_recording": "New ECG recordings",
       "tension_window": "Tension windows",
-      "same_time_baseline": "Same-time activity"
+      "same_time_baseline": "Same-time activity",
+      "upcoming_visit": "Appointments"
     },
     "layoutReset": "Reset to defaults",
     "layoutResetTitle": "Reset the dashboard layout?",
@@ -1604,26 +1612,6 @@
       }
     },
     "researchMode": {
-      "dialog": {
-        "title": "Enable Research Mode",
-        "intro": "Research Mode adds an estimated drug-level chart to your GLP-1 medication page. Read the boundary below before turning it on — the chart is a learning aid, never a measurement, never medical advice.",
-        "whatItIsHeader": "What this is",
-        "whatItIs": "A sawtooth curve simulating how your logged doses superimpose over time, using the one-compartment Bateman model with absorption and half-life parameters published in the EMA EPAR for each approved GLP-1 receptor agonist. The vertical axis is unit-less and unlabeled. The shape, not the number, is what the chart shows.",
-        "whatItIsntHeader": "What this isn't",
-        "whatItIsnt": "Not a blood level. Not a measurement. Not a forecast of how your body actually responds. Not a basis for any dose, timing, or escalation decision. Talk to your prescribing clinician for anything that affects how you take your medication.",
-        "whyEstimateHeader": "Why it's an estimate",
-        "whyEstimate": "Population pharmacokinetics describe the typical patient. Individual variation is large — tirzepatide's Schneck/Urva 2024 model reports ~22% inter-individual variability on absorption and ~49% on volume of distribution. A textbook curve cannot capture your weight, kidney function, injection technique, or timing accuracy. Read the curve as the rhythm of dosing, not as your level.",
-        "mdrBoundaryHeader": "Regulatory boundary",
-        "mdrBoundary": "HealthLog displays public regulatory data and your own log entries. It does not predict, diagnose, treat, or recommend any therapy. EU Regulation 2017/745 (the Medical Device Regulation, MDR) and guidance document MDCG 2021-24 draw the line at software that interprets data for medical purposes — this chart stays decisively on the educational side of that line. If you ever feel it's nudging you toward a clinical decision, close it.",
-        "citationsHeader": "Sources",
-        "citations": "EMA European Public Assessment Reports for Mounjaro, Ozempic, Wegovy, Saxenda, Trulicity, Byetta, and Bydureon (Section 5.2). Schneck K, Urva S. Population pharmacokinetics of the GIP/GLP receptor agonist tirzepatide. CPT Pharmacometrics Syst Pharmacol 2024;13(3):494-503 (DOI 10.1002/psp4.13099).",
-        "versionLine": "Disclaimer version: {version}",
-        "acknowledgeCta": "I understand — enable",
-        "cancelCta": "Cancel",
-        "successToast": "Research Mode enabled. The drug-level chart is now visible on your GLP-1 medication page.",
-        "errorToast": "Could not enable Research Mode. Please try again.",
-        "staleVersionToast": "The disclaimer was updated since this page loaded. Reload to read the current version."
-      },
       "chart": {
         "title": "Estimated drug level",
         "axisLabel": "Estimated level (relative)",
@@ -3110,8 +3098,7 @@
       "valuesBack": "Back to insights",
       "valuesBackToMetric": "Back to {metric}",
       "scoresBack": "Back to insights",
-      "ecgDescription": "Single-lead ECG recordings from your device, each with the device's own result.",
-      "ecgDisclaimer": "HealthLog shows the trace and the recording — it does not interpret the waveform."
+      "ecgDescription": "Single-lead ECG recordings from your device, each with the device's own result."
     },
     "units": {
       "steps": "steps",
@@ -3785,6 +3772,25 @@
         "statement": "On days with “{label}” the mood averaged {direction}: {withAvg} against {withoutAvg}.",
         "counts": "{withDays} days with, {withoutDays} days without",
         "caveat": "That shows a connection, not a cause."
+      },
+      "prognosis": {
+        "title": "Your rating, and what your own days suggest",
+        "selfLabel": "Your rating",
+        "expectedLabel": "Expected on your own pattern",
+        "band": "Range {low} to {high}",
+        "statement": "On your own patterns so far, a value around {value} would have been expected for {date}. Built from {n} days that carried everything the comparison needs.",
+        "provisional": "Still provisional: the pattern rests on a short stretch of days.",
+        "notToday": "This describes {date}, not today.",
+        "deviationWithin": "Your own rating sits inside that range.",
+        "deviationAbove": "Your own rating sits {amount} points above that range.",
+        "deviationBelow": "Your own rating sits {amount} points below that range.",
+        "weightedTitle": "What weighed most in this day's comparison",
+        "weightedUp": "{label} — counted towards a higher expected value",
+        "weightedDown": "{label} — counted towards a lower expected value",
+        "caveat": "This is a comparison with your own past days, not a statement about how a day came to go the way it did.",
+        "learning": "Learning phase: {entries} of {threshold} days recorded. A comparison appears once there are enough of them.",
+        "noPattern": "Nothing in the {entries} days recorded so far is steady enough to compare a day against. Recording a day's context makes more of it comparable.",
+        "featureValue": "{field}: {value}"
       }
     },
     "derived": {
@@ -4255,10 +4261,8 @@
     },
     "ecg": {
       "sectionTitle": "ECG recordings",
-      "sectionIntro": "Single-lead ECG strips recorded by your device. HealthLog only shows the recording and the result your device produced — it does not read or interpret the waveform.",
       "loadError": "Could not load your ECG recordings.",
       "backToList": "Back to recordings",
-      "disclaimer": "This is the result your recording device produced. HealthLog does not read or interpret ECG recordings and does not provide a diagnosis.",
       "clinicianNote": "If this result concerns you, discuss this recording with a clinician.",
       "resultAttribution": "Recorded result: {result}, as reported by the recording device.",
       "result": {
@@ -4591,19 +4595,6 @@
     "remainingMany": "{count} more readings to go."
   },
   "settings": {
-    "researchMode": {
-      "sectionTitle": "Research Mode",
-      "subtitle": "Opt-in curve of the estimated GLP-1 drug level, from EMA-published data.",
-      "toggleLabel": "Show the estimated drug-level chart",
-      "disabledStatus": "Disabled. The drug-level chart is hidden.",
-      "enabledStaleStatus": "The disclaimer was updated. Re-acknowledge below to bring the chart back.",
-      "acknowledgedOn": "Acknowledged on {date}.",
-      "rePromptTitle": "Disclaimer updated",
-      "rePromptBody": "The Research Mode disclaimer was updated since you last acknowledged it. Re-read and re-confirm to keep the chart visible.",
-      "rePromptCta": "Re-acknowledge disclaimer",
-      "disableError": "Could not disable Research Mode. Please try again.",
-      "subtitleDetail": "Reading-only — never a measurement or medical advice."
-    },
     "shell": {
       "sectionsNav": "Settings sections",
       "groups": {
@@ -4887,8 +4878,8 @@
       },
       "advanced": {
         "title": "Advanced",
-        "description": "Opt-in Research Mode toggle plus the account-wide danger zone for wiping every health record.",
-        "subtitle": "Research mode, data reset, and account deletion."
+        "description": "The way out: erase every health record for good, or close the account entirely.",
+        "subtitle": "Data reset and account deletion."
       },
       "export": {
         "title": "Export & Import",
@@ -5977,7 +5968,9 @@
       "rangeCustomEnd": "To",
       "errorGeneric": "The export could not be generated. Please try again.",
       "errorRateLimit": "You have reached the export limit for this hour.",
-      "errorModuleDisabled": "The health record export is switched off for this account."
+      "errorModuleDisabled": "The health record export is switched off for this account.",
+      "visitOffer": "An appointment is coming up on {when}: {what}.",
+      "visitOfferApply": "Report up to then"
     },
     "globalExcludedInjectionSitesLabel": "Globally excluded injection sites",
     "globalExcludedInjectionSitesHint": "Never offered and rejected when logging a dose, even if a medication prefers them.",
@@ -6037,14 +6030,6 @@
       "createDetail": "The token is shown once on creation — store it then; it cannot be recovered."
     },
     "genderOther": "Other",
-    "cycleTracking": {
-      "title": "Cycle tracking",
-      "description": "Track your menstrual cycle, predictions, symptoms, and phase insights.",
-      "enable": "Enable cycle tracking",
-      "manage": "Open cycle tracking",
-      "error": "Couldn't update cycle tracking.",
-      "detail": "On by default for accounts set to female; available to everyone."
-    },
     "nightscout": "Nightscout",
     "nightscoutTag": "CGM",
     "nightscoutDescription": "Connect your own Nightscout site to sync continuous glucose readings into the glucose panel.",
@@ -6285,9 +6270,8 @@
       },
       "posture": {
         "title": "Privacy posture",
-        "description": "Control how much your data is shared with AI features and opt-in research.",
-        "openAi": "AI privacy mode",
-        "openResearch": "Research mode"
+        "description": "Control how much of your data is shared with AI features.",
+        "openAi": "AI privacy mode"
       }
     },
     "mcp": {
@@ -8153,7 +8137,8 @@
       "openLink": "Open checkups"
     },
     "showMeasurements": "Show measurements",
-    "loadError": "Could not load your reminders."
+    "loadError": "Could not load your reminders.",
+    "fileVisit": "Record a visit"
   },
   "moduleList": {
     "viewToggleLabel": "View",
@@ -8506,27 +8491,27 @@
     },
     "mcp": {
       "label": "External assistant access (MCP)",
-      "description": "Let an MCP-capable assistant read your health data over a scoped token. Off by default."
+      "description": "Read access for an MCP-capable assistant, over a scoped token."
     },
     "environment": {
       "label": "Environment",
-      "description": "Pull in daily weather and daylight for your location to correlate with mood, sleep, and vitals. Off by default."
+      "description": "Daily weather and daylight for your location, beside mood, sleep, and vitals."
     },
     "inboundDocuments": {
       "label": "Documents",
-      "description": "Keep every medical letter, report, and scan in one encrypted, searchable place — linked to your conditions. Off by default."
+      "description": "Medical letters, reports, and scans in one encrypted, searchable place."
     },
     "mentalHealth": {
       "label": "Mental wellbeing",
-      "description": "Opt-in PHQ-9 and GAD-7 screeners beside mood tracking. Off by default; answers are encrypted and kept out of the AI Coach."
+      "description": "Four opt-in screeners beside mood tracking."
     },
     "nutrients": {
       "label": "Nutrient intake",
-      "description": "Store daily micronutrient totals (vitamins, minerals, water, caffeine) synced from Apple Health. Off by default."
+      "description": "Daily micronutrient totals synced from Apple Health."
     },
     "vaccinations": {
       "label": "Vaccinations",
-      "description": "The vaccination record in structured form: which dose was given when, where it sits in its series, and when the next booster is due."
+      "description": "The vaccination record, structured: dose, series, next booster."
     }
   },
   "illness": {
@@ -9023,7 +9008,8 @@
     },
     "openDetail": "Show details",
     "historyLoadError": "Your assessment history could not be loaded",
-    "historyLoadErrorHint": "This does not mean you have no results — the list could not be fetched. Try again."
+    "historyLoadErrorHint": "This does not mean you have no results — the list could not be fetched. Try again.",
+    "privacyNote": "Your answers are stored encrypted and never reach the AI Coach."
   },
   "records": {
     "aiInclusion": {
@@ -9310,7 +9296,8 @@
       "previewUnavailable": "No inline preview for this file type",
       "uploadedMeta": "Added {date} · {size}",
       "share": "Share",
-      "labValuesLink": "View {count} lab values"
+      "labValuesLink": "View {count} lab values",
+      "visitsLabel": "Belongs to visit"
     },
     "dropOverlay": {
       "title": "Drop files to upload",
@@ -9327,7 +9314,8 @@
       "partialFailure": "{failed} of {total} could not be updated",
       "failed": "The action could not be completed",
       "share": "Share",
-      "shareTooMany": "A share link can hold at most {max} documents. Deselect some and try again."
+      "shareTooMany": "A share link can hold at most {max} documents. Deselect some and try again.",
+      "linkVisit": "File against visit"
     },
     "episodeCard": {
       "title": "Documents",
@@ -9620,6 +9608,11 @@
           "below": "By {time} you are at {today} steps. On a usual day you are around {typical} by now.",
           "above": "By {time} you are at {today} steps, ahead of the {typical} that is usual for you by now."
         }
+      },
+      "upcomingVisit": {
+        "title": "Appointment coming up",
+        "bodyToday": "{what} — today",
+        "bodyTomorrow": "{what} — tomorrow"
       }
     },
     "action": {
@@ -9715,7 +9708,8 @@
     "sensitiveHint": "Nothing here is ever preselected. Pick each entry yourself.",
     "scopeNone": "Nothing selected yet. Choose what to include, or apply the standard report.",
     "scopeCount": "{count} entries from {groups} areas",
-    "scopeSensitive": "incl. {names}"
+    "scopeSensitive": "incl. {names}",
+    "leafVisits": "Visits"
   },
   "recordSharing": {
     "banner": {
@@ -9726,9 +9720,7 @@
     },
     "switcher": {
       "label": "Open a record",
-      "ownRecord": "My own record",
-      "readOnly": "Read only",
-      "canWrite": "Can add entries"
+      "ownRecord": "My own record"
     },
     "switch": {
       "failed": "Could not open that record. Please try again.",
@@ -10082,6 +10074,98 @@
       "hospital": "Hospital",
       "therapy": "Therapy session",
       "other": "Appointment"
+    },
+    "sectionTitle": "Visits",
+    "sectionDescription": "Doctor's visits and booked appointments in one place.",
+    "add": "Visit",
+    "loadError": "Visits could not be loaded.",
+    "emptyTitle": "No visit recorded yet",
+    "emptyDescription": "A date is enough. Everything else is optional.",
+    "upcomingHeading": "Upcoming",
+    "pastHeading": "Past",
+    "createTitle": "Record a visit",
+    "editTitle": "Edit visit",
+    "formDescription": "Only the date is required.",
+    "created": "Visit saved.",
+    "updated": "Visit updated.",
+    "saveFailed": "The visit could not be saved.",
+    "checkupNotClosed": "Visit saved. The checkup stays open — your access does not cover that.",
+    "status": {
+      "planned": "Planned",
+      "done": "Attended",
+      "cancelled": "Cancelled",
+      "noShow": "Missed"
+    },
+    "card": {
+      "documentCount": "linked documents",
+      "labCount": "linked lab results",
+      "conditionCount": "linked conditions"
+    },
+    "form": {
+      "date": "Date and time",
+      "dateDerivesStatusHint": "A date in the future is a booked appointment.",
+      "status": "Status",
+      "practitioner": "Practice or doctor",
+      "practitionerHint": "Optional — you can add the name later.",
+      "practitionerNone": "Not specified",
+      "practitionerSearch": "Search name or practice",
+      "practitionerNoMatch": "No entry found.",
+      "practitionerAdd": "Add new",
+      "practitionerClear": "Clear selection",
+      "kind": "Kind",
+      "reason": "Reason",
+      "outcome": "Outcome",
+      "outcomeReveal": "Add an outcome",
+      "linkDocuments": "Documents",
+      "linkLabResults": "Lab results",
+      "linkConditions": "Conditions",
+      "linkNothingToOffer": "Nothing here to link yet."
+    },
+    "deleteTitle": "Delete this visit?",
+    "deleteDescription": "The entry is removed. If the visit is booked, its reminder stops with it.",
+    "deleteFailed": "The visit could not be deleted.",
+    "suggestion": {
+      "single": "Does this belong to this visit?",
+      "choose": "Which visit does this belong to?"
+    },
+    "episodeCard": {
+      "title": "Visits about this",
+      "emptyLine": "No visit linked to this condition yet.",
+      "add": "Add a visit"
+    },
+    "dashboard": {
+      "nextVisit": "Next appointment: {what} on {when}"
     }
+  },
+  "checkups": {
+    "viewSwitchLabel": "Show checkups or visits",
+    "tabVorsorge": "Checkups",
+    "tabVisits": "Visits"
+  },
+  "practitioners": {
+    "title": "Practices and doctors",
+    "description": "Your own address book — type a practice once, pick it everywhere.",
+    "linkLabel": "Address book",
+    "add": "Entry",
+    "searchPlaceholder": "Search name or practice",
+    "loadError": "The address book could not be loaded.",
+    "emptyTitle": "No entry yet",
+    "emptyDescription": "Add a practice so you can pick it when you record a visit.",
+    "noMatchTitle": "No match",
+    "noMatchDescription": "No entry matches this search.",
+    "createTitle": "Add an entry",
+    "editTitle": "Edit entry",
+    "formDescription": "Only the name is required.",
+    "name": "Name",
+    "specialty": "Specialty",
+    "practice": "Practice",
+    "location": "Address",
+    "phone": "Phone",
+    "note": "Note",
+    "noteHint": "Stored encrypted.",
+    "saveFailed": "The entry could not be saved.",
+    "deleteTitle": "Delete this entry?",
+    "deleteDescription": "Your existing visits stay, and they keep this name.",
+    "deleteFailed": "The entry could not be deleted."
   }
 }

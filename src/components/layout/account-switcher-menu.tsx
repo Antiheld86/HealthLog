@@ -101,11 +101,15 @@ export function AccountSwitcherMenuItems() {
                   )
                 }
               >
+                {/* Two lines, not three. The access level had a line of its
+                    own here and it never fit — a 240 px menu truncated
+                    "Kann verwalten" as often as it showed it, and the entry
+                    still said which kind of record this is on the line below.
+                    The level is what the banner states once you are inside,
+                    where it governs what the page lets you do. It stays on
+                    the row as `data-access-level` for the browser journeys. */}
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate">{accountLabel(account)}</span>
-                  <span className="text-muted-foreground truncate text-xs">
-                    {accessLabel(presentation.access, t)}
-                  </span>
                   <span className="text-muted-foreground truncate text-xs">
                     {recordKindLabel(presentation.recordKind, t)}
                   </span>
@@ -120,16 +124,6 @@ export function AccountSwitcherMenuItems() {
       </DropdownMenuSub>
     </>
   );
-}
-
-function accessLabel(
-  access: ReturnType<typeof resolveRecordPresentation>["access"],
-  t: ReturnType<typeof useTranslations>["t"],
-): string {
-  if (access === "manage") return t("recordSharing.row.canManage");
-  return access === "view-and-add"
-    ? t("recordSharing.switcher.canWrite")
-    : t("recordSharing.switcher.readOnly");
 }
 
 function recordKindLabel(

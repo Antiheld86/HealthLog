@@ -31,9 +31,29 @@ export const encounterKeys = {
    * year at a time, and two windows are two different answers rather than one
    * answer that overwrites the other.
    */
-  encounterList: (from: string | null, to: string | null, status?: string) =>
-    ["encounters", "list", from, to, status ?? null] as const,
+  encounterList: (
+    from: string | null,
+    to: string | null,
+    status?: string,
+    episodeId?: string,
+  ) =>
+    [
+      "encounters",
+      "list",
+      from,
+      to,
+      status ?? null,
+      episodeId ?? null,
+    ] as const,
   encounter: (id: string) => ["encounters", "detail", id] as const,
+  /**
+   * The "which visit does this belong to" verdict for one anchor date. The
+   * anchor is part of the key because it IS the question: a document dated the
+   * 3rd and one dated the 20th get different answers, and one overwriting the
+   * other would pre-select the wrong visit on the second review step.
+   */
+  encounterSuggestion: (anchor: string) =>
+    ["encounters", "suggest", anchor] as const,
   /**
    * The address book. Under its own root rather than nested beneath
    * `["encounters"]`: a practitioner outlives the visits that name it, and a
@@ -43,4 +63,13 @@ export const encounterKeys = {
   practitionerList: (q?: string) =>
     ["practitioners", "list", q ?? null] as const,
   practitioner: (id: string) => ["practitioners", "detail", id] as const,
+
+  /* ── mutation keys ──────────────────────────────────────────────── */
+
+  encounterCreate: () => ["encounters", "create"] as const,
+  encounterUpdate: () => ["encounters", "update"] as const,
+  encounterDelete: () => ["encounters", "delete"] as const,
+  practitionerCreate: () => ["practitioners", "create"] as const,
+  practitionerUpdate: () => ["practitioners", "update"] as const,
+  practitionerDelete: () => ["practitioners", "delete"] as const,
 };

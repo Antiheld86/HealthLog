@@ -20,8 +20,11 @@ import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import {
   loadConditionLinks,
+  loadDocumentEncounterLinks,
+  narrowOwnedEncounterIds,
   narrowOwnedEpisodeIds,
   replaceConditionLinks,
+  replaceEncounterLinks,
 } from "@/lib/documents/links";
 import { serialiseDocumentDetail } from "@/lib/documents/store";
 import { annotate } from "@/lib/logging/context";
@@ -92,8 +95,9 @@ export const GET = apiHandler(
       });
     }
 
-    const [links, contentIndex, thumbnail] = await Promise.all([
+    const [links, visitLinks, contentIndex, thumbnail] = await Promise.all([
       loadConditionLinks(user.id, [document.id]),
+      loadDocumentEncounterLinks(user.id, [document.id]),
       prisma.documentContentIndex.findUnique({
         where: { documentId: document.id },
         select: { source: true },
@@ -117,6 +121,7 @@ export const GET = apiHandler(
         contentIndex !== null,
         toContentIndexSource(contentIndex?.source),
         thumbnail !== null,
+        visitLinks.get(document.id) ?? [],
       ),
     );
   },
@@ -169,6 +174,21 @@ export const PATCH = apiHandler(
       nextEpisodeIds = narrowed;
     }
 
+    // Replace-set visit links, same semantics and same refusal.
+    let nextEncounterIds: string[] | undefined;
+    if (parsed.data.encounterIds !== undefined) {
+      const narrowed = await narrowOwnedEncounterIds(
+        user.id,
+        parsed.data.encounterIds,
+      );
+      if (narrowed === null) {
+        return apiError("Visit not found", 404, {
+          errorCode: "documents.inbound.encounterNotFound",
+        });
+      }
+      nextEncounterIds = narrowed;
+    }
+
     // No mass assignment — each editable column is set explicitly only when
     // the client sent it. `userId` is never a body field.
     const data: Prisma.InboundDocumentUpdateInput = {};
@@ -189,14 +209,23 @@ export const PATCH = apiHandler(
     if (nextEpisodeIds !== undefined) {
       await replaceConditionLinks(prisma, user.id, existing.id, nextEpisodeIds);
     }
+    if (nextEncounterIds !== undefined) {
+      await replaceEncounterLinks(
+        prisma,
+        user.id,
+        existing.id,
+        nextEncounterIds,
+      );
+    }
 
     const document = await prisma.inboundDocument.findFirstOrThrow({
       where: { id: existing.id },
       omit: { contentEncrypted: true },
       include: { facts: { orderBy: { createdAt: "asc" } } },
     });
-    const [links, contentIndex, thumbnail] = await Promise.all([
+    const [links, visitLinks, contentIndex, thumbnail] = await Promise.all([
       loadConditionLinks(user.id, [document.id]),
+      loadDocumentEncounterLinks(user.id, [document.id]),
       prisma.documentContentIndex.findUnique({
         where: { documentId: document.id },
         select: { source: true },
@@ -210,6 +239,7 @@ export const PATCH = apiHandler(
     const touched = [
       ...Object.keys(data),
       ...(nextEpisodeIds !== undefined ? ["episodeIds"] : []),
+      ...(nextEncounterIds !== undefined ? ["encounterIds"] : []),
     ];
 
     await auditLog("documents.inbound.update", {
@@ -234,6 +264,7 @@ export const PATCH = apiHandler(
         contentIndex !== null,
         toContentIndexSource(contentIndex?.source),
         thumbnail !== null,
+        visitLinks.get(document.id) ?? [],
       ),
     );
   },

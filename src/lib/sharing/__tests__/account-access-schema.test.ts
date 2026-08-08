@@ -6,6 +6,7 @@ const sharedEntry = {
   accountId: "record-a",
   username: "record-a",
   displayName: "Record A",
+  fullName: "Test Full Name",
   access: "read",
   level: "read",
   recordKind: "shared",
@@ -73,6 +74,11 @@ describe("parseAccountAccess", () => {
     ],
     ["username", { username: "different-record" }, {}],
     ["display name", { displayName: "Different record" }, {}],
+    // v1.37.2 — the owner's full name is part of the entry now, so the two
+    // published views of the active record must agree on it like every other
+    // field. A parity matcher blind to it would let the banner and the
+    // switcher name the same owner differently.
+    ["full name", { fullName: "Different name" }, {}],
   ])(
     "fails closed when active disagrees with its canonical entry on %s",
     (_field, activeOverrides, blockOverrides) => {

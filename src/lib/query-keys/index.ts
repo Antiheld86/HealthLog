@@ -241,6 +241,25 @@ export const medicationDependentKeys = [
 export const cycleDependentKeys = [queryKeys.cycle(), queryKeys.insightsRoot()];
 
 /**
+ * Keys invalidated when a visit or an address-book entry changes.
+ *
+ * Both roots ride together in one bundle rather than two, because the two
+ * writes reach each other: renaming a practice changes the label every visit
+ * that names it renders, and deleting one nulls the reference on visits that
+ * stay. A bundle that evicted only the surface being written would leave the
+ * other showing the pre-write name.
+ *
+ * `useEncounterMutations` and `usePractitionerMutations` are its consumers.
+ * It briefly had none — the roots landed a release before the surfaces that
+ * read them — and was removed on trunk for that reason; it is back here
+ * together with the writes that need it.
+ */
+export const encounterDependentKeys = [
+  queryKeys.encounters(),
+  queryKeys.practitioners(),
+];
+
+/**
  * Invalidate every key in the bundle in parallel. Use this from mutation
  * `onSuccess` handlers so the call site stays a one-liner instead of repeating
  * `Promise.all(keys.map(...))` everywhere.

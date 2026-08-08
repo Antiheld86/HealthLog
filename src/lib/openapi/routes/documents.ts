@@ -91,13 +91,13 @@ inboundFactEditSchema.meta({
 documentUpdateSchema.meta({
   id: "DocumentUpdateRequest",
   description:
-    "Metadata edit for a stored document: `title` (user label; null clears it), `kind` (category), `documentDate` (user filing date, YYYY-MM-DD; null clears it), `episodeIds` (REPLACE-SET of condition links — the document's links become exactly this set; an empty array unlinks everything; every id must be a live episode of the caller or the whole request answers 404). At least one field required. No `userId` field — narrowed from the session and fed to the Prisma `where` with the row id.",
+    "Metadata edit for a stored document: `title` (user label; null clears it), `kind` (category), `documentDate` (user filing date, YYYY-MM-DD; null clears it), `episodeIds` (REPLACE-SET of condition links — the document's links become exactly this set; an empty array unlinks everything; every id must be a live episode of the caller or the whole request answers 404), `encounterIds` (the same replace-set semantics over the caller's visits). At least one field required. No `userId` field — narrowed from the session and fed to the Prisma `where` with the row id.",
 });
 
 documentBulkSchema.meta({
   id: "DocumentBulkRequest",
   description:
-    "One bulk action over up to 100 owner-scoped documents: `setKind` (requires `kind`), `linkEpisode` / `unlinkEpisode` (require `episodeId`), `delete` (tombstone, undo-able for 30 days), `restore` (clear tombstone). Partial failures never abort the batch — see the per-id result array.",
+    "One bulk action over up to 100 owner-scoped documents: `setKind` (requires `kind`), `linkEpisode` / `unlinkEpisode` (require `episodeId`), `linkEncounter` / `unlinkEncounter` (require `encounterId`), `delete` (tombstone, undo-able for 30 days), `restore` (clear tombstone). Partial failures never abort the batch — see the per-id result array.",
 });
 
 const factProvenance = z.object({
@@ -137,6 +137,18 @@ const conditionLink = z
       "A link to one of the caller's illness/condition episodes. `name` is the episode's user-facing label.",
   });
 
+const encounterLink = z
+  .object({
+    encounterId: z.string(),
+    kind: z.string(),
+    occurredAt: z.string().nullable(),
+  })
+  .meta({
+    id: "DocumentEncounterLink",
+    description:
+      "A link to one of the caller's visits — \"this letter belongs to that appointment\". `kind` is the visit-kind ENUM CONSTANT rather than a rendered name: unlike a condition label, which is the person's own words, a visit kind is one of eight closed values whose human name the reader's own bundle owns, so publishing the constant is what lets a German reader and an English one each see it named correctly.",
+  });
+
 const inboundDocument = z
   .object({
     id: z.string(),
@@ -153,6 +165,7 @@ const inboundDocument = z
     factCount: z.number(),
     pendingCount: z.number(),
     conditionLinks: z.array(conditionLink),
+    encounterLinks: z.array(encounterLink),
     servingClass: z.enum(["inline", "attachment"]),
     hasContentIndex: z.boolean(),
     contentIndexSource: z
@@ -257,6 +270,13 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             "Only documents linked to this illness/condition episode.",
         },
         {
+          name: "encounterId",
+          in: "query",
+          required: false,
+          schema: { type: "string" },
+          description: "Only documents linked to this visit.",
+        },
+        {
           name: "year",
           in: "query",
           required: false,
@@ -355,6 +375,10 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
               episodeIds: z.array(z.string()).optional().meta({
                 description:
                   "Optional condition pre-links (repeat the field per id). Every id must be a live episode of the caller.",
+              }),
+              encounterIds: z.array(z.string()).optional().meta({
+                description:
+                  "Optional visit pre-links (repeat the field per id). Every id must be a live visit of the caller; an unknown one refuses the upload rather than dropping the link the person asked for.",
               }),
             }),
           },

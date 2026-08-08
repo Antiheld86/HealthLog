@@ -93,22 +93,22 @@ test.describe("Settings mobile consistency (Pixel 5)", () => {
     }
   });
 
-  test("/settings/account: action buttons do not overflow their cards", async ({
+  test("/settings/security: action buttons do not overflow their cards", async ({
     page,
   }) => {
-    await page.goto("/settings/account", { waitUntil: "networkidle" });
+    // The change-password card sits on Security now, beside the second
+    // factors and the passkeys. The claim is unchanged; the address is not.
+    await page.goto("/settings/security", { waitUntil: "networkidle" });
     // Same reason as the grid test below: gate on the element, not the
     // network, because the read underneath it happens exactly once.
     await expect(
       page.getByRole("button", { name: /change password/i }),
     ).toBeVisible();
 
-    // The account page's action button(s) must live within (or above the
-    // bottom of) the parent card. Since v1.18.1 the "restart onboarding"
-    // tour button moved to Settings → Advanced, so account carries the
-    // change-password button; the tour button is matched here too in case
-    // it is present. On mobile the button stacks below the title — it's
+    // The page's action button(s) must live within (or above the bottom of)
+    // the parent card. On mobile the button stacks below the title — it is
     // allowed to extend the card's height, but not push past the right edge.
+    // The German "Passwort ändern" is the long case this was written for.
     const overflowCheck = await page.evaluate(() => {
       const buttons = Array.from(document.querySelectorAll("button"));
       const targets = buttons.filter((b) => {
@@ -134,7 +134,7 @@ test.describe("Settings mobile consistency (Pixel 5)", () => {
 
     expect(
       overflowCheck.length,
-      "expected to find the change-password action button on /settings/account",
+      "expected to find the change-password action button on /settings/security",
     ).toBeGreaterThanOrEqual(1);
 
     for (const t of overflowCheck) {

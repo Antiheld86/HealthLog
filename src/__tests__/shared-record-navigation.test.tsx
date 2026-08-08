@@ -44,10 +44,42 @@ describe("shared-record navigation", () => {
   it("keeps profile facts outside Settings and makes profile the scoped doorway", () => {
     const navigation = resolveSharedRecordNavigation(["profile"]);
 
-    expect(SHARED_RECORD_DOMAIN_ROUTE_FAMILIES.profile).toEqual(["/profile"]);
-    expect(navigation.destinationHrefs).toEqual(["/profile"]);
+    expect(SHARED_RECORD_DOMAIN_ROUTE_FAMILIES.profile).toEqual([
+      "/profile",
+      "/checkups",
+    ]);
+    expect(navigation.destinationHrefs).toEqual(["/profile", "/checkups"]);
     expect(navigation.allowsPath("/profile")).toBe(true);
     expect(navigation.allowsPath("/settings/anamnesis")).toBe(false);
+  });
+
+  it("presents the checkups page under both domains whose content it shows", () => {
+    // The page holds two things: the preventive-care list, which is a
+    // `measurements` read, and the visits section, which is `profile`. A grant
+    // naming either one must be able to reach it; a grant naming neither must
+    // not. Before the visits section the `measurements` omission was invisible,
+    // because a whole-record grant admits every path regardless.
+    expect(
+      resolveSharedRecordNavigation(["measurements"]).allowsPath("/checkups"),
+    ).toBe(true);
+    expect(
+      resolveSharedRecordNavigation(["profile"]).allowsPath("/checkups"),
+    ).toBe(true);
+    expect(resolveSharedRecordNavigation(null).allowsPath("/checkups")).toBe(
+      true,
+    );
+    expect(
+      resolveSharedRecordNavigation(["labs"]).allowsPath("/checkups"),
+    ).toBe(false);
+
+    // Listed twice, offered once: a grant holding both domains must not put
+    // two identical entries in the navigation.
+    expect(
+      resolveSharedRecordNavigation([
+        "measurements",
+        "profile",
+      ]).destinationHrefs.filter((href) => href === "/checkups"),
+    ).toEqual(["/checkups"]);
   });
 
   it("uses the active record scope instead of the actor's module flags", () => {

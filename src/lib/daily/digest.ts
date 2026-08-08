@@ -127,6 +127,21 @@ export interface DailyDigestPreventiveDue {
 }
 
 /**
+ * A booked visit falling today or tomorrow.
+ *
+ * Read off the VISIT table, never off the reminder engine: an appointment's
+ * one-shot reminder is excluded from every preventive-care read, and this is
+ * how the appointment reaches the rail without relaxing that exclusion. The
+ * kind rides as the enum constant so the reader's own bundle names it.
+ */
+export interface DailyDigestUpcomingVisit {
+  id: string;
+  kind: string;
+  occurredAt: string;
+  practitionerName: string | null;
+}
+
+/**
  * S11 — a confident elevated-at-rest ("tension") window for the day, already
  * detected server-side (`loadIntradayPulse`) under its full confidence gate.
  * The builder only formats it; the signal correctness lives in the analytics
@@ -251,6 +266,8 @@ export interface DailyDigestInput {
   morningRefreshedToday: boolean;
   syncIssues: DailyDigestSyncIssue[];
   preventiveDue: DailyDigestPreventiveDue[];
+  /** The booked visit falling today or tomorrow, or null. Honest-absent. */
+  upcomingVisit?: DailyDigestUpcomingVisit | null;
   /** Standing coach plans (active + reviewed) — check-in candidates (§2.3). */
   coachPlans: DailyDigestCoachPlan[];
   /**
@@ -493,6 +510,44 @@ function buildPreventiveCareItem(
     kind: "preventive_care",
     title: t("daily.item.preventiveCare.title"),
     body,
+    status: "info",
+    actions: [
+      {
+        labelKey: "daily.action.viewCheckups",
+        intent: "checkup.view",
+        href: "/checkups",
+      },
+    ],
+  };
+}
+
+/**
+ * The booked visit falling today or tomorrow, as one rail line.
+ *
+ * No module gate: a visit is core, like the checkups page it lives on. No
+ * action beyond opening the page either — there is nothing to do about an
+ * appointment except keep it, and a "mark done" here would duplicate the
+ * visit's own status field with a second place to set it.
+ */
+function buildUpcomingVisitItem(
+  visit: DailyDigestUpcomingVisit | null,
+  now: Date,
+  t: Translate,
+): PriorityItem | null {
+  if (!visit) return null;
+  const at = new Date(visit.occurredAt);
+  if (Number.isNaN(at.getTime())) return null;
+  // Today vs tomorrow is decided on the SAME instants the read window used, so
+  // a visit admitted by the query can never be described as neither.
+  const hoursAway = (at.getTime() - now.getTime()) / (60 * 60 * 1000);
+  const what = visit.practitionerName ?? t(`encounters.kind.${visit.kind}`);
+  return {
+    kind: "upcoming_visit",
+    title: t("daily.item.upcomingVisit.title"),
+    body:
+      hoursAway <= 24
+        ? t("daily.item.upcomingVisit.bodyToday", { what })
+        : t("daily.item.upcomingVisit.bodyTomorrow", { what }),
     status: "info",
     actions: [
       {
@@ -880,6 +935,16 @@ export function buildDailyDigest(
   if (ecg) worthALook.push(ecg);
   const preventive = buildPreventiveCareItem(input.preventiveDue, t);
   if (preventive) worthALook.push(preventive);
+  // Beside the checkups rather than among them: the two are neighbours on the
+  // rail because a person reads "what am I meant to arrange" and "where am I
+  // meant to be" in one glance, and they stay separate items because one is
+  // overdue and the other is simply scheduled.
+  const visit = buildUpcomingVisitItem(
+    input.upcomingVisit ?? null,
+    input.now,
+    t,
+  );
+  if (visit) worthALook.push(visit);
   // S11 — the calm, informational tension marker sits last: it is context, not
   // an action that expires, so a time-sensitive dose / sync / check-in wins the
   // bounded rail ahead of it.

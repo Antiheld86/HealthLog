@@ -427,9 +427,8 @@ model User {
   // v1.18.6 (DISC-02) — one-time medical-disclaimer acknowledgment. Shown
   // once at the start of onboarding: HealthLog is a private tracking tool,
   // not a clinical assessment or diagnosis; if worried, talk to a doctor.
-  // Mirrors the `researchModeAcknowledged*` pair — the version pins exactly
-  // which copy the user read, so a future material wording change can ask
-  // again. Null = never acknowledged (legacy accounts read as never-asked;
+  // The version pins exactly which copy the user read, so a future material
+  // wording change can ask again. Null = never acknowledged (legacy accounts read as never-asked;
   // the prompt only gates fresh onboarding, so they are not re-walled). The
   // acknowledged legal text stays reachable on the public privacy page.
   disclaimerAcknowledgedAt      DateTime? @map("disclaimer_acknowledged_at")
@@ -495,28 +494,6 @@ model User {
   // v1.5's Apple Health passthrough drops in without extra schema
   // work.
   sourcePriorityJson Json? @map("source_priority_json")
-
-  // v1.4.25 W19c — Research Mode acknowledgment for the opt-in GLP-1
-  // PK research-view chart. The chart is hidden behind a per-user
-  // flag that is set to `true` only after the user has dismissed an
-  // undismissable MDR-disclaimer dialog. The `researchModeAcknowledged*`
-  // pair records exactly *which version* of the disclaimer copy the
-  // user has read; when the disclaimer copy changes (e.g. EMA guidance
-  // update, new drug added), the Settings surface re-prompts the user
-  // and refuses to surface the chart until the new version is
-  // acknowledged. Keeping the version on the user row (instead of an
-  // append-only audit table) is intentional — the Coach refusal layer
-  // and the chart-render guard both need a cheap synchronous read.
-  //
-  // `researchModeEnabled = false` is the safe default — the chart
-  // never renders without an explicit opt-in. The DELETE branch of
-  // the API endpoint sets all three columns back to NULL/false so a
-  // user who turns Research Mode off must re-acknowledge the
-  // disclaimer if they ever turn it back on, even if the version
-  // hasn't changed in the interim.
-  researchModeEnabled             Boolean   @default(false) @map("research_mode_enabled")
-  researchModeAcknowledgedAt      DateTime? @map("research_mode_acknowledged_at")
-  researchModeAcknowledgedVersion String?   @map("research_mode_acknowledged_version")
 
   // v1.4.30 — iOS SyncMode foundation (R-E C-2). Last-known
   // synchronization checkpoint per user. iOS reads it via
@@ -774,6 +751,7 @@ model User {
   googleHealthOAuthStates                   GoogleHealthOAuthState[]
   moodEntries                               MoodEntry[]
   moodContexts                              MoodContext[]
+  moodPredictions                           MoodPrediction[]
   mentalHealthAssessments                   MentalHealthAssessment[]
   moodTagsCustom                            MoodTag[]                         @relation("UserMoodTags")
   moodTagCategoriesCustom                   MoodTagCategory[]                 @relation("UserMoodTagCategories")
@@ -4268,6 +4246,68 @@ model MoodContext {
 
   @@index([userId])
   @@map("mood_contexts")
+}
+
+/// What the account's own past days say a day like this one usually looks
+/// like — one row per local day, written by a job and never by a person.
+///
+/// Four things about this table that a later reader would otherwise have to
+/// infer, and would infer wrongly:
+///
+/// 1. **Written by the `mood-prognosis-refresh` job only. Never by a route,
+///    and the user cannot overwrite it.** The self-assessment on `MoodEntry`
+///    and the value here are two separate readings of the same day and they
+///    stay separate: the deviation between them is the entire finding, and a
+///    surface that let somebody correct the prognosis into agreement would
+///    destroy it. Two tables make that structural rather than a convention,
+///    and `src/__tests__/mood-prediction-write-surface-guard.test.ts` holds
+///    the writer set to one file.
+/// 2. **`features` holds the evidence, not a hint.** It is the JSON list of
+///    the standardised contributions the fit actually used for that day, so
+///    the "what the model weighted" line is generated from what happened
+///    rather than recomputed at render time against a model that may since
+///    have been re-fitted.
+/// 3. **Deliberately not in the disaster-recovery backup.** It is a derived
+///    artefact, recomputable in full from `MoodEntry` + `MoodContext` and the
+///    linked modules, and the nightly job rebuilds it after a restore. The
+///    verdict is written down in `DERIVED_MODELS`
+///    (`src/lib/export/backup-plan.ts`), where the completeness guard reads
+///    it, so this is a decision rather than an omission. It IS in the wipe
+///    plan: a derived row is still a statement about somebody's days.
+/// 4. **`n` and the band are part of the value.** A consumer that renders
+///    `predicted` without `ciLow` / `ciHigh` / `n` is a defect: a forecast
+///    built from thirty days and one built from three hundred look identical
+///    on screen and mean very different things.
+model MoodPrediction {
+  userId String @map("user_id")
+  /// YYYY-MM-DD in the account's own zone — the same day key and the same
+  /// anchoring `MoodEntry.date` carries, so the two readings of a day join
+  /// without a second timezone derivation.
+  date   String
+
+  /// The expected pleasantness (A1) for that day, 0-10, on the account's own
+  /// past pattern. A counterfactual, never a measurement.
+  predicted Float
+  /// The band around it, from the rolling-origin validation residuals. Null
+  /// only when the validation produced no residuals at all, which the write
+  /// path treats as "no forecast" rather than as a bare point estimate.
+  ciLow     Float? @map("ci_low")
+  ciHigh    Float? @map("ci_high")
+  /// Complete days the fit was built from. Shown wherever `predicted` is.
+  n         Int
+
+  /// Bumped whenever the feature set or the fit changes, so a re-fit is
+  /// legible in the stored rows instead of silently changing their meaning.
+  modelVersion String   @map("model_version")
+  /// JSON array of `{ feature, contribution }` — the standardised coefficient
+  /// times that day's standardised value, per feature.
+  features     String
+  computedAt   DateTime @map("computed_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, date])
+  @@map("mood_predictions")
 }
 
 // ─── Mood Tag Taxonomy (v1.8.5 W6-tax) ────────────────────────

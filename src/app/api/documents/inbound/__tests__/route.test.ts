@@ -20,6 +20,8 @@ const {
   txCreateMany,
   txDocumentFindMany,
   txEpisodeFindMany,
+  txEncounterFindMany,
+  txEncounterLinkCreateMany,
 } = vi.hoisted(() => ({
   txQueryRaw: vi.fn(),
   txCreate: vi.fn(),
@@ -28,6 +30,8 @@ const {
   // writes, so the transaction double has to answer for them.
   txDocumentFindMany: vi.fn(),
   txEpisodeFindMany: vi.fn(),
+  txEncounterFindMany: vi.fn(),
+  txEncounterLinkCreateMany: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => {
@@ -35,7 +39,9 @@ vi.mock("@/lib/db", () => {
     $queryRaw: txQueryRaw,
     inboundDocument: { create: txCreate, findMany: txDocumentFindMany },
     illnessEpisode: { findMany: txEpisodeFindMany },
+    encounter: { findMany: txEncounterFindMany },
     documentConditionLink: { createMany: txCreateMany },
+    encounterDocumentLink: { createMany: txEncounterLinkCreateMany },
   };
   return {
     prisma: {
@@ -50,6 +56,9 @@ vi.mock("@/lib/db", () => {
       documentConditionLink: {
         findMany: vi.fn(),
       },
+      encounterDocumentLink: {
+        findMany: vi.fn(),
+      },
       documentContentIndex: {
         findMany: vi.fn(),
       },
@@ -57,6 +66,9 @@ vi.mock("@/lib/db", () => {
         findMany: vi.fn(),
       },
       illnessEpisode: {
+        findMany: vi.fn(),
+      },
+      encounter: {
         findMany: vi.fn(),
       },
       appSettings: {
@@ -183,6 +195,12 @@ beforeEach(() => {
   vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
   vi.mocked(requireModuleEnabled).mockResolvedValue({ enabled: true } as never);
   vi.mocked(prisma.extractedFact.groupBy).mockResolvedValue([] as never);
+  vi.mocked(prisma.encounterDocumentLink.findMany).mockResolvedValue(
+    [] as never,
+  );
+  vi.mocked(prisma.encounter.findMany).mockResolvedValue([] as never);
+  txEncounterFindMany.mockResolvedValue([]);
+  txEncounterLinkCreateMany.mockResolvedValue({ count: 0 });
   vi.mocked(prisma.documentConditionLink.findMany).mockResolvedValue(
     [] as never,
   );

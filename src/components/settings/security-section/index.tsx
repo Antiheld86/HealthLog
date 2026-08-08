@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import { queryKeys } from "@/lib/query-keys";
 import { apiGet } from "@/lib/api/api-fetch";
+import { PasswordCard } from "@/components/settings/password-card";
 import { TotpCard } from "./totp-card";
 import { SecurityKeysCard, type WebauthnKeyInfo } from "./security-keys-card";
 import { PasskeyListSection } from "./passkey-list-section";
@@ -45,28 +46,35 @@ export function SecuritySection() {
     passkeys != null &&
     passkeys.length === 0;
 
-  if (isLoading || !status) {
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-40 w-full rounded-xl" />
-        <Skeleton className="h-40 w-full rounded-xl" />
-        <Skeleton className="h-40 w-full rounded-xl" />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       {showNudge && <PasskeyUpgradeNudge />}
 
-      <TotpCard
-        enabled={status.totp.enabled}
-        recoveryCodesRemaining={status.recoveryCodesRemaining}
-      />
+      {/* The password leads, and it renders before the factor status has
+          landed — it depends on nothing this page fetches. It is also the
+          only way to change a password now that the Account card is gone, so
+          a `/api/auth/me/mfa` that never answers must not take it down with
+          the cards that do need it. */}
+      <PasswordCard />
 
-      <SecurityKeysCard keys={status.webauthn} />
+      {isLoading || !status ? (
+        <>
+          <Skeleton className="h-40 w-full rounded-xl" />
+          <Skeleton className="h-40 w-full rounded-xl" />
+          <Skeleton className="h-40 w-full rounded-xl" />
+        </>
+      ) : (
+        <>
+          <TotpCard
+            enabled={status.totp.enabled}
+            recoveryCodesRemaining={status.recoveryCodesRemaining}
+          />
 
-      <PasskeyListSection isAuthenticated={isAuthenticated} />
+          <SecurityKeysCard keys={status.webauthn} />
+
+          <PasskeyListSection isAuthenticated={isAuthenticated} />
+        </>
+      )}
     </div>
   );
 }

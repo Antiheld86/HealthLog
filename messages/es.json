@@ -283,7 +283,14 @@
     "familyHistoryColCondition": "Afección",
     "familyHistoryColAgeAtOnset": "Edad de inicio",
     "labsSourceRangeNote": "* El rango de referencia procede del propio informe y difiere del rango guardado:",
-    "labsCatalogRangeLabel": "rango guardado"
+    "labsCatalogRangeLabel": "rango guardado",
+    "visitsTitle": "Visitas médicas",
+    "visitsColDate": "Fecha",
+    "visitsColPractice": "Consulta",
+    "visitsColKind": "Tipo",
+    "visitsColReason": "Motivo",
+    "visitsColOutcome": "Resultado",
+    "visitsColConditions": "Enfermedades"
   },
   "errorBoundary": {
     "title": "Algo ha salido mal",
@@ -478,7 +485,8 @@
       "milestone": "Hitos",
       "ecg_new_recording": "Nuevos registros de ECG",
       "tension_window": "Periodos de tensión",
-      "same_time_baseline": "Actividad a la misma hora"
+      "same_time_baseline": "Actividad a la misma hora",
+      "upcoming_visit": "Citas"
     },
     "layoutReset": "Restablecer valores por defecto",
     "layoutResetTitle": "¿Restablecer el diseño del panel?",
@@ -1604,26 +1612,6 @@
       }
     },
     "researchMode": {
-      "dialog": {
-        "title": "Activar el modo Investigación",
-        "intro": "El modo Investigación añade un gráfico estimado del nivel de fármaco a tu página de GLP-1. Lee el límite a continuación antes de activarlo: el gráfico es una ayuda de aprendizaje, nunca una medición, nunca un consejo médico.",
-        "whatItIsHeader": "Qué es esto",
-        "whatItIs": "Una curva en diente de sierra que simula la superposición de tus dosis registradas a lo largo del tiempo, usando el modelo de Bateman de un compartimento con los parámetros de absorción y semivida publicados en el EPAR de la EMA de cada agonista GLP-1 aprobado. El eje vertical es adimensional y sin etiquetas. La forma, no el número, es lo que muestra el gráfico.",
-        "whatItIsntHeader": "Qué no es",
-        "whatItIsnt": "No es un nivel en sangre. No es una medición. No es una predicción de cómo responde realmente tu cuerpo. No es base para ninguna decisión de dosis, tiempo o escalado. Para cualquier cosa que afecte cómo tomas tu medicación, habla con tu médico prescriptor.",
-        "whyEstimateHeader": "Por qué es una estimación",
-        "whyEstimate": "La farmacocinética poblacional describe al paciente típico. La variación individual es grande: el modelo Schneck/Urva 2024 de tirzepatida reporta aproximadamente un 22 % de variabilidad interindividual en la absorción y aproximadamente un 49 % en el volumen de distribución. Una curva de manual no puede capturar tu peso, tu función renal, tu técnica de inyección ni la precisión de tus horarios. Lee la curva como el ritmo de tu dosificación, no como tu nivel.",
-        "mdrBoundaryHeader": "Límite regulatorio",
-        "mdrBoundary": "HealthLog muestra datos regulatorios públicos y tus propios registros. La aplicación no predice, no diagnostica, no trata y no recomienda ninguna terapia. El Reglamento UE 2017/745 (Medical Device Regulation, MDR) y el documento de orientación MDCG 2021-24 trazan la línea con el software que interpreta datos con fines médicos: este gráfico se queda decididamente del lado educativo de esa línea. Si en algún momento sientes que te empuja hacia una decisión clínica, ciérralo.",
-        "citationsHeader": "Fuentes",
-        "citations": "European Public Assessment Reports de la EMA para Mounjaro, Ozempic, Wegovy, Saxenda, Trulicity, Byetta y Bydureon (Sección 5.2). Schneck K, Urva S. Population pharmacokinetics of the GIP/GLP receptor agonist tirzepatide. CPT Pharmacometrics Syst Pharmacol 2024;13(3):494-503 (DOI 10.1002/psp4.13099).",
-        "versionLine": "Versión del disclaimer: {version}",
-        "acknowledgeCta": "Entiendo — activar",
-        "cancelCta": "Cancelar",
-        "successToast": "Modo Investigación activado. La curva de nivel de fármaco es ahora visible en tu página de GLP-1.",
-        "errorToast": "No se pudo activar el modo Investigación. Inténtalo de nuevo.",
-        "staleVersionToast": "El disclaimer se actualizó desde que cargó esta página. Recarga para leer la versión actual."
-      },
       "chart": {
         "title": "Nivel de fármaco estimado",
         "axisLabel": "Nivel estimado (relativo)",
@@ -3110,8 +3098,7 @@
       "valuesBack": "Volver a Insights",
       "valuesBackToMetric": "Volver a {metric}",
       "scoresBack": "Volver a Insights",
-      "ecgDescription": "Registros de ECG de una derivación de tu dispositivo, cada uno con el resultado del propio dispositivo.",
-      "ecgDisclaimer": "HealthLog muestra el trazado y el registro, pero no interpreta la onda."
+      "ecgDescription": "Registros de ECG de una derivación de tu dispositivo, cada uno con el resultado del propio dispositivo."
     },
     "units": {
       "steps": "pasos",
@@ -3785,6 +3772,25 @@
         "statement": "En los días con «{label}» el ánimo promedió {direction}: {withAvg} frente a {withoutAvg}.",
         "counts": "{withDays} días con, {withoutDays} días sin",
         "caveat": "Esto muestra una relación, no una causa."
+      },
+      "prognosis": {
+        "title": "Tu valoración y lo que sugieren tus días anteriores",
+        "selfLabel": "Tu valoración",
+        "expectedLabel": "Esperado según tus propios patrones",
+        "band": "Rango de {low} a {high}",
+        "statement": "Según tus patrones hasta ahora, para {date} cabría esperar un valor en torno a {value}. Calculado a partir de {n} días que reúnen todo lo que la comparación necesita.",
+        "provisional": "Todavía provisional: el patrón se apoya en pocos días.",
+        "notToday": "Esto describe {date}, no hoy.",
+        "deviationWithin": "Tu propia valoración está dentro de ese rango.",
+        "deviationAbove": "Tu propia valoración está {amount} puntos por encima de ese rango.",
+        "deviationBelow": "Tu propia valoración está {amount} puntos por debajo de ese rango.",
+        "weightedTitle": "Lo que más pesó en la comparación de este día",
+        "weightedUp": "{label}: contó hacia un valor esperado más alto",
+        "weightedDown": "{label}: contó hacia un valor esperado más bajo",
+        "caveat": "Es una comparación con tus propios días anteriores, no una afirmación sobre cómo llegó a transcurrir un día.",
+        "learning": "Fase de aprendizaje: {entries} de {threshold} días registrados. La comparación aparece cuando haya suficientes.",
+        "noPattern": "En los {entries} días registrados hasta ahora no hay nada lo bastante constante para comparar un día. Registrar el contexto del día hace comparable una parte mayor.",
+        "featureValue": "{field}: {value}"
       }
     },
     "derived": {
@@ -4255,10 +4261,8 @@
     },
     "ecg": {
       "sectionTitle": "Registros de ECG",
-      "sectionIntro": "Tiras de ECG de una sola derivación registradas por tu dispositivo. HealthLog solo muestra el registro y el resultado que produjo tu dispositivo; no lee ni interpreta la onda.",
       "loadError": "No se pudieron cargar tus registros de ECG.",
       "backToList": "Volver a los registros",
-      "disclaimer": "Este es el resultado que produjo tu dispositivo de registro. HealthLog no lee ni interpreta los registros de ECG y no proporciona un diagnóstico.",
       "clinicianNote": "Si este resultado te preocupa, comenta este registro con un profesional médico.",
       "resultAttribution": "Resultado registrado: {result}, según lo informado por el dispositivo de registro.",
       "result": {
@@ -4591,19 +4595,6 @@
     "remainingMany": "Faltan {count} mediciones para la tendencia."
   },
   "settings": {
-    "researchMode": {
-      "sectionTitle": "Modo Investigación",
-      "subtitle": "Curva opcional del nivel estimado del fármaco GLP-1, según datos de la EMA.",
-      "toggleLabel": "Mostrar la curva estimada del nivel de fármaco",
-      "disabledStatus": "Desactivado. La curva está oculta.",
-      "enabledStaleStatus": "El disclaimer se actualizó. Reconfirma debajo para volver a mostrar la curva.",
-      "acknowledgedOn": "Confirmado el {date}.",
-      "rePromptTitle": "Disclaimer actualizado",
-      "rePromptBody": "El disclaimer del modo Investigación se actualizó desde tu última confirmación. Relelo y reconfirma para mantener la curva visible.",
-      "rePromptCta": "Reconfirmar disclaimer",
-      "disableError": "No se pudo desactivar el modo Investigación. Inténtalo de nuevo.",
-      "subtitleDetail": "Solo lectura: nunca una medición ni un consejo médico."
-    },
     "shell": {
       "sectionsNav": "Secciones de ajustes",
       "groups": {
@@ -4887,8 +4878,8 @@
       },
       "advanced": {
         "title": "Avanzado",
-        "description": "Activador opt-in del modo Investigación y zona de peligro para borrar irrevocablemente todos los registros de salud.",
-        "subtitle": "Modo investigación, restablecer datos y eliminar cuenta."
+        "description": "La salida: borra todos los registros de salud para siempre o cierra la cuenta.",
+        "subtitle": "Restablecer datos y eliminar cuenta."
       },
       "export": {
         "title": "Exportar e importar",
@@ -5977,7 +5968,9 @@
       "rangeCustomEnd": "Hasta",
       "errorGeneric": "No se pudo generar la exportación. Inténtelo de nuevo.",
       "errorRateLimit": "Ha alcanzado el límite de exportaciones de esta hora.",
-      "errorModuleDisabled": "La exportación del expediente está desactivada para esta cuenta."
+      "errorModuleDisabled": "La exportación del expediente está desactivada para esta cuenta.",
+      "visitOffer": "El {when} hay una cita: {what}.",
+      "visitOfferApply": "Informe hasta esa fecha"
     },
     "globalExcludedInjectionSitesLabel": "Sitios de inyección excluidos globalmente",
     "globalExcludedInjectionSitesHint": "Nunca se ofrecen y se rechazan al registrar una dosis, aunque un medicamento los prefiera.",
@@ -6037,14 +6030,6 @@
       "createDetail": "El token se muestra una sola vez al crearlo — guárdalo entonces; no se puede recuperar."
     },
     "genderOther": "Otro",
-    "cycleTracking": {
-      "title": "Seguimiento del ciclo",
-      "description": "Registra tu ciclo menstrual, predicciones, síntomas e información de fases.",
-      "enable": "Activar el seguimiento del ciclo",
-      "manage": "Abrir seguimiento del ciclo",
-      "error": "No se pudo actualizar el seguimiento del ciclo.",
-      "detail": "Activado por defecto en cuentas configuradas como femeninas; disponible para todos."
-    },
     "nightscout": "Nightscout",
     "nightscoutTag": "CGM",
     "nightscoutDescription": "Conecta tu propio sitio Nightscout para sincronizar lecturas continuas de glucosa en el panel de glucosa.",
@@ -6285,9 +6270,8 @@
       },
       "posture": {
         "title": "Configuración de privacidad",
-        "description": "Controla cuántos de tus datos se comparten con las funciones de IA y la investigación opcional.",
-        "openAi": "Modo de privacidad de IA",
-        "openResearch": "Modo investigación"
+        "description": "Controla cuántos de tus datos se comparten con las funciones de IA.",
+        "openAi": "Modo de privacidad de IA"
       }
     },
     "mcp": {
@@ -8153,7 +8137,8 @@
       "openLink": "Abrir revisiones"
     },
     "showMeasurements": "Ver mediciones",
-    "loadError": "No se pudieron cargar tus recordatorios."
+    "loadError": "No se pudieron cargar tus recordatorios.",
+    "fileVisit": "Registrar una cita"
   },
   "moduleList": {
     "viewToggleLabel": "Vista",
@@ -8506,27 +8491,27 @@
     },
     "mcp": {
       "label": "Acceso de asistente externo (MCP)",
-      "description": "Permite que un asistente compatible con MCP lea tus datos de salud mediante un token con alcance limitado. Desactivado de forma predeterminada."
+      "description": "Acceso de lectura para un asistente compatible con MCP, mediante un token limitado."
     },
     "environment": {
       "label": "Entorno",
-      "description": "Incorpora el tiempo y las horas de luz diarias de tu ubicación para correlacionarlos con el ánimo, el sueño y las constantes. Desactivado por defecto."
+      "description": "El tiempo y las horas de luz diarias de tu ubicación, junto al ánimo, el sueño y las constantes."
     },
     "inboundDocuments": {
       "label": "Documentos",
-      "description": "Guarda cada carta médica, informe y escaneo en un solo lugar cifrado y con búsqueda — vinculado a tus afecciones. Desactivado por defecto."
+      "description": "Cartas médicas, informes y escaneos en un lugar cifrado y con búsqueda."
     },
     "mentalHealth": {
       "label": "Bienestar mental",
-      "description": "Cuestionarios PHQ-9 y GAD-7 opcionales, junto al registro de ánimo. Desactivado por defecto; las respuestas se cifran y se mantienen fuera del Coach de IA."
+      "description": "Cuatro cuestionarios opcionales, junto al registro de ánimo."
     },
     "nutrients": {
       "label": "Ingesta de nutrientes",
-      "description": "Guarda los totales diarios de micronutrientes (vitaminas, minerales, agua, cafeína) sincronizados desde Apple Health. Desactivado por defecto."
+      "description": "Totales diarios de micronutrientes sincronizados desde Apple Health."
     },
     "vaccinations": {
       "label": "Vacunas",
-      "description": "La cartilla de vacunación en forma estructurada: qué dosis se administró y cuándo, en qué lugar de la serie está y cuándo toca el próximo refuerzo."
+      "description": "La cartilla de vacunación estructurada: dosis, serie, próximo refuerzo."
     }
   },
   "illness": {
@@ -9023,7 +9008,8 @@
     },
     "openDetail": "Ver detalles",
     "historyLoadError": "No se pudo cargar tu historial de evaluaciones",
-    "historyLoadErrorHint": "Esto no significa que no tengas resultados: no se pudo obtener la lista. Vuelve a intentarlo."
+    "historyLoadErrorHint": "Esto no significa que no tengas resultados: no se pudo obtener la lista. Vuelve a intentarlo.",
+    "privacyNote": "Tus respuestas se guardan cifradas y nunca llegan al Coach de IA."
   },
   "records": {
     "aiInclusion": {
@@ -9310,7 +9296,8 @@
       "previewUnavailable": "Sin vista previa integrada para este tipo de archivo",
       "uploadedMeta": "Añadido el {date} · {size}",
       "share": "Compartir",
-      "labValuesLink": "Ver {count} valores de laboratorio"
+      "labValuesLink": "Ver {count} valores de laboratorio",
+      "visitsLabel": "Pertenece a la cita"
     },
     "dropOverlay": {
       "title": "Suelta los archivos para subirlos",
@@ -9327,7 +9314,8 @@
       "partialFailure": "No se pudieron actualizar {failed} de {total}",
       "failed": "No se pudo completar la acción",
       "share": "Compartir",
-      "shareTooMany": "Un enlace para compartir admite como máximo {max} documentos. Deselecciona algunos e inténtalo de nuevo."
+      "shareTooMany": "Un enlace para compartir admite como máximo {max} documentos. Deselecciona algunos e inténtalo de nuevo.",
+      "linkVisit": "Asignar a una cita"
     },
     "episodeCard": {
       "title": "Documentos",
@@ -9620,6 +9608,11 @@
           "below": "A las {time} llevas {today} pasos. En un día habitual rondas los {typical} a esta hora.",
           "above": "A las {time} llevas {today} pasos, por encima de los {typical} habituales a esta hora."
         }
+      },
+      "upcomingVisit": {
+        "title": "Cita próxima",
+        "bodyToday": "{what}: hoy",
+        "bodyTomorrow": "{what}: mañana"
       }
     },
     "action": {
@@ -9715,7 +9708,8 @@
     "sensitiveHint": "Aquí nunca hay nada preseleccionado. Elija cada entrada usted mismo.",
     "scopeNone": "Nada seleccionado todavía. Elija qué incluir o aplique el informe estándar.",
     "scopeCount": "{count} entradas de {groups} áreas",
-    "scopeSensitive": "incl. {names}"
+    "scopeSensitive": "incl. {names}",
+    "leafVisits": "Visitas médicas"
   },
   "recordSharing": {
     "banner": {
@@ -9726,9 +9720,7 @@
     },
     "switcher": {
       "label": "Abrir un historial",
-      "ownRecord": "Mi propio historial",
-      "readOnly": "Solo lectura",
-      "canWrite": "Puede añadir entradas"
+      "ownRecord": "Mi propio historial"
     },
     "switch": {
       "failed": "No se pudo abrir ese historial. Inténtalo de nuevo.",
@@ -10082,6 +10074,98 @@
       "hospital": "Hospital",
       "therapy": "Sesión de terapia",
       "other": "Cita médica"
+    },
+    "sectionTitle": "Citas",
+    "sectionDescription": "Visitas médicas y citas reservadas en un solo sitio.",
+    "add": "Cita",
+    "loadError": "No se pudieron cargar las citas.",
+    "emptyTitle": "Todavía no hay ninguna cita",
+    "emptyDescription": "Basta con una fecha. Todo lo demás es opcional.",
+    "upcomingHeading": "Próximas",
+    "pastHeading": "Pasadas",
+    "createTitle": "Registrar una cita",
+    "editTitle": "Editar la cita",
+    "formDescription": "Solo la fecha es obligatoria.",
+    "created": "Cita guardada.",
+    "updated": "Cita actualizada.",
+    "saveFailed": "No se pudo guardar la cita.",
+    "checkupNotClosed": "Cita guardada. La revisión sigue pendiente: tu acceso no lo permite.",
+    "status": {
+      "planned": "Prevista",
+      "done": "Realizada",
+      "cancelled": "Cancelada",
+      "noShow": "No acudida"
+    },
+    "card": {
+      "documentCount": "documentos vinculados",
+      "labCount": "resultados de laboratorio vinculados",
+      "conditionCount": "enfermedades vinculadas"
+    },
+    "form": {
+      "date": "Fecha y hora",
+      "dateDerivesStatusHint": "Una fecha futura es una cita reservada.",
+      "status": "Estado",
+      "practitioner": "Consulta o médico",
+      "practitionerHint": "Opcional: puedes añadir el nombre más tarde.",
+      "practitionerNone": "Sin indicar",
+      "practitionerSearch": "Buscar nombre o consulta",
+      "practitionerNoMatch": "No se encontró ninguna entrada.",
+      "practitionerAdd": "Añadir nueva",
+      "practitionerClear": "Quitar la selección",
+      "kind": "Tipo",
+      "reason": "Motivo",
+      "outcome": "Resultado",
+      "outcomeReveal": "Añadir un resultado",
+      "linkDocuments": "Documentos",
+      "linkLabResults": "Resultados de laboratorio",
+      "linkConditions": "Enfermedades",
+      "linkNothingToOffer": "Todavía no hay nada que vincular."
+    },
+    "deleteTitle": "¿Eliminar esta cita?",
+    "deleteDescription": "Se elimina la entrada. Si la cita está reservada, su recordatorio también desaparece.",
+    "deleteFailed": "No se pudo eliminar la cita.",
+    "suggestion": {
+      "single": "¿Pertenece a esta cita?",
+      "choose": "¿A qué cita pertenece?"
+    },
+    "episodeCard": {
+      "title": "Citas relacionadas",
+      "emptyLine": "Todavía no hay ninguna cita vinculada a esta enfermedad.",
+      "add": "Añadir una cita"
+    },
+    "dashboard": {
+      "nextVisit": "Próxima cita: {what} el {when}"
     }
+  },
+  "checkups": {
+    "viewSwitchLabel": "Mostrar revisiones o citas",
+    "tabVorsorge": "Revisiones",
+    "tabVisits": "Citas"
+  },
+  "practitioners": {
+    "title": "Consultas y médicos",
+    "description": "Tu propia agenda: escribe una consulta una vez y elígela en todas partes.",
+    "linkLabel": "Agenda",
+    "add": "Entrada",
+    "searchPlaceholder": "Buscar nombre o consulta",
+    "loadError": "No se pudo cargar la agenda.",
+    "emptyTitle": "Todavía no hay entradas",
+    "emptyDescription": "Añade una consulta para poder elegirla al registrar una cita.",
+    "noMatchTitle": "Sin coincidencias",
+    "noMatchDescription": "Ninguna entrada coincide con esta búsqueda.",
+    "createTitle": "Añadir una entrada",
+    "editTitle": "Editar la entrada",
+    "formDescription": "Solo el nombre es obligatorio.",
+    "name": "Nombre",
+    "specialty": "Especialidad",
+    "practice": "Consulta",
+    "location": "Dirección",
+    "phone": "Teléfono",
+    "note": "Nota",
+    "noteHint": "Se guarda cifrada.",
+    "saveFailed": "No se pudo guardar la entrada.",
+    "deleteTitle": "¿Eliminar esta entrada?",
+    "deleteDescription": "Tus citas anteriores se mantienen y conservan este nombre.",
+    "deleteFailed": "No se pudo eliminar la entrada."
   }
 }

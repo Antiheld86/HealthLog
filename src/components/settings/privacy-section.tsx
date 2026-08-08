@@ -179,7 +179,9 @@ export function PrivacySection() {
         </SettingsCardActions>
       </SettingsCard>
 
-      {/* Privacy posture (AI privacy mode + research mode live on their pages) */}
+      {/* Privacy posture. The AI privacy mode is what is left to decide here:
+          research mode is gone, so the second button pointed at a page that
+          no longer carries the control it named. */}
       <SettingsCard>
         <SettingsCardHeader
           icon={Sparkles}
@@ -190,11 +192,6 @@ export function PrivacySection() {
           <Button asChild variant="outline" size="sm">
             <Link href="/settings/ai">
               {t("settings.privacy.posture.openAi")}
-            </Link>
-          </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link href="/settings/advanced">
-              {t("settings.privacy.posture.openResearch")}
             </Link>
           </Button>
         </SettingsCardActions>

@@ -13,6 +13,10 @@ export const accountAccessEntrySchema = z
     accountId: z.string().min(1),
     username: z.string().min(1),
     displayName: z.string().nullable(),
+    // v1.37.2 — the record owner's full name, shown in front of a delegate on
+    // the switcher + banner. A deliberate disclosure to everyone they share
+    // with; see `accountLabel`.
+    fullName: z.string().nullable(),
     access: z.enum(["read", "write"]),
     level: accountAccessLevelSchema,
     recordKind: accountRecordKindSchema,
@@ -80,6 +84,7 @@ function matchesCanonicalAccountAccessEntry(
     active.accountId === canonical.accountId &&
     active.username === canonical.username &&
     active.displayName === canonical.displayName &&
+    active.fullName === canonical.fullName &&
     active.access === canonical.access &&
     active.level === canonical.level &&
     active.recordKind === canonical.recordKind &&

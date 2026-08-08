@@ -44,6 +44,10 @@ vi.mock("@/hooks/use-auth", async () => {
 
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
+  // The panel's visit offer reads the encounter list. Pending forever here:
+  // this file is about the panel's own state, and a resolved read would put
+  // an offer in the markup every assertion below would have to know about.
+  useQuery: () => ({ data: undefined, isPending: true, isError: false }),
 }));
 
 import { I18nProvider } from "@/lib/i18n/context";
@@ -188,7 +192,8 @@ describe("<HealthRecordExportPanel> — the first run", () => {
     expect(groupChip(html, "body")).toBe("0/12");
     expect(groupChip(html, "labs")).toBe("0/1");
     expect(groupChip(html, "medications")).toBe("0/4");
-    expect(groupChip(html, "history")).toBe("0/2");
+    // ALLERGIES, ILLNESS_EPISODES and now VISITS.
+    expect(groupChip(html, "history")).toBe("0/3");
     expect(groupChip(html, "cardio")).toBe("0/14");
     expect(groupChip(html, "activity")).toBe("0/8");
     expect(groupChip(html, "sleepRecovery")).toBe("0/16");

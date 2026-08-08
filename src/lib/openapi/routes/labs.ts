@@ -26,7 +26,7 @@ import {
 createLabResultSchema.meta({
   id: "CreateLabResultRequest",
   description:
-    'Record a single biomarker reading (HbA1c, LDL, ferritin, TSH, …). A reading is EITHER numeric (`value` + `unit`, optional reference bounds) OR qualitative (`valueText`, e.g. "negativ" / "positiv") — exactly one, never both, never neither. `analyte` + `unit` are free-form (a lab prints its own naming); a qualitative reading needs no unit / bounds. When both numeric bounds are present `referenceLow` must not exceed `referenceHigh`. `takenAt` is a backdatable ISO instant (no future, ≤ 50 years past). The optional `note` is encrypted at rest. The optional `source` records provenance: `"OCR"` for an on-device-OCR capture (the raw image never reaches the server on this path), defaulting to `"MANUAL"` when omitted.',
+    'Record a single biomarker reading (HbA1c, LDL, ferritin, TSH, …). A reading is EITHER numeric (`value` + `unit`, optional reference bounds) OR qualitative (`valueText`, e.g. "negativ" / "positiv") — exactly one, never both, never neither. `analyte` + `unit` are free-form (a lab prints its own naming); a qualitative reading needs no unit / bounds. When both numeric bounds are present `referenceLow` must not exceed `referenceHigh`. `takenAt` is a backdatable ISO instant (no future, ≤ 50 years past). The optional `note` is encrypted at rest. The optional `source` records provenance: `"OCR"` for an on-device-OCR capture (the raw image never reaches the server on this path), defaulting to `"MANUAL"` when omitted. The optional `encounterId` files the reading against a visit the caller owns — always optional, and a link that could not be made never fails the reading.',
 });
 
 updateLabResultSchema.meta({

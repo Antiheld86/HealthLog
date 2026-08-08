@@ -38,6 +38,7 @@ function doc(overrides: Partial<InboundDocumentDto> = {}): InboundDocumentDto {
     factCount: 0,
     pendingCount: 0,
     conditionLinks: [],
+    encounterLinks: [],
     servingClass: "inline",
     hasContentIndex: false,
     contentIndexSource: null,
