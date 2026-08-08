@@ -290,7 +290,12 @@
     "visitsColKind": "Kind",
     "visitsColReason": "Reason",
     "visitsColOutcome": "Outcome",
-    "visitsColConditions": "Conditions"
+    "visitsColConditions": "Conditions",
+    "immunizationsTitle": "Immunizations",
+    "immunizationsColDate": "Date",
+    "immunizationsColVaccine": "Vaccine",
+    "immunizationsColDose": "Dose",
+    "immunizationsColLot": "Lot"
   },
   "errorBoundary": {
     "title": "Something went wrong",
@@ -354,6 +359,7 @@
     "vorsorge": "Checkups",
     "illness": "Illness",
     "documents": "Documents",
+    "vaccinations": "Vaccinations",
     "mentalWellbeing": "Mental wellbeing"
   },
   "auth": {
@@ -8507,6 +8513,138 @@
       "description": "The vaccination record, structured: dose, series, next booster."
     }
   },
+  "vaccinations": {
+    "title": "Vaccinations",
+    "subtitle": "Your immunization record, dose by dose.",
+    "listLoadError": "Vaccinations could not be loaded.",
+    "series": {
+      "booster": "Booster",
+      "ofTotal": "Dose {position} of {total}",
+      "doseN": "Dose {position}"
+    },
+    "row": {
+      "lot": "Lot {lot}"
+    },
+    "form": {
+      "date": "Date",
+      "catalogLabel": "Vaccine (catalogue)",
+      "identityHint": "Pick from the catalogue or type it in below — either is enough.",
+      "catalogNone": "Choose a vaccine",
+      "catalogSearch": "Search vaccines",
+      "catalogNoMatch": "No catalogue entry found",
+      "catalogClear": "Clear selection",
+      "freeTextLabel": "Free text",
+      "freeTextPlaceholder": "as written on the record",
+      "seriesToggle": "Add series details",
+      "doseNumber": "Dose no.",
+      "seriesDoses": "Doses in series",
+      "lot": "Lot number",
+      "site": "Injection site",
+      "siteNone": "Not specified",
+      "practitioner": "Practice / doctor",
+      "note": "Note",
+      "linkDocuments": "Link a document",
+      "linkNothingToOffer": "No documents yet."
+    },
+    "site": {
+      "LEFT_ARM": "Left upper arm",
+      "RIGHT_ARM": "Right upper arm",
+      "LEFT_THIGH": "Left thigh",
+      "RIGHT_THIGH": "Right thigh",
+      "ORAL": "Oral",
+      "NASAL": "Nasal",
+      "OTHER": "Other"
+    },
+    "createTitle": "Log a vaccination",
+    "editTitle": "Edit vaccination",
+    "formDescription": "A date and the vaccine are enough; everything else is optional.",
+    "created": "Vaccination saved",
+    "updated": "Vaccination updated",
+    "saveFailed": "The vaccination could not be saved.",
+    "deleteTitle": "Delete this vaccination?",
+    "deleteDescription": "The entry is removed from your record. A planned booster reminder stays.",
+    "deleteFailed": "The vaccination could not be deleted.",
+    "info": {
+      "primarySeriesOne": "Primary series: {count} dose",
+      "primarySeriesFew": "Primary series: {count} doses",
+      "primarySeriesOther": "Primary series: {count} doses",
+      "yearly": "Yearly vaccination",
+      "boosterYearsOne": "Booster typically every {count} year",
+      "boosterYearsFew": "Booster typically every {count} years",
+      "boosterYearsOther": "Booster typically every {count} years",
+      "boosterMonthsOne": "Booster typically every {count} month",
+      "boosterMonthsFew": "Booster typically every {count} months",
+      "boosterMonthsOther": "Booster typically every {count} months",
+      "standard60": "Standard vaccination from age 60",
+      "sourceLabel": "Source: {source}",
+      "affordanceLabel": "Schedule info"
+    },
+    "booster": {
+      "title": "Plan a booster?",
+      "body": "You can set a reminder for the next booster from this dose. Change the interval or the label, or decline.",
+      "interval": "Interval",
+      "label": "Label",
+      "labelSuffix": "booster",
+      "decline": "Not now",
+      "confirm": "Set reminder",
+      "planned": "Booster planned",
+      "failed": "The reminder could not be created.",
+      "everyYearsOne": "every {count} year",
+      "everyYearsFew": "every {count} years",
+      "everyYearsOther": "every {count} years",
+      "everyMonthsOne": "every {count} month",
+      "everyMonthsFew": "every {count} months",
+      "everyMonthsOther": "every {count} months"
+    },
+    "suggestion": {
+      "single": "File against this vaccination?",
+      "choose": "Which vaccination does this scan belong to?",
+      "linked": "Linked to vaccination",
+      "failed": "Linking failed.",
+      "unnamed": "Vaccination"
+    },
+    "empty": {
+      "title": "No vaccination logged yet",
+      "description": "Transcribe your vaccination card line by line — a date and the vaccine are enough."
+    },
+    "catalog": {
+      "tetanus": "Tetanus",
+      "diphtheria": "Diphtheria",
+      "pertussis": "Whooping cough (pertussis)",
+      "polio": "Polio",
+      "measles": "Measles",
+      "mumps": "Mumps",
+      "rubella": "Rubella",
+      "varicella": "Chickenpox (varicella)",
+      "hib": "Hib (Haemophilus influenzae b)",
+      "hepatitis-a": "Hepatitis A",
+      "hepatitis-b": "Hepatitis B",
+      "influenza": "Influenza (flu)",
+      "pneumococcal": "Pneumococcus",
+      "herpes-zoster": "Shingles (herpes zoster)",
+      "rsv": "RSV",
+      "covid-19": "COVID-19",
+      "fsme": "Tick-borne encephalitis (TBE)",
+      "hpv": "HPV (human papillomavirus)",
+      "meningococcal-acwy": "Meningococcus ACWY",
+      "meningococcal-b": "Meningococcus B",
+      "rotavirus": "Rotavirus",
+      "typhoid": "Typhoid",
+      "rabies": "Rabies",
+      "yellow-fever": "Yellow fever",
+      "japanese-encephalitis": "Japanese encephalitis",
+      "cholera": "Cholera",
+      "td": "Td (tetanus, diphtheria)",
+      "tdap": "Tdap (tetanus, diphtheria, pertussis)",
+      "tdap-ipv": "Tdap-IPV (four-in-one)",
+      "dtap-ipv": "DTaP-IPV (childhood four-in-one)",
+      "hexavalent": "Six-in-one (DTaP-IPV-Hib-HepB)",
+      "mmr": "MMR (measles, mumps, rubella)",
+      "mmrv": "MMRV (measles, mumps, rubella, varicella)",
+      "hepa-hepb": "Hepatitis A and B",
+      "hepa-typhoid": "Hepatitis A and typhoid"
+    }
+  },
   "illness": {
     "title": "Illness journal",
     "subtitle": "A retrospective log of your illness and condition episodes.",
@@ -9702,7 +9840,8 @@
     "scopeNone": "Nothing selected yet. Choose what to include, or apply the standard report.",
     "scopeCount": "{count} entries from {groups} areas",
     "scopeSensitive": "incl. {names}",
-    "leafVisits": "Visits"
+    "leafVisits": "Visits",
+    "leafImmunizations": "Immunizations"
   },
   "recordSharing": {
     "banner": {
@@ -10002,7 +10141,8 @@
       "documentUpdate": "{name} changed a document",
       "documentDiscard": "{name} discarded a document",
       "medicationIntakeImportFinished": "The dose import {name} started has finished",
-      "medicationOneShotReconciled": "A one-off medication was opened or closed after a dose {name} recorded"
+      "medicationOneShotReconciled": "A one-off medication was opened or closed after a dose {name} recorded",
+      "vaccinationBoosterPlanned": "{name} planned a booster"
     },
     "section": {
       "measurements": {

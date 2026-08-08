@@ -290,7 +290,12 @@
     "visitsColKind": "Art",
     "visitsColReason": "Anlass",
     "visitsColOutcome": "Ergebnis",
-    "visitsColConditions": "Erkrankungen"
+    "visitsColConditions": "Erkrankungen",
+    "immunizationsTitle": "Impfungen",
+    "immunizationsColDate": "Datum",
+    "immunizationsColVaccine": "Impfstoff",
+    "immunizationsColDose": "Dosis",
+    "immunizationsColLot": "Charge"
   },
   "errorBoundary": {
     "title": "Da ist etwas schiefgelaufen",
@@ -354,6 +359,7 @@
     "vorsorge": "Vorsorge",
     "illness": "Krankheit",
     "documents": "Dokumente",
+    "vaccinations": "Impfungen",
     "mentalWellbeing": "Seelisches Wohlbefinden"
   },
   "auth": {
@@ -8507,6 +8513,138 @@
       "description": "Der Impfpass in strukturierter Form: Dosis, Serie, nächste Auffrischung."
     }
   },
+  "vaccinations": {
+    "title": "Impfungen",
+    "subtitle": "Dein Impfpass, Dosis für Dosis.",
+    "listLoadError": "Impfungen konnten nicht geladen werden.",
+    "series": {
+      "booster": "Auffrischung",
+      "ofTotal": "Dosis {position} von {total}",
+      "doseN": "{position}. Dosis"
+    },
+    "row": {
+      "lot": "Charge {lot}"
+    },
+    "form": {
+      "date": "Datum",
+      "catalogLabel": "Impfstoff (Katalog)",
+      "identityHint": "Katalog wählen oder unten frei eintragen — eins genügt.",
+      "catalogNone": "Impfstoff wählen",
+      "catalogSearch": "Impfstoff suchen",
+      "catalogNoMatch": "Kein Katalogeintrag gefunden",
+      "catalogClear": "Auswahl entfernen",
+      "freeTextLabel": "Freitext",
+      "freeTextPlaceholder": "wie im Impfpass angegeben",
+      "seriesToggle": "Serie angeben",
+      "doseNumber": "Dosis-Nr.",
+      "seriesDoses": "Dosen in Serie",
+      "lot": "Chargennummer",
+      "site": "Impfstelle",
+      "siteNone": "Keine Angabe",
+      "practitioner": "Praxis / Arzt",
+      "note": "Notiz",
+      "linkDocuments": "Dokument verknüpfen",
+      "linkNothingToOffer": "Noch keine Dokumente vorhanden."
+    },
+    "site": {
+      "LEFT_ARM": "Linker Oberarm",
+      "RIGHT_ARM": "Rechter Oberarm",
+      "LEFT_THIGH": "Linker Oberschenkel",
+      "RIGHT_THIGH": "Rechter Oberschenkel",
+      "ORAL": "Oral",
+      "NASAL": "Nasal",
+      "OTHER": "Andere"
+    },
+    "createTitle": "Impfung erfassen",
+    "editTitle": "Impfung bearbeiten",
+    "formDescription": "Datum und Impfstoff genügen; alles andere ist optional.",
+    "created": "Impfung gespeichert",
+    "updated": "Impfung aktualisiert",
+    "saveFailed": "Impfung konnte nicht gespeichert werden.",
+    "deleteTitle": "Impfung löschen?",
+    "deleteDescription": "Der Eintrag wird aus deinem Impfpass entfernt. Ein geplanter Auffrischungs-Reminder bleibt bestehen.",
+    "deleteFailed": "Impfung konnte nicht gelöscht werden.",
+    "info": {
+      "primarySeriesOne": "Grundimmunisierung: {count} Dosis",
+      "primarySeriesFew": "Grundimmunisierung: {count} Dosen",
+      "primarySeriesOther": "Grundimmunisierung: {count} Dosen",
+      "yearly": "Jährliche Impfung",
+      "boosterYearsOne": "Auffrischung üblicherweise alle {count} Jahr",
+      "boosterYearsFew": "Auffrischung üblicherweise alle {count} Jahre",
+      "boosterYearsOther": "Auffrischung üblicherweise alle {count} Jahre",
+      "boosterMonthsOne": "Auffrischung üblicherweise alle {count} Monat",
+      "boosterMonthsFew": "Auffrischung üblicherweise alle {count} Monate",
+      "boosterMonthsOther": "Auffrischung üblicherweise alle {count} Monate",
+      "standard60": "Standardimpfung ab 60",
+      "sourceLabel": "Quelle: {source}",
+      "affordanceLabel": "Impfschema-Info"
+    },
+    "booster": {
+      "title": "Auffrischung planen?",
+      "body": "Aus dieser Impfung lässt sich eine Erinnerung für die nächste Auffrischung anlegen. Du kannst Intervall und Bezeichnung ändern oder ablehnen.",
+      "interval": "Intervall",
+      "label": "Bezeichnung",
+      "labelSuffix": "Auffrischung",
+      "decline": "Nicht jetzt",
+      "confirm": "Erinnerung anlegen",
+      "planned": "Auffrischung geplant",
+      "failed": "Erinnerung konnte nicht angelegt werden.",
+      "everyYearsOne": "alle {count} Jahr",
+      "everyYearsFew": "alle {count} Jahre",
+      "everyYearsOther": "alle {count} Jahre",
+      "everyMonthsOne": "alle {count} Monat",
+      "everyMonthsFew": "alle {count} Monate",
+      "everyMonthsOther": "alle {count} Monate"
+    },
+    "suggestion": {
+      "single": "Zu dieser Impfung hinzufügen?",
+      "choose": "Zu welcher Impfung gehört der Scan?",
+      "linked": "Mit Impfung verknüpft",
+      "failed": "Verknüpfung fehlgeschlagen.",
+      "unnamed": "Impfung"
+    },
+    "empty": {
+      "title": "Noch keine Impfung erfasst",
+      "description": "Übertrage deinen Impfpass Zeile für Zeile — Datum und Impfstoff genügen."
+    },
+    "catalog": {
+      "tetanus": "Tetanus (Wundstarrkrampf)",
+      "diphtheria": "Diphtherie",
+      "pertussis": "Keuchhusten (Pertussis)",
+      "polio": "Polio (Kinderlähmung)",
+      "measles": "Masern",
+      "mumps": "Mumps",
+      "rubella": "Röteln",
+      "varicella": "Windpocken (Varizellen)",
+      "hib": "Hib (Haemophilus influenzae b)",
+      "hepatitis-a": "Hepatitis A",
+      "hepatitis-b": "Hepatitis B",
+      "influenza": "Grippe (Influenza)",
+      "pneumococcal": "Pneumokokken",
+      "herpes-zoster": "Gürtelrose (Herpes zoster)",
+      "rsv": "RSV",
+      "covid-19": "COVID-19",
+      "fsme": "FSME (Frühsommer-Meningoenzephalitis)",
+      "hpv": "HPV (Humane Papillomviren)",
+      "meningococcal-acwy": "Meningokokken ACWY",
+      "meningococcal-b": "Meningokokken B",
+      "rotavirus": "Rotaviren",
+      "typhoid": "Typhus",
+      "rabies": "Tollwut",
+      "yellow-fever": "Gelbfieber",
+      "japanese-encephalitis": "Japanische Enzephalitis",
+      "cholera": "Cholera",
+      "td": "Td (Tetanus, Diphtherie)",
+      "tdap": "Tdap (Tetanus, Diphtherie, Pertussis)",
+      "tdap-ipv": "Tdap-IPV (Vierfachimpfung)",
+      "dtap-ipv": "DTaP-IPV (Vierfachimpfung, Kindesalter)",
+      "hexavalent": "Sechsfachimpfung (DTaP-IPV-Hib-HepB)",
+      "mmr": "MMR (Masern, Mumps, Röteln)",
+      "mmrv": "MMRV (Masern, Mumps, Röteln, Varizellen)",
+      "hepa-hepb": "Hepatitis A und B",
+      "hepa-typhoid": "Hepatitis A und Typhus"
+    }
+  },
   "illness": {
     "title": "Krankheitstagebuch",
     "subtitle": "Ein rückblickendes Protokoll deiner Krankheits- und Beschwerde-Episoden.",
@@ -9702,7 +9840,8 @@
     "scopeNone": "Noch nichts ausgewählt. Wählen Sie aus, was enthalten sein soll, oder übernehmen Sie den Standardbericht.",
     "scopeCount": "{count} Einträge aus {groups} Bereichen",
     "scopeSensitive": "inkl. {names}",
-    "leafVisits": "Arztbesuche"
+    "leafVisits": "Arztbesuche",
+    "leafImmunizations": "Impfungen"
   },
   "recordSharing": {
     "banner": {
@@ -10002,7 +10141,8 @@
       "documentUpdate": "{name} hat ein Dokument geändert",
       "documentDiscard": "{name} hat ein Dokument verworfen",
       "medicationIntakeImportFinished": "Der von {name} gestartete Einnahme-Import ist fertig",
-      "medicationOneShotReconciled": "Ein einmaliges Medikament wurde nach einer Einnahme von {name} geöffnet oder geschlossen"
+      "medicationOneShotReconciled": "Ein einmaliges Medikament wurde nach einer Einnahme von {name} geöffnet oder geschlossen",
+      "vaccinationBoosterPlanned": "{name} hat eine Auffrischung geplant"
     },
     "section": {
       "measurements": {

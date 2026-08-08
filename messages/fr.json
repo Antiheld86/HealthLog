@@ -290,7 +290,12 @@
     "visitsColKind": "Type",
     "visitsColReason": "Motif",
     "visitsColOutcome": "Résultat",
-    "visitsColConditions": "Maladies"
+    "visitsColConditions": "Maladies",
+    "immunizationsTitle": "Vaccinations",
+    "immunizationsColDate": "Date",
+    "immunizationsColVaccine": "Vaccin",
+    "immunizationsColDose": "Dose",
+    "immunizationsColLot": "Lot"
   },
   "errorBoundary": {
     "title": "Une erreur est survenue",
@@ -354,6 +359,7 @@
     "vorsorge": "Examens",
     "illness": "Maladie",
     "documents": "Documents",
+    "vaccinations": "Vaccinations",
     "mentalWellbeing": "Bien-être mental"
   },
   "auth": {
@@ -8507,6 +8513,138 @@
       "description": "Le carnet de vaccination structuré : dose, série, prochain rappel."
     }
   },
+  "vaccinations": {
+    "title": "Vaccinations",
+    "subtitle": "Votre carnet de vaccination, dose par dose.",
+    "listLoadError": "Impossible de charger les vaccinations.",
+    "series": {
+      "booster": "Rappel",
+      "ofTotal": "Dose {position} sur {total}",
+      "doseN": "Dose {position}"
+    },
+    "row": {
+      "lot": "Lot {lot}"
+    },
+    "form": {
+      "date": "Date",
+      "catalogLabel": "Vaccin (catalogue)",
+      "identityHint": "Choisissez dans le catalogue ou saisissez ci-dessous : l'un suffit.",
+      "catalogNone": "Choisir un vaccin",
+      "catalogSearch": "Rechercher des vaccins",
+      "catalogNoMatch": "Aucune entrée du catalogue trouvée",
+      "catalogClear": "Effacer la sélection",
+      "freeTextLabel": "Texte libre",
+      "freeTextPlaceholder": "comme indiqué sur le carnet",
+      "seriesToggle": "Ajouter les détails de la série",
+      "doseNumber": "N° de dose",
+      "seriesDoses": "Doses dans la série",
+      "lot": "Numéro de lot",
+      "site": "Site d'injection",
+      "siteNone": "Non précisé",
+      "practitioner": "Cabinet / médecin",
+      "note": "Note",
+      "linkDocuments": "Associer un document",
+      "linkNothingToOffer": "Aucun document pour l'instant."
+    },
+    "site": {
+      "LEFT_ARM": "Bras gauche",
+      "RIGHT_ARM": "Bras droit",
+      "LEFT_THIGH": "Cuisse gauche",
+      "RIGHT_THIGH": "Cuisse droite",
+      "ORAL": "Oral",
+      "NASAL": "Nasal",
+      "OTHER": "Autre"
+    },
+    "createTitle": "Enregistrer une vaccination",
+    "editTitle": "Modifier la vaccination",
+    "formDescription": "Une date et le vaccin suffisent ; tout le reste est facultatif.",
+    "created": "Vaccination enregistrée",
+    "updated": "Vaccination mise à jour",
+    "saveFailed": "La vaccination n'a pas pu être enregistrée.",
+    "deleteTitle": "Supprimer cette vaccination ?",
+    "deleteDescription": "L'entrée est retirée de votre carnet. Un rappel programmé est conservé.",
+    "deleteFailed": "La vaccination n'a pas pu être supprimée.",
+    "info": {
+      "primarySeriesOne": "Primovaccination : {count} dose",
+      "primarySeriesFew": "Primovaccination : {count} doses",
+      "primarySeriesOther": "Primovaccination : {count} doses",
+      "yearly": "Vaccination annuelle",
+      "boosterYearsOne": "Rappel généralement tous les {count} an",
+      "boosterYearsFew": "Rappel généralement tous les {count} ans",
+      "boosterYearsOther": "Rappel généralement tous les {count} ans",
+      "boosterMonthsOne": "Rappel généralement tous les {count} mois",
+      "boosterMonthsFew": "Rappel généralement tous les {count} mois",
+      "boosterMonthsOther": "Rappel généralement tous les {count} mois",
+      "standard60": "Vaccination standard à partir de 60 ans",
+      "sourceLabel": "Source : {source}",
+      "affordanceLabel": "Infos sur le schéma"
+    },
+    "booster": {
+      "title": "Planifier un rappel ?",
+      "body": "Vous pouvez créer un rappel pour le prochain rappel à partir de cette dose. Modifiez l'intervalle ou le libellé, ou refusez.",
+      "interval": "Intervalle",
+      "label": "Libellé",
+      "labelSuffix": "rappel",
+      "decline": "Pas maintenant",
+      "confirm": "Créer le rappel",
+      "planned": "Rappel planifié",
+      "failed": "Le rappel n'a pas pu être créé.",
+      "everyYearsOne": "tous les {count} an",
+      "everyYearsFew": "tous les {count} ans",
+      "everyYearsOther": "tous les {count} ans",
+      "everyMonthsOne": "tous les {count} mois",
+      "everyMonthsFew": "tous les {count} mois",
+      "everyMonthsOther": "tous les {count} mois"
+    },
+    "suggestion": {
+      "single": "Associer à cette vaccination ?",
+      "choose": "À quelle vaccination appartient ce scan ?",
+      "linked": "Associé à la vaccination",
+      "failed": "L'association a échoué.",
+      "unnamed": "Vaccination"
+    },
+    "empty": {
+      "title": "Aucune vaccination enregistrée",
+      "description": "Recopiez votre carnet de vaccination ligne par ligne : une date et le vaccin suffisent."
+    },
+    "catalog": {
+      "tetanus": "Tétanos",
+      "diphtheria": "Diphtérie",
+      "pertussis": "Coqueluche",
+      "polio": "Poliomyélite",
+      "measles": "Rougeole",
+      "mumps": "Oreillons",
+      "rubella": "Rubéole",
+      "varicella": "Varicelle",
+      "hib": "Hib (Haemophilus influenzae b)",
+      "hepatitis-a": "Hépatite A",
+      "hepatitis-b": "Hépatite B",
+      "influenza": "Grippe",
+      "pneumococcal": "Pneumocoque",
+      "herpes-zoster": "Zona (herpès zoster)",
+      "rsv": "VRS",
+      "covid-19": "COVID-19",
+      "fsme": "Encéphalite à tiques (TBE)",
+      "hpv": "HPV (papillomavirus humain)",
+      "meningococcal-acwy": "Méningocoque ACWY",
+      "meningococcal-b": "Méningocoque B",
+      "rotavirus": "Rotavirus",
+      "typhoid": "Typhoïde",
+      "rabies": "Rage",
+      "yellow-fever": "Fièvre jaune",
+      "japanese-encephalitis": "Encéphalite japonaise",
+      "cholera": "Choléra",
+      "td": "dT (tétanos, diphtérie)",
+      "tdap": "dTca (tétanos, diphtérie, coqueluche)",
+      "tdap-ipv": "dTca-VPI (quadruple)",
+      "dtap-ipv": "DTCa-VPI (quadruple, enfance)",
+      "hexavalent": "Hexavalent (DTCa-VPI-Hib-VHB)",
+      "mmr": "ROR (rougeole, oreillons, rubéole)",
+      "mmrv": "RORV (rougeole, oreillons, rubéole, varicelle)",
+      "hepa-hepb": "Hépatite A et B",
+      "hepa-typhoid": "Hépatite A et typhoïde"
+    }
+  },
   "illness": {
     "title": "Journal de maladie",
     "subtitle": "Un suivi rétrospectif de vos épisodes de maladie et d'affections.",
@@ -9702,7 +9840,8 @@
     "scopeNone": "Rien de sélectionné pour l'instant. Choisissez ce qui doit figurer, ou appliquez le compte rendu standard.",
     "scopeCount": "{count} éléments issus de {groups} domaines",
     "scopeSensitive": "dont {names}",
-    "leafVisits": "Consultations"
+    "leafVisits": "Consultations",
+    "leafImmunizations": "Vaccinations"
   },
   "recordSharing": {
     "banner": {
@@ -10002,7 +10141,8 @@
       "documentUpdate": "{name} a modifié un document",
       "documentDiscard": "{name} a écarté un document",
       "medicationIntakeImportFinished": "L'import de prises lancé par {name} est terminé",
-      "medicationOneShotReconciled": "Un médicament à prise unique a été rouvert ou clos après une prise enregistrée par {name}"
+      "medicationOneShotReconciled": "Un médicament à prise unique a été rouvert ou clos après une prise enregistrée par {name}",
+      "vaccinationBoosterPlanned": "{name} a planifié un rappel"
     },
     "section": {
       "measurements": {

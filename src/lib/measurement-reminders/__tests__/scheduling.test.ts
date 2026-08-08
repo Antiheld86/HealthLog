@@ -128,6 +128,32 @@ describe("computeReminderNextDueAt", () => {
     // 19:00 Berlin == 17:00Z (DST).
     expect(evening!.toISOString()).toBe("2026-06-10T17:00:00.000Z");
   });
+
+  // A ten-year booster (tetanus, FSME, …) uses the engine's maximum rolling
+  // interval — 3650 days. When such a reminder is satisfied, the satisfy path
+  // computes the next due with `after === lastSatisfiedAt`, so the single
+  // rolling slot lands exactly `intervalDays` out — right on the engine's
+  // ten-year forward search horizon. The boundary slot must still be found;
+  // a decade booster whose next dose is logged must roll forward, not vanish.
+  it("rolling at the maximum interval (3650 days) still re-anchors on satisfy", () => {
+    // Mirrors `satisfyReminder`: lastSatisfiedAt and `after` are the same
+    // instant (the dose's day-granular occurredAt, at day start).
+    const satisfiedAt = new Date("2026-08-08T00:00:00Z");
+    const reminder = base({
+      intervalDays: 3650,
+      // Anchor from the original 2016 dose + interval — irrelevant once
+      // satisfied, but this is what the mint wrote.
+      anchorDate: new Date("2026-03-13T00:00:00Z"),
+      lastSatisfiedAt: satisfiedAt,
+      notifyHour: 9,
+      createdAt: new Date("2026-08-08T00:00:00Z"),
+    });
+    const due = computeReminderNextDueAt(reminder, TZ, satisfiedAt);
+    expect(due).not.toBeNull();
+    // 3650 days after 2026-08-08 → 2036-08-05, slot at 09:00 Berlin (07:00Z).
+    expect(due!.getUTCFullYear()).toBe(2036);
+    expect(due!.getTime()).toBeGreaterThan(satisfiedAt.getTime());
+  });
 });
 
 describe("byHourTimesOfDay", () => {

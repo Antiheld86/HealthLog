@@ -237,6 +237,19 @@ function seed() {
       reactionEncrypted: null,
     },
   ];
+  rows.vaccinationRecord = [
+    {
+      id: "vacc-1",
+      occurredAt: new Date("2019-03-04T00:00:00.000Z"),
+      antigenSlug: "tetanus",
+      vaccineName: null,
+      lotNumber: "AB123",
+      seriesDoses: null,
+      doseNumber: 3,
+      site: "LEFT_ARM",
+      practitioner: { name: "Sample practice" },
+    },
+  ];
   rows.familyHistoryEntry = [
     { relationship: "MOTHER", condition: "Hypertension", ageAtOnset: 50 },
   ];
@@ -428,6 +441,7 @@ describe("zero read for unchosen leaves", () => {
     ["LAB_RESULTS", "labResult"],
     ["ILLNESS_EPISODES", "illnessEpisode"],
     ["VISITS", "encounter"],
+    ["IMMUNIZATIONS", "vaccinationRecord"],
     ["ANAMNESIS", "userHealthProfile"],
     ["ANAMNESIS", "healthProfileFactRevision"],
   ];

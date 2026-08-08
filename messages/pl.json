@@ -290,7 +290,12 @@
     "visitsColKind": "Rodzaj",
     "visitsColReason": "Powód",
     "visitsColOutcome": "Wynik",
-    "visitsColConditions": "Choroby"
+    "visitsColConditions": "Choroby",
+    "immunizationsTitle": "Szczepienia",
+    "immunizationsColDate": "Data",
+    "immunizationsColVaccine": "Szczepionka",
+    "immunizationsColDose": "Dawka",
+    "immunizationsColLot": "Seria"
   },
   "errorBoundary": {
     "title": "Coś poszło nie tak",
@@ -354,6 +359,7 @@
     "vorsorge": "Badania",
     "illness": "Choroba",
     "documents": "Dokumenty",
+    "vaccinations": "Szczepienia",
     "mentalWellbeing": "Dobrostan psychiczny"
   },
   "auth": {
@@ -8507,6 +8513,138 @@
       "description": "Książeczka szczepień uporządkowana: dawka, seria, następne przypomnienie."
     }
   },
+  "vaccinations": {
+    "title": "Szczepienia",
+    "subtitle": "Twoja karta szczepień, dawka po dawce.",
+    "listLoadError": "Nie udało się załadować szczepień.",
+    "series": {
+      "booster": "Dawka przypominająca",
+      "ofTotal": "Dawka {position} z {total}",
+      "doseN": "Dawka {position}"
+    },
+    "row": {
+      "lot": "Seria {lot}"
+    },
+    "form": {
+      "date": "Data",
+      "catalogLabel": "Szczepionka (katalog)",
+      "identityHint": "Wybierz z katalogu lub wpisz poniżej — wystarczy jedno.",
+      "catalogNone": "Wybierz szczepionkę",
+      "catalogSearch": "Szukaj szczepionek",
+      "catalogNoMatch": "Nie znaleziono wpisu w katalogu",
+      "catalogClear": "Wyczyść wybór",
+      "freeTextLabel": "Tekst dowolny",
+      "freeTextPlaceholder": "jak podano w karcie szczepień",
+      "seriesToggle": "Dodaj szczegóły serii",
+      "doseNumber": "Nr dawki",
+      "seriesDoses": "Dawki w serii",
+      "lot": "Numer serii",
+      "site": "Miejsce podania",
+      "siteNone": "Nie podano",
+      "practitioner": "Gabinet / lekarz",
+      "note": "Notatka",
+      "linkDocuments": "Powiąż dokument",
+      "linkNothingToOffer": "Brak dokumentów."
+    },
+    "site": {
+      "LEFT_ARM": "Lewe ramię",
+      "RIGHT_ARM": "Prawe ramię",
+      "LEFT_THIGH": "Lewe udo",
+      "RIGHT_THIGH": "Prawe udo",
+      "ORAL": "Doustnie",
+      "NASAL": "Donosowo",
+      "OTHER": "Inne"
+    },
+    "createTitle": "Zarejestruj szczepienie",
+    "editTitle": "Edytuj szczepienie",
+    "formDescription": "Wystarczą data i szczepionka; cała reszta jest opcjonalna.",
+    "created": "Szczepienie zapisane",
+    "updated": "Szczepienie zaktualizowane",
+    "saveFailed": "Nie udało się zapisać szczepienia.",
+    "deleteTitle": "Usunąć to szczepienie?",
+    "deleteDescription": "Wpis zostanie usunięty z Twojej karty. Zaplanowane przypomnienie o dawce przypominającej pozostaje.",
+    "deleteFailed": "Nie udało się usunąć szczepienia.",
+    "info": {
+      "primarySeriesOne": "Seria podstawowa: {count} dawka",
+      "primarySeriesFew": "Seria podstawowa: {count} dawki",
+      "primarySeriesOther": "Seria podstawowa: {count} dawek",
+      "yearly": "Szczepienie coroczne",
+      "boosterYearsOne": "Dawka przypominająca zwykle co {count} rok",
+      "boosterYearsFew": "Dawka przypominająca zwykle co {count} lata",
+      "boosterYearsOther": "Dawka przypominająca zwykle co {count} lat",
+      "boosterMonthsOne": "Dawka przypominająca zwykle co {count} miesiąc",
+      "boosterMonthsFew": "Dawka przypominająca zwykle co {count} miesiące",
+      "boosterMonthsOther": "Dawka przypominająca zwykle co {count} miesięcy",
+      "standard60": "Szczepienie standardowe od 60. roku życia",
+      "sourceLabel": "Źródło: {source}",
+      "affordanceLabel": "Informacje o schemacie"
+    },
+    "booster": {
+      "title": "Zaplanować dawkę przypominającą?",
+      "body": "Z tego szczepienia możesz utworzyć przypomnienie o następnej dawce przypominającej. Zmień odstęp lub etykietę albo odrzuć.",
+      "interval": "Odstęp",
+      "label": "Etykieta",
+      "labelSuffix": "przypomnienie",
+      "decline": "Nie teraz",
+      "confirm": "Utwórz przypomnienie",
+      "planned": "Zaplanowano dawkę przypominającą",
+      "failed": "Nie udało się utworzyć przypomnienia.",
+      "everyYearsOne": "co {count} rok",
+      "everyYearsFew": "co {count} lata",
+      "everyYearsOther": "co {count} lat",
+      "everyMonthsOne": "co {count} miesiąc",
+      "everyMonthsFew": "co {count} miesiące",
+      "everyMonthsOther": "co {count} miesięcy"
+    },
+    "suggestion": {
+      "single": "Powiązać z tym szczepieniem?",
+      "choose": "Do którego szczepienia należy ten skan?",
+      "linked": "Powiązano ze szczepieniem",
+      "failed": "Powiązanie nie powiodło się.",
+      "unnamed": "Szczepienie"
+    },
+    "empty": {
+      "title": "Nie zarejestrowano jeszcze żadnego szczepienia",
+      "description": "Przepisz swoją kartę szczepień wiersz po wierszu — wystarczą data i szczepionka."
+    },
+    "catalog": {
+      "tetanus": "Tężec",
+      "diphtheria": "Błonica",
+      "pertussis": "Krztusiec",
+      "polio": "Polio (choroba Heinego-Medina)",
+      "measles": "Odra",
+      "mumps": "Świnka",
+      "rubella": "Różyczka",
+      "varicella": "Ospa wietrzna",
+      "hib": "Hib (Haemophilus influenzae b)",
+      "hepatitis-a": "WZW typu A",
+      "hepatitis-b": "WZW typu B",
+      "influenza": "Grypa",
+      "pneumococcal": "Pneumokoki",
+      "herpes-zoster": "Półpasiec (herpes zoster)",
+      "rsv": "RSV",
+      "covid-19": "COVID-19",
+      "fsme": "KZM (kleszczowe zapalenie mózgu)",
+      "hpv": "HPV (wirus brodawczaka ludzkiego)",
+      "meningococcal-acwy": "Meningokoki ACWY",
+      "meningococcal-b": "Meningokoki B",
+      "rotavirus": "Rotawirusy",
+      "typhoid": "Dur brzuszny",
+      "rabies": "Wścieklizna",
+      "yellow-fever": "Żółta gorączka",
+      "japanese-encephalitis": "Japońskie zapalenie mózgu",
+      "cholera": "Cholera",
+      "td": "Td (tężec, błonica)",
+      "tdap": "Tdap (tężec, błonica, krztusiec)",
+      "tdap-ipv": "Tdap-IPV (poczwórna)",
+      "dtap-ipv": "DTaP-IPV (poczwórna dziecięca)",
+      "hexavalent": "Sześciowalentna (DTaP-IPV-Hib-WZWB)",
+      "mmr": "MMR (odra, świnka, różyczka)",
+      "mmrv": "MMRV (odra, świnka, różyczka, ospa wietrzna)",
+      "hepa-hepb": "WZW typu A i B",
+      "hepa-typhoid": "WZW typu A i dur brzuszny"
+    }
+  },
   "illness": {
     "title": "Dziennik chorób",
     "subtitle": "Retrospektywny zapis Twoich epizodów chorób i dolegliwości.",
@@ -9702,7 +9840,8 @@
     "scopeNone": "Nic jeszcze nie wybrano. Wybierz, co ma się znaleźć w dokumencie, albo zastosuj raport standardowy.",
     "scopeCount": "{count} pozycji z {groups} obszarów",
     "scopeSensitive": "w tym {names}",
-    "leafVisits": "Wizyty lekarskie"
+    "leafVisits": "Wizyty lekarskie",
+    "leafImmunizations": "Szczepienia"
   },
   "recordSharing": {
     "banner": {
@@ -10002,7 +10141,8 @@
       "documentUpdate": "{name} zmienił dokument",
       "documentDiscard": "{name} odrzucił dokument",
       "medicationIntakeImportFinished": "Import przyjęć rozpoczęty przez {name} zakończył się",
-      "medicationOneShotReconciled": "Lek jednorazowy został otwarty lub zamknięty po dawce zapisanej przez {name}"
+      "medicationOneShotReconciled": "Lek jednorazowy został otwarty lub zamknięty po dawce zapisanej przez {name}",
+      "vaccinationBoosterPlanned": "{name} zaplanował dawkę przypominającą"
     },
     "section": {
       "measurements": {

@@ -284,6 +284,82 @@ export function buildClinicalRecordsNotesSection(
         .finalY + 8;
   }
 
+  // The immunization history. Reference data (not time-windowed), populated
+  // when the `IMMUNIZATIONS` leaf is selected AND the `vaccinations` module is
+  // on AND live doses exist. A compact chronological table — date, vaccine
+  // (catalogue name or verbatim free text), dose display, lot — in the same
+  // calm factual register. No due-status, no gap analysis: the report
+  // reproduces the record, it does not adjudicate it. The dose display is
+  // composed from the server-resolved series numbers; nothing is re-derived.
+  if (data.immunizations && data.immunizations.length > 0) {
+    y = ensureSpace(y, 6 + 18);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(30, 30, 30);
+    doc.text(t("doctorReport.immunizationsTitle"), margin, y);
+    y += 6;
+
+    const doseDisplay = (
+      series: (typeof data.immunizations)[number]["series"],
+    ): string => {
+      const primary = series[0];
+      if (!primary) return "—";
+      if (primary.booster) return t("vaccinations.series.booster");
+      if (primary.total !== null) {
+        return t("vaccinations.series.ofTotal", {
+          position: primary.position,
+          total: primary.total,
+        });
+      }
+      return t("vaccinations.series.doseN", { position: primary.position });
+    };
+
+    const immunizationRows = data.immunizations.map((row) => [
+      fmtDate(row.occurredAt),
+      row.antigenSlug
+        ? t(`vaccinations.catalog.${row.antigenSlug}`)
+        : (row.vaccineName ?? "—"),
+      doseDisplay(row.series),
+      row.lotNumber ?? "—",
+    ]);
+
+    autoTable(doc, {
+      startY: y,
+      head: [
+        [
+          t("doctorReport.immunizationsColDate"),
+          t("doctorReport.immunizationsColVaccine"),
+          t("doctorReport.immunizationsColDose"),
+          t("doctorReport.immunizationsColLot"),
+        ],
+      ],
+      body: immunizationRows,
+      theme: "grid",
+      styles: {
+        fontSize: 9,
+        cellPadding: 3,
+        textColor: [30, 30, 30],
+        lineColor: [200, 200, 200],
+        lineWidth: 0.3,
+      },
+      headStyles: {
+        fillColor: [245, 245, 245],
+        textColor: [30, 30, 30],
+        fontStyle: "bold",
+      },
+      alternateRowStyles: { fillColor: [252, 252, 252] },
+      margin: {
+        left: margin,
+        right: margin,
+        top: margin,
+        bottom: tableBottomMargin,
+      },
+    });
+    y =
+      (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable
+        .finalY + 8;
+  }
+
   // v1.27.x — structured allergy / intolerance records. Reference data
   // (not time-windowed) the aggregator populates when the `allergies`
   // toggle is ON (default) and rows exist. Stored fields only — substance,

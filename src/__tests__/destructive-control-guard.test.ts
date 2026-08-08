@@ -400,6 +400,16 @@ const REGISTRY: DestructiveEntry[] = [
     recovery: "tombstoned-no-restore",
     confirm: ["AlertDialog"],
   },
+  {
+    file: "components/vaccinations/use-vaccinations.ts",
+    destroys:
+      "one logged dose with its lot, site and the document links it collected — the booster reminder it once satisfied is deliberately not rewound",
+    triggers: ["components/vaccinations/vaccination-sheet.tsx"],
+    // The route soft-deletes and a restore route exists, but no surface offers
+    // the undo yet, so from a person's side the dose is gone.
+    recovery: "tombstoned-no-restore",
+    confirm: ["AlertDialog"],
+  },
 
   // ── Cycle ───────────────────────────────────────────────────────────────
   {

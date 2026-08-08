@@ -290,7 +290,12 @@
     "visitsColKind": "Tipo",
     "visitsColReason": "Motivo",
     "visitsColOutcome": "Esito",
-    "visitsColConditions": "Malattie"
+    "visitsColConditions": "Malattie",
+    "immunizationsTitle": "Vaccinazioni",
+    "immunizationsColDate": "Data",
+    "immunizationsColVaccine": "Vaccino",
+    "immunizationsColDose": "Dose",
+    "immunizationsColLot": "Lotto"
   },
   "errorBoundary": {
     "title": "Qualcosa è andato storto",
@@ -354,6 +359,7 @@
     "vorsorge": "Controlli",
     "illness": "Malattia",
     "documents": "Documenti",
+    "vaccinations": "Vaccinazioni",
     "mentalWellbeing": "Benessere mentale"
   },
   "auth": {
@@ -8507,6 +8513,138 @@
       "description": "Il libretto vaccinale strutturato: dose, serie, prossimo richiamo."
     }
   },
+  "vaccinations": {
+    "title": "Vaccinazioni",
+    "subtitle": "Il tuo libretto vaccinale, dose per dose.",
+    "listLoadError": "Impossibile caricare le vaccinazioni.",
+    "series": {
+      "booster": "Richiamo",
+      "ofTotal": "Dose {position} di {total}",
+      "doseN": "Dose {position}"
+    },
+    "row": {
+      "lot": "Lotto {lot}"
+    },
+    "form": {
+      "date": "Data",
+      "catalogLabel": "Vaccino (catalogo)",
+      "identityHint": "Scegli dal catalogo o scrivilo sotto: ne basta uno.",
+      "catalogNone": "Scegli un vaccino",
+      "catalogSearch": "Cerca vaccini",
+      "catalogNoMatch": "Nessuna voce del catalogo trovata",
+      "catalogClear": "Rimuovi selezione",
+      "freeTextLabel": "Testo libero",
+      "freeTextPlaceholder": "come indicato sul libretto",
+      "seriesToggle": "Aggiungi dettagli della serie",
+      "doseNumber": "N. dose",
+      "seriesDoses": "Dosi nella serie",
+      "lot": "Numero di lotto",
+      "site": "Sede di iniezione",
+      "siteNone": "Non specificato",
+      "practitioner": "Studio / medico",
+      "note": "Nota",
+      "linkDocuments": "Collega un documento",
+      "linkNothingToOffer": "Nessun documento ancora."
+    },
+    "site": {
+      "LEFT_ARM": "Braccio sinistro",
+      "RIGHT_ARM": "Braccio destro",
+      "LEFT_THIGH": "Coscia sinistra",
+      "RIGHT_THIGH": "Coscia destra",
+      "ORAL": "Orale",
+      "NASAL": "Nasale",
+      "OTHER": "Altro"
+    },
+    "createTitle": "Registra una vaccinazione",
+    "editTitle": "Modifica vaccinazione",
+    "formDescription": "Bastano una data e il vaccino; tutto il resto è facoltativo.",
+    "created": "Vaccinazione salvata",
+    "updated": "Vaccinazione aggiornata",
+    "saveFailed": "Impossibile salvare la vaccinazione.",
+    "deleteTitle": "Eliminare questa vaccinazione?",
+    "deleteDescription": "La voce viene rimossa dal tuo libretto. Un promemoria di richiamo programmato rimane.",
+    "deleteFailed": "Impossibile eliminare la vaccinazione.",
+    "info": {
+      "primarySeriesOne": "Ciclo primario: {count} dose",
+      "primarySeriesFew": "Ciclo primario: {count} dosi",
+      "primarySeriesOther": "Ciclo primario: {count} dosi",
+      "yearly": "Vaccinazione annuale",
+      "boosterYearsOne": "Richiamo di norma ogni {count} anno",
+      "boosterYearsFew": "Richiamo di norma ogni {count} anni",
+      "boosterYearsOther": "Richiamo di norma ogni {count} anni",
+      "boosterMonthsOne": "Richiamo di norma ogni {count} mese",
+      "boosterMonthsFew": "Richiamo di norma ogni {count} mesi",
+      "boosterMonthsOther": "Richiamo di norma ogni {count} mesi",
+      "standard60": "Vaccinazione standard dai 60 anni",
+      "sourceLabel": "Fonte: {source}",
+      "affordanceLabel": "Informazioni sullo schema"
+    },
+    "booster": {
+      "title": "Pianificare un richiamo?",
+      "body": "Da questa dose puoi creare un promemoria per il prossimo richiamo. Cambia l'intervallo o l'etichetta, oppure rifiuta.",
+      "interval": "Intervallo",
+      "label": "Etichetta",
+      "labelSuffix": "richiamo",
+      "decline": "Non ora",
+      "confirm": "Crea promemoria",
+      "planned": "Richiamo pianificato",
+      "failed": "Impossibile creare il promemoria.",
+      "everyYearsOne": "ogni {count} anno",
+      "everyYearsFew": "ogni {count} anni",
+      "everyYearsOther": "ogni {count} anni",
+      "everyMonthsOne": "ogni {count} mese",
+      "everyMonthsFew": "ogni {count} mesi",
+      "everyMonthsOther": "ogni {count} mesi"
+    },
+    "suggestion": {
+      "single": "Collegare a questa vaccinazione?",
+      "choose": "A quale vaccinazione appartiene questa scansione?",
+      "linked": "Collegato alla vaccinazione",
+      "failed": "Collegamento non riuscito.",
+      "unnamed": "Vaccinazione"
+    },
+    "empty": {
+      "title": "Nessuna vaccinazione registrata",
+      "description": "Trascrivi il tuo libretto vaccinale riga per riga: bastano una data e il vaccino."
+    },
+    "catalog": {
+      "tetanus": "Tetano",
+      "diphtheria": "Difterite",
+      "pertussis": "Pertosse",
+      "polio": "Poliomielite",
+      "measles": "Morbillo",
+      "mumps": "Parotite",
+      "rubella": "Rosolia",
+      "varicella": "Varicella",
+      "hib": "Hib (Haemophilus influenzae b)",
+      "hepatitis-a": "Epatite A",
+      "hepatitis-b": "Epatite B",
+      "influenza": "Influenza",
+      "pneumococcal": "Pneumococco",
+      "herpes-zoster": "Herpes zoster (fuoco di Sant'Antonio)",
+      "rsv": "RSV",
+      "covid-19": "COVID-19",
+      "fsme": "Encefalite da zecche (TBE)",
+      "hpv": "HPV (papillomavirus umano)",
+      "meningococcal-acwy": "Meningococco ACWY",
+      "meningococcal-b": "Meningococco B",
+      "rotavirus": "Rotavirus",
+      "typhoid": "Febbre tifoide",
+      "rabies": "Rabbia",
+      "yellow-fever": "Febbre gialla",
+      "japanese-encephalitis": "Encefalite giapponese",
+      "cholera": "Colera",
+      "td": "Td (tetano, difterite)",
+      "tdap": "Tdap (tetano, difterite, pertosse)",
+      "tdap-ipv": "Tdap-IPV (tetravalente)",
+      "dtap-ipv": "DTPa-IPV (tetravalente pediatrico)",
+      "hexavalent": "Esavalente (DTPa-IPV-Hib-HBV)",
+      "mmr": "MPR (morbillo, parotite, rosolia)",
+      "mmrv": "MPRV (morbillo, parotite, rosolia, varicella)",
+      "hepa-hepb": "Epatite A e B",
+      "hepa-typhoid": "Epatite A e febbre tifoide"
+    }
+  },
   "illness": {
     "title": "Diario delle malattie",
     "subtitle": "Un registro retrospettivo dei tuoi episodi di malattia e disturbi.",
@@ -9702,7 +9840,8 @@
     "scopeNone": "Ancora niente selezionato. Scegli cosa includere oppure applica il referto standard.",
     "scopeCount": "{count} voci da {groups} aree",
     "scopeSensitive": "incl. {names}",
-    "leafVisits": "Visite mediche"
+    "leafVisits": "Visite mediche",
+    "leafImmunizations": "Vaccinazioni"
   },
   "recordSharing": {
     "banner": {
@@ -10002,7 +10141,8 @@
       "documentUpdate": "{name} ha modificato un documento",
       "documentDiscard": "{name} ha scartato un documento",
       "medicationIntakeImportFinished": "L'importazione delle dosi avviata da {name} è terminata",
-      "medicationOneShotReconciled": "Un farmaco monodose è stato riaperto o chiuso dopo una dose registrata da {name}"
+      "medicationOneShotReconciled": "Un farmaco monodose è stato riaperto o chiuso dopo una dose registrata da {name}",
+      "vaccinationBoosterPlanned": "{name} ha pianificato un richiamo"
     },
     "section": {
       "measurements": {

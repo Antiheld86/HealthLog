@@ -260,6 +260,25 @@ export const encounterDependentKeys = [
 ];
 
 /**
+ * Keys invalidated when a dose is logged, edited, deleted, restored, linked or
+ * a booster is minted.
+ *
+ * The immunization root and the preventive-care root ride together, and that
+ * pairing is the whole reason the bundle exists rather than a bare
+ * `queryKeys.vaccinations()` eviction: logging a dose runs the satisfy matcher,
+ * which re-anchors any booster reminder the dose answers. The checkups list
+ * reads that reminder from `["measurement-reminders"]`, so evicting only the
+ * dose list would leave a booster on screen the server had already moved a
+ * decade out. Both surfaces change on one write; both roots evict on one call.
+ *
+ * `useVaccinations`' mutations and the booster mint are its consumers.
+ */
+export const vaccinationDependentKeys = [
+  queryKeys.vaccinations(),
+  queryKeys.measurementReminders(),
+];
+
+/**
  * Invalidate every key in the bundle in parallel. Use this from mutation
  * `onSuccess` handlers so the call site stays a one-liner instead of repeating
  * `Promise.all(keys.map(...))` everywhere.

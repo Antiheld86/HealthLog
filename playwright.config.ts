@@ -143,6 +143,14 @@ export default defineConfig({
         // the single-candidate branch to the picker. It proves a flow through
         // stable data-slots, not a mobile layout, so it runs in one project.
         "visits.spec.ts",
+        // The immunization-log journey transcribes doses, mints a booster
+        // reminder and logs a next dose against the one shared account, then
+        // reads grouped counts back off it. Two projects mutating that account
+        // in parallel would leave a stale group on the page and a second row in
+        // an antigen bucket, flipping the grouped verdicts. It proves flows
+        // through stable data-slots, not a mobile layout, so it runs in one
+        // project.
+        "vaccinations.spec.ts",
         // Runs only in the service-worker project.
         "v137-record-session-fence-offline.spec.ts",
       ],

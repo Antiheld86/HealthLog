@@ -67,6 +67,11 @@ export function PractitionerCombobox({
               variant="outline"
               role="combobox"
               aria-expanded={open}
+              // `role="combobox"` is not a name-from-content role: the visible
+              // placeholder span does not give the trigger an accessible name,
+              // so name it from the field's own label. Applies wherever this
+              // combobox is embedded (the visit form and the immunization form).
+              aria-label={t("encounters.form.practitioner")}
               disabled={disabled}
               data-slot="encounter-practitioner-trigger"
               className="min-h-11 min-w-0 flex-1 justify-between font-normal"

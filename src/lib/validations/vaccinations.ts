@@ -209,3 +209,42 @@ export const vaccinationLinkSchema = z
   .strict();
 
 export type VaccinationLinkInput = z.infer<typeof vaccinationLinkSchema>;
+
+/* ── booster mint (rung 2) ────────────────────────────────────────── */
+
+/**
+ * The confirm body for a booster reminder.
+ *
+ * Every value is the user's — accepted or edited from the catalogue's
+ * prefill. `intervalMonths` is bounded generously (a decade booster is 120)
+ * and the label is composed client-side so its locale is the person's own. No
+ * `vaccinationAntigen` field: the server reads the antigen from the dose's
+ * catalogue entry, never from the request, so a client cannot key a reminder
+ * onto an antigen the dose does not contain.
+ */
+export const vaccinationBoosterSchema = z
+  .object({
+    intervalMonths: z.number().int().min(1).max(600),
+    label: z.string().trim().min(1).max(120),
+    notifyHour: z.number().int().min(0).max(23).optional(),
+  })
+  .strict();
+
+export type VaccinationBoosterInput = z.infer<typeof vaccinationBoosterSchema>;
+
+/* ── upload suggestion ────────────────────────────────────────────── */
+
+/**
+ * The single input to the upload suggestion: the document's anchor date. No
+ * ids — the candidate doses come from the caller's own record, narrowed from
+ * the session.
+ */
+export const vaccinationSuggestQuerySchema = z
+  .object({
+    anchor: z.iso.datetime({ offset: true }),
+  })
+  .strict();
+
+export type VaccinationSuggestQuery = z.infer<
+  typeof vaccinationSuggestQuerySchema
+>;

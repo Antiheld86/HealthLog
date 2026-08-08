@@ -195,6 +195,10 @@ export function recordActivityVerbLine(
       return t("recordSharing.activityVerb.vaccinationRecordDelete", { name });
     case "vaccination.record.restore":
       return t("recordSharing.activityVerb.vaccinationRecordRestore", { name });
+    case "vaccination.booster.planned":
+      return t("recordSharing.activityVerb.vaccinationBoosterPlanned", {
+        name,
+      });
     case "practitioner.contact.update":
       return t("recordSharing.activityVerb.practitionerContactUpdate", {
         name,

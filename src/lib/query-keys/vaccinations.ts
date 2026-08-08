@@ -42,4 +42,14 @@ export const vaccinationKeys = {
   vaccinationList: (antigenSlug?: string | null) =>
     ["vaccinations", "list", antigenSlug ?? null] as const,
   vaccination: (id: string) => ["vaccinations", "detail", id] as const,
+  /** The upload suggestion for one anchor date; the anchor is part of the key. */
+  vaccinationSuggestion: (anchor: string) =>
+    ["vaccinations", "suggest", anchor] as const,
+  /** Mutation keys — the factory is the only legal source of these too. */
+  vaccinationCreate: () => ["vaccinations", "create"] as const,
+  vaccinationUpdate: () => ["vaccinations", "update"] as const,
+  vaccinationDelete: () => ["vaccinations", "delete"] as const,
+  vaccinationRestore: () => ["vaccinations", "restore"] as const,
+  vaccinationBooster: () => ["vaccinations", "booster"] as const,
+  vaccinationLink: () => ["vaccinations", "link"] as const,
 } as const;

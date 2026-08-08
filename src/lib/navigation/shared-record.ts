@@ -30,7 +30,12 @@ export const SHARED_RECORD_DOMAIN_ROUTE_FAMILIES = {
   measurements: ["/measurements", "/checkups"],
   medications: ["/medications"],
   labs: ["/labs"],
-  profile: ["/profile", "/checkups"],
+  // `/vaccinations` joins `profile`: an immunization history is health
+  // background in the same sense as the visits already listed here, so a
+  // delegate scoped to `profile` must be able to present the page the API
+  // already lets them read — without this line the grant reads the data and
+  // the chrome hides the only page that shows it.
+  profile: ["/profile", "/checkups", "/vaccinations"],
   illness: ["/illness"],
   mind: ["/mood", "/mental-wellbeing"],
   cycle: ["/cycle"],

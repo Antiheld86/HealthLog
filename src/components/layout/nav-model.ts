@@ -12,6 +12,7 @@ import {
   Pill,
   Settings,
   Stethoscope,
+  Syringe,
   Thermometer,
   Trophy,
   Waves,
@@ -192,6 +193,20 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
     icon: Thermometer,
     tourId: "nav-illness",
     requiresModule: "illness",
+  },
+  // v1.38.0 — the immunization log sits in the clinical spine beside Illness.
+  // Born-gated: `requiresModule: "vaccinations"` reads the resolved module map,
+  // so the entry is absent until the account keeps the module on (default-on —
+  // it drops only when a user turns it off). SURFACE-gated: the `/api/vaccinations*`
+  // data routes stay reachable so a restore / import keeps working and
+  // re-enabling finds every dose intact.
+  {
+    href: "/vaccinations",
+    sharedRecord: true,
+    tKey: "nav.vaccinations",
+    icon: Syringe,
+    tourId: "nav-vaccinations",
+    requiresModule: "vaccinations",
   },
   // v1.18.0 — Workouts and Recovery both left the left-nav: each already
   // surfaces as an Insights tab-strip pill (`/insights/workouts` gated on

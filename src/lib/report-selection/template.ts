@@ -38,6 +38,7 @@ export const STANDARD_TEMPLATE_LEAVES: readonly ReportLeafId[] = [
   "MEDICATION_COMPLIANCE",
   "ALLERGIES",
   "ILLNESS_EPISODES",
+  "IMMUNIZATIONS",
 ];
 
 /** The template's i18n label — it is named on the button, never anonymous. */
