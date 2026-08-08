@@ -51,4 +51,13 @@ export const encounterKeys = {
   practitionerList: (q?: string) =>
     ["practitioners", "list", q ?? null] as const,
   practitioner: (id: string) => ["practitioners", "detail", id] as const,
+
+  /* ── mutation keys ──────────────────────────────────────────────── */
+
+  encounterCreate: () => ["encounters", "create"] as const,
+  encounterUpdate: () => ["encounters", "update"] as const,
+  encounterDelete: () => ["encounters", "delete"] as const,
+  practitionerCreate: () => ["practitioners", "create"] as const,
+  practitionerUpdate: () => ["practitioners", "update"] as const,
+  practitionerDelete: () => ["practitioners", "delete"] as const,
 };

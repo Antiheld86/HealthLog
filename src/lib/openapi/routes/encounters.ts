@@ -84,7 +84,7 @@ practitionerUpdateSchema.meta({
 practitionerListQuerySchema.meta({
   id: "ListPractitionersQuery",
   description:
-    "Query params for the address book: `q` (case-insensitive substring of the name) and `limit` (1–200, default 100). Name-ordered.",
+    "Query params for the address book: `q` (case-insensitive substring of the name OR the practice — a person looks one up by whichever of the two they remember) and `limit` (1–200, default 100). Name-ordered.",
 });
 
 const practitioner = z
