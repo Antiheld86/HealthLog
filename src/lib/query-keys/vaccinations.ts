@@ -17,10 +17,13 @@
  * like coverage. It belongs in the release that puts doses into one of those
  * payloads, alongside the reader that makes it necessary.
  *
- * The one server-side cache a dose CAN move belongs to somebody else: logging
- * one satisfies a booster reminder, which is a preventive-care write. That
- * eviction is the reminder module's, and the client bundle below invalidates
- * the reminder keys for the same reason.
+ * There is no dependent-keys bundle here yet either, and that omission is the
+ * same rule one layer up: a bundle with no caller is dead code, and the gate
+ * says so. When the capture surface lands it brings its own, and that bundle
+ * has to evict the preventive-care root alongside this one — logging a dose
+ * satisfies the booster reminders it answers, so the checkups list goes stale
+ * in the same tick. Evicting only the immunization list would leave a booster
+ * on screen that the server had already moved a decade out.
  */
 export const vaccinationKeys = {
   /**

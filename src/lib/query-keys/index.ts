@@ -255,20 +255,6 @@ export const encounterDependentKeys = [
 ];
 
 /**
- * Keys invalidated when a dose changes.
- *
- * The preventive-care root rides along, and it is the whole reason this is a
- * bundle rather than one key: logging a dose satisfies the booster reminders
- * it answers, so the checkups list is stale the moment the dose saves.
- * Evicting only the immunization list would leave a booster on screen that
- * the server had already moved a decade out.
- */
-export const vaccinationDependentKeys = [
-  queryKeys.vaccinations(),
-  queryKeys.measurementReminders(),
-];
-
-/**
  * Invalidate every key in the bundle in parallel. Use this from mutation
  * `onSuccess` handlers so the call site stays a one-liner instead of repeating
  * `Promise.all(keys.map(...))` everywhere.
