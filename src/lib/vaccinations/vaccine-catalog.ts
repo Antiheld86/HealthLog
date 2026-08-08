@@ -195,11 +195,13 @@ export const VACCINE_CATALOG: readonly VaccineSeed[] = [
 
   // ── Monovalent: added in the later decades ──────────────────────────────
   {
-    // Seasonal: one dose per year, and the series concept does not apply.
+    // Seasonal: one dose per year against that year's strains, so there is no
+    // series to be part of. Null rather than 1 — every autumn's dose would
+    // otherwise read as a booster on a one-dose series it had already passed.
     slug: "influenza",
     atc: "J07BB02",
     components: ["influenza"],
-    typicalSeriesDoses: 1,
+    typicalSeriesDoses: null,
     boosterIntervalMonths: 12,
     category: "standard60",
     source: STIKO,
