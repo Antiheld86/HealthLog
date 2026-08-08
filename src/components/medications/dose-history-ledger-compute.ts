@@ -204,3 +204,18 @@ export function applyOptimisticSlotMark(
   });
   return { ...payload, rows };
 }
+
+/**
+ * Request body for marking a ledger slot from the Verlauf. The taken arm
+ * anchors `takenAt` on the slot instant: marking Tuesday 09:00 from a
+ * Thursday evening records a dose taken Tuesday 09:00, which is the claim
+ * the person is making. The optimistic paint above already promised this.
+ */
+export function slotMarkRequestBody(
+  row: Pick<LedgerRow, "at">,
+  action: "taken" | "skipped",
+): Record<string, unknown> {
+  return action === "skipped"
+    ? { skipped: true, scheduledFor: row.at }
+    : { skipped: false, scheduledFor: row.at, takenAt: row.at };
+}

@@ -106,6 +106,7 @@ import {
   formatSlotDelta,
   groupLedgerByDay,
   isSlotActionable,
+  slotMarkRequestBody,
   type LedgerPayload,
   type LedgerRow,
 } from "@/components/medications/dose-history-ledger-compute";
@@ -273,18 +274,13 @@ export function DoseHistoryLedger({
 
       try {
         // Pin the displayed slot so the server marks THAT dose (the canonical
-        // slot upsert), not a now-snap to the nearest one. The POST returns
-        // the created event; its id drives the Undo affordance (the same
-        // soft-delete route the cards use).
+        // slot upsert), not a now-snap to the nearest one — and anchor
+        // `takenAt` on the same instant, matching the optimistic paint. The
+        // POST returns the created event; its id drives the Undo affordance
+        // (the same soft-delete route the cards use).
         const created = await apiPost<{ id?: string } | undefined>(
           `/api/medications/${medicationId}/intake`,
-          action === "skipped"
-            ? { skipped: true, scheduledFor: row.at }
-            : {
-                skipped: false,
-                scheduledFor: row.at,
-                takenAt: new Date().toISOString(),
-              },
+          slotMarkRequestBody(row, action),
         );
         const eventId: string | undefined = created?.id;
         toast.success(
