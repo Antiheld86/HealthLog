@@ -196,6 +196,12 @@ import {
   type CyclePredictionRefreshPayload,
 } from "@/lib/jobs/cycle-prediction-refresh";
 import {
+  MOOD_PROGNOSIS_REFRESH_QUEUE,
+  MOOD_PROGNOSIS_REFRESH_CRON,
+  handleMoodPrognosisRefresh,
+  type MoodPrognosisRefreshPayload,
+} from "@/lib/jobs/mood-prognosis-refresh";
+import {
   ACHIEVEMENT_UNLOCK_SWEEP_QUEUE,
   ACHIEVEMENT_UNLOCK_SWEEP_CRON,
   handleAchievementUnlockSweep,
@@ -365,6 +371,10 @@ const allQueues = [
   // scans. Without this entry the schedule silently no-ops and the forecast
   // is only as fresh as the last time somebody opened the calendar.
   CYCLE_PREDICTION_REFRESH_QUEUE,
+  // v1.38 — nightly rebuild of the mood forecast rows. Without this entry the
+  // schedule silently no-ops: nothing else writes them, so the surface would
+  // answer "not enough data yet" forever on an account that has plenty.
+  MOOD_PROGNOSIS_REFRESH_QUEUE,
   // v1.35.3 — nightly pin for newly unlocked achievements. Without this entry
   // the schedule silently no-ops and no unlock date is ever made durable.
   ACHIEVEMENT_UNLOCK_SWEEP_QUEUE,
@@ -521,6 +531,10 @@ const schedules: ScheduleEntry[] = [
     CYCLE_PREDICTION_REFRESH_CRON,
     cronIsTheRetry,
   ],
+  // v1.38 — daily 04:35 Europe/Berlin rebuild of the mood forecast rows.
+  // Tomorrow's tick is the retry: the fit moves on a day scale and a night
+  // late writes the same rows from the same days.
+  [MOOD_PROGNOSIS_REFRESH_QUEUE, MOOD_PROGNOSIS_REFRESH_CRON, cronIsTheRetry],
   // v1.35.3 — daily 04:25 Europe/Berlin pin for newly unlocked achievements.
   // Tomorrow's tick is the retry: the date written is the computed completion
   // date, so a night late writes the identical row.
@@ -742,6 +756,14 @@ export async function registerMaintenanceQueues(
     CYCLE_PREDICTION_REFRESH_QUEUE,
     { localConcurrency: 1 },
     handleCyclePredictionRefresh,
+  );
+  // v1.38 — nightly mood-forecast rebuild. Single-flight: two ticks would fit
+  // the same windows twice and the second pass would write the identical rows.
+  await createAndWork<MoodPrognosisRefreshPayload>(
+    boss,
+    MOOD_PROGNOSIS_REFRESH_QUEUE,
+    { localConcurrency: 1 },
+    handleMoodPrognosisRefresh,
   );
   // v1.35.3 — nightly achievement-unlock pin. Single-flight: the underlying
   // createMany is idempotent on the (userId, achievementId) unique, so a
