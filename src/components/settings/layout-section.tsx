@@ -39,7 +39,7 @@ export function LayoutSection() {
   );
 
   return (
-    <SettingsCard className="divide-border divide-y overflow-hidden p-0 md:p-0">
+    <SettingsCard flush className="divide-border divide-y">
       {visibleGroups.map((group) => (
         <Link
           key={group.id}
