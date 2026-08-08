@@ -379,6 +379,42 @@ export async function inviteGrant(
   }
 
   const now = new Date();
+
+  // An expired grant confers nothing (see `grantState`), but its row still
+  // sits in the live-pair slot the partial unique index guards: the index
+  // predicate is `WHERE revoked_at IS NULL` and cannot read the clock. Without
+  // ending the lapsed row here, a re-invitation for the same pair after expiry
+  // always collides on P2002 and 409s, though the person genuinely has no
+  // access anymore. Close it now — conditionally, the expiry state in the
+  // WHERE — so "revocation never deletes" still holds and the fresh invitation
+  // can mint its row. A live (unexpired) row is not matched, so its P2002 stays
+  // correct. `revokedBy` is stamped GRANTOR rather than left null because the
+  // paired CHECK (`account_grants_revoked_by_check`) requires revoked_at and
+  // revoked_by to be both set or both null and the revoker enum has no expiry
+  // member; the owner re-inviting is the actor that ends the lapsed row.
+  const closed = await db.accountGrant.updateMany({
+    where: {
+      grantorId: input.grantorId,
+      granteeId: input.granteeId,
+      revokedAt: null,
+      expiresAt: { lte: now },
+    },
+    data: { revokedAt: now, revokedBy: "GRANTOR" },
+  });
+  if (closed.count > 0) {
+    // Keep "who had access, from when to when, and who ended it" answering
+    // truthfully: the lapsed row ended by its own expiry, closed on re-invite.
+    await auditLog("sharing.grant.expired_closed", {
+      userId: input.grantorId,
+      details: {
+        granteeId: input.granteeId,
+        closedCount: closed.count,
+        reason: "expired",
+      },
+      client: db,
+    }).catch(() => {});
+  }
+
   try {
     return await db.accountGrant.create({
       data: {
