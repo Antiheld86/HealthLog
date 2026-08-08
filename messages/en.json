@@ -3120,8 +3120,6 @@
     "navRecovery": "Recovery",
     "workouts": {
       "title": "Workouts",
-      "askWhy": "Ask why",
-      "askWhyPrompt": "Why did this session read the way it did? Walk me through my own numbers from it.",
       "description": "Recent runs, rides, walks and strength sessions, deduped across Apple Watch and Withings sources.",
       "emptyState": {
         "title": "No workouts yet",
