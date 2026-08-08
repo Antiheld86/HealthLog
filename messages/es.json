@@ -9771,6 +9771,7 @@
       "scopeAggregateNote": "El resumen del panel, la puntuación de salud y el resumen diario solo aparecen cuando se comparte todo el historial.",
       "scopeDocumentsNote": "Un documento puede contener cualquier cosa. Comparte esta sección solo si esa persona puede leerlo todo.",
       "scopeEmptyHint": "Elige al menos una sección o vuelve a compartir todo el historial.",
+      "scopeChooseHint": "Elige si compartir todo el historial o solo algunas secciones.",
       "expiresLabel": "El acceso termina el (opcional)",
       "expiresHint": "Déjalo vacío para un acceso que dure hasta que alguien lo termine. Una fecha aquí se comprueba en cada petición, así que el acceso se detiene solo al final de ese día.",
       "submit": "Enviar invitación",

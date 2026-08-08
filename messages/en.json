@@ -9771,6 +9771,7 @@
       "scopeAggregateNote": "The dashboard overview, health score and daily digest only appear when the entire record is shared.",
       "scopeDocumentsNote": "A document can contain anything. Share this only if they may read all of it.",
       "scopeEmptyHint": "Pick at least one section, or go back to sharing the entire record.",
+      "scopeChooseHint": "Choose whether to share the entire record or only selected sections.",
       "expiresLabel": "Access ends on (optional)",
       "expiresHint": "Leave this empty for access that lasts until somebody ends it. A date here is checked on every request, so access stops on its own at the end of that day.",
       "submit": "Send invitation",

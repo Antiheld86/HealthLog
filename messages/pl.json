@@ -9771,6 +9771,7 @@
       "scopeAggregateNote": "Przegląd na pulpicie, wynik zdrowia i dzienne podsumowanie pojawiają się tylko wtedy, gdy udostępniona jest cała kartoteka.",
       "scopeDocumentsNote": "Dokument może zawierać wszystko. Udostępnij tę sekcję tylko wtedy, gdy ta osoba może przeczytać całość.",
       "scopeEmptyHint": "Wybierz co najmniej jedną sekcję albo wróć do udostępniania całej kartoteki.",
+      "scopeChooseHint": "Wybierz, czy udostępnić całą kartotekę, czy tylko wybrane sekcje.",
       "expiresLabel": "Dostęp kończy się (opcjonalnie)",
       "expiresHint": "Zostaw puste, aby dostęp trwał, dopóki ktoś go nie zakończy. Data jest sprawdzana przy każdym żądaniu, więc dostęp kończy się sam z końcem tego dnia.",
       "submit": "Wyślij zaproszenie",

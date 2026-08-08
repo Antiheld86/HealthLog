@@ -9771,6 +9771,7 @@
       "scopeAggregateNote": "Die Übersicht auf dem Dashboard, der Health Score und die Tageszusammenfassung erscheinen nur, wenn die gesamte Akte geteilt ist.",
       "scopeDocumentsNote": "Ein Dokument kann alles enthalten. Teile diesen Bereich nur, wenn die Person alles davon lesen darf.",
       "scopeEmptyHint": "Wähle mindestens einen Bereich aus oder teile wieder die gesamte Akte.",
+      "scopeChooseHint": "Wähle, ob die gesamte Akte oder nur einzelne Bereiche geteilt werden.",
       "expiresLabel": "Zugriff endet am (optional)",
       "expiresHint": "Leer lassen für Zugriff, der gilt, bis ihn jemand beendet. Ein Datum wird bei jeder Anfrage geprüft, der Zugriff endet also am Ende dieses Tages von selbst.",
       "submit": "Einladung senden",

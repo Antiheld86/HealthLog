@@ -42,12 +42,12 @@ import { wallClockInTz, zonedWallClockToUtc } from "@/lib/tz/wall-clock";
  *   * **What they may do** stays what it was, one radio per level, narrowest
  *     preselected, each with the sentence that says what it actually does
  *     rather than the word for it.
- *   * **What they may open** is two radios, whole record preselected. Narrowing
- *     is the branch somebody chooses, and only then do the eight sections
- *     appear. A person who wants the default reads two lines and presses send;
- *     a person who wants to narrow sees at most eight named subjects with a
- *     sentence each, which is a thing a person can hold in their head. Nobody
- *     ever sees nineteen checkboxes.
+ *   * **What they may open** is two radios with nothing preselected. Whole
+ *     record and narrowing are both a choice the owner makes, so neither is
+ *     nudged: an untouched fieldset blocks the form rather than defaulting to
+ *     the whole record. Choosing to narrow reveals the eight sections; a person
+ *     who wants everything picks whole record and presses send. Nobody ever
+ *     sees nineteen checkboxes.
  *
  * The two honest limits are stated inside the expanded state, where the
  * decision is actually being made, rather than in help text somebody would
@@ -84,9 +84,11 @@ export function GrantInviteCard() {
   // READ preselected. The narrower level is the one somebody should have to
   // choose their way out of, not into.
   const [access, setAccess] = useState<GrantAccessLevel>("READ");
-  // The entire record preselected, for the same reason and with the opposite
-  // sign: narrowing is the deliberate act, so it is the one that costs a click.
-  const [narrowed, setNarrowed] = useState(false);
+  // Nothing preselected: neither "the entire record" nor "only sections" is
+  // chosen until the owner picks one. `null` is that unset state, and it blocks
+  // the form — a whole-record grant is a real decision, not the thing that
+  // happens when somebody leaves the fieldset alone.
+  const [narrowed, setNarrowed] = useState<boolean | null>(null);
   const [sections, setSections] = useState<ShareDomain[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [invited, setInvited] = useState<string | null>(null);
@@ -133,7 +135,7 @@ export function GrantInviteCard() {
           setIdentifier("");
           setExpiresOn("");
           setAccess("READ");
-          setNarrowed(false);
+          setNarrowed(null);
           setSections([]);
           setInvited(grant.account.username);
         },
@@ -224,7 +226,7 @@ export function GrantInviteCard() {
             <div className="space-y-2">
               <ScopeOption
                 mode="all"
-                selected={!narrowed}
+                selected={narrowed === false}
                 onSelect={() => {
                   setNarrowed(false);
                   setError(null);
@@ -234,7 +236,7 @@ export function GrantInviteCard() {
               />
               <ScopeOption
                 mode="some"
-                selected={narrowed}
+                selected={narrowed === true}
                 onSelect={() => {
                   setNarrowed(true);
                   setError(null);
@@ -243,6 +245,16 @@ export function GrantInviteCard() {
                 capability={t("recordSharing.invite.scopeSomeCapability")}
               />
             </div>
+            {choice.mode === "unset" && (
+              // Nothing chosen: say what the two options decide, rather than
+              // sending a request or silently defaulting to the whole record.
+              <p
+                data-slot="grant-invite-scope-choose"
+                className="text-muted-foreground pl-1 text-xs"
+              >
+                {t("recordSharing.invite.scopeChooseHint")}
+              </p>
+            )}
             {choice.mode === "pick" && (
               <div
                 data-slot="grant-invite-sections"
@@ -364,7 +376,7 @@ export interface InviteScopeChoice {
    * Which of the three shapes the second question takes: the collapsed line
    * that answers it for Manage, the whole record, or the section list.
    */
-  mode: "manage" | "all" | "pick";
+  mode: "manage" | "unset" | "all" | "pick";
   /** Exactly what goes on the wire as `scope`. */
   scope: ShareDomain[] | null;
   /** Is the form in a state that must not be sent. */
@@ -399,12 +411,17 @@ export function resolveInviteScope({
   sections,
 }: {
   access: GrantAccessLevel;
-  narrowed: boolean;
+  narrowed: boolean | null;
   sections: ShareDomain[];
 }): InviteScopeChoice {
   if (access === "MANAGE") {
     return { mode: "manage", scope: null, blocked: false };
   }
+  // Nothing chosen yet. This is NOT the whole-record default: scope-absent is
+  // read by the wire as "the entire record" (the pre-v1.37.0 contract), so an
+  // unset UI must block rather than fall through to it. The whole-record grant
+  // is only ever the explicit "all" choice below.
+  if (narrowed === null) return { mode: "unset", scope: null, blocked: true };
   if (!narrowed) return { mode: "all", scope: null, blocked: false };
   const picked = SHARE_DOMAINS.filter((domain) => sections.includes(domain));
   // A narrowed invitation with nothing ticked is not a narrow grant, it is a

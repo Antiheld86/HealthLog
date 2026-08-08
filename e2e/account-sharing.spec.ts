@@ -191,6 +191,16 @@ test.describe("account sharing", () => {
       '[data-slot="grant-invite-identifier"]',
     );
     const submit = ownerPage.locator('[data-slot="grant-invite-submit"]');
+
+    // Nothing under the scope question is preselected now, so the form blocks
+    // until the owner picks one. This invitation is unscoped, so choose the
+    // whole record before asserting the button can enable.
+    const wholeRecord = ownerPage.locator(
+      '[data-slot="grant-invite-scope-option"][data-scope="all"]',
+    );
+    await wholeRecord.click();
+    await expect(wholeRecord).toHaveAttribute("data-selected", "true");
+
     await expect(async () => {
       await identifier.fill(E2E_USER.username);
       await expect(submit).toBeEnabled({ timeout: 1000 });

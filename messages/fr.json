@@ -9771,6 +9771,7 @@
       "scopeAggregateNote": "La vue d'ensemble du tableau de bord, le score de santé et le résumé quotidien n'apparaissent que si le dossier entier est partagé.",
       "scopeDocumentsNote": "Un document peut contenir n'importe quoi. Ne partagez cette rubrique que si la personne peut tout lire.",
       "scopeEmptyHint": "Choisissez au moins une rubrique, ou revenez au partage du dossier complet.",
+      "scopeChooseHint": "Choisissez de partager le dossier complet ou seulement certaines rubriques.",
       "expiresLabel": "L'accès prend fin le (facultatif)",
       "expiresHint": "Laissez ce champ vide pour un accès qui dure jusqu'à ce que quelqu'un y mette fin. Une date ici est vérifiée à chaque requête, l'accès s'arrête donc de lui-même à la fin de cette journée.",
       "submit": "Envoyer l'invitation",

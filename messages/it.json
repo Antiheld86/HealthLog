@@ -9771,6 +9771,7 @@
       "scopeAggregateNote": "La panoramica della dashboard, il punteggio di salute e il riepilogo giornaliero compaiono solo se viene condivisa l'intera cartella.",
       "scopeDocumentsNote": "Un documento può contenere qualsiasi cosa. Condividi questa sezione solo se quella persona può leggere tutto.",
       "scopeEmptyHint": "Scegli almeno una sezione oppure torna a condividere l'intera cartella.",
+      "scopeChooseHint": "Scegli se condividere l'intera cartella o solo alcune sezioni.",
       "expiresLabel": "L'accesso termina il (facoltativo)",
       "expiresHint": "Lascia vuoto per un accesso che dura finché qualcuno non lo termina. Una data qui viene controllata a ogni richiesta, quindi l'accesso si interrompe da solo alla fine di quel giorno.",
       "submit": "Invia invito",

@@ -106,6 +106,15 @@ test.describe("delegated writes", () => {
       '[data-slot="grant-invite-identifier"]',
     );
     const submit = ownerPage.locator('[data-slot="grant-invite-submit"]');
+
+    // The scope question preselects nothing, so the form blocks until the owner
+    // picks one. This invitation is unscoped — choose the whole record.
+    const wholeRecord = ownerPage.locator(
+      '[data-slot="grant-invite-scope-option"][data-scope="all"]',
+    );
+    await wholeRecord.click();
+    await expect(wholeRecord).toHaveAttribute("data-selected", "true");
+
     // The controlled input keeps the submit disabled until React has attached,
     // so retry the pair rather than waiting a fixed time and hoping.
     await expect(async () => {

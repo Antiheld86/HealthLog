@@ -19,7 +19,9 @@
  *
  * Mutation checks, run and recorded in the stream's report:
  *   - render the eight checkboxes unconditionally (drop the `narrowed` gate) →
- *     "the entire record is the default and the sections stay closed" goes red;
+ *     "preselects neither scope and leaves the sections closed" goes red;
+ *   - preselect a scope (`narrowed` defaulting to a boolean) → the same test
+ *     goes red on the `data-selected="false"` assertions;
  *   - render the scope fieldset for MANAGE too → "manage collapses the whole
  *     question" goes red.
  */
@@ -55,14 +57,15 @@ describe("choosing what a grant opens", () => {
     expect(html).toContain('data-scope="some"');
   });
 
-  it("makes the entire record the default and leaves the sections closed", () => {
-    // The shape of the whole design: narrowing is an act somebody chooses, so
-    // the default costs nothing and the eight checkboxes are not on screen
-    // until they are wanted. A form that showed them all at once would make
-    // the common case look like unfinished work.
+  it("preselects neither scope and leaves the sections closed", () => {
+    // Nothing is nudged: whole record and narrowing are both a choice the owner
+    // makes. An all-checked or whole-record default reads as the form answering
+    // the question for them. The eight checkboxes stay off screen until the
+    // narrow branch is chosen, and the form blocks until a scope is picked.
     const html = render(<GrantInviteCard />);
-    expect(html).toContain('data-scope="all" data-selected="true"');
+    expect(html).toContain('data-scope="all" data-selected="false"');
     expect(html).toContain('data-scope="some" data-selected="false"');
+    expect(html).toContain('data-slot="grant-invite-scope-choose"');
     expect(html).not.toContain('data-slot="grant-invite-sections"');
     expect(html).not.toContain('data-slot="grant-invite-section"');
   });
@@ -149,7 +152,16 @@ describe("what the form would send", () => {
   // the copy above says what a person is agreeing to, this says what leaves
   // the browser.
 
-  it("sends nothing scoped for the whole record", () => {
+  it("blocks until a scope is chosen, and does not fall through to whole record", () => {
+    // `null` is the unset state. It must NOT resolve to scope-absent: the wire
+    // reads an absent scope as the entire record, so an untouched fieldset that
+    // omitted scope would silently mint a whole-record grant. Unset blocks.
+    expect(
+      resolveInviteScope({ access: "READ", narrowed: null, sections: [] }),
+    ).toEqual({ mode: "unset", scope: null, blocked: true });
+  });
+
+  it("sends nothing scoped for the whole record once it is explicitly chosen", () => {
     expect(
       resolveInviteScope({ access: "READ", narrowed: false, sections: [] }),
     ).toEqual({ mode: "all", scope: null, blocked: false });
