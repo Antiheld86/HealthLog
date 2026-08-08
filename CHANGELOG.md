@@ -65,6 +65,49 @@
   optimistic paint had promised this all along, and the skipped-to-taken flip
   in the same view already behaved this way.
 
+- The Appearance list in Settings had a strip of dead space above every row
+  that the first row did not have — 24 px on a desktop, 16 px on a phone,
+  unclickable, sitting between one module and the next. The rows read a step
+  apart from the top of their own list. They now sit the same distance from
+  the line above them, and the geometry sweep measures it so it cannot drift
+  back.
+
+- The Account settings page is the profile again. Cycle tracking is a module
+  and its switch lives in the Modules hub, so the second on-ramp here is gone
+  along with the "manage in Account" link beside that switch, which pointed at
+  an anchor nothing rendered. Changing the password moved to Security, where
+  the second factors and the passkeys already are, and it leads that page.
+
+- Five module rows ran two to three times longer than their thirteen
+  neighbours: environment, external assistant access, documents, mental
+  wellbeing and nutrient intake. Every one of them ended in "off by default",
+  restating what the switch beside the row already shows. They are one
+  sentence now, like the rest. The mental-wellbeing row also named two
+  screeners where the module ships four, and what happens to your answers is
+  now said on the mental-wellbeing page itself, where you are about to give
+  them.
+
+- Research Mode is retired. It was an opt-in for the estimated GLP-1 level
+  curve, but that chart stopped consulting the flag several releases ago and
+  has been visible to everyone since — so the switch on the Advanced page
+  changed no screen in either position. The curve is simply part of the
+  medication page, and the switch, its acknowledgment dialog, and the stored
+  acknowledgment are gone. Advanced is now what it reads as: reset the data,
+  delete the account.
+
+- The ECG page opened with three lines about what HealthLog does not do
+  before showing a single recording, two of them saying the same thing. They
+  are gone; the recording's own page still states that the result shown is
+  the device's. The device's verdict now rides the timestamp as a tag instead
+  of taking a line of its own, the list shows the five most recent strips
+  rather than every one ever recorded, and a recording has its own address
+  with the back link above the heading, so a strip can be linked to and the
+  browser's own Back works.
+
+- An entry in the record switcher no longer carries the access level on a
+  line of its own. In a menu that narrow it was truncated more often than it
+  was read, and the banner states it in full once you are inside the record.
+
 ## [1.37.1] — 2026-08-08
 
 ### Added
