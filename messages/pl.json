@@ -290,7 +290,12 @@
     "visitsColKind": "Rodzaj",
     "visitsColReason": "Powód",
     "visitsColOutcome": "Wynik",
-    "visitsColConditions": "Choroby"
+    "visitsColConditions": "Choroby",
+    "immunizationsTitle": "Szczepienia",
+    "immunizationsColDate": "Data",
+    "immunizationsColVaccine": "Szczepionka",
+    "immunizationsColDose": "Dawka",
+    "immunizationsColLot": "Seria"
   },
   "errorBoundary": {
     "title": "Coś poszło nie tak",
@@ -9805,7 +9810,8 @@
     "scopeNone": "Nic jeszcze nie wybrano. Wybierz, co ma się znaleźć w dokumencie, albo zastosuj raport standardowy.",
     "scopeCount": "{count} pozycji z {groups} obszarów",
     "scopeSensitive": "w tym {names}",
-    "leafVisits": "Wizyty lekarskie"
+    "leafVisits": "Wizyty lekarskie",
+    "leafImmunizations": "Szczepienia"
   },
   "recordSharing": {
     "banner": {

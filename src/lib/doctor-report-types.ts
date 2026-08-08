@@ -296,6 +296,31 @@ export interface DoctorReportData {
     /** Labels of the conditions this visit was filed against. */
     conditionLabels: string[];
   }> | null;
+  /**
+   * The immunization history. Reference data, not time-windowed — an Impfpass
+   * is a lifetime document and a doctor wants the whole of it, so this mirrors
+   * the allergies stance rather than the visit window. Populated when the
+   * `IMMUNIZATIONS` leaf is selected AND the `vaccinations` module is on AND at
+   * least one live dose exists; null/absent otherwise, and the PDF then skips
+   * the section. `series` carries the server-resolved position per component
+   * antigen so the renderer composes "N of M" without re-deriving it; the
+   * catalogue name resolves from `antigenSlug` at render, with `vaccineName`
+   * the free-text fallback.
+   */
+  immunizations?: Array<{
+    occurredAt: string;
+    antigenSlug: string | null;
+    vaccineName: string | null;
+    lotNumber: string | null;
+    site: string | null;
+    practitionerName: string | null;
+    series: Array<{
+      antigen: string;
+      position: number;
+      total: number | null;
+      booster: boolean;
+    }>;
+  }> | null;
   illnessEpisodes?: Array<{
     /** User-facing condition label (e.g. "Erkältung"). */
     label: string;

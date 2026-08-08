@@ -290,7 +290,12 @@
     "visitsColKind": "Kind",
     "visitsColReason": "Reason",
     "visitsColOutcome": "Outcome",
-    "visitsColConditions": "Conditions"
+    "visitsColConditions": "Conditions",
+    "immunizationsTitle": "Immunizations",
+    "immunizationsColDate": "Date",
+    "immunizationsColVaccine": "Vaccine",
+    "immunizationsColDose": "Dose",
+    "immunizationsColLot": "Lot"
   },
   "errorBoundary": {
     "title": "Something went wrong",
@@ -9805,7 +9810,8 @@
     "scopeNone": "Nothing selected yet. Choose what to include, or apply the standard report.",
     "scopeCount": "{count} entries from {groups} areas",
     "scopeSensitive": "incl. {names}",
-    "leafVisits": "Visits"
+    "leafVisits": "Visits",
+    "leafImmunizations": "Immunizations"
   },
   "recordSharing": {
     "banner": {

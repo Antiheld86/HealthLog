@@ -290,7 +290,12 @@
     "visitsColKind": "Type",
     "visitsColReason": "Motif",
     "visitsColOutcome": "Résultat",
-    "visitsColConditions": "Maladies"
+    "visitsColConditions": "Maladies",
+    "immunizationsTitle": "Vaccinations",
+    "immunizationsColDate": "Date",
+    "immunizationsColVaccine": "Vaccin",
+    "immunizationsColDose": "Dose",
+    "immunizationsColLot": "Lot"
   },
   "errorBoundary": {
     "title": "Une erreur est survenue",
@@ -9805,7 +9810,8 @@
     "scopeNone": "Rien de sélectionné pour l'instant. Choisissez ce qui doit figurer, ou appliquez le compte rendu standard.",
     "scopeCount": "{count} éléments issus de {groups} domaines",
     "scopeSensitive": "dont {names}",
-    "leafVisits": "Consultations"
+    "leafVisits": "Consultations",
+    "leafImmunizations": "Vaccinations"
   },
   "recordSharing": {
     "banner": {

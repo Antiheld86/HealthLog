@@ -47,6 +47,7 @@ export type StructuredLeafId =
   | "ALLERGIES"
   | "ILLNESS_EPISODES"
   | "VISITS"
+  | "IMMUNIZATIONS"
   | "FAMILY_HISTORY"
   | "MOOD"
   | "CYCLE"
@@ -201,13 +202,14 @@ export const STRUCTURED_LEAF_GROUP: Record<StructuredLeafId, ReportGroupId> = {
   ALLERGIES: "history",
   ILLNESS_EPISODES: "history",
   VISITS: "history",
+  IMMUNIZATIONS: "history",
   FAMILY_HISTORY: "sensitive",
   MOOD: "sensitive",
   CYCLE: "sensitive",
   ANAMNESIS: "sensitive",
 };
 
-/** i18n label keys for the 15 structured leaves. */
+/** i18n label keys for the 16 structured leaves. */
 export const STRUCTURED_LEAF_LABEL_KEYS: Record<StructuredLeafId, string> = {
   PATIENT_IDENTITY: "reportSelection.leafPatientIdentity",
   INSURANCE: "reportSelection.leafInsurance",
@@ -220,6 +222,7 @@ export const STRUCTURED_LEAF_LABEL_KEYS: Record<StructuredLeafId, string> = {
   ALLERGIES: "reportSelection.leafAllergies",
   ILLNESS_EPISODES: "reportSelection.leafIllnessEpisodes",
   VISITS: "reportSelection.leafVisits",
+  IMMUNIZATIONS: "reportSelection.leafImmunizations",
   FAMILY_HISTORY: "reportSelection.leafFamilyHistory",
   MOOD: "reportSelection.leafMood",
   CYCLE: "reportSelection.leafCycle",
@@ -309,6 +312,10 @@ export const LEAF_MODULE: Partial<Record<ReportLeafId, ModuleKey>> = {
   MEDICATION_ADMINISTRATIONS: "medications",
   MEDICATION_COMPLIANCE: "medications",
   GLP1_THERAPY: "medications",
+  // The immunization log is its own opt-out module: the leaf hides when the
+  // `vaccinations` module is off, and the deselected leaf hides regardless of
+  // the module — the two exclude independently, like `ILLNESS_EPISODES`.
+  IMMUNIZATIONS: "vaccinations",
   // VISITS is deliberately absent, like ALLERGIES beside it. A visit carries
   // no module of its own — it is core, like the checkups page it lives on —
   // and the whole report is already gated by `doctorReport`. Reading the

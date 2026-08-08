@@ -290,7 +290,12 @@
     "visitsColKind": "Tipo",
     "visitsColReason": "Motivo",
     "visitsColOutcome": "Resultado",
-    "visitsColConditions": "Enfermedades"
+    "visitsColConditions": "Enfermedades",
+    "immunizationsTitle": "Vacunas",
+    "immunizationsColDate": "Fecha",
+    "immunizationsColVaccine": "Vacuna",
+    "immunizationsColDose": "Dosis",
+    "immunizationsColLot": "Lote"
   },
   "errorBoundary": {
     "title": "Algo ha salido mal",
@@ -9805,7 +9810,8 @@
     "scopeNone": "Nada seleccionado todavía. Elija qué incluir o aplique el informe estándar.",
     "scopeCount": "{count} entradas de {groups} áreas",
     "scopeSensitive": "incl. {names}",
-    "leafVisits": "Visitas médicas"
+    "leafVisits": "Visitas médicas",
+    "leafImmunizations": "Vacunas"
   },
   "recordSharing": {
     "banner": {

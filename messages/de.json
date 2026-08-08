@@ -290,7 +290,12 @@
     "visitsColKind": "Art",
     "visitsColReason": "Anlass",
     "visitsColOutcome": "Ergebnis",
-    "visitsColConditions": "Erkrankungen"
+    "visitsColConditions": "Erkrankungen",
+    "immunizationsTitle": "Impfungen",
+    "immunizationsColDate": "Datum",
+    "immunizationsColVaccine": "Impfstoff",
+    "immunizationsColDose": "Dosis",
+    "immunizationsColLot": "Charge"
   },
   "errorBoundary": {
     "title": "Da ist etwas schiefgelaufen",
@@ -9805,7 +9810,8 @@
     "scopeNone": "Noch nichts ausgewählt. Wählen Sie aus, was enthalten sein soll, oder übernehmen Sie den Standardbericht.",
     "scopeCount": "{count} Einträge aus {groups} Bereichen",
     "scopeSensitive": "inkl. {names}",
-    "leafVisits": "Arztbesuche"
+    "leafVisits": "Arztbesuche",
+    "leafImmunizations": "Impfungen"
   },
   "recordSharing": {
     "banner": {

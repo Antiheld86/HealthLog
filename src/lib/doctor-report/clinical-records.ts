@@ -11,6 +11,7 @@
  * Split out of the aggregator with the selection rework.
  */
 import { prisma } from "@/lib/db";
+import { deriveSeries } from "@/lib/vaccinations/series";
 import { resolveEffectiveReferenceRange } from "@/lib/labs/reference-range";
 import { getEvent } from "@/lib/logging/context";
 import { decryptAllergyReaction } from "@/lib/doctor-report-helpers";
@@ -192,6 +193,62 @@ export async function loadVisits(
       .map((link) => link.episode.label),
   }));
   return mapped.length > 0 ? mapped : null;
+}
+
+/**
+ * The immunization history. Reference data, not time-windowed — an Impfpass is
+ * a lifetime document, so like allergies it ignores the report window.
+ *
+ * The series positions are derived server-side over the whole live set (the
+ * same derivation the list and the API use), so the report reproduces exactly
+ * the numbers the person sees on screen and no client re-derives them. No note
+ * column is read on this path — an Impfreaktion is the person's private note,
+ * not part of a handed-over record.
+ */
+export async function loadImmunizations(
+  userId: string,
+): Promise<DoctorReportData["immunizations"]> {
+  const rows = await prisma.vaccinationRecord.findMany({
+    where: { userId, deletedAt: null },
+    orderBy: { occurredAt: "asc" },
+    select: {
+      id: true,
+      occurredAt: true,
+      antigenSlug: true,
+      vaccineName: true,
+      lotNumber: true,
+      seriesDoses: true,
+      doseNumber: true,
+      site: true,
+      practitioner: { select: { name: true } },
+    },
+  });
+  if (rows.length === 0) return null;
+
+  const series = deriveSeries(
+    rows.map((row) => ({
+      id: row.id,
+      occurredAt: row.occurredAt,
+      antigenSlug: row.antigenSlug,
+      doseNumber: row.doseNumber,
+      seriesDoses: row.seriesDoses,
+    })),
+  );
+
+  return rows.map((row) => ({
+    occurredAt: row.occurredAt.toISOString(),
+    antigenSlug: row.antigenSlug,
+    vaccineName: row.vaccineName,
+    lotNumber: row.lotNumber,
+    site: row.site,
+    practitionerName: row.practitioner?.name ?? null,
+    series: (series.get(row.id) ?? []).map((position) => ({
+      antigen: position.antigen,
+      position: position.position,
+      total: position.total,
+      booster: position.booster,
+    })),
+  }));
 }
 
 /**
