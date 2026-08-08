@@ -1,8 +1,9 @@
 /**
  * What a restore could not put back, and how much of it there was.
  *
- * Three of the restore's lookups resolve a key against a SEEDED CATALOGUE —
- * cycle symptoms, illness symptoms, mood factors. The catalogue is reference
+ * Four of the restore's lookups resolve a key against a SEEDED CATALOGUE —
+ * cycle symptoms, illness symptoms, rated mood factors and the mood tags a
+ * person ticks present or absent. The catalogue is reference
  * data the instance owns, not data the file carries, so it legitimately drifts
  * between the day a backup is written and the day it is read: a key gets
  * renamed, a symptom is retired, the file is a year old, the instance is three
@@ -28,7 +29,8 @@
  */
 
 /** Which seeded catalogue a key failed to resolve against. */
-export type SkippedCatalogue = "cycleSymptom" | "illnessSymptom" | "moodFactor";
+export type SkippedCatalogue =
+  "cycleSymptom" | "illnessSymptom" | "moodFactor" | "moodTag";
 
 /** One key this instance does not know, and the links it cost. */
 export interface SkippedCatalogueKey {

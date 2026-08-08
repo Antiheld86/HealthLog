@@ -194,6 +194,9 @@ function catalogueLabel(
   if (catalogue === "illnessSymptom") {
     return t("admin.section.backups.restoreSkippedIllnessSymptom");
   }
+  if (catalogue === "moodTag") {
+    return t("admin.section.backups.restoreSkippedMoodTag");
+  }
   return t("admin.section.backups.restoreSkippedMoodFactor");
 }
 

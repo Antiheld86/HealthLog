@@ -20,6 +20,19 @@
   reliably the one that ran. It is selected by name now, and a copy that never
   arrived fails the build instead of quietly leaving another one in its place.
 
+### Fixed
+
+- Mood entries now survive a restore whole. The disaster-recovery backup was
+  carrying only the rated factors of an entry, so every tag ticked present or
+  absent was missing from the file, and it was dropping the note, the entry's
+  own timezone and the sync counter as well. A restored entry came back without
+  its text, read its day boundaries under the old Berlin assumption whatever
+  zone it had been logged in, and could lose the next sync round to a paired
+  phone still holding a higher counter. The backup carries every column now,
+  both halves of the tag taxonomy come back, and a structural check fails the
+  build if a future column goes missing the same way. Backup files written
+  before this restore exactly as they did.
+
 ## [1.37.0] — 2026-08-07
 
 ### Added

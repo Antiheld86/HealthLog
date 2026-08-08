@@ -6701,6 +6701,7 @@
         "restoreSkippedCycleSymptom": "Síntoma del ciclo",
         "restoreSkippedIllnessSymptom": "Síntoma de enfermedad",
         "restoreSkippedMoodFactor": "Factor de ánimo",
+        "restoreSkippedMoodTag": "Etiqueta de ánimo",
         "docsLink": "Documentación"
       },
       "danger-zone": {
