@@ -39,6 +39,8 @@ import { prisma } from "@/lib/db";
 import { hashQueryTokens } from "@/lib/documents/content-index";
 import {
   loadConditionLinks,
+  loadDocumentEncounterLinks,
+  narrowOwnedEncounterIds,
   narrowOwnedEpisodeIds,
 } from "@/lib/documents/links";
 import {
@@ -116,8 +118,9 @@ async function duplicateResponse(
   userId: string,
   existing: SerialisableDocument,
 ): Promise<NextResponse> {
-  const [links, groups] = await Promise.all([
+  const [links, visitLinks, groups] = await Promise.all([
     loadConditionLinks(userId, [existing.id]),
+    loadDocumentEncounterLinks(userId, [existing.id]),
     prisma.extractedFact.groupBy({
       by: ["status"],
       where: { userId, documentId: existing.id },
@@ -140,6 +143,10 @@ async function duplicateResponse(
         existing,
         { factCount, pendingCount },
         links.get(existing.id) ?? [],
+        false,
+        null,
+        false,
+        visitLinks.get(existing.id) ?? [],
       ),
       error: null,
       meta: { duplicate: true },
@@ -212,17 +219,21 @@ async function processUpload(
     return apiError("Field 'file' must be a file", 422);
   }
 
-  // Optional metadata (title / kind / documentDate / episodeIds). The file is
-  // read separately; these are the form fields beside it. `episodeIds` may be
-  // repeated.
+  // Optional metadata (title / kind / documentDate / episodeIds /
+  // encounterIds). The file is read separately; these are the form fields
+  // beside it. Both id lists may be repeated.
   const rawEpisodeIds = formData
     .getAll("episodeIds")
+    .filter((v): v is string => typeof v === "string");
+  const rawEncounterIds = formData
+    .getAll("encounterIds")
     .filter((v): v is string => typeof v === "string");
   const parsed = documentCreateSchema.safeParse({
     title: formData.get("title") ?? undefined,
     kind: formData.get("kind") ?? undefined,
     documentDate: formData.get("documentDate") ?? undefined,
     episodeIds: rawEpisodeIds.length > 0 ? rawEpisodeIds : undefined,
+    encounterIds: rawEncounterIds.length > 0 ? rawEncounterIds : undefined,
   });
   if (!parsed.success) {
     return apiError("Invalid document metadata", 422, {
@@ -265,6 +276,19 @@ async function processUpload(
   if (episodeIds === null) {
     return apiError("Episode not found", 404, {
       errorCode: "documents.inbound.episodeNotFound",
+    });
+  }
+
+  // Same for the visit ids the review step offered. A refusal rather than a
+  // silent drop: the person saw a visit named and would otherwise watch the
+  // upload succeed without the link they asked for.
+  const encounterIds = await narrowOwnedEncounterIds(
+    user.id,
+    parsed.data.encounterIds ?? [],
+  );
+  if (encounterIds === null) {
+    return apiError("Visit not found", 404, {
+      errorCode: "documents.inbound.encounterNotFound",
     });
   }
 
@@ -346,6 +370,15 @@ async function processUpload(
           targetIds: episodeIds,
         });
       }
+      if (encounterIds.length > 0) {
+        await linkTargets(tx, {
+          userId: user.id,
+          sourceKind: "document",
+          sourceId: created.id,
+          targetKind: "encounter",
+          targetIds: encounterIds,
+        });
+      }
       return created;
     });
   } catch (err) {
@@ -382,6 +415,7 @@ async function processUpload(
       byteSize: document.byteSize,
       servingClass: detected.servingClass,
       linked: episodeIds.length,
+      linkedVisits: encounterIds.length,
     },
   });
 
@@ -406,12 +440,19 @@ async function processUpload(
   // because of it. Only fresh inserts reach here (a duplicate returns early).
   void enqueueDocumentSummary(user.id, document.id);
 
-  const links = await loadConditionLinks(user.id, [document.id]);
+  const [links, visitLinks] = await Promise.all([
+    loadConditionLinks(user.id, [document.id]),
+    loadDocumentEncounterLinks(user.id, [document.id]),
+  ]);
   return apiSuccess(
     serialiseDocument(
       document,
       { factCount: 0, pendingCount: 0 },
       links.get(document.id) ?? [],
+      false,
+      null,
+      false,
+      visitLinks.get(document.id) ?? [],
     ),
     201,
   );
@@ -481,8 +522,19 @@ export const GET = apiHandler(async (request: Request) => {
       errorCode: "documents.inbound.invalidQuery",
     });
   }
-  const { q, kind, episodeId, year, from, to, sort, order, cursor, limit } =
-    parsed.data;
+  const {
+    q,
+    kind,
+    episodeId,
+    encounterId,
+    year,
+    from,
+    to,
+    sort,
+    order,
+    cursor,
+    limit,
+  } = parsed.data;
 
   const where: Prisma.InboundDocumentWhereInput = {
     userId: user.id,
@@ -490,6 +542,10 @@ export const GET = apiHandler(async (request: Request) => {
   };
   if (kind && kind.length > 0) where.kind = { in: kind };
   if (episodeId) where.conditionLinks = { some: { episodeId } };
+  // The visit filter reads the SAME table the visit's own sheet writes, from
+  // the document side. Filtering rather than post-filtering: a page of fifty
+  // documents narrowed in Node would page wrongly.
+  if (encounterId) where.encounterLinks = { some: { encounterId } };
   if (year !== undefined) {
     where.documentDate = {
       gte: new Date(Date.UTC(year, 0, 1)),
@@ -576,10 +632,16 @@ export const GET = apiHandler(async (request: Request) => {
   }
 
   // Condition links for the page in ONE grouped query (no N+1).
-  const linkMap = await loadConditionLinks(
-    user.id,
-    page.map((d) => d.id),
-  );
+  const [linkMap, visitLinkMap] = await Promise.all([
+    loadConditionLinks(
+      user.id,
+      page.map((d) => d.id),
+    ),
+    loadDocumentEncounterLinks(
+      user.id,
+      page.map((d) => d.id),
+    ),
+  ]);
 
   // Which of the page's documents have a content index (drives the searchable
   // status + the provenance the UI reads to tell an AI-read document from a
@@ -610,7 +672,9 @@ export const GET = apiHandler(async (request: Request) => {
       count: page.length,
       sort,
       order,
-      filtered: Boolean(q || (kind && kind.length > 0) || episodeId || year),
+      filtered: Boolean(
+        q || (kind && kind.length > 0) || episodeId || encounterId || year,
+      ),
     },
   });
 
@@ -623,6 +687,7 @@ export const GET = apiHandler(async (request: Request) => {
         indexSources.has(doc.id),
         toContentIndexSource(indexSources.get(doc.id)),
         thumbnailIds.has(doc.id),
+        visitLinkMap.get(doc.id) ?? [],
       ),
     ),
     nextCursor,

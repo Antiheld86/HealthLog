@@ -25,6 +25,7 @@ vi.mock("@/lib/db", () => ({
     moodEntry: { findMany: vi.fn() },
     labResult: { findMany: vi.fn() },
     illnessEpisode: { findMany: vi.fn() },
+    encounter: { findMany: vi.fn() },
     allergy: { findMany: vi.fn() },
     familyHistoryEntry: { findMany: vi.fn() },
     userHealthProfile: { findUnique: vi.fn() },
@@ -165,6 +166,7 @@ beforeEach(() => {
   vi.mocked(prisma.moodEntry.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.labResult.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.illnessEpisode.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.encounter.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.allergy.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.familyHistoryEntry.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.userHealthProfile.findUnique).mockResolvedValue(

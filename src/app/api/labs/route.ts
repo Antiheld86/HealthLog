@@ -21,6 +21,7 @@ import {
   type ResolvedBiomarker,
   serialiseLabResult,
 } from "@/lib/labs/serialise";
+import { linkTargets } from "@/lib/links";
 import { encryptNoteToBytes } from "@/lib/labs/store";
 import { annotate } from "@/lib/logging/context";
 import {
@@ -190,6 +191,7 @@ async function postLabResult(request: NextRequest) {
     takenAt,
     note,
     source,
+    encounterId,
   } = parsed.data;
 
   // v1.18.9 — a qualitative reading carries `valueText` ("negativ" / …) instead
@@ -267,6 +269,21 @@ async function postLabResult(request: NextRequest) {
       noteEncrypted: note ? encryptNoteToBytes(note) : null,
     },
   });
+  // The by-the-way half: file the reading against the visit the form offered,
+  // if it offered one. Best-effort by design — the reading is the write that
+  // matters, and a link that could not be made (a visit deleted between the
+  // suggestion and the save) must not lose it. The link service narrows both
+  // ends to this record, so an id naming nothing simply writes nothing.
+  if (encounterId) {
+    await linkTargets(prisma, {
+      userId: user.id,
+      sourceKind: "encounter",
+      sourceId: encounterId,
+      targetKind: "labResult",
+      targetIds: [created.id],
+    }).catch(() => {});
+  }
+
   invalidateUserHealthScore(user.id);
   const dto = serialiseLabResult(created, biomarker);
 

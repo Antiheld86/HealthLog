@@ -35,6 +35,7 @@ export const PRIORITY_ITEM_KINDS = [
   "ecg_new_recording",
   "tension_window",
   "same_time_baseline",
+  "upcoming_visit",
 ] as const;
 
 export type PriorityItemKind = (typeof PRIORITY_ITEM_KINDS)[number];
@@ -52,7 +53,7 @@ export function isPriorityItemKind(value: unknown): value is PriorityItemKind {
  * action; the user can only
  * acknowledge them, so they're the only kinds the Today rail lets you
  * dismiss. The remaining kinds (`dose_window`, `sync_issue`,
- * `preventive_care`, `coach_checkin`) are ACTIONABLE — they clear on their
+ * `preventive_care`, `coach_checkin`, `upcoming_visit`) are ACTIONABLE — they clear on their
  * own once the user acts (logs the dose, reconnects the integration, …) and
  * are never dismissible; offering a dismiss on them would just let a user
  * silence a still-open action item.

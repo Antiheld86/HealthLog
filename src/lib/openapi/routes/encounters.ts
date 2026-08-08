@@ -21,6 +21,7 @@ import {
   encounterCreateSchema,
   encounterUpdateSchema,
   encounterListQuerySchema,
+  encounterSuggestQuerySchema,
   encounterLinkSchema,
   encounterStatusEnum,
   encounterKindEnum,
@@ -53,7 +54,13 @@ encounterUpdateSchema.meta({
 encounterListQuerySchema.meta({
   id: "ListEncountersQuery",
   description:
-    "Window and filters for the visit list: `from` / `to` (ISO-8601 instants), `status`, `practitionerId`, and `limit` (1–200, default 100).",
+    "Window and filters for the visit list: `from` / `to` (ISO-8601 instants), `status`, `practitionerId`, `episodeId` (only visits filed against that condition episode — the condition side of the link, and the only direction it is offered in), and `limit` (1–200, default 100).",
+});
+
+encounterSuggestQuerySchema.meta({
+  id: "SuggestEncounterQuery",
+  description:
+    "The date to resolve around, as an ISO-8601 instant with an offset. A document uses `reportDate ?? documentDate`; a lab panel uses `takenAt`.",
 });
 
 encounterLinkSchema.meta({
@@ -77,7 +84,7 @@ practitionerUpdateSchema.meta({
 practitionerListQuerySchema.meta({
   id: "ListPractitionersQuery",
   description:
-    "Query params for the address book: `q` (case-insensitive substring of the name) and `limit` (1–200, default 100). Name-ordered.",
+    "Query params for the address book: `q` (case-insensitive substring of the name OR the practice — a person looks one up by whichever of the two they remember) and `limit` (1–200, default 100). Name-ordered.",
 });
 
 const practitioner = z
@@ -120,7 +127,7 @@ const encounterLinks = z
   .meta({
     id: "EncounterLinks",
     description:
-      "The three link families of one visit, each ordered by when it was filed. Present on the detail response, absent from the list.",
+      "The three link families of one visit, each ordered by when it was filed. Present on BOTH the list and the detail: a card shows counts of what the visit produced, and an edit opened from a list row seeds its pickers from that row — a list without them would make the first read zero and the second unfile everything on save. The list resolves them in three grouped queries for the whole page, not three per row.",
   });
 
 const skipReport = z
@@ -170,6 +177,35 @@ const encounterList = z
     id: "EncounterList",
     description:
       "Visits split server-side rather than client-side. `upcoming` reads soonest-first and `past` reads newest-first — opposite directions, resolved once here so the ordering lives in one place.",
+  });
+
+const suggestionCandidate = z
+  .object({
+    id: z.string(),
+    occurredAt: z.string(),
+    status: encounterStatusEnum,
+    kind: encounterKindEnum,
+    practitionerName: z.string().nullable(),
+  })
+  .meta({
+    id: "EncounterSuggestionCandidate",
+    description:
+      "One visit a record might belong to, resolved far enough to render a row without a second round trip. `practitionerName` is null when the visit names no practice, which is an absence rather than a gap.",
+  });
+
+const encounterSuggestion = z
+  .discriminatedUnion("kind", [
+    z.object({ kind: z.literal("one"), encounter: suggestionCandidate }),
+    z.object({
+      kind: z.literal("many"),
+      encounters: z.array(suggestionCandidate),
+    }),
+    z.object({ kind: z.literal("none") }),
+  ])
+  .meta({
+    id: "EncounterSuggestion",
+    description:
+      "The verdict, as a shape rather than a best guess. There is deliberately no field on the `many` arm a client could read as a pre-selection: collapsing two candidates into one is the failure this union exists to make impossible.",
   });
 
 const encounterNotFound = {
@@ -225,6 +261,30 @@ export const encounterPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: {
             "application/json": {
               schema: dataEnvelope(encounter, "CreateEncounterEnvelope"),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/encounters/suggest": {
+    get: {
+      tags: ["Records"],
+      summary: "Which visit does a record dated around this day belong to?",
+      description:
+        "Resolves the caller's live DONE or PLANNED visits within ±7 days of `anchor` into a verdict, so the three capture moments that ask the question — a document arriving, a lab panel committed from an extraction, a lab panel typed by hand — all read the same answer. `one` means pre-select it visibly with one undo; `many` means offer a picker with NOTHING pre-selected, because pre-selecting the first of two teaches a person to stop reading suggestions; `none` means offer nothing at all. Cancelled visits and no-shows are never candidates: neither happened, so neither produced the record being filed. No AI provider is involved and none is required.",
+      requestParams: { query: encounterSuggestQuerySchema },
+      responses: {
+        ...recordRefusal(),
+        "200": {
+          description: "The verdict.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                encounterSuggestion,
+                "SuggestEncounterEnvelope",
+              ),
             },
           },
         },

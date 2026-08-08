@@ -23,6 +23,11 @@ vi.mock("@/lib/db", () => ({
       deleteMany: vi.fn(),
       createMany: vi.fn(),
     },
+    encounterDocumentLink: {
+      findMany: vi.fn(),
+      deleteMany: vi.fn(),
+      createMany: vi.fn(),
+    },
     documentContentIndex: {
       findUnique: vi.fn(),
     },
@@ -30,6 +35,9 @@ vi.mock("@/lib/db", () => ({
       findUnique: vi.fn(),
     },
     illnessEpisode: {
+      findMany: vi.fn(),
+    },
+    encounter: {
       findMany: vi.fn(),
     },
     appSettings: {
@@ -129,6 +137,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
   vi.mocked(requireModuleEnabled).mockResolvedValue({ enabled: true } as never);
+  vi.mocked(prisma.encounterDocumentLink.findMany).mockResolvedValue(
+    [] as never,
+  );
+  vi.mocked(prisma.encounter.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.documentConditionLink.findMany).mockResolvedValue(
     [] as never,
   );

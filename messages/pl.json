@@ -283,7 +283,14 @@
     "familyHistoryColCondition": "Schorzenie",
     "familyHistoryColAgeAtOnset": "Wiek zachorowania",
     "labsSourceRangeNote": "* Zakres referencyjny pochodzi z samego wyniku i różni się od zapisanego zakresu:",
-    "labsCatalogRangeLabel": "zapisany zakres"
+    "labsCatalogRangeLabel": "zapisany zakres",
+    "visitsTitle": "Wizyty lekarskie",
+    "visitsColDate": "Data",
+    "visitsColPractice": "Gabinet",
+    "visitsColKind": "Rodzaj",
+    "visitsColReason": "Powód",
+    "visitsColOutcome": "Wynik",
+    "visitsColConditions": "Choroby"
   },
   "errorBoundary": {
     "title": "Coś poszło nie tak",
@@ -478,7 +485,8 @@
       "milestone": "Kamienie milowe",
       "ecg_new_recording": "Nowe zapisy EKG",
       "tension_window": "Okresy napięcia",
-      "same_time_baseline": "Aktywność o tej samej porze"
+      "same_time_baseline": "Aktywność o tej samej porze",
+      "upcoming_visit": "Wizyty"
     },
     "layoutReset": "Przywróć wartości domyślne",
     "layoutResetTitle": "Zresetować układ pulpitu?",
@@ -5996,7 +6004,9 @@
       "rangeCustomEnd": "Do",
       "errorGeneric": "Nie udało się wygenerować eksportu. Spróbuj ponownie.",
       "errorRateLimit": "Osiągnięto limit eksportów w tej godzinie.",
-      "errorModuleDisabled": "Eksport dokumentacji jest wyłączony dla tego konta."
+      "errorModuleDisabled": "Eksport dokumentacji jest wyłączony dla tego konta.",
+      "visitOffer": "{when} zaplanowano wizytę: {what}.",
+      "visitOfferApply": "Raport do tego dnia"
     },
     "globalExcludedInjectionSitesLabel": "Globalnie wykluczone miejsca iniekcji",
     "globalExcludedInjectionSitesHint": "Nigdy nieproponowane i odrzucane przy rejestracji, nawet jeśli lek je preferuje.",
@@ -8171,7 +8181,8 @@
       "openLink": "Otwórz badania"
     },
     "showMeasurements": "Pokaż pomiary",
-    "loadError": "Nie udało się załadować przypomnień."
+    "loadError": "Nie udało się załadować przypomnień.",
+    "fileVisit": "Zapisz wizytę"
   },
   "moduleList": {
     "viewToggleLabel": "Widok",
@@ -9324,7 +9335,8 @@
       "previewUnavailable": "Brak podglądu dla tego typu pliku",
       "uploadedMeta": "Dodano {date} · {size}",
       "share": "Udostępnij",
-      "labValuesLink": "Zobacz {count} wyników laboratoryjnych"
+      "labValuesLink": "Zobacz {count} wyników laboratoryjnych",
+      "visitsLabel": "Należy do wizyty"
     },
     "dropOverlay": {
       "title": "Upuść pliki, aby je przesłać",
@@ -9341,7 +9353,8 @@
       "partialFailure": "Nie udało się zaktualizować {failed} z {total}",
       "failed": "Nie udało się wykonać akcji",
       "share": "Udostępnij",
-      "shareTooMany": "Link do udostępniania obejmuje maksymalnie {max} dokumentów. Odznacz kilka i spróbuj ponownie."
+      "shareTooMany": "Link do udostępniania obejmuje maksymalnie {max} dokumentów. Odznacz kilka i spróbuj ponownie.",
+      "linkVisit": "Przypisz do wizyty"
     },
     "episodeCard": {
       "title": "Dokumenty",
@@ -9634,6 +9647,11 @@
           "below": "Do {time} masz {today} kroków. W zwykły dzień o tej porze jesteś w okolicach {typical}.",
           "above": "Do {time} masz {today} kroków, powyżej zwykłych {typical} o tej porze."
         }
+      },
+      "upcomingVisit": {
+        "title": "Zbliża się wizyta",
+        "bodyToday": "{what} — dzisiaj",
+        "bodyTomorrow": "{what} — jutro"
       }
     },
     "action": {
@@ -9729,7 +9747,8 @@
     "sensitiveHint": "Nic tu nie jest wstępnie wybrane. Wybierz każdą pozycję samodzielnie.",
     "scopeNone": "Nic jeszcze nie wybrano. Wybierz, co ma się znaleźć w dokumencie, albo zastosuj raport standardowy.",
     "scopeCount": "{count} pozycji z {groups} obszarów",
-    "scopeSensitive": "w tym {names}"
+    "scopeSensitive": "w tym {names}",
+    "leafVisits": "Wizyty lekarskie"
   },
   "recordSharing": {
     "banner": {
@@ -10092,6 +10111,98 @@
       "hospital": "Szpital",
       "therapy": "Sesja terapeutyczna",
       "other": "Wizyta lekarska"
+    },
+    "sectionTitle": "Wizyty",
+    "sectionDescription": "Wizyty u lekarza i umówione terminy w jednym miejscu.",
+    "add": "Wizyta",
+    "loadError": "Nie udało się wczytać wizyt.",
+    "emptyTitle": "Brak zapisanych wizyt",
+    "emptyDescription": "Wystarczy data. Reszta jest opcjonalna.",
+    "upcomingHeading": "Nadchodzące",
+    "pastHeading": "Minione",
+    "createTitle": "Zapisz wizytę",
+    "editTitle": "Edytuj wizytę",
+    "formDescription": "Wymagana jest tylko data.",
+    "created": "Wizyta zapisana.",
+    "updated": "Wizyta zaktualizowana.",
+    "saveFailed": "Nie udało się zapisać wizyty.",
+    "checkupNotClosed": "Wizyta zapisana. Badanie pozostaje otwarte — twój dostęp tego nie obejmuje.",
+    "status": {
+      "planned": "Zaplanowana",
+      "done": "Odbyta",
+      "cancelled": "Odwołana",
+      "noShow": "Niewykorzystana"
+    },
+    "card": {
+      "documentCount": "powiązane dokumenty",
+      "labCount": "powiązane wyniki badań",
+      "conditionCount": "powiązane choroby"
+    },
+    "form": {
+      "date": "Data i godzina",
+      "dateDerivesStatusHint": "Data w przyszłości oznacza umówiony termin.",
+      "status": "Status",
+      "practitioner": "Gabinet lub lekarz",
+      "practitionerHint": "Opcjonalne — nazwę możesz dodać później.",
+      "practitionerNone": "Nie podano",
+      "practitionerSearch": "Szukaj nazwiska lub gabinetu",
+      "practitionerNoMatch": "Nie znaleziono wpisu.",
+      "practitionerAdd": "Dodaj nowy",
+      "practitionerClear": "Usuń wybór",
+      "kind": "Rodzaj",
+      "reason": "Powód",
+      "outcome": "Wynik",
+      "outcomeReveal": "Dodaj wynik",
+      "linkDocuments": "Dokumenty",
+      "linkLabResults": "Wyniki badań",
+      "linkConditions": "Choroby",
+      "linkNothingToOffer": "Na razie nie ma nic do powiązania."
+    },
+    "deleteTitle": "Usunąć tę wizytę?",
+    "deleteDescription": "Wpis zostanie usunięty. Jeśli wizyta jest umówiona, przypomnienie o niej też zniknie.",
+    "deleteFailed": "Nie udało się usunąć wizyty.",
+    "suggestion": {
+      "single": "Czy to należy do tej wizyty?",
+      "choose": "Do której wizyty to należy?"
+    },
+    "episodeCard": {
+      "title": "Powiązane wizyty",
+      "emptyLine": "Do tej choroby nie przypisano jeszcze żadnej wizyty.",
+      "add": "Dodaj wizytę"
+    },
+    "dashboard": {
+      "nextVisit": "Najbliższa wizyta: {what}, {when}"
     }
+  },
+  "checkups": {
+    "viewSwitchLabel": "Pokaż badania profilaktyczne lub wizyty",
+    "tabVorsorge": "Profilaktyka",
+    "tabVisits": "Wizyty"
+  },
+  "practitioners": {
+    "title": "Gabinety i lekarze",
+    "description": "Twoja własna książka adresowa — wpisz gabinet raz, wybieraj go wszędzie.",
+    "linkLabel": "Książka adresowa",
+    "add": "Wpis",
+    "searchPlaceholder": "Szukaj nazwiska lub gabinetu",
+    "loadError": "Nie udało się wczytać książki adresowej.",
+    "emptyTitle": "Brak wpisów",
+    "emptyDescription": "Dodaj gabinet, aby móc go wybrać przy zapisywaniu wizyty.",
+    "noMatchTitle": "Brak wyników",
+    "noMatchDescription": "Żaden wpis nie pasuje do tego wyszukiwania.",
+    "createTitle": "Dodaj wpis",
+    "editTitle": "Edytuj wpis",
+    "formDescription": "Wymagana jest tylko nazwa.",
+    "name": "Nazwa",
+    "specialty": "Specjalizacja",
+    "practice": "Gabinet",
+    "location": "Adres",
+    "phone": "Telefon",
+    "note": "Notatka",
+    "noteHint": "Zapisywana w postaci zaszyfrowanej.",
+    "saveFailed": "Nie udało się zapisać wpisu.",
+    "deleteTitle": "Usunąć ten wpis?",
+    "deleteDescription": "Twoje dotychczasowe wizyty pozostają i zachowują tę nazwę.",
+    "deleteFailed": "Nie udało się usunąć wpisu."
   }
 }

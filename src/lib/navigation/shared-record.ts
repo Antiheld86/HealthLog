@@ -15,10 +15,22 @@ import {
  * fail closed in chrome until it has been intentionally classified.
  */
 export const SHARED_RECORD_DOMAIN_ROUTE_FAMILIES = {
-  measurements: ["/measurements"],
+  // `/checkups` carries content from two domains and is listed under both.
+  // The preventive-care list has always been a `measurements` read
+  // (`/api/measurement-reminders` declares it), and the page was in neither
+  // list — under a whole-record grant it painted anyway, because a null
+  // section set admits everything, so the omission stayed invisible for as
+  // long as a scoped grant had no reason to open it. The visits section makes
+  // it visible: a delegate scoped to `profile` is granted the visit data by
+  // the API and would be denied the only page that shows it. The table is
+  // built by a flatMap over (domain, href) pairs, so one href under two
+  // domains means a grant naming either presents the page — and the handler
+  // still evaluates the grant on every read, because this is a presentation
+  // inventory and not an authorization table.
+  measurements: ["/measurements", "/checkups"],
   medications: ["/medications"],
   labs: ["/labs"],
-  profile: ["/profile"],
+  profile: ["/profile", "/checkups"],
   illness: ["/illness"],
   mind: ["/mood", "/mental-wellbeing"],
   cycle: ["/cycle"],
@@ -78,7 +90,10 @@ export function resolveSharedRecordNavigation(
   );
 
   return {
-    destinationHrefs: routeFamilies.map((family) => family.href),
+    // Deduplicated: an href listed under two domains is one destination, and a
+    // grant holding both would otherwise offer it twice — and make
+    // `sharedRecordLandingHref` count a page as two doorways.
+    destinationHrefs: [...new Set(routeFamilies.map((family) => family.href))],
     allowsPath(pathname: string): boolean {
       return routeFamilies.some((family) =>
         matchesRouteFamily(pathname, family.href),

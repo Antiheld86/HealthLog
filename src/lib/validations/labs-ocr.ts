@@ -209,6 +209,17 @@ export const ocrCommitSchema = z.object({
    * is verified server-side before any link is written.
    */
   documentId: z.string().trim().min(1).max(64).optional(),
+  /**
+   * The visit this panel came out of, when the review step offered one.
+   *
+   * Optional, always. A panel commits with no visit named and the commit
+   * succeeds unchanged — the link is the by-the-way half of the flow, never
+   * a condition of the write. Ownership is verified server-side, and one link
+   * is written PER RESULT ROW rather than one for the panel: a re-run panel on
+   * a different day links to its own visit, which is why the join is m:n and
+   * not a scalar column on the result.
+   */
+  encounterId: z.string().trim().min(1).max(40).optional(),
 });
 
 export type OcrCommitInput = z.infer<typeof ocrCommitSchema>;

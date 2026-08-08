@@ -674,6 +674,32 @@ describe("sendViaApns — dispatcher fan-out", () => {
     expect(note.payload.replyMarkup).toBeUndefined();
   });
 
+  it("withholds the category and the reminder id when actions are suppressed", async () => {
+    // The category IS the action row on iOS, and the id is what the action
+    // would POST. An appointment nudge has neither: the by-id reminder family
+    // refuses an ENCOUNTER-origin row, so both are dropped and the push
+    // arrives as a plain alert. The event type still routes it.
+    vi.mocked(prisma.device.findMany).mockResolvedValueOnce([
+      { id: "d1", apnsToken: "tok-a", apnsEnvironment: "sandbox" },
+    ] as never);
+    sendMock.mockResolvedValueOnce({ sent: [{ device: "tok-a" }], failed: [] });
+    await sendViaApns("u-1", {
+      title: "t",
+      message: "m",
+      eventType: "MEASUREMENT_REMINDER",
+      suppressActions: true,
+      metadata: {
+        reminderId: "rem-1",
+        scheduledAt: "2026-08-08T09:00:00.000Z",
+      },
+    });
+    const note = sendMock.mock.calls[0][0];
+    expect(note.category).toBeUndefined();
+    expect(note.payload.reminderId).toBeUndefined();
+    expect(note.payload.eventType).toBe("MEASUREMENT_REMINDER");
+    expect(note.payload.scheduledAt).toBe("2026-08-08T09:00:00.000Z");
+  });
+
   it("forwards MOOD_REMINDER eventType as aps.category too", async () => {
     // SR-2 contract: the mood-reminder daily job emits this event-type;
     // the iOS app registers a `MOOD_REMINDER` category whose only

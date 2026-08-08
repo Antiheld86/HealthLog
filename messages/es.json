@@ -283,7 +283,14 @@
     "familyHistoryColCondition": "Afección",
     "familyHistoryColAgeAtOnset": "Edad de inicio",
     "labsSourceRangeNote": "* El rango de referencia procede del propio informe y difiere del rango guardado:",
-    "labsCatalogRangeLabel": "rango guardado"
+    "labsCatalogRangeLabel": "rango guardado",
+    "visitsTitle": "Visitas médicas",
+    "visitsColDate": "Fecha",
+    "visitsColPractice": "Consulta",
+    "visitsColKind": "Tipo",
+    "visitsColReason": "Motivo",
+    "visitsColOutcome": "Resultado",
+    "visitsColConditions": "Enfermedades"
   },
   "errorBoundary": {
     "title": "Algo ha salido mal",
@@ -478,7 +485,8 @@
       "milestone": "Hitos",
       "ecg_new_recording": "Nuevos registros de ECG",
       "tension_window": "Periodos de tensión",
-      "same_time_baseline": "Actividad a la misma hora"
+      "same_time_baseline": "Actividad a la misma hora",
+      "upcoming_visit": "Citas"
     },
     "layoutReset": "Restablecer valores por defecto",
     "layoutResetTitle": "¿Restablecer el diseño del panel?",
@@ -5996,7 +6004,9 @@
       "rangeCustomEnd": "Hasta",
       "errorGeneric": "No se pudo generar la exportación. Inténtelo de nuevo.",
       "errorRateLimit": "Ha alcanzado el límite de exportaciones de esta hora.",
-      "errorModuleDisabled": "La exportación del expediente está desactivada para esta cuenta."
+      "errorModuleDisabled": "La exportación del expediente está desactivada para esta cuenta.",
+      "visitOffer": "El {when} hay una cita: {what}.",
+      "visitOfferApply": "Informe hasta esa fecha"
     },
     "globalExcludedInjectionSitesLabel": "Sitios de inyección excluidos globalmente",
     "globalExcludedInjectionSitesHint": "Nunca se ofrecen y se rechazan al registrar una dosis, aunque un medicamento los prefiera.",
@@ -8171,7 +8181,8 @@
       "openLink": "Abrir revisiones"
     },
     "showMeasurements": "Ver mediciones",
-    "loadError": "No se pudieron cargar tus recordatorios."
+    "loadError": "No se pudieron cargar tus recordatorios.",
+    "fileVisit": "Registrar una cita"
   },
   "moduleList": {
     "viewToggleLabel": "Vista",
@@ -9324,7 +9335,8 @@
       "previewUnavailable": "Sin vista previa integrada para este tipo de archivo",
       "uploadedMeta": "Añadido el {date} · {size}",
       "share": "Compartir",
-      "labValuesLink": "Ver {count} valores de laboratorio"
+      "labValuesLink": "Ver {count} valores de laboratorio",
+      "visitsLabel": "Pertenece a la cita"
     },
     "dropOverlay": {
       "title": "Suelta los archivos para subirlos",
@@ -9341,7 +9353,8 @@
       "partialFailure": "No se pudieron actualizar {failed} de {total}",
       "failed": "No se pudo completar la acción",
       "share": "Compartir",
-      "shareTooMany": "Un enlace para compartir admite como máximo {max} documentos. Deselecciona algunos e inténtalo de nuevo."
+      "shareTooMany": "Un enlace para compartir admite como máximo {max} documentos. Deselecciona algunos e inténtalo de nuevo.",
+      "linkVisit": "Asignar a una cita"
     },
     "episodeCard": {
       "title": "Documentos",
@@ -9634,6 +9647,11 @@
           "below": "A las {time} llevas {today} pasos. En un día habitual rondas los {typical} a esta hora.",
           "above": "A las {time} llevas {today} pasos, por encima de los {typical} habituales a esta hora."
         }
+      },
+      "upcomingVisit": {
+        "title": "Cita próxima",
+        "bodyToday": "{what}: hoy",
+        "bodyTomorrow": "{what}: mañana"
       }
     },
     "action": {
@@ -9729,7 +9747,8 @@
     "sensitiveHint": "Aquí nunca hay nada preseleccionado. Elija cada entrada usted mismo.",
     "scopeNone": "Nada seleccionado todavía. Elija qué incluir o aplique el informe estándar.",
     "scopeCount": "{count} entradas de {groups} áreas",
-    "scopeSensitive": "incl. {names}"
+    "scopeSensitive": "incl. {names}",
+    "leafVisits": "Visitas médicas"
   },
   "recordSharing": {
     "banner": {
@@ -10092,6 +10111,98 @@
       "hospital": "Hospital",
       "therapy": "Sesión de terapia",
       "other": "Cita médica"
+    },
+    "sectionTitle": "Citas",
+    "sectionDescription": "Visitas médicas y citas reservadas en un solo sitio.",
+    "add": "Cita",
+    "loadError": "No se pudieron cargar las citas.",
+    "emptyTitle": "Todavía no hay ninguna cita",
+    "emptyDescription": "Basta con una fecha. Todo lo demás es opcional.",
+    "upcomingHeading": "Próximas",
+    "pastHeading": "Pasadas",
+    "createTitle": "Registrar una cita",
+    "editTitle": "Editar la cita",
+    "formDescription": "Solo la fecha es obligatoria.",
+    "created": "Cita guardada.",
+    "updated": "Cita actualizada.",
+    "saveFailed": "No se pudo guardar la cita.",
+    "checkupNotClosed": "Cita guardada. La revisión sigue pendiente: tu acceso no lo permite.",
+    "status": {
+      "planned": "Prevista",
+      "done": "Realizada",
+      "cancelled": "Cancelada",
+      "noShow": "No acudida"
+    },
+    "card": {
+      "documentCount": "documentos vinculados",
+      "labCount": "resultados de laboratorio vinculados",
+      "conditionCount": "enfermedades vinculadas"
+    },
+    "form": {
+      "date": "Fecha y hora",
+      "dateDerivesStatusHint": "Una fecha futura es una cita reservada.",
+      "status": "Estado",
+      "practitioner": "Consulta o médico",
+      "practitionerHint": "Opcional: puedes añadir el nombre más tarde.",
+      "practitionerNone": "Sin indicar",
+      "practitionerSearch": "Buscar nombre o consulta",
+      "practitionerNoMatch": "No se encontró ninguna entrada.",
+      "practitionerAdd": "Añadir nueva",
+      "practitionerClear": "Quitar la selección",
+      "kind": "Tipo",
+      "reason": "Motivo",
+      "outcome": "Resultado",
+      "outcomeReveal": "Añadir un resultado",
+      "linkDocuments": "Documentos",
+      "linkLabResults": "Resultados de laboratorio",
+      "linkConditions": "Enfermedades",
+      "linkNothingToOffer": "Todavía no hay nada que vincular."
+    },
+    "deleteTitle": "¿Eliminar esta cita?",
+    "deleteDescription": "Se elimina la entrada. Si la cita está reservada, su recordatorio también desaparece.",
+    "deleteFailed": "No se pudo eliminar la cita.",
+    "suggestion": {
+      "single": "¿Pertenece a esta cita?",
+      "choose": "¿A qué cita pertenece?"
+    },
+    "episodeCard": {
+      "title": "Citas relacionadas",
+      "emptyLine": "Todavía no hay ninguna cita vinculada a esta enfermedad.",
+      "add": "Añadir una cita"
+    },
+    "dashboard": {
+      "nextVisit": "Próxima cita: {what} el {when}"
     }
+  },
+  "checkups": {
+    "viewSwitchLabel": "Mostrar revisiones o citas",
+    "tabVorsorge": "Revisiones",
+    "tabVisits": "Citas"
+  },
+  "practitioners": {
+    "title": "Consultas y médicos",
+    "description": "Tu propia agenda: escribe una consulta una vez y elígela en todas partes.",
+    "linkLabel": "Agenda",
+    "add": "Entrada",
+    "searchPlaceholder": "Buscar nombre o consulta",
+    "loadError": "No se pudo cargar la agenda.",
+    "emptyTitle": "Todavía no hay entradas",
+    "emptyDescription": "Añade una consulta para poder elegirla al registrar una cita.",
+    "noMatchTitle": "Sin coincidencias",
+    "noMatchDescription": "Ninguna entrada coincide con esta búsqueda.",
+    "createTitle": "Añadir una entrada",
+    "editTitle": "Editar la entrada",
+    "formDescription": "Solo el nombre es obligatorio.",
+    "name": "Nombre",
+    "specialty": "Especialidad",
+    "practice": "Consulta",
+    "location": "Dirección",
+    "phone": "Teléfono",
+    "note": "Nota",
+    "noteHint": "Se guarda cifrada.",
+    "saveFailed": "No se pudo guardar la entrada.",
+    "deleteTitle": "¿Eliminar esta entrada?",
+    "deleteDescription": "Tus citas anteriores se mantienen y conservan este nombre.",
+    "deleteFailed": "No se pudo eliminar la entrada."
   }
 }

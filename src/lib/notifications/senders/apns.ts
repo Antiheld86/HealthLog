@@ -592,6 +592,8 @@ export async function sendViaApns(
     metadata?: Record<string, unknown>;
     discreet?: boolean;
     urgent?: boolean;
+    /** The dispatch offers no completion action — see `NotificationPayload`. */
+    suppressActions?: boolean;
     recordUserId?: string;
     recipientUserId?: string;
   },
@@ -732,12 +734,21 @@ export async function sendViaApns(
             // an iOS action identifier or deep link that can mutate it.
             // Keep the ordinary event envelope so opening the notification
             // follows the normal authorised record-selection flow.
+            // `suppressActions` removes the act-on-it keys for the same
+            // reason it clears the category below: the affordance the app
+            // would build from them resolves to a refusal.
             ...pickIosMetadata(
               managedDelivery
                 ? undefined
-                : payload.discreet
-                  ? stripCycleMetadata(payload.metadata)
-                  : payload.metadata,
+                : payload.suppressActions
+                  ? stripActionMetadata(
+                      payload.discreet
+                        ? stripCycleMetadata(payload.metadata)
+                        : payload.metadata,
+                    )
+                  : payload.discreet
+                    ? stripCycleMetadata(payload.metadata)
+                    : payload.metadata,
             ),
           },
           threadId: routingEvent,
@@ -746,7 +757,13 @@ export async function sendViaApns(
           // ignores categories it doesn't know about, so adding the key
           // here is safe for event-types that don't have an actionable
           // category registered yet — they fall back to a plain alert.
-          category: managedDelivery ? undefined : routingEvent,
+          // A suppressed-action dispatch drops the category for the same
+          // reason a managed delivery does: the category IS the action row,
+          // and an appointment nudge has no action the server would accept.
+          category:
+            managedDelivery || payload.suppressActions
+              ? undefined
+              : routingEvent,
           // Future-proof for an iOS Notification Service Extension. iOS
           // ignores the flag when no extension is registered, so it's a
           // no-op on today's binary but unblocks NSE work without a
@@ -1024,6 +1041,32 @@ function pickIosMetadata(
     if (IOS_METADATA_ALLOWLIST.has(key)) {
       out[key] = metadata[key];
     }
+  }
+  return out;
+}
+
+/**
+ * Metadata keys that exist so the iOS app can ACT on the notification rather
+ * than merely read it. Dropped when the producer says the dispatch carries no
+ * completion affordance.
+ */
+const ACTION_METADATA_KEYS = new Set(["reminderId"]);
+
+/**
+ * Strip the act-on-it keys from a payload whose actions the server will refuse.
+ *
+ * An appointment nudge rides the same `MEASUREMENT_REMINDER` event type as a
+ * checkup, so the iOS app would offer the registered "Erledigt" action and
+ * POST a completion the by-id reminder family answers 404 for. Removing the
+ * id is what removes the action: the handler has nothing to complete.
+ */
+function stripActionMetadata(
+  metadata: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!metadata) return metadata;
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(metadata)) {
+    if (!ACTION_METADATA_KEYS.has(key)) out[key] = metadata[key];
   }
   return out;
 }

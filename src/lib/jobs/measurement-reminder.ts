@@ -338,12 +338,20 @@ export async function runMeasurementReminderTick(
         return { title: rendered.title, message: rendered.body };
       };
 
+      // An appointment nudge is dispatched without its Done / Later
+      // affordance. It rides the same event type as a checkup — one engine,
+      // one cron, deliberately — but every by-id reminder surface refuses an
+      // ENCOUNTER-origin row: satisfying one would mark an appointment
+      // attended from a notification, and postponing one would move a date the
+      // visit record still believes it owns. The channels each drop their own
+      // affordance from this flag rather than re-deriving the origin.
       const outcome = await dispatchImpl({
         eventType: "MEASUREMENT_REMINDER",
         userId: reminder.user.id,
         title,
         message: body,
         renderForRecipient,
+        ...(reminder.origin === "ENCOUNTER" ? { suppressActions: true } : {}),
         metadata: {
           scheduledAt: now.toISOString(),
           reminderId: reminder.id,

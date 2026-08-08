@@ -290,6 +290,24 @@ export interface DocumentConditionLinkDto {
   name: string;
 }
 
+/**
+ * One visit link on a document DTO — "this letter belongs to that appointment".
+ *
+ * Carries the visit's KIND as the enum constant rather than a rendered name.
+ * A condition's label is the person's own words and reads the same in every
+ * language; a visit kind is one of eight closed values whose human name the
+ * reader's own bundle owns, so publishing the constant is what lets a German
+ * reader and an English one each see it named correctly. The date and the id
+ * are resolved server-side as usual.
+ */
+export interface DocumentEncounterLinkDto {
+  encounterId: string;
+  /** `ROUTINE` | `ACUTE` | … — the client renders the name. */
+  kind: string;
+  /** ISO-8601 instant of the visit. */
+  occurredAt: string | null;
+}
+
 /** The document DTO (list + detail). */
 export interface InboundDocumentDto {
   id: string;
@@ -312,6 +330,8 @@ export interface InboundDocumentDto {
   pendingCount: number;
   /** Linked illness/condition episodes (empty when unlinked). */
   conditionLinks: DocumentConditionLinkDto[];
+  /** Visits this document is filed against (empty when unlinked). */
+  encounterLinks: DocumentEncounterLinkDto[];
   /** How the serve route delivers the original: render inline or download. */
   servingClass: "inline" | "attachment";
   /**
@@ -485,18 +505,35 @@ const episodeIdList = z
   .max(DOCUMENT_MAX_EPISODE_LINKS);
 
 /**
+ * Max visit links a single document may carry / receive per request.
+ *
+ * The same bound as the condition links, and for the same reason: a document
+ * filed against twenty visits is a client defect rather than a large but
+ * legitimate batch.
+ */
+export const DOCUMENT_MAX_ENCOUNTER_LINKS = 20;
+
+const encounterIdList = z
+  .array(z.string().trim().min(1).max(40))
+  .max(DOCUMENT_MAX_ENCOUNTER_LINKS);
+
+/**
  * The store-only upload metadata (the multipart form fields beside the file).
  * Every field is optional — a bare file upload is valid and lands as a STORED
  * document with no title / category / filing date. `episodeIds` pre-links the
  * document to the caller's illness/condition episodes (repeated `episodeIds`
- * form fields; ownership is re-checked in the route). No `userId` field; it
- * is always narrowed from the session.
+ * form fields; ownership is re-checked in the route), and `encounterIds` does
+ * the same for the caller's visits — the review step offers the visit the
+ * document's own date falls near, and the link rides the upload rather than
+ * becoming a second trip. No `userId` field; it is always narrowed from the
+ * session.
  */
 export const documentCreateSchema = z.object({
   title: z.string().trim().min(1).max(DOCUMENT_TITLE_MAX).optional(),
   kind: z.enum(INBOUND_DOCUMENT_KINDS).optional(),
   documentDate: isoDateString.optional(),
   episodeIds: episodeIdList.optional(),
+  encounterIds: encounterIdList.optional(),
 });
 
 export type DocumentCreateInput = z.infer<typeof documentCreateSchema>;
@@ -524,13 +561,16 @@ export const documentUpdateSchema = z
      * is re-checked in the route against the caller's episodes.
      */
     episodeIds: episodeIdList.optional(),
+    /** Replace-set visit links, same semantics as `episodeIds`. */
+    encounterIds: encounterIdList.optional(),
   })
   .refine(
     (d) =>
       d.title !== undefined ||
       d.kind !== undefined ||
       d.documentDate !== undefined ||
-      d.episodeIds !== undefined,
+      d.episodeIds !== undefined ||
+      d.encounterIds !== undefined,
     { message: "Provide at least one field to update" },
   );
 
@@ -561,6 +601,8 @@ export const documentListQuerySchema = z.object({
   kind: z.array(z.enum(INBOUND_DOCUMENT_KINDS)).max(16).optional(),
   /** Only documents linked to this illness/condition episode. */
   episodeId: z.string().trim().min(1).max(40).optional(),
+  /** Only documents linked to this visit. */
+  encounterId: z.string().trim().min(1).max(40).optional(),
   /** Only documents whose filing date falls in this calendar year (UTC). */
   year: z.coerce.number().int().min(1900).max(9999).optional(),
   from: isoDateString.optional(),
@@ -587,6 +629,8 @@ export const DOCUMENT_BULK_ACTIONS = [
   "setKind",
   "linkEpisode",
   "unlinkEpisode",
+  "linkEncounter",
+  "unlinkEncounter",
   "delete",
   "restore",
 ] as const;
@@ -608,6 +652,7 @@ export const documentBulkSchema = z
     action: z.enum(DOCUMENT_BULK_ACTIONS),
     kind: z.enum(INBOUND_DOCUMENT_KINDS).optional(),
     episodeId: z.string().trim().min(1).max(40).optional(),
+    encounterId: z.string().trim().min(1).max(40).optional(),
   })
   .refine((d) => d.action !== "setKind" || d.kind !== undefined, {
     message: "Action 'setKind' requires a kind",
@@ -620,6 +665,15 @@ export const documentBulkSchema = z
     {
       message: "Episode actions require an episodeId",
       path: ["episodeId"],
+    },
+  )
+  .refine(
+    (d) =>
+      (d.action !== "linkEncounter" && d.action !== "unlinkEncounter") ||
+      d.encounterId !== undefined,
+    {
+      message: "Visit actions require an encounterId",
+      path: ["encounterId"],
     },
   );
 

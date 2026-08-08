@@ -30,6 +30,7 @@ function doc(overrides: Partial<InboundDocumentDto> = {}): InboundDocumentDto {
     factCount: 0,
     pendingCount: 0,
     conditionLinks: [{ episodeId: "ep-knee", name: "Knie" }],
+    encounterLinks: [],
     servingClass: "inline",
     hasContentIndex: false,
     contentIndexSource: null,

@@ -22,7 +22,7 @@ import { dataEnvelope, stdResponses } from "./shared";
 ocrCommitSchema.meta({
   id: "OcrCommitRequest",
   description:
-    "The rows a human confirmed on the Lab-OCR review screen. Each row is EITHER numeric (`value` + `unit`, optional reference bounds) OR qualitative (`valueText`) — exactly one. `analyte` drives a resolve-or-mint of the user-scoped biomarker; `takenAt` is a backdatable ISO instant. No `userId` field — it is narrowed from the session. 1..100 rows. The route skips a row that duplicates a live reading (same analyte + day + value).",
+    "The rows a human confirmed on the Lab-OCR review screen. Each row is EITHER numeric (`value` + `unit`, optional reference bounds) OR qualitative (`valueText`) — exactly one. `analyte` drives a resolve-or-mint of the user-scoped biomarker; `takenAt` is a backdatable ISO instant. No `userId` field — it is narrowed from the session. 1..100 rows. The route skips a row that duplicates a live reading (same analyte + day + value). The optional `encounterId` files the panel against a visit the caller owns — ONE link per written result row, so a marker re-run on a different day belongs to its own visit; always optional, and a link that could not be made never fails the commit.",
 });
 
 const capabilityResponse = z

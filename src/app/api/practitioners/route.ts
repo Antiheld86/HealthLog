@@ -50,8 +50,27 @@ export const GET = apiHandler(async (request: NextRequest) => {
     where: {
       userId: user.id,
       deletedAt: null,
+      // Both plaintext columns, because a person looks a practice up by
+      // whichever of the two they remember: the doctor's name on the referral
+      // or the practice name on the door. Searching only the name made the
+      // second attempt return nothing and read as "not in the address book".
       ...(parsed.data.q
-        ? { name: { contains: parsed.data.q, mode: "insensitive" as const } }
+        ? {
+            OR: [
+              {
+                name: {
+                  contains: parsed.data.q,
+                  mode: "insensitive" as const,
+                },
+              },
+              {
+                practice: {
+                  contains: parsed.data.q,
+                  mode: "insensitive" as const,
+                },
+              },
+            ],
+          }
         : {}),
     },
     orderBy: { name: "asc" },

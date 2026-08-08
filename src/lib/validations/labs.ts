@@ -131,6 +131,12 @@ export const createLabResultSchema = z
     takenAt: takenAtField,
     note: optionalNote,
     source,
+    /**
+     * The visit this reading came out of, when the form offered one. Optional
+     * always: a reading saves with no visit named, and the link never gates
+     * the write.
+     */
+    encounterId: z.string().trim().min(1).max(40).optional(),
   })
   // Either a catalog link OR a free-text analyte must be present.
   .refine((d) => d.biomarkerId !== undefined || d.analyte !== undefined, {

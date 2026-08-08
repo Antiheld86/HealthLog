@@ -50,6 +50,7 @@ function doc(id: string, title: string): InboundDocumentDto {
     factCount: 0,
     pendingCount: 0,
     conditionLinks: [{ episodeId: "ep1", name: "Knee" }],
+    encounterLinks: [],
     servingClass: "inline",
     hasContentIndex: false,
     contentIndexSource: null,

@@ -32,6 +32,7 @@ import {
   type DailyDigestCoachPlan,
   type DailyDigestEcg,
   type DailyDigestPreventiveDue,
+  type DailyDigestUpcomingVisit,
   type DailyDigestScore,
   type DailyDigestSameTime,
   type DailyDigestSyncIssue,
@@ -62,6 +63,16 @@ import {
 
 /** Integration states that mean "your action is needed to keep data flowing". */
 const SYNC_ISSUE_STATES = ["error_reauth", "parked"] as const;
+
+/**
+ * How far ahead the rail mentions a booked appointment: today or tomorrow.
+ *
+ * The rail is a "what about today" surface, so anything further out is not a
+ * thing to act on this morning. Two days rather than one because an evening
+ * reader wants tomorrow's 08:00 appointment, and a 24-hour window would hide it
+ * from them.
+ */
+const UPCOMING_VISIT_WINDOW_MS = 2 * 24 * 60 * 60 * 1000;
 
 /** Defensive cap on how many overdue reminders we read for the rail summary. */
 const PREVENTIVE_DUE_READ_LIMIT = 20;
@@ -355,6 +366,7 @@ export async function loadDailyDigest(
     planRows,
     ecgRow,
     arrivalRows,
+    nextVisitRow,
   ] = await Promise.all([
     readDashboardSnapshotCached(user),
     resolveModuleMap(user.id),
@@ -428,6 +440,27 @@ export async function loadDailyDigest(
         generatedAt: true,
       },
     }),
+    // The next PLANNED visit inside the two-day horizon. Read straight off the
+    // visit table, never off the reminder engine — see the mapping below for
+    // why the exclusion above must stay untouched.
+    prisma.encounter.findFirst({
+      where: {
+        userId: user.id,
+        deletedAt: null,
+        status: "PLANNED",
+        occurredAt: {
+          gt: now,
+          lte: new Date(now.getTime() + UPCOMING_VISIT_WINDOW_MS),
+        },
+      },
+      orderBy: { occurredAt: "asc" },
+      select: {
+        id: true,
+        kind: true,
+        occurredAt: true,
+        practitioner: { select: { name: true } },
+      },
+    }),
   ]);
 
   const score: DailyDigestScore | null = snapshot.healthScore
@@ -462,6 +495,29 @@ export async function loadDailyDigest(
   const preventiveDue: DailyDigestPreventiveDue[] = dueReminders.map((row) => ({
     label: row.label,
   }));
+
+  /**
+   * The appointment falling today or tomorrow, read from the VISIT table.
+   *
+   * Not from the reminder table. An ENCOUNTER-origin reminder is excluded from
+   * every preventive-care read, which is right — an appointment is not a
+   * checkup — but a notification about something the app never shows is worse
+   * than none. So the appointment reaches the rail from the record it lives
+   * in, and the exclusion above stays exactly as it is. A diff here that
+   * touches `origin` is the wrong fix.
+   *
+   * `occurredAt > now` deliberately, not `>= todayStart`: an appointment that
+   * has already happened today is not something to be reminded about, and the
+   * person is more likely to be at it than looking at this.
+   */
+  const upcomingVisit: DailyDigestUpcomingVisit | null = nextVisitRow
+    ? {
+        id: nextVisitRow.id,
+        kind: nextVisitRow.kind,
+        occurredAt: nextVisitRow.occurredAt.toISOString(),
+        practitionerName: nextVisitRow.practitioner?.name ?? null,
+      }
+    : null;
 
   // S10 — the freshest ECG recording (device verdict + recordedAt only). The
   // builder decides "new" and gates on the `insights` module. An ECG row only
@@ -563,6 +619,7 @@ export async function loadDailyDigest(
       morningRefreshedToday,
       syncIssues,
       preventiveDue,
+      upcomingVisit,
       coachPlans,
       milestone,
       tensionWindow,

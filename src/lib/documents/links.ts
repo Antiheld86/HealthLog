@@ -8,7 +8,10 @@
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { listTargetsBySource, replaceTargets } from "@/lib/links";
-import type { DocumentConditionLinkDto } from "@/lib/validations/inbound-documents";
+import type {
+  DocumentConditionLinkDto,
+  DocumentEncounterLinkDto,
+} from "@/lib/validations/inbound-documents";
 
 /**
  * Load the condition links for a page of documents in ONE grouped query.
@@ -37,6 +40,82 @@ export async function loadConditionLinks(
     );
   }
   return map;
+}
+
+/**
+ * Load the VISIT links for a page of documents in ONE grouped query.
+ *
+ * Unlike the condition chips this filters tombstoned visits out: the condition
+ * behaviour is a long-standing one this refactor deliberately did not change,
+ * while a visit link is new and starts from the honest default — a deleted
+ * visit is not something the document still belongs to.
+ */
+export async function loadDocumentEncounterLinks(
+  userId: string,
+  documentIds: string[],
+): Promise<Map<string, DocumentEncounterLinkDto[]>> {
+  const map = new Map<string, DocumentEncounterLinkDto[]>();
+  if (documentIds.length === 0) return map;
+  const byDocument = await listTargetsBySource(prisma, {
+    userId,
+    sourceKind: "document",
+    sourceIds: documentIds,
+    targetKind: "encounter",
+  });
+  for (const [documentId, targets] of byDocument) {
+    map.set(
+      documentId,
+      targets.map((target) => ({
+        encounterId: target.id,
+        kind: target.label,
+        occurredAt: target.date,
+      })),
+    );
+  }
+  return map;
+}
+
+/**
+ * Narrow a client-sent visit-id list to the caller's LIVE visits.
+ *
+ * Same shape and same refusal as {@link narrowOwnedEpisodeIds}: null when any
+ * id names nothing, so an attacker probing another account's visit ids learns
+ * only "not found".
+ */
+export async function narrowOwnedEncounterIds(
+  userId: string,
+  encounterIds: string[],
+): Promise<string[] | null> {
+  const unique = [...new Set(encounterIds)];
+  if (unique.length === 0) return [];
+  const owned = await prisma.encounter.findMany({
+    where: { id: { in: unique }, userId, deletedAt: null },
+    select: { id: true },
+  });
+  if (owned.length !== unique.length) return null;
+  return unique;
+}
+
+/**
+ * Replace-set a document's visit links inside the given client.
+ *
+ * Goes through the link service in the `document → encounter` direction, which
+ * is the same table the visit's own sheet writes from the other end, so the two
+ * surfaces cannot disagree about what is filed where.
+ */
+export async function replaceEncounterLinks(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  documentId: string,
+  encounterIds: string[],
+): Promise<void> {
+  await replaceTargets(tx, {
+    userId,
+    sourceKind: "document",
+    sourceId: documentId,
+    targetKind: "encounter",
+    targetIds: encounterIds,
+  });
 }
 
 /**

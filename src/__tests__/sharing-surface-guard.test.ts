@@ -939,6 +939,10 @@ const DELEGABLE_ROUTES: Record<string, DelegableEntry> = {
     domain: "profile",
     why: "One visit of the record, fetch-then-guard against the resolved user. The links it resolves are read through the link service, which narrows both ends to the same resolved id.",
   },
+  "app/api/encounters/suggest/route.ts": {
+    domain: "profile",
+    why: "Which of the record's visits a document or lab panel dated around a given day belongs to. A read over the same rows the visit list serves, reduced to a verdict — the caller learns nothing about the record it could not learn from the list itself, and the anchor it passes is a date rather than an id, so it cannot address a row.",
+  },
   "app/api/practitioners/route.ts": {
     domain: "profile",
     why: "The record's own address book of doctors and practices. Record content, not account configuration — it touches no credential, no integration and no notification channel, which is the fence the classification turns on. The create arm is a delegable write.",
@@ -1864,12 +1868,13 @@ const ACTOR_ROUTES: Record<string, string> = {
  * managed-record configuration adds one more: 196 → 197. The bounded
  * read-only profile summary makes the next explicit admission: 197 → 198.
  * The two initial Cycle reads follow as separate, scoped admissions: 198 → 200.
- * The mood day's linked figures, read-only, add one: 200 → 201. The visit
- * record and its address book bring twelve: 201 → 213. The mood prognosis,
+ * The mood day's linked figures, read-only, add one: 200 -> 201. The visit
+ * record and its address book bring twelve: 201 -> 213. The mood prognosis,
  * read-only and admitted on the whole record for the same reason as the linked
- * figures, adds one: 213 → 214.
+ * figures, adds one: 213 -> 214. The visit-suggestion read, which serves the
+ * three incidental-linking moments from the same rule, adds one: 214 -> 215.
  */
-const FROZEN_ENTRY_COUNT = 214;
+const FROZEN_ENTRY_COUNT = 215;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —

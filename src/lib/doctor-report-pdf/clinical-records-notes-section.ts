@@ -217,6 +217,73 @@ export function buildClinicalRecordsNotesSection(
         .finalY + 8;
   }
 
+  // Visits inside the window — what happened at a practice, and what came out
+  // of it. Present only when the VISITS leaf was selected AND the window held a
+  // visit (the aggregator gates `data.visits`); the leaf carries no module of
+  // its own, because a visit is core and the whole report is already gated by
+  // `doctorReport`. Same calm factual register as the illness table above: no
+  // colour, no status tint. The encrypted reason and outcome decrypt at render
+  // and never enter the stored selection.
+  if (data.visits && data.visits.length > 0) {
+    y = ensureSpace(y, 6 + 18);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(30, 30, 30);
+    doc.text(t("doctorReport.visitsTitle"), margin, y);
+    y += 6;
+
+    const visitRows = data.visits.map((visit) => [
+      fmtDate(visit.occurredAt),
+      // The practice, with its specialty when there is one; an em dash when
+      // the visit named neither, which is honest rather than invented.
+      [visit.practitionerName, visit.practitionerSpecialty]
+        .filter(Boolean)
+        .join(" · ") || "—",
+      t(`encounters.kind.${visit.kind}`),
+      visit.reason ?? "—",
+      visit.outcome ?? "—",
+      visit.conditionLabels.length > 0 ? visit.conditionLabels.join(", ") : "—",
+    ]);
+
+    autoTable(doc, {
+      startY: y,
+      head: [
+        [
+          t("doctorReport.visitsColDate"),
+          t("doctorReport.visitsColPractice"),
+          t("doctorReport.visitsColKind"),
+          t("doctorReport.visitsColReason"),
+          t("doctorReport.visitsColOutcome"),
+          t("doctorReport.visitsColConditions"),
+        ],
+      ],
+      body: visitRows,
+      theme: "grid",
+      styles: {
+        fontSize: 9,
+        cellPadding: 3,
+        textColor: [30, 30, 30],
+        lineColor: [200, 200, 200],
+        lineWidth: 0.3,
+      },
+      headStyles: {
+        fillColor: [245, 245, 245],
+        textColor: [30, 30, 30],
+        fontStyle: "bold",
+      },
+      alternateRowStyles: { fillColor: [252, 252, 252] },
+      margin: {
+        left: margin,
+        right: margin,
+        top: margin,
+        bottom: tableBottomMargin,
+      },
+    });
+    y =
+      (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable
+        .finalY + 8;
+  }
+
   // v1.27.x — structured allergy / intolerance records. Reference data
   // (not time-windowed) the aggregator populates when the `allergies`
   // toggle is ON (default) and rows exist. Stored fields only — substance,
