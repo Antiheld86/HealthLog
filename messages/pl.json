@@ -3090,8 +3090,7 @@
       "valuesBack": "Powrót do Insights",
       "valuesBackToMetric": "Powrót do {metric}",
       "scoresBack": "Powrót do Insights",
-      "ecgDescription": "Zapisy EKG jednoodprowadzeniowe z Twojego urządzenia, każdy z wynikiem samego urządzenia.",
-      "ecgDisclaimer": "HealthLog pokazuje przebieg i zapis — nie interpretuje krzywej."
+      "ecgDescription": "Zapisy EKG jednoodprowadzeniowe z Twojego urządzenia, każdy z wynikiem samego urządzenia."
     },
     "units": {
       "steps": "kroki",
@@ -4235,10 +4234,8 @@
     },
     "ecg": {
       "sectionTitle": "Zapisy EKG",
-      "sectionIntro": "Jednoodprowadzeniowe zapisy EKG zarejestrowane przez Twoje urządzenie. HealthLog pokazuje tylko zapis i wynik wygenerowany przez urządzenie — nie odczytuje ani nie interpretuje przebiegu.",
       "loadError": "Nie udało się wczytać Twoich zapisów EKG.",
       "backToList": "Powrót do zapisów",
-      "disclaimer": "To jest wynik wygenerowany przez Twoje urządzenie rejestrujące. HealthLog nie odczytuje ani nie interpretuje zapisów EKG i nie stawia diagnozy.",
       "clinicianNote": "Jeśli ten wynik Cię niepokoi, omów ten zapis z lekarzem.",
       "resultAttribution": "Zarejestrowany wynik: {result}, zgodnie z informacją z urządzenia rejestrującego.",
       "result": {

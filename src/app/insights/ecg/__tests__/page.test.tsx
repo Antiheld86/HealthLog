@@ -63,19 +63,29 @@ function render(data: { recordings: EcgRecord[]; hasRecordings: boolean }) {
 }
 
 describe("/insights/ecg page (H1)", () => {
-  it("renders the EcgSection with its disclaimer when recordings exist", () => {
+  it("renders the EcgSection when recordings exist", () => {
     const html = render({
       recordings: [seededRecording()],
       hasRecordings: true,
     });
-    // The reused section + its load-bearing non-diagnostic disclaimer render.
     expect(html).toContain('data-slot="ecg-section"');
     expect(html).toContain('data-slot="ecg-card"');
-    expect(html).toContain('data-slot="ecg-disclaimer"');
     // The shell owns the page heading (`<h1>`); the section's own
     // `<SectionHeading>` (`<h2>`) is suppressed via `hideHeading`.
     expect(html).toContain('id="insights-subpage-title"');
     expect(html).not.toContain("<h2");
+  });
+
+  it("carries no disclaimer paragraph above the list", () => {
+    // Two muted lines used to lead this page — one from the shell's own
+    // explainer slot and one hand-rolled beneath it, both saying HealthLog
+    // does not read the curve. The page opens on the recordings now.
+    const html = render({
+      recordings: [seededRecording()],
+      hasRecordings: true,
+    });
+    expect(html).not.toContain('data-slot="ecg-disclaimer"');
+    expect(html).not.toContain("is not interpreted");
   });
 
   it("shows the empty state (no section) when the account has no recordings", () => {

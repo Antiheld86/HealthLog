@@ -3090,8 +3090,7 @@
       "valuesBack": "Retour aux Insights",
       "valuesBackToMetric": "Retour à {metric}",
       "scoresBack": "Retour aux Insights",
-      "ecgDescription": "Enregistrements ECG à dérivation unique de votre appareil, chacun accompagné du résultat de l'appareil.",
-      "ecgDisclaimer": "HealthLog affiche le tracé et l'enregistrement, mais n'interprète pas la courbe."
+      "ecgDescription": "Enregistrements ECG à dérivation unique de votre appareil, chacun accompagné du résultat de l'appareil."
     },
     "units": {
       "steps": "pas",
@@ -4235,10 +4234,8 @@
     },
     "ecg": {
       "sectionTitle": "Enregistrements ECG",
-      "sectionIntro": "Tracés ECG à une seule dérivation enregistrés par votre appareil. HealthLog affiche uniquement l'enregistrement et le résultat produit par votre appareil ; il ne lit ni n'interprète le tracé.",
       "loadError": "Impossible de charger vos enregistrements ECG.",
       "backToList": "Retour aux enregistrements",
-      "disclaimer": "Il s'agit du résultat produit par votre appareil d'enregistrement. HealthLog ne lit ni n'interprète les enregistrements ECG et ne fournit aucun diagnostic.",
       "clinicianNote": "Si ce résultat vous préoccupe, parlez de cet enregistrement à un professionnel de santé.",
       "resultAttribution": "Résultat enregistré : {result}, tel que signalé par l'appareil d'enregistrement.",
       "result": {

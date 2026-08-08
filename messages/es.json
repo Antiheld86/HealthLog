@@ -3090,8 +3090,7 @@
       "valuesBack": "Volver a Insights",
       "valuesBackToMetric": "Volver a {metric}",
       "scoresBack": "Volver a Insights",
-      "ecgDescription": "Registros de ECG de una derivación de tu dispositivo, cada uno con el resultado del propio dispositivo.",
-      "ecgDisclaimer": "HealthLog muestra el trazado y el registro, pero no interpreta la onda."
+      "ecgDescription": "Registros de ECG de una derivación de tu dispositivo, cada uno con el resultado del propio dispositivo."
     },
     "units": {
       "steps": "pasos",
@@ -4235,10 +4234,8 @@
     },
     "ecg": {
       "sectionTitle": "Registros de ECG",
-      "sectionIntro": "Tiras de ECG de una sola derivación registradas por tu dispositivo. HealthLog solo muestra el registro y el resultado que produjo tu dispositivo; no lee ni interpreta la onda.",
       "loadError": "No se pudieron cargar tus registros de ECG.",
       "backToList": "Volver a los registros",
-      "disclaimer": "Este es el resultado que produjo tu dispositivo de registro. HealthLog no lee ni interpreta los registros de ECG y no proporciona un diagnóstico.",
       "clinicianNote": "Si este resultado te preocupa, comenta este registro con un profesional médico.",
       "resultAttribution": "Resultado registrado: {result}, según lo informado por el dispositivo de registro.",
       "result": {

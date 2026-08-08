@@ -3090,8 +3090,7 @@
       "valuesBack": "Zurück zu Insights",
       "valuesBackToMetric": "Zurück zu {metric}",
       "scoresBack": "Zurück zu Insights",
-      "ecgDescription": "Einkanal-EKG-Aufzeichnungen deines Geräts, jeweils mit dem Ergebnis des Geräts.",
-      "ecgDisclaimer": "HealthLog zeigt die Kurve und die Aufzeichnung – die Kurve wird nicht interpretiert."
+      "ecgDescription": "Einkanal-EKG-Aufzeichnungen deines Geräts, jeweils mit dem Ergebnis des Geräts."
     },
     "units": {
       "steps": "Schritte",
@@ -4235,10 +4234,8 @@
     },
     "ecg": {
       "sectionTitle": "EKG-Aufzeichnungen",
-      "sectionIntro": "Einkanal-EKG-Streifen, die dein Gerät aufgezeichnet hat. HealthLog zeigt nur die Aufzeichnung und das von deinem Gerät erstellte Ergebnis – die Kurve wird nicht gelesen oder ausgewertet.",
       "loadError": "Deine EKG-Aufzeichnungen konnten nicht geladen werden.",
       "backToList": "Zurück zu den Aufzeichnungen",
-      "disclaimer": "Dies ist das Ergebnis, das dein Aufzeichnungsgerät erstellt hat. HealthLog liest oder interpretiert EKG-Aufzeichnungen nicht und stellt keine Diagnose.",
       "clinicianNote": "Wenn dich dieses Ergebnis beunruhigt, besprich diese Aufzeichnung mit einer Ärztin oder einem Arzt.",
       "resultAttribution": "Aufgezeichnetes Ergebnis: {result}, wie vom Aufzeichnungsgerät gemeldet.",
       "result": {

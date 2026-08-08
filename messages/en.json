@@ -3090,8 +3090,7 @@
       "valuesBack": "Back to insights",
       "valuesBackToMetric": "Back to {metric}",
       "scoresBack": "Back to insights",
-      "ecgDescription": "Single-lead ECG recordings from your device, each with the device's own result.",
-      "ecgDisclaimer": "HealthLog shows the trace and the recording — it does not interpret the waveform."
+      "ecgDescription": "Single-lead ECG recordings from your device, each with the device's own result."
     },
     "units": {
       "steps": "steps",
@@ -4235,10 +4234,8 @@
     },
     "ecg": {
       "sectionTitle": "ECG recordings",
-      "sectionIntro": "Single-lead ECG strips recorded by your device. HealthLog only shows the recording and the result your device produced — it does not read or interpret the waveform.",
       "loadError": "Could not load your ECG recordings.",
       "backToList": "Back to recordings",
-      "disclaimer": "This is the result your recording device produced. HealthLog does not read or interpret ECG recordings and does not provide a diagnosis.",
       "clinicianNote": "If this result concerns you, discuss this recording with a clinician.",
       "resultAttribution": "Recorded result: {result}, as reported by the recording device.",
       "result": {
