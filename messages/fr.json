@@ -3778,6 +3778,15 @@
         "noneInWindow": "rien sur cette période",
         "higherIsMore": "plus haut = {anchor}",
         "notRecorded": "Non renseigné : {list}."
+      },
+      "contextComparison": {
+        "title": "Contexte de la journée et ton humeur",
+        "description": "Où se situait la valeur d'humeur les jours enregistrés jusqu'ici avec cette entrée, par rapport aux autres.",
+        "lower": "plus bas",
+        "higher": "plus haut",
+        "statement": "Les jours avec « {label} », l'humeur était en moyenne {direction} : {withAvg} contre {withoutAvg}.",
+        "counts": "{withDays} jours avec, {withoutDays} jours sans",
+        "caveat": "Cela montre un lien, pas une cause."
       }
     },
     "derived": {

@@ -3778,6 +3778,15 @@
         "noneInWindow": "nulla in questo periodo",
         "higherIsMore": "più alto = {anchor}",
         "notRecorded": "Non registrato: {list}."
+      },
+      "contextComparison": {
+        "title": "Contesto della giornata e il tuo umore",
+        "description": "Come si è collocato il valore dell'umore nei giorni finora registrati con questa voce, rispetto agli altri.",
+        "lower": "più basso",
+        "higher": "più alto",
+        "statement": "Nei giorni con «{label}» l'umore è stato in media {direction}: {withAvg} contro {withoutAvg}.",
+        "counts": "{withDays} giorni con, {withoutDays} giorni senza",
+        "caveat": "Questo mostra una relazione, non una causa."
       }
     },
     "derived": {

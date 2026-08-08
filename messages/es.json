@@ -3778,6 +3778,15 @@
         "noneInWindow": "nada en este periodo",
         "higherIsMore": "más alto = {anchor}",
         "notRecorded": "Sin registrar: {list}."
+      },
+      "contextComparison": {
+        "title": "Contexto del día y tu estado de ánimo",
+        "description": "Cómo se situó el valor de ánimo en los días registrados hasta ahora con esta entrada, frente al resto.",
+        "lower": "más bajo",
+        "higher": "más alto",
+        "statement": "En los días con «{label}» el ánimo promedió {direction}: {withAvg} frente a {withoutAvg}.",
+        "counts": "{withDays} días con, {withoutDays} días sin",
+        "caveat": "Esto muestra una relación, no una causa."
       }
     },
     "derived": {

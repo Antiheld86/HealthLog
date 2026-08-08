@@ -3778,6 +3778,15 @@
         "noneInWindow": "nichts im Zeitraum",
         "higherIsMore": "höher = {anchor}",
         "notRecorded": "Nicht erfasst: {list}."
+      },
+      "contextComparison": {
+        "title": "Tageskontext und deine Stimmung",
+        "description": "Wie der Stimmungswert an bisher erfassten Tagen mit diesem Eintrag lag, verglichen mit den übrigen Tagen.",
+        "lower": "niedriger",
+        "higher": "höher",
+        "statement": "An Tagen mit „{label}“ lag die Stimmung im Durchschnitt {direction}: {withAvg} gegenüber {withoutAvg}.",
+        "counts": "{withDays} Tage mit, {withoutDays} Tage ohne",
+        "caveat": "Das zeigt einen Zusammenhang, keine Ursache."
       }
     },
     "derived": {

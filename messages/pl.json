@@ -3778,6 +3778,15 @@
         "noneInWindow": "brak w tym okresie",
         "higherIsMore": "wyżej = {anchor}",
         "notRecorded": "Nie zapisano: {list}."
+      },
+      "contextComparison": {
+        "title": "Kontekst dnia a nastrój",
+        "description": "Jak wypadał nastrój w dotychczas zapisanych dniach z tym wpisem, w porównaniu z pozostałymi.",
+        "lower": "niższy",
+        "higher": "wyższy",
+        "statement": "W dniach z „{label}” nastrój był średnio {direction}: {withAvg} wobec {withoutAvg}.",
+        "counts": "{withDays} dni z, {withoutDays} dni bez",
+        "caveat": "To pokazuje związek, nie przyczynę."
       }
     },
     "derived": {

@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { ComponentType } from "react";
 import {
   BarChart3,
+  Briefcase,
   CalendarDays,
   CalendarRange,
   Clock,
@@ -89,6 +90,8 @@ const MoodTimeOfDayChart = dynamic(
     ),
   },
 );
+import { MoodContextComparison } from "./mood-context-comparison";
+import type { ContextComparisonRow } from "@/lib/insights/mood-context-crosstab";
 import { MoodTagBreakdown, type MoodTagRow } from "./mood-tag-breakdown";
 import {
   MoodCorrelationCards,
@@ -158,6 +161,8 @@ interface MoodInsightsResponse {
   // Optional only to tolerate a stale pre-v1.12.0 cached payload during a
   // rollout; the live endpoint always populates it.
   tagMetricCrosstab?: MoodTagMetricCrosstabRow[];
+  /** v1.38 — context value against the day's mood, counts included. */
+  contextComparison?: ContextComparisonRow[];
   // Optional only to tolerate a stale pre-v1.14.0 cached payload during a
   // rollout; the live endpoint always populates it.
   factorCrosstab?: MoodFactorMetricCrosstabRow[];
@@ -272,6 +277,10 @@ export function MoodInsightsSections({
   const hasBetterDays = betterDays.length > 0;
   const crosstabRows = data.tagMetricCrosstab ?? [];
   const hasCrosstab = crosstabRows.length > 0;
+  // Defensive against a stale server-cache payload minted before this shape
+  // landed, the same way the influence rows above are.
+  const contextRows = data.contextComparison ?? [];
+  const hasContextComparison = contextRows.length > 0;
   const factorCrosstabRows = data.factorCrosstab ?? [];
   const hasFactorCrosstab = factorCrosstabRows.length > 0;
   const dimensionSummaries = data.dimensions ?? [];
@@ -406,6 +415,15 @@ export function MoodInsightsSections({
       {hasCrosstab && (
         <SectionCard title={t("insights.mood.crosstab.title")} icon={Grid3x3}>
           <MoodTagMetricCrosstab rows={crosstabRows} />
+        </SectionCard>
+      )}
+
+      {hasContextComparison && (
+        <SectionCard
+          title={t("insights.mood.contextComparison.title")}
+          icon={Briefcase}
+        >
+          <MoodContextComparison rows={contextRows} />
         </SectionCard>
       )}
 

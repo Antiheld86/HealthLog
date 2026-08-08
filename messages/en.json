@@ -3778,6 +3778,15 @@
         "noneInWindow": "nothing in this range",
         "higherIsMore": "higher = {anchor}",
         "notRecorded": "Not recorded: {list}."
+      },
+      "contextComparison": {
+        "title": "Day context and your mood",
+        "description": "How the mood value sat on the days recorded so far carrying this entry, compared with the other days.",
+        "lower": "lower",
+        "higher": "higher",
+        "statement": "On days with “{label}” the mood averaged {direction}: {withAvg} against {withoutAvg}.",
+        "counts": "{withDays} days with, {withoutDays} days without",
+        "caveat": "That shows a connection, not a cause."
       }
     },
     "derived": {

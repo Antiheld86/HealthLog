@@ -47,6 +47,10 @@ export {
 import { resolveUserTimezone } from "@/lib/tz/resolver";
 import { annotate } from "@/lib/logging/context";
 import { createCustomLabelResolver } from "@/lib/mood/custom-tags";
+import {
+  computeContextMoodComparison,
+  type ContextComparisonRow,
+} from "@/lib/insights/mood-context-crosstab";
 import { loadUserSourcePriority } from "@/lib/rollups/measurement-read";
 import {
   computeBetterDays,
@@ -171,6 +175,20 @@ export interface MoodAggregateEntry {
    * aggregate tests (flat tags only) keep their narrow fixtures.
    */
   structuredTags?: StructuredTagRef[];
+  /**
+   * v1.38 — the day's context, when the entry carries one. Only the
+   * categorical fields: the comparison below tests membership of a value, and
+   * the numeric ratings are a different question this milestone does not ask.
+   * Optional so every fixture written before contexts existed keeps its shape.
+   */
+  context?: {
+    workStatus: string | null;
+    contactCircles: string | null;
+    contactForm: string | null;
+    contactExtent: string | null;
+    leisureCategories: string | null;
+    eventType: string | null;
+  } | null;
   /**
    * v1.37 — the five level-A values, each 0-10 and each nullable. Optional so
    * every fixture written before they existed keeps its narrow shape, and
@@ -453,6 +471,13 @@ export interface MoodAggregates {
    */
   stability: MoodStability | null;
   tags: TagSummaryRow[];
+  /**
+   * v1.38 — how the day's pleasantness sat on days carrying each context
+   * value against the days that did not. A comparison and never a cause: the
+   * copy that renders it says so, and every row carries the two counts it was
+   * computed from so a reader can weigh it themselves.
+   */
+  contextComparison: ContextComparisonRow[];
   /** v1.8.5 — structured-tag breakdown from the taxonomy join. */
   structuredTags: StructuredTagRow[];
   /**
@@ -582,6 +607,23 @@ export function computeMoodAggregates(args: {
     userPriorityJson,
   });
 
+  // v1.38 — every context value against the day's pleasantness, one BH-FDR
+  // family across the whole sweep. Entries with no context contribute to the
+  // "without" side of each comparison, which is what makes the counts mean
+  // what the copy says they mean.
+  const contextComparison = computeContextMoodComparison(
+    entries.map((entry) => ({
+      day: entry.date,
+      moodA1: entry.a1 ?? null,
+      workStatus: entry.context?.workStatus ?? null,
+      contactCircles: entry.context?.contactCircles ?? null,
+      contactForm: entry.context?.contactForm ?? null,
+      contactExtent: entry.context?.contactExtent ?? null,
+      leisureCategories: entry.context?.leisureCategories ?? null,
+      eventType: entry.context?.eventType ?? null,
+    })),
+  );
+
   // Distinct day keys the user logged on — drives the streak takeaway.
   const loggedDayKeys = Array.from(new Set(entries.map((entry) => entry.date)));
 
@@ -624,6 +666,7 @@ export function computeMoodAggregates(args: {
     betterDays,
     tagMetricCrosstab,
     factorCrosstab,
+    contextComparison,
     narratives: computeMoodNarratives({
       daily: moodDaily,
       weekday,
@@ -677,6 +720,19 @@ export async function fetchMoodAggregates(
         // the breakdown can fold structured tags next to the flat ones.
         // v1.14.0 — also pull the per-link `rating` + the factor's
         // kind/scale/inverse so RATED factors feed the factor crosstab.
+        // v1.38 — the categorical context fields. The numeric ratings are not
+        // read here: this surface compares membership of a value against the
+        // day's pleasantness, and a rating is a different question.
+        context: {
+          select: {
+            workStatus: true,
+            contactCircles: true,
+            contactForm: true,
+            contactExtent: true,
+            leisureCategories: true,
+            eventType: true,
+          },
+        },
         tagLinks: {
           select: {
             rating: true,
@@ -716,6 +772,7 @@ export async function fetchMoodAggregates(
         tags: parseTags(row.tags),
         moodLoggedAt: row.moodLoggedAt,
         tz: row.tz,
+        context: row.context,
         // BINARY links carry the structured-tag breakdown; RATED links
         // (a non-null `rating`) carry the factor score. One join, two axes.
         structuredTags: row.tagLinks
