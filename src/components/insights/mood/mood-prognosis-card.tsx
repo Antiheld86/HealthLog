@@ -35,7 +35,8 @@ import { TileHeader } from "@/components/insights/tile-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import { apiGet } from "@/lib/api/api-fetch";
-import { useTranslations } from "@/lib/i18n/context";
+import { formatDate } from "@/lib/date-format";
+import { useDateFormatPreference, useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import type { PrognosisReading } from "@/lib/analytics/mood-prognosis/read";
 
@@ -78,7 +79,13 @@ export function MoodPrognosisCard() {
  */
 export function MoodPrognosisView({ reading }: { reading: PrognosisReading }) {
   const { t, locale } = useTranslations();
+  const dateFormat = useDateFormatPreference();
   const data = reading;
+  // The day key is a plain calendar date and is rendered as one, through the
+  // account's own date-order preference and pinned to UTC — the same treatment
+  // every other day key in the app gets, so this card cannot show a different
+  // day from the list beside it.
+  const day = data.present ? formatDate(data.date, dateFormat, locale) : "";
 
   // Below the first rung there is nothing to say and the surface says nothing
   // rather than showing an empty frame with an apology in it.
@@ -145,7 +152,7 @@ export function MoodPrognosisView({ reading }: { reading: PrognosisReading }) {
             >
               {t("insights.mood.prognosis.statement", {
                 value: formatValue(data.predicted, locale),
-                date: data.date,
+                date: day,
                 n: String(data.n),
               })}
             </p>
@@ -164,7 +171,7 @@ export function MoodPrognosisView({ reading }: { reading: PrognosisReading }) {
                 className="text-muted-foreground text-xs"
                 data-slot="mood-prognosis-age"
               >
-                {t("insights.mood.prognosis.notToday", { date: data.date })}
+                {t("insights.mood.prognosis.notToday", { date: day })}
               </p>
             ) : null}
 

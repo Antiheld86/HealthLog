@@ -44,6 +44,17 @@ export const PROGNOSIS_FIT_WINDOW_DAYS = 365;
  */
 export const PROGNOSIS_WRITE_WINDOW_DAYS = 7;
 
+/**
+ * Hard cap on the rows one fit reads.
+ *
+ * A year holds 365 days and the fold keeps one entry per day, so the cap only
+ * ever bites on an account that logs many times a day — and there it bites on
+ * the oldest days, which is the right end to lose. It is here because an
+ * unbounded `findMany` in a nightly job over an account with years of history
+ * is a table scan waiting for the account that has one.
+ */
+export const MAX_PROGNOSIS_ROWS = 5000;
+
 /** `YYYY-MM-DD`, this many days before the given instant, in UTC terms. */
 export function dayKeyBefore(now: Date, days: number): string {
   return new Date(now.getTime() - days * 86_400_000).toISOString().slice(0, 10);
@@ -67,10 +78,13 @@ export async function loadPrognosisDays(
   const since = dayKeyBefore(now, windowDays);
   const entries = await prisma.moodEntry.findMany({
     where: { userId, deletedAt: null, date: { gte: since } },
-    // Ascending, so a later entry on the same day overwrites the earlier one
-    // in the fold below and the "last entry of the day wins" rule is the
-    // read order rather than a comparison.
-    orderBy: [{ date: "asc" }, { moodLoggedAt: "asc" }],
+    // Descending, and the fold below keeps the FIRST row it sees per day, so
+    // "the last entry of a day wins" is the read order rather than a
+    // comparison. Descending also puts the cap on the right end: an account
+    // that logs many times a day loses its oldest days to the limit, never
+    // its newest ones, and the newest are the days a forecast is written for.
+    orderBy: [{ date: "desc" }, { moodLoggedAt: "desc" }],
+    take: MAX_PROGNOSIS_ROWS,
     select: {
       date: true,
       moodA1: true,
@@ -107,6 +121,9 @@ export async function loadPrognosisDays(
 
   const byDay = new Map<string, PrognosisDayInput>();
   for (const entry of entries) {
+    // The rows arrive newest first, so the first one seen for a day is that
+    // day's last entry.
+    if (byDay.has(entry.date)) continue;
     byDay.set(entry.date, {
       day: entry.date,
       a1: entry.moodA1,
@@ -185,6 +202,9 @@ export async function countQualifyingDays(
     },
     distinct: ["date"],
     select: { date: true },
+    // Bounded by the window either way — a year holds 366 distinct day keys —
+    // and the cap says so rather than trusting the window to be small.
+    take: 400,
   });
   return days.length;
 }

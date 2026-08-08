@@ -102,7 +102,13 @@ describe("<MoodPrognosisView>", () => {
   it("says which day it is about when that day is not today", () => {
     const stale = render(present({ current: false, ageDays: 4 }));
     expect(stale).toContain('data-slot="mood-prognosis-age"');
-    expect(stale).toContain("2026-08-07");
+    // Rendered through the account's own date-order preference rather than as
+    // the raw day key — under this render's `en` locale and the default AUTO
+    // preference that is month-first. The assertion is on the formatted form
+    // precisely because a raw `2026-08-07` on the screen would pass a looser
+    // one.
+    expect(stale).toContain("08/07/2026");
+    expect(stale).not.toContain("2026-08-07");
   });
 
   it("names what the model weighted, in the reader's own words", () => {
