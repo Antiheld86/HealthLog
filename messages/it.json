@@ -6857,6 +6857,7 @@
         "restoreSkippedMoodFactor": "Fattore dell'umore",
         "restoreSkippedMoodTag": "Etichetta dell'umore",
         "restoreSkippedVisitReference": "Riferimento alla visita",
+        "restoreSkippedVaccinationReference": "Riferimento alla vaccinazione",
         "restoreSkippedCheckupClosure": "Chiusura del controllo",
         "docsLink": "Documentazione"
       },
@@ -8507,6 +8508,10 @@
     "nutrients": {
       "label": "Assunzione di nutrienti",
       "description": "Totali giornalieri di micronutrienti sincronizzati da Apple Health."
+    },
+    "vaccinations": {
+      "label": "Vaccinazioni",
+      "description": "Il libretto vaccinale strutturato: dose, serie, prossimo richiamo."
     }
   },
   "illness": {
@@ -9935,6 +9940,10 @@
       "encounterVisitUpdate": "{name} ha modificato una visita medica",
       "encounterVisitDelete": "{name} ha eliminato una visita medica",
       "encounterVisitRestore": "{name} ha ripristinato una visita medica",
+      "vaccinationRecordCreate": "{name} ha aggiunto una vaccinazione",
+      "vaccinationRecordUpdate": "{name} ha modificato una vaccinazione",
+      "vaccinationRecordDelete": "{name} ha eliminato una vaccinazione",
+      "vaccinationRecordRestore": "{name} ha ripristinato una vaccinazione",
       "practitionerContactCreate": "{name} ha aggiunto uno studio alla rubrica",
       "practitionerContactUpdate": "{name} ha modificato una voce della rubrica",
       "practitionerContactDelete": "{name} ha eliminato una voce della rubrica",
@@ -10014,7 +10023,7 @@
       },
       "profile": {
         "label": "Anamnesi",
-        "detail": "Allergie, anamnesi familiare, i dati del tuo profilo sanitario e le tue visite mediche e studi."
+        "detail": "Allergie, anamnesi familiare, i dati del tuo profilo sanitario, le tue visite mediche e studi, e il tuo libretto vaccinale."
       },
       "illness": {
         "label": "Malattie",

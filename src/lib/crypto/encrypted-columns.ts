@@ -242,6 +242,13 @@ export const ENCRYPTED_COLUMNS: readonly EncryptedColumn[] = [
   { model: "Encounter", field: "outcomeEncrypted", kind: "bytes" },
   { model: "Practitioner", field: "noteEncrypted", kind: "bytes" },
 
+  // ───── v1.38.0 dose free text (Bytes column) ─────
+  // What the person wrote about the dose — a reaction, a sore arm, why the
+  // schedule went the way it did. The Pass's own structured fields stay
+  // queryable plaintext (the batch code is a batch code, not a secret), so
+  // this is the one column on the record that rotates.
+  { model: "VaccinationRecord", field: "noteEncrypted", kind: "bytes" },
+
   // ───── Inbound clinical document (Bytes column, codec-dispatched) ─────
   // The raw uploaded document (the most sensitive blob in the corpus; never
   // logged, never in wide-event meta). Two layouts, recorded per row in

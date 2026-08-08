@@ -6857,6 +6857,7 @@
         "restoreSkippedMoodFactor": "Stimmungsfaktor",
         "restoreSkippedMoodTag": "Stimmungs-Tag",
         "restoreSkippedVisitReference": "Besuchsverknüpfung",
+        "restoreSkippedVaccinationReference": "Impfverknüpfung",
         "restoreSkippedCheckupClosure": "Vorsorge-Abschluss",
         "docsLink": "Dokumentation"
       },
@@ -8507,6 +8508,10 @@
     "nutrients": {
       "label": "Nährstoffzufuhr",
       "description": "Tägliche Mikronährstoff-Summen aus Apple Health."
+    },
+    "vaccinations": {
+      "label": "Impfungen",
+      "description": "Der Impfpass in strukturierter Form: Dosis, Serie, nächste Auffrischung."
     }
   },
   "illness": {
@@ -9935,6 +9940,10 @@
       "encounterVisitUpdate": "{name} hat einen Arztbesuch bearbeitet",
       "encounterVisitDelete": "{name} hat einen Arztbesuch gelöscht",
       "encounterVisitRestore": "{name} hat einen Arztbesuch wiederhergestellt",
+      "vaccinationRecordCreate": "{name} hat eine Impfung eingetragen",
+      "vaccinationRecordUpdate": "{name} hat eine Impfung bearbeitet",
+      "vaccinationRecordDelete": "{name} hat eine Impfung gelöscht",
+      "vaccinationRecordRestore": "{name} hat eine Impfung wiederhergestellt",
       "practitionerContactCreate": "{name} hat eine Praxis zum Adressbuch hinzugefügt",
       "practitionerContactUpdate": "{name} hat einen Adressbucheintrag bearbeitet",
       "practitionerContactDelete": "{name} hat einen Adressbucheintrag gelöscht",
@@ -10014,7 +10023,7 @@
       },
       "profile": {
         "label": "Gesundheitliche Vorgeschichte",
-        "detail": "Allergien, Familienanamnese, die Angaben in deinem Gesundheitsprofil sowie Arztbesuche und Praxen."
+        "detail": "Allergien, Familienanamnese, die Angaben in deinem Gesundheitsprofil, Arztbesuche und Praxen sowie deine Impfungen."
       },
       "illness": {
         "label": "Krankheiten",

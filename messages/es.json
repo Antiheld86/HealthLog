@@ -6857,6 +6857,7 @@
         "restoreSkippedMoodFactor": "Factor de ánimo",
         "restoreSkippedMoodTag": "Etiqueta de ánimo",
         "restoreSkippedVisitReference": "Referencia de visita",
+        "restoreSkippedVaccinationReference": "Referencia de vacunación",
         "restoreSkippedCheckupClosure": "Cierre de revisión",
         "docsLink": "Documentación"
       },
@@ -8507,6 +8508,10 @@
     "nutrients": {
       "label": "Ingesta de nutrientes",
       "description": "Totales diarios de micronutrientes sincronizados desde Apple Health."
+    },
+    "vaccinations": {
+      "label": "Vacunas",
+      "description": "La cartilla de vacunación estructurada: dosis, serie, próximo refuerzo."
     }
   },
   "illness": {
@@ -9935,6 +9940,10 @@
       "encounterVisitUpdate": "{name} editó una visita médica",
       "encounterVisitDelete": "{name} eliminó una visita médica",
       "encounterVisitRestore": "{name} restauró una visita médica",
+      "vaccinationRecordCreate": "{name} añadió una vacuna",
+      "vaccinationRecordUpdate": "{name} editó una vacuna",
+      "vaccinationRecordDelete": "{name} eliminó una vacuna",
+      "vaccinationRecordRestore": "{name} restauró una vacuna",
       "practitionerContactCreate": "{name} añadió una consulta a la agenda",
       "practitionerContactUpdate": "{name} editó una entrada de la agenda",
       "practitionerContactDelete": "{name} eliminó una entrada de la agenda",
@@ -10014,7 +10023,7 @@
       },
       "profile": {
         "label": "Antecedentes de salud",
-        "detail": "Alergias, antecedentes familiares, los datos de tu perfil de salud y tus visitas médicas y consultas."
+        "detail": "Alergias, antecedentes familiares, los datos de tu perfil de salud, tus visitas médicas y consultas, y tu cartilla de vacunación."
       },
       "illness": {
         "label": "Enfermedades",

@@ -40,7 +40,14 @@
  * travels, or a document, lab result or condition episode whose id a portable
  * export does not carry.
  *
- * The sixth, `checkupClosure`, is not about a restore at all, and it borrows
+ * The sixth, `vaccinationReference`, is the same kind as `visitReference` and
+ * is kept separate rather than folded into it so the report says which part of
+ * the record lost an edge. It names a row an immunization entry pointed at
+ * that the restore did not put back — a booster reminder, which never travels,
+ * a practitioner or visit the file referenced without carrying, or a scanned
+ * page whose id a portable export does not include.
+ *
+ * The seventh, `checkupClosure`, is not about a restore at all, and it borrows
  * this shape deliberately rather than growing a second reporting mechanism
  * beside it. The situation is the same one: something a write was asked to do
  * could not be done, the record itself survives, and the person is told which
@@ -54,6 +61,7 @@ export type SkippedCatalogue =
   | "moodFactor"
   | "moodTag"
   | "visitReference"
+  | "vaccinationReference"
   | "checkupClosure";
 
 /** One key this instance does not know, and the links it cost. */

@@ -10389,6 +10389,422 @@ paths:
         "404": *a17
         "422": *a3
         "429": *a4
+  /api/vaccinations:
+    get:
+      tags:
+        - Records
+      summary: List vaccinations
+      description: Returns the caller's live doses, newest first, each with its series resolved per component antigen.
+        Soft-deleted doses are excluded.
+      parameters:
+        - in: query
+          name: antigenSlug
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 64
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+      responses:
+        "200":
+          description: The caller's immunization history.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListVaccinationsEnvelope"
+        "401": *a1
+        "403": *a6
+        "422": *a3
+        "429": *a4
+    post:
+      tags:
+        - Records
+      summary: Log a vaccination
+      description: "Records one administered dose and satisfies every live booster reminder keyed to one of its component
+        antigens — so a single combined dose settles each of the antigens it contains. Satisfaction is forward-only: a
+        dose older than a reminder's last satisfaction is a no-op, which is what makes back-entering an old paper record
+        safe. Honours `Idempotency-Key`. Audits as `vaccination.record.create`."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                occurredAt:
+                  type: string
+                  format: date-time
+                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                antigenSlug:
+                  anyOf:
+                    - type: string
+                      minLength: 1
+                      maxLength: 64
+                    - type: "null"
+                vaccineName:
+                  anyOf:
+                    - type: string
+                      minLength: 1
+                      maxLength: 200
+                    - type: "null"
+                doseNumber:
+                  anyOf:
+                    - type: integer
+                      minimum: 1
+                      maximum: 20
+                    - type: "null"
+                seriesDoses:
+                  anyOf:
+                    - type: integer
+                      minimum: 1
+                      maximum: 10
+                    - type: "null"
+                lotNumber:
+                  anyOf:
+                    - type: string
+                      minLength: 1
+                      maxLength: 64
+                    - type: "null"
+                site:
+                  anyOf:
+                    - type: string
+                      enum:
+                        - LEFT_ARM
+                        - RIGHT_ARM
+                        - LEFT_THIGH
+                        - RIGHT_THIGH
+                        - ORAL
+                        - NASAL
+                        - OTHER
+                    - type: "null"
+                practitionerId:
+                  anyOf:
+                    - type: string
+                      minLength: 1
+                      maxLength: 40
+                    - type: "null"
+                encounterId:
+                  anyOf:
+                    - type: string
+                      minLength: 1
+                      maxLength: 40
+                    - type: "null"
+                note:
+                  anyOf:
+                    - type: string
+                      maxLength: 2000
+                    - type: "null"
+                documentIds:
+                  maxItems: 100
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
+              required:
+                - occurredAt
+              additionalProperties: false
+      responses:
+        "201":
+          description: Dose logged.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateVaccinationEnvelope"
+        "401": *a1
+        "403": *a6
+        "422": *a3
+        "429": *a4
+  /api/vaccinations/{id}:
+    get:
+      tags:
+        - Records
+      summary: Read a single vaccination
+      description: Returns the dose with its linked pages resolved. Owner-scoped; a cross-user or tombstoned id 404s.
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: The dose.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetVaccinationEnvelope"
+        "401": *a1
+        "403": *a6
+        "404": &a18
+          description: Vaccination not found (or owned by another user).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422": *a3
+        "429": *a4
+    patch:
+      tags:
+        - Records
+      summary: Edit a vaccination
+      description: Partial edit; omitted fields are left untouched. Never re-runs booster satisfaction. Audits as
+        `vaccination.record.update`. Owner-scoped.
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                occurredAt:
+                  type: string
+                  format: date-time
+                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                antigenSlug:
+                  anyOf:
+                    - type: string
+                      minLength: 1
+                      maxLength: 64
+                    - type: "null"
+                vaccineName:
+                  anyOf:
+                    - type: string
+                      minLength: 1
+                      maxLength: 200
+                    - type: "null"
+                doseNumber:
+                  anyOf:
+                    - type: integer
+                      minimum: 1
+                      maximum: 20
+                    - type: "null"
+                seriesDoses:
+                  anyOf:
+                    - type: integer
+                      minimum: 1
+                      maximum: 10
+                    - type: "null"
+                lotNumber:
+                  anyOf:
+                    - type: string
+                      minLength: 1
+                      maxLength: 64
+                    - type: "null"
+                site:
+                  anyOf:
+                    - type: string
+                      enum:
+                        - LEFT_ARM
+                        - RIGHT_ARM
+                        - LEFT_THIGH
+                        - RIGHT_THIGH
+                        - ORAL
+                        - NASAL
+                        - OTHER
+                    - type: "null"
+                practitionerId:
+                  anyOf:
+                    - type: string
+                      minLength: 1
+                      maxLength: 40
+                    - type: "null"
+                encounterId:
+                  anyOf:
+                    - type: string
+                      minLength: 1
+                      maxLength: 40
+                    - type: "null"
+                note:
+                  anyOf:
+                    - type: string
+                      maxLength: 2000
+                    - type: "null"
+                documentIds:
+                  maxItems: 100
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
+              additionalProperties: false
+      responses:
+        "200":
+          description: Dose updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateVaccinationEnvelope"
+        "401": *a1
+        "403": *a6
+        "404": *a18
+        "422": *a3
+        "429": *a4
+    delete:
+      tags:
+        - Records
+      summary: Soft-delete a vaccination
+      description: "Stamps `deletedAt`. A booster reminder the dose once satisfied is deliberately not rewound: the reminder
+        belongs to the preventive-care list and outlives the record, and tidying a transcription is not evidence the
+        dose never happened. Idempotent. Audits as `vaccination.record.delete`."
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Soft-deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteVaccinationEnvelope"
+        "401": *a1
+        "403": *a6
+        "404": *a18
+        "422": *a3
+        "429": *a4
+  /api/vaccinations/{id}/restore:
+    post:
+      tags:
+        - Records
+      summary: Restore a soft-deleted vaccination
+      description: Clears the tombstone. The link rows survived the soft delete, so the dose returns with its pages still
+        filed against it. Restoring a live dose is a no-op that still succeeds.
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Dose restored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RestoreVaccinationEnvelope"
+        "401": *a1
+        "403": *a6
+        "404": *a18
+        "422": *a3
+        "429": *a4
+  /api/vaccinations/{id}/links:
+    post:
+      tags:
+        - Records
+      summary: File documents against a vaccination
+      description: "Adds links. Idempotent: a pair that already exists succeeds and changes nothing. Session-authenticated
+        only, matching document and visit link and unlink."
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                targetKind:
+                  type: string
+                  enum:
+                    - document
+                targetIds:
+                  minItems: 1
+                  maxItems: 100
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
+              required:
+                - targetKind
+                - targetIds
+              additionalProperties: false
+      responses:
+        "200":
+          description: The dose's linked pages after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkVaccinationEnvelope"
+        "401": *a1
+        "404": *a18
+        "422": *a3
+        "429": *a4
+    delete:
+      tags:
+        - Records
+      summary: Unfile documents from a vaccination
+      description: Removes links. Idempotent, and it still works for a page the account has since deleted — refusing would
+        leave a filing nobody can clear.
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                targetKind:
+                  type: string
+                  enum:
+                    - document
+                targetIds:
+                  minItems: 1
+                  maxItems: 100
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
+              required:
+                - targetKind
+                - targetIds
+              additionalProperties: false
+      responses:
+        "200":
+          description: The dose's linked pages after the change.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnlinkVaccinationEnvelope"
+        "401": *a1
+        "404": *a18
+        "422": *a3
+        "429": *a4
   /api/illness/episodes:
     get:
       tags:
@@ -10514,7 +10930,7 @@ paths:
                 $ref: "#/components/schemas/GetIllnessEpisodeEnvelope"
         "401": *a1
         "403": *a6
-        "404": &a18
+        "404": &a19
           description: Illness episode not found (or owned by another user).
           content:
             application/json:
@@ -10593,7 +11009,7 @@ paths:
                 $ref: "#/components/schemas/UpdateIllnessEpisodeEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a18
+        "404": *a19
         "422": *a3
         "429": *a4
     delete:
@@ -10617,7 +11033,7 @@ paths:
                 $ref: "#/components/schemas/DeleteIllnessEpisodeEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a18
+        "404": *a19
         "422": *a3
         "429": *a4
   /api/illness/episodes/{id}/restore:
@@ -10644,7 +11060,7 @@ paths:
                 $ref: "#/components/schemas/RestoreIllnessEpisodeEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a18
+        "404": *a19
         "422": *a3
         "429": *a4
   /api/illness/episodes/{id}/resolve:
@@ -10681,7 +11097,7 @@ paths:
                 $ref: "#/components/schemas/ResolveIllnessEpisodeEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a18
+        "404": *a19
         "422": *a3
         "429": *a4
   /api/illness/episodes/{id}/day-logs:
@@ -10732,7 +11148,7 @@ paths:
                 $ref: "#/components/schemas/GetIllnessDayLogEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a18
+        "404": *a19
         "422": *a3
         "429": *a4
     post:
@@ -10812,7 +11228,7 @@ paths:
                 $ref: "#/components/schemas/UpsertIllnessDayLogCreatedEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a18
+        "404": *a19
         "422": *a3
         "429": *a4
   /api/illness/episodes/{id}/correlation:
@@ -10839,7 +11255,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/IllnessCorrelationEnvelope"
         "401": *a1
-        "404": *a18
+        "404": *a19
         "422": *a3
         "429": *a4
   /api/illness/insights:
@@ -11112,7 +11528,7 @@ paths:
                 $ref: "#/components/schemas/GetAllergyEnvelope"
         "401": *a1
         "403": *a6
-        "404": &a19
+        "404": &a20
           description: Allergy not found (or owned by another user).
           content:
             application/json:
@@ -11195,7 +11611,7 @@ paths:
                 $ref: "#/components/schemas/UpdateAllergyEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a19
+        "404": *a20
         "422": *a3
         "429": *a4
     delete:
@@ -11219,7 +11635,7 @@ paths:
                 $ref: "#/components/schemas/DeleteAllergyEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a19
+        "404": *a20
         "422": *a3
         "429": *a4
   /api/family-history:
@@ -11327,7 +11743,7 @@ paths:
                 $ref: "#/components/schemas/GetFamilyHistoryEnvelope"
         "401": *a1
         "403": *a6
-        "404": &a20
+        "404": &a21
           description: Family history entry not found (or owned by another user).
           content:
             application/json:
@@ -11396,7 +11812,7 @@ paths:
                 $ref: "#/components/schemas/UpdateFamilyHistoryEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a20
+        "404": *a21
         "422": *a3
         "429": *a4
     delete:
@@ -11420,7 +11836,7 @@ paths:
                 $ref: "#/components/schemas/DeleteFamilyHistoryEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a20
+        "404": *a21
         "422": *a3
         "429": *a4
   /api/documents/inbound:
@@ -12565,7 +12981,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreateCustomMetricResponse"
         "401": *a1
-        "409": &a22
+        "409": &a23
           description: A custom metric with this name already exists for the caller.
           content:
             application/json:
@@ -12594,7 +13010,7 @@ paths:
                 $ref: "#/components/schemas/GetCustomMetricResponse"
         "401": *a1
         "403": *a6
-        "404": &a21
+        "404": &a22
           description: Custom metric not found (or owned by another user).
           content:
             application/json:
@@ -12658,8 +13074,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateCustomMetricResponse"
         "401": *a1
-        "404": *a21
-        "409": *a22
+        "404": *a22
+        "409": *a23
         "422": *a3
         "429": *a4
     delete:
@@ -12682,7 +13098,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteCustomMetricResponse"
         "401": *a1
-        "404": *a21
+        "404": *a22
         "422": *a3
         "429": *a4
   /api/custom-metrics/{id}/entries:
@@ -12726,7 +13142,7 @@ paths:
                 $ref: "#/components/schemas/ListCustomMetricEntriesEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a21
+        "404": *a22
         "422": *a3
         "429": *a4
     post:
@@ -12770,7 +13186,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreateCustomMetricEntryResponse"
         "401": *a1
-        "404": *a21
+        "404": *a22
         "422": *a3
         "429": *a4
   /api/custom-metrics/{id}/entries/{entryId}:
@@ -12820,7 +13236,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateCustomMetricEntryResponse"
         "401": *a1
-        "404": &a23
+        "404": &a24
           description: Custom metric entry not found (or owned by another user).
           content:
             application/json:
@@ -12852,7 +13268,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteCustomMetricEntryResponse"
         "401": *a1
-        "404": *a23
+        "404": *a24
         "422": *a3
         "429": *a4
   /api/onboarding/disclaimer:
@@ -13022,7 +13438,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientOverviewEnvelope"
         "401": *a1
-        "403": &a24
+        "403": &a25
           description: >-
             The opt-in `nutrients` module is off for this account (errorCode `module.disabled`). Stop syncing and do not
             retry; offer the enable-in-settings hint. Only run the HealthKit read-authorization flow while the module is
@@ -13077,7 +13493,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientDailySeriesEnvelope"
         "401": *a1
-        "403": *a24
+        "403": *a25
         "422": *a3
         "429": *a4
   /api/nutrients/water:
@@ -13104,7 +13520,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientWaterWriteEnvelope"
         "401": *a1
-        "403": *a24
+        "403": *a25
         "422": *a3
         "429": *a4
   /api/integrations/healthkit:
@@ -13442,7 +13858,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RecordActivityEnvelope"
         "401": *a1
-        "403": &a25
+        "403": &a26
           description: Refused. `meta.errorCode` is `sharing.not_permitted` when the request was made while acting on another
             account (grant management is never delegable), or `sharing.access.denied` when the caller may not act as the
             account they named. The latter is byte-identical for an account that does not exist and one that granted
@@ -13467,7 +13883,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AccountGrantListEnvelope"
         "401": *a1
-        "403": *a25
+        "403": *a26
         "422": *a3
         "429": *a4
     post:
@@ -13562,7 +13978,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AcceptedAccountGrantEnvelope"
         "401": *a1
-        "403": *a25
+        "403": *a26
         "404":
           description: No such invitation for this account.
           content:
@@ -13606,7 +14022,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RevokedAccountGrantEnvelope"
         "401": *a1
-        "403": *a25
+        "403": *a26
         "404":
           description: No such grant on this account's record.
           content:
@@ -13647,7 +14063,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RenouncedAccountGrantEnvelope"
         "401": *a1
-        "403": *a25
+        "403": *a26
         "404":
           description: No such grant held by this account.
           content:
@@ -13946,7 +14362,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "401": *a1
-        "403": *a25
+        "403": *a26
         "409":
           description: "The record this browser session is on is not the record the request asserted. `meta.errorCode` is
             `sharing.session.changed`. It is not a refusal of access — the caller may well be entitled to both records —
@@ -15549,6 +15965,8 @@ components:
         mentalHealth:
           type: boolean
         nutrients:
+          type: boolean
+        vaccinations:
           type: boolean
         baseUpdatedAt:
           description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
@@ -25800,6 +26218,9 @@ components:
         nutrients:
           type: boolean
           description: Whether the "nutrients" module is enabled for this account.
+        vaccinations:
+          type: boolean
+          description: Whether the "vaccinations" module is enabled for this account.
       required:
         - cycle
         - mood
@@ -25819,6 +26240,7 @@ components:
         - inboundDocuments
         - mentalHealth
         - nutrients
+        - vaccinations
       additionalProperties: false
       description: Fully-resolved per-user module enable/disable map. Every toggleable module key is present. `false` means
         the surface should disappear end-to-end (nav, dashboard, insights, …). `cycle` mirrors `cycleTrackingEnabled`;
@@ -35517,6 +35939,418 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/Practitioner"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    ListVaccinationsEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/VaccinationList"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    VaccinationList:
+      type: object
+      properties:
+        vaccinations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Vaccination"
+      required:
+        - vaccinations
+      additionalProperties: false
+      description: The caller's immunization history, newest dose first, with every entry's series already resolved over the
+        whole live set — never over the filtered page, which would report the oldest dose in a window as the first ever
+        given.
+    Vaccination:
+      type: object
+      properties:
+        id:
+          type: string
+        occurredAt:
+          type: string
+        antigenSlug:
+          anyOf:
+            - type: string
+            - type: "null"
+        vaccineName:
+          anyOf:
+            - type: string
+            - type: "null"
+        doseNumber:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+        seriesDoses:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+        lotNumber:
+          anyOf:
+            - type: string
+            - type: "null"
+        site:
+          anyOf:
+            - type: string
+              enum:
+                - LEFT_ARM
+                - RIGHT_ARM
+                - LEFT_THIGH
+                - RIGHT_THIGH
+                - ORAL
+                - NASAL
+                - OTHER
+            - type: "null"
+        catalogEntry:
+          anyOf:
+            - $ref: "#/components/schemas/VaccinationCatalogEntry"
+            - type: "null"
+        series:
+          type: array
+          items:
+            $ref: "#/components/schemas/VaccinationSeriesPosition"
+        practitioner:
+          anyOf:
+            - $ref: "#/components/schemas/VaccinationPractitioner"
+            - type: "null"
+        encounter:
+          anyOf:
+            - $ref: "#/components/schemas/VaccinationEncounterStub"
+            - type: "null"
+        reminderId:
+          anyOf:
+            - type: string
+            - type: "null"
+        note:
+          anyOf:
+            - type: string
+            - type: "null"
+        documents:
+          type: array
+          items:
+            $ref: "#/components/schemas/VaccinationLinkedDocument"
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - occurredAt
+        - antigenSlug
+        - vaccineName
+        - doseNumber
+        - seriesDoses
+        - lotNumber
+        - site
+        - catalogEntry
+        - series
+        - practitioner
+        - encounter
+        - reminderId
+        - note
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+      description: "One administered dose. `occurredAt` is a day at UTC midnight — the source record carries dates, never
+        times. `series` carries one entry per component antigen, so a combined preparation reports several at once and
+        each may be at a different position: a dose can be a booster for one antigen and a first dose for another in the
+        same act. An empty `series` means the dose has no resolvable antigen (free text only, or a slug this release
+        does not know) and nothing is guessed from the name. `note` is the decrypted free text, or null on a
+        key-rotation gap — fail-soft, never a 500. `reminderId` names the booster reminder this dose settled, when one
+        matched. `documents` is present on the detail response and absent from the list."
+    VaccinationCatalogEntry:
+      type: object
+      properties:
+        slug:
+          type: string
+        atc:
+          type: string
+        category:
+          type: string
+      required:
+        - slug
+        - atc
+        - category
+      additionalProperties: false
+      description: "What the catalogue this release ships knows about the record's `antigenSlug`: the slug itself, its WHO ATC
+        code from the J07 subtree, and its picker grouping. Null when the slug does not resolve — a slug written by an
+        older release, or one restored verbatim from an older backup. Null is the signal to render `vaccineName`
+        instead; it is not an error and not missing data."
+    VaccinationSeriesPosition:
+      type: object
+      properties:
+        antigen:
+          type: string
+        position:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+        total:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+        booster:
+          type: boolean
+      required:
+        - antigen
+        - position
+        - total
+        - booster
+      additionalProperties: false
+      description: "Where this dose sits in ONE antigen's series, derived server-side over the whole history. `position` is
+        the person's own recorded dose number when they gave one, otherwise the chronological index among their doses
+        for that antigen. `total` is the record's own series length, then the catalogue's typical one, then null when
+        neither knows — a seasonal vaccine has no 'of M'. `booster` is true once the series is complete and this dose
+        comes after it. Render text from these values: both resolved reads as 'N of M', position alone as 'dose N',
+        `booster` as a booster. Do not recompute them — a client cannot see the whole history and the two would drift."
+    VaccinationPractitioner:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        specialty:
+          anyOf:
+            - type: string
+            - type: "null"
+        practice:
+          anyOf:
+            - type: string
+            - type: "null"
+        location:
+          anyOf:
+            - type: string
+            - type: "null"
+        phone:
+          anyOf:
+            - type: string
+            - type: "null"
+        note:
+          anyOf:
+            - type: string
+            - type: "null"
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - id
+        - name
+        - specialty
+        - practice
+        - location
+        - phone
+        - note
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+      description: The practice that administered the dose, resolved rather than an id. Null when the record names none.
+    VaccinationEncounterStub:
+      type: object
+      properties:
+        id:
+          type: string
+        occurredAt:
+          type: string
+        kind:
+          type: string
+      required:
+        - id
+        - occurredAt
+        - kind
+      additionalProperties: false
+      description: The visit the dose was given at, enough to recognise it by. Null when no visit is linked.
+    VaccinationLinkedDocument:
+      type: object
+      properties:
+        id:
+          type: string
+        label:
+          anyOf:
+            - type: string
+            - type: "null"
+        date:
+          anyOf:
+            - type: string
+            - type: "null"
+        redacted:
+          type: boolean
+      required:
+        - id
+        - label
+        - date
+        - redacted
+      additionalProperties: false
+      description: "One page filed against a dose, resolved. The label and the date are computed server-side from the document
+        itself, so the client never re-derives them. Both go null together, with `redacted: true`, when the caller's
+        grant does not cover the document vault: a dose lives in the health background but points into the vault, and a
+        page's filename is itself the sensitive part. The link is still listed — the caller may know the dose was
+        transcribed from a page — and `redacted` tells a withheld name apart from a page that simply has no date."
+    CreateVaccinationEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Vaccination"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    GetVaccinationEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Vaccination"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    UpdateVaccinationEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Vaccination"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    DeleteVaccinationEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            deleted:
+              type: boolean
+          required:
+            - deleted
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    RestoreVaccinationEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/Vaccination"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    LinkVaccinationEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            documents:
+              type: array
+              items:
+                $ref: "#/components/schemas/VaccinationLinkedDocument"
+            unknown:
+              type: array
+              items:
+                type: string
+          required:
+            - documents
+            - unknown
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    UnlinkVaccinationEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            documents:
+              type: array
+              items:
+                $ref: "#/components/schemas/VaccinationLinkedDocument"
+            unknown:
+              type: array
+              items:
+                type: string
+          required:
+            - documents
+            - unknown
+          additionalProperties: false
         error:
           type: "null"
         meta:

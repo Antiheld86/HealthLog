@@ -34,6 +34,8 @@ vi.mock("@/lib/db", () => ({
     encounterDocumentLink: { findMany: vi.fn().mockResolvedValue([]) },
     encounterLabLink: { findMany: vi.fn().mockResolvedValue([]) },
     encounterConditionLink: { findMany: vi.fn().mockResolvedValue([]) },
+    vaccinationRecord: { findMany: vi.fn().mockResolvedValue([]) },
+    vaccinationDocumentLink: { findMany: vi.fn().mockResolvedValue([]) },
     cycleProfile: { findUnique: vi.fn().mockResolvedValue(null) },
     menstrualCycle: { findMany: vi.fn().mockResolvedValue([]) },
     cycleDayLog: { findMany: vi.fn().mockResolvedValue([]) },

@@ -281,7 +281,7 @@ const ROUTE_IMPORTS = import.meta.glob<Record<string, unknown>>(
 
 describe("the complete MANAGE handler matrix", () => {
   it("starts with a non-empty, exact handler inventory", () => {
-    expect(ADMITTED_MUTATING_HANDLERS.length).toBe(70);
+    expect(ADMITTED_MUTATING_HANDLERS.length).toBe(74);
   });
 });
 
@@ -534,6 +534,20 @@ async function makeVisit(userId: string) {
       status: "DONE",
       kind: "ROUTINE",
     },
+  });
+}
+
+/**
+ * One logged dose, catalogue-identified.
+ *
+ * `tetanus` rather than a combination on purpose: the drivers below assert one
+ * effect each, and a combination would satisfy several booster reminders at
+ * once if the fixture ever grew one. There is none here, so no reminder moves
+ * and the edit and delete verbs say only what they are here to say.
+ */
+async function makeVaccination(userId: string) {
+  return getPrismaClient().vaccinationRecord.create({
+    data: { userId, occurredAt: new Date(ISO), antigenSlug: "tetanus" },
   });
 }
 
@@ -1437,6 +1451,109 @@ manageContract("POST /api/practitioners/[id]/restore", {
   applied: async (row) =>
     (await getPrismaClient().practitioner.findUnique({ where: { id: row.id } }))
       ?.deletedAt === null,
+});
+
+writeEffectContract("POST /api/vaccinations", {
+  contract: ADMITTED_MUTATING_HANDLERS.find(
+    (entry) => entry.route === "/api/vaccinations" && entry.action === "POST",
+  )!,
+  prepare: async (ownerId) => ({ ownerId }),
+  act: async () => {
+    const { POST } = await import("@/app/api/vaccinations/route");
+    return call(POST as Handler, "POST", "/api/vaccinations", {
+      occurredAt: ISO,
+      antigenSlug: "tetanus",
+    });
+  },
+  ok: 201,
+  auditAction: "vaccination.record.create",
+  applied: async ({ ownerId }) =>
+    (await getPrismaClient().vaccinationRecord.count({
+      where: { userId: ownerId },
+    })) === 1,
+});
+
+manageContract("PATCH /api/vaccinations/[id]", {
+  contract: ADMITTED_MUTATING_HANDLERS.find(
+    (entry) =>
+      entry.route === "/api/vaccinations/[id]" && entry.action === "PATCH",
+  )!,
+  prepare: (ownerId) => makeVaccination(ownerId),
+  act: async (row) => {
+    const { PATCH } = await import("@/app/api/vaccinations/[id]/route");
+    return call(
+      PATCH as Handler,
+      "PATCH",
+      `/api/vaccinations/${row.id}`,
+      { lotNumber: "MX-2211" },
+      { id: row.id },
+    );
+  },
+  ok: 200,
+  auditAction: "vaccination.record.update",
+  applied: async (row) =>
+    (
+      await getPrismaClient().vaccinationRecord.findUnique({
+        where: { id: row.id },
+      })
+    )?.lotNumber === "MX-2211",
+});
+
+manageContract("DELETE /api/vaccinations/[id]", {
+  contract: ADMITTED_MUTATING_HANDLERS.find(
+    (entry) =>
+      entry.route === "/api/vaccinations/[id]" && entry.action === "DELETE",
+  )!,
+  prepare: (ownerId) => makeVaccination(ownerId),
+  act: async (row) => {
+    const { DELETE } = await import("@/app/api/vaccinations/[id]/route");
+    return call(
+      DELETE as Handler,
+      "DELETE",
+      `/api/vaccinations/${row.id}`,
+      undefined,
+      { id: row.id },
+    );
+  },
+  ok: 200,
+  auditAction: "vaccination.record.delete",
+  applied: async (row) =>
+    (
+      await getPrismaClient().vaccinationRecord.findUnique({
+        where: { id: row.id },
+      })
+    )?.deletedAt !== null,
+});
+
+manageContract("POST /api/vaccinations/[id]/restore", {
+  contract: ADMITTED_MUTATING_HANDLERS.find(
+    (entry) => entry.route === "/api/vaccinations/[id]/restore",
+  )!,
+  prepare: async (ownerId) => {
+    const row = await makeVaccination(ownerId);
+    return getPrismaClient().vaccinationRecord.update({
+      where: { id: row.id },
+      data: { deletedAt: new Date() },
+    });
+  },
+  act: async (row) => {
+    const { POST } = await import("@/app/api/vaccinations/[id]/restore/route");
+    return call(
+      POST as Handler,
+      "POST",
+      `/api/vaccinations/${row.id}/restore`,
+      {},
+      { id: row.id },
+    );
+  },
+  ok: 200,
+  auditAction: "vaccination.record.restore",
+  applied: async (row) =>
+    (
+      await getPrismaClient().vaccinationRecord.findUnique({
+        where: { id: row.id },
+      })
+    )?.deletedAt === null,
 });
 
 manageContract("POST /api/illness/episodes/[id]/day-logs", {
@@ -2379,13 +2496,13 @@ describe("the conditions the admissions were granted on", () => {
 describe("the complete MANAGE handler matrix", () => {
   it("registers one strict actor-and-effect driver for every admission", () => {
     const expected = ADMITTED_MUTATING_HANDLERS.map(matrixKey).sort();
-    expect(STRICT_DRIVER_KEYS.size).toBe(70);
+    expect(STRICT_DRIVER_KEYS.size).toBe(74);
     expect([...STRICT_DRIVER_KEYS].sort()).toEqual(expected);
   });
 
   it("executes every registered driver through its owned effect and actor audit", () => {
     const expected = ADMITTED_MUTATING_HANDLERS.map(matrixKey).sort();
-    expect(REAL_EFFECT_KEYS.size).toBe(70);
+    expect(REAL_EFFECT_KEYS.size).toBe(74);
     expect([...REAL_EFFECT_KEYS].sort()).toEqual(expected);
   });
 });

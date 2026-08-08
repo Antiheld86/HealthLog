@@ -53,6 +53,7 @@ import {
   Pill,
   Smile,
   Sparkles,
+  Syringe,
   TestTube,
   Thermometer,
   type LucideIcon,
@@ -110,6 +111,8 @@ const MODULE_ICONS: Record<ModuleKey, LucideIcon> = {
   mentalHealth: Brain,
   // v1.28 — opt-in micronutrient-intake sync (Apple Health day totals).
   nutrients: Leaf,
+  // v1.38.0 — the immunization log.
+  vaccinations: Syringe,
 };
 
 export function ModulesSection() {

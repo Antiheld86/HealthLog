@@ -335,6 +335,7 @@ describe("doctor-report — module enable/disable gating", () => {
     inboundDocuments: true,
     mentalHealth: true,
     nutrients: true,
+    vaccinations: true,
   } as const;
 
   it("includes every module's data when all modules are enabled", async () => {

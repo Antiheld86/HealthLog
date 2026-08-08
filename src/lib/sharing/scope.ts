@@ -47,8 +47,8 @@ export const SHARE_DOMAINS = [
   /** Lab results and the biomarker catalogue behind them. */
   "labs",
   /**
-   * Health background: allergies, family history, anamnesis facts, and visits
-   * and practitioners.
+   * Health background: allergies, family history, anamnesis facts, visits and
+   * practitioners, and the immunization history.
    *
    * Visits joined this domain rather than getting one of their own, and the
    * cost is worth naming: somebody granted `profile` so a relative could see
@@ -56,6 +56,14 @@ export const SHARE_DOMAINS = [
    * book behind it. The mitigation is not this comment — it is the consent
    * copy, which names visits in all six locales, so the widening is stated
    * where it is agreed to rather than inferred from the code.
+   *
+   * The immunization log joined on the same argument and carries the same
+   * cost, stated the same way: a delegate holding this domain for the allergy
+   * list also sees every dose the person has had, and the consent copy names
+   * it. Vaccinations are a tracked clinical vertical with their own module
+   * toggle, which is a separate question from consent — a module the owner
+   * enabled is not a section the owner shared, and a person granting health
+   * background is granting the section whether or not the surfaces are on.
    */
   "profile",
   /** Illness episodes and the day logs under them. */

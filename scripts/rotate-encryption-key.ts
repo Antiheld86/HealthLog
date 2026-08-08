@@ -562,6 +562,17 @@ async function main() {
     ),
   );
 
+  // ───── v1.38.0 dose free text (Bytes column) ─────
+  // The note on an administered dose — a reaction, a sore arm. Always
+  // encrypted on write, so every non-null row rotates.
+  results.push(
+    await rotateBytesColumn(
+      "VaccinationRecord",
+      "noteEncrypted",
+      prisma.vaccinationRecord,
+    ),
+  );
+
   // ───── Inbound clinical document (Bytes column, codec-dispatched) ─────
   // The raw uploaded document. Two layouts recorded per row in
   // `contentCodec` ("base64v1" string codec | "binary2" binary codec), so

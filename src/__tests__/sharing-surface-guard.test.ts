@@ -943,6 +943,14 @@ const DELEGABLE_ROUTES: Record<string, DelegableEntry> = {
     domain: "profile",
     why: "Which of the record's visits a document or lab panel dated around a given day belongs to. A read over the same rows the visit list serves, reduced to a verdict — the caller learns nothing about the record it could not learn from the list itself, and the anchor it passes is a date rather than an id, so it cannot address a row.",
   },
+  "app/api/vaccinations/route.ts": {
+    domain: "profile",
+    why: "The record's immunization history. Health background in the same sense as the allergies and the visits already under this domain: it names no credential, no integration and no notification channel. It carries the same honest cost as those two, which is that a delegate granted `profile` to read an allergy list also sees every dose the person has had; the consent copy names the immunization history for exactly this reason. The create arm is a delegable write.",
+  },
+  "app/api/vaccinations/[id]/route.ts": {
+    domain: "profile",
+    why: "One dose of the record, fetch-then-guard against the resolved user. The pages it resolves are read through the link service, which narrows both ends to the same resolved id, and their names are withheld from a grant that does not reach the vault — the filename of a scanned page is itself the sensitive part.",
+  },
   "app/api/practitioners/route.ts": {
     domain: "profile",
     why: "The record's own address book of doctors and practices. Record content, not account configuration — it touches no credential, no integration and no notification channel, which is the fence the classification turns on. The create arm is a delegable write.",
@@ -1143,6 +1151,10 @@ const DELEGABLE_ROUTES: Record<string, DelegableEntry> = {
   "app/api/practitioners/[id]/restore/route.ts": {
     domain: "profile",
     why: "Reopening a deleted address-book entry. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/vaccinations/[id]/restore/route.ts": {
+    domain: "profile",
+    why: "Reopening a deleted dose with the page it was transcribed from still filed against it. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
   },
   "app/api/mood-entries/bulk-delete/route.ts": {
     domain: "mind",
@@ -1387,6 +1399,8 @@ const DELEGABLE_WRITE_ROUTES: Record<string, string> = {
     "Filing a visit, or booking one. Every id the body may carry — the practitioner, the checkup it closes, the three link arrays — is re-narrowed to the resolved record before anything is written, so a delegate cannot attach one record's document to another's visit. Booking mints the appointment reminder under the RECORD, which is correct: it is the owner's appointment and the owner's channels that should be nudged about it.",
   "app/api/practitioners/route.ts":
     "Adding a doctor or practice to the record's address book. Nothing is unique across accounts here by design, so a delegate adding a practice the owner already has produces a second row rather than a collision with somebody else's namespace.",
+  "app/api/vaccinations/route.ts":
+    "Logging a dose. Every id the body may carry — the practitioner, the visit, the pages to file it against — is re-narrowed to the resolved record before anything is written, so a delegate cannot attach one record's scan to another's dose. The booster reminders it clears are the RECORD's, which is correct: it is the owner's booster plan, and a helper transcribing an Impfpass is doing exactly the work that should settle it.",
   "app/api/medications/[id]/side-effects/route.ts":
     "Recording a side effect. Admitted on one condition, met at the call site: the POST rate bucket keys on the ACTOR, so a delegate burns their own allowance rather than the owner's and cannot collect a fresh one by switching records.",
   "app/api/medications/route.ts":
@@ -1512,6 +1526,16 @@ const DELEGABLE_MANAGE_ROUTES: Record<string, ManageEntry> = {
     domain: "profile",
     conditions: [],
     why: "Reopening a deleted address-book entry. It does not re-attach the visits whose reference was nulled, because which visits meant this practice is not recoverable.",
+  },
+  "app/api/vaccinations/[id]/route.ts": {
+    domain: "profile",
+    conditions: ["C4"],
+    why: "Correcting and removing one dose; the delete soft-deletes and deliberately does not rewind the booster reminder the dose once cleared, because tidying a transcription is not evidence the dose never happened. C4 on the edit: the date, the antigen, the dose number and the two references are filed before and after, and the encrypted note deliberately is not. The edit never re-runs the satisfy matcher, so a delegate cannot move a booster's due date by correcting a typo.",
+  },
+  "app/api/vaccinations/[id]/restore/route.ts": {
+    domain: "profile",
+    conditions: [],
+    why: "Reopening a deleted dose. The document links survived the tombstone, so it comes back with its page still filed against it.",
   },
   "app/api/illness/episodes/[id]/resolve/route.ts": {
     domain: "illness",
@@ -1873,8 +1897,12 @@ const ACTOR_ROUTES: Record<string, string> = {
  * read-only and admitted on the whole record for the same reason as the linked
  * figures, adds one: 213 -> 214. The visit-suggestion read, which serves the
  * three incidental-linking moments from the same rule, adds one: 214 -> 215.
+ *
+ * v1.38.0 -- the immunization log adds six: two reads and one restore on the
+ * record list, one create on the write literal, and the edit/delete pair plus
+ * the restore on the manage literal. 215 -> 221.
  */
-const FROZEN_ENTRY_COUNT = 215;
+const FROZEN_ENTRY_COUNT = 221;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —
@@ -2635,7 +2663,7 @@ describe("(g) the MANAGE route set is frozen", () => {
 
   it("keeps the admitted mutation inventory complete and discoverable", () => {
     expect(ADMITTED_MUTATING_HANDLERS.length).toBeGreaterThan(0);
-    expect(ADMITTED_MUTATING_HANDLERS.length).toBe(70);
+    expect(ADMITTED_MUTATING_HANDLERS.length).toBe(74);
 
     const expected = ADMITTED_MUTATING_HANDLERS.map(
       ({ handlerModule, action, level }) =>

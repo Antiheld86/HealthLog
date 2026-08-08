@@ -57,6 +57,7 @@ import {
   RhythmClassification,
   SecondarySymptom,
   SleepStage,
+  VaccinationSite,
 } from "@/generated/prisma/enums";
 import {
   DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
@@ -884,6 +885,44 @@ const encounterLinkBackupSchema = z
   })
   .passthrough();
 
+/**
+ * One administered dose.
+ *
+ * `antigenSlug` is a free string here rather than an enum of the catalogue
+ * this release ships, deliberately: a slug the catalogue has since dropped
+ * must still restore, and the renderer degrades to `vaccineName`. Validating
+ * it at the restore boundary would refuse a file the app itself wrote.
+ */
+const vaccinationBackupSchema = z
+  .object({
+    id: z.string().min(1),
+    occurredAt: isoDateTime,
+    antigenSlug: z.string().nullable().optional(),
+    vaccineName: z.string().nullable().optional(),
+    doseNumber: z.number().int().nullable().optional(),
+    seriesDoses: z.number().int().nullable().optional(),
+    lotNumber: z.string().nullable().optional(),
+    site: z.enum(VaccinationSite).nullable().optional(),
+    practitionerId: z.string().nullable().optional(),
+    encounterId: z.string().nullable().optional(),
+    // Carried so the loss is visible in the file. The restore resolves it to
+    // NULL and names the drop: the reminder it points at does not travel.
+    reminderId: z.string().nullable().optional(),
+    noteEncrypted: base64BytesSchema.nullable().optional(),
+    createdAt: isoDateTime,
+    updatedAt: isoDateTime,
+    deletedAt: isoDateTime.nullable().optional(),
+  })
+  .passthrough();
+
+const vaccinationLinkBackupSchema = z
+  .object({
+    vaccinationId: z.string().min(1),
+    targetId: z.string().min(1),
+    createdAt: isoDateTime,
+  })
+  .passthrough();
+
 const allergyBackupSchema = z
   .object({
     id: z.string().min(1),
@@ -1036,6 +1075,12 @@ export const backupPayloadSchema = z
     encounterDocumentLinks: z.array(encounterLinkBackupSchema).default([]),
     encounterLabLinks: z.array(encounterLinkBackupSchema).default([]),
     encounterConditionLinks: z.array(encounterLinkBackupSchema).default([]),
+    // The immunization log and the pages it was transcribed from. Defaulted
+    // for the same reason as the sections above: a file written before the
+    // tables existed carries no key, and an account with an empty Impfpass
+    // writes [].
+    vaccinations: z.array(vaccinationBackupSchema).default([]),
+    vaccinationDocumentLinks: z.array(vaccinationLinkBackupSchema).default([]),
     manifest: backupManifestSchema.nullable().default(null),
   })
   .passthrough()

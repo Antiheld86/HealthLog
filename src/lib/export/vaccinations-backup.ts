@@ -1,0 +1,418 @@
+/**
+ * The immunization log, with both backup ends in one file.
+ *
+ * Same arrangement as `visits-backup.ts` and for the same reason: a reader
+ * asking "is this carried at both ways?" answers it here, and a reader who
+ * greps only the restore ROUTE gets a false negative because the route
+ * delegates.
+ *
+ * Two models ride: the dose and the link that keeps the scanned Impfpass page
+ * beside it. Both are carried rather than owed. `DocumentConditionLink` on the
+ * debt register says what the alternative costs — documents and conditions
+ * both restore, the filing between them does not — and an immunization history
+ * is the record with the least chance of being reconstructed from anywhere
+ * else, so the same regret is not repeated here.
+ *
+ * Each model uses its own named select constant and its own delegate call
+ * rather than riding a parent's `include`: `documentLinks` is a relation field
+ * name on three different models now, so a relation-shaped write would be
+ * attributed to whichever of them a matcher happened to find first.
+ *
+ * Three references need care on the way back:
+ *
+ *   - `practitionerId` and `encounterId` point at models that restore in the
+ *     same run. They remap to the restored rows, and drop to NULL when the
+ *     file references a row it does not carry.
+ *   - `reminderId` points at a `MeasurementReminder`, which is on the
+ *     coverage-pending register and does not come back. It resolves to NULL,
+ *     never to a dangling id, and the drop is reported.
+ *   - `antigenSlug` is restored verbatim with no validation against the
+ *     current catalogue. A slug this release no longer resolves must still
+ *     come back; the renderer degrades to the free-text arm, which is the
+ *     guarantee `src/lib/vaccinations/__tests__/catalog-integrity.test.ts`
+ *     holds.
+ */
+import { Buffer } from "node:buffer";
+import type { Prisma, PrismaClient } from "@/generated/prisma/client";
+import type { VaccinationSite } from "@/generated/prisma/client";
+
+import {
+  recordUnknownKeys,
+  type RestoreSkipLog,
+} from "@/lib/export/restore-skips";
+
+export interface VaccinationsBackupOptions {
+  purpose?: "portable-export" | "disaster-recovery";
+}
+
+/** One administered dose, as the Pass recorded it. */
+export interface VaccinationBackupEntry {
+  /** Always carried: the document link addresses a dose by it. */
+  id: string;
+  occurredAt: string;
+  /**
+   * Carried verbatim, never checked against the catalogue this release ships.
+   * A slug that stopped resolving still describes what the person was given.
+   */
+  antigenSlug: string | null;
+  vaccineName: string | null;
+  doseNumber: number | null;
+  seriesDoses: number | null;
+  lotNumber: string | null;
+  site: VaccinationSite | null;
+  practitionerId: string | null;
+  encounterId: string | null;
+  /**
+   * Carried so the loss is visible in the file rather than inferred from its
+   * absence. The restore resolves it to NULL and names the drop: the reminder
+   * it points at is not in the backup.
+   */
+  reminderId: string | null;
+  /** Base64 ciphertext, carried verbatim — never decrypted into the file. */
+  noteEncrypted: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string | null;
+}
+
+/** One edge from a dose to the page it was transcribed from. */
+export interface VaccinationDocumentLinkBackupEntry {
+  vaccinationId: string;
+  targetId: string;
+  createdAt: string;
+}
+
+export interface VaccinationsBackupSection {
+  vaccinations: VaccinationBackupEntry[];
+  vaccinationDocumentLinks: VaccinationDocumentLinkBackupEntry[];
+}
+
+export interface VaccinationsBackupCounts {
+  vaccinations: number;
+  vaccinationLinks: number;
+}
+
+/** Base64 for a `Bytes` ciphertext column, or null when the column is empty. */
+function encodeCiphertext(value: Uint8Array | null): string | null {
+  if (!value || value.byteLength === 0) return null;
+  return Buffer.from(value).toString("base64");
+}
+
+/**
+ * Named select constants, one per model — a structural matcher binds a model
+ * to the literal beside its delegate call, and an inline object inside a
+ * `Promise.all` is the shape earlier work here had to refactor away from.
+ */
+const VACCINATION_BACKUP_SELECT = {
+  id: true,
+  occurredAt: true,
+  antigenSlug: true,
+  vaccineName: true,
+  doseNumber: true,
+  seriesDoses: true,
+  lotNumber: true,
+  site: true,
+  practitionerId: true,
+  encounterId: true,
+  reminderId: true,
+  noteEncrypted: true,
+  createdAt: true,
+  updatedAt: true,
+  deletedAt: true,
+} as const;
+
+const VACCINATION_DOCUMENT_LINK_BACKUP_SELECT = {
+  vaccinationId: true,
+  documentId: true,
+  createdAt: true,
+} as const;
+
+/**
+ * Build the immunization slice of a user's full backup.
+ *
+ * Takes the delegates it uses rather than a whole client, matching the other
+ * section builders. A portable export omits tombstones so a restore cannot
+ * resurrect them; a disaster-recovery payload keeps them so the account comes
+ * back as itself.
+ */
+export async function buildVaccinationsBackupSection(
+  prisma: Pick<PrismaClient, "vaccinationRecord" | "vaccinationDocumentLink">,
+  userId: string,
+  options: VaccinationsBackupOptions = {},
+): Promise<VaccinationsBackupSection> {
+  const disasterRecovery = options.purpose === "disaster-recovery";
+
+  const [vaccinationRows, documentLinkRows] = await Promise.all([
+    prisma.vaccinationRecord.findMany({
+      where: disasterRecovery ? { userId } : { userId, deletedAt: null },
+      orderBy: { occurredAt: "desc" },
+      select: VACCINATION_BACKUP_SELECT,
+    }),
+    prisma.vaccinationDocumentLink.findMany({
+      where: { userId },
+      orderBy: { createdAt: "asc" },
+      select: VACCINATION_DOCUMENT_LINK_BACKUP_SELECT,
+    }),
+  ]);
+
+  return {
+    vaccinations: vaccinationRows.map((row) => ({
+      id: row.id,
+      occurredAt: row.occurredAt.toISOString(),
+      antigenSlug: row.antigenSlug,
+      vaccineName: row.vaccineName,
+      doseNumber: row.doseNumber,
+      seriesDoses: row.seriesDoses,
+      lotNumber: row.lotNumber,
+      site: row.site,
+      practitionerId: row.practitionerId,
+      encounterId: row.encounterId,
+      reminderId: row.reminderId,
+      noteEncrypted: encodeCiphertext(row.noteEncrypted),
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+      ...(disasterRecovery
+        ? { deletedAt: row.deletedAt?.toISOString() ?? null }
+        : {}),
+    })),
+    vaccinationDocumentLinks: documentLinkRows.map((row) => ({
+      vaccinationId: row.vaccinationId,
+      targetId: row.documentId,
+      createdAt: row.createdAt.toISOString(),
+    })),
+  };
+}
+
+/** Row counts for the audit trail, mirroring the other section counters. */
+export function countVaccinationsBackupSection(
+  section: VaccinationsBackupSection,
+): VaccinationsBackupCounts {
+  return {
+    vaccinations: section.vaccinations.length,
+    vaccinationLinks: section.vaccinationDocumentLinks.length,
+  };
+}
+
+/** Counts the immunization restore wiped, for the audit trail. */
+export interface VaccinationsRestoreCleared {
+  vaccinations: number;
+  vaccinationLinks: number;
+}
+
+/**
+ * The slice of a parsed backup this restore consumes.
+ *
+ * Required rather than optional: the payload schema defaults every key, so
+ * every caller already satisfies this, and one that stops satisfying it fails
+ * to compile instead of passing `undefined` into a loop that iterates zero
+ * times and reports success.
+ */
+export interface VaccinationsRestoreInput {
+  vaccinations: RestoredVaccination[];
+  vaccinationDocumentLinks: VaccinationDocumentLinkBackupEntry[];
+}
+
+/**
+ * What the restore reads, as the parsed file actually presents it — a wider
+ * set than what this release writes: a portable export omits the tombstone,
+ * and every optional column arrives as `undefined` rather than `null`.
+ */
+type OptionalNullable<T> = { [K in keyof T]?: T[K] | undefined };
+
+export type RestoredVaccination = Pick<
+  VaccinationBackupEntry,
+  "id" | "occurredAt" | "createdAt" | "updatedAt"
+> &
+  OptionalNullable<
+    Pick<
+      VaccinationBackupEntry,
+      | "antigenSlug"
+      | "vaccineName"
+      | "doseNumber"
+      | "seriesDoses"
+      | "lotNumber"
+      | "site"
+      | "practitionerId"
+      | "encounterId"
+      | "reminderId"
+      | "noteEncrypted"
+    >
+  > & { deletedAt?: string | null };
+
+function decodeCiphertext(encoded: string): Uint8Array<ArrayBuffer> {
+  const decoded = Buffer.from(encoded, "base64");
+  const bytes = new Uint8Array(new ArrayBuffer(decoded.byteLength));
+  bytes.set(decoded);
+  return bytes;
+}
+
+/**
+ * Re-create the account's immunization log and its document links.
+ *
+ * Delete-then-recreate inside the caller's transaction, matching every other
+ * section. The dose first, then the link, because a link addresses both of its
+ * ends by id.
+ *
+ * MUST be called after the practitioners, encounters and documents have been
+ * restored: the dose remaps two of those references against the database and
+ * the link is written only when the document actually came back. Calling it
+ * earlier would drop every reference and be counted as a successful restore of
+ * a thinner record.
+ */
+export async function restoreVaccinationsData(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  payload: VaccinationsRestoreInput,
+  skips: RestoreSkipLog,
+): Promise<VaccinationsRestoreCleared> {
+  const clearedLinks = await tx.vaccinationDocumentLink.deleteMany({
+    where: { userId: ownerId },
+  });
+  const clearedVaccinations = await tx.vaccinationRecord.deleteMany({
+    where: { userId: ownerId },
+  });
+
+  // Both far sides are restored by other branches of the same transaction, so
+  // the check is against the database rather than against the payload — this
+  // is the only place that can see all three sections at once.
+  const [practitionerIds, encounterIds] = await Promise.all([
+    tx.practitioner.findMany({
+      where: { userId: ownerId },
+      select: { id: true },
+    }),
+    tx.encounter.findMany({
+      where: { userId: ownerId },
+      select: { id: true },
+    }),
+  ]);
+  const restoredPractitioners = new Set(practitionerIds.map((row) => row.id));
+  const restoredEncounters = new Set(encounterIds.map((row) => row.id));
+
+  // A row the file references but the restore did not bring back cannot be
+  // invented, and a dangling id would fail the foreign key and roll the whole
+  // restore back over one dose. The reference drops to NULL instead — the
+  // dose, its date, its antigen and its batch code all survive.
+  const droppedPractitioners: string[] = [];
+  const droppedEncounters: string[] = [];
+  // The reminder is on the coverage-pending register: it is not in the file at
+  // all, so every reference to one is a known, reportable drop.
+  const droppedReminders: string[] = [];
+
+  if (payload.vaccinations.length > 0) {
+    await tx.vaccinationRecord.createMany({
+      data: payload.vaccinations.map((entry) => {
+        const practitionerId =
+          entry.practitionerId &&
+          restoredPractitioners.has(entry.practitionerId)
+            ? entry.practitionerId
+            : null;
+        if (entry.practitionerId && practitionerId === null) {
+          droppedPractitioners.push(entry.practitionerId);
+        }
+        const encounterId =
+          entry.encounterId && restoredEncounters.has(entry.encounterId)
+            ? entry.encounterId
+            : null;
+        if (entry.encounterId && encounterId === null) {
+          droppedEncounters.push(entry.encounterId);
+        }
+        if (entry.reminderId) droppedReminders.push(entry.reminderId);
+        return {
+          id: entry.id,
+          userId: ownerId,
+          occurredAt: new Date(entry.occurredAt),
+          // Verbatim, deliberately: a slug the current catalogue no longer
+          // resolves still describes what was given, and the renderer falls
+          // back to `vaccineName`.
+          antigenSlug: entry.antigenSlug ?? null,
+          vaccineName: entry.vaccineName ?? null,
+          doseNumber: entry.doseNumber ?? null,
+          seriesDoses: entry.seriesDoses ?? null,
+          lotNumber: entry.lotNumber ?? null,
+          site: entry.site ?? null,
+          practitionerId,
+          encounterId,
+          // Never the id the file carried: the row it named is not restored.
+          reminderId: null,
+          noteEncrypted:
+            entry.noteEncrypted == null
+              ? null
+              : decodeCiphertext(entry.noteEncrypted),
+          createdAt: new Date(entry.createdAt),
+          updatedAt: new Date(entry.updatedAt),
+          deletedAt: entry.deletedAt ? new Date(entry.deletedAt) : null,
+        };
+      }),
+    });
+  }
+
+  recordUnknownKeys(
+    skips,
+    "vaccinationReference",
+    [...new Set(droppedPractitioners)],
+    droppedPractitioners,
+  );
+  recordUnknownKeys(
+    skips,
+    "vaccinationReference",
+    [...new Set(droppedEncounters)],
+    droppedEncounters,
+  );
+  recordUnknownKeys(
+    skips,
+    "vaccinationReference",
+    [...new Set(droppedReminders)],
+    droppedReminders,
+  );
+
+  const restoredVaccinations = new Set(
+    payload.vaccinations.map((entry) => entry.id),
+  );
+  const documentIds = await tx.inboundDocument.findMany({
+    where: { userId: ownerId },
+    select: { id: true },
+  });
+  const restoredDocuments = new Set(documentIds.map((row) => row.id));
+
+  const writableLinks: Array<{
+    vaccinationId: string;
+    documentId: string;
+    createdAt: Date;
+  }> = [];
+  const droppedLinks: string[] = [];
+  for (const entry of payload.vaccinationDocumentLinks) {
+    if (
+      restoredVaccinations.has(entry.vaccinationId) &&
+      restoredDocuments.has(entry.targetId)
+    ) {
+      writableLinks.push({
+        vaccinationId: entry.vaccinationId,
+        documentId: entry.targetId,
+        createdAt: new Date(entry.createdAt),
+      });
+    } else {
+      droppedLinks.push(entry.targetId);
+    }
+  }
+  if (writableLinks.length > 0) {
+    await tx.vaccinationDocumentLink.createMany({
+      data: writableLinks.map((row) => ({
+        userId: ownerId,
+        vaccinationId: row.vaccinationId,
+        documentId: row.documentId,
+        createdAt: row.createdAt,
+      })),
+    });
+  }
+  recordUnknownKeys(
+    skips,
+    "vaccinationReference",
+    [...new Set(droppedLinks)],
+    droppedLinks,
+  );
+
+  return {
+    vaccinations: clearedVaccinations.count,
+    vaccinationLinks: clearedLinks.count,
+  };
+}

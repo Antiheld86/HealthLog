@@ -6857,6 +6857,7 @@
         "restoreSkippedMoodFactor": "Mood factor",
         "restoreSkippedMoodTag": "Mood tag",
         "restoreSkippedVisitReference": "Visit reference",
+        "restoreSkippedVaccinationReference": "Vaccination reference",
         "restoreSkippedCheckupClosure": "Checkup closure",
         "docsLink": "Documentation"
       },
@@ -8507,6 +8508,10 @@
     "nutrients": {
       "label": "Nutrient intake",
       "description": "Daily micronutrient totals synced from Apple Health."
+    },
+    "vaccinations": {
+      "label": "Vaccinations",
+      "description": "The vaccination record, structured: dose, series, next booster."
     }
   },
   "illness": {
@@ -9935,6 +9940,10 @@
       "encounterVisitUpdate": "{name} edited a visit",
       "encounterVisitDelete": "{name} deleted a visit",
       "encounterVisitRestore": "{name} restored a visit",
+      "vaccinationRecordCreate": "{name} added a vaccination",
+      "vaccinationRecordUpdate": "{name} edited a vaccination",
+      "vaccinationRecordDelete": "{name} deleted a vaccination",
+      "vaccinationRecordRestore": "{name} restored a vaccination",
       "practitionerContactCreate": "{name} added a practice to the address book",
       "practitionerContactUpdate": "{name} edited an address book entry",
       "practitionerContactDelete": "{name} deleted an address book entry",
@@ -10014,7 +10023,7 @@
       },
       "profile": {
         "label": "Health background",
-        "detail": "Allergies, family history, the facts in your health profile, and your visits and practices."
+        "detail": "Allergies, family history, the facts in your health profile, your visits and practices, and your vaccination record."
       },
       "illness": {
         "label": "Illness",

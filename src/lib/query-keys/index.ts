@@ -40,6 +40,7 @@ import { recordSettingsKeys } from "./record-settings";
 import { profileKeys } from "./profile";
 import { settingsKeys } from "./settings";
 import { sharingKeys } from "./sharing";
+import { vaccinationKeys } from "./vaccinations";
 import { workoutKeys } from "./workouts";
 
 export const queryKeys = {
@@ -70,6 +71,7 @@ export const queryKeys = {
   ...recordSettingsKeys,
   ...profileKeys,
   ...sharingKeys,
+  ...vaccinationKeys,
 };
 
 export { recordSettingsKeys } from "./record-settings";

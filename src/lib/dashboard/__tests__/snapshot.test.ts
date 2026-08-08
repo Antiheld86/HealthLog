@@ -142,6 +142,7 @@ function moduleMap(
     inboundDocuments: true,
     mentalHealth: true,
     nutrients: true,
+    vaccinations: true,
   };
   return { ...base, ...overrides };
 }

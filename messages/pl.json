@@ -6857,6 +6857,7 @@
         "restoreSkippedMoodFactor": "Czynnik nastroju",
         "restoreSkippedMoodTag": "Tag nastroju",
         "restoreSkippedVisitReference": "Odwołanie wizyty",
+        "restoreSkippedVaccinationReference": "Odwołanie szczepienia",
         "restoreSkippedCheckupClosure": "Zamknięcie badania",
         "docsLink": "Dokumentacja"
       },
@@ -8507,6 +8508,10 @@
     "nutrients": {
       "label": "Spożycie składników odżywczych",
       "description": "Dzienne sumy mikroskładników synchronizowane z Apple Health."
+    },
+    "vaccinations": {
+      "label": "Szczepienia",
+      "description": "Książeczka szczepień uporządkowana: dawka, seria, następne przypomnienie."
     }
   },
   "illness": {
@@ -9935,6 +9940,10 @@
       "encounterVisitUpdate": "{name} zmienił wizytę lekarską",
       "encounterVisitDelete": "{name} usunął wizytę lekarską",
       "encounterVisitRestore": "{name} przywrócił wizytę lekarską",
+      "vaccinationRecordCreate": "{name} dodał szczepienie",
+      "vaccinationRecordUpdate": "{name} zmienił szczepienie",
+      "vaccinationRecordDelete": "{name} usunął szczepienie",
+      "vaccinationRecordRestore": "{name} przywrócił szczepienie",
       "practitionerContactCreate": "{name} dodał gabinet do książki adresowej",
       "practitionerContactUpdate": "{name} zmienił wpis w książce adresowej",
       "practitionerContactDelete": "{name} usunął wpis w książce adresowej",
@@ -10014,7 +10023,7 @@
       },
       "profile": {
         "label": "Historia zdrowia",
-        "detail": "Alergie, wywiad rodzinny, dane z Twojego profilu zdrowotnego oraz wizyty lekarskie i gabinety."
+        "detail": "Alergie, wywiad rodzinny, dane z Twojego profilu zdrowotnego, wizyty lekarskie i gabinety oraz Twoja historia szczepień."
       },
       "illness": {
         "label": "Choroby",

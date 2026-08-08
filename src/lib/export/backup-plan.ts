@@ -142,6 +142,14 @@ export const BACKED_UP_MODELS = [
   "EncounterLabLink",
   "EncounterConditionLink",
 
+  // ── Vaccinations ──────────────────────────────────────────────────────────
+  // An immunization history is the one part of a health record that has no
+  // other copy: the paper Pass is the original, and once it has been
+  // transcribed the transcription is what the person relies on. Nothing
+  // re-syncs it from a provider.
+  "VaccinationRecord",
+  "VaccinationDocumentLink",
+
   // ── Coach ─────────────────────────────────────────────────────────────────
   "CoachConversation",
   "CoachMessage",
@@ -190,6 +198,10 @@ export const BACKUP_WRITER_FILES: readonly string[] = [
   // relation-shaped proof would be attributed to whichever one a matcher found
   // first — the `symptomLinks` confusion, avoided by construction.
   "src/lib/export/visits-backup.ts",
+  // The immunization log and its document link, same arrangement for the same
+  // reason: `documentLinks` is a field name on three models now, so each of
+  // these reads through its OWN delegate here.
+  "src/lib/export/vaccinations-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 
@@ -199,6 +211,7 @@ export const BACKUP_RESTORE_FILES: readonly string[] = [
   "src/lib/export/intraday-profile-backup.ts",
   "src/lib/export/health-score-backup.ts",
   "src/lib/export/visits-backup.ts",
+  "src/lib/export/vaccinations-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 
@@ -262,6 +275,15 @@ export const TWO_ENDED_MODELS = [
   "EncounterDocumentLink",
   "EncounterLabLink",
   "EncounterConditionLink",
+  // Doses travel both ways from the release that introduces them, and the
+  // link with them. `DocumentConditionLink` one list down says what the
+  // alternative costs — documents and conditions both restore, the filing
+  // between them does not. Repeating that here would return a restored
+  // Impfpass scan and a restored dose with nothing between them, which is the
+  // same regret against a record a person cannot reconstruct from anywhere
+  // else.
+  "VaccinationRecord",
+  "VaccinationDocumentLink",
 ] as const;
 
 /** One model claimed to travel both ways. */

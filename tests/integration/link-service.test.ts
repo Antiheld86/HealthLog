@@ -74,7 +74,14 @@ async function seedAccount(id: string) {
       onsetAt: new Date("2026-06-20T00:00:00.000Z"),
     },
   });
-  return { encounter, document, labResult, episode };
+  const vaccination = await prisma.vaccinationRecord.create({
+    data: {
+      userId: id,
+      occurredAt: new Date("2026-05-14T00:00:00.000Z"),
+      antigenSlug: "tdap",
+    },
+  });
+  return { encounter, document, labResult, episode, vaccination };
 }
 
 let owner: Awaited<ReturnType<typeof seedAccount>>;
@@ -459,5 +466,182 @@ describe("link service — resolved reads", () => {
       targetKind: "document",
     });
     expect(listed).toEqual([]);
+  });
+});
+
+/**
+ * The `vaccination:document` pair, one case per invariant the facade claims.
+ *
+ * The pair is new; the invariants are not. Repeating them here rather than
+ * trusting the encounter cases is the point — every one of them is a `where`
+ * clause or an index on a DIFFERENT table, and a pair wired to the wrong
+ * column or the wrong ownership probe would pass every test above while
+ * exposing this one.
+ */
+describe("link service — the vaccination pair", () => {
+  it("links a dose to the page it was transcribed from", async () => {
+    const prisma = getPrismaClient();
+    const result = await linkTargets(prisma, {
+      userId: OWNER,
+      sourceKind: "vaccination",
+      sourceId: owner.vaccination.id,
+      targetKind: "document",
+      targetIds: [owner.document.id],
+    });
+
+    expect(result.changed).toBe(1);
+    expect(result.unknownTargetIds).toEqual([]);
+    expect(await prisma.vaccinationDocumentLink.count()).toBe(1);
+    // Written against the right columns, not merely written: a pair wired to
+    // the wrong column would still increment the count above.
+    const row = await prisma.vaccinationDocumentLink.findFirstOrThrow();
+    expect({
+      vaccinationId: row.vaccinationId,
+      documentId: row.documentId,
+      userId: row.userId,
+    }).toEqual({
+      vaccinationId: owner.vaccination.id,
+      documentId: owner.document.id,
+      userId: OWNER,
+    });
+  });
+
+  it("refuses a document another account owns", async () => {
+    const prisma = getPrismaClient();
+    const result = await linkTargets(prisma, {
+      userId: OWNER,
+      sourceKind: "vaccination",
+      sourceId: owner.vaccination.id,
+      targetKind: "document",
+      targetIds: [stranger.document.id],
+    });
+
+    expect(result.changed).toBe(0);
+    expect(result.unknownTargetIds).toEqual([stranger.document.id]);
+    expect(await prisma.vaccinationDocumentLink.count()).toBe(0);
+  });
+
+  it("refuses a dose another account owns", async () => {
+    const prisma = getPrismaClient();
+    const result = await linkTargets(prisma, {
+      userId: OWNER,
+      sourceKind: "vaccination",
+      sourceId: stranger.vaccination.id,
+      targetKind: "document",
+      targetIds: [owner.document.id],
+    });
+
+    expect(result.unknownSource).toBe(true);
+    expect(await prisma.vaccinationDocumentLink.count()).toBe(0);
+  });
+
+  it("links the same pair twice without writing a second row", async () => {
+    const prisma = getPrismaClient();
+    const request = {
+      userId: OWNER,
+      sourceKind: "vaccination" as const,
+      sourceId: owner.vaccination.id,
+      targetKind: "document" as const,
+      targetIds: [owner.document.id],
+    };
+    expect((await linkTargets(prisma, request)).changed).toBe(1);
+    expect((await linkTargets(prisma, request)).changed).toBe(0);
+    expect(await prisma.vaccinationDocumentLink.count()).toBe(1);
+  });
+
+  it("refuses a call naming more targets than the cap", async () => {
+    const prisma = getPrismaClient();
+    await expect(
+      linkTargets(prisma, {
+        userId: OWNER,
+        sourceKind: "vaccination",
+        sourceId: owner.vaccination.id,
+        targetKind: "document",
+        targetIds: Array.from(
+          { length: MAX_TARGETS_PER_CALL + 1 },
+          (_, index) => `doc-${index}`,
+        ),
+      }),
+    ).rejects.toThrow(/cap/);
+    expect(await prisma.vaccinationDocumentLink.count()).toBe(0);
+  });
+
+  it("will not link onto a dose the account has deleted", async () => {
+    const prisma = getPrismaClient();
+    await prisma.vaccinationRecord.update({
+      where: { id: owner.vaccination.id },
+      data: { deletedAt: new Date() },
+    });
+
+    const result = await linkTargets(prisma, {
+      userId: OWNER,
+      sourceKind: "vaccination",
+      sourceId: owner.vaccination.id,
+      targetKind: "document",
+      targetIds: [owner.document.id],
+    });
+    expect(result.unknownSource).toBe(true);
+    expect(await prisma.vaccinationDocumentLink.count()).toBe(0);
+  });
+
+  it("resolves the linked page to a label and a date, never a bare id", async () => {
+    const prisma = getPrismaClient();
+    await linkTargets(prisma, {
+      userId: OWNER,
+      sourceKind: "vaccination",
+      sourceId: owner.vaccination.id,
+      targetKind: "document",
+      targetIds: [owner.document.id],
+    });
+
+    const listed = await listTargets(prisma, {
+      userId: OWNER,
+      sourceKind: "vaccination",
+      sourceId: owner.vaccination.id,
+      targetKind: "document",
+    });
+    expect(listed).toEqual([
+      {
+        id: owner.document.id,
+        label: `${OWNER} report`,
+        date: "2026-06-30T00:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("does not leak another account's dose links into a read", async () => {
+    const prisma = getPrismaClient();
+    await linkTargets(prisma, {
+      userId: STRANGER,
+      sourceKind: "vaccination",
+      sourceId: stranger.vaccination.id,
+      targetKind: "document",
+      targetIds: [stranger.document.id],
+    });
+
+    expect(
+      await listTargets(prisma, {
+        userId: OWNER,
+        sourceKind: "vaccination",
+        sourceId: stranger.vaccination.id,
+        targetKind: "document",
+      }),
+    ).toEqual([]);
+  });
+
+  it("has no table joining a dose to a lab result", async () => {
+    // The ceiling, asserted rather than only commented: the vaccination
+    // source owns exactly one pair, and asking for a second is a programming
+    // error the facade refuses loudly instead of inventing a table for.
+    const prisma = getPrismaClient();
+    await expect(
+      linkTargets(prisma, {
+        userId: OWNER,
+        sourceKind: "vaccination",
+        sourceId: owner.vaccination.id,
+        targetKind: "labResult",
+        targetIds: [owner.labResult.id],
+      }),
+    ).rejects.toThrow(/No link table joins a vaccination to a labResult/);
   });
 });
