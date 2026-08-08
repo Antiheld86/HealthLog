@@ -67,6 +67,8 @@ const LOGGED_AT = new Date("2026-07-19T23:40:00.000Z");
 const CREATED_AT = new Date("2026-07-19T23:41:00.000Z");
 const UPDATED_AT = new Date("2026-07-20T06:05:00.000Z");
 const DELETED_AT = new Date("2026-07-20T07:00:00.000Z");
+const CONTEXT_NOTE = "the meeting overran and the evening went with it";
+const CONTEXT_EVENT_AT = new Date("2026-07-19T16:30:00.000Z");
 
 beforeEach(async () => {
   await truncateAllTables(getPrismaClient());
@@ -214,6 +216,29 @@ describe("mood backup round trip", () => {
             { moodTagId: ownTag.id, rating: null },
           ],
         },
+        // The day context, with one value from each of the four sections plus
+        // its own encrypted note. A zero is in there for the same reason it is
+        // among the level-A values above: zero is a real answer and a carrier
+        // that read it as absence would round-trip it to NULL and pass every
+        // truthiness check on the way.
+        context: {
+          create: {
+            userId: OWNER_ID,
+            workStatus: "overtime",
+            workMinutes: 600,
+            workLoad: 8,
+            workSatisfaction: 0,
+            contactCircles: JSON.stringify(["partner", "friends"]),
+            contactForm: "phone",
+            contactQuality: 7,
+            leisureCategories: JSON.stringify(["reading"]),
+            leisureMinutes: 30,
+            eventType: "conflict",
+            eventValence: -4,
+            eventAt: CONTEXT_EVENT_AT,
+            notesEncrypted: encryptNote(CONTEXT_NOTE),
+          },
+        },
       },
     });
     await prisma.moodEntry.create({
@@ -316,6 +341,149 @@ describe("mood backup round trip", () => {
     expect(byKey.get("rt_headache")!.rating).toBeNull();
     expect(byKey.get("custom:rt_long_walk")!.rating).toBeNull();
     expect(byKey.get("rt_sleep_quality")!.rating).toBe(4);
+
+    // The day context comes back as its own row, bound to the restored entry.
+    // Asserted as "the row is there" before any column is read, so a restore
+    // that stopped writing it fails by name instead of as a Prisma throw three
+    // frames down.
+    expect(
+      await prisma.moodContext.count({
+        where: { moodEntryId: "mood-rt-entry" },
+      }),
+      "the restored entry has no day context — the backup or the restore dropped it",
+    ).toBe(1);
+    const context = await prisma.moodContext.findUniqueOrThrow({
+      where: { moodEntryId: "mood-rt-entry" },
+    });
+    expect(context.userId).toBe(OWNER_ID);
+    expect(context.workStatus).toBe("overtime");
+    expect(context.workMinutes).toBe(600);
+    expect(context.workLoad).toBe(8);
+    // Zero, not NULL.
+    expect(context.workSatisfaction).toBe(0);
+    expect(context.contactCircles).toBe(JSON.stringify(["partner", "friends"]));
+    expect(context.contactForm).toBe("phone");
+    expect(context.contactQuality).toBe(7);
+    // Untouched sections stay empty rather than arriving as a defaulted middle.
+    expect(context.contactSupport).toBeNull();
+    expect(context.leisureCategories).toBe(JSON.stringify(["reading"]));
+    expect(context.leisureMinutes).toBe(30);
+    expect(context.leisureJoy).toBeNull();
+    expect(context.eventType).toBe("conflict");
+    expect(context.eventValence).toBe(-4);
+    expect(context.eventAt).toEqual(CONTEXT_EVENT_AT);
+    expect(
+      context.notesEncrypted,
+      "the restored context has no note ciphertext — the backup dropped it",
+    ).not.toBeNull();
+    expect(decryptFromBytes(context.notesEncrypted!)).toBe(CONTEXT_NOTE);
+
+    // The entry that never had a context still has none. A restore that minted
+    // an empty row for every entry would turn "never asked" into "asked and
+    // answered nothing" across the whole account.
+    expect(
+      await prisma.moodContext.count({
+        where: { moodEntryId: "mood-rt-tombstone" },
+      }),
+    ).toBe(0);
+  });
+
+  it("a file written before contexts existed restores without one", async () => {
+    const prisma = getPrismaClient();
+    await seedAdminSession(prisma);
+    await seedOwner(prisma);
+
+    // The compatibility floor for this change: no `context` key at all, and a
+    // live row that DOES have one. The restore wipes and rebuilds, so the row
+    // comes back exactly as the file describes it — which means without a
+    // context, not with the one that happened to be on disk.
+    await prisma.moodEntry.create({
+      data: {
+        id: "mood-rt-legacy-context",
+        userId: OWNER_ID,
+        date: "2026-07-19",
+        mood: "OKAY",
+        score: 3,
+        source: "MANUAL",
+        moodLoggedAt: LOGGED_AT,
+        context: { create: { userId: OWNER_ID, workStatus: "regular" } },
+      },
+    });
+    expect(await prisma.moodContext.count()).toBe(1);
+
+    const legacyPayload = {
+      schemaVersion: "2",
+      exportedAt: "2026-07-20T00:00:00.000Z",
+      userId: OWNER_ID,
+      appSettings: null,
+      measurements: [],
+      medications: [],
+      intakeEvents: [],
+      moodEntries: [
+        {
+          id: "mood-rt-legacy-context",
+          date: "2026-07-19",
+          mood: "OKAY",
+          score: 3,
+          tags: null,
+          source: "MANUAL",
+          loggedAt: LOGGED_AT.toISOString(),
+          externalId: null,
+          deletedAt: null,
+          factors: [],
+        },
+      ],
+      customMoodTags: [],
+      nutrientDays: [],
+    };
+
+    const response = await restoreFromPayload(
+      prisma,
+      parseBackupPayload(legacyPayload),
+      "MOOD_CONTEXT_LEGACY",
+    );
+    expect(response.status).toBe(200);
+    await prisma.moodEntry.findUniqueOrThrow({
+      where: { id: "mood-rt-legacy-context" },
+    });
+    expect(await prisma.moodContext.count()).toBe(0);
+  });
+
+  it("carries the context through a portable export, in plain text", async () => {
+    const prisma = getPrismaClient();
+    await seedOwner(prisma);
+    await prisma.moodEntry.create({
+      data: {
+        id: "mood-rt-portable",
+        userId: OWNER_ID,
+        date: "2026-07-19",
+        mood: "GUT",
+        score: 4,
+        source: "MANUAL",
+        moodLoggedAt: LOGGED_AT,
+        context: {
+          create: {
+            userId: OWNER_ID,
+            leisureCategories: JSON.stringify(["music"]),
+            leisureJoy: 9,
+            notesEncrypted: encryptNote(CONTEXT_NOTE),
+          },
+        },
+      },
+    });
+
+    const { payload } = await buildFullBackupPayload(prisma, OWNER_ID, {
+      purpose: "portable-export",
+    });
+    const entries = (payload as { moodEntries: Array<Record<string, unknown>> })
+      .moodEntries;
+    const context = entries[0].context as Record<string, unknown>;
+    // A portable file is for a person to read: the note is plain text and no
+    // ciphertext rides along.
+    expect(context.note).toBe(CONTEXT_NOTE);
+    expect(context.notesEncrypted).toBeUndefined();
+    expect(context.leisureJoy).toBe(9);
+    expect(context.leisureCategories).toBe(JSON.stringify(["music"]));
   });
 
   it("wipes before it rebuilds, so a live row comes back exactly as the file describes it", async () => {

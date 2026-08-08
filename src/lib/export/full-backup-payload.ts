@@ -149,6 +149,96 @@ const MOOD_ENTRY_TAG_LINK_SELECT = {
 } as const satisfies Prisma.MoodEntryTagLinkSelect;
 
 /**
+ * Every restorable `MoodContext` scalar.
+ *
+ * `moodEntryId` and `userId` are absent for the reasons the exclusion list in
+ * `mood-backup-completeness.test.ts` states: the context rides inside its
+ * entry and is re-bound to whatever id that entry got, and the owner is
+ * re-derived from the restoring account. The two row stamps are absent for the
+ * third reason there — they describe when the sub-row was written, not when
+ * the day happened, and the entry already carries the moment that matters.
+ *
+ * Named rather than inlined so the guard can compare it field-by-field against
+ * the model, exactly as it does for the two selects above. This is the whole
+ * point of the pair: a column added to `MoodContext` without a line here
+ * fails, and it fails in the release that added it.
+ */
+const MOOD_CONTEXT_BACKUP_SELECT = {
+  workStatus: true,
+  workMinutes: true,
+  overtimeMinutes: true,
+  workLoad: true,
+  workSatisfaction: true,
+  contactCircles: true,
+  contactForm: true,
+  contactExtent: true,
+  contactQuality: true,
+  contactSupport: true,
+  leisureCategories: true,
+  leisureMinutes: true,
+  leisureJoy: true,
+  leisureRecovery: true,
+  eventType: true,
+  eventValence: true,
+  eventAt: true,
+  notesEncrypted: true,
+} as const satisfies Prisma.MoodContextSelect;
+
+type BackupMoodContext = Prisma.MoodContextGetPayload<{
+  select: typeof MOOD_CONTEXT_BACKUP_SELECT;
+}>;
+
+/**
+ * One context row, in whichever of the two wire shapes the caller asked for.
+ *
+ * The split is the same one `Measurement` makes: a disaster-recovery file
+ * carries the ciphertext verbatim, because the instance that reads it back
+ * holds the key; a portable export carries the plain text, because the point
+ * of a portable file is that somebody can read it. Every other column rides in
+ * both, since none of them is a storage detail — they are all answers somebody
+ * gave.
+ *
+ * The parameter is spelled `moodContext` rather than `c`, deliberately: the
+ * completeness guard proves a selected column reaches a payload by matching
+ * `moodContext.<column>`, and a one-letter parameter shared with another
+ * mapper in this file would make that matcher unable to fail.
+ */
+function serialiseMoodContext(
+  moodContext: BackupMoodContext,
+  disasterRecovery: boolean,
+) {
+  return {
+    ...(disasterRecovery
+      ? {
+          notesEncrypted: moodContext.notesEncrypted
+            ? Buffer.from(moodContext.notesEncrypted).toString("base64")
+            : null,
+        }
+      : { note: readNote(moodContext.notesEncrypted, null) }),
+    workStatus: moodContext.workStatus,
+    workMinutes: moodContext.workMinutes,
+    overtimeMinutes: moodContext.overtimeMinutes,
+    workLoad: moodContext.workLoad,
+    workSatisfaction: moodContext.workSatisfaction,
+    // The two multi-selects ride as the stored JSON string, unparsed. The
+    // restore writes the column back verbatim, so a file cannot arrive with a
+    // list the parser and the column disagree about.
+    contactCircles: moodContext.contactCircles,
+    contactForm: moodContext.contactForm,
+    contactExtent: moodContext.contactExtent,
+    contactQuality: moodContext.contactQuality,
+    contactSupport: moodContext.contactSupport,
+    leisureCategories: moodContext.leisureCategories,
+    leisureMinutes: moodContext.leisureMinutes,
+    leisureJoy: moodContext.leisureJoy,
+    leisureRecovery: moodContext.leisureRecovery,
+    eventType: moodContext.eventType,
+    eventValence: moodContext.eventValence,
+    eventAt: moodContext.eventAt?.toISOString() ?? null,
+  };
+}
+
+/**
  * Build the canonical full-backup payload for `userId`. Portable exports omit
  * tombstones and document ciphertext; disaster-recovery payloads preserve
  * both so weekly and off-host snapshots share one restorable wire format.
@@ -259,6 +349,9 @@ export async function buildFullBackupPayload(
         // definition — so the present/absent tags, the kind most people pick,
         // were absent from the file and could not come back from it.
         tagLinks: { select: MOOD_ENTRY_TAG_LINK_SELECT },
+        // The day context, when the entry has one. Sparse by design — most
+        // entries carry none, and the join answers null on those.
+        context: { select: MOOD_CONTEXT_BACKUP_SELECT },
       },
     }),
     // The account's OWN mood tags. The seeded catalogue is reference data every
@@ -505,6 +598,12 @@ export async function buildFullBackupPayload(
         deletedAt: moodEntry.deletedAt?.toISOString() ?? null,
         factors,
         structuredTags,
+        // The day context, or null. Null rather than an empty object, because
+        // "no context" and "a context whose every field is empty" are
+        // different facts and the restore has to keep them apart.
+        context: moodEntry.context
+          ? serialiseMoodContext(moodEntry.context, disasterRecovery)
+          : null,
       };
     }),
     customMoodTags: customMoodTags.map((tag) => ({
