@@ -133,7 +133,7 @@ export class GrantError extends Error {
  * The narrow client slice these functions need, so a caller can pass a
  * transaction handle. Same shape as `issue-token.ts`.
  */
-type GrantDb = Pick<Prisma.TransactionClient, "accountGrant">;
+type GrantDb = Pick<Prisma.TransactionClient, "accountGrant" | "auditLog">;
 
 // ── The state machine, pure ─────────────────────────────────────────────────
 

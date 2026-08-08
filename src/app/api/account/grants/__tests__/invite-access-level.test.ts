@@ -38,7 +38,12 @@ vi.mock("@/lib/api-handler", async () => {
 vi.mock("@/lib/db", () => ({
   prisma: {
     user: { findFirst: vi.fn() },
-    accountGrant: { create: vi.fn() },
+    accountGrant: {
+      create: vi.fn(),
+      // inviteGrant sweeps expired live-pair rows before the create; nothing to
+      // close in these fixtures.
+      updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
   },
 }));
 
