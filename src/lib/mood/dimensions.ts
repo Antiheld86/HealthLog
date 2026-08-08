@@ -120,19 +120,3 @@ const BY_KEY = new Map<string, MoodDimension>(
 export function getMoodDimension(key: string): MoodDimension | undefined {
   return BY_KEY.get(key);
 }
-
-/**
- * Turn a stored value into one where "up" reads as "better".
- *
- * The only legal way to normalise an inverse dimension. Returns `null` for an
- * absent value, because an unanswered dimension is not a neutral one — the
- * whole point of leaving A2..A5 nullable is that absence stays readable as
- * absence.
- */
-export function orientForComparison(
-  dimension: MoodDimension,
-  value: number | null | undefined,
-): number | null {
-  if (typeof value !== "number" || !Number.isFinite(value)) return null;
-  return dimension.inverse ? dimension.max - value : value;
-}
