@@ -15,6 +15,7 @@ import { persistRotatedToken } from "@/lib/integrations/oauth-refresh";
 import { recordSyncFailure } from "@/lib/integrations/status";
 import type { FailureKind } from "@/lib/integrations/status";
 import { getEvent } from "@/lib/logging/context";
+import { dropImplausibleMeasurements } from "@/lib/measurements/plausibility-gate";
 import {
   collapseToTypeDayKeys,
   recomputeBucketsForMeasurement,
@@ -530,7 +531,7 @@ export async function replaceStaleFitbitSleep(
  */
 export async function upsertFitbitMeasurements(
   userId: string,
-  readings: FitbitMeasurementUpsert[],
+  incoming: FitbitMeasurementUpsert[],
   opts: { deferRollup?: boolean } = {},
 ): Promise<{
   imported: number;
@@ -541,6 +542,15 @@ export async function upsertFitbitMeasurements(
     measuredAt: Date;
   }>;
 }> {
+  // Every resource leg funnels through here, so this is the one place the
+  // provider's numbers have to clear the app's declared plausibility band
+  // before they can become rows. A refused reading is dropped and tallied on
+  // the ambient event, never clamped and never written for a later reader to
+  // discover.
+  const readings = dropImplausibleMeasurements("fitbit", incoming, (r) => ({
+    type: r.type,
+    value: r.value,
+  }));
   if (readings.length === 0) return { imported: 0, touched: [], inserted: [] };
 
   // Probe EVERY existing row (live AND tombstoned) for the batch's externalIds
