@@ -410,6 +410,100 @@ describe("an appointment reminder can never be orphaned", () => {
   });
 });
 
+/**
+ * The orphan sweep, in both directions.
+ *
+ * The tests above prove the sequence that produced an orphan no longer does.
+ * These two pin the sweep itself, because it is the part that makes the state
+ * unreachable rather than merely unproduced — and because its retention rule
+ * is subtler than it looks.
+ *
+ * It reaps by the RELATION (`encounters: { none: {} }`), which counts visits
+ * pointing at a reminder without caring whether those visits are tombstoned.
+ * That asymmetry is deliberate and is the second test: a soft-deleted visit
+ * still owns its reminder, so restoring the visit finds its nudge intact. A
+ * sweep that also read the visit's tombstone would quietly destroy that on the
+ * next unrelated write, and nothing else in the system would notice.
+ */
+describe("the orphan sweep", () => {
+  /** A live appointment row with no visit pointing at it — the state itself. */
+  async function strandedReminder() {
+    return getPrismaClient().measurementReminder.create({
+      data: {
+        userId: OWNER_ID,
+        label: "Stranded appointment",
+        origin: "ENCOUNTER",
+        anchorDate: daysFromNow(5),
+        notifyHour: 9,
+        nextDueAt: daysFromNow(5),
+        enabled: true,
+      },
+    });
+  }
+
+  /** Any visit write; the sweep rides the transaction rather than a route. */
+  async function anyVisitWrite() {
+    const created = (
+      await body(
+        await post({
+          occurredAt: daysFromNow(-4).toISOString(),
+          status: "DONE",
+        }),
+      )
+    ).data;
+    expect(
+      (await patch(created.id as string, { kind: "ROUTINE" })).status,
+    ).toBe(200);
+  }
+
+  it("tombstones a row no visit claims", async () => {
+    const prisma = getPrismaClient();
+    const stranded = await strandedReminder();
+
+    await anyVisitWrite();
+
+    const after = await prisma.measurementReminder.findUniqueOrThrow({
+      where: { id: stranded.id },
+    });
+    // Disarmed AND tombstoned. Disabling alone would leave a row the engine
+    // ignores but every future reader still has to reason about.
+    expect(after.deletedAt).not.toBeNull();
+    expect(after.enabled).toBe(false);
+    expect(after.nextDueAt).toBeNull();
+  });
+
+  it("leaves a row that a SOFT-DELETED visit still claims", async () => {
+    const prisma = getPrismaClient();
+    await post({
+      occurredAt: daysFromNow(9).toISOString(),
+      status: "PLANNED",
+    });
+    const owned = await prisma.measurementReminder.findFirstOrThrow({
+      where: { userId: OWNER_ID, origin: "ENCOUNTER" },
+    });
+    const visit = await prisma.encounter.findFirstOrThrow({
+      where: { userId: OWNER_ID, reminderId: owned.id },
+    });
+
+    // Tombstoned directly rather than through the delete route: that route
+    // retires the reminder on purpose, which would prove nothing about the
+    // sweep. This is the state a soft-deleted visit is actually in.
+    await prisma.encounter.update({
+      where: { id: visit.id },
+      data: { deletedAt: new Date() },
+    });
+
+    await anyVisitWrite();
+
+    const after = await prisma.measurementReminder.findUniqueOrThrow({
+      where: { id: owned.id },
+    });
+    // Still claimed, so still there. Restoring the visit has to find its nudge.
+    expect(after.deletedAt).toBeNull();
+    expect(after.enabled).toBe(true);
+  });
+});
+
 describe("closing a checkup by filing a visit", () => {
   async function seedCheckup() {
     return getPrismaClient().measurementReminder.create({
