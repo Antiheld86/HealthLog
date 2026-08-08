@@ -125,7 +125,10 @@ export function VaccinationSheet({
         ) : null}
 
         {isEdit ? (
-          <AlertDialog open={confirmingDelete} onOpenChange={setConfirmingDelete}>
+          <AlertDialog
+            open={confirmingDelete}
+            onOpenChange={setConfirmingDelete}
+          >
             <AlertDialogTrigger asChild>
               <Button
                 type="button"

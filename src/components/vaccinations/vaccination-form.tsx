@@ -124,7 +124,9 @@ function toInt(value: string): number | null {
 }
 
 /** The body a draft becomes, empties turned into absences. Null when unsavable. */
-export function draftToBody(draft: VaccinationDraft): VaccinationWriteBody | null {
+export function draftToBody(
+  draft: VaccinationDraft,
+): VaccinationWriteBody | null {
   const occurredAt = draftInstant(draft.occurredAt);
   if (!occurredAt) return null;
   if (!draftHasIdentity(draft)) return null;
@@ -250,7 +252,10 @@ export function VaccinationForm({
         />
       </FieldGroup>
 
-      <FieldGroup htmlFor="vaccination-site" label={t("vaccinations.form.site")}>
+      <FieldGroup
+        htmlFor="vaccination-site"
+        label={t("vaccinations.form.site")}
+      >
         <NativeSelect
           id="vaccination-site"
           value={draft.site}
@@ -283,7 +288,10 @@ export function VaccinationForm({
         slot="vaccination-encounter-suggestion"
       />
 
-      <FieldGroup htmlFor="vaccination-note" label={t("vaccinations.form.note")}>
+      <FieldGroup
+        htmlFor="vaccination-note"
+        label={t("vaccinations.form.note")}
+      >
         <Textarea
           id="vaccination-note"
           rows={2}

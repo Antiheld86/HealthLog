@@ -8564,6 +8564,21 @@
     "deleteTitle": "Impfung löschen?",
     "deleteDescription": "Der Eintrag wird aus deinem Impfpass entfernt. Ein geplanter Auffrischungs-Reminder bleibt bestehen.",
     "deleteFailed": "Impfung konnte nicht gelöscht werden.",
+    "info": {
+      "primarySeriesOne": "Grundimmunisierung: {count} Dosis",
+      "primarySeriesFew": "Grundimmunisierung: {count} Dosen",
+      "primarySeriesOther": "Grundimmunisierung: {count} Dosen",
+      "yearly": "Jährliche Impfung",
+      "boosterYearsOne": "Auffrischung üblicherweise alle {count} Jahr",
+      "boosterYearsFew": "Auffrischung üblicherweise alle {count} Jahre",
+      "boosterYearsOther": "Auffrischung üblicherweise alle {count} Jahre",
+      "boosterMonthsOne": "Auffrischung üblicherweise alle {count} Monat",
+      "boosterMonthsFew": "Auffrischung üblicherweise alle {count} Monate",
+      "boosterMonthsOther": "Auffrischung üblicherweise alle {count} Monate",
+      "standard60": "Standardimpfung ab 60",
+      "sourceLabel": "Quelle: {source}",
+      "affordanceLabel": "Impfschema-Info"
+    },
     "empty": {
       "title": "Noch keine Impfung erfasst",
       "description": "Übertrage deinen Impfpass Zeile für Zeile — Datum und Impfstoff genügen."

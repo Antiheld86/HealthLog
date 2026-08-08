@@ -125,7 +125,11 @@ describe("VaccinationList grouping", () => {
     expect(html).toContain("Some old vaccine");
     expect(html).toContain("Retired brand");
     // A free-text row shows no series sentence — nothing is guessed.
-    const freeSection = html.slice(html.indexOf('data-vaccination-id="free-1"'));
-    expect(freeSection.slice(0, 400)).not.toContain("data-slot=\"vaccination-series\"");
+    const freeSection = html.slice(
+      html.indexOf('data-vaccination-id="free-1"'),
+    );
+    expect(freeSection.slice(0, 400)).not.toContain(
+      'data-slot="vaccination-series"',
+    );
   });
 });

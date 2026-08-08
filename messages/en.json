@@ -8564,6 +8564,21 @@
     "deleteTitle": "Delete this vaccination?",
     "deleteDescription": "The entry is removed from your record. A planned booster reminder stays.",
     "deleteFailed": "The vaccination could not be deleted.",
+    "info": {
+      "primarySeriesOne": "Primary series: {count} dose",
+      "primarySeriesFew": "Primary series: {count} doses",
+      "primarySeriesOther": "Primary series: {count} doses",
+      "yearly": "Yearly vaccination",
+      "boosterYearsOne": "Booster typically every {count} year",
+      "boosterYearsFew": "Booster typically every {count} years",
+      "boosterYearsOther": "Booster typically every {count} years",
+      "boosterMonthsOne": "Booster typically every {count} month",
+      "boosterMonthsFew": "Booster typically every {count} months",
+      "boosterMonthsOther": "Booster typically every {count} months",
+      "standard60": "Standard vaccination from age 60",
+      "sourceLabel": "Source: {source}",
+      "affordanceLabel": "Schedule info"
+    },
     "empty": {
       "title": "No vaccination logged yet",
       "description": "Transcribe your vaccination card line by line — a date and the vaccine are enough."

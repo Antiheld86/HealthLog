@@ -8564,6 +8564,21 @@
     "deleteTitle": "¿Eliminar esta vacuna?",
     "deleteDescription": "La entrada se elimina de tu registro. Un recordatorio de refuerzo programado se mantiene.",
     "deleteFailed": "No se pudo eliminar la vacuna.",
+    "info": {
+      "primarySeriesOne": "Serie primaria: {count} dosis",
+      "primarySeriesFew": "Serie primaria: {count} dosis",
+      "primarySeriesOther": "Serie primaria: {count} dosis",
+      "yearly": "Vacunación anual",
+      "boosterYearsOne": "Refuerzo normalmente cada {count} año",
+      "boosterYearsFew": "Refuerzo normalmente cada {count} años",
+      "boosterYearsOther": "Refuerzo normalmente cada {count} años",
+      "boosterMonthsOne": "Refuerzo normalmente cada {count} mes",
+      "boosterMonthsFew": "Refuerzo normalmente cada {count} meses",
+      "boosterMonthsOther": "Refuerzo normalmente cada {count} meses",
+      "standard60": "Vacunación estándar a partir de los 60",
+      "sourceLabel": "Fuente: {source}",
+      "affordanceLabel": "Información del esquema"
+    },
     "empty": {
       "title": "Aún no hay ninguna vacuna registrada",
       "description": "Transcribe tu cartilla de vacunación línea por línea: bastan una fecha y la vacuna."

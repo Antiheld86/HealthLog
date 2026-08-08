@@ -16,8 +16,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api/api-fetch";
 import { invalidateReminderReads } from "@/hooks/use-measurement-reminders";
-import { invalidateKeys, queryKeys, vaccinationDependentKeys } from "@/lib/query-keys";
-import type { VaccinationDTO, VaccinationListDTO } from "@/lib/vaccinations/dto";
+import {
+  invalidateKeys,
+  queryKeys,
+  vaccinationDependentKeys,
+} from "@/lib/query-keys";
+import type {
+  VaccinationDTO,
+  VaccinationListDTO,
+} from "@/lib/vaccinations/dto";
 
 export type Vaccination = VaccinationDTO;
 
@@ -48,10 +55,7 @@ const BASE = "/api/vaccinations";
  * numbers are still derived over the whole live set on the server, so a
  * filtered view never reports the oldest visible dose as the first ever given.
  */
-export function useVaccinations(
-  antigenSlug?: string | null,
-  enabled = true,
-) {
+export function useVaccinations(antigenSlug?: string | null, enabled = true) {
   return useQuery({
     queryKey: queryKeys.vaccinationList(antigenSlug ?? null),
     enabled,

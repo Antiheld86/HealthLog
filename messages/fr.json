@@ -8564,6 +8564,21 @@
     "deleteTitle": "Supprimer cette vaccination ?",
     "deleteDescription": "L'entrée est retirée de votre carnet. Un rappel programmé est conservé.",
     "deleteFailed": "La vaccination n'a pas pu être supprimée.",
+    "info": {
+      "primarySeriesOne": "Primovaccination : {count} dose",
+      "primarySeriesFew": "Primovaccination : {count} doses",
+      "primarySeriesOther": "Primovaccination : {count} doses",
+      "yearly": "Vaccination annuelle",
+      "boosterYearsOne": "Rappel généralement tous les {count} an",
+      "boosterYearsFew": "Rappel généralement tous les {count} ans",
+      "boosterYearsOther": "Rappel généralement tous les {count} ans",
+      "boosterMonthsOne": "Rappel généralement tous les {count} mois",
+      "boosterMonthsFew": "Rappel généralement tous les {count} mois",
+      "boosterMonthsOther": "Rappel généralement tous les {count} mois",
+      "standard60": "Vaccination standard à partir de 60 ans",
+      "sourceLabel": "Source : {source}",
+      "affordanceLabel": "Infos sur le schéma"
+    },
     "empty": {
       "title": "Aucune vaccination enregistrée",
       "description": "Recopiez votre carnet de vaccination ligne par ligne : une date et le vaccin suffisent."

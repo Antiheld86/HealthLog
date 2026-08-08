@@ -28,9 +28,11 @@
 import { Syringe } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
+import { InfoPopover } from "@/components/ui/info-popover";
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
 import type { SeriesPosition } from "@/lib/vaccinations/series";
 import type { Vaccination } from "./use-vaccinations";
+import { CatalogInfo, catalogInfoAvailable } from "./catalog-info";
 
 type Translate = ReturnType<typeof useTranslations>["t"];
 
@@ -57,12 +59,16 @@ interface AntigenGroup {
  * resolves through the dynamic name key; a free-text record shows its wording.
  */
 function recordIdentity(t: Translate, record: Vaccination): string | null {
-  if (record.catalogEntry) return t(`vaccinations.catalog.${record.catalogEntry.slug}`);
+  if (record.catalogEntry)
+    return t(`vaccinations.catalog.${record.catalogEntry.slug}`);
   return record.vaccineName;
 }
 
 /** The series sentence for one appearance, composed from resolved numbers. */
-function seriesLabel(t: Translate, position: SeriesPosition | null): string | null {
+function seriesLabel(
+  t: Translate,
+  position: SeriesPosition | null,
+): string | null {
   if (!position) return null;
   if (position.booster) return t("vaccinations.series.booster");
   if (position.total !== null) {
@@ -170,7 +176,10 @@ function DoseRow({
         <div className="min-w-0 space-y-0.5">
           <div className="flex flex-wrap items-center gap-x-2 text-sm">
             {series ? (
-              <span className="text-foreground font-medium" data-slot="vaccination-series">
+              <span
+                className="text-foreground font-medium"
+                data-slot="vaccination-series"
+              >
                 {series}
               </span>
             ) : null}
@@ -220,6 +229,14 @@ export function VaccinationList({
               ? t(`vaccinations.catalog.${group.antigen}`)
               : group.freeName}
             <span className="normal-case">({group.rows.length})</span>
+            {group.antigen && catalogInfoAvailable(group.antigen) ? (
+              <InfoPopover
+                label={t("vaccinations.info.affordanceLabel")}
+                content={<CatalogInfo slug={group.antigen} />}
+                iconClassName="h-3 w-3"
+                triggerDataSlot="vaccination-info-trigger"
+              />
+            ) : null}
           </h2>
           <div className="space-y-2">
             {group.rows.map((row, index) => (

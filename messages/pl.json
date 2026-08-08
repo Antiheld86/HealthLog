@@ -8564,6 +8564,21 @@
     "deleteTitle": "Usunąć to szczepienie?",
     "deleteDescription": "Wpis zostanie usunięty z Twojej karty. Zaplanowane przypomnienie o dawce przypominającej pozostaje.",
     "deleteFailed": "Nie udało się usunąć szczepienia.",
+    "info": {
+      "primarySeriesOne": "Seria podstawowa: {count} dawka",
+      "primarySeriesFew": "Seria podstawowa: {count} dawki",
+      "primarySeriesOther": "Seria podstawowa: {count} dawek",
+      "yearly": "Szczepienie coroczne",
+      "boosterYearsOne": "Dawka przypominająca zwykle co {count} rok",
+      "boosterYearsFew": "Dawka przypominająca zwykle co {count} lata",
+      "boosterYearsOther": "Dawka przypominająca zwykle co {count} lat",
+      "boosterMonthsOne": "Dawka przypominająca zwykle co {count} miesiąc",
+      "boosterMonthsFew": "Dawka przypominająca zwykle co {count} miesiące",
+      "boosterMonthsOther": "Dawka przypominająca zwykle co {count} miesięcy",
+      "standard60": "Szczepienie standardowe od 60. roku życia",
+      "sourceLabel": "Źródło: {source}",
+      "affordanceLabel": "Informacje o schemacie"
+    },
     "empty": {
       "title": "Nie zarejestrowano jeszcze żadnego szczepienia",
       "description": "Przepisz swoją kartę szczepień wiersz po wierszu — wystarczą data i szczepionka."

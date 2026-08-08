@@ -8564,6 +8564,21 @@
     "deleteTitle": "Eliminare questa vaccinazione?",
     "deleteDescription": "La voce viene rimossa dal tuo libretto. Un promemoria di richiamo programmato rimane.",
     "deleteFailed": "Impossibile eliminare la vaccinazione.",
+    "info": {
+      "primarySeriesOne": "Ciclo primario: {count} dose",
+      "primarySeriesFew": "Ciclo primario: {count} dosi",
+      "primarySeriesOther": "Ciclo primario: {count} dosi",
+      "yearly": "Vaccinazione annuale",
+      "boosterYearsOne": "Richiamo di norma ogni {count} anno",
+      "boosterYearsFew": "Richiamo di norma ogni {count} anni",
+      "boosterYearsOther": "Richiamo di norma ogni {count} anni",
+      "boosterMonthsOne": "Richiamo di norma ogni {count} mese",
+      "boosterMonthsFew": "Richiamo di norma ogni {count} mesi",
+      "boosterMonthsOther": "Richiamo di norma ogni {count} mesi",
+      "standard60": "Vaccinazione standard dai 60 anni",
+      "sourceLabel": "Fonte: {source}",
+      "affordanceLabel": "Informazioni sullo schema"
+    },
     "empty": {
       "title": "Nessuna vaccinazione registrata",
       "description": "Trascrivi il tuo libretto vaccinale riga per riga: bastano una data e il vaccino."

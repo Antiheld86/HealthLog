@@ -50,7 +50,9 @@ export function VaccinationsView() {
     <div className="space-y-6">
       <PageHeader
         title={
-          <span data-tour-id="vaccinations-hero">{t("vaccinations.title")}</span>
+          <span data-tour-id="vaccinations-hero">
+            {t("vaccinations.title")}
+          </span>
         }
         description={t("vaccinations.subtitle")}
         actions={
