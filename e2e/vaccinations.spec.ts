@@ -84,14 +84,11 @@ async function captureDose(
     booster: "confirm" | "decline" | "none";
   },
 ): Promise<void> {
-  const add = page.locator('[data-slot="vaccination-add"]').first();
-  const addEmpty = page.locator('[data-slot="vaccination-add-empty"]').first();
-  // The list uses a header Add; the empty state uses its own.
-  if (await add.isVisible().catch(() => false)) {
-    await add.click();
-  } else {
-    await addEmpty.click();
-  }
+  // The header Add renders whether or not the list is empty, so clicking it
+  // works in both states. click() auto-waits for the button to be actionable,
+  // which avoids racing an instant visibility read against the client render
+  // (an empty-state-only branch times out once a record already exists).
+  await page.locator('[data-slot="vaccination-add"]').first().click();
 
   await expect(page.locator('[data-slot="vaccination-form"]')).toBeVisible();
 
