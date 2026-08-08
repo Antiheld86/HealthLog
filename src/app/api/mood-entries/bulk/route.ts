@@ -41,6 +41,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { markSyncCheckpoint } from "@/lib/sync/checkpoint";
 import {
   getScoreForMood,
+  moodContextSchema,
   moodLevelEnum,
   moodSourceEnum,
 } from "@/lib/validations/mood";
@@ -51,7 +52,8 @@ import {
   type UnstableExternalIdShape,
 } from "@/lib/validations/external-id";
 import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
-import { deriveA1 } from "@/lib/mood/level-a";
+import { levelAForWrite } from "@/lib/mood/level-a";
+import { persistMoodContext } from "@/lib/mood/context";
 import { encryptNote } from "@/lib/crypto/note-cipher";
 import { invalidateUserMood } from "@/lib/cache/invalidate";
 import { recomputeMoodBucketsForEntry } from "@/lib/rollups/mood-rollups";
@@ -94,6 +96,32 @@ const bulkEntrySchema = z.object({
     .max(30)
     .optional(),
   note: z.string().max(500).optional(),
+  /**
+   * v1.38 — the five level-A self-state values, each 0-10, each optional.
+   * A batch that carries none still writes complete rows: the server derives
+   * `a1` from the five-point label, so an older client build needs no change
+   * to stay correct. A value out of range marks THIS entry skipped and never
+   * the batch, which is what the per-entry parse below is for.
+   */
+  a1: z.number().int().min(0).max(10).nullable().optional(),
+  a2: z.number().int().min(0).max(10).nullable().optional(),
+  a3: z.number().int().min(0).max(10).nullable().optional(),
+  a4: z.number().int().min(0).max(10).nullable().optional(),
+  a5: z.number().int().min(0).max(10).nullable().optional(),
+  /**
+   * v1.38 — the day's context. Optional, and absent leaves a stored context
+   * alone on a re-post, matching the single-entry path: a build with no
+   * context surface must not blank one filled in on the web.
+   *
+   * Declared as `unknown` here and parsed with `moodContextSchema` PER ENTRY
+   * in the loop below, deliberately. Validating it in the batch schema would
+   * make one entry carrying a retired key fail all five hundred, and this
+   * endpoint's whole contract — stated in its own OpenAPI description — is
+   * that a bad row is `skipped` and the rest of the batch lands. A phone
+   * draining a year of local history must not lose the year to one row.
+   * @per-entry-parse: moodContextSchema, in the loop below
+   */
+  context: z.unknown().optional(),
   moodLoggedAt: z.iso.datetime({ offset: true }).transform((s) => new Date(s)),
   source: moodSourceEnum.optional().default("MANUAL"),
   /**
@@ -275,13 +303,38 @@ async function postBulk(request: NextRequest): Promise<Response> {
       continue;
     }
 
+    // The context, parsed for THIS entry. A value outside the vocabulary
+    // skips this row and nothing else.
+    const parsedContext =
+      entry.context === undefined
+        ? { success: true as const, data: undefined }
+        : moodContextSchema.nullable().safeParse(entry.context);
+    if (!parsedContext.success) {
+      const reason = "invalid_context";
+      skipped.push({ index: i, reason });
+      results.push({
+        index: i,
+        status: "skipped",
+        reason,
+        ...(entry.externalId ? { externalId: entry.externalId } : {}),
+      });
+      continue;
+    }
+
     const date = moodDateKey(entry.moodLoggedAt, tz);
     const score = getScoreForMood(entry.mood);
-    // v1.37 — pleasantness derived from the same label the score comes from.
-    // The batch request shape is unchanged: this path carries no level-A
-    // input, so A2 to A5 are left alone rather than written as nulls, and a
-    // row that already carries hand-set values keeps them across a re-import.
-    const moodA1 = deriveA1(entry.mood);
+    // v1.37 / v1.38 — the same resolution the single-entry path uses:
+    // pleasantness derived from the label unless the entry states its own, and
+    // the other four present only when this entry carried them. An omitted
+    // dimension is left alone rather than written as null, so a row that
+    // already carries hand-set values keeps them across a re-import.
+    const levelA = levelAForWrite(entry.mood, {
+      a1: entry.a1,
+      a2: entry.a2,
+      a3: entry.a3,
+      a4: entry.a4,
+      a5: entry.a5,
+    });
 
     try {
       // v1.12.1 — when the entry carries a source-stable `externalId`,
@@ -353,7 +406,7 @@ async function postBulk(request: NextRequest): Promise<Response> {
             tz,
             mood: entry.mood,
             score,
-            moodA1,
+            ...levelA,
             tags: entry.tags ? JSON.stringify(entry.tags) : null,
             note: null,
             noteEncrypted: encryptNote(entry.note ?? null),
@@ -370,7 +423,7 @@ async function postBulk(request: NextRequest): Promise<Response> {
             // the same row.
             mood: entry.mood,
             score,
-            moodA1,
+            ...levelA,
             tags: entry.tags ? JSON.stringify(entry.tags) : null,
             note: null,
             noteEncrypted: encryptNote(entry.note ?? null),
@@ -392,6 +445,15 @@ async function postBulk(request: NextRequest): Promise<Response> {
         // transaction that throw now rolls the mood row back with it, so a
         // "skipped" result means nothing was written — which is what the
         // client was already being told.
+        // v1.38 — the day context, inside the same transaction as the row, so
+        // an entry reported as skipped really did write nothing.
+        await persistMoodContext(
+          tx,
+          upserted.id,
+          user.id,
+          parsedContext.data,
+        );
+
         if (
           (entry.tagKeys && entry.tagKeys.length > 0) ||
           (entry.ratedFactors && entry.ratedFactors.length > 0)

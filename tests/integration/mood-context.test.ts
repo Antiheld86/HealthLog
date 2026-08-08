@@ -337,6 +337,115 @@ describe("mood context write path (real Postgres)", () => {
     expect(await getPrismaClient().moodEntry.count()).toBe(0);
   });
 
+  it("the bulk path stores a context and skips only the entry that is wrong", async () => {
+    // The contract this endpoint states in its own description: a bad row is
+    // skipped and the batch lands. A phone draining a year of local history
+    // must not lose the year to one row carrying a retired key.
+    const { POST } = await import("@/app/api/mood-entries/bulk/route");
+    const res = await POST(
+      postRequest("/api/mood-entries/bulk", {
+        entries: [
+          {
+            mood: "GUT",
+            moodLoggedAt: "2026-05-23T08:00:00.000Z",
+            externalId: "ios-bulk-1",
+            a2: 6,
+            context: { workStatus: "partial", workMinutes: 240 },
+          },
+          {
+            mood: "OKAY",
+            moodLoggedAt: "2026-05-23T12:00:00.000Z",
+            externalId: "ios-bulk-2",
+            context: { workStatus: "sabbatical" },
+          },
+          {
+            mood: "SUPER_GUT",
+            moodLoggedAt: "2026-05-23T18:00:00.000Z",
+            externalId: "ios-bulk-3",
+          },
+        ],
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: {
+        inserted: number;
+        skipped: Array<{ index: number; reason: string }>;
+      };
+    };
+    expect(body.data.inserted).toBe(2);
+    expect(body.data.skipped).toEqual([
+      { index: 1, reason: "invalid_context" },
+    ]);
+
+    const entries = await getPrismaClient().moodEntry.findMany({
+      orderBy: { moodLoggedAt: "asc" },
+      include: { context: true },
+    });
+    expect(entries).toHaveLength(2);
+    // The good row landed whole: the level-A value it sent, the derived one it
+    // did not, and its context.
+    expect(entries[0].stressA2).toBe(6);
+    expect(entries[0].moodA1).toBe(7);
+    expect(entries[0].context?.workStatus).toBe("partial");
+    expect(entries[0].context?.workMinutes).toBe(240);
+    // The row that carried no context has none, rather than an empty one.
+    expect(entries[1].context).toBeNull();
+    expect(entries[1].moodA1).toBe(9);
+  });
+
+  it("the sync feed carries both levels under the keys the write path takes", async () => {
+    const { POST } = await import("@/app/api/mood-entries/route");
+    await POST(
+      postRequest("/api/mood-entries", {
+        mood: "SCHLECHT",
+        moodLoggedAt: "2026-05-24T08:00:00.000Z",
+        a2: 8,
+        context: {
+          eventType: "badNews",
+          eventValence: -4,
+          note: "Called in the afternoon.",
+        },
+      }),
+    );
+
+    const { GET } = await import("@/app/api/sync/changes/route");
+    const res = await GET(new NextRequest("http://localhost/api/sync/changes"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: {
+        changes: {
+          mood: {
+            upserts: Array<{
+              a1: number | null;
+              a2: number | null;
+              a5: number | null;
+              context: {
+                eventType: string | null;
+                eventValence: number | null;
+                note: string | null;
+                contactCircles: string[];
+              } | null;
+            }>;
+          };
+        };
+      };
+    };
+    const upsert = body.data.changes.mood.upserts[0];
+    // Derived server-side, so a client that sent only a label still mirrors a
+    // complete row.
+    expect(upsert.a1).toBe(3);
+    expect(upsert.a2).toBe(8);
+    // Untouched dimensions stay absent rather than arriving as a middle value.
+    expect(upsert.a5).toBeNull();
+    expect(upsert.context?.eventType).toBe("badNews");
+    expect(upsert.context?.eventValence).toBe(-4);
+    // The note is decrypted for the client; the ciphertext never rides.
+    expect(upsert.context?.note).toBe("Called in the afternoon.");
+    expect(upsert.context?.contactCircles).toEqual([]);
+    expect(JSON.stringify(upsert)).not.toContain("notesEncrypted");
+  });
+
   it("deleting the entry takes its context with it", async () => {
     const { POST } = await import("@/app/api/mood-entries/route");
     const created = await POST(
