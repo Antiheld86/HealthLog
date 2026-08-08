@@ -35,6 +35,7 @@ import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 
 import { ReferenceRangeBadge } from "./reference-range-badge";
+import { SourceRangeNote } from "./source-range-note";
 import type { LabResultDetailDto, LabResultDto } from "./types";
 
 const NOTE_MAX_LENGTH = 2000;
@@ -356,7 +357,13 @@ export function LabHistoryList({ readings }: { readings: LabResultDto[] }) {
                 {formatDateShort(r.takenAt, true)}
               </TableCell>
               <TableCell>
-                <ReferenceRangeBadge status={r.rangeStatus} />
+                <div className="flex flex-col items-start gap-1">
+                  <ReferenceRangeBadge status={r.rangeStatus} />
+                  <SourceRangeNote
+                    reading={r}
+                    className="text-muted-foreground text-xs"
+                  />
+                </div>
               </TableCell>
               <TableCell className="text-muted-foreground text-sm">
                 {r.hasNote ? t("labs.hasNote") : ""}

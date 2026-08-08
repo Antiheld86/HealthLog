@@ -247,6 +247,32 @@ export function OcrRowEditor({
         </div>
       ) : null}
 
+      {/* The window as the report printed it. Editable, because the human is
+          reviewing a transcription: the two bounds above are the derived
+          reading of this string, and correcting the string is how a range the
+          parser could not read ("bis 5,0", "negativ") still reaches the row
+          instead of being dropped. */}
+      {!isQualitative ? (
+        <div className="space-y-1">
+          <Label htmlFor={`${fieldId}-refText`} className="text-xs">
+            {t("labs.ocr.refTextLabel")}
+          </Label>
+          <Input
+            id={`${fieldId}-refText`}
+            value={row.referenceText ?? ""}
+            placeholder={t("labs.ocr.refTextPlaceholder")}
+            maxLength={120}
+            onChange={(e) => {
+              const raw = e.target.value;
+              onChange({
+                ...row,
+                referenceText: raw.trim() === "" ? null : raw,
+              });
+            }}
+          />
+        </div>
+      ) : null}
+
       {valueUnreadable ? (
         <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
           <AlertCircle aria-hidden className="h-3.5 w-3.5" />

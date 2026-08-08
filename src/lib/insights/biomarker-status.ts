@@ -29,7 +29,10 @@ import {
 } from "@/lib/ai/prompts/biomarker";
 import { openerArchetypeHint } from "@/lib/ai/prompts/opener-archetype";
 import type { Locale } from "@/lib/i18n/config";
-import { classifyReferenceRange } from "@/lib/labs/reference-range";
+import {
+  classifyAgainstEffectiveRange,
+  resolveEffectiveReferenceRange,
+} from "@/lib/labs/reference-range";
 import { getNoKeyBiomarkerStatusText } from "@/lib/insights/no-key-fallbacks";
 import { hashInsightSnapshot } from "@/lib/insights/snapshot-hash";
 import { runStatusCompletion } from "@/lib/insights/status-provider";
@@ -158,7 +161,17 @@ export async function generateBiomarkerStatus(args: {
     },
     orderBy: { takenAt: "desc" },
     take: SNAPSHOT_READING_CAP,
-    select: { id: true, value: true, takenAt: true },
+    select: {
+      id: true,
+      value: true,
+      takenAt: true,
+      // The window this reading's own report printed, when it carries one.
+      // The verdict below is the reading's, not the marker's, so it has to
+      // read the reading's window — see `resolveEffectiveReferenceRange`.
+      sourceReferenceLow: true,
+      sourceReferenceHigh: true,
+      sourceReferenceText: true,
+    },
   });
   if (rows.length === 0) {
     annotate({
@@ -174,6 +187,14 @@ export async function generateBiomarkerStatus(args: {
     takenAt: r.takenAt,
   }));
   const latest = readings[0];
+  // The window the latest reading is judged against: its own report's range
+  // when that reading carries one, the catalog band otherwise. One rule, the
+  // same one the API DTO, the doctor report and the coach snapshot apply.
+  const latestRange = resolveEffectiveReferenceRange(
+    marker.lowerBound,
+    marker.upperBound,
+    rows[0],
+  );
   const totalCount = await prisma.labResult.count({
     where: {
       userId: args.userId,
@@ -226,7 +247,7 @@ export async function generateBiomarkerStatus(args: {
     locale,
     promptVersion: PROMPT_VERSION,
     count: totalCount,
-    bounds: { lower: marker.lowerBound, upper: marker.upperBound },
+    bounds: { lower: latestRange.low, upper: latestRange.high },
     latest: {
       id: latest.id,
       takenAt: latest.takenAt.toISOString(),
@@ -252,11 +273,7 @@ export async function generateBiomarkerStatus(args: {
   // Ascending series (oldest → newest) for the trend summary the prompt reads.
   const ascending = [...readings].reverse();
   const summary = summarizeSeries(ascending.map((r) => ({ value: r.value })));
-  const latestStatus = classifyReferenceRange(
-    latest.value,
-    marker.lowerBound,
-    marker.upperBound,
-  );
+  const latestStatus = classifyAgainstEffectiveRange(latest.value, latestRange);
 
   const snapshot = {
     locale,
@@ -266,8 +283,8 @@ export async function generateBiomarkerStatus(args: {
       name: marker.name,
       unit: marker.unit,
       referenceRange:
-        marker.lowerBound != null || marker.upperBound != null
-          ? { lower: marker.lowerBound, upper: marker.upperBound }
+        latestRange.low != null || latestRange.high != null
+          ? { lower: latestRange.low, upper: latestRange.high }
           : null,
     },
     dataCoverage: {

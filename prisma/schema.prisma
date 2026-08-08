@@ -5005,9 +5005,41 @@ model LabResult {
   /// reference bounds + range verdict are meaningless for a qualitative row.
   valueText     String?   @map("value_text")
   unit          String
-  /// Optional reference-range bounds as reported by the lab.
+  /// Reference-range bounds stamped onto the row at write time. Despite the
+  /// name these are NOT the lab's printed range: since v1.18.1 every write
+  /// path copies the linked `Biomarker`'s `lowerBound` / `upperBound` here as
+  /// historical truth, so a later catalog edit does not silently rewrite a
+  /// past reading. The range the LAB printed lives in `sourceReference*`.
   referenceLow  Float?    @map("reference_low")
   referenceHigh Float?    @map("reference_high")
+
+  /// The reference range as PRINTED ON THE SOURCE REPORT for this one reading.
+  ///
+  /// Labs run different methods on different devices, so the window a
+  /// physician evaluates against is the one printed beside the value on that
+  /// report — not a catalog band that averages every lab. These three columns
+  /// carry it: the parsed numeric bounds where a bound could be derived, and
+  /// `sourceReferenceText` as the report's own verbatim string ("< 5",
+  /// "bis 5,0", "negativ", "siehe Befund"). The text is kept whenever the
+  /// source printed one, parseable or not — absence reads as absence, and a
+  /// window that could not be derived is never invented.
+  ///
+  /// Precedence: for a single reading the source bounds win over the catalog
+  /// band; the catalog stays the net for readings that carry no source range.
+  /// `resolveEffectiveReferenceRange` in `src/lib/labs/reference-range.ts` is
+  /// the one place that rule is expressed, and every surface that judges a
+  /// reading routes through it.
+  ///
+  /// Plaintext, not `*Encrypted`: that suffix marks user prose (`noteEncrypted`
+  /// here, `Biomarker.contextEncrypted` next door). This is a structured
+  /// lab-report field of exactly the class of the plaintext `analyte` / `unit`
+  /// / `value` / `valueText` columns beside it — `valueText` already carries
+  /// the actual clinical RESULT ("positiv") in the clear, so encrypting the
+  /// window that result is judged against would protect strictly less while
+  /// making the column unreadable to the SQL the read paths run.
+  sourceReferenceLow  Float?  @map("source_reference_low")
+  sourceReferenceHigh Float?  @map("source_reference_high")
+  sourceReferenceText String? @map("source_reference_text")
   /// When the sample was taken (UTC instant; wall-clock anchoring is the
   /// reader's concern per the schema's UTC-only convention).
   takenAt       DateTime  @map("taken_at")

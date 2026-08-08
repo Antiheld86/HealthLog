@@ -23,6 +23,7 @@ import { applyOrder, useModuleListPrefs } from "@/lib/module-list-prefs";
 
 import { LabTrendSparkline } from "./lab-trend-sparkline";
 import { ReferenceRangeBadge } from "./reference-range-badge";
+import { SourceRangeNote } from "./source-range-note";
 import type { LabResultDto, LabResultListResponse } from "./types";
 
 interface MarkerGroup {
@@ -316,6 +317,10 @@ export function LabList({ onAddFirst }: { onAddFirst?: () => void } = {}) {
                         )}
                       </span>
                     ) : null}
+                    <SourceRangeNote
+                      reading={group.latest}
+                      className="text-xs"
+                    />
                     <span className="text-xs">
                       {formatDate(group.latest.takenAt)}
                     </span>
