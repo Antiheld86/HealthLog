@@ -27,20 +27,48 @@ import {
 // `enriched` says the entry matched a stored workout that had no
 // heart-rate series and the series it carried was attached. The
 // workout row itself was not written, so such an entry also counts
-// towards `duplicates`; the top-level counters count rows.
+// towards `duplicates`. That rule is part of the published contract,
+// not just a note here: it rides the field descriptions below, because
+// a client summing the counters has to know which bucket an
+// enrichment lands in.
 const workoutBatchEntryResult = z
   .object({
     index: z.number().int().nonnegative(),
-    status: z.enum(["inserted", "duplicate", "enriched", "skipped"]),
-    reason: z.string().optional(),
+    status: z
+      .enum(["inserted", "duplicate", "enriched", "skipped"])
+      .describe(
+        "`inserted`: a new workout row. `duplicate`: the workout was already stored and nothing was written. `enriched`: the workout was already stored and the heart-rate series this entry carried was attached to it; the workout row itself was not written, and the entry also counts towards the top-level `duplicates`. `skipped`: the server refused the entry, see `reason`.",
+      ),
+    reason: z
+      .string()
+      .optional()
+      .describe(
+        "Why a `skipped` entry was refused: `unstable_external_id` for an id that does not survive a client restart, `invalid_samples` for a heart-rate series that failed validation.",
+      ),
   })
   .meta({ id: "WorkoutBatchEntryResult" });
 
 const workoutBatchResponse = z
   .object({
-    processed: z.number().int().nonnegative(),
-    inserted: z.number().int().nonnegative(),
-    duplicates: z.number().int().nonnegative(),
+    processed: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe(
+        "Entries in the request. Equals `inserted + duplicates + skipped.length`.",
+      ),
+    inserted: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe("Workout rows this request wrote."),
+    duplicates: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe(
+        "Entries that wrote no workout row because the workout was already stored. The top-level counters count workout rows, so an entry reported as `enriched` counts here as well even though its heart-rate series was attached.",
+      ),
     skipped: z.array(
       z.object({
         index: z.number().int().nonnegative(),

@@ -21679,14 +21679,19 @@ components:
           type: integer
           minimum: 0
           maximum: 9007199254740991
+          description: Entries in the request. Equals `inserted + duplicates + skipped.length`.
         inserted:
           type: integer
           minimum: 0
           maximum: 9007199254740991
+          description: Workout rows this request wrote.
         duplicates:
           type: integer
           minimum: 0
           maximum: 9007199254740991
+          description: Entries that wrote no workout row because the workout was already stored. The top-level counters count
+            workout rows, so an entry reported as `enriched` counts here as well even though its heart-rate series was
+            attached.
         skipped:
           type: array
           items:
@@ -21727,7 +21732,13 @@ components:
             - duplicate
             - enriched
             - skipped
+          description: "`inserted`: a new workout row. `duplicate`: the workout was already stored and nothing was written.
+            `enriched`: the workout was already stored and the heart-rate series this entry carried was attached to it;
+            the workout row itself was not written, and the entry also counts towards the top-level `duplicates`.
+            `skipped`: the server refused the entry, see `reason`."
         reason:
+          description: "Why a `skipped` entry was refused: `unstable_external_id` for an id that does not survive a client
+            restart, `invalid_samples` for a heart-rate series that failed validation."
           type: string
       required:
         - index

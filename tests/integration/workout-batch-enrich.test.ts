@@ -213,6 +213,52 @@ describe("POST /api/workouts/batch — HR series enrichment (real Postgres)", ()
     ).toBe(1);
   });
 
+  it("hands the attach to exactly one of two concurrent enrichments", async () => {
+    await post({ workouts: [baseWorkout("hk-uuid-enrich-008")] });
+
+    // Both requests probe a workout with no series, so both mean to
+    // attach one. The unique index on `workout_id` decides: one write
+    // lands, the other conflicts and is skipped. The loser must report
+    // the duplicate it turned out to be rather than claim an attach the
+    // database never made — that is the arm this case exists for, and
+    // the outcome is deterministic even though the winner is not.
+    const { POST } = await import("@/app/api/workouts/batch/route");
+    const body = {
+      workouts: [baseWorkout("hk-uuid-enrich-008", { samples: SERIES })],
+    };
+    const [resA, resB] = await Promise.all([
+      POST(makeRequest(body)),
+      POST(makeRequest(body)),
+    ]);
+    expect(resA.status).toBe(200);
+    expect(resB.status).toBe(200);
+
+    const [jsonA, jsonB] = (await Promise.all([resA.json(), resB.json()])) as [
+      { data: BatchResponse },
+      { data: BatchResponse },
+    ];
+    const statuses = [
+      jsonA.data.entries[0]?.status,
+      jsonB.data.entries[0]?.status,
+    ].sort();
+    expect(statuses).toEqual(["duplicate", "enriched"]);
+    // Both responses still count the entry as a duplicate row.
+    expect(jsonA.data.duplicates).toBe(1);
+    expect(jsonB.data.duplicates).toBe(1);
+    expect(jsonA.data.inserted + jsonB.data.inserted).toBe(0);
+
+    const series = await getPrismaClient().workoutSamples.findMany({
+      where: { workout: { userId: TEST_USER_ID } },
+    });
+    expect(series).toHaveLength(1);
+    expect(series[0]?.sampleCount).toBe(3);
+    expect(
+      await getPrismaClient().workout.count({
+        where: { userId: TEST_USER_ID },
+      }),
+    ).toBe(1);
+  });
+
   it("reports one enrichment when two entries in one batch aim at the same workout", async () => {
     await post({ workouts: [baseWorkout("hk-uuid-enrich-007")] });
 
