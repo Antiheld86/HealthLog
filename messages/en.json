@@ -6037,14 +6037,6 @@
       "createDetail": "The token is shown once on creation — store it then; it cannot be recovered."
     },
     "genderOther": "Other",
-    "cycleTracking": {
-      "title": "Cycle tracking",
-      "description": "Track your menstrual cycle, predictions, symptoms, and phase insights.",
-      "enable": "Enable cycle tracking",
-      "manage": "Open cycle tracking",
-      "error": "Couldn't update cycle tracking.",
-      "detail": "On by default for accounts set to female; available to everyone."
-    },
     "nightscout": "Nightscout",
     "nightscoutTag": "CGM",
     "nightscoutDescription": "Connect your own Nightscout site to sync continuous glucose readings into the glucose panel.",

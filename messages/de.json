@@ -6037,14 +6037,6 @@
       "createDetail": "Der Token wird nur einmal bei der Erstellung angezeigt — sichere ihn dann; er lässt sich nicht wiederherstellen."
     },
     "genderOther": "Divers",
-    "cycleTracking": {
-      "title": "Zyklus-Tracking",
-      "description": "Verfolge deinen Menstruationszyklus, Vorhersagen, Symptome und Phasen-Insights.",
-      "enable": "Zyklus-Tracking aktivieren",
-      "manage": "Zyklus-Tracking öffnen",
-      "error": "Zyklus-Tracking konnte nicht aktualisiert werden.",
-      "detail": "Standardmäßig an für als weiblich eingestellte Konten; für alle verfügbar."
-    },
     "nightscout": "Nightscout",
     "nightscoutTag": "CGM",
     "nightscoutDescription": "Verbinde deine eigene Nightscout-Seite, um kontinuierliche Glukosewerte ins Glukose-Panel zu synchronisieren.",

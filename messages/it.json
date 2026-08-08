@@ -6037,14 +6037,6 @@
       "createDetail": "Il token viene mostrato una sola volta alla creazione — salvalo subito; non può essere recuperato."
     },
     "genderOther": "Altro",
-    "cycleTracking": {
-      "title": "Monitoraggio del ciclo",
-      "description": "Monitora il ciclo mestruale, le previsioni, i sintomi e gli approfondimenti sulle fasi.",
-      "enable": "Attiva il monitoraggio del ciclo",
-      "manage": "Apri il monitoraggio del ciclo",
-      "error": "Impossibile aggiornare il monitoraggio del ciclo.",
-      "detail": "Attivo per impostazione predefinita per gli account impostati come femminili; disponibile per tutti."
-    },
     "nightscout": "Nightscout",
     "nightscoutTag": "CGM",
     "nightscoutDescription": "Collega il tuo sito Nightscout per sincronizzare le letture continue del glucosio nel pannello glucosio.",

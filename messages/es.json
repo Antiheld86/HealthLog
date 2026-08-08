@@ -6037,14 +6037,6 @@
       "createDetail": "El token se muestra una sola vez al crearlo — guárdalo entonces; no se puede recuperar."
     },
     "genderOther": "Otro",
-    "cycleTracking": {
-      "title": "Seguimiento del ciclo",
-      "description": "Registra tu ciclo menstrual, predicciones, síntomas e información de fases.",
-      "enable": "Activar el seguimiento del ciclo",
-      "manage": "Abrir seguimiento del ciclo",
-      "error": "No se pudo actualizar el seguimiento del ciclo.",
-      "detail": "Activado por defecto en cuentas configuradas como femeninas; disponible para todos."
-    },
     "nightscout": "Nightscout",
     "nightscoutTag": "CGM",
     "nightscoutDescription": "Conecta tu propio sitio Nightscout para sincronizar lecturas continuas de glucosa en el panel de glucosa.",

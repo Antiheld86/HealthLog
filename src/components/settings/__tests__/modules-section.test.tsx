@@ -163,11 +163,20 @@ describe("<ModulesSection>", () => {
     }
   });
 
-  it("keeps a manage deep-link beside the delegated coach + cycle switches", () => {
+  it("keeps a manage deep-link beside the delegated coach switch", () => {
     const html = render();
-    // Coach → Coach settings; cycle → the Account cycle-tracking card.
+    // Coach → Coach settings. Coach is the only delegated module with more
+    // to configure than on/off (cadence, memory) at a settings address.
     expect(html).toContain('href="/settings/coach"');
-    expect(html).toContain('href="/settings/account#cycle-tracking"');
+  });
+
+  it("offers no Account deep-link beside the cycle switch", () => {
+    // Cycle used to carry a second enable surface in Settings → Account,
+    // and this link pointed at it. The switch here drives the same column,
+    // so the Account card went and the link with it — a deep-link to an
+    // anchor nothing renders is a door into a wall.
+    const html = render();
+    expect(html).not.toContain("/settings/account#cycle-tracking");
   });
 
   it("no longer renders the 'Always on' core-domains card", () => {

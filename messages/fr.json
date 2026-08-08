@@ -6037,14 +6037,6 @@
       "createDetail": "Le jeton n'est affiché qu'une fois à la création — conservez-le alors ; il ne peut pas être récupéré."
     },
     "genderOther": "Autre",
-    "cycleTracking": {
-      "title": "Suivi du cycle",
-      "description": "Suivez votre cycle menstruel, les prédictions, les symptômes et les analyses de phases.",
-      "enable": "Activer le suivi du cycle",
-      "manage": "Ouvrir le suivi du cycle",
-      "error": "Impossible de mettre à jour le suivi du cycle.",
-      "detail": "Activé par défaut pour les comptes définis comme féminins ; disponible pour tous."
-    },
     "nightscout": "Nightscout",
     "nightscoutTag": "CGM",
     "nightscoutDescription": "Connecte ton propre site Nightscout pour synchroniser les mesures de glucose en continu dans le panneau glucose.",

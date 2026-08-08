@@ -6037,14 +6037,6 @@
       "createDetail": "Token jest pokazywany tylko raz przy tworzeniu — zapisz go wtedy; nie można go odzyskać."
     },
     "genderOther": "Inna",
-    "cycleTracking": {
-      "title": "Śledzenie cyklu",
-      "description": "Śledź swój cykl menstruacyjny, prognozy, objawy i analizy faz.",
-      "enable": "Włącz śledzenie cyklu",
-      "manage": "Otwórz śledzenie cyklu",
-      "error": "Nie udało się zaktualizować śledzenia cyklu.",
-      "detail": "Domyślnie włączone dla kont ustawionych jako kobiece; dostępne dla wszystkich."
-    },
     "nightscout": "Nightscout",
     "nightscoutTag": "CGM",
     "nightscoutDescription": "Połącz własną stronę Nightscout, aby synchronizować ciągłe odczyty glukozy w panelu glukozy.",
