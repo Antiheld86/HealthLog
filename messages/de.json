@@ -3793,6 +3793,25 @@
         "statement": "An Tagen mit „{label}“ lag die Stimmung im Durchschnitt {direction}: {withAvg} gegenüber {withoutAvg}.",
         "counts": "{withDays} Tage mit, {withoutDays} Tage ohne",
         "caveat": "Das zeigt einen Zusammenhang, keine Ursache."
+      },
+      "prognosis": {
+        "title": "Deine Einschätzung und was deine bisherigen Tage nahelegen",
+        "selfLabel": "Deine Einschätzung",
+        "expectedLabel": "Auf Basis deiner Muster erwartet",
+        "band": "Bereich {low} bis {high}",
+        "statement": "Auf Basis deiner bisherigen Muster wäre für {date} ein Wert um {value} zu erwarten gewesen. Ermittelt aus {n} Tagen, die alles enthalten, was der Vergleich braucht.",
+        "provisional": "Noch vorläufig: das Muster stützt sich auf eine kurze Strecke von Tagen.",
+        "notToday": "Das beschreibt {date}, nicht heute.",
+        "deviationWithin": "Deine eigene Einschätzung liegt in diesem Bereich.",
+        "deviationAbove": "Deine eigene Einschätzung liegt {amount} Punkte über diesem Bereich.",
+        "deviationBelow": "Deine eigene Einschätzung liegt {amount} Punkte unter diesem Bereich.",
+        "weightedTitle": "Was an diesem Tag am stärksten gewichtet wurde",
+        "weightedUp": "{label} — zählte in Richtung eines höheren erwarteten Werts",
+        "weightedDown": "{label} — zählte in Richtung eines niedrigeren erwarteten Werts",
+        "caveat": "Das ist ein Vergleich mit deinen eigenen bisherigen Tagen, keine Aussage darüber, wie ein Tag zustande gekommen ist.",
+        "learning": "Lernphase: {entries} von {threshold} Tagen erfasst. Ein Vergleich erscheint, sobald genug davon zusammengekommen sind.",
+        "noPattern": "In den bisher erfassten {entries} Tagen ist nichts gleichmäßig genug, um einen Tag damit zu vergleichen. Wer den Kontext eines Tages mit erfasst, macht mehr davon vergleichbar.",
+        "featureValue": "{field}: {value}"
       }
     },
     "derived": {

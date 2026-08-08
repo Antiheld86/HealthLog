@@ -17,6 +17,7 @@ import { userDayKey } from "@/lib/tz/format";
 import { isCurrentForTodayClaim } from "@/lib/insights/measurement-freshness";
 import { computeMoodDimensionSeries } from "@/lib/insights/mood-dimension-series";
 import { computeContextMoodComparison } from "@/lib/insights/mood-context-crosstab";
+import { readMoodPrognosis } from "@/lib/analytics/mood-prognosis/read";
 import { MOOD_DIMENSIONS } from "@/lib/mood/dimensions";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 import {
@@ -321,6 +322,113 @@ async function buildMoodDimensionBlock(userId: string): Promise<{
   };
 }
 
+/**
+ * The day's two readings for the model, with the age of the second one.
+ *
+ * Absence is a present field rather than a missing one: `{ present: false }`
+ * with the reason and the count, so the model says "not enough entries yet"
+ * instead of inventing a number. That shape is a contract elsewhere in the
+ * product already and it is the reason this block is built even when there is
+ * nothing to report.
+ *
+ * The wording rule travels with the values. A model handed a number and no
+ * instruction writes the sentence its training suggests, and the sentence its
+ * training suggests about a forecast is a causal one.
+ */
+interface MoodPrognosisFeature {
+  present: boolean;
+  /** Why there is nothing, when there is nothing. */
+  reason?: string;
+  /** Days of the account's own history the ladder was read against. */
+  entries: number;
+  /** The day the forecast is about. */
+  date?: string;
+  /** The expected value, 0-10. Never to be stated without `n` and the band. */
+  predicted?: number;
+  ciLow?: number | null;
+  ciHigh?: number | null;
+  /** Complete days the fit used. State it in any sentence that uses the value. */
+  n?: number;
+  modelVersion?: string;
+  /** The person's own rating for that day, unchanged. */
+  selfAssessment?: number | null;
+  /** Where that rating sat against the band: within, above or below. */
+  deviation?: string | null;
+  /** Whole days between the forecast's day and today. */
+  daysAgo?: number | null;
+  /** Whether it is fresh enough to back a present-tense sentence. */
+  current?: boolean;
+  /** Present only when it is not, and says in words what the flag says. */
+  staleNotice?: string;
+  /** The wording rule, stated rather than implied. */
+  note: string;
+}
+
+/**
+ * The forecast block, or an honest absence.
+ *
+ * One reader for every surface: this calls the same `readMoodPrognosis` the
+ * route calls, so the Coach and the page cannot disagree about what today's
+ * comparison is. The freshness rule is the shared one — `isCurrentForTodayClaim`
+ * against the same `TODAY_CLAIM_MAX_AGE_DAYS` — because a second constant for
+ * "how old may a value be before today stops being true about it" is how two
+ * surfaces start narrating the same reading differently.
+ */
+async function buildMoodPrognosisBlock(userId: string): Promise<{
+  prognosis?: MoodPrognosisFeature;
+}> {
+  const reading = await readMoodPrognosis(
+    userId,
+    new Date(),
+    await resolveUserTimezone(userId),
+  );
+
+  if (!reading.present) {
+    return {
+      prognosis: {
+        present: false,
+        reason: reading.reason,
+        entries: reading.entries,
+        note:
+          "There is no expected-value comparison for this account yet. Say so " +
+          "plainly if it comes up; do not estimate one, and do not describe " +
+          "the absence as a bad sign.",
+      },
+    };
+  }
+
+  return {
+    prognosis: {
+      present: true,
+      entries: reading.entries,
+      date: reading.date,
+      predicted: reading.predicted,
+      ciLow: reading.ciLow,
+      ciHigh: reading.ciHigh,
+      n: reading.n,
+      modelVersion: reading.modelVersion,
+      selfAssessment: reading.selfAssessment,
+      deviation: reading.deviation,
+      daysAgo: reading.ageDays,
+      current: reading.current,
+      ...(reading.current
+        ? {}
+        : {
+            staleNotice: `This comparison is about ${reading.date}. State it as that day, with the date; do not describe it as today.`,
+          }),
+      note:
+        "Two separate readings of one day: `selfAssessment` is what the person " +
+        "recorded and leads; `predicted` is what a comparison with their own " +
+        "past days would have expected, built from `n` days. Never merge them, " +
+        "never present `predicted` as the person's mood, and never state it " +
+        "without `n` and the band. Phrase it as a counterfactual — a value " +
+        "around X would have been expected — and never say that anything " +
+        "caused anything: the comparison is an association over the account's " +
+        "own days and supports no cause.",
+    },
+  };
+}
+
 export interface AggregatedFeatures {
   weight?: {
     latest: number;
@@ -467,6 +575,16 @@ export interface AggregatedFeatures {
         withoutAvg: number;
       }>;
     };
+    /**
+     * v1.38 — the day's two readings and the distance between them.
+     *
+     * Always present once the mood module is on, because an honest absence is
+     * information: `present: false` with a reason and a count keeps the model
+     * from filling the gap with an estimate. The block carries its own age, so
+     * a comparison about the day before yesterday cannot back a sentence about
+     * today.
+     */
+    prognosis?: MoodPrognosisFeature;
   };
   sleep?: {
     avg7: number | null;
@@ -1363,6 +1481,7 @@ export async function extractFeatures(
       totalEntries: moodTotalEntries,
       ...(await buildMoodDimensionBlock(userId)),
       ...(await buildMoodContextBlock(userId)),
+      ...(await buildMoodPrognosisBlock(userId)),
       coverage: {
         count: moodTotalEntries,
         spanDays,

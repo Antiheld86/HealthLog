@@ -75,6 +75,12 @@ export const WIPE_MODELS = [
   // but a parent deleted first leaves the child's own count reporting zero for
   // rows that existed, and the confirmation screen quotes those counts.
   "MoodContext",
+  // Derived, and wiped anyway. The forecast rows are recomputable from the
+  // entries above — which is why they stay out of the backup — but they are
+  // still a day-by-day statement about somebody's mood, and leaving them
+  // behind after a screen that promised to delete all health data would leave
+  // the shape of the record standing where the record used to be.
+  "MoodPrediction",
   "MoodEntry",
   "MoodEntryRollup",
   "MoodReminderDispatch",

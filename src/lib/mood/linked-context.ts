@@ -99,6 +99,20 @@ export interface LinkedBody {
   episodeId: string | null;
 }
 
+/**
+ * The five linked figures of one day as plain numbers, for callers that need
+ * a window of days rather than one day's blocks — the prognosis fit is the
+ * only one so far. `null` is absence, and a module switched off makes its own
+ * figures absent rather than zero.
+ */
+export interface LinkedDayFigures {
+  sleepAsleep: number | null;
+  steps: number | null;
+  activeEnergy: number | null;
+  restingHeartRate: number | null;
+  heartRateVariability: number | null;
+}
+
 export interface LinkedDayContext {
   /** The entry's local day, resolved through the entry's own `tz`. */
   day: string;
@@ -396,6 +410,17 @@ export async function resolveLinkedDayContext(
       }
     : MODULE_OFF;
 
+  const bodyBlock = await resolveBody(userId, day, enabled);
+
+  return { day, sleep, activity, vitals, body: bodyBlock };
+}
+
+/** The illness day-log block, split out so the day loop above reads straight. */
+async function resolveBody(
+  userId: string,
+  day: string,
+  enabled: ReadonlyMap<ModuleKey, boolean>,
+): Promise<LinkedBlock<LinkedBody>> {
   let body: LinkedBlock<LinkedBody> = MODULE_OFF;
   if (enabled.get("illness") ?? true) {
     // Read only. The illness module owns symptom capture and its severity
@@ -419,6 +444,152 @@ export async function resolveLinkedDayContext(
       episodeId: dayLog?.episodeId ?? null,
     };
   }
+  return body;
+}
 
-  return { day, sleep, activity, vitals, body };
+/**
+ * The five linked figures of one day, as plain numbers, for a whole window.
+ *
+ * The same figures the block above answers with, resolved for many days in
+ * one query instead of one query per day. It exists because the prognosis fits
+ * over a year of days and the per-day resolver would have run several hundred
+ * round trips to build one matrix.
+ *
+ * It is the SAME engine, deliberately: the module gates come from
+ * `moduleForMeasurementType` through `typeAvailable`, the cross-source de-dup
+ * runs through `canonicalRowsOfDay`, the night reconstruction is the one in
+ * `sleep-night.ts`, and the day totals are the same `sumOfDay` / `latestOfDay`
+ * the single-day path uses. A second implementation of "what did this day look
+ * like" would be a second answer, and the mood sheet and the model would start
+ * disagreeing about the same Tuesday.
+ *
+ * A switched-off module answers `null` for its metrics, not zero and not a
+ * value the owner declined to surface: the model must not learn from a module
+ * whose figures the account asked not to see.
+ */
+export async function resolveLinkedDayFigures(
+  userId: string,
+  days: readonly string[],
+  tz: string,
+): Promise<Map<string, LinkedDayFigures>> {
+  const out = new Map<string, LinkedDayFigures>();
+  if (days.length === 0) return out;
+
+  const sorted = [...days].sort();
+  const { from } = localDayWindow(sorted[0]);
+  const { to } = localDayWindow(sorted[sorted.length - 1]);
+
+  const gateStates = await Promise.all(
+    LINKED_MODULE_KEYS.map(
+      async (key) => [key, await isModuleEnabled(userId, key)] as const,
+    ),
+  );
+  const enabled = new Map<ModuleKey, boolean>(gateStates);
+  const priority = await loadUserSourcePriority(userId);
+
+  const measurements: LinkedRow[] = await prisma.measurement.findMany({
+    where: {
+      userId,
+      deletedAt: null,
+      type: { in: [...LINKED_MEASUREMENT_TYPES] },
+      measuredAt: { gte: from, lte: to },
+    },
+    select: {
+      type: true,
+      value: true,
+      measuredAt: true,
+      sleepStage: true,
+      source: true,
+      deviceType: true,
+    },
+    // The canonical-source picker keeps insertion order inside a bucket, so a
+    // stable read order is what makes its device-type tie-break reproducible
+    // rather than whatever the planner returned this time.
+    orderBy: [{ measuredAt: "asc" }, { id: "asc" }],
+  });
+
+  // One pass to bucket by local day, rather than filtering the whole window
+  // once per day: over a year of history that difference is the whole cost of
+  // the fit's data preparation.
+  const byDay = new Map<string, LinkedRow[]>();
+  for (const row of measurements) {
+    const key = moodDateKey(row.measuredAt, tz);
+    const bucket = byDay.get(key);
+    if (bucket) bucket.push(row);
+    else byDay.set(key, [row]);
+  }
+
+  const sleepAvailable = typeAvailable("SLEEP_DURATION", enabled);
+  const activityAvailable = typeAvailable("ACTIVITY_STEPS", enabled);
+  const vitalsAvailable = typeAvailable("RESTING_HEART_RATE", enabled);
+
+  const nightByDay = new Map<string, number | null>();
+  const inBedByDay = new Map<string, number | null>();
+  if (sleepAvailable) {
+    const stageRows = measurements.filter((r) => r.type === "SLEEP_DURATION");
+    if (stageRows.length > 0) {
+      for (const night of reconstructSleepNights(
+        stageRows as unknown as SleepStageRow[],
+        tz,
+        priority,
+      )) {
+        nightByDay.set(night.night, night.asleepMinutes ?? null);
+        inBedByDay.set(night.night, night.inBedMinutes ?? null);
+      }
+    }
+  }
+
+  for (const day of days) {
+    const dayRows = byDay.get(day) ?? [];
+    out.set(day, {
+      sleepAsleep: sleepAvailable ? (nightByDay.get(day) ?? null) : null,
+      steps: activityAvailable
+        ? valueOf(
+            sumOfDay(dayRows, "ACTIVITY_STEPS", "steps", day, tz, priority),
+          )
+        : null,
+      activeEnergy: activityAvailable
+        ? valueOf(
+            sumOfDay(
+              dayRows,
+              "ACTIVE_ENERGY_BURNED",
+              "kcal",
+              day,
+              tz,
+              priority,
+            ),
+          )
+        : null,
+      restingHeartRate: vitalsAvailable
+        ? valueOf(
+            latestOfDay(
+              dayRows,
+              "RESTING_HEART_RATE",
+              "bpm",
+              day,
+              tz,
+              priority,
+            ),
+          )
+        : null,
+      heartRateVariability: vitalsAvailable
+        ? valueOf(
+            latestOfDay(
+              dayRows,
+              "HEART_RATE_VARIABILITY",
+              "ms",
+              day,
+              tz,
+              priority,
+            ),
+          )
+        : null,
+    });
+  }
+  return out;
+}
+
+/** A figure as a plain number, with absence staying absence. */
+function valueOf(figure: LinkedFigure): number | null {
+  return figure.present ? figure.value : null;
 }

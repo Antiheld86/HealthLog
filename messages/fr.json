@@ -3793,6 +3793,25 @@
         "statement": "Les jours avec « {label} », l'humeur était en moyenne {direction} : {withAvg} contre {withoutAvg}.",
         "counts": "{withDays} jours avec, {withoutDays} jours sans",
         "caveat": "Cela montre un lien, pas une cause."
+      },
+      "prognosis": {
+        "title": "Ton évaluation et ce que suggèrent tes journées passées",
+        "selfLabel": "Ton évaluation",
+        "expectedLabel": "Attendu selon tes propres habitudes",
+        "band": "Plage de {low} à {high}",
+        "statement": "D'après tes habitudes jusqu'ici, une valeur autour de {value} aurait été attendue pour {date}. Établi à partir de {n} journées réunissant tout ce dont la comparaison a besoin.",
+        "provisional": "Encore provisoire : le motif repose sur une courte série de journées.",
+        "notToday": "Cela décrit {date}, pas aujourd'hui.",
+        "deviationWithin": "Ta propre évaluation se situe dans cette plage.",
+        "deviationAbove": "Ta propre évaluation se situe {amount} points au-dessus de cette plage.",
+        "deviationBelow": "Ta propre évaluation se situe {amount} points en dessous de cette plage.",
+        "weightedTitle": "Ce qui a le plus pesé dans la comparaison de cette journée",
+        "weightedUp": "{label} — comptait vers une valeur attendue plus élevée",
+        "weightedDown": "{label} — comptait vers une valeur attendue plus basse",
+        "caveat": "C'est une comparaison avec tes propres journées passées, pas une affirmation sur la manière dont une journée s'est déroulée.",
+        "learning": "Phase d'apprentissage : {entries} journées sur {threshold} enregistrées. La comparaison apparaît une fois qu'il y en a assez.",
+        "noPattern": "Dans les {entries} journées enregistrées jusqu'ici, rien n'est assez régulier pour comparer une journée. Noter le contexte d'une journée en rend davantage comparable.",
+        "featureValue": "{field} : {value}"
       }
     },
     "derived": {

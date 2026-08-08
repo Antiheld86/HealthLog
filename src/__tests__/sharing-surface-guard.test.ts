@@ -891,6 +891,10 @@ const DELEGABLE_ROUTES: Record<string, DelegableEntry> = {
     domain: "record",
     why: "What the sleep, activity, vitals and illness modules already hold for one of the record's days, read-only. It is reached from a mood surface and it is NOT a mind read: the payload is sleep minutes, steps, active energy, resting heart rate, heart-rate variability and an illness day-log with its symptom keys. Declared `mind` it let a mood-only delegate walk arbitrary dates and read two sections the owner had declined to share, with no entry needing to exist for the date. Admitted on the whole-record grant only, like the other cross-section reads; a scoped grant is refused rather than served a filtered day.",
   },
+  "app/api/mood/prognosis/route.ts": {
+    domain: "record",
+    why: "The day's two readings — the record's own rating and what its past days imply — read-only. It is NOT a mind read: the fit takes the day's context AND the sleep, activity and recovery figures the owning modules hold, and the payload names the features that carried weight, so a reader sees that sleep or steps or resting heart rate mattered on a given day. Declared `mind` it would hand a mood-only delegate a derived view of sections the owner declined to share. Admitted on the whole-record grant only, like the linked-day read beside it; a scoped grant is refused rather than served a filtered contribution list, which would falsely read as \"the model weighted only the mood fields\".",
+  },
   "app/api/mood-entries/[id]/route.ts": {
     domain: "mind",
     why: "One mood entry of the record, fetch-then-guard against the resolved user.",
@@ -1864,11 +1868,13 @@ const ACTOR_ROUTES: Record<string, string> = {
  * managed-record configuration adds one more: 196 → 197. The bounded
  * read-only profile summary makes the next explicit admission: 197 → 198.
  * The two initial Cycle reads follow as separate, scoped admissions: 198 → 200.
- * The mood day's linked figures, read-only, add one: 200 → 201.
- * The visit-suggestion read, which serves the three incidental-linking
- * moments from the same rule, adds one: 213 → 214.
+ * The mood day's linked figures, read-only, add one: 200 -> 201. The visit
+ * record and its address book bring twelve: 201 -> 213. The mood prognosis,
+ * read-only and admitted on the whole record for the same reason as the linked
+ * figures, adds one: 213 -> 214. The visit-suggestion read, which serves the
+ * three incidental-linking moments from the same rule, adds one: 214 -> 215.
  */
-const FROZEN_ENTRY_COUNT = 214;
+const FROZEN_ENTRY_COUNT = 215;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —

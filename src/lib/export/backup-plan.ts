@@ -367,6 +367,8 @@ export const DERIVED_MODELS: Readonly<Record<string, string>> = {
     "Recomputed from `MedicationIntakeEvent` against the schedule by the compliance analytics tier.",
   MoodEntryRollup:
     "A per-day reconstruction of `MoodEntry`, rebuilt by the same rollup tier that rebuilds the measurement one.",
+  MoodPrediction:
+    "What the account's own past days imply about a day, fitted from `MoodEntry` + `MoodContext` and the linked modules. The nightly `mood-prognosis-refresh` job rebuilds it after a restore, and rebuilding it is better than carrying it: a restored row would state a forecast made by a model version that may no longer exist, against data the restore has just moved.",
   CyclePrediction:
     "A forecast derived from `MenstrualCycle` history; regenerated on the next cycle read.",
   StrainTrimpCache:

@@ -3793,6 +3793,25 @@
         "statement": "W dniach z „{label}” nastrój był średnio {direction}: {withAvg} wobec {withoutAvg}.",
         "counts": "{withDays} dni z, {withoutDays} dni bez",
         "caveat": "To pokazuje związek, nie przyczynę."
+      },
+      "prognosis": {
+        "title": "Twoja ocena i to, co sugerują twoje dotychczasowe dni",
+        "selfLabel": "Twoja ocena",
+        "expectedLabel": "Oczekiwane na podstawie twoich wzorców",
+        "band": "Zakres od {low} do {high}",
+        "statement": "Na podstawie twoich dotychczasowych wzorców dla {date} należałoby oczekiwać wartości około {value}. Wyliczone z {n} dni, które zawierają wszystko, czego potrzebuje porównanie.",
+        "provisional": "Jeszcze wstępne: wzorzec opiera się na krótkim odcinku dni.",
+        "notToday": "To opisuje {date}, nie dzisiaj.",
+        "deviationWithin": "Twoja własna ocena mieści się w tym zakresie.",
+        "deviationAbove": "Twoja własna ocena leży {amount} punktów powyżej tego zakresu.",
+        "deviationBelow": "Twoja własna ocena leży {amount} punktów poniżej tego zakresu.",
+        "weightedTitle": "Co najbardziej zaważyło w porównaniu tego dnia",
+        "weightedUp": "{label} — liczyło się w stronę wyższej oczekiwanej wartości",
+        "weightedDown": "{label} — liczyło się w stronę niższej oczekiwanej wartości",
+        "caveat": "To porównanie z twoimi wcześniejszymi dniami, nie stwierdzenie, jak doszło do takiego przebiegu dnia.",
+        "learning": "Faza uczenia: zapisano {entries} z {threshold} dni. Porównanie pojawi się, gdy będzie ich dość.",
+        "noPattern": "W zapisanych dotąd {entries} dniach nic nie jest na tyle regularne, by porównać z tym dzień. Zapisywanie kontekstu dnia sprawia, że więcej da się porównać.",
+        "featureValue": "{field}: {value}"
       }
     },
     "derived": {
