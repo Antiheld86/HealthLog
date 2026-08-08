@@ -9888,7 +9888,7 @@
       },
       "profile": {
         "label": "Antecedentes de salud",
-        "detail": "Alergias, antecedentes familiares y los datos de tu perfil de salud."
+        "detail": "Alergias, antecedentes familiares, los datos de tu perfil de salud y tus visitas médicas y consultas."
       },
       "illness": {
         "label": "Enfermedades",

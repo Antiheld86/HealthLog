@@ -9888,7 +9888,7 @@
       },
       "profile": {
         "label": "Gesundheitliche Vorgeschichte",
-        "detail": "Allergien, Familienanamnese und die Angaben in deinem Gesundheitsprofil."
+        "detail": "Allergien, Familienanamnese, die Angaben in deinem Gesundheitsprofil sowie Arztbesuche und Praxen."
       },
       "illness": {
         "label": "Krankheiten",

@@ -9888,7 +9888,7 @@
       },
       "profile": {
         "label": "Health background",
-        "detail": "Allergies, family history and the facts in your health profile."
+        "detail": "Allergies, family history, the facts in your health profile, and your visits and practices."
       },
       "illness": {
         "label": "Illness",

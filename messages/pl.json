@@ -9888,7 +9888,7 @@
       },
       "profile": {
         "label": "Historia zdrowia",
-        "detail": "Alergie, wywiad rodzinny i dane z Twojego profilu zdrowia."
+        "detail": "Alergie, wywiad rodzinny, dane z Twojego profilu zdrowotnego oraz wizyty lekarskie i gabinety."
       },
       "illness": {
         "label": "Choroby",

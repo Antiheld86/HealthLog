@@ -9888,7 +9888,7 @@
       },
       "profile": {
         "label": "Anamnesi",
-        "detail": "Allergie, storia familiare e i dati del tuo profilo di salute."
+        "detail": "Allergie, anamnesi familiare, i dati del tuo profilo sanitario e le tue visite mediche e studi."
       },
       "illness": {
         "label": "Malattie",
