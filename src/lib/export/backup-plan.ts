@@ -198,6 +198,10 @@ export const BACKUP_WRITER_FILES: readonly string[] = [
   // relation-shaped proof would be attributed to whichever one a matcher found
   // first — the `symptomLinks` confusion, avoided by construction.
   "src/lib/export/visits-backup.ts",
+  // The immunization log and its document link, same arrangement for the same
+  // reason: `documentLinks` is a field name on three models now, so each of
+  // these reads through its OWN delegate here.
+  "src/lib/export/vaccinations-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 
@@ -207,6 +211,7 @@ export const BACKUP_RESTORE_FILES: readonly string[] = [
   "src/lib/export/intraday-profile-backup.ts",
   "src/lib/export/health-score-backup.ts",
   "src/lib/export/visits-backup.ts",
+  "src/lib/export/vaccinations-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 

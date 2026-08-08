@@ -49,6 +49,7 @@ import { restoreProfileData } from "@/lib/export/profile-backup";
 import { restoreIntradayProfileData } from "@/lib/export/intraday-profile-backup";
 import { restoreHealthScoreData } from "@/lib/export/health-score-backup";
 import { restoreVisitsData } from "@/lib/export/visits-backup";
+import { restoreVaccinationsData } from "@/lib/export/vaccinations-backup";
 import { invalidateUserData } from "@/lib/cache/invalidate";
 
 export const dynamic = "force-dynamic";
@@ -92,6 +93,8 @@ interface RestoreResponse {
     practitioners: number;
     encounters: number;
     encounterLinks: number;
+    vaccinations: number;
+    vaccinationLinks: number;
   };
 }
 
@@ -1332,6 +1335,18 @@ const handler = apiHandler(
             skips,
           );
 
+          // The immunization log, after the visits: a dose remaps its
+          // practitioner and its encounter against rows the branch above has
+          // just written, and its document link needs the documents that
+          // landed before that. Both ends of this section live in
+          // `src/lib/export/vaccinations-backup.ts`.
+          const vaccinationsCleared = await restoreVaccinationsData(
+            tx,
+            ownerId,
+            payload,
+            skips,
+          );
+
           const cleared = {
             measurements: measurements.count,
             medications: meds.count,
@@ -1361,6 +1376,8 @@ const handler = apiHandler(
             practitioners: visitsCleared.practitioners,
             encounters: visitsCleared.encounters,
             encounterLinks: visitsCleared.encounterLinks,
+            vaccinations: vaccinationsCleared.vaccinations,
+            vaccinationLinks: vaccinationsCleared.vaccinationLinks,
           };
           return { cleared, skipped: summarizeRestoreSkips(skips) };
         },

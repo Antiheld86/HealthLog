@@ -6873,6 +6873,7 @@
         "restoreSkippedMoodFactor": "Czynnik nastroju",
         "restoreSkippedMoodTag": "Tag nastroju",
         "restoreSkippedVisitReference": "Odwołanie wizyty",
+        "restoreSkippedVaccinationReference": "Odwołanie szczepienia",
         "restoreSkippedCheckupClosure": "Zamknięcie badania",
         "docsLink": "Dokumentacja"
       },

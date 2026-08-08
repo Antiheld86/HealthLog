@@ -6873,6 +6873,7 @@
         "restoreSkippedMoodFactor": "Stimmungsfaktor",
         "restoreSkippedMoodTag": "Stimmungs-Tag",
         "restoreSkippedVisitReference": "Besuchsverknüpfung",
+        "restoreSkippedVaccinationReference": "Impfverknüpfung",
         "restoreSkippedCheckupClosure": "Vorsorge-Abschluss",
         "docsLink": "Dokumentation"
       },

@@ -290,6 +290,8 @@ function sourceClient() {
     encounterDocumentLink: { findMany: vi.fn().mockResolvedValue([]) },
     encounterLabLink: { findMany: vi.fn().mockResolvedValue([]) },
     encounterConditionLink: { findMany: vi.fn().mockResolvedValue([]) },
+    vaccinationRecord: { findMany: vi.fn().mockResolvedValue([]) },
+    vaccinationDocumentLink: { findMany: vi.fn().mockResolvedValue([]) },
     customMetric: {
       findMany: vi.fn().mockResolvedValue([
         {

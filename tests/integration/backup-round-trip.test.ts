@@ -46,7 +46,7 @@ process.env.ENCRYPTION_KEY ??=
 
 import type { PrismaClient } from "@/generated/prisma/client";
 import { encrypt, encryptBytes } from "@/lib/crypto";
-import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
+import { decryptFromBytes, encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 import { readNote } from "@/lib/crypto/note-cipher";
 import { buildFullBackupPayload } from "@/lib/export/full-backup-payload";
 import { TWO_ENDED_MODELS, type TwoEndedModel } from "@/lib/export/backup-plan";
@@ -149,6 +149,10 @@ const COUNT_BACK: Record<
     p.encounterLabLink.count({ where: { userId } }),
   EncounterConditionLink: (p, userId) =>
     p.encounterConditionLink.count({ where: { userId } }),
+  VaccinationRecord: (p, userId) =>
+    p.vaccinationRecord.count({ where: { userId } }),
+  VaccinationDocumentLink: (p, userId) =>
+    p.vaccinationDocumentLink.count({ where: { userId } }),
 };
 
 /**
@@ -468,6 +472,40 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       episodeId: episode.id,
     },
   });
+
+  // One dose with every optional column filled, and the page it was
+  // transcribed from. Fat on purpose, against this file's own minimal-fixture
+  // rule: a count-back proves the row returned, and the assertion after the
+  // restore reads each column back so it also proves the row returned WHOLE.
+  // The practitioner and the encounter are the ones seeded above, because both
+  // are remapped on the way back and a reference to something the restore did
+  // not put back is a different case (covered by the skip test below).
+  //
+  // `reminderId` is deliberately NOT set here: it is the one reference that
+  // can never resolve, so setting it would make this test's "nothing was
+  // skipped" assertion false for a reason that is correct behaviour.
+  const vaccination = await prisma.vaccinationRecord.create({
+    data: {
+      userId: OWNER_ID,
+      occurredAt: AT("2026-05-14T00:00:00.000Z"),
+      antigenSlug: "tdap",
+      vaccineName: "Tetanus, diphtheria and pertussis",
+      doseNumber: 3,
+      seriesDoses: 3,
+      lotNumber: "RT-4471",
+      site: "LEFT_ARM",
+      practitionerId: practitioner.id,
+      encounterId: encounter.id,
+      noteEncrypted: encryptToBytes("sore arm for a day, nothing else"),
+    },
+  });
+  await prisma.vaccinationDocumentLink.create({
+    data: {
+      userId: OWNER_ID,
+      vaccinationId: vaccination.id,
+      documentId: document.id,
+    },
+  });
 }
 
 async function createOwner(prisma: PrismaClient) {
@@ -596,5 +634,131 @@ describe("every model the plan claims two-ended survives a real restore", () => 
     expect(sideEffect.notes, "plaintext must not come back in the column").toBe(
       null,
     );
+
+    // The dose, read back column by column. The count above says a row
+    // returned; a restore that wrote one row with every optional column
+    // defaulted would satisfy it and hand back an Impfpass line with no
+    // antigen, no batch code and no arm. The two remapped references are
+    // asserted as ids that exist rather than as the ids the file carried,
+    // because that is the property the remap owes.
+    const dose = await prisma.vaccinationRecord.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+      include: {
+        practitioner: { select: { name: true } },
+        encounter: { select: { occurredAt: true } },
+        documentLinks: { select: { documentId: true } },
+      },
+    });
+    expect({
+      occurredAt: dose.occurredAt.toISOString(),
+      antigenSlug: dose.antigenSlug,
+      vaccineName: dose.vaccineName,
+      doseNumber: dose.doseNumber,
+      seriesDoses: dose.seriesDoses,
+      lotNumber: dose.lotNumber,
+      site: dose.site,
+      practitioner: dose.practitioner?.name ?? null,
+      encounterAt: dose.encounter?.occurredAt.toISOString() ?? null,
+      links: dose.documentLinks.length,
+      note: dose.noteEncrypted ? decryptFromBytes(dose.noteEncrypted) : null,
+    }).toEqual({
+      occurredAt: "2026-05-14T00:00:00.000Z",
+      antigenSlug: "tdap",
+      vaccineName: "Tetanus, diphtheria and pertussis",
+      doseNumber: 3,
+      seriesDoses: 3,
+      lotNumber: "RT-4471",
+      site: "LEFT_ARM",
+      practitioner: "Round-trip practice",
+      encounterAt: "2026-06-30T08:00:00.000Z",
+      links: 1,
+      note: "sore arm for a day, nothing else",
+    });
+  });
+
+  /**
+   * The two references a dose can carry that the restore cannot honour, and
+   * the slug it must not judge.
+   *
+   * Separated from the round trip above because both are correct behaviour
+   * that shows up as a reported skip, and that file asserts nothing was
+   * skipped. Reported is the whole point: a reference dropped in silence is
+   * the same defect as a row dropped in silence, one field smaller.
+   */
+  it("reports the reminder it cannot restore and keeps a slug it cannot resolve", async () => {
+    const prisma = getPrismaClient();
+    await seedAdminSession(prisma);
+    await createOwner(prisma);
+
+    const reminder = await prisma.measurementReminder.create({
+      data: {
+        userId: OWNER_ID,
+        label: "Tetanus booster",
+        intervalDays: 3650,
+        vaccinationAntigen: "tetanus",
+      },
+    });
+    await prisma.vaccinationRecord.create({
+      data: {
+        userId: OWNER_ID,
+        occurredAt: AT("1987-09-02T00:00:00.000Z"),
+        // A slug no catalogue this release ships resolves. It must come back
+        // exactly as written: the renderer degrades to `vaccineName`, and a
+        // restore that dropped or rewrote it would lose what a person was
+        // actually given.
+        antigenSlug: "retired-antigen-from-an-older-release",
+        vaccineName: "Whatever the Pass called it in 1987",
+        reminderId: reminder.id,
+      },
+    });
+
+    const { payload } = await buildFullBackupPayload(prisma, OWNER_ID, {
+      purpose: "disaster-recovery",
+    });
+    await prisma.user.delete({ where: { id: OWNER_ID } });
+    await createOwner(prisma);
+
+    const backup = await prisma.dataBackup.create({
+      data: {
+        userId: OWNER_ID,
+        type: "TWO_ENDED_ROUND_TRIP",
+        data: encrypt(JSON.stringify(payload)),
+      },
+    });
+    const response = await POST(
+      new Request(`http://localhost/api/admin/backups/${backup.id}/restore`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirm: "RESTORE" }),
+      }) as never,
+      { params: Promise.resolve({ id: backup.id }) },
+    );
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).toBe(200);
+
+    const reported = body.data.skipped.catalogueKeys as Array<{
+      catalogue: string;
+      key: string;
+    }>;
+    expect(
+      reported.filter((entry) => entry.catalogue === "vaccinationReference"),
+      "the reminder the dose pointed at is not in the backup at all, so " +
+        "dropping the reference is correct and saying nothing about it is not",
+    ).toEqual([
+      { catalogue: "vaccinationReference", key: reminder.id, links: 1 },
+    ]);
+
+    const dose = await prisma.vaccinationRecord.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+    });
+    expect({
+      antigenSlug: dose.antigenSlug,
+      vaccineName: dose.vaccineName,
+      reminderId: dose.reminderId,
+    }).toEqual({
+      antigenSlug: "retired-antigen-from-an-older-release",
+      vaccineName: "Whatever the Pass called it in 1987",
+      reminderId: null,
+    });
   });
 });

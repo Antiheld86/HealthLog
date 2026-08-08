@@ -6873,6 +6873,7 @@
         "restoreSkippedMoodFactor": "Facteur d'humeur",
         "restoreSkippedMoodTag": "Étiquette d'humeur",
         "restoreSkippedVisitReference": "Référence de visite",
+        "restoreSkippedVaccinationReference": "Référence de vaccination",
         "restoreSkippedCheckupClosure": "Clôture d'un examen",
         "docsLink": "Documentation"
       },

@@ -36,6 +36,8 @@ vi.mock("@/lib/db", () => ({
     encounterDocumentLink: { findMany: vi.fn().mockResolvedValue([]) },
     encounterLabLink: { findMany: vi.fn().mockResolvedValue([]) },
     encounterConditionLink: { findMany: vi.fn().mockResolvedValue([]) },
+    vaccinationRecord: { findMany: vi.fn().mockResolvedValue([]) },
+    vaccinationDocumentLink: { findMany: vi.fn().mockResolvedValue([]) },
     // v1.15.0 — cycle tables read by the full-backup helper.
     cycleProfile: { findUnique: vi.fn() },
     menstrualCycle: { findMany: vi.fn() },
@@ -113,6 +115,10 @@ beforeEach(() => {
   );
   vi.mocked(prisma.encounterLabLink.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.encounterConditionLink.findMany).mockResolvedValue(
+    [] as never,
+  );
+  vi.mocked(prisma.vaccinationRecord.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.vaccinationDocumentLink.findMany).mockResolvedValue(
     [] as never,
   );
 });

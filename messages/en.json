@@ -6873,6 +6873,7 @@
         "restoreSkippedMoodFactor": "Mood factor",
         "restoreSkippedMoodTag": "Mood tag",
         "restoreSkippedVisitReference": "Visit reference",
+        "restoreSkippedVaccinationReference": "Vaccination reference",
         "restoreSkippedCheckupClosure": "Checkup closure",
         "docsLink": "Documentation"
       },
