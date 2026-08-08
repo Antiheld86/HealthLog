@@ -5207,13 +5207,6 @@
         "axis": {
           "countsFor": "Licz {pillar} do wyniku"
         },
-        "domain": {
-          "cardiometabolic": "Serce i metabolizm",
-          "activity": "Aktywność",
-          "sleep": "Sen",
-          "adiposity": "Sylwetka",
-          "wellbeing": "Samopoczucie"
-        },
         "state": {
           "counting": "Liczy się do Twojego wyniku",
           "waiting": "Wybrany, czeka na dane",

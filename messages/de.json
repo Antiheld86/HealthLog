@@ -5207,13 +5207,6 @@
         "axis": {
           "countsFor": "{pillar} in den Score einrechnen"
         },
-        "domain": {
-          "cardiometabolic": "Herz und Stoffwechsel",
-          "activity": "Aktivität",
-          "sleep": "Schlaf",
-          "adiposity": "Körperform",
-          "wellbeing": "Wohlbefinden"
-        },
         "state": {
           "counting": "Zählt in deinen Score",
           "waiting": "Ausgewählt, wartet auf Daten",

@@ -6,7 +6,7 @@
  * surface renames a pillar, and the two surfaces would then be talking
  * about different things while showing the same list.
  */
-import type { ScoreDomain, ScorePillarId } from "@/lib/analytics/score/types";
+import type { ScorePillarId } from "@/lib/analytics/score/types";
 
 export const SCORE_PILLAR_LABEL_KEYS: Record<ScorePillarId, string> = {
   BLOOD_PRESSURE: "insights.healthScore.pillar.bloodPressure",
@@ -16,13 +16,4 @@ export const SCORE_PILLAR_LABEL_KEYS: Record<ScorePillarId, string> = {
   ADIPOSITY: "insights.healthScore.pillar.adiposity",
   WELLBEING: "insights.healthScore.pillar.wellbeing",
   LIPIDS: "insights.healthScore.pillar.lipids",
-};
-
-/** Domain headings, one per distinct area of health. */
-export const SCORE_DOMAIN_LABEL_KEYS: Record<ScoreDomain, string> = {
-  cardiometabolic: "settings.sections.score.domain.cardiometabolic",
-  activity: "settings.sections.score.domain.activity",
-  sleep: "settings.sections.score.domain.sleep",
-  adiposity: "settings.sections.score.domain.adiposity",
-  wellbeing: "settings.sections.score.domain.wellbeing",
 };
