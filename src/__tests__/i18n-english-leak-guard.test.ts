@@ -75,6 +75,13 @@ function isMaskPlaceholder(words: string[]): boolean {
  * reason. Prune an entry only when the value genuinely diverges in a locale.
  */
 const LEGIT_IDENTICAL = new Set<string>([
+  // Vaccine catalogue: clinical proper nouns whose accepted written form is the
+  // same across these locales. "Hib" carries its Latin binomial verbatim, and
+  // "Hepatitis A" / "Hepatitis B" read identically in Spanish. The catalogue
+  // ships no trade names, so these are disease names, not brands.
+  "vaccinations.catalog.hib",
+  "vaccinations.catalog.hepatitis-a",
+  "vaccinations.catalog.hepatitis-b",
   // The AM/PM marker label — the affix abbreviations themselves are the same
   // 12-hour-clock notation across the shipped Latin-script locales.
   "common.period",
