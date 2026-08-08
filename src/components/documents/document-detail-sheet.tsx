@@ -80,6 +80,7 @@ import {
 } from "@/lib/validations/inbound-documents";
 import { DocumentAiSection } from "./document-ai-section";
 import { DocumentEncounterSuggestion } from "./document-encounter-suggestion";
+import { VaccinationDocumentSuggestion } from "@/components/vaccinations/vaccination-document-suggestion";
 import { DocumentSummaryBlock } from "./document-summary-block";
 import type { DocumentAiTarget } from "./document-ai-transport";
 import { DocumentShareSheet } from "./document-share-sheet";
@@ -1044,6 +1045,16 @@ export function DocumentDetailSheet({
                 value={pickedEncounterId}
                 onChange={setSuggestedEncounter}
               />
+
+              {/* A vaccination scan offers to file against the dose it records,
+                  through the same ±7-day rule the visit suggestion uses. */}
+              {doc.kind === "VACCINATION" ? (
+                <VaccinationDocumentSuggestion
+                  anchor={doc.reportDate ?? doc.documentDate}
+                  documentId={doc.id}
+                  disabled={!canManage}
+                />
+              ) : null}
 
               {/* "Belongs to visit" — read-only here on purpose. The filing
                   happens at the moment the document arrives, or from the

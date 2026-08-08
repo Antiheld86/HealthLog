@@ -29,10 +29,12 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { PractitionerCombobox } from "@/components/encounters/practitioner-combobox";
 import { EncounterSuggestionField } from "@/components/encounters/encounter-suggestion-field";
+import { useAuth } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
 import type { Practitioner } from "@/hooks/use-practitioners";
 import type { Vaccination, VaccinationWriteBody } from "./use-vaccinations";
 import { CatalogPicker } from "./catalog-picker";
+import { VaccinationDocumentPicker } from "./vaccination-document-picker";
 
 /** The seven anatomical sites, mirroring the Prisma `VaccinationSite` enum. */
 export const VACCINATION_SITES = [
@@ -153,6 +155,7 @@ export function VaccinationForm({
   onChange: (next: VaccinationDraft) => void;
 }) {
   const { t } = useTranslations();
+  const { user } = useAuth();
   const patch = (part: Partial<VaccinationDraft>) =>
     onChange({ ...draft, ...part });
 
@@ -299,6 +302,12 @@ export function VaccinationForm({
           onChange={(event) => patch({ note: event.target.value })}
         />
       </FieldGroup>
+
+      <VaccinationDocumentPicker
+        enabled={user?.modules?.inboundDocuments === true}
+        documentIds={draft.documentIds}
+        onChange={(documentIds) => patch({ documentIds })}
+      />
     </div>
   );
 }

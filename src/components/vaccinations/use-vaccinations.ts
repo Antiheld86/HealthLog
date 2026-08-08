@@ -25,6 +25,7 @@ import type {
   VaccinationDTO,
   VaccinationListDTO,
 } from "@/lib/vaccinations/dto";
+import type { VaccinationSuggestionResult } from "@/lib/vaccinations/document-suggestion";
 
 export type Vaccination = VaccinationDTO;
 
@@ -114,6 +115,47 @@ export function useVaccinationMutations() {
   });
 
   return { create, update, remove, restore };
+}
+
+/**
+ * Which dose a document dated `anchor` most plausibly belongs to.
+ *
+ * The verdict is server-resolved through the shared ±7-day window, so the
+ * browser never re-derives which dose a scan belongs to — and the "many"
+ * verdict carries no pre-selection, so a caller cannot pre-select one of two.
+ */
+export function useVaccinationSuggestion(
+  anchor: string | null,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.vaccinationSuggestion(anchor ?? ""),
+    enabled: enabled && Boolean(anchor),
+    queryFn: () =>
+      apiGet<VaccinationSuggestionResult>(
+        `${BASE}/suggest?anchor=${encodeURIComponent(anchor ?? "")}`,
+      ),
+  });
+}
+
+/** Link a document to a dose from the document side (the upload suggestion). */
+export function useLinkDocumentToVaccination() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationKey: queryKeys.vaccinationLink(),
+    mutationFn: ({
+      vaccinationId,
+      documentId,
+    }: {
+      vaccinationId: string;
+      documentId: string;
+    }) =>
+      apiPost(`${BASE}/${vaccinationId}/links`, {
+        targetKind: "document",
+        targetIds: [documentId],
+      }),
+    onSuccess: () => invalidateKeys(qc, vaccinationDependentKeys),
+  });
 }
 
 /** What the booster confirm carries — the user's accepted-or-edited values. */

@@ -231,3 +231,20 @@ export const vaccinationBoosterSchema = z
   .strict();
 
 export type VaccinationBoosterInput = z.infer<typeof vaccinationBoosterSchema>;
+
+/* ── upload suggestion ────────────────────────────────────────────── */
+
+/**
+ * The single input to the upload suggestion: the document's anchor date. No
+ * ids — the candidate doses come from the caller's own record, narrowed from
+ * the session.
+ */
+export const vaccinationSuggestQuerySchema = z
+  .object({
+    anchor: z.iso.datetime({ offset: true }),
+  })
+  .strict();
+
+export type VaccinationSuggestQuery = z.infer<
+  typeof vaccinationSuggestQuerySchema
+>;
