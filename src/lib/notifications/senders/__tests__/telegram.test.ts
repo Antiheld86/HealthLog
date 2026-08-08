@@ -318,6 +318,23 @@ describe("sendViaTelegram — interactive mood + measurement (v1.19.0)", () => {
     );
   });
 
+  it("offers no keyboard on a MEASUREMENT_REMINDER whose actions are suppressed", async () => {
+    // An appointment nudge. The reminder id is present and the event type
+    // matches, so only the flag stands between the person and two buttons
+    // that can answer nothing but "not found".
+    await sendViaTelegram(config, {
+      eventType: "MEASUREMENT_REMINDER",
+      userId: "user-1",
+      title: "t",
+      message: "m",
+      suppressActions: true,
+      metadata: { reminderId: "rem-1" },
+    });
+    const opts = sendTelegramMessageMock.mock.calls[0][3];
+    expect(opts.replyMarkup).toBeUndefined();
+    expect(scheduleTelegramAutoDeleteMock).not.toHaveBeenCalled();
+  });
+
   it("sends a plain MEASUREMENT_REMINDER (no keyboard, no self-clean) without a reminderId", async () => {
     await sendViaTelegram(config, {
       eventType: "MEASUREMENT_REMINDER",
