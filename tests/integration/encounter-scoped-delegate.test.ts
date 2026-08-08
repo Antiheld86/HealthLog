@@ -187,6 +187,39 @@ async function readLinks(encounterId: string): Promise<Links> {
   return parsed.data.links;
 }
 
+/**
+ * The SAME visit, read off the LIST rather than the detail.
+ *
+ * The list resolves links through `loadEncounterLinksForMany` — the batched
+ * arm of the same service, a distinct code path from the detail's
+ * `loadEncounterLinks`. It applies the same per-family redaction from the same
+ * predicate, and it has to be proven separately: a batched read that dropped
+ * the redaction would leak "Ferritin, 30 June" to a delegate the single read
+ * withholds it from, and no assertion on the detail path would notice.
+ */
+async function readListLinks(encounterId: string): Promise<Links> {
+  const { GET } = await import("@/app/api/encounters/route");
+  const res = await GET(
+    new Request("http://localhost/api/encounters") as never,
+  );
+  expect(res.status).toBe(200);
+  const parsed = (await res.json()) as {
+    data: {
+      upcoming: Array<{ id: string; links?: Links }>;
+      past: Array<{ id: string; links?: Links }>;
+    };
+  };
+  const row = [...parsed.data.upcoming, ...parsed.data.past].find(
+    (entry) => entry.id === encounterId,
+  );
+  expect(row, "the visit is in the list response").toBeDefined();
+  expect(
+    row!.links,
+    "the list carries the links, not only the detail",
+  ).toBeDefined();
+  return row!.links!;
+}
+
 let seeded: Awaited<ReturnType<typeof seedRecord>>;
 
 beforeEach(async () => {
@@ -255,6 +288,58 @@ describe("link labels follow the target's own domain", () => {
     expect(links.labResults[0]!.redacted).toBe(false);
     expect(links.documents[0]!.label).toBeNull();
     expect(links.conditions[0]!.label).toBeNull();
+  });
+});
+
+describe("the list path redacts the same seam as the detail path", () => {
+  it("gives an entire-record delegate every name on the list", async () => {
+    await switchInto("READ", null);
+    const links = await readListLinks(seeded.encounter.id);
+
+    // The ordinary sharing case: the batched read must not withhold from a
+    // grant that covers everything. Without this leg, the redaction assertion
+    // below could pass against a batched read that redacts unconditionally.
+    expect(links.documents[0]!.label).toBe("Oncology discharge letter");
+    expect(links.labResults[0]!.label).toBe("Iron panel · Ferritin");
+    expect(links.conditions[0]!.label).toBe("Hashimoto thyroiditis");
+    expect(links.documents[0]!.redacted).toBe(false);
+  });
+
+  it("withholds all three names from a profile-only delegate on the list", async () => {
+    await switchInto("READ", ["profile"]);
+    const links = await readListLinks(seeded.encounter.id);
+
+    // The shape survives — the card counts what the visit produced — and the
+    // names do not. This is the property the batched read has to hold on its
+    // own, because the card and the edit sheet both read links off the list.
+    expect(links.documents).toHaveLength(1);
+    expect(links.labResults).toHaveLength(1);
+    expect(links.conditions).toHaveLength(1);
+
+    for (const link of [
+      links.documents[0]!,
+      links.labResults[0]!,
+      links.conditions[0]!,
+    ]) {
+      expect(link.label).toBeNull();
+      expect(link.date).toBeNull();
+      expect(link.redacted).toBe(true);
+      // The id is the caller's own link row and stays.
+      expect(link.id).toBeTruthy();
+    }
+  });
+
+  it("reveals only the held domain on the list", async () => {
+    await switchInto("READ", ["profile", "labs"]);
+    const links = await readListLinks(seeded.encounter.id);
+
+    // Per-family on the batched path too: labs is held, the other two are not.
+    expect(links.labResults[0]!.label).toBe("Iron panel · Ferritin");
+    expect(links.labResults[0]!.redacted).toBe(false);
+    expect(links.documents[0]!.label).toBeNull();
+    expect(links.documents[0]!.redacted).toBe(true);
+    expect(links.conditions[0]!.label).toBeNull();
+    expect(links.conditions[0]!.redacted).toBe(true);
   });
 });
 
