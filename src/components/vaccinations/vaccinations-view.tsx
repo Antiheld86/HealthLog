@@ -22,6 +22,7 @@ import { useTranslations } from "@/lib/i18n/context";
 
 import { VaccinationList } from "./vaccination-list";
 import { VaccinationSheet } from "./vaccination-sheet";
+import { BoosterMintPrompt, boosterOfferFor } from "./booster-mint-prompt";
 import { useVaccinations, type Vaccination } from "./use-vaccinations";
 
 export function VaccinationsView() {
@@ -34,6 +35,9 @@ export function VaccinationsView() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editing, setEditing] = useState<Vaccination | null>(null);
   const [session, setSession] = useState(0);
+  // The just-created dose whose catalogue entry carries a booster interval;
+  // drives the one-time mint offer, cleared on confirm or decline.
+  const [boosterFor, setBoosterFor] = useState<Vaccination | null>(null);
 
   const openCreate = () => {
     setEditing(null);
@@ -72,6 +76,17 @@ export function VaccinationsView() {
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         vaccination={editing}
+        onCreated={(created) => {
+          // Offer the booster only when the catalogue entry carries an
+          // interval; a free-text or one-off dose never prompts.
+          if (boosterOfferFor(created)) setBoosterFor(created);
+        }}
+      />
+
+      <BoosterMintPrompt
+        key={boosterFor?.id ?? "none"}
+        record={boosterFor}
+        onClose={() => setBoosterFor(null)}
       />
 
       {isLoading ? (

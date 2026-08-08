@@ -8579,6 +8579,23 @@
       "sourceLabel": "Source : {source}",
       "affordanceLabel": "Infos sur le schéma"
     },
+    "booster": {
+      "title": "Planifier un rappel ?",
+      "body": "Vous pouvez créer un rappel pour le prochain rappel à partir de cette dose. Modifiez l'intervalle ou le libellé, ou refusez.",
+      "interval": "Intervalle",
+      "label": "Libellé",
+      "labelSuffix": "rappel",
+      "decline": "Pas maintenant",
+      "confirm": "Créer le rappel",
+      "planned": "Rappel planifié",
+      "failed": "Le rappel n'a pas pu être créé.",
+      "everyYearsOne": "tous les {count} an",
+      "everyYearsFew": "tous les {count} ans",
+      "everyYearsOther": "tous les {count} ans",
+      "everyMonthsOne": "tous les {count} mois",
+      "everyMonthsFew": "tous les {count} mois",
+      "everyMonthsOther": "tous les {count} mois"
+    },
     "empty": {
       "title": "Aucune vaccination enregistrée",
       "description": "Recopiez votre carnet de vaccination ligne par ligne : une date et le vaccin suffisent."

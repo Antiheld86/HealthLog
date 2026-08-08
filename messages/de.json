@@ -8579,6 +8579,23 @@
       "sourceLabel": "Quelle: {source}",
       "affordanceLabel": "Impfschema-Info"
     },
+    "booster": {
+      "title": "Auffrischung planen?",
+      "body": "Aus dieser Impfung lässt sich eine Erinnerung für die nächste Auffrischung anlegen. Du kannst Intervall und Bezeichnung ändern oder ablehnen.",
+      "interval": "Intervall",
+      "label": "Bezeichnung",
+      "labelSuffix": "Auffrischung",
+      "decline": "Nicht jetzt",
+      "confirm": "Erinnerung anlegen",
+      "planned": "Auffrischung geplant",
+      "failed": "Erinnerung konnte nicht angelegt werden.",
+      "everyYearsOne": "alle {count} Jahr",
+      "everyYearsFew": "alle {count} Jahre",
+      "everyYearsOther": "alle {count} Jahre",
+      "everyMonthsOne": "alle {count} Monat",
+      "everyMonthsFew": "alle {count} Monate",
+      "everyMonthsOther": "alle {count} Monate"
+    },
     "empty": {
       "title": "Noch keine Impfung erfasst",
       "description": "Übertrage deinen Impfpass Zeile für Zeile — Datum und Impfstoff genügen."

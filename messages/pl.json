@@ -8579,6 +8579,23 @@
       "sourceLabel": "Źródło: {source}",
       "affordanceLabel": "Informacje o schemacie"
     },
+    "booster": {
+      "title": "Zaplanować dawkę przypominającą?",
+      "body": "Z tego szczepienia możesz utworzyć przypomnienie o następnej dawce przypominającej. Zmień odstęp lub etykietę albo odrzuć.",
+      "interval": "Odstęp",
+      "label": "Etykieta",
+      "labelSuffix": "przypomnienie",
+      "decline": "Nie teraz",
+      "confirm": "Utwórz przypomnienie",
+      "planned": "Zaplanowano dawkę przypominającą",
+      "failed": "Nie udało się utworzyć przypomnienia.",
+      "everyYearsOne": "co {count} rok",
+      "everyYearsFew": "co {count} lata",
+      "everyYearsOther": "co {count} lat",
+      "everyMonthsOne": "co {count} miesiąc",
+      "everyMonthsFew": "co {count} miesiące",
+      "everyMonthsOther": "co {count} miesięcy"
+    },
     "empty": {
       "title": "Nie zarejestrowano jeszcze żadnego szczepienia",
       "description": "Przepisz swoją kartę szczepień wiersz po wierszu — wystarczą data i szczepionka."

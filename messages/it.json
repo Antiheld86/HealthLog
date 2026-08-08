@@ -8579,6 +8579,23 @@
       "sourceLabel": "Fonte: {source}",
       "affordanceLabel": "Informazioni sullo schema"
     },
+    "booster": {
+      "title": "Pianificare un richiamo?",
+      "body": "Da questa dose puoi creare un promemoria per il prossimo richiamo. Cambia l'intervallo o l'etichetta, oppure rifiuta.",
+      "interval": "Intervallo",
+      "label": "Etichetta",
+      "labelSuffix": "richiamo",
+      "decline": "Non ora",
+      "confirm": "Crea promemoria",
+      "planned": "Richiamo pianificato",
+      "failed": "Impossibile creare il promemoria.",
+      "everyYearsOne": "ogni {count} anno",
+      "everyYearsFew": "ogni {count} anni",
+      "everyYearsOther": "ogni {count} anni",
+      "everyMonthsOne": "ogni {count} mese",
+      "everyMonthsFew": "ogni {count} mesi",
+      "everyMonthsOther": "ogni {count} mesi"
+    },
     "empty": {
       "title": "Nessuna vaccinazione registrata",
       "description": "Trascrivi il tuo libretto vaccinale riga per riga: bastano una data e il vaccino."

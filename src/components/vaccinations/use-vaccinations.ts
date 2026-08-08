@@ -115,3 +115,34 @@ export function useVaccinationMutations() {
 
   return { create, update, remove, restore };
 }
+
+/** What the booster confirm carries — the user's accepted-or-edited values. */
+export interface BoosterMintBody {
+  intervalMonths: number;
+  label: string;
+  notifyHour?: number;
+}
+
+/**
+ * Mint (or re-anchor) the booster reminder a dose suggests.
+ *
+ * The response is an ordinary Vorsorge reminder; the write fans out through the
+ * dose dependent-keys and the reminder reads so the new checkup appears on
+ * `/checkups` the instant it is confirmed.
+ */
+export function useBoosterMint() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationKey: queryKeys.vaccinationBooster(),
+    mutationFn: ({ id, body }: { id: string; body: BoosterMintBody }) =>
+      apiPost<{ reminder: unknown; minted: boolean }>(
+        `${BASE}/${id}/booster`,
+        body,
+      ),
+    onSuccess: () =>
+      Promise.all([
+        invalidateKeys(qc, vaccinationDependentKeys),
+        invalidateReminderReads(qc),
+      ]),
+  });
+}

@@ -47,4 +47,5 @@ export const vaccinationKeys = {
   vaccinationUpdate: () => ["vaccinations", "update"] as const,
   vaccinationDelete: () => ["vaccinations", "delete"] as const,
   vaccinationRestore: () => ["vaccinations", "restore"] as const,
+  vaccinationBooster: () => ["vaccinations", "booster"] as const,
 } as const;

@@ -8579,6 +8579,23 @@
       "sourceLabel": "Source: {source}",
       "affordanceLabel": "Schedule info"
     },
+    "booster": {
+      "title": "Plan a booster?",
+      "body": "You can set a reminder for the next booster from this dose. Change the interval or the label, or decline.",
+      "interval": "Interval",
+      "label": "Label",
+      "labelSuffix": "booster",
+      "decline": "Not now",
+      "confirm": "Set reminder",
+      "planned": "Booster planned",
+      "failed": "The reminder could not be created.",
+      "everyYearsOne": "every {count} year",
+      "everyYearsFew": "every {count} years",
+      "everyYearsOther": "every {count} years",
+      "everyMonthsOne": "every {count} month",
+      "everyMonthsFew": "every {count} months",
+      "everyMonthsOther": "every {count} months"
+    },
     "empty": {
       "title": "No vaccination logged yet",
       "description": "Transcribe your vaccination card line by line — a date and the vaccine are enough."
