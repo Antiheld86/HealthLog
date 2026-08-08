@@ -887,11 +887,42 @@
       "iconGroupMisc": "Autres"
     },
     "sectionMoreTags": "Plus de tags",
-    "sectionFactors": "Facteurs",
     "sectionNoteDetails": "Note et détails",
     "quickTagsHelp": "Vos tags fréquents — en un geste",
     "quickTagsExpand": "Plus",
-    "loadError": "Impossible de charger vos entrées d'humeur."
+    "loadError": "Impossible de charger vos entrées d'humeur.",
+    "sectionLevelA": "Cinq échelles",
+    "sectionLevelAHelp": "Facultatif. Ce que vous ne touchez pas reste vide.",
+    "dimensionNotAnswered": "non renseigné",
+    "dimensionClear": "effacer",
+    "dimensionValueText": "{value} sur {max} : {low} à {high}",
+    "dimension": {
+      "a1": {
+        "label": "Humeur",
+        "low": "très désagréable",
+        "high": "très agréable"
+      },
+      "a2": {
+        "label": "Stress",
+        "low": "parfaitement détendu",
+        "high": "extrêmement tendu"
+      },
+      "a3": {
+        "label": "Énergie",
+        "low": "épuisé",
+        "high": "plein d'énergie"
+      },
+      "a4": {
+        "label": "Lien social",
+        "low": "isolé",
+        "high": "compris et soutenu"
+      },
+      "a5": {
+        "label": "Stabilité",
+        "low": "complètement dépassé",
+        "high": "pleinement capable d'agir"
+      }
+    }
   },
   "medications": {
     "title": "Médicaments",
@@ -3613,7 +3644,15 @@
         "statLabel": "Comment ceci est calculé",
         "explainerLabel": "Comment ceci est calculé"
       },
-      "inTargetTitle": "Dans votre plage"
+      "inTargetTitle": "Dans votre plage",
+      "dimensions": {
+        "title": "Cinq échelles",
+        "none": "Rien n'est encore enregistré pour ces cinq échelles.",
+        "window": "{days} jours",
+        "noneInWindow": "rien sur cette période",
+        "higherIsMore": "plus haut = {anchor}",
+        "notRecorded": "Non renseigné : {list}."
+      }
     },
     "derived": {
       "coverage": {
@@ -6485,13 +6524,13 @@
     "outcomeFailed": "Échec",
     "auditDetails": "Détails",
     "deleteAllData": "Supprimer toutes les données globalement",
-    "deleteAllDescription": "Supprime toutes les données de mesures, de médicaments, d'intégrations et de journaux pour tous les utilisateurs.",
+    "deleteAllDescription": "Supprime tous les enregistrements de tous les comptes ; les comptes et leurs identifiants de connexion sont conservés.",
     "deleteAllConfirm": "Vraiment supprimer toutes les données ?",
-    "deleteAllConfirmDescription": "Cette action supprimera définitivement toutes les mesures, médicaments, événements de prise, jetons d'API, connexions Withings, défis d'authentification ouverts, canaux de notification (Telegram, ntfy, Web Push), abonnements push et suppressions de messages Telegram en file d'attente pour tous les utilisateurs. Les comptes utilisateurs, le journal d'audit et les retours soumis sont conservés afin que l'effacement reste traçable et que les rapports de bug restent triables.",
+    "deleteAllConfirmDescription": "Cette action supprime définitivement tous les enregistrements de tous les comptes dans l'ensemble de la base de données, et non une sélection de tables. Sont conservés : les comptes utilisateurs et leurs identifiants de connexion, la configuration de l'instance et les délégations qui gardent les profils gérés accessibles. Un reçu de cet effacement est ensuite écrit dans le journal d'audit ; l'historique antérieur part avec le reste.",
     "deleteButton": "Supprimer toutes les données",
     "deleteAllPromptLabel": "Tapez {token} pour continuer",
     "finalDelete": "Supprimer définitivement",
-    "deletedResult": "Deleted: {measurements} measurements, {medications} Médicaments,{intakeEvents} intakes, {apiTokens} API tokens, {withingsConnections} Withings connections, {authChallenges} auth challenges, {notificationChannels} notification channels, {pushSubscriptions} push subscriptions, {telegramScheduledDeletions} queued Telegram deletions. Feedback rows preserved.",
+    "deletedResult": "{rows} lignes supprimées dans {tables} tables. Les comptes utilisateurs et les identifiants de connexion ont été conservés.",
     "authRegister": "Inscription",
     "authLogin": "Connexion",
     "authLoginPasskey": "Connexion par passkey",

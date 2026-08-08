@@ -13,6 +13,11 @@ import {
   SCHEDULE_COMPLIANCE_SELECT,
 } from "@/lib/analytics/compliance";
 import { resolveUserTimezone } from "@/lib/tz/resolver";
+import { userDayKey } from "@/lib/tz/format";
+import { isCurrentForTodayClaim } from "@/lib/insights/measurement-freshness";
+import { computeMoodDimensionSeries } from "@/lib/insights/mood-dimension-series";
+import { MOOD_DIMENSIONS } from "@/lib/mood/dimensions";
+import { getServerTranslator } from "@/lib/i18n/server-translator";
 import {
   reconstructSleepNights,
   type SleepStageRow,
@@ -62,6 +67,158 @@ interface DataCoverage {
   avgDaysBetween: number | null;
   oldestDaysAgo: number;
   newestDaysAgo: number;
+}
+
+/**
+ * One level-A dimension as the model reads it.
+ *
+ * `latest` never travels without `newestDaysAgo` and `current` beside it. A
+ * value with no age is exactly what produced a reading from last week stated
+ * as this morning's, so the age is part of the shape rather than something a
+ * caller is trusted to look up.
+ */
+export interface MoodDimensionFeature {
+  key: string;
+  /** The wording behind the numbers, so a 7 is not read as 7 out of 5. */
+  scale: string;
+  /** True when a higher number means a worse day — stress, and only stress. */
+  inverse: boolean;
+  avg7: number | null;
+  avg30: number | null;
+  latest: number | null;
+  /** The local day the newest value belongs to. */
+  latestDate: string | null;
+  /** Whole days between that day and today. */
+  newestDaysAgo: number | null;
+  /**
+   * Whether that value may back a present-tense claim. False for an absent
+   * age too: a missing age is not a fresh one.
+   */
+  current: boolean;
+  /**
+   * Present only when `current` is false, and says in words what the flag
+   * says in a boolean. The model reads prose more reliably than it reads a
+   * field name, and a stale dimension narrated as today's is the one failure
+   * this block exists to prevent.
+   */
+  staleNotice?: string;
+  count: number;
+}
+
+/**
+ * The level-A blocks for the model, read once over a bounded window.
+ *
+ * The rollup tier caches the mean of `score` and nothing else, so this is its
+ * own read rather than a widened rollup: a cached tier for four columns that
+ * may all be NULL would cost a migration to answer a question the live read
+ * answers in one indexed range scan. If a surface measurably slows, the tier
+ * grows then, as a read-swap with a fallback on a coverage miss — never as a
+ * second engine running beside this one.
+ *
+ * Only dimensions somebody answered are returned. An empty block would invite
+ * a sentence about a question that was never asked.
+ *
+ * A STALE dimension is still returned, carrying its age and an instruction,
+ * rather than filtered out the way the health-status surfaces drop a reading
+ * too old to describe. That is a deliberate difference and worth the sentence:
+ * those surfaces write one line about one metric, so a value they cannot
+ * narrate has nothing left to contribute and dropping it is the whole fix.
+ * This block is context for an open conversation, where "your stress was 9 on
+ * the third, and you have not answered it since" is a useful and true thing to
+ * say — and where silence is worse than history, because the reader then has
+ * no way to tell an unanswered dimension from one nobody has looked at in a
+ * week. The safety therefore rides on `current` plus `staleNotice` rather than
+ * on absence, and both are asserted at the shipped composition in
+ * `tests/integration/mood-dimension-features.test.ts`.
+ */
+async function buildMoodDimensionFeatures(
+  userId: string,
+): Promise<MoodDimensionFeature[] | undefined> {
+  const tz = await resolveUserTimezone(userId);
+  const { t } = getServerTranslator("en");
+  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  const rows = await prisma.moodEntry.findMany({
+    where: { userId, deletedAt: null, moodLoggedAt: { gte: since } },
+    orderBy: { moodLoggedAt: "desc" },
+    take: 2000,
+    select: {
+      date: true,
+      moodA1: true,
+      stressA2: true,
+      energyA3: true,
+      connectionA4: true,
+      stabilityA5: true,
+    },
+  });
+  if (rows.length === 0) return undefined;
+
+  // The same calculator the trend page uses, so the number in a Coach
+  // sentence and the number on the chart cannot disagree.
+  const summaries = computeMoodDimensionSeries(
+    rows.map((row) => ({
+      date: row.date,
+      a1: row.moodA1,
+      a2: row.stressA2,
+      a3: row.energyA3,
+      a4: row.connectionA4,
+      a5: row.stabilityA5,
+    })),
+    userDayKey(new Date(), tz),
+  );
+
+  const blocks = summaries
+    .filter((summary) => summary.present)
+    .map((summary) => {
+      const dimension = MOOD_DIMENSIONS.find((d) => d.key === summary.key)!;
+      const current = isCurrentForTodayClaim(summary.newestDaysAgo);
+      return {
+        key: summary.key,
+        // The anchors are resolved through the bundle rather than repeated
+        // here: the model must read the same words the person read when they
+        // moved the slider, and a second copy of that wording would drift
+        // from the one on screen the first time either was edited. English,
+        // like the legacy `scale` line beside it.
+        scale: `${t(dimension.labelKey)}, 0-10: 0 = ${t(dimension.lowAnchorKey)}, 10 = ${t(dimension.highAnchorKey)}`,
+        inverse: summary.inverse,
+        avg7: summary.avg7,
+        avg30: summary.avg30,
+        latest: summary.latest,
+        latestDate: summary.latestDate,
+        newestDaysAgo: summary.newestDaysAgo,
+        current,
+        ...(current
+          ? {}
+          : {
+              staleNotice: summary.latestDate
+                ? `Last answered on ${summary.latestDate}. State it as history with that date; do not describe it as today.`
+                : "No dated value. Do not describe this dimension as current.",
+            }),
+        count: summary.count,
+      };
+    });
+
+  return blocks.length > 0 ? blocks : undefined;
+}
+
+/**
+ * The dimensions block and the note that says how to read it beside the
+ * block-level `asOf`. Absent entirely when nobody has answered a dimension,
+ * so an account that only ever taps a face carries neither key.
+ */
+async function buildMoodDimensionBlock(userId: string): Promise<{
+  dimensions?: MoodDimensionFeature[];
+  dimensionsAsOfNote?: string;
+}> {
+  const dimensions = await buildMoodDimensionFeatures(userId);
+  if (!dimensions) return {};
+  return {
+    dimensions,
+    dimensionsAsOfNote:
+      "The block-level asOf describes the newest mood ENTRY on the 1-5 axis. " +
+      "For the five dimensions below, each carries its own newestDaysAgo and " +
+      "current, and those are the ones that govern what may be said about " +
+      "them today; they are often older than the entry itself.",
+  };
 }
 
 export interface AggregatedFeatures {
@@ -161,6 +318,34 @@ export interface AggregatedFeatures {
     trend30: "improving" | "declining" | "stable" | null;
     totalEntries: number;
     coverage: DataCoverage;
+    /**
+     * v1.37 — the five level-A self-state values, one block each, and only for
+     * the dimensions somebody actually answered. `scale` above describes the
+     * legacy 1-5 axis and is handed to the model verbatim, so it is left
+     * exactly as it was; these carry their own scale line beside it.
+     *
+     * Every block states its own age, because the ages differ: stress can be
+     * six days old while pleasantness was answered this morning, and a model
+     * given one age for the pair narrates the stale one as today's.
+     */
+    dimensions?: MoodDimensionFeature[];
+    /**
+     * Says which age governs which claim, because two of them ride in the
+     * same block and they disagree by design.
+     *
+     * `annotateSnapshotFreshness` stamps every metric block with an `asOf`
+     * built from `coverage.newestDaysAgo`, which for mood is the age of the
+     * newest ENTRY — the 1-5 axis. Somebody who taps a face each morning and
+     * opens the sliders once a week has `asOf.daysAgo` of 0 and a stress
+     * reading six days old, so a reader taking the block-level stamp as
+     * covering the dimensions would state last week's answer as today's.
+     * That is the exact sentence this milestone exists to prevent, and it is
+     * cheaper to name the precedence than to leave two true numbers looking
+     * like a contradiction.
+     *
+     * Present only alongside `dimensions`.
+     */
+    dimensionsAsOfNote?: string;
   };
   sleep?: {
     avg7: number | null;
@@ -1055,6 +1240,7 @@ export async function extractFeatures(
       latest: moodLatestScore,
       trend30,
       totalEntries: moodTotalEntries,
+      ...(await buildMoodDimensionBlock(userId)),
       coverage: {
         count: moodTotalEntries,
         spanDays,

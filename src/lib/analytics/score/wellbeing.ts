@@ -1,3 +1,25 @@
+/**
+ * The WELLBEING pillar reads validated instruments, and only those.
+ *
+ * PHQ-9, GAD-7 and WHO-5 over a 90-day window. Every threshold below cites
+ * the paper it comes from, which is the whole reason this pillar can be shown
+ * to a doctor.
+ *
+ * Daily mood does not feed it, and that is a decision rather than an
+ * oversight. Since v1.37 a mood entry carries a 0-10 self-rated pleasantness
+ * on most rows, including a mapped value on historical ones, so the number is
+ * available and folding it in would be a small change. It stays out: a
+ * self-rated slider moved once a day and a scored clinical questionnaire are
+ * different kinds of evidence, and averaging them into one figure that cites
+ * Kroenke, Spitzer and the WHO would weaken exactly the line that makes the
+ * figure worth anything. There is also no good answer to "why did my score
+ * drop because I logged a bad afternoon".
+ *
+ * Daily mood keeps its own surfaces — the trend page, the assistant, the
+ * briefing — where its resolution is the point. Bringing it in here would be
+ * a score decision, taken on the score line, with its own coverage rule and
+ * its own line in the explainer; it is not something to add on the way past.
+ */
 import type { Derived } from "@/lib/insights/derived/types";
 
 import type { PillarValue, WellbeingPillarInput } from "./types";

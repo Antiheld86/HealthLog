@@ -15,6 +15,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
+import { deriveA1, shapeLevelA } from "@/lib/mood/level-a";
 import { encryptNote, shapeMoodNote } from "@/lib/crypto/note-cipher";
 import { invalidateUserMood } from "@/lib/cache/invalidate";
 import { recomputeMoodBucketsForEntry } from "@/lib/rollups/mood-rollups";
@@ -57,7 +58,11 @@ export const GET = apiHandler(
       meta: { moodEntryId: id },
     });
 
-    return apiSuccess({ ...shapeMoodNote(entry), tags: parseTags(entry.tags) });
+    return apiSuccess({
+      // v1.37 — level-A values under the keys the write path takes.
+      ...shapeLevelA(shapeMoodNote(entry)),
+      tags: parseTags(entry.tags),
+    });
   },
 );
 
@@ -120,7 +125,32 @@ export const PUT = apiHandler(
     if (data.mood !== undefined) {
       updateData.mood = data.mood;
       updateData.score = getScoreForMood(data.mood);
+      // v1.37 — pleasantness follows the label the same way `score` does, so
+      // an entry corrected from "okay" to "bad" cannot keep yesterday's A1.
+      // Only when the label actually moved, though: the edit dialog sends the
+      // whole entry back on every save, and re-deriving on an unchanged label
+      // would overwrite a value the person set by hand every time they
+      // corrected the timestamp. An explicit `a1` below overrides either way.
+      if (data.mood !== existing.mood) {
+        updateData.moodA1 = deriveA1(data.mood);
+      }
     }
+    // v1.37 — level-A values are per-field on this path: omitted keeps the
+    // stored value, an explicit number replaces it, an explicit null clears
+    // it. Built one at a time from the parsed body, never spread.
+    //
+    // Pleasantness is the exception, and it is the same exception the create
+    // path makes: an entry always carries a five-point label, so it always
+    // implies a pleasantness value, and a null falls back to the derivation
+    // rather than emptying the column. One rule on both routes — the capture
+    // surfaces therefore offer no clear control for it.
+    if (data.a1 !== undefined) {
+      updateData.moodA1 = data.a1 ?? deriveA1(data.mood ?? existing.mood);
+    }
+    if (data.a2 !== undefined) updateData.stressA2 = data.a2;
+    if (data.a3 !== undefined) updateData.energyA3 = data.a3;
+    if (data.a4 !== undefined) updateData.connectionA4 = data.a4;
+    if (data.a5 !== undefined) updateData.stabilityA5 = data.a5;
     if (data.moodLoggedAt !== undefined) {
       // v1.4.25 W7b — re-anchor the row's `date` to the user's current
       // displayTimezone. Also refresh the `tz` column so the row's
@@ -290,7 +320,8 @@ export const PUT = apiHandler(
     }
 
     return apiSuccess({
-      ...entry,
+      // v1.37 — level-A values under the keys the write path takes.
+      ...shapeLevelA(entry),
       tags: parseTags(entry.tags),
       // v1.8.5 — surface the persisted structured-tag keys so a client
       // hydrating from the update response renders the tag set without a

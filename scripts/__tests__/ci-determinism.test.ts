@@ -77,14 +77,19 @@ describe("Playwright CI determinism", () => {
     const workflow = parse(
       readRepoFile(".github/workflows/e2e.yml"),
     ) as Workflow;
-    const upload = workflow.jobs.e2e?.steps?.find((step) =>
+    // The suite runs as a shard matrix since the single job outgrew its
+    // timeout; the running job is `shard`, while `e2e` is the gate that
+    // carries the required check name and runs no browser. The report
+    // therefore lives on the shard job, named per shard so the two
+    // artifacts cannot clobber each other.
+    const upload = workflow.jobs.shard?.steps?.find((step) =>
       step.uses?.startsWith("actions/upload-artifact@"),
     );
 
     expect(upload).toBeDefined();
     expect(upload?.if).toBe("always()");
     expect(upload?.with).toMatchObject({
-      name: "playwright-report",
+      name: "playwright-report-shard-${{ matrix.shard }}",
       path: "playwright-report/",
       "retention-days": 7,
       "if-no-files-found": "ignore",
@@ -95,7 +100,7 @@ describe("Playwright CI determinism", () => {
     const workflow = parse(
       readRepoFile(".github/workflows/e2e.yml"),
     ) as Workflow;
-    const env = workflow.jobs.e2e?.env;
+    const env = workflow.jobs.shard?.env;
 
     expect(env?.API_TOKEN_HMAC_KEY).toMatch(/^[0-9a-f]{64}$/);
     expect(env?.SESSION_COOKIE_SECURE).toBe("false");

@@ -24,6 +24,7 @@ import { annotate } from "@/lib/logging/context";
 import { withIdempotency } from "@/lib/idempotency";
 import { encryptNote, shapeMoodNote } from "@/lib/crypto/note-cipher";
 import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
+import { levelAForWrite, shapeLevelA } from "@/lib/mood/level-a";
 import { invalidateUserMood } from "@/lib/cache/invalidate";
 import { recomputeMoodBucketsForEntry } from "@/lib/rollups/mood-rollups";
 import {
@@ -125,7 +126,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   const entriesWithParsedTags = entries.map(({ tagLinks, ...e }) => ({
     // v1.23 — decrypt `noteEncrypted` onto `note`, strip the ciphertext.
-    ...shapeMoodNote(e),
+    // v1.37 — the five level-A values under the keys the create path takes,
+    // so the edit form reads back what it wrote instead of mapping column
+    // names to wire names by hand. The column spelling is stripped, not
+    // joined: one number under two names is a choice nobody made.
+    ...shapeLevelA(shapeMoodNote(e)),
     tags: parseTags(e.tags),
     // v1.8.5 — flat list of binary structured-tag keys attached to the
     // entry (rated factors are surfaced separately below).
@@ -206,6 +211,17 @@ async function postMoodEntry(request: NextRequest) {
     source,
     externalId,
   } = parsed.data;
+  // v1.37 — the five level-A values, built field by field from the parsed
+  // body (never spread) and resolved once for every branch below. A1 falls
+  // back to the derivation from `mood`; the other four are whatever the user
+  // set, or nothing.
+  const levelA = levelAForWrite(mood, {
+    a1: parsed.data.a1,
+    a2: parsed.data.a2,
+    a3: parsed.data.a3,
+    a4: parsed.data.a4,
+    a5: parsed.data.a5,
+  });
   // v1.4.25 W7b (Decision A) — anchor the `date` string to the user's
   // current displayTimezone and store the resolved zone on the row.
   // Legacy rows with `tz IS NULL` continue to read as Europe/Berlin
@@ -265,6 +281,7 @@ async function postMoodEntry(request: NextRequest) {
                 tz,
                 mood,
                 score,
+                ...levelA,
                 tags: tags ? JSON.stringify(tags) : null,
                 note: null,
                 noteEncrypted: encryptNote(note ?? null),
@@ -272,11 +289,19 @@ async function postMoodEntry(request: NextRequest) {
                 externalId,
                 moodLoggedAt,
               },
+              // A re-post restates pleasantness, because the label it carries
+              // always implies one and a stale A1 beside a changed mood would
+              // contradict the entry's own face. It does NOT restate the other
+              // four: `levelA` carries them only when this request did, so a
+              // client re-posting without sliders — the phone, whose build has
+              // none — leaves the stress and energy somebody answered on the
+              // web exactly where they were. An explicit null clears one.
               update: {
                 date,
                 tz,
                 mood,
                 score,
+                ...levelA,
                 tags: tags ? JSON.stringify(tags) : null,
                 note: null,
                 noteEncrypted: encryptNote(note ?? null),
@@ -290,6 +315,9 @@ async function postMoodEntry(request: NextRequest) {
                 tz,
                 mood,
                 score,
+                // A fresh row: an omitted dimension lands as NULL, which is
+                // the same thing the upsert's arms mean by omitting it.
+                ...levelA,
                 tags: tags ? JSON.stringify(tags) : null,
                 note: null,
                 noteEncrypted: encryptNote(note ?? null),
@@ -374,7 +402,8 @@ async function postMoodEntry(request: NextRequest) {
     return apiSuccess(
       {
         // v1.23 — decrypt `noteEncrypted` onto `note`, strip the ciphertext.
-        ...shapeMoodNote(entry),
+        // v1.37 — level-A values under their wire keys (see the list read).
+        ...shapeLevelA(shapeMoodNote(entry)),
         tags: parseTags(entry.tags),
         // v1.8.5 — surface the persisted structured-tag keys so a client
         // hydrating from the create response renders the tag set without a

@@ -47,16 +47,14 @@ export function DangerZoneSection() {
       // Idempotency-Key prevents a double-submit from re-running the
       // destructive transaction, matching the Backups restore path.
       const idempotencyKey = `admin-data-wipe-${crypto.randomUUID()}`;
+      // The server returns one count per table that actually held rows. It
+      // used to return nine fixed names, which is how nobody noticed the
+      // wipe had stopped covering the schema: the result line read the same
+      // whether it had cleared nine tables or ninety.
       return apiDelete<{
-        measurements: number;
-        intakeEvents: number;
-        medications: number;
-        apiTokens: number;
-        withingsConnections: number;
-        authChallenges: number;
-        notificationChannels: number;
-        pushSubscriptions: number;
-        telegramScheduledDeletions: number;
+        cleared: boolean;
+        deletedRows: number;
+        models: Record<string, number>;
       }>(
         "/api/admin/data",
         { confirm: WIPE_CONFIRM_TOKEN },
@@ -67,15 +65,8 @@ export function DangerZoneSection() {
       queryClient.invalidateQueries();
       setWipeMsg(
         t("admin.deletedResult", {
-          measurements: data.measurements,
-          medications: data.medications,
-          intakeEvents: data.intakeEvents,
-          apiTokens: data.apiTokens,
-          withingsConnections: data.withingsConnections,
-          authChallenges: data.authChallenges,
-          notificationChannels: data.notificationChannels,
-          pushSubscriptions: data.pushSubscriptions,
-          telegramScheduledDeletions: data.telegramScheduledDeletions,
+          rows: data.deletedRows,
+          tables: Object.keys(data.models).length,
         }),
       );
     },

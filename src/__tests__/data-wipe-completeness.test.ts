@@ -35,11 +35,12 @@
  * that model; add a column to `model User` without classifying it and it goes
  * red naming the column.
  */
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-
 import { describe, it, expect } from "vitest";
 
+import {
+  parseWipeSchema,
+  reachedByCascade,
+} from "@/__tests__/helpers/wipe-schema-shape";
 import {
   INSTANCE_SCOPED,
   USER_KEPT_FIELDS,
@@ -51,61 +52,7 @@ import {
   wipeWhere,
 } from "@/lib/data-wipe/wipe-plan";
 
-const SCHEMA = join(process.cwd(), "prisma", "schema.prisma");
-
-interface Relation {
-  /** Target model name. */
-  target: string;
-  cascade: boolean;
-  /** `true` when the relation field is optional (`Model?`). */
-  optional: boolean;
-}
-
-interface ModelShape {
-  scalars: string[];
-  relations: Relation[];
-}
-
-function parseSchema(schema: string): Map<string, ModelShape> {
-  const blocks = [...schema.matchAll(/^model\s+(\w+)\s*\{([\s\S]*?)^\}/gm)].map(
-    (m) => ({ name: m[1], body: m[2] }),
-  );
-  const modelNames = new Set(blocks.map((b) => b.name));
-
-  const out = new Map<string, ModelShape>();
-  for (const block of blocks) {
-    const scalars: string[] = [];
-    const relations: Relation[] = [];
-    for (const rawLine of block.body.split("\n")) {
-      const line = rawLine.trim();
-      if (!line || line.startsWith("//") || line.startsWith("@@")) continue;
-      const match = /^(\w+)\s+(\w+)(\[\])?(\?)?/.exec(line);
-      if (!match) continue;
-      const [, field, type, isList, isOptional] = match;
-      if (modelNames.has(type)) {
-        // A list side of a relation carries no column and cannot cascade.
-        if (isList) continue;
-        relations.push({
-          target: type,
-          cascade: line.includes("onDelete: Cascade"),
-          optional: Boolean(isOptional),
-        });
-        continue;
-      }
-      if (isList && type === type.toUpperCase()) {
-        // Scalar / enum list column — still a column.
-        scalars.push(field);
-        continue;
-      }
-      scalars.push(field);
-    }
-    out.set(block.name, { scalars, relations });
-  }
-  return out;
-}
-
-const schemaText = readFileSync(SCHEMA, "utf8");
-const models = parseSchema(schemaText);
+const models = parseWipeSchema();
 const wipeSet = new Set<string>(WIPE_MODELS);
 
 describe("data-wipe completeness", () => {
@@ -158,21 +105,7 @@ describe("data-wipe completeness", () => {
   it("every model without a userId column is reached by cascade or declared instance-scoped", () => {
     // Fixpoint over required cascade relations: a model is covered when the
     // database removes it as a consequence of a row the wipe deletes.
-    const covered = new Set<string>(wipeSet);
-    for (;;) {
-      let grew = false;
-      for (const [name, shape] of models) {
-        if (covered.has(name)) continue;
-        const reached = shape.relations.some(
-          (r) => r.cascade && !r.optional && covered.has(r.target),
-        );
-        if (reached) {
-          covered.add(name);
-          grew = true;
-        }
-      }
-      if (!grew) break;
-    }
+    const covered = reachedByCascade(models, wipeSet);
 
     const orphans = [...models]
       .filter(([, shape]) => !shape.scalars.includes("userId"))

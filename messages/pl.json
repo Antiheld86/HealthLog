@@ -887,11 +887,42 @@
       "iconGroupMisc": "Inne"
     },
     "sectionMoreTags": "Więcej tagów",
-    "sectionFactors": "Czynniki",
     "sectionNoteDetails": "Notatka i szczegóły",
     "quickTagsHelp": "Twoje częste tagi — jedno dotknięcie",
     "quickTagsExpand": "Więcej",
-    "loadError": "Nie udało się załadować wpisów nastroju."
+    "loadError": "Nie udało się załadować wpisów nastroju.",
+    "sectionLevelA": "Pięć skal",
+    "sectionLevelAHelp": "Opcjonalne. To, czego nie ruszysz, zostaje puste.",
+    "dimensionNotAnswered": "nie podano",
+    "dimensionClear": "wyczyść",
+    "dimensionValueText": "{value} z {max}: od {low} do {high}",
+    "dimension": {
+      "a1": {
+        "label": "Nastrój",
+        "low": "bardzo nieprzyjemnie",
+        "high": "bardzo przyjemnie"
+      },
+      "a2": {
+        "label": "Stres",
+        "low": "całkowicie odprężony",
+        "high": "skrajnie obciążony"
+      },
+      "a3": {
+        "label": "Energia",
+        "low": "wyczerpany",
+        "high": "pełen energii"
+      },
+      "a4": {
+        "label": "Więź",
+        "low": "odizolowany",
+        "high": "rozumiany i wspierany"
+      },
+      "a5": {
+        "label": "Stabilność",
+        "low": "całkowicie przytłoczony",
+        "high": "w pełni zdolny do działania"
+      }
+    }
   },
   "medications": {
     "title": "Leki",
@@ -3613,7 +3644,15 @@
         "statLabel": "Jak to obliczono",
         "explainerLabel": "Jak to obliczono"
       },
-      "inTargetTitle": "W Twoim zakresie"
+      "inTargetTitle": "W Twoim zakresie",
+      "dimensions": {
+        "title": "Pięć skal",
+        "none": "Dla tych pięciu skal nie ma jeszcze żadnych danych.",
+        "window": "{days} dni",
+        "noneInWindow": "brak w tym okresie",
+        "higherIsMore": "wyżej = {anchor}",
+        "notRecorded": "Nie zapisano: {list}."
+      }
     },
     "derived": {
       "coverage": {
@@ -6485,13 +6524,13 @@
     "outcomeFailed": "Nieudane",
     "auditDetails": "Szczegóły",
     "deleteAllData": "Usuń wszystkie dane globalnie",
-    "deleteAllDescription": "Usuwa wszystkie dane pomiarów, leków, integracji i logów wszystkich użytkowników.",
+    "deleteAllDescription": "Usuwa wszystkie rekordy wszystkich kont; konta i dane logowania zostają zachowane.",
     "deleteAllConfirm": "Na pewno usunąć wszystkie dane?",
-    "deleteAllConfirmDescription": "Spowoduje to trwałe usunięcie wszystkich pomiarów, leków, zdarzeń przyjęcia, tokenów API, połączeń Withings, otwartych wyzwań uwierzytelniania, kanałów powiadomień (Telegram, ntfy, Web Push), subskrypcji push oraz zakolejkowanych usunięć wiadomości Telegram wszystkich użytkowników. Konta użytkowników, dziennik audytu i przesłane opinie zostają zachowane, aby samo usunięcie pozostało możliwe do prześledzenia, a zgłoszenia błędów — do obsłużenia.",
+    "deleteAllConfirmDescription": "Ta operacja trwale usuwa wszystkie rekordy wszystkich kont w całej bazie danych, a nie wybrane tabele. Zachowane zostają: konta użytkowników i ich dane logowania, konfiguracja instancji oraz uprawnienia, dzięki którym profile zarządzane pozostają dostępne. Po zakończeniu do dziennika audytu trafia potwierdzenie tego usunięcia; wcześniejsza historia znika razem z resztą.",
     "deleteButton": "Usuń wszystkie dane",
     "deleteAllPromptLabel": "Wpisz {token}, aby kontynuować",
     "finalDelete": "Usuń trwale",
-    "deletedResult": "Deleted: {measurements} measurements, {medications} Leki,{intakeEvents} intakes, {apiTokens} API tokens, {withingsConnections} Withings connections, {authChallenges} auth challenges, {notificationChannels} notification channels, {pushSubscriptions} push subscriptions, {telegramScheduledDeletions} queued Telegram deletions. Feedback rows preserved.",
+    "deletedResult": "Usunięto {rows} wierszy w {tables} tabelach. Konta użytkowników i dane logowania zostały zachowane.",
     "authRegister": "Rejestracja",
     "authLogin": "Zaloguj",
     "authLoginPasskey": "Logowanie kluczem passkey",

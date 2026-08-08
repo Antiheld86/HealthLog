@@ -887,11 +887,42 @@
       "iconGroupMisc": "Altro"
     },
     "sectionMoreTags": "Altri tag",
-    "sectionFactors": "Fattori",
     "sectionNoteDetails": "Nota e dettagli",
     "quickTagsHelp": "I tuoi tag frequenti: un tocco",
     "quickTagsExpand": "Altro",
-    "loadError": "Impossibile caricare le voci dell'umore."
+    "loadError": "Impossibile caricare le voci dell'umore.",
+    "sectionLevelA": "Cinque scale",
+    "sectionLevelAHelp": "Facoltativo. Quello che non tocchi resta vuoto.",
+    "dimensionNotAnswered": "non indicato",
+    "dimensionClear": "cancella",
+    "dimensionValueText": "{value} su {max}: da {low} a {high}",
+    "dimension": {
+      "a1": {
+        "label": "Umore",
+        "low": "molto spiacevole",
+        "high": "molto piacevole"
+      },
+      "a2": {
+        "label": "Stress",
+        "low": "completamente rilassato",
+        "high": "estremamente sotto pressione"
+      },
+      "a3": {
+        "label": "Energia",
+        "low": "esausto",
+        "high": "pieno di energia"
+      },
+      "a4": {
+        "label": "Connessione",
+        "low": "isolato",
+        "high": "capito e sostenuto"
+      },
+      "a5": {
+        "label": "Stabilità",
+        "low": "completamente sopraffatto",
+        "high": "pienamente capace di agire"
+      }
+    }
   },
   "medications": {
     "title": "Farmaci",
@@ -3613,7 +3644,15 @@
         "statLabel": "Come è stato calcolato",
         "explainerLabel": "Come è stato calcolato"
       },
-      "inTargetTitle": "Nel tuo intervallo"
+      "inTargetTitle": "Nel tuo intervallo",
+      "dimensions": {
+        "title": "Cinque scale",
+        "none": "Per queste cinque scale non c'è ancora nulla.",
+        "window": "{days} giorni",
+        "noneInWindow": "nulla in questo periodo",
+        "higherIsMore": "più alto = {anchor}",
+        "notRecorded": "Non registrato: {list}."
+      }
     },
     "derived": {
       "coverage": {
@@ -6485,13 +6524,13 @@
     "outcomeFailed": "Non riuscito",
     "auditDetails": "Dettagli",
     "deleteAllData": "Elimina tutti i dati globalmente",
-    "deleteAllDescription": "Elimina tutti i dati di misurazioni, farmaci, integrazioni e log di tutti gli utenti.",
+    "deleteAllDescription": "Elimina tutti i record di tutti gli account; gli account e le credenziali di accesso vengono conservati.",
     "deleteAllConfirm": "Eliminare davvero tutti i dati?",
-    "deleteAllConfirmDescription": "Questa operazione eliminerà definitivamente tutte le misurazioni, i farmaci, gli eventi di assunzione, i token API, le connessioni Withings, le challenge di autenticazione aperte, i canali di notifica (Telegram, ntfy, Web Push), le sottoscrizioni push e le eliminazioni di messaggi Telegram in coda di tutti gli utenti. Gli account utente, il log di audit e i feedback inviati vengono conservati affinché la cancellazione resti tracciabile e le segnalazioni di bug restino gestibili.",
+    "deleteAllConfirmDescription": "Questa operazione elimina definitivamente tutti i record di tutti gli account nell'intero database, non una selezione di tabelle. Vengono conservati: gli account utente e le loro credenziali di accesso, la configurazione dell'istanza e le deleghe che mantengono raggiungibili i profili gestiti. Al termine nel log di audit viene scritta una ricevuta di questa cancellazione; la cronologia precedente se ne va con tutto il resto.",
     "deleteButton": "Elimina tutti i dati",
     "deleteAllPromptLabel": "Digita {token} per continuare",
     "finalDelete": "Elimina definitivamente",
-    "deletedResult": "Deleted: {measurements} measurements, {medications} Farmaci,{intakeEvents} intakes, {apiTokens} API tokens, {withingsConnections} Withings connections, {authChallenges} auth challenges, {notificationChannels} notification channels, {pushSubscriptions} push subscriptions, {telegramScheduledDeletions} queued Telegram deletions. Feedback rows preserved.",
+    "deletedResult": "Eliminate {rows} righe in {tables} tabelle. Account utente e credenziali di accesso conservati.",
     "authRegister": "Registrazione",
     "authLogin": "Accedi",
     "authLoginPasskey": "Accesso con passkey",

@@ -887,11 +887,42 @@
       "iconGroupMisc": "Other"
     },
     "sectionMoreTags": "More tags",
-    "sectionFactors": "Factors",
     "sectionNoteDetails": "Note & details",
     "quickTagsHelp": "Your frequent tags — one tap",
     "quickTagsExpand": "More",
-    "loadError": "Could not load your mood entries."
+    "loadError": "Could not load your mood entries.",
+    "sectionLevelA": "Five scales",
+    "sectionLevelAHelp": "Optional. Anything you leave alone stays empty.",
+    "dimensionNotAnswered": "not recorded",
+    "dimensionClear": "clear",
+    "dimensionValueText": "{value} of {max}: {low} to {high}",
+    "dimension": {
+      "a1": {
+        "label": "Mood",
+        "low": "very unpleasant",
+        "high": "very pleasant"
+      },
+      "a2": {
+        "label": "Stress",
+        "low": "completely relaxed",
+        "high": "extremely strained"
+      },
+      "a3": {
+        "label": "Energy",
+        "low": "drained",
+        "high": "full of energy"
+      },
+      "a4": {
+        "label": "Connectedness",
+        "low": "isolated",
+        "high": "understood and supported"
+      },
+      "a5": {
+        "label": "Stability",
+        "low": "completely overwhelmed",
+        "high": "fully able to act"
+      }
+    }
   },
   "medications": {
     "title": "Medications",
@@ -3613,7 +3644,15 @@
         "statLabel": "How this was computed",
         "explainerLabel": "How this was computed"
       },
-      "inTargetTitle": "In your range"
+      "inTargetTitle": "In your range",
+      "dimensions": {
+        "title": "Five scales",
+        "none": "Nothing recorded for these five scales yet.",
+        "window": "{days} days",
+        "noneInWindow": "nothing in this range",
+        "higherIsMore": "higher = {anchor}",
+        "notRecorded": "Not recorded: {list}."
+      }
     },
     "derived": {
       "coverage": {
@@ -6485,13 +6524,13 @@
     "outcomeFailed": "Failed",
     "auditDetails": "Details",
     "deleteAllData": "Delete all data globally",
-    "deleteAllDescription": "Deletes all measurement, medication, integration, and log data for all users.",
+    "deleteAllDescription": "Deletes every record every account holds; the accounts and their sign-in credentials are kept.",
     "deleteAllConfirm": "Really delete all data?",
-    "deleteAllConfirmDescription": "This will permanently delete all measurements, medications, intake events, API tokens, Withings connections, open authentication challenges, notification channels (Telegram, ntfy, Web Push), push subscriptions, and queued Telegram message deletions for all users. User accounts, the audit log, and submitted feedback are preserved so the wipe itself remains traceable and bug reports stay triageable.",
+    "deleteAllConfirmDescription": "This permanently deletes every account's records across the whole database, not a selection of tables. Kept: the user accounts and the credentials that sign into them, the instance configuration, and the delegation grants that keep managed profiles reachable. A receipt for this wipe is written to the audit log afterwards; the audit history before it goes with everything else.",
     "deleteButton": "Delete all data",
     "deleteAllPromptLabel": "Type {token} to continue",
     "finalDelete": "Delete permanently",
-    "deletedResult": "Deleted: {measurements} measurements, {medications} medications, {intakeEvents} intakes, {apiTokens} API tokens, {withingsConnections} Withings connections, {authChallenges} auth challenges, {notificationChannels} notification channels, {pushSubscriptions} push subscriptions, {telegramScheduledDeletions} queued Telegram deletions. Feedback rows preserved.",
+    "deletedResult": "Deleted {rows} rows across {tables} tables. User accounts and sign-in credentials were kept.",
     "authRegister": "Registration",
     "authLogin": "Login",
     "authLoginPasskey": "Passkey login",
