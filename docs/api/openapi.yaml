@@ -8377,6 +8377,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MoodPrognosisEnvelope"
         "401": *a1
+        "403": *a7
         "422": *a3
         "429": *a4
   /api/mood-entries/bulk:

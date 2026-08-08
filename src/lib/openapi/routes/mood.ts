@@ -35,7 +35,9 @@ import {
 import {
   dataEnvelope,
   errorEnvelope,
+  recordRefusal,
   stdResponses,
+  MODULE_DISABLED_DESCRIPTION,
   baseUpdatedAtField,
   updatedAtTokenField,
   conflictResponse409,
@@ -510,6 +512,9 @@ export const moodPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
+        // Two reasons, one status: the module gate and the sharing fence both
+        // answer 403, and OpenAPI allows one response per status.
+        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
         ...stdResponses,
       },
     },
