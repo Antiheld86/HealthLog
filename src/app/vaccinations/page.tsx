@@ -9,7 +9,7 @@ import { PageAuthGate } from "@/components/ui/page-auth-gate";
 import { VaccinationsView } from "@/components/vaccinations/vaccinations-view";
 
 /**
- * v1.38.0 — the immunization log entry.
+ * v1.37.3: the immunization log entry.
  *
  * Gated on the resolved `modules.vaccinations` flag from `GET /api/auth/me`.
  * The module is default-on, so `=== false` is the only state that hides the

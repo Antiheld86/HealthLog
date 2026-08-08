@@ -194,7 +194,7 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
     tourId: "nav-illness",
     requiresModule: "illness",
   },
-  // v1.38.0 — the immunization log sits in the clinical spine beside Illness.
+  // v1.37.3: the immunization log sits in the clinical spine beside Illness.
   // Born-gated: `requiresModule: "vaccinations"` reads the resolved module map,
   // so the entry is absent until the account keeps the module on (default-on —
   // it drops only when a user turns it off). SURFACE-gated: the `/api/vaccinations*`
