@@ -24,6 +24,7 @@ import {
 } from "@/lib/ai/types";
 import { AI_BUDGETS } from "@/lib/ai/ai-budgets";
 import { prisma } from "@/lib/db";
+import { parseReferenceRange } from "@/lib/labs/parse-reference-range";
 import { annotate } from "@/lib/logging/context";
 import {
   extractedLabsSchema,
@@ -42,7 +43,8 @@ Extract every analyte reading you can read. For each reading capture:
 - value: the numeric result as a number, OR null if the result is qualitative text.
 - valueText: the qualitative result text (e.g. "negativ", "positiv", "nicht nachweisbar"), OR null if the result is numeric.
 - unit: the measurement unit (e.g. "mg/dL", "%", "ng/mL"), or null if none is printed or the reading is qualitative.
-- referenceLow / referenceHigh: the reference-range bounds as numbers, or null. A one-sided range like "< 116" sets referenceHigh only; "> 40" sets referenceLow only.
+- referenceText: the reference range EXACTLY as printed beside the value, verbatim and complete, including its operator and unit if written (for example "3,5 - 5,0", "< 116", "bis 5,0", "150.000 - 400.000 /\u00b5l", "negativ"). Copy the characters; do NOT reformat, convert, or normalise them. Null only when no range is printed for that row.
+- referenceLow / referenceHigh: the SAME range reduced to numbers, when it reduces to numbers, else null. A one-sided range like "< 116" sets referenceHigh only; "> 40" sets referenceLow only.
 - takenAt: the per-row collection date in ISO 8601 (YYYY-MM-DD) if a date is printed for that row, else null.
 - confidence: an object { analyte, value, unit, range } with a 0..1 score for how legible each field was. Use a low score when a field is blurred, ambiguous, or you had to guess.
 
@@ -51,7 +53,7 @@ Set EXACTLY ONE of value / valueText per reading. Never invent a value you canno
 Also capture reportDate: the report's collection/sample date in ISO 8601 (YYYY-MM-DD), or null.
 
 Respond ONLY with a JSON object of this exact shape:
-{ "reportDate": string|null, "rows": [ { "analyte": string, "value": number|null, "valueText": string|null, "unit": string|null, "referenceLow": number|null, "referenceHigh": number|null, "takenAt": string|null, "confidence": { "analyte": number, "value": number, "unit": number, "range": number } } ] }`;
+{ "reportDate": string|null, "rows": [ { "analyte": string, "value": number|null, "valueText": string|null, "unit": string|null, "referenceText": string|null, "referenceLow": number|null, "referenceHigh": number|null, "takenAt": string|null, "confidence": { "analyte": number, "value": number, "unit": number, "range": number } } ] }`;
 
 const USER_PROMPT = `Transcribe the lab report in the attached image into the JSON schema described in the system prompt. Return only the JSON object.`;
 
@@ -70,7 +72,8 @@ Extract every analyte reading you can identify. For each reading capture:
 - value: the numeric result as a number, OR null if the result is qualitative text. German reports use a decimal comma (e.g. "5,4") — emit it as 5.4.
 - valueText: the qualitative result text (e.g. "negativ", "positiv", "nicht nachweisbar"), OR null if the result is numeric.
 - unit: the measurement unit (e.g. "mg/dL", "%", "ng/mL"), or null if none is printed or the reading is qualitative.
-- referenceLow / referenceHigh: the reference-range bounds as numbers, or null. A one-sided range like "< 116" sets referenceHigh only; "> 40" sets referenceLow only.
+- referenceText: the reference range EXACTLY as printed beside the value, verbatim and complete, including its operator and unit if written (for example "3,5 - 5,0", "< 116", "bis 5,0", "150.000 - 400.000 /\u00b5l", "negativ"). Copy the characters; do NOT reformat, convert, or normalise them. Null only when no range is printed for that row.
+- referenceLow / referenceHigh: the SAME range reduced to numbers, when it reduces to numbers, else null. A one-sided range like "< 116" sets referenceHigh only; "> 40" sets referenceLow only.
 - takenAt: the per-row collection date in ISO 8601 (YYYY-MM-DD) if a date is printed for that row, else null.
 - confidence: an object { analyte, value, unit, range } with a 0..1 score for how confident you are in each field. Use a LOW score when the OCR text was garbled, ambiguous, or you had to guess — the text is lossy, so be conservative.
 
@@ -79,7 +82,7 @@ Set EXACTLY ONE of value / valueText per reading. Never invent a value you canno
 Also capture reportDate: the report's collection/sample date in ISO 8601 (YYYY-MM-DD), or null.
 
 Respond ONLY with a JSON object of this exact shape:
-{ "reportDate": string|null, "rows": [ { "analyte": string, "value": number|null, "valueText": string|null, "unit": string|null, "referenceLow": number|null, "referenceHigh": number|null, "takenAt": string|null, "confidence": { "analyte": number, "value": number, "unit": number, "range": number } } ] }`;
+{ "reportDate": string|null, "rows": [ { "analyte": string, "value": number|null, "valueText": string|null, "unit": string|null, "referenceText": string|null, "referenceLow": number|null, "referenceHigh": number|null, "takenAt": string|null, "confidence": { "analyte": number, "value": number, "unit": number, "range": number } } ] }`;
 
 /** A normalised ISO date string (YYYY-MM-DD) or null. */
 function normaliseDate(raw: string | null): string | null {
@@ -130,6 +133,7 @@ async function annotateRow(
 ): Promise<OcrExtractedRowDto> {
   const analyte = row.analyte.trim();
   const takenAt = normaliseDate(row.takenAt) ?? reportDate;
+  const printed = parseReferenceRange(row.referenceText, row.unit);
 
   // Biomarker match — case-insensitive on the catalog identity, presence-only.
   const existingBiomarker = await prisma.biomarker.findFirst({
@@ -175,8 +179,13 @@ async function annotateRow(
     value: row.value,
     valueText: row.valueText,
     unit: row.unit,
-    referenceLow: row.referenceLow,
-    referenceHigh: row.referenceHigh,
+    // Both readings of the printed window travel to the review screen: the
+    // derived bounds where the string yields them, and the string itself
+    // either way. A window the parser could not read is still the window the
+    // lab printed, so the user sees it and it reaches the row.
+    referenceLow: printed?.low ?? row.referenceLow,
+    referenceHigh: printed?.high ?? row.referenceHigh,
+    referenceText: printed?.text ?? null,
     takenAt,
     confidence: row.confidence,
     biomarkerMatch: existingBiomarker ? "existing" : "new",

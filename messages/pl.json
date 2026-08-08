@@ -281,7 +281,9 @@
     "familyHistoryTitle": "Wywiad rodzinny",
     "familyHistoryColRelationship": "Pokrewieństwo",
     "familyHistoryColCondition": "Schorzenie",
-    "familyHistoryColAgeAtOnset": "Wiek zachorowania"
+    "familyHistoryColAgeAtOnset": "Wiek zachorowania",
+    "labsSourceRangeNote": "* Zakres referencyjny pochodzi z samego wyniku i różni się od zapisanego zakresu:",
+    "labsCatalogRangeLabel": "zapisany zakres"
   },
   "errorBoundary": {
     "title": "Coś poszło nie tak",
@@ -6697,6 +6699,7 @@
         "restoreSkippedCycleSymptom": "Objaw cyklu",
         "restoreSkippedIllnessSymptom": "Objaw choroby",
         "restoreSkippedMoodFactor": "Czynnik nastroju",
+        "restoreSkippedMoodTag": "Tag nastroju",
         "docsLink": "Dokumentacja"
       },
       "danger-zone": {
@@ -8047,7 +8050,12 @@
       "qualitativePlaceholder": "np. ujemny",
       "qualNegative": "ujemny",
       "qualPositive": "dodatni",
-      "qualBorderline": "graniczny"
+      "qualBorderline": "graniczny",
+      "sourceRange": "Zakres wydrukowany na wyniku",
+      "sourceRangePlaceholder": "np. 3,5 - 5,0 lub < 5",
+      "sourceRangeAdd": "+ Dodaj zakres z wyniku",
+      "sourceRangeHint": "Opcjonalne. Dotyczy tylko tego pomiaru; zapisany zakres pozostaje bez zmian.",
+      "sourceRangeUnparsed": "Zapisane bez zmian — nie odczytano z tego zakresu liczbowego."
     },
     "backToLabs": "Wróć do wyników",
     "hasNote": "Notatka",
@@ -8078,7 +8086,10 @@
         "90": "90 d",
         "365": "1 r",
         "all": "Wszystko"
-      }
+      },
+      "sourceRangeLabel": "Zakres z wyniku",
+      "sourceBandLegend": "Drugie pasmo: zakres wydrukowany na wyniku z {date}.",
+      "sourceBandMixed": "Drugie pasmo: zakres z najnowszego wyniku. Wcześniejsze wyniki w tym okresie podają inne zakresy."
     },
     "biomarker": {
       "manageTitle": "Biomarkery",
@@ -8253,11 +8264,17 @@
       "fileTooLarge": "Plik jest za duży (maks. 12 MB).",
       "fileType": "Prześlij plik JPEG, PNG, WebP lub PDF.",
       "extractFailed": "Nie udało się odczytać wyniku. Spróbuj wyraźniejszego zdjęcia.",
-      "pdfNeedsAnthropic": "Skanowanie PDF wymaga dostawcy wizji Claude; prześlij zamiast tego zdjęcie."
+      "pdfNeedsAnthropic": "Skanowanie PDF wymaga dostawcy wizji Claude; prześlij zamiast tego zdjęcie.",
+      "refTextLabel": "Zakres tak jak wydrukowano",
+      "refTextPlaceholder": "np. 3,5 - 5,0"
     },
     "loadMoreReadings": "Wczytaj więcej pomiarów",
     "documentsLink": "Dokumenty wyników badań",
-    "notLinkedYet": "Jeszcze niepowiązane z biomarkerem"
+    "notLinkedYet": "Jeszcze niepowiązane z biomarkerem",
+    "sourceRange": {
+      "fromReport": "Zakres z wyniku {range}",
+      "catalogDiffers": "twój zakres {range}"
+    }
   },
   "modules": {
     "cycle": {

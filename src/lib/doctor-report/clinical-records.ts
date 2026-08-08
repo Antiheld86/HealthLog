@@ -11,6 +11,7 @@
  * Split out of the aggregator with the selection rework.
  */
 import { prisma } from "@/lib/db";
+import { resolveEffectiveReferenceRange } from "@/lib/labs/reference-range";
 import { getEvent } from "@/lib/logging/context";
 import { decryptAllergyReaction } from "@/lib/doctor-report-helpers";
 import type { DoctorReportData } from "@/lib/doctor-report-types";
@@ -42,6 +43,9 @@ export async function loadLabResults(
       unit: true,
       referenceLow: true,
       referenceHigh: true,
+      sourceReferenceLow: true,
+      sourceReferenceHigh: true,
+      sourceReferenceText: true,
       takenAt: true,
     },
   });
@@ -52,14 +56,28 @@ export async function loadLabResults(
   for (const r of rows) {
     const key = r.analyte.toLowerCase();
     const prev = byAnalyte.get(key);
+    // The row already stamps the catalog band it was written under; the
+    // reading's own report window, when present, is what the physician read
+    // the value against, so it wins here exactly as it does on every other
+    // lab surface.
+    const range = resolveEffectiveReferenceRange(
+      r.referenceLow,
+      r.referenceHigh,
+      r,
+    );
     byAnalyte.set(key, {
       panel: r.panel,
       analyte: r.analyte,
       value: r.value,
       valueText: r.valueText,
       unit: r.unit,
-      referenceLow: r.referenceLow,
-      referenceHigh: r.referenceHigh,
+      referenceLow: range.low,
+      referenceHigh: range.high,
+      catalogReferenceLow: range.catalogLow,
+      catalogReferenceHigh: range.catalogHigh,
+      sourceReferenceText: range.sourceText,
+      referenceOrigin: range.origin,
+      referenceDivergesFromCatalog: range.divergesFromCatalog,
       takenAt: r.takenAt.toISOString(),
       count: (prev?.count ?? 0) + 1,
     });

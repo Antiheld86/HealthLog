@@ -281,7 +281,9 @@
     "familyHistoryTitle": "Family history",
     "familyHistoryColRelationship": "Relative",
     "familyHistoryColCondition": "Condition",
-    "familyHistoryColAgeAtOnset": "Age at onset"
+    "familyHistoryColAgeAtOnset": "Age at onset",
+    "labsSourceRangeNote": "* The reference range comes from the report itself and differs from the saved range:",
+    "labsCatalogRangeLabel": "saved range"
   },
   "errorBoundary": {
     "title": "Something went wrong",
@@ -6697,6 +6699,7 @@
         "restoreSkippedCycleSymptom": "Cycle symptom",
         "restoreSkippedIllnessSymptom": "Illness symptom",
         "restoreSkippedMoodFactor": "Mood factor",
+        "restoreSkippedMoodTag": "Mood tag",
         "docsLink": "Documentation"
       },
       "danger-zone": {
@@ -8047,7 +8050,12 @@
       "qualitativePlaceholder": "e.g. negative",
       "qualNegative": "negative",
       "qualPositive": "positive",
-      "qualBorderline": "borderline"
+      "qualBorderline": "borderline",
+      "sourceRange": "Range printed on the report",
+      "sourceRangePlaceholder": "e.g. 3.5 - 5.0 or < 5",
+      "sourceRangeAdd": "+ Add the range from the report",
+      "sourceRangeHint": "Optional. Applies to this reading only; your saved range stays as it is.",
+      "sourceRangeUnparsed": "Kept as written — no numeric range read from it."
     },
     "backToLabs": "Back to lab results",
     "hasNote": "Note",
@@ -8078,7 +8086,10 @@
         "90": "90d",
         "365": "1y",
         "all": "All"
-      }
+      },
+      "sourceRangeLabel": "Report range",
+      "sourceBandLegend": "Second band: the range printed on the report of {date}.",
+      "sourceBandMixed": "Second band: the range printed on the most recent report. Earlier reports in view state different ranges."
     },
     "biomarker": {
       "manageTitle": "Biomarkers",
@@ -8253,11 +8264,17 @@
       "fileTooLarge": "File is too large (max 12 MB).",
       "fileType": "Upload a JPEG, PNG, WebP, or PDF.",
       "extractFailed": "Couldn't read the report. Try a clearer photo.",
-      "pdfNeedsAnthropic": "PDF scanning needs a Claude vision provider; upload a photo instead."
+      "pdfNeedsAnthropic": "PDF scanning needs a Claude vision provider; upload a photo instead.",
+      "refTextLabel": "Range as printed",
+      "refTextPlaceholder": "e.g. 3.5 - 5.0"
     },
     "loadMoreReadings": "Load more readings",
     "documentsLink": "Lab report documents",
-    "notLinkedYet": "Not linked to a biomarker yet"
+    "notLinkedYet": "Not linked to a biomarker yet",
+    "sourceRange": {
+      "fromReport": "Report range {range}",
+      "catalogDiffers": "your range {range}"
+    }
   },
   "modules": {
     "cycle": {

@@ -61,3 +61,113 @@ export function formatReferenceRange(
   if (hasLow) return `≥ ${formatNumber(low as number)}`;
   return opts?.emptyText ?? "";
 }
+
+/**
+ * The reference range a lab report printed beside ONE reading, as stored on
+ * `LabResult.sourceReference*`.
+ */
+export interface SourceReferenceRange {
+  sourceReferenceLow: number | null;
+  sourceReferenceHigh: number | null;
+  sourceReferenceText: string | null;
+}
+
+/** Where the bounds a reading is judged against came from. */
+export type ReferenceRangeOrigin = "source" | "catalog" | "none";
+
+/** The bounds one reading is judged against, plus how they were arrived at. */
+export interface EffectiveReferenceRange {
+  /** The bound the verdict uses. */
+  low: number | null;
+  high: number | null;
+  origin: ReferenceRangeOrigin;
+  /** The catalog band, kept alongside so a surface can show both. */
+  catalogLow: number | null;
+  catalogHigh: number | null;
+  /** The printed window, kept verbatim. Null when the report stated none. */
+  sourceText: string | null;
+  /**
+   * True when the source window is in force AND the catalog states a window
+   * that differs from it. This is the case a reader must be told about: the
+   * same number reads differently against the two, so a surface that shows
+   * only one of them is showing a partial answer.
+   */
+  divergesFromCatalog: boolean;
+}
+
+/** Two bounds are the same window when both ends match (null included). */
+function sameWindow(
+  aLow: number | null,
+  aHigh: number | null,
+  bLow: number | null,
+  bHigh: number | null,
+): boolean {
+  return aLow === bLow && aHigh === bHigh;
+}
+
+/**
+ * Resolve the reference window ONE reading is judged against.
+ *
+ * A lab runs its own method on its own device, and the physician reads the
+ * value against the window printed on that report. So for a reading that
+ * carries a source window, the source window wins — for that reading alone.
+ * The catalog band stays the net for every reading that carries none.
+ *
+ * A source window counts as stating a window only when it yields at least one
+ * numeric bound. A printed string with no derivable bound ("negativ", "siehe
+ * Befund") is carried through as `sourceText` but never displaces the catalog:
+ * a range that could not be read is not an argument for having no range.
+ *
+ * This function is the ONLY place that precedence is expressed. Every surface
+ * that classifies a reading — the API DTO, the doctor report, insights, the
+ * coach snapshot, the MCP read, the FHIR export — routes through it, so a
+ * reading cannot read as in-range on one surface and out on another.
+ */
+export function resolveEffectiveReferenceRange(
+  catalogLow: number | null | undefined,
+  catalogHigh: number | null | undefined,
+  source: SourceReferenceRange | null | undefined,
+): EffectiveReferenceRange {
+  const cLow = catalogLow ?? null;
+  const cHigh = catalogHigh ?? null;
+  const sLow = source?.sourceReferenceLow ?? null;
+  const sHigh = source?.sourceReferenceHigh ?? null;
+  const sourceText = source?.sourceReferenceText ?? null;
+
+  if (sLow !== null || sHigh !== null) {
+    return {
+      low: sLow,
+      high: sHigh,
+      origin: "source",
+      catalogLow: cLow,
+      catalogHigh: cHigh,
+      sourceText,
+      divergesFromCatalog:
+        (cLow !== null || cHigh !== null) &&
+        !sameWindow(sLow, sHigh, cLow, cHigh),
+    };
+  }
+
+  return {
+    low: cLow,
+    high: cHigh,
+    origin: cLow !== null || cHigh !== null ? "catalog" : "none",
+    catalogLow: cLow,
+    catalogHigh: cHigh,
+    sourceText,
+    divergesFromCatalog: false,
+  };
+}
+
+/**
+ * Classify one reading against its effective window. Qualitative readings
+ * (no numeric value) always report `"unknown"` — there is nothing to compare
+ * against bounds, and a fabricated verdict is worse than none.
+ */
+export function classifyAgainstEffectiveRange(
+  value: number | null,
+  effective: EffectiveReferenceRange,
+): ReferenceRangeStatus {
+  if (value === null) return "unknown";
+  return classifyReferenceRange(value, effective.low, effective.high);
+}

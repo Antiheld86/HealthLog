@@ -76,6 +76,7 @@ function toCommitRow(row: OcrReviewRow): OcrCommitRowInput | null {
     takenAt: takenAt.toISOString(),
     ...(row.referenceLow !== null ? { referenceLow: row.referenceLow } : {}),
     ...(row.referenceHigh !== null ? { referenceHigh: row.referenceHigh } : {}),
+    ...(row.referenceText ? { referenceText: row.referenceText } : {}),
   };
 }
 

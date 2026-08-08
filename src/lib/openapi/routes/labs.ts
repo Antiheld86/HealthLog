@@ -44,7 +44,13 @@ listLabResultsSchema.meta({
 const rangeStatusEnum = z.enum(["in-range", "below", "above", "unknown"]).meta({
   id: "LabReferenceRangeStatus",
   description:
-    "Server-computed, NEUTRAL reference-range verdict. `unknown` when the lab reported no usable bounds. Inclusive bounds: a value on the limit reads in-range. The badge that renders this must stay calm and informative — not an alarming red.",
+    "Server-computed, NEUTRAL reference-range verdict, always against `referenceLow` / `referenceHigh` (the window in force for that reading). `unknown` when no usable bounds are on file. Inclusive bounds: a value on the limit reads in-range. The badge that renders this must stay calm and informative — not an alarming red.",
+});
+
+const referenceOriginEnum = z.enum(["source", "catalog", "none"]).meta({
+  id: "LabReferenceRangeOrigin",
+  description:
+    "Which window `referenceLow` / `referenceHigh` came from. `source` = the range printed on this reading's own report, which wins for that reading because it is the window the physician evaluated the value against. `catalog` = the user's Biomarker band, the net for readings with no printed range. `none` = no window on file.",
 });
 
 const labResultRow = z
@@ -60,6 +66,13 @@ const labResultRow = z
     unit: z.string(),
     referenceLow: z.number().nullable(),
     referenceHigh: z.number().nullable(),
+    catalogReferenceLow: z.number().nullable(),
+    catalogReferenceHigh: z.number().nullable(),
+    sourceReferenceLow: z.number().nullable(),
+    sourceReferenceHigh: z.number().nullable(),
+    sourceReferenceText: z.string().nullable(),
+    referenceOrigin: referenceOriginEnum,
+    referenceDivergesFromCatalog: z.boolean(),
     takenAt: z.string(),
     source: z.string(),
     hasNote: z.boolean(),
@@ -70,7 +83,7 @@ const labResultRow = z
   .meta({
     id: "LabResult",
     description:
-      'A stored lab result. Exactly one of `value` (numeric) or `valueText` (qualitative, e.g. "negativ") is non-null; `rangeStatus` is always `unknown` for a qualitative row (no number to classify). `biomarkerId` links the user-scoped catalog marker (null for legacy free-text rows); when linked, `analyte` / `unit` / `referenceLow` / `referenceHigh` are RESOLVED server-side from the Biomarker — the client renders them and never recomputes the range. The encrypted note is never echoed in list rows; `hasNote` flags its presence and the single-resource GET returns the decrypted `note`.',
+      "A stored lab result. Exactly one of `value` (numeric) or `valueText` (qualitative, e.g. \"negativ\") is non-null; `rangeStatus` is always `unknown` for a qualitative row (no number to classify). `biomarkerId` links the user-scoped catalog marker (null for legacy free-text rows); when linked, `analyte` / `unit` are RESOLVED server-side from the Biomarker.\n\nThree reference windows ride on the row and the server says which one applies. `referenceLow` / `referenceHigh` are the window IN FORCE and the one `rangeStatus` was computed from — read these to render the range and you are correct without doing any resolution of your own. `sourceReferenceLow` / `sourceReferenceHigh` / `sourceReferenceText` are the range this reading's own report printed (the text verbatim, kept even when no numbers could be read out of it). `catalogReferenceLow` / `catalogReferenceHigh` are the Biomarker band. `referenceOrigin` names the winner and `referenceDivergesFromCatalog` is true when the report's window and the catalog band state different limits — a surface showing only one of the two is showing a partial answer. The client renders these values and never recomputes the range. The encrypted note is never echoed in list rows; `hasNote` flags its presence and the single-resource GET returns the decrypted `note`.",
   });
 
 const labResultDetail = labResultRow

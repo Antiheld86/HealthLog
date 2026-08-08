@@ -281,7 +281,9 @@
     "familyHistoryTitle": "Antécédents familiaux",
     "familyHistoryColRelationship": "Lien de parenté",
     "familyHistoryColCondition": "Affection",
-    "familyHistoryColAgeAtOnset": "Âge au début"
+    "familyHistoryColAgeAtOnset": "Âge au début",
+    "labsSourceRangeNote": "* La plage de référence provient du compte rendu lui-même et diffère de la plage enregistrée :",
+    "labsCatalogRangeLabel": "plage enregistrée"
   },
   "errorBoundary": {
     "title": "Une erreur est survenue",
@@ -6697,6 +6699,7 @@
         "restoreSkippedCycleSymptom": "Symptôme de cycle",
         "restoreSkippedIllnessSymptom": "Symptôme de maladie",
         "restoreSkippedMoodFactor": "Facteur d'humeur",
+        "restoreSkippedMoodTag": "Étiquette d'humeur",
         "docsLink": "Documentation"
       },
       "danger-zone": {
@@ -8047,7 +8050,12 @@
       "qualitativePlaceholder": "p. ex. négatif",
       "qualNegative": "négatif",
       "qualPositive": "positif",
-      "qualBorderline": "limite"
+      "qualBorderline": "limite",
+      "sourceRange": "Plage imprimée sur le compte rendu",
+      "sourceRangePlaceholder": "p. ex. 3,5 - 5,0 ou < 5",
+      "sourceRangeAdd": "+ Ajouter la plage du compte rendu",
+      "sourceRangeHint": "Facultatif. Ne vaut que pour cette mesure ; votre plage enregistrée reste inchangée.",
+      "sourceRangeUnparsed": "Conservé tel quel : aucune plage numérique n'a pu en être lue."
     },
     "backToLabs": "Retour aux résultats",
     "hasNote": "Note",
@@ -8078,7 +8086,10 @@
         "90": "90 j",
         "365": "1 a",
         "all": "Tout"
-      }
+      },
+      "sourceRangeLabel": "Plage du compte rendu",
+      "sourceBandLegend": "Deuxième bande : la plage imprimée sur le compte rendu du {date}.",
+      "sourceBandMixed": "Deuxième bande : la plage imprimée sur le compte rendu le plus récent. Des comptes rendus antérieurs de la période indiquent d'autres plages."
     },
     "biomarker": {
       "manageTitle": "Biomarqueurs",
@@ -8253,11 +8264,17 @@
       "fileTooLarge": "Le fichier est trop volumineux (max. 12 Mo).",
       "fileType": "Importez un JPEG, PNG, WebP ou PDF.",
       "extractFailed": "Impossible de lire le compte rendu. Essayez une photo plus nette.",
-      "pdfNeedsAnthropic": "Le scan PDF nécessite un fournisseur de vision Claude ; importez plutôt une photo."
+      "pdfNeedsAnthropic": "Le scan PDF nécessite un fournisseur de vision Claude ; importez plutôt une photo.",
+      "refTextLabel": "Plage telle qu'imprimée",
+      "refTextPlaceholder": "p. ex. 3,5 - 5,0"
     },
     "loadMoreReadings": "Charger plus de mesures",
     "documentsLink": "Documents de résultats",
-    "notLinkedYet": "Pas encore lié à un biomarqueur"
+    "notLinkedYet": "Pas encore lié à un biomarqueur",
+    "sourceRange": {
+      "fromReport": "Plage du compte rendu {range}",
+      "catalogDiffers": "votre plage {range}"
+    }
   },
   "modules": {
     "cycle": {

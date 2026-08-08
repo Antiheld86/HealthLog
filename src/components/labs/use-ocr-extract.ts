@@ -33,6 +33,7 @@ export interface OcrCommitRowInput {
   unit?: string;
   referenceLow?: number;
   referenceHigh?: number;
+  referenceText?: string;
   takenAt: string;
 }
 
