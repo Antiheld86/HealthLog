@@ -38831,6 +38831,10 @@ components:
                 anyOf:
                   - type: string
                   - type: "null"
+              fullName:
+                anyOf:
+                  - type: string
+                  - type: "null"
               access:
                 type: string
                 enum:
@@ -38868,6 +38872,7 @@ components:
               - accountId
               - username
               - displayName
+              - fullName
               - access
               - level
               - recordKind
@@ -38885,6 +38890,10 @@ components:
                   type: string
                   minLength: 1
                 displayName:
+                  anyOf:
+                    - type: string
+                    - type: "null"
+                fullName:
                   anyOf:
                     - type: string
                     - type: "null"
@@ -38925,6 +38934,7 @@ components:
                 - accountId
                 - username
                 - displayName
+                - fullName
                 - access
                 - level
                 - recordKind

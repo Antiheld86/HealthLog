@@ -31,6 +31,7 @@ function activeGrant({
       id: "record-owner",
       username: "record-owner",
       displayName: "Record owner",
+      fullName: "Test Full Name",
       managedProfileAt,
     },
   };
@@ -91,6 +92,31 @@ describe("resolveAccountAccess", () => {
       }),
     );
     expect(access.recordKind).toBe("self");
+  });
+
+  it("carries the owner's full name to a read-only delegate", async () => {
+    // v1.37.2 — the record owner's full name crosses to whoever they share
+    // with, read-only included (maintainer decision 2026-08-08). It is the
+    // resolver that lets it cross, so it is the resolver that proves it: a
+    // READ grant, and the delegate's resolved entry still names the owner in
+    // full. If a future change drops `fullName` from the grantor `select`,
+    // this fails rather than silently reverting the disclosure to a nickname.
+    vi.mocked(prisma.accountGrant.findMany).mockResolvedValue([
+      activeGrant({ access: "READ" }),
+    ] as never);
+
+    const access = await resolveAccountAccess({
+      user: { id: "delegate" },
+      session: {},
+    });
+
+    expect(access.accounts[0]).toEqual(
+      expect.objectContaining({
+        access: "read",
+        canWrite: false,
+        fullName: "Test Full Name",
+      }),
+    );
   });
 
   it("keeps whole-record legacy payloads decodable and scoped payloads closed", () => {

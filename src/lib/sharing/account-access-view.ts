@@ -51,6 +51,14 @@ export interface AccountAccessEntry {
   username: string;
   displayName: string | null;
   /**
+   * v1.37.2 — the record owner's full name, when they have set one. Shown in
+   * front of a delegate on the switcher and the banner, ahead of the greeting
+   * name, so the person whose record they are entering reads as who they are
+   * rather than by a nickname. See {@link accountLabel} for the deliberate
+   * disclosure this carries; it is a maintainer decision, not an oversight.
+   */
+  fullName: string | null;
+  /**
    * The grant's level, as the owner offered it and the caller accepted it.
    *
    * The same value as {@link AccountAccessEntry.level}, under the name the
@@ -116,16 +124,29 @@ export interface AccountAccess {
 /**
  * The name to put in front of a person, given what the payload published.
  *
- * `displayName` when the account set one, the username otherwise. This is a
- * presentation fallback and not a derivation of anything the server decided —
- * both values are published, and which of the two reads better is the client's
- * business. Kept here so the banner, the switcher and the sharing panel cannot
- * disagree about what to call somebody.
+ * `fullName` when it is set, `displayName` next, the username last. All three
+ * are published; which reads best is the client's business, not a derivation
+ * of anything the server decided. Kept here so the banner, the switcher and
+ * the sharing panel cannot disagree about what to call somebody.
+ *
+ * `fullName` is optional on the argument on purpose: only the account-access
+ * entry carries it, so the switcher and the banner prefer it while the
+ * grant-view and actor shapes that never had it keep falling back to the
+ * greeting name exactly as before.
+ *
+ * v1.37.2 — the record owner's full name is shown to anyone they share with,
+ * read-only included; maintainer decision 2026-08-08. It is patient-identity
+ * data that until now stayed behind a MANAGE-gated export, so a future reader
+ * should not "tighten" this back as a leak: it is the intended behaviour, not
+ * an accident of the label falling through to it.
  */
 export function accountLabel(entry: {
   displayName: string | null;
   username: string;
+  fullName?: string | null;
 }): string {
+  const full = entry.fullName?.trim();
+  if (full && full.length > 0) return full;
   const named = entry.displayName?.trim();
   return named && named.length > 0 ? named : entry.username;
 }

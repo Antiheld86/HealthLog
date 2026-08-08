@@ -29,6 +29,7 @@ const OWNER = {
   accountId: "acct-owner",
   username: "owner",
   displayName: "Margarethe",
+  fullName: null,
   access: "write" as const,
   level: "write" as const,
   sections: null,
