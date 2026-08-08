@@ -8518,6 +8518,15 @@
   "vaccinations": {
     "title": "Vaccinazioni",
     "subtitle": "Il tuo libretto vaccinale, dose per dose.",
+    "listLoadError": "Impossibile caricare le vaccinazioni.",
+    "series": {
+      "booster": "Richiamo",
+      "ofTotal": "Dose {position} di {total}",
+      "doseN": "Dose {position}"
+    },
+    "row": {
+      "lot": "Lotto {lot}"
+    },
     "empty": {
       "title": "Nessuna vaccinazione registrata",
       "description": "Trascrivi il tuo libretto vaccinale riga per riga: bastano una data e il vaccino."

@@ -8518,6 +8518,15 @@
   "vaccinations": {
     "title": "Szczepienia",
     "subtitle": "Twoja karta szczepień, dawka po dawce.",
+    "listLoadError": "Nie udało się załadować szczepień.",
+    "series": {
+      "booster": "Dawka przypominająca",
+      "ofTotal": "Dawka {position} z {total}",
+      "doseN": "Dawka {position}"
+    },
+    "row": {
+      "lot": "Seria {lot}"
+    },
     "empty": {
       "title": "Nie zarejestrowano jeszcze żadnego szczepienia",
       "description": "Przepisz swoją kartę szczepień wiersz po wierszu — wystarczą data i szczepionka."

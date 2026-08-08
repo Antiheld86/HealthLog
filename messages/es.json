@@ -8518,6 +8518,15 @@
   "vaccinations": {
     "title": "Vacunas",
     "subtitle": "Tu registro de vacunación, dosis a dosis.",
+    "listLoadError": "No se pudieron cargar las vacunas.",
+    "series": {
+      "booster": "Refuerzo",
+      "ofTotal": "Dosis {position} de {total}",
+      "doseN": "Dosis {position}"
+    },
+    "row": {
+      "lot": "Lote {lot}"
+    },
     "empty": {
       "title": "Aún no hay ninguna vacuna registrada",
       "description": "Transcribe tu cartilla de vacunación línea por línea: bastan una fecha y la vacuna."

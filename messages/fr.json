@@ -8518,6 +8518,15 @@
   "vaccinations": {
     "title": "Vaccinations",
     "subtitle": "Votre carnet de vaccination, dose par dose.",
+    "listLoadError": "Impossible de charger les vaccinations.",
+    "series": {
+      "booster": "Rappel",
+      "ofTotal": "Dose {position} sur {total}",
+      "doseN": "Dose {position}"
+    },
+    "row": {
+      "lot": "Lot {lot}"
+    },
     "empty": {
       "title": "Aucune vaccination enregistrée",
       "description": "Recopiez votre carnet de vaccination ligne par ligne : une date et le vaccin suffisent."

@@ -8518,6 +8518,15 @@
   "vaccinations": {
     "title": "Impfungen",
     "subtitle": "Dein Impfpass, Dosis für Dosis.",
+    "listLoadError": "Impfungen konnten nicht geladen werden.",
+    "series": {
+      "booster": "Auffrischung",
+      "ofTotal": "Dosis {position} von {total}",
+      "doseN": "{position}. Dosis"
+    },
+    "row": {
+      "lot": "Charge {lot}"
+    },
     "empty": {
       "title": "Noch keine Impfung erfasst",
       "description": "Übertrage deinen Impfpass Zeile für Zeile — Datum und Impfstoff genügen."

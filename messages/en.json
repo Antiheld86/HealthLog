@@ -8518,6 +8518,15 @@
   "vaccinations": {
     "title": "Vaccinations",
     "subtitle": "Your immunization record, dose by dose.",
+    "listLoadError": "Vaccinations could not be loaded.",
+    "series": {
+      "booster": "Booster",
+      "ofTotal": "Dose {position} of {total}",
+      "doseN": "Dose {position}"
+    },
+    "row": {
+      "lot": "Lot {lot}"
+    },
     "empty": {
       "title": "No vaccination logged yet",
       "description": "Transcribe your vaccination card line by line — a date and the vaccine are enough."
