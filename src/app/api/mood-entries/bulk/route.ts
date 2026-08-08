@@ -447,12 +447,7 @@ async function postBulk(request: NextRequest): Promise<Response> {
         // client was already being told.
         // v1.38 — the day context, inside the same transaction as the row, so
         // an entry reported as skipped really did write nothing.
-        await persistMoodContext(
-          tx,
-          upserted.id,
-          user.id,
-          parsedContext.data,
-        );
+        await persistMoodContext(tx, upserted.id, user.id, parsedContext.data);
 
         if (
           (entry.tagKeys && entry.tagKeys.length > 0) ||

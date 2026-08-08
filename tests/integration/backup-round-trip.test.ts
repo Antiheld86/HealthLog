@@ -106,6 +106,7 @@ const COUNT_BACK: Record<
   MedicationSideEffect: (p, userId) =>
     p.medicationSideEffect.count({ where: { userId } }),
   MoodEntry: (p, userId) => p.moodEntry.count({ where: { userId } }),
+  MoodContext: (p, userId) => p.moodContext.count({ where: { userId } }),
   MoodEntryTagLink: (p, userId) =>
     p.moodEntryTagLink.count({ where: { moodEntry: { userId } } }),
   MoodTag: (p, userId) => p.moodTag.count({ where: { userId } }),
@@ -233,6 +234,14 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       source: "MOODLOG",
       moodLoggedAt: AT("2026-07-01T20:00:00.000Z"),
       tagLinks: { create: { moodTagId: moodTag.id, rating: 4 } },
+      context: {
+        create: {
+          userId: OWNER_ID,
+          workStatus: "regular",
+          contactCircles: JSON.stringify(["family"]),
+          leisureJoy: 6,
+        },
+      },
     },
   });
 
