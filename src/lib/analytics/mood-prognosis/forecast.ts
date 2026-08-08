@@ -23,7 +23,7 @@ import {
 } from "./features";
 import { PROGNOSIS_WRITE_WINDOW_DAYS } from "./load";
 import { featureContributions, predictWithFit } from "./ridge";
-import { forecastGate } from "./thresholds";
+import { MIN_ENTRIES_FOR_FORECAST, forecastGate } from "./thresholds";
 import { fitPrognosisModel } from "./validate";
 
 /** The lowest and highest value the target scale can express. */
@@ -100,6 +100,18 @@ export function computeForecast(
   const matrix = buildFeatureMatrix(days);
   const model = matrix === null ? null : fitPrognosisModel(matrix);
   if (model === null) return { status: "refused", reason: "no-pattern" };
+
+  // The second floor, and the one the rated-day gate above cannot see. A day
+  // missing one of the selected features is dropped rather than imputed, so a
+  // sparse-context account can clear thirty rated days and still fit on a
+  // handful of complete rows. `n` shown beside the value and a wide band on a
+  // small fit keep it from being dishonest, but a forecast "built from twelve
+  // days" past a floor that was supposed to mean thirty is a floor that does
+  // not hold. The number of days the fit ACTUALLY used has to clear the same
+  // threshold, not only the number of days that carried a rating.
+  if (model.n < MIN_ENTRIES_FOR_FORECAST) {
+    return { status: "refused", reason: "no-pattern" };
+  }
 
   const rows: ForecastRow[] = [];
   for (const day of rated.slice(-writeWindowDays)) {
