@@ -281,7 +281,9 @@
     "familyHistoryTitle": "Anamnesi familiare",
     "familyHistoryColRelationship": "Parentela",
     "familyHistoryColCondition": "Condizione",
-    "familyHistoryColAgeAtOnset": "Età di esordio"
+    "familyHistoryColAgeAtOnset": "Età di esordio",
+    "labsSourceRangeNote": "* L'intervallo di riferimento proviene dal referto stesso e differisce da quello salvato:",
+    "labsCatalogRangeLabel": "intervallo salvato"
   },
   "errorBoundary": {
     "title": "Qualcosa è andato storto",
@@ -6701,6 +6703,7 @@
         "restoreSkippedCycleSymptom": "Sintomo del ciclo",
         "restoreSkippedIllnessSymptom": "Sintomo di malattia",
         "restoreSkippedMoodFactor": "Fattore dell'umore",
+        "restoreSkippedMoodTag": "Etichetta dell'umore",
         "docsLink": "Documentazione"
       },
       "danger-zone": {
@@ -8046,7 +8049,12 @@
       "qualitativePlaceholder": "es. negativo",
       "qualNegative": "negativo",
       "qualPositive": "positivo",
-      "qualBorderline": "borderline"
+      "qualBorderline": "borderline",
+      "sourceRange": "Intervallo stampato sul referto",
+      "sourceRangePlaceholder": "es. 3,5 - 5,0 oppure < 5",
+      "sourceRangeAdd": "+ Aggiungi l'intervallo dal referto",
+      "sourceRangeHint": "Facoltativo. Vale solo per questa misura; l'intervallo salvato resta invariato.",
+      "sourceRangeUnparsed": "Conservato così com'è: non è stato letto alcun intervallo numerico."
     },
     "backToLabs": "Torna ai risultati",
     "hasNote": "Nota",
@@ -8077,7 +8085,10 @@
         "90": "90 g",
         "365": "1 a",
         "all": "Tutto"
-      }
+      },
+      "sourceRangeLabel": "Intervallo del referto",
+      "sourceBandLegend": "Seconda banda: l'intervallo stampato sul referto del {date}.",
+      "sourceBandMixed": "Seconda banda: l'intervallo stampato sul referto più recente. Referti precedenti nel periodo indicano intervalli diversi."
     },
     "biomarker": {
       "manageTitle": "Biomarcatori",
@@ -8252,11 +8263,17 @@
       "fileTooLarge": "Il file è troppo grande (max 12 MB).",
       "fileType": "Carica un JPEG, PNG, WebP o PDF.",
       "extractFailed": "Impossibile leggere il referto. Prova con una foto più nitida.",
-      "pdfNeedsAnthropic": "La scansione PDF richiede un provider di visione Claude; carica invece una foto."
+      "pdfNeedsAnthropic": "La scansione PDF richiede un provider di visione Claude; carica invece una foto.",
+      "refTextLabel": "Intervallo come stampato",
+      "refTextPlaceholder": "es. 3,5 - 5,0"
     },
     "loadMoreReadings": "Carica altre misurazioni",
     "documentsLink": "Documenti dei referti",
-    "notLinkedYet": "Non ancora collegato a un biomarcatore"
+    "notLinkedYet": "Non ancora collegato a un biomarcatore",
+    "sourceRange": {
+      "fromReport": "Intervallo del referto {range}",
+      "catalogDiffers": "il tuo intervallo {range}"
+    }
   },
   "modules": {
     "cycle": {

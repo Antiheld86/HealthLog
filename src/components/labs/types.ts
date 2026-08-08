@@ -1,4 +1,7 @@
-import type { ReferenceRangeStatus } from "@/lib/validations/labs";
+import type {
+  ReferenceRangeOrigin,
+  ReferenceRangeStatus,
+} from "@/lib/validations/labs";
 
 /** A lab-result row as the list / create endpoints serialise it. */
 export interface LabResultDto {
@@ -12,8 +15,25 @@ export interface LabResultDto {
   /** v1.18.9 — qualitative result text ("negativ" / …); null for a numeric row. */
   valueText: string | null;
   unit: string;
+  /**
+   * The window this reading is judged against and the one `rangeStatus` was
+   * computed from: the range its own report printed when it carries one, the
+   * catalog band otherwise. Render these and the range shown always matches
+   * the verdict shown.
+   */
   referenceLow: number | null;
   referenceHigh: number | null;
+  /** The catalog marker's band, so both windows can be drawn. */
+  catalogReferenceLow: number | null;
+  catalogReferenceHigh: number | null;
+  /** The window the source report printed; the text verbatim, bounds when derivable. */
+  sourceReferenceLow: number | null;
+  sourceReferenceHigh: number | null;
+  sourceReferenceText: string | null;
+  /** Which window is in force. */
+  referenceOrigin: ReferenceRangeOrigin;
+  /** True when the report's window and the catalog band state different limits. */
+  referenceDivergesFromCatalog: boolean;
   takenAt: string;
   source: string;
   hasNote: boolean;

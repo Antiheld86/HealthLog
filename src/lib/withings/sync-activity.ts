@@ -39,6 +39,7 @@ import { prisma } from "@/lib/db";
 import { getEvent } from "@/lib/logging/context";
 import { safeFetch } from "@/lib/safe-fetch";
 import { getUnitForType } from "@/lib/validations/measurement";
+import { dropImplausibleMeasurements } from "@/lib/measurements/plausibility-gate";
 import {
   collapseToTypeDayKeys,
   recomputeBucketsForMeasurement,
@@ -342,7 +343,7 @@ export async function syncUserActivity(
     value: number;
     externalId: string;
   }
-  const planned: PlannedRow[] = [];
+  const collected: PlannedRow[] = [];
   for (const entry of entries) {
     if (!entry.date) continue;
     const measuredAt = activityMeasuredAt(entry.date);
@@ -352,7 +353,7 @@ export async function syncUserActivity(
       // valid (a day of rest still records 0 steps). Only skip
       // undefined / null / NaN.
       if (raw == null || !Number.isFinite(raw)) continue;
-      planned.push({
+      collected.push({
         type,
         measuredAt,
         value: raw,
@@ -360,6 +361,15 @@ export async function syncUserActivity(
       });
     }
   }
+
+  // A daily-activity total the app's own band calls impossible (a step count
+  // past 200 000, a negative distance) is a provider artefact, not a day. Drop
+  // it before the plan is read against the table, so it can neither insert a
+  // fresh impossible slot nor overwrite a good stored one.
+  const planned = dropImplausibleMeasurements("withings", collected, (p) => ({
+    type: p.type,
+    value: p.value,
+  }));
 
   if (planned.length > 0) {
     const slotKey = (type: MeasurementType, measuredAt: Date) =>

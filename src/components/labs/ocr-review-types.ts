@@ -16,6 +16,8 @@ export interface OcrReviewRow {
   unit: string | null;
   referenceLow: number | null;
   referenceHigh: number | null;
+  /** The reference range as printed on the scanned report, verbatim. */
+  referenceText: string | null;
   /** ISO calendar day (YYYY-MM-DD) or null. */
   takenAt: string | null;
   confidence: OcrExtractedRowDto["confidence"];
@@ -39,6 +41,7 @@ export function seedReviewRows(
     unit: row.unit,
     referenceLow: row.referenceLow,
     referenceHigh: row.referenceHigh,
+    referenceText: row.referenceText,
     takenAt: row.takenAt ?? fallbackDate,
     confidence: row.confidence,
     biomarkerMatch: row.biomarkerMatch,

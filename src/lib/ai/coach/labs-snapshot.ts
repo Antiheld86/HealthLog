@@ -37,7 +37,7 @@
  * is always owner-scoped and safe to read), so the block is `null` only when the
  * account has no recent readings.
  */
-import { classifyReferenceRange } from "@/lib/labs/reference-range";
+import { classifyAgainstEffectiveRange } from "@/lib/labs/reference-range";
 import { resolveLabFields } from "@/lib/labs/serialise";
 import { sanitizeForPrompt } from "@/lib/insights/sanitize";
 import { prisma } from "@/lib/db";
@@ -131,6 +131,9 @@ export async function buildLabsSnapshotBlock(
       unit: true,
       referenceLow: true,
       referenceHigh: true,
+      sourceReferenceLow: true,
+      sourceReferenceHigh: true,
+      sourceReferenceText: true,
       takenAt: true,
       biomarkerId: true,
       biomarker: {
@@ -181,15 +184,13 @@ export async function buildLabsSnapshotBlock(
       referenceLow: resolved.referenceLow,
       referenceHigh: resolved.referenceHigh,
       // A qualitative row has nothing to compare against the bounds → neutral
-      // "unknown", never a fabricated verdict. A numeric row classifies.
-      rangeStatus:
-        row.value === null
-          ? "unknown"
-          : classifyReferenceRange(
-              row.value,
-              resolved.referenceLow,
-              resolved.referenceHigh,
-            ),
+      // "unknown", never a fabricated verdict. A numeric row classifies against
+      // the window in force for it — the report's own range when it carries
+      // one, the catalog band otherwise. Same rule as every other lab surface.
+      rangeStatus: classifyAgainstEffectiveRange(
+        row.value,
+        resolved.effectiveRange,
+      ),
       takenAt: row.takenAt.toISOString(),
     });
 

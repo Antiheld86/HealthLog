@@ -184,6 +184,9 @@ async function postLabResult(request: NextRequest) {
     unit,
     referenceLow,
     referenceHigh,
+    sourceReferenceLow,
+    sourceReferenceHigh,
+    sourceReferenceText,
     takenAt,
     note,
     source,
@@ -248,6 +251,13 @@ async function postLabResult(request: NextRequest) {
       unit: biomarker.unit,
       referenceLow: biomarker.lowerBound,
       referenceHigh: biomarker.upperBound,
+      // The window this reading's own report printed, kept beside the catalog
+      // stamp rather than folded into it: it governs THIS reading's verdict,
+      // and the catalog band stays the net for every reading without one. A
+      // qualitative reading has no window to record.
+      sourceReferenceLow: isQualitative ? null : (sourceReferenceLow ?? null),
+      sourceReferenceHigh: isQualitative ? null : (sourceReferenceHigh ?? null),
+      sourceReferenceText: isQualitative ? null : (sourceReferenceText ?? null),
       takenAt,
       // v1.25 (iOS #36) — provenance: the on-device-OCR path posts
       // `source: "OCR"`; an omitted field stays "MANUAL" so the legacy
@@ -258,6 +268,7 @@ async function postLabResult(request: NextRequest) {
     },
   });
   invalidateUserHealthScore(user.id);
+  const dto = serialiseLabResult(created, biomarker);
 
   await auditLog("labResult.create", {
     userId: user.id,
@@ -275,6 +286,9 @@ async function postLabResult(request: NextRequest) {
       structured: biomarkerId !== undefined,
       // v1.25 (iOS #36) — provenance of the reading ("MANUAL" | "OCR").
       source: source ?? "MANUAL",
+      // Which window governs this reading's verdict, so a dashboard can see
+      // how often a report's own range displaces the catalog band.
+      referenceOrigin: dto.referenceOrigin,
     },
   });
 
@@ -298,5 +312,5 @@ async function postLabResult(request: NextRequest) {
     source: "manual",
   }).catch(() => {});
 
-  return apiSuccess(serialiseLabResult(created, biomarker), 201);
+  return apiSuccess(dto, 201);
 }

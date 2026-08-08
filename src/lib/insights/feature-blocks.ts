@@ -10,7 +10,7 @@
  * point (`extractFeatures`) stays in the hub.
  */
 import { prisma } from "@/lib/db";
-import { classifyReferenceRange } from "@/lib/labs/reference-range";
+import { classifyAgainstEffectiveRange } from "@/lib/labs/reference-range";
 import { calendarDaysUntil } from "@/lib/measurement-reminders/due-day";
 import { resolveLabFields } from "@/lib/labs/serialise";
 import { readRollupBuckets } from "@/lib/rollups/measurement-rollups";
@@ -164,6 +164,9 @@ export async function readLabsBriefingBlock(
       valueText: true,
       referenceLow: true,
       referenceHigh: true,
+      sourceReferenceLow: true,
+      sourceReferenceHigh: true,
+      sourceReferenceText: true,
       takenAt: true,
       biomarkerId: true,
       biomarker: {
@@ -198,14 +201,10 @@ export async function readLabsBriefingBlock(
   for (const list of byMarker.values()) {
     const latest = list[0];
     const resolved = resolveLabFields(latest, latest.biomarker);
-    const rangeStatus =
-      latest.value === null
-        ? ("unknown" as const)
-        : classifyReferenceRange(
-            latest.value,
-            resolved.referenceLow,
-            resolved.referenceHigh,
-          );
+    const rangeStatus = classifyAgainstEffectiveRange(
+      latest.value,
+      resolved.effectiveRange,
+    );
 
     // Trend = latest numeric reading vs the immediately prior numeric reading.
     let trend: "rising" | "falling" | "flat" | null = null;

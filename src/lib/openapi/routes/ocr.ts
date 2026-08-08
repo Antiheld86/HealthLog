@@ -53,6 +53,10 @@ const extractedRow = z
     unit: z.string().nullable(),
     referenceLow: z.number().nullable(),
     referenceHigh: z.number().nullable(),
+    referenceText: z.string().nullable().meta({
+      description:
+        'The reference range EXACTLY as printed on the report, verbatim ("3,5 - 5,0", "< 116", "bis 5,0", "negativ"). `referenceLow` / `referenceHigh` carry the same window reduced to numbers WHEN it reduces to numbers; this field carries it either way, so a window stated in words is not lost between the report and the reading.',
+    }),
     takenAt: z.string().nullable(),
     confidence: extractConfidence,
     biomarkerMatch: z.enum(["new", "existing"]),
@@ -87,6 +91,13 @@ const committedRow = z
     unit: z.string(),
     referenceLow: z.number().nullable(),
     referenceHigh: z.number().nullable(),
+    catalogReferenceLow: z.number().nullable(),
+    catalogReferenceHigh: z.number().nullable(),
+    sourceReferenceLow: z.number().nullable(),
+    sourceReferenceHigh: z.number().nullable(),
+    sourceReferenceText: z.string().nullable(),
+    referenceOrigin: z.enum(["source", "catalog", "none"]),
+    referenceDivergesFromCatalog: z.boolean(),
     takenAt: z.string(),
     source: z.string(),
     hasNote: z.boolean(),
@@ -94,7 +105,11 @@ const committedRow = z
     createdAt: z.string(),
     updatedAt: z.string(),
   })
-  .meta({ id: "OcrCommittedLabResult" });
+  .meta({
+    id: "OcrCommittedLabResult",
+    description:
+      "A written reading. Its reference window resolves exactly as it does on `/api/labs` — see `LabResult`.",
+  });
 
 const commitResponse = z
   .object({

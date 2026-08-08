@@ -7,8 +7,15 @@
  * `code.text` for the common biomarkers, and stamps the canonical UCUM `code`
  * on the value WHEN the recorded unit matches the mapped canonical symbol. An
  * analyte that does NOT resolve keeps the honest text-only `code` +
- * display-only `unit` (no fabricated terminology). The lab's reference bounds
- * map onto R4 `referenceRange`.
+ * display-only `unit` (no fabricated terminology).
+ *
+ * The reference bounds map onto R4 `referenceRange`, and they are the SAME
+ * bounds the app's own verdict uses: the window the reading's source report
+ * printed when it carries one, the catalog band otherwise, already resolved
+ * upstream in `loadLabResults`. When the source report stated its window in
+ * words the bounds could not be read from ("negativ", "siehe Befund"), that
+ * string rides on `referenceRange.text` so a receiver still gets what the lab
+ * wrote rather than a silently empty element.
  */
 import type { DoctorReportData } from "@/lib/doctor-report-data";
 import { LOINC_SYSTEM, UCUM_SYSTEM } from "@/lib/fhir/loinc-map";
@@ -82,8 +89,11 @@ export function labObservations(
     // The bounds are stated in the SAME unit as the value, so they carry the
     // SAME coding — a bare unit beside a coded value leaves a receiver unable
     // to compare the two.
+    const sourceText =
+      lab.referenceOrigin === "source" ? lab.sourceReferenceText : null;
+    const hasBounds = lab.referenceLow !== null || lab.referenceHigh !== null;
     const referenceRange: FhirObservationReferenceRange[] | undefined =
-      lab.referenceLow !== null || lab.referenceHigh !== null
+      hasBounds || sourceText
         ? [
             {
               ...(lab.referenceLow !== null
@@ -92,6 +102,7 @@ export function labObservations(
               ...(lab.referenceHigh !== null
                 ? { high: quantity(lab.referenceHigh) }
                 : {}),
+              ...(sourceText ? { text: sourceText } : {}),
             },
           ]
         : undefined;

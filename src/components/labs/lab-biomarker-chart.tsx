@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { CHART_HEIGHT_PX } from "@/lib/charts/constants";
 import { prefersReducedMotion } from "@/lib/charts/reduced-motion";
 import { formatLabValue } from "@/lib/labs/format-value";
+import { formatReferenceRange } from "@/lib/labs/reference-range";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
 
 import { RichChartTooltip, type RichTooltipRow } from "../charts/chart-tooltip";
@@ -32,6 +33,15 @@ import type { LabResultDto } from "./types";
  * MUTED primary fill — never a danger colour — honouring the no-alarming-
  * colour rule. Every reading carries the same y-axis unit because a chart is
  * one biomarker only.
+ *
+ * A SECOND band draws the window a source report printed, when the readings in
+ * view carry one. It is visually distinct from the catalog band — an outlined
+ * band in the chart's secondary hue against the catalog's filled primary — and
+ * both stay muted; the in/out verdict is the badge's job, never the chart's
+ * colour. The source window is a per-reading fact, so the band is drawn from
+ * the NEWEST reading in view that carries one and the legend dates it. When
+ * the readings in view carry more than one distinct printed window the legend
+ * says so rather than implying one window covered the whole series.
  */
 
 const RANGE_DAYS = [
@@ -46,6 +56,26 @@ type RangeKey = (typeof RANGE_DAYS)[number]["key"];
 interface ChartPoint {
   timestamp: number;
   value: number;
+  /** The window this reading was judged against, for the tooltip. */
+  referenceLow: number | null;
+  referenceHigh: number | null;
+  referenceOrigin: LabResultDto["referenceOrigin"];
+  sourceReferenceText: string | null;
+}
+
+/** The source window drawn as the second band, resolved from the readings in view. */
+interface SourceBand {
+  low: number | null;
+  high: number | null;
+  /** The reading the band was taken from. */
+  takenAt: number;
+  /** True when the readings in view printed more than one distinct window. */
+  mixed: boolean;
+}
+
+/** Identity of a printed window, for counting distinct ones. */
+function bandKey(low: number | null, high: number | null): string {
+  return `${low ?? ""}|${high ?? ""}`;
 }
 
 export function LabBiomarkerChart({
@@ -87,8 +117,36 @@ export function LabBiomarkerChart({
     return filtered.map((r) => ({
       timestamp: new Date(r.takenAt).getTime(),
       value: r.value,
+      referenceLow: r.referenceLow,
+      referenceHigh: r.referenceHigh,
+      referenceOrigin: r.referenceOrigin,
+      sourceReferenceText: r.sourceReferenceText,
     }));
   }, [readings, range, nowMs]);
+
+  // The source band: the newest in-view reading whose report printed a window
+  // with usable bounds. Readings without one contribute nothing — an absent
+  // window is absent, not a reason to widen or narrow the band.
+  const sourceBand = useMemo<SourceBand | null>(() => {
+    const withWindow = points.filter(
+      (p) =>
+        p.referenceOrigin === "source" &&
+        (p.referenceLow !== null || p.referenceHigh !== null),
+    );
+    if (withWindow.length === 0) return null;
+    const newest = withWindow.reduce((a, b) =>
+      b.timestamp > a.timestamp ? b : a,
+    );
+    const distinct = new Set(
+      withWindow.map((p) => bandKey(p.referenceLow, p.referenceHigh)),
+    );
+    return {
+      low: newest.referenceLow,
+      high: newest.referenceHigh,
+      takenAt: newest.timestamp,
+      mixed: distinct.size > 1,
+    };
+  }, [points]);
 
   // Y domain wraps both the data and the reference window so the band is
   // always visible even when every reading sits inside it.
@@ -97,15 +155,23 @@ export function LabBiomarkerChart({
     const candidates = [...values];
     if (lowerBound != null) candidates.push(lowerBound);
     if (upperBound != null) candidates.push(upperBound);
+    // The source band has to fit too, or the second band is drawn off-canvas
+    // and the chart silently shows one window while claiming two.
+    if (sourceBand?.low != null) candidates.push(sourceBand.low);
+    if (sourceBand?.high != null) candidates.push(sourceBand.high);
     if (candidates.length === 0) return [0, 1];
     const min = Math.min(...candidates);
     const max = Math.max(...candidates);
     const pad = (max - min || Math.abs(max) || 1) * 0.1;
     return [min - pad, max + pad];
-  }, [points, lowerBound, upperBound]);
+  }, [points, lowerBound, upperBound, sourceBand]);
 
   const animate = !prefersReducedMotion();
   const primary = "var(--primary)";
+  // A second muted hue from the chart palette. Distinct from the primary band
+  // by hue AND by treatment (outline vs fill), so the two are told apart
+  // without relying on colour alone.
+  const secondary = "var(--chart-2)";
 
   return (
     <div className="space-y-3">
@@ -185,6 +251,42 @@ export function LabBiomarkerChart({
                   strokeDasharray="4 4"
                 />
               ) : null}
+              {/* The source window — outlined, not filled, so it reads as a
+                  second band over the catalog one rather than a second fill
+                  competing with it. Same no-alarm-colour rule. */}
+              {sourceBand &&
+              sourceBand.low != null &&
+              sourceBand.high != null ? (
+                <ReferenceArea
+                  y1={sourceBand.low}
+                  y2={sourceBand.high}
+                  fill={secondary}
+                  fillOpacity={0.06}
+                  stroke={secondary}
+                  strokeOpacity={0.5}
+                  strokeDasharray="2 3"
+                />
+              ) : null}
+              {sourceBand &&
+              sourceBand.low != null &&
+              sourceBand.high == null ? (
+                <ReferenceLine
+                  y={sourceBand.low}
+                  stroke={secondary}
+                  strokeOpacity={0.6}
+                  strokeDasharray="2 3"
+                />
+              ) : null}
+              {sourceBand &&
+              sourceBand.high != null &&
+              sourceBand.low == null ? (
+                <ReferenceLine
+                  y={sourceBand.high}
+                  stroke={secondary}
+                  strokeOpacity={0.6}
+                  strokeDasharray="2 3"
+                />
+              ) : null}
               <Tooltip
                 content={(props) => {
                   const active = props.active ?? false;
@@ -201,6 +303,22 @@ export function LabBiomarkerChart({
                       color: primary,
                     },
                   ];
+                  // Name the window THIS reading was judged against. Two
+                  // readings on one chart can carry different printed windows,
+                  // so the band alone cannot answer it per point.
+                  if (point.referenceOrigin === "source") {
+                    rows.push({
+                      name: t("labs.chart.sourceRangeLabel"),
+                      value:
+                        point.sourceReferenceText ??
+                        `${formatReferenceRange(
+                          point.referenceLow,
+                          point.referenceHigh,
+                          formatLabValue,
+                        )} ${unit}`.trim(),
+                      color: secondary,
+                    });
+                  }
                   return (
                     <RichChartTooltip
                       active
@@ -221,6 +339,15 @@ export function LabBiomarkerChart({
               />
             </ComposedChart>
           </ResponsiveContainer>
+          {sourceBand ? (
+            <p className="text-muted-foreground mt-2 text-xs">
+              {sourceBand.mixed
+                ? t("labs.chart.sourceBandMixed")
+                : t("labs.chart.sourceBandLegend", {
+                    date: fmt.dateShortSmart(new Date(sourceBand.takenAt)),
+                  })}
+            </p>
+          ) : null}
         </div>
       )}
     </div>

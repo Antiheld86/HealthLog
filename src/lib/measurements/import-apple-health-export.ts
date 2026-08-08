@@ -720,6 +720,16 @@ export async function streamParseExportXml(
           ),
         );
 
+        // The reconciler carries the same plausibility gate the block above
+        // already applied, so this arm means the two disagreed. Tally it under
+        // the same counter the earlier guard uses and count no row.
+        if (verdict.status === "rejected_range") {
+          unknown[`${type}::aggregate_out_of_range`] =
+            (unknown[`${type}::aggregate_out_of_range`] ?? 0) + 1;
+          stat.durationMs += Date.now() - rowStart;
+          continue;
+        }
+
         cumulativeEstimatedDays.add(dayKey);
         cumulativeEstimatedRows += 1;
         if (verdict.status === "inserted") {

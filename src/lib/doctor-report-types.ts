@@ -241,8 +241,23 @@ export interface DoctorReportData {
      */
     valueText: string | null;
     unit: string;
+    /**
+     * The reference window this reading is judged against: the range printed
+     * on its own report when it carries one, the catalog band otherwise.
+     * Resolved server-side through `resolveEffectiveReferenceRange` so the PDF
+     * marker, the FHIR `referenceRange`, and the API verdict agree.
+     */
     referenceLow: number | null;
     referenceHigh: number | null;
+    /** The catalog band, kept so the PDF can name a divergence. */
+    catalogReferenceLow: number | null;
+    catalogReferenceHigh: number | null;
+    /** The window the source report printed, verbatim; null when it printed none. */
+    sourceReferenceText: string | null;
+    /** Which of the two windows `referenceLow` / `referenceHigh` came from. */
+    referenceOrigin: "source" | "catalog" | "none";
+    /** True when the report's window and the catalog band state different limits. */
+    referenceDivergesFromCatalog: boolean;
     /** ISO timestamp of the latest reading. */
     takenAt: string;
     /** Count of readings for this analyte in the window (≥ 1). */

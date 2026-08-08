@@ -22,6 +22,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { apiGet, apiPost } from "@/lib/api/api-fetch";
 import { localizedApiError } from "@/lib/api/localized-error";
+import { parseReferenceRange } from "@/lib/labs/parse-reference-range";
 import { formatReferenceRange } from "@/lib/labs/reference-range";
 import { formatLabValue } from "@/lib/labs/format-value";
 import { useTranslations } from "@/lib/i18n/context";
@@ -118,6 +119,13 @@ export function LabForm({
   const [valueText, setValueText] = useState("");
   const [takenAt, setTakenAt] = useState(defaultTakenAtValue);
   const [note, setNote] = useState("");
+  // The window the paper report printed for THIS reading. Optional and folded
+  // away by default: most entries are typed against a catalog marker and never
+  // need it, and a field nobody fills is a field in the way. One text input,
+  // because that is how a report states it — "3,5 - 5,0", "< 5", "bis 5,0".
+  // The bounds are derived from what is typed; what is typed is kept verbatim.
+  const [sourceRangeOpen, setSourceRangeOpen] = useState(false);
+  const [sourceRange, setSourceRange] = useState("");
   // v1.30.1 H3 — which submit button is in flight, so the OTHER one doesn't
   // also show a spinner. `!== null` replaces the old plain `submitting`
   // boolean for every disabled check below.
@@ -193,11 +201,27 @@ export function LabForm({
 
     setPendingAction(keepOpen ? "saveAndAddAnother" : "save");
     try {
+      // Parse client-side so the user sees the derived window before saving,
+      // and send BOTH: the bounds where they could be read, the text always.
+      const printed = isQualitative
+        ? null
+        : parseReferenceRange(sourceRange, selected?.unit);
       const created = await apiPost<LabResultDto>("/api/labs", {
         biomarkerId,
         ...(isQualitative
           ? { valueText: qualitativeValue }
           : { value: numericValue }),
+        ...(printed
+          ? {
+              ...(printed.low !== null
+                ? { sourceReferenceLow: printed.low }
+                : {}),
+              ...(printed.high !== null
+                ? { sourceReferenceHigh: printed.high }
+                : {}),
+              sourceReferenceText: printed.text,
+            }
+          : {}),
         takenAt: new Date(takenAt).toISOString(),
         ...(note.trim() ? { note: note.trim() } : {}),
       });
@@ -221,6 +245,8 @@ export function LabForm({
         setValue("");
         setValueText("");
         setNote("");
+        // The next analyte off the same report has its own printed window.
+        setSourceRange("");
         setError(null);
         onSavedKeepOpen?.(created);
         // Return focus to wherever the next entry starts so the flow
@@ -250,6 +276,20 @@ export function LabForm({
         selected.upperBound,
         formatLabValue,
       )
+    : "";
+
+  // What the typed string resolved to, shown back so the user can see whether
+  // a window was read out of it before the reading is saved. When none was,
+  // the hint says the text is kept as written rather than staying silent.
+  const parsedSourceRange = parseReferenceRange(sourceRange, selected?.unit);
+  const sourceRangeHint = parsedSourceRange
+    ? parsedSourceRange.low === null && parsedSourceRange.high === null
+      ? t("labs.form.sourceRangeUnparsed")
+      : `${formatReferenceRange(
+          parsedSourceRange.low,
+          parsedSourceRange.high,
+          formatLabValue,
+        )} ${selected?.unit ?? ""}`.trim()
     : "";
 
   const footerNode = (
@@ -413,6 +453,39 @@ export function LabForm({
           <p className="text-muted-foreground text-xs">
             {t("labs.referenceLabel")} {referenceText} {selected.unit}
           </p>
+        ) : null}
+
+        {resultType === "numeric" ? (
+          <div className="space-y-1.5">
+            {sourceRangeOpen ? (
+              <>
+                <Label htmlFor="lab-sourceRange">
+                  {t("labs.form.sourceRange")}
+                </Label>
+                <Input
+                  id="lab-sourceRange"
+                  value={sourceRange}
+                  onChange={(e) => setSourceRange(e.target.value)}
+                  placeholder={t("labs.form.sourceRangePlaceholder")}
+                  maxLength={120}
+                  autoFocus
+                />
+                <p className="text-muted-foreground text-xs">
+                  {sourceRangeHint || t("labs.form.sourceRangeHint")}
+                </p>
+              </>
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground h-auto px-0 text-xs"
+                onClick={() => setSourceRangeOpen(true)}
+              >
+                {t("labs.form.sourceRangeAdd")}
+              </Button>
+            )}
+          </div>
         ) : null}
 
         <div className="space-y-1.5">

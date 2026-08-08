@@ -57,6 +57,7 @@ function editToFactData(edit: InboundFactEdit): FactData {
       unit: edit.unit ?? null,
       referenceLow: edit.referenceLow ?? null,
       referenceHigh: edit.referenceHigh ?? null,
+      referenceText: edit.referenceText ?? null,
       effectiveDate: edit.effectiveDate ?? null,
     };
     return data;

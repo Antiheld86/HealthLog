@@ -20,10 +20,18 @@ export function buildClinicalRecordsNotesSection(
 
   // v1.17.1 — structured lab-results section. Populated when the `labs`
   // toggle is ON (default) and the user recorded at least one result in the
-  // window. One row per analyte (latest reading), with the lab's reference
-  // range and a NEUTRAL in/out-of-range marker — informative, never an
-  // alarming red. The marker is a quiet glyph (↓ / ↑ / —), not a colour, so
-  // the clinical PDF stays calm.
+  // window. One row per analyte (latest reading), with the reference range and
+  // a NEUTRAL in/out-of-range marker — informative, never an alarming red. The
+  // marker is a quiet glyph (↓ / ↑ / —), not a colour, so the clinical PDF
+  // stays calm.
+  //
+  // The reference column prints the window the reading was JUDGED against, and
+  // when that window came off the source report it prints the report's own
+  // string verbatim — a clinician comparing this table against the original
+  // report should read the same characters. A reading whose report window
+  // differs from the catalog band carries a footnote marker, and the catalog
+  // band is named beneath the table, because "3,9–5,4" and "3,5–5,0" disagree
+  // about the same number and a table that shows only one is a partial answer.
   if (data.labResults && data.labResults.length > 0) {
     y = ensureSpace(y, 6 + 18);
     doc.setFontSize(14);
@@ -54,6 +62,23 @@ export function buildClinicalRecordsNotesSection(
       }
     };
 
+    // The reference cell: the report's own string when the report stated the
+    // window, else the formatted catalog band. A divergence gets a "*" the
+    // note under the table explains.
+    const referenceCell = (
+      lr: NonNullable<typeof data.labResults>[number],
+    ): string => {
+      const printed =
+        lr.referenceOrigin === "source" && lr.sourceReferenceText
+          ? lr.sourceReferenceText
+          : rangeText(lr.referenceLow, lr.referenceHigh);
+      return lr.referenceDivergesFromCatalog ? `${printed} *` : printed;
+    };
+
+    const diverging = data.labResults.filter(
+      (lr) => lr.referenceDivergesFromCatalog,
+    );
+
     const labRows = data.labResults.map((lr) => {
       // v1.18.9 — a qualitative reading (`value === null`) prints its result
       // text in the value column and has no numeric range / status glyph.
@@ -63,7 +88,7 @@ export function buildClinicalRecordsNotesSection(
         isQualitative
           ? (lr.valueText ?? "")
           : `${num(lr.value as number)} ${lr.unit}`.trim(),
-        isQualitative ? "—" : rangeText(lr.referenceLow, lr.referenceHigh),
+        isQualitative ? "—" : referenceCell(lr),
         isQualitative
           ? ""
           : statusGlyph(lr.value as number, lr.referenceLow, lr.referenceHigh),
@@ -107,6 +132,30 @@ export function buildClinicalRecordsNotesSection(
     y =
       (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable
         .finalY + 8;
+
+    // Name every diverging marker's catalog band, so the reader can see both
+    // windows rather than being told only that they differ.
+    if (diverging.length > 0) {
+      y = ensureSpace(y, 4 + diverging.length * 4);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(110, 110, 110);
+      doc.text(t("doctorReport.labsSourceRangeNote"), margin, y);
+      y += 4;
+      for (const lr of diverging) {
+        doc.text(
+          `* ${lr.analyte}: ${t("doctorReport.labsCatalogRangeLabel")} ${rangeText(
+            lr.catalogReferenceLow,
+            lr.catalogReferenceHigh,
+          )} ${lr.unit}`.trim(),
+          margin,
+          y,
+        );
+        y += 4;
+      }
+      doc.setTextColor(30, 30, 30);
+      y += 4;
+    }
   }
 
   // v1.18.1 P4 — illness / condition episodes overlapping the window. Present

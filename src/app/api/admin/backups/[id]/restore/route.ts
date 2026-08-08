@@ -684,6 +684,10 @@ const handler = apiHandler(
               entry.factors.map((factor) => factor.key),
             );
             const factorKeys = [...new Set(referencedFactorKeys)];
+            const referencedTagKeys = payload.moodEntries.flatMap(
+              (entry) => entry.structuredTags,
+            );
+            const tagKeys = [...new Set(referencedTagKeys)];
             // Re-create the account's own tag definitions first. The lookup
             // below used to ask only for the seeded catalogue (`userId: null`),
             // so a single custom rated tag made the whole restore throw
@@ -740,6 +744,30 @@ const handler = apiHandler(
               referencedFactorKeys,
             );
 
+            // The BINARY half of the same taxonomy, looked up the same way and
+            // reported the same way. It gets its own family because an
+            // operator reading the report needs to know whether a rated
+            // factor's score or a ticked tag went missing; they are different
+            // losses on the same entry.
+            const tagRows =
+              tagKeys.length === 0
+                ? []
+                : await tx.moodTag.findMany({
+                    where: {
+                      key: { in: tagKeys },
+                      kind: "BINARY",
+                      OR: [{ userId: null }, { userId: ownerId }],
+                    },
+                    select: { id: true, key: true },
+                  });
+            const tagByKey = new Map(tagRows.map((tag) => [tag.key, tag.id]));
+            recordUnknownKeys(
+              skips,
+              "moodTag",
+              tagKeys.filter((key) => !tagByKey.has(key)),
+              referencedTagKeys,
+            );
+
             for (const entry of payload.moodEntries) {
               const moodLoggedAt = new Date(entry.loggedAt);
               const restoredData = {
@@ -747,10 +775,44 @@ const handler = apiHandler(
                 mood: entry.mood,
                 score: entry.score,
                 tags: entry.tags ?? null,
+                // The note comes back the way every other dual-column note
+                // does: ciphertext verbatim when the file carries it, and a
+                // portable file's plaintext re-encrypted on the way in, with
+                // the legacy column left null either way.
+                note: null,
+                noteEncrypted:
+                  entry.noteEncrypted == null
+                    ? encryptNote(entry.note ?? null)
+                    : decodeEncryptedBytes(entry.noteEncrypted),
                 source: entry.source ?? "MOODLOG",
                 externalId: entry.externalId ?? null,
                 moodLoggedAt,
+                // The zone the `date` string is anchored to. A file written
+                // before this rode the payload carries nothing, and NULL is
+                // what such a row meant anyway: the legacy Europe/Berlin
+                // reading. So an old file keeps its old day boundaries and a
+                // new one keeps the zone the person actually logged in.
+                tz: entry.tz ?? null,
+                // Mood reconciles last-writer-wins by `syncVersion`. Restoring
+                // at the schema default would hand the next sync round to any
+                // paired device still holding a higher number, and the device
+                // would overwrite the recovered row with what it had — a
+                // restore that loses to the client is worse than one that
+                // fails. An old file carries nothing here and keeps the
+                // default, which is the value those rows were written with.
+                ...(entry.syncVersion === undefined
+                  ? {}
+                  : { syncVersion: entry.syncVersion }),
                 deletedAt: entry.deletedAt ? new Date(entry.deletedAt) : null,
+                ...(entry.syncedAt
+                  ? { syncedAt: new Date(entry.syncedAt) }
+                  : {}),
+                ...(entry.createdAt
+                  ? { createdAt: new Date(entry.createdAt) }
+                  : {}),
+                ...(entry.updatedAt
+                  ? { updatedAt: new Date(entry.updatedAt) }
+                  : {}),
               };
               const createData = { userId: ownerId, ...restoredData };
               const restored = entry.id
@@ -798,8 +860,19 @@ const handler = apiHandler(
                     ]
                   : [];
               });
-              if (factorLinks.length > 0) {
-                await tx.moodEntryTagLink.createMany({ data: factorLinks });
+              // The other arm. A BINARY link carries no score — the presence
+              // of the row is the signal — so `rating` is NULL by definition,
+              // which is exactly what the backup's old tag-link filter took to
+              // mean "nothing here".
+              const tagLinks = entry.structuredTags.flatMap((key) => {
+                const moodTagId = tagByKey.get(key);
+                return moodTagId
+                  ? [{ moodEntryId: restored.id, moodTagId, rating: null }]
+                  : [];
+              });
+              const links = [...factorLinks, ...tagLinks];
+              if (links.length > 0) {
+                await tx.moodEntryTagLink.createMany({ data: links });
               }
             }
           }
@@ -894,6 +967,9 @@ const handler = apiHandler(
                 unit: lab.unit,
                 referenceLow: lab.referenceLow ?? null,
                 referenceHigh: lab.referenceHigh ?? null,
+                sourceReferenceLow: lab.sourceReferenceLow ?? null,
+                sourceReferenceHigh: lab.sourceReferenceHigh ?? null,
+                sourceReferenceText: lab.sourceReferenceText ?? null,
                 takenAt: new Date(lab.takenAt),
                 source: lab.source,
                 noteEncrypted:

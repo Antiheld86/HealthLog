@@ -281,7 +281,9 @@
     "familyHistoryTitle": "Antecedentes familiares",
     "familyHistoryColRelationship": "Parentesco",
     "familyHistoryColCondition": "Afección",
-    "familyHistoryColAgeAtOnset": "Edad de inicio"
+    "familyHistoryColAgeAtOnset": "Edad de inicio",
+    "labsSourceRangeNote": "* El rango de referencia procede del propio informe y difiere del rango guardado:",
+    "labsCatalogRangeLabel": "rango guardado"
   },
   "errorBoundary": {
     "title": "Algo ha salido mal",
@@ -6701,6 +6703,7 @@
         "restoreSkippedCycleSymptom": "Síntoma del ciclo",
         "restoreSkippedIllnessSymptom": "Síntoma de enfermedad",
         "restoreSkippedMoodFactor": "Factor de ánimo",
+        "restoreSkippedMoodTag": "Etiqueta de ánimo",
         "docsLink": "Documentación"
       },
       "danger-zone": {
@@ -8046,7 +8049,12 @@
       "qualitativePlaceholder": "p. ej. negativo",
       "qualNegative": "negativo",
       "qualPositive": "positivo",
-      "qualBorderline": "límite"
+      "qualBorderline": "límite",
+      "sourceRange": "Rango impreso en el informe",
+      "sourceRangePlaceholder": "p. ej. 3,5 - 5,0 o < 5",
+      "sourceRangeAdd": "+ Añadir el rango del informe",
+      "sourceRangeHint": "Opcional. Se aplica solo a esta lectura; tu rango guardado no cambia.",
+      "sourceRangeUnparsed": "Se guarda tal cual: no se pudo leer un rango numérico."
     },
     "backToLabs": "Volver a los resultados",
     "hasNote": "Nota",
@@ -8077,7 +8085,10 @@
         "90": "90 d",
         "365": "1 a",
         "all": "Todo"
-      }
+      },
+      "sourceRangeLabel": "Rango del informe",
+      "sourceBandLegend": "Segunda banda: el rango impreso en el informe del {date}.",
+      "sourceBandMixed": "Segunda banda: el rango impreso en el informe más reciente. Informes anteriores del periodo indican rangos distintos."
     },
     "biomarker": {
       "manageTitle": "Biomarcadores",
@@ -8252,11 +8263,17 @@
       "fileTooLarge": "El archivo es demasiado grande (máx. 12 MB).",
       "fileType": "Sube un JPEG, PNG, WebP o PDF.",
       "extractFailed": "No se pudo leer el informe. Prueba con una foto más nítida.",
-      "pdfNeedsAnthropic": "El escaneo de PDF necesita un proveedor de visión de Claude; sube una foto en su lugar."
+      "pdfNeedsAnthropic": "El escaneo de PDF necesita un proveedor de visión de Claude; sube una foto en su lugar.",
+      "refTextLabel": "Rango tal como aparece",
+      "refTextPlaceholder": "p. ej. 3,5 - 5,0"
     },
     "loadMoreReadings": "Cargar más mediciones",
     "documentsLink": "Documentos de resultados",
-    "notLinkedYet": "Aún no vinculado a un biomarcador"
+    "notLinkedYet": "Aún no vinculado a un biomarcador",
+    "sourceRange": {
+      "fromReport": "Rango del informe {range}",
+      "catalogDiffers": "tu rango {range}"
+    }
   },
   "modules": {
     "cycle": {

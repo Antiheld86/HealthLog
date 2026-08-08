@@ -14,6 +14,7 @@
  */
 import { z } from "zod/v4";
 
+import { SOURCE_REFERENCE_TEXT_MAX } from "@/lib/labs/parse-reference-range";
 import { validateEntryInstant } from "@/lib/validations/entry-instant";
 
 /**
@@ -64,6 +65,29 @@ const referenceLow = z.number().finite().optional();
 const referenceHigh = z.number().finite().optional();
 
 /**
+ * The reference range the SOURCE REPORT printed for this one reading.
+ *
+ * Distinct from `referenceLow` / `referenceHigh` above, which seed (and are
+ * stamped from) the catalog marker's band. A lab runs its own method on its
+ * own device, so the window a physician evaluates against is the one on that
+ * report; these fields carry it, and `resolveEffectiveReferenceRange` lets it
+ * win for that reading alone.
+ *
+ * `sourceReferenceText` is what was printed, verbatim. It is accepted with or
+ * without derivable bounds: a window stated as "negativ" or "siehe Befund"
+ * still belongs on the record, and dropping it because no number could be read
+ * out of it is exactly the loss this field exists to stop.
+ */
+const sourceReferenceLow = z.number().finite().optional();
+const sourceReferenceHigh = z.number().finite().optional();
+const sourceReferenceText = z
+  .string()
+  .trim()
+  .max(SOURCE_REFERENCE_TEXT_MAX)
+  .optional()
+  .or(z.literal("").transform(() => undefined));
+
+/**
  * v1.18.1 — optional link to a user-scoped `Biomarker` (the catalog row).
  * When set, the structured-entry path resolves the unit + reference range
  * from the biomarker server-side, so `analyte` / `unit` may be omitted (the
@@ -101,6 +125,9 @@ export const createLabResultSchema = z
     unit: requiredText(40).optional(),
     referenceLow,
     referenceHigh,
+    sourceReferenceLow,
+    sourceReferenceHigh,
+    sourceReferenceText,
     takenAt: takenAtField,
     note: optionalNote,
     source,
@@ -142,6 +169,19 @@ export const createLabResultSchema = z
       message: "referenceLow must not exceed referenceHigh",
       path: ["referenceLow"],
     },
+  )
+  // Same guard on the source window. A transposed window is a client error
+  // here for the same reason: nothing downstream can tell it from a real one.
+  .refine(
+    (d) =>
+      d.valueText !== undefined ||
+      d.sourceReferenceLow === undefined ||
+      d.sourceReferenceHigh === undefined ||
+      d.sourceReferenceLow <= d.sourceReferenceHigh,
+    {
+      message: "sourceReferenceLow must not exceed sourceReferenceHigh",
+      path: ["sourceReferenceLow"],
+    },
   );
 
 export type CreateLabResultInput = z.infer<typeof createLabResultSchema>;
@@ -164,6 +204,9 @@ export const updateLabResultSchema = z
     unit: requiredText(40).optional(),
     referenceLow: referenceLow.or(z.null()),
     referenceHigh: referenceHigh.or(z.null()),
+    sourceReferenceLow: sourceReferenceLow.or(z.null()),
+    sourceReferenceHigh: sourceReferenceHigh.or(z.null()),
+    sourceReferenceText: sourceReferenceText.or(z.null()),
     takenAt: takenAtField.optional(),
     note: optionalNote.or(z.null()),
   })
@@ -182,6 +225,18 @@ export const updateLabResultSchema = z
     {
       message: "referenceLow must not exceed referenceHigh",
       path: ["referenceLow"],
+    },
+  )
+  .refine(
+    (d) =>
+      d.sourceReferenceLow === undefined ||
+      d.sourceReferenceLow === null ||
+      d.sourceReferenceHigh === undefined ||
+      d.sourceReferenceHigh === null ||
+      d.sourceReferenceLow <= d.sourceReferenceHigh,
+    {
+      message: "sourceReferenceLow must not exceed sourceReferenceHigh",
+      path: ["sourceReferenceLow"],
     },
   );
 
@@ -246,7 +301,12 @@ export type ListLabResultsInput = z.infer<typeof listLabResultsSchema>;
  * implementation. Re-exported here for the existing import sites.
  */
 export {
+  classifyAgainstEffectiveRange,
   classifyReferenceRange,
   formatReferenceRange,
+  resolveEffectiveReferenceRange,
+  type EffectiveReferenceRange,
+  type ReferenceRangeOrigin,
   type ReferenceRangeStatus,
+  type SourceReferenceRange,
 } from "@/lib/labs/reference-range";
