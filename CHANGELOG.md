@@ -99,14 +99,19 @@
   before showing a single recording, two of them saying the same thing. They
   are gone; the recording's own page still states that the result shown is
   the device's. The device's verdict now rides the timestamp as a tag instead
-  of taking a line of its own, the list shows the five most recent strips
-  rather than every one ever recorded, and a recording has its own address
-  with the back link above the heading, so a strip can be linked to and the
-  browser's own Back works.
+  of taking a line of its own. The overview teaser shows the five most recent
+  strips rather than every one ever recorded, while the ECG page itself still
+  lists them all, so nothing is hidden where you go to look. A recording has
+  its own address now, with the back link above the heading, so a strip can be
+  linked to and the browser's own Back works.
 
 - An entry in the record switcher no longer carries the access level on a
   line of its own. In a menu that narrow it was truncated more often than it
   was read, and the banner states it in full once you are inside the record.
+
+- The record owner's name reads in full on the switcher and the banner when
+  they have set one, ahead of the greeting name — so a delegate entering
+  somebody's record sees whose it is by who they are.
 
 ## [1.37.1] — 2026-08-08
 
