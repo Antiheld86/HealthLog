@@ -13,6 +13,15 @@
 export type EcgClassification =
   "IRREGULAR" | "NOT_DETECTED" | "INCONCLUSIVE" | null;
 
+/**
+ * How many strips the OVERVIEW teaser paints. It is a glance, not a history;
+ * the dedicated `/insights/ecg` page passes no limit and shows every
+ * recording. The constant lives here — a pure value with no React import — so
+ * the `/insights` page can pass it without pulling the ECG component eagerly
+ * across its dynamic boundary.
+ */
+export const ECG_OVERVIEW_LIMIT = 5;
+
 /** i18n key per device verdict, under `insights.ecg.result.*`. */
 export const ECG_RESULT_LABEL_KEYS: Record<string, string> = {
   IRREGULAR: "insights.ecg.result.irregular",

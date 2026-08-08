@@ -76,6 +76,26 @@ describe("/insights/ecg page (H1)", () => {
     expect(html).not.toContain("<h2");
   });
 
+  it("renders every recording — the full page passes no cap", () => {
+    // The teaser on `/insights` caps at five; this dedicated page must not.
+    // An account with many strips reaches all of them here, or the older ones
+    // become unreachable with no pagination behind them. Eight in, eight out.
+    const recordings = Array.from({ length: 8 }, (_, index) => ({
+      ...seededRecording(),
+      id: `rec-${index}`,
+      recordedAt: new Date(Date.UTC(2026, 6, 10 - index, 8, 0)).toISOString(),
+    }));
+    const html = render({ recordings, hasRecordings: true });
+
+    const rows = (html.match(/data-slot="ecg-row"/g) ?? []).length;
+    expect(rows).toBe(8);
+    for (const rec of recordings) {
+      expect(html, `${rec.id} must be reachable on the full page`).toContain(
+        `/insights/ecg/${rec.id}`,
+      );
+    }
+  });
+
   it("carries no disclaimer paragraph above the list", () => {
     // Two muted lines used to lead this page — one from the shell's own
     // explainer slot and one hand-rolled beneath it, both saying HealthLog

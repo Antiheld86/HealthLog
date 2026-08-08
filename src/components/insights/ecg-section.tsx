@@ -12,9 +12,15 @@ import { cn } from "@/lib/utils";
 import { SectionHeading } from "@/components/ui/section-heading";
 import {
   ecgResultLabel,
+  ECG_OVERVIEW_LIMIT,
   type EcgClassification,
 } from "@/lib/insights/ecg-classification";
 import { InsightSectionCard } from "./insight-section-card";
+
+// Re-exported so the tests (and any teaser call site) can keep importing the
+// overview cap from the component they are exercising; the value itself lives
+// in the React-free lib module.
+export { ECG_OVERVIEW_LIMIT };
 
 /**
  * v1.28.50 — ECG recording list.
@@ -37,12 +43,6 @@ import { InsightSectionCard } from "./insight-section-card";
  * Data-availability-gated: the section un-mounts entirely (`return null`)
  * when the user has no recordings — never an empty / alarming card.
  */
-
-/**
- * How many strips the list paints. The API already caps its own read at 200;
- * this is the reading limit, not the fetch limit.
- */
-export const ECG_LIST_LIMIT = 5;
 
 export interface EcgRecordingListItem {
   id: string;
@@ -72,12 +72,20 @@ interface EcgSectionProps {
    * teaser keeps its own heading unchanged.
    */
   hideHeading?: boolean;
+  /**
+   * Cap the number of strips shown. The overview teaser passes
+   * `ECG_OVERVIEW_LIMIT`; the dedicated `/insights/ecg` page passes nothing,
+   * so it renders the full list. Omitted = no cap: a full surface must never
+   * silently hide a recording behind a limit with no way to reach it.
+   */
+  limit?: number;
 }
 
 export function EcgSection({
   enabled = true,
   className,
   hideHeading = false,
+  limit,
 }: EcgSectionProps) {
   const { isAuthenticated } = useAuth();
   const { t } = useTranslations();
@@ -98,9 +106,11 @@ export function EcgSection({
   // Data-availability gate — never paint an empty card.
   if (isLoading || !data || !data.hasRecordings) return null;
 
-  // The route hands them back most-recent-first; the slice is the reading
-  // limit on top of that, so the newest strips are the ones on screen.
-  const recordings = data.recordings.slice(0, ECG_LIST_LIMIT);
+  // The route hands them back most-recent-first. A `limit` (the overview
+  // teaser) keeps the newest few; no limit (the dedicated page) shows them
+  // all, so an older strip is never made unreachable.
+  const recordings =
+    limit != null ? data.recordings.slice(0, limit) : data.recordings;
 
   return (
     <section

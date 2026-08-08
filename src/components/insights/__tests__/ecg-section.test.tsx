@@ -28,7 +28,7 @@ vi.mock("@tanstack/react-query", () => ({
   useQuery: (opts: unknown) => useQueryMock(opts),
 }));
 
-const { EcgSection, ECG_LIST_LIMIT } = await import("../ecg-section");
+const { EcgSection, ECG_OVERVIEW_LIMIT } = await import("../ecg-section");
 type EcgRecordingListItem = import("../ecg-section").EcgRecordingListItem;
 
 const IRREGULAR_REC: EcgRecordingListItem = {
@@ -53,11 +53,12 @@ const NORMAL_REC: EcgRecordingListItem = {
 function renderSection(
   data:
     { recordings: EcgRecordingListItem[]; hasRecordings: boolean } | undefined,
+  props: { limit?: number } = {},
 ) {
   useQueryMock.mockReturnValue({ data, isLoading: false });
   return renderToStaticMarkup(
     <I18nProvider initialLocale="en">
-      <EcgSection />
+      <EcgSection {...props} />
     </I18nProvider>,
   );
 }
@@ -99,26 +100,48 @@ describe("<EcgSection>", () => {
     );
   });
 
-  it("caps the list at the most recent handful", () => {
-    // Eight strips in, five out — and the five are the ones the route
-    // handed back first, which it orders `recordedAt desc`.
-    const recordings = Array.from({ length: 8 }, (_, index) => ({
+  const eightRecordings = () =>
+    Array.from({ length: 8 }, (_, index) => ({
       ...NORMAL_REC,
       id: `ecg_${index}`,
       recordedAt: new Date(Date.UTC(2026, 5, 20 - index, 9, 15)).toISOString(),
     }));
-    const html = renderSection({ recordings, hasRecordings: true });
 
-    expect(ECG_LIST_LIMIT).toBe(5);
-    expect(countRows(html)).toBe(ECG_LIST_LIMIT);
-    for (const kept of recordings.slice(0, ECG_LIST_LIMIT)) {
+  it("caps the OVERVIEW teaser at the most recent handful", () => {
+    // The teaser passes `limit`. Eight strips in, five out — and the five are
+    // the ones the route handed back first, which it orders `recordedAt desc`.
+    const recordings = eightRecordings();
+    const html = renderSection(
+      { recordings, hasRecordings: true },
+      { limit: ECG_OVERVIEW_LIMIT },
+    );
+
+    expect(ECG_OVERVIEW_LIMIT).toBe(5);
+    expect(countRows(html)).toBe(ECG_OVERVIEW_LIMIT);
+    for (const kept of recordings.slice(0, ECG_OVERVIEW_LIMIT)) {
       expect(html, `${kept.id} should be listed`).toContain(
         `/insights/ecg/${kept.id}`,
       );
     }
-    for (const dropped of recordings.slice(ECG_LIST_LIMIT)) {
-      expect(html, `${dropped.id} is past the cap`).not.toContain(
+    for (const dropped of recordings.slice(ECG_OVERVIEW_LIMIT)) {
+      expect(html, `${dropped.id} is past the teaser cap`).not.toContain(
         `/insights/ecg/${dropped.id}`,
+      );
+    }
+  });
+
+  it("renders every recording when NO limit is given (the full page)", () => {
+    // The dedicated `/insights/ecg` page passes no `limit`, so an account with
+    // many strips reaches all of them — the cap is a teaser affordance, never
+    // a wall on the full surface. Eight seeded, eight rendered, every one
+    // reachable by its own address.
+    const recordings = eightRecordings();
+    const html = renderSection({ recordings, hasRecordings: true });
+
+    expect(countRows(html)).toBe(8);
+    for (const rec of recordings) {
+      expect(html, `${rec.id} must be reachable on the full page`).toContain(
+        `/insights/ecg/${rec.id}`,
       );
     }
   });
