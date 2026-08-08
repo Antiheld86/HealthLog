@@ -774,15 +774,19 @@ const handler = apiHandler(
                 date: entry.date,
                 mood: entry.mood,
                 score: entry.score,
-                // The five level-A values. `?? null` rather than a derivation:
-                // a file that carries none is a file from before they existed,
-                // and filling them in here would put a number the person never
-                // gave into a restored row and call it their answer.
-                moodA1: entry.a1 ?? null,
-                stressA2: entry.a2 ?? null,
-                energyA3: entry.a3 ?? null,
-                connectionA4: entry.a4 ?? null,
-                stabilityA5: entry.a5 ?? null,
+                // The five level-A values, carried the same way `syncVersion`
+                // is: absent in the file means the file predates the columns,
+                // and an upsert whose update arm stated them would wipe live
+                // answers off every matched row when an older backup is
+                // restored over a going concern. A file that has them writes
+                // them, including an explicit null; a file that does not says
+                // nothing. Never derived — filling one in here would put a
+                // number the person never gave into a restored row.
+                ...(entry.a1 === undefined ? {} : { moodA1: entry.a1 }),
+                ...(entry.a2 === undefined ? {} : { stressA2: entry.a2 }),
+                ...(entry.a3 === undefined ? {} : { energyA3: entry.a3 }),
+                ...(entry.a4 === undefined ? {} : { connectionA4: entry.a4 }),
+                ...(entry.a5 === undefined ? {} : { stabilityA5: entry.a5 }),
                 tags: entry.tags ?? null,
                 // The note comes back the way every other dual-column note
                 // does: ciphertext verbatim when the file carries it, and a
