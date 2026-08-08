@@ -1031,6 +1031,23 @@
           "high": "deutlich gut"
         }
       }
+    },
+    "dayContext": {
+      "minutesPlaceholder": "Minuten",
+      "contactsHelp": "Wie viele Menschen es waren, sagt nichts über den Tag. Was zählt, ist wie der Kontakt sich angefühlt hat.",
+      "notePlaceholder": "Was zu diesem Tag noch gehört",
+      "notRecorded": "nicht erfasst",
+      "linkedTitle": "Aus deinen anderen Modulen",
+      "linkedHelp": "Gelesen, wo es gepflegt wird. Änderst du es dort, ändert es sich auch hier.",
+      "linkedSleep": "Geschlafen",
+      "linkedInBed": "Im Bett",
+      "linkedSteps": "Schritte",
+      "linkedActiveEnergy": "Aktive Energie",
+      "linkedRestingHeartRate": "Ruhepuls",
+      "linkedHrv": "Herzratenvariabilität",
+      "bodyLogged": "Im Krankheitstagebuch erfasst: {count} Symptome",
+      "bodyNotLogged": "Für diesen Tag ist im Krankheitstagebuch nichts erfasst",
+      "openIllness": "Öffnen"
     }
   },
   "medications": {

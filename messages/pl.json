@@ -1031,6 +1031,23 @@
           "high": "wyraźnie dobry"
         }
       }
+    },
+    "dayContext": {
+      "minutesPlaceholder": "Minuty",
+      "contactsHelp": "Liczba osób nic nie mówi o dniu. Liczy się to, jak kontakt został odebrany.",
+      "notePlaceholder": "Co jeszcze należy do tego dnia",
+      "notRecorded": "nie zapisano",
+      "linkedTitle": "Z pozostałych modułów",
+      "linkedHelp": "Odczytane stamtąd, gdzie jest przechowywane. Zmień to tam, a zmieni się tutaj.",
+      "linkedSleep": "Sen",
+      "linkedInBed": "W łóżku",
+      "linkedSteps": "Kroki",
+      "linkedActiveEnergy": "Energia aktywna",
+      "linkedRestingHeartRate": "Tętno spoczynkowe",
+      "linkedHrv": "Zmienność rytmu serca",
+      "bodyLogged": "Zapisano w dzienniku choroby: {count} objawów",
+      "bodyNotLogged": "Na ten dzień nic nie zapisano w dzienniku choroby",
+      "openIllness": "Otwórz"
     }
   },
   "medications": {

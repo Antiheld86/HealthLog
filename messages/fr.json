@@ -1031,6 +1031,23 @@
           "high": "nettement positif"
         }
       }
+    },
+    "dayContext": {
+      "minutesPlaceholder": "Minutes",
+      "contactsHelp": "Le nombre de personnes ne dit rien de la journée. Ce qui compte, c'est le ressenti du contact.",
+      "notePlaceholder": "Ce qui appartient encore à cette journée",
+      "notRecorded": "non enregistré",
+      "linkedTitle": "Depuis tes autres modules",
+      "linkedHelp": "Lu là où c'est enregistré. Modifie-le là-bas et cela change ici.",
+      "linkedSleep": "Sommeil",
+      "linkedInBed": "Au lit",
+      "linkedSteps": "Pas",
+      "linkedActiveEnergy": "Énergie active",
+      "linkedRestingHeartRate": "Fréquence cardiaque au repos",
+      "linkedHrv": "Variabilité cardiaque",
+      "bodyLogged": "Consigné dans le journal de maladie : {count} symptômes",
+      "bodyNotLogged": "Rien n'est consigné dans le journal de maladie pour cette journée",
+      "openIllness": "Ouvrir"
     }
   },
   "medications": {

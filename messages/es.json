@@ -1031,6 +1031,23 @@
           "high": "claramente bueno"
         }
       }
+    },
+    "dayContext": {
+      "minutesPlaceholder": "Minutos",
+      "contactsHelp": "Cuántas personas fueron no dice nada del día. Lo que cuenta es cómo se sintió el contacto.",
+      "notePlaceholder": "Cualquier otra cosa que forme parte de este día",
+      "notRecorded": "sin registrar",
+      "linkedTitle": "De tus otros módulos",
+      "linkedHelp": "Se lee de donde está guardado. Cámbialo allí y cambia aquí.",
+      "linkedSleep": "Dormido",
+      "linkedInBed": "En la cama",
+      "linkedSteps": "Pasos",
+      "linkedActiveEnergy": "Energía activa",
+      "linkedRestingHeartRate": "Pulso en reposo",
+      "linkedHrv": "Variabilidad cardiaca",
+      "bodyLogged": "Registrado en el diario de enfermedad: {count} síntomas",
+      "bodyNotLogged": "No hay nada registrado en el diario de enfermedad para este día",
+      "openIllness": "Abrir"
     }
   },
   "medications": {

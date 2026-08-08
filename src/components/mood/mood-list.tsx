@@ -94,6 +94,16 @@ import {
   levelAUpdatePayload,
   type LevelAState,
 } from "./mood-level-a-fields";
+import type { MoodContextWire } from "@/lib/mood/context";
+import {
+  EMPTY_MOOD_CONTEXT,
+  MoodContextSections,
+  MoodLinkedDaySection,
+  moodContextFromEntry,
+  moodContextPayload,
+  type MoodContextState,
+} from "./mood-context-fields";
+import { dayOfLocalInput, useLinkedDayContext } from "./use-linked-day-context";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api/api-fetch";
 import { localizedApiError } from "@/lib/api/localized-error";
 
@@ -118,6 +128,8 @@ interface MoodEntry {
   a4?: number | null;
   a5?: number | null;
   note: string | null;
+  // v1.38 — the day context, null on entries that carry none.
+  context: MoodContextWire | null;
   source: string;
   moodLoggedAt: string;
 }
@@ -201,6 +213,12 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
   // v1.37 — the five level-A values on the edit path. Seeded from the entry,
   // so what the capture sheet wrote is visible and changeable here.
   const [editLevelA, setEditLevelA] = useState<LevelAState>(EMPTY_LEVEL_A);
+  // v1.38 — the day context on the edit path, seeded from the entry so what
+  // the capture sheet wrote is visible and correctable here. A value that can
+  // be written on one surface and not corrected on another is worse than one
+  // nobody was offered.
+  const [editContext, setEditContext] =
+    useState<MoodContextState>(EMPTY_MOOD_CONTEXT);
   const [editNote, setEditNote] = useState("");
   const [editMoodLoggedAt, setEditMoodLoggedAt] = useState("");
   const [editSeed, setEditSeed] = useState<{
@@ -209,6 +227,7 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
     tagKeys: string[];
     ratedFactors: RatedFactor[];
     levelA: LevelAState;
+    context: MoodContextState;
     note: string;
     moodLoggedAt: string;
   }>({
@@ -217,6 +236,7 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
     tagKeys: [],
     ratedFactors: [],
     levelA: EMPTY_LEVEL_A,
+    context: EMPTY_MOOD_CONTEXT,
     note: "",
     moodLoggedAt: "",
   });
@@ -410,6 +430,7 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
       tagKeys,
       ratedFactors,
       levelA,
+      context,
       note,
       moodLoggedAt,
     }: {
@@ -419,6 +440,7 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
       tagKeys: string[];
       ratedFactors: RatedFactor[];
       levelA: LevelAState;
+      context: MoodContextState;
       note: string | null;
       moodLoggedAt: string;
     }) => {
@@ -431,6 +453,10 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
         // user cleared has to travel as an explicit null or the old answer
         // survives an edit that visibly removed it.
         ...levelAUpdatePayload(levelA),
+        // Always stated on this path, and `null` when every section is empty:
+        // the dialog shows the whole context, so an omission here would leave
+        // a context the person just cleared sitting on the row.
+        context: moodContextPayload(context),
         note,
         moodLoggedAt,
       });
@@ -446,6 +472,7 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
           a.key.localeCompare(b.key),
         ),
         levelA: editLevelA,
+        context: editContext,
         note: editNote,
         moodLoggedAt: editMoodLoggedAt,
       });
@@ -465,11 +492,20 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
         a.key.localeCompare(b.key),
       ),
       levelA: editLevelA,
+      context: editContext,
       note: editNote,
       moodLoggedAt: editMoodLoggedAt,
     },
     blocked: updateMutation.isPending || deleteMutation.isPending,
   });
+
+  // v1.38 — the linked figures for the entry being edited, read for its own
+  // local day. Only while a dialog is open: a list of fifty rows must not cost
+  // fifty module reads.
+  const editLinked = useLinkedDayContext(
+    dayOfLocalInput(editMoodLoggedAt),
+    editing !== null,
+  );
 
   const totalPages = data ? Math.ceil(data.meta.total / PAGE_SIZE) : 0;
 
@@ -482,6 +518,7 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
         a.key.localeCompare(b.key),
       ),
       levelA: levelAFromEntry(entry),
+      context: moodContextFromEntry(entry.context),
       note: entry.note ?? "",
       moodLoggedAt: toDateTimeLocalValue(entry.moodLoggedAt),
     };
@@ -491,6 +528,7 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
     setEditTagKeys(seed.tagKeys);
     setEditRatedFactors(seed.ratedFactors);
     setEditLevelA(seed.levelA);
+    setEditContext(seed.context);
     setEditNote(seed.note);
     setEditMoodLoggedAt(seed.moodLoggedAt);
     setEditSeed(seed);
@@ -544,6 +582,7 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
       tagKeys: editTagKeys,
       ratedFactors: editRatedFactors,
       levelA: editLevelA,
+      context: editContext,
       note: trimmedNote.length > 0 ? trimmedNote : null,
       moodLoggedAt: measuredDate.toISOString(),
     });
@@ -1043,6 +1082,17 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
                 with the derived one would quietly discard what the person
                 set. */}
             <MoodLevelASection value={editLevelA} onChange={setEditLevelA} />
+
+            {/* v1.38 — the day context, seeded from the entry. */}
+            <MoodContextSections
+              value={editContext}
+              onChange={setEditContext}
+            />
+
+            {/* v1.38 — read-only, from the modules that own it. Resolved for
+                the entry's own day, so an entry moved to another date shows
+                that day's figures. */}
+            <MoodLinkedDaySection linked={editLinked} />
 
             {/* v1.8.5 (C1) — free-text note. */}
             <div className="space-y-2">

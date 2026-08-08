@@ -1031,6 +1031,23 @@
           "high": "clearly good"
         }
       }
+    },
+    "dayContext": {
+      "minutesPlaceholder": "Minutes",
+      "contactsHelp": "How many people it was says nothing about the day. What counts is how the contact felt.",
+      "notePlaceholder": "Anything else that belongs to this day",
+      "notRecorded": "not recorded",
+      "linkedTitle": "From your other modules",
+      "linkedHelp": "Read from where it is kept. Change it there and it changes here.",
+      "linkedSleep": "Asleep",
+      "linkedInBed": "In bed",
+      "linkedSteps": "Steps",
+      "linkedActiveEnergy": "Active energy",
+      "linkedRestingHeartRate": "Resting heart rate",
+      "linkedHrv": "Heart rate variability",
+      "bodyLogged": "Logged in the illness journal: {count} symptoms",
+      "bodyNotLogged": "Nothing is logged in the illness journal for this day",
+      "openIllness": "Open"
     }
   },
   "medications": {

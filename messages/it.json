@@ -1031,6 +1031,23 @@
           "high": "chiaramente positivo"
         }
       }
+    },
+    "dayContext": {
+      "minutesPlaceholder": "Minuti",
+      "contactsHelp": "Quante persone fossero non dice nulla della giornata. Conta come è stato vissuto il contatto.",
+      "notePlaceholder": "Che altro appartiene a questa giornata",
+      "notRecorded": "non registrato",
+      "linkedTitle": "Dagli altri moduli",
+      "linkedHelp": "Letto da dove è registrato. Cambialo lì e cambia anche qui.",
+      "linkedSleep": "Dormito",
+      "linkedInBed": "A letto",
+      "linkedSteps": "Passi",
+      "linkedActiveEnergy": "Energia attiva",
+      "linkedRestingHeartRate": "Frequenza cardiaca a riposo",
+      "linkedHrv": "Variabilità cardiaca",
+      "bodyLogged": "Registrato nel diario di malattia: {count} sintomi",
+      "bodyNotLogged": "Per questa giornata non c'è nulla nel diario di malattia",
+      "openIllness": "Apri"
     }
   },
   "medications": {
