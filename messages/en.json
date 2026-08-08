@@ -3785,6 +3785,25 @@
         "statement": "On days with “{label}” the mood averaged {direction}: {withAvg} against {withoutAvg}.",
         "counts": "{withDays} days with, {withoutDays} days without",
         "caveat": "That shows a connection, not a cause."
+      },
+      "prognosis": {
+        "title": "Your rating, and what your own days suggest",
+        "selfLabel": "Your rating",
+        "expectedLabel": "Expected on your own pattern",
+        "band": "Range {low} to {high}",
+        "statement": "On your own patterns so far, a value around {value} would have been expected for {date}. Built from {n} days that carried everything the comparison needs.",
+        "provisional": "Still provisional: the pattern rests on a short stretch of days.",
+        "notToday": "This describes {date}, not today.",
+        "deviationWithin": "Your own rating sits inside that range.",
+        "deviationAbove": "Your own rating sits {amount} points above that range.",
+        "deviationBelow": "Your own rating sits {amount} points below that range.",
+        "weightedTitle": "What weighed most in this day's comparison",
+        "weightedUp": "{label} — counted towards a higher expected value",
+        "weightedDown": "{label} — counted towards a lower expected value",
+        "caveat": "This is a comparison with your own past days, not a statement about how a day came to go the way it did.",
+        "learning": "Learning phase: {entries} of {threshold} days recorded. A comparison appears once there are enough of them.",
+        "noPattern": "Nothing in the {entries} days recorded so far is steady enough to compare a day against. Recording a day's context makes more of it comparable.",
+        "featureValue": "{field}: {value}"
       }
     },
     "derived": {

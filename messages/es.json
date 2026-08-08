@@ -3785,6 +3785,25 @@
         "statement": "En los días con «{label}» el ánimo promedió {direction}: {withAvg} frente a {withoutAvg}.",
         "counts": "{withDays} días con, {withoutDays} días sin",
         "caveat": "Esto muestra una relación, no una causa."
+      },
+      "prognosis": {
+        "title": "Tu valoración y lo que sugieren tus días anteriores",
+        "selfLabel": "Tu valoración",
+        "expectedLabel": "Esperado según tus propios patrones",
+        "band": "Rango de {low} a {high}",
+        "statement": "Según tus patrones hasta ahora, para {date} cabría esperar un valor en torno a {value}. Calculado a partir de {n} días que reúnen todo lo que la comparación necesita.",
+        "provisional": "Todavía provisional: el patrón se apoya en pocos días.",
+        "notToday": "Esto describe {date}, no hoy.",
+        "deviationWithin": "Tu propia valoración está dentro de ese rango.",
+        "deviationAbove": "Tu propia valoración está {amount} puntos por encima de ese rango.",
+        "deviationBelow": "Tu propia valoración está {amount} puntos por debajo de ese rango.",
+        "weightedTitle": "Lo que más pesó en la comparación de este día",
+        "weightedUp": "{label}: contó hacia un valor esperado más alto",
+        "weightedDown": "{label}: contó hacia un valor esperado más bajo",
+        "caveat": "Es una comparación con tus propios días anteriores, no una afirmación sobre cómo llegó a transcurrir un día.",
+        "learning": "Fase de aprendizaje: {entries} de {threshold} días registrados. La comparación aparece cuando haya suficientes.",
+        "noPattern": "En los {entries} días registrados hasta ahora no hay nada lo bastante constante para comparar un día. Registrar el contexto del día hace comparable una parte mayor.",
+        "featureValue": "{field}: {value}"
       }
     },
     "derived": {

@@ -58,6 +58,18 @@ export const moodKeys = {
   moodLinkedContext: (date: string, tz: string) =>
     ["mood-linked-context", date, tz] as const,
 
+  /**
+   * v1.38 — the day's two readings: the person's own rating and what their
+   * past days imply, with the band and the case count.
+   *
+   * Under the `["mood-entries"]` prefix so `moodDependentKeys` reaches it: the
+   * self-assessment half of the payload comes straight off a mood row, and an
+   * edit to today's entry changes the deviation the card shows. The forecast
+   * half does not move until the nightly job runs again, which is why the read
+   * is cheap enough to refetch on a mood write.
+   */
+  moodPrognosis: () => ["mood-entries", "prognosis"] as const,
+
   moodAnalytics: () => ["mood-analytics"] as const,
   /**
    * v1.8.5 — pre-computed mood-insights aggregates (heatmap, distribution,
