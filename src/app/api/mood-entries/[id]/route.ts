@@ -16,6 +16,7 @@ import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
 import { deriveA1, shapeLevelA } from "@/lib/mood/level-a";
+import { contextForWire, persistMoodContext } from "@/lib/mood/context";
 import { encryptNote, shapeMoodNote } from "@/lib/crypto/note-cipher";
 import { invalidateUserMood } from "@/lib/cache/invalidate";
 import { recomputeMoodBucketsForEntry } from "@/lib/rollups/mood-rollups";
@@ -47,6 +48,9 @@ export const GET = apiHandler(
     // (not `findUnique`) because `deletedAt` is not part of a unique index.
     const entry = await prisma.moodEntry.findFirst({
       where: { id, deletedAt: null },
+      // v1.38 — the day context rides with the entry rather than behind a
+      // second request: the edit surface needs both or neither.
+      include: { context: true },
     });
 
     if (!entry || entry.userId !== user.id) {
@@ -58,10 +62,13 @@ export const GET = apiHandler(
       meta: { moodEntryId: id },
     });
 
+    const { context, ...row } = entry;
     return apiSuccess({
       // v1.37 — level-A values under the keys the write path takes.
-      ...shapeLevelA(shapeMoodNote(entry)),
-      tags: parseTags(entry.tags),
+      ...shapeLevelA(shapeMoodNote(row)),
+      tags: parseTags(row.tags),
+      // v1.38 — lists decoded, note decrypted, ciphertext dropped.
+      context: context ? contextForWire(context) : null,
     });
   },
 );
@@ -201,6 +208,20 @@ export const PUT = apiHandler(
           );
         }
 
+        // v1.38 — the day context replaces whole when the request carried
+        // one, and is left alone when it did not, matching the two link sets
+        // above. Inside the same transaction: a context write that fails rolls
+        // the edit and its syncVersion increment back with it.
+        const contextOutcome = await persistMoodContext(
+          tx,
+          id,
+          user.id,
+          data.context,
+        );
+        const storedContext = await tx.moodContext.findUnique({
+          where: { moodEntryId: id },
+        });
+
         // Return the same split shape as list/create: binary keys are
         // independent from rated-factor keys and their per-entry scores.
         const links = await tx.moodEntryTagLink.findMany({
@@ -213,6 +234,8 @@ export const PUT = apiHandler(
 
         return {
           entry: updated,
+          contextOutcome,
+          persistedContext: storedContext,
           persistedTagKeys: links
             .filter((link) => link.moodTag.kind !== "RATED")
             .map((link) => link.moodTag.key),
@@ -252,8 +275,13 @@ export const PUT = apiHandler(
       }
       throw error;
     }
-    const { entry, persistedTagKeys, persistedRatedFactors } =
-      transactionOutcome.result;
+    const {
+      entry,
+      persistedTagKeys,
+      persistedRatedFactors,
+      persistedContext,
+      contextOutcome,
+    } = transactionOutcome.result;
 
     await auditLog("moodEntry.update", {
       userId: user.id,
@@ -278,6 +306,7 @@ export const PUT = apiHandler(
             ...(data.tags !== undefined ? ["tags"] : []),
             ...(data.tagKeys !== undefined ? ["tagKeys"] : []),
             ...(data.ratedFactors !== undefined ? ["ratedFactors"] : []),
+            ...(data.context !== undefined ? ["context"] : []),
           ],
         }),
       },
@@ -285,7 +314,7 @@ export const PUT = apiHandler(
 
     annotate({
       action: { name: "mood-entries.update" },
-      meta: { moodEntryId: id },
+      meta: { moodEntryId: id, mood_context: contextOutcome },
     });
 
     // v1.4.34 IW-G — bust per-user mood + achievements + analytics caches.
@@ -328,6 +357,8 @@ export const PUT = apiHandler(
       // refetch (shape-matches the list GET).
       tagKeys: persistedTagKeys,
       ratedFactors: persistedRatedFactors,
+      // v1.38 — the stored context after the edit, or null when there is none.
+      context: persistedContext ? contextForWire(persistedContext) : null,
     });
   },
 );

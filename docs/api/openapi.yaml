@@ -3405,12 +3405,16 @@ paths:
       tags:
         - Measurements
       summary: Typed workout batch ingest (v1.4.25 W16b)
-      description: Server-side ingest endpoint for HKWorkout records (iOS) and Withings activity rows (server-to-server). Up
+      description: 'Server-side ingest endpoint for HKWorkout records (iOS) and Withings activity rows (server-to-server). Up
         to 100 workouts per call; nested route geometry (GeoJSON LineString) is capped at 20 000 points and stored in a
         1:1 `WorkoutRoute` row keyed by `workoutId`. Idempotent via the `Idempotency-Key` header (replay window 24h).
-        Per-entry status (`inserted | duplicate | skipped`) lets the iOS sync cursor checkpoint accurately. The request
-        body ceiling is 5 MB enforced at the HTTP layer — clients above the ceiling receive a 413 with
-        `workout.batch.payload_too_large`.
+        Per-entry status (`inserted | duplicate | enriched | skipped`) lets the iOS sync cursor checkpoint accurately.
+        An entry matching a stored workout is first-write-wins for the workout row; when it carries a `samples` array
+        and the stored workout has no heart-rate series, the series is attached and the entry reports `enriched`
+        (repeatable: a workout that already has a series is a no-op). An entry whose `samples` array fails validation is
+        refused on its own with `reason: "invalid_samples"` — the rest of the batch still lands. The request body
+        ceiling is 5 MB enforced at the HTTP layer — clients above the ceiling receive a 413 with
+        `workout.batch.payload_too_large`.'
       requestBody:
         required: true
         content:
@@ -16096,6 +16100,49 @@ components:
         note:
           type: string
           maxLength: 500
+        a1:
+          description: "Pleasantness, 0-10. Optional: the server DERIVES it from `mood` when the entry does not carry one, so an
+            older build that sends only the five-point label still writes a complete row. A value sent here wins over
+            the derivation."
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        a2:
+          description: 'Stress, 0-10, INVERSE-oriented: a higher value is more stress. Stored exactly as set; a client that wants
+            "up is better" flips the sign itself.'
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        a3:
+          description: Energy, 0-10.
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        a4:
+          description: Connectedness, 0-10.
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        a5:
+          description: Stability, 0-10.
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        context:
+          description: The day's context. Absent leaves a stored context untouched on a re-post; an empty one removes it.
+          anyOf:
+            - $ref: "#/components/schemas/MoodContext"
+            - type: "null"
         moodLoggedAt:
           type: string
           format: date-time
@@ -16122,6 +16169,163 @@ components:
         - mood
         - moodLoggedAt
       description: One bulk mood entry (UPSERT keyed by `externalId`).
+    MoodContext:
+      type: object
+      properties:
+        workStatus:
+          description: Shape of the working day.
+          anyOf:
+            - type: string
+              enum:
+                - off
+                - partial
+                - regular
+                - overtime
+            - type: "null"
+        workMinutes:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 1440
+            - type: "null"
+        overtimeMinutes:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 1440
+            - type: "null"
+        workLoad:
+          description: "0-10, INVERSE-oriented: a higher value is a heavier day, not a better one."
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        workSatisfaction:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        contactCircles:
+          description: "Who the day's contact was with. Multi-select. Never scored: the count of people is not a good or a bad
+            number."
+          anyOf:
+            - type: array
+              items:
+                type: string
+                enum:
+                  - partner
+                  - child
+                  - family
+                  - friends
+                  - colleagues
+                  - acquaintances
+                  - professional
+                  - other
+            - type: "null"
+        contactForm:
+          anyOf:
+            - type: string
+              enum:
+                - inPerson
+                - phone
+                - video
+                - written
+            - type: "null"
+        contactExtent:
+          anyOf:
+            - type: string
+              enum:
+                - brief
+                - medium
+                - extended
+            - type: "null"
+        contactQuality:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        contactSupport:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        leisureCategories:
+          anyOf:
+            - type: array
+              items:
+                type: string
+                enum:
+                  - film
+                  - reading
+                  - gaming
+                  - music
+                  - creative
+                  - outing
+                  - garden
+                  - cooking
+                  - timeWithChild
+                  - relaxation
+                  - other
+            - type: "null"
+        leisureMinutes:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 1440
+            - type: "null"
+        leisureJoy:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        leisureRecovery:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        eventType:
+          description: One notable event. One per entry, not a list.
+          anyOf:
+            - type: string
+              enum:
+                - goodNews
+                - badNews
+                - success
+                - disappointment
+                - conflict
+                - appointment
+                - familyEvent
+                - change
+                - unexpected
+            - type: "null"
+        eventValence:
+          description: -5 (clearly bad) to +5 (clearly good).
+          anyOf:
+            - type: integer
+              minimum: -5
+              maximum: 5
+            - type: "null"
+        eventAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
+        note:
+          description: One free-text note for the whole context. AES-256-GCM at rest; the ciphertext never rides the wire.
+          anyOf:
+            - type: string
+              maxLength: 500
+            - type: "null"
+      description: "The day around a mood entry: work, contacts, leisure and one notable event. Every field optional. Sleep,
+        activity, vitals and body symptoms are deliberately ABSENT — they are owned by their own modules and are read
+        from there, never captured a second time here."
     MoodTagLayoutPutRequest:
       type: object
       properties:
@@ -20100,6 +20304,48 @@ components:
           type: integer
           minimum: -9007199254740991
           maximum: 9007199254740991
+          description: The legacy 1-5 axis. Unchanged.
+        a1:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: Pleasantness, 0-10. Server-derived from `mood` on every write, so this is populated even for rows a client
+            posted without it. Consume the value; do not re-derive it.
+        a2:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: "Stress, 0-10, INVERSE-oriented: a higher value is more stress. NULL when nobody answered it."
+        a3:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: Energy, 0-10, or null.
+        a4:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: Connectedness, 0-10, or null.
+        a5:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: Stability, 0-10, or null.
+        context:
+          anyOf:
+            - $ref: "#/components/schemas/MoodContextOutput"
+            - type: "null"
+          description: The day's context, or null when the entry carries none. Null and an object of nulls are different answers.
         tags:
           anyOf:
             - type: string
@@ -20129,6 +20375,12 @@ components:
         - date
         - mood
         - score
+        - a1
+        - a2
+        - a3
+        - a4
+        - a5
+        - context
         - tags
         - note
         - moodLoggedAt
@@ -22319,14 +22571,19 @@ components:
           type: integer
           minimum: 0
           maximum: 9007199254740991
+          description: Entries in the request. Equals `inserted + duplicates + skipped.length`.
         inserted:
           type: integer
           minimum: 0
           maximum: 9007199254740991
+          description: Workout rows this request wrote.
         duplicates:
           type: integer
           minimum: 0
           maximum: 9007199254740991
+          description: Entries that wrote no workout row because the workout was already stored. The top-level counters count
+            workout rows, so an entry reported as `enriched` counts here as well even though its heart-rate series was
+            attached.
         skipped:
           type: array
           items:
@@ -22365,8 +22622,15 @@ components:
           enum:
             - inserted
             - duplicate
+            - enriched
             - skipped
+          description: "`inserted`: a new workout row. `duplicate`: the workout was already stored and nothing was written.
+            `enriched`: the workout was already stored and the heart-rate series this entry carried was attached to it;
+            the workout row itself was not written, and the entry also counts towards the top-level `duplicates`.
+            `skipped`: the server refused the entry, see `reason`."
         reason:
+          description: "Why a `skipped` entry was refused: `unstable_external_id` for an id that does not survive a client
+            restart, `invalid_samples` for a heart-rate series that failed validation."
           type: string
       required:
         - index
@@ -39316,6 +39580,164 @@ components:
       description: The account this session is now acting on, or null when it is back in its own. The stamp is a selector and
         not a permission — the grant is re-checked on every subsequent request, so a revocation lands on the next one
         rather than at the next login.
+    MoodContextOutput:
+      type: object
+      properties:
+        workStatus:
+          description: Shape of the working day.
+          anyOf:
+            - type: string
+              enum:
+                - off
+                - partial
+                - regular
+                - overtime
+            - type: "null"
+        workMinutes:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 1440
+            - type: "null"
+        overtimeMinutes:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 1440
+            - type: "null"
+        workLoad:
+          description: "0-10, INVERSE-oriented: a higher value is a heavier day, not a better one."
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        workSatisfaction:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        contactCircles:
+          description: "Who the day's contact was with. Multi-select. Never scored: the count of people is not a good or a bad
+            number."
+          anyOf:
+            - type: array
+              items:
+                type: string
+                enum:
+                  - partner
+                  - child
+                  - family
+                  - friends
+                  - colleagues
+                  - acquaintances
+                  - professional
+                  - other
+            - type: "null"
+        contactForm:
+          anyOf:
+            - type: string
+              enum:
+                - inPerson
+                - phone
+                - video
+                - written
+            - type: "null"
+        contactExtent:
+          anyOf:
+            - type: string
+              enum:
+                - brief
+                - medium
+                - extended
+            - type: "null"
+        contactQuality:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        contactSupport:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        leisureCategories:
+          anyOf:
+            - type: array
+              items:
+                type: string
+                enum:
+                  - film
+                  - reading
+                  - gaming
+                  - music
+                  - creative
+                  - outing
+                  - garden
+                  - cooking
+                  - timeWithChild
+                  - relaxation
+                  - other
+            - type: "null"
+        leisureMinutes:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 1440
+            - type: "null"
+        leisureJoy:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        leisureRecovery:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        eventType:
+          description: One notable event. One per entry, not a list.
+          anyOf:
+            - type: string
+              enum:
+                - goodNews
+                - badNews
+                - success
+                - disappointment
+                - conflict
+                - appointment
+                - familyEvent
+                - change
+                - unexpected
+            - type: "null"
+        eventValence:
+          description: -5 (clearly bad) to +5 (clearly good).
+          anyOf:
+            - type: integer
+              minimum: -5
+              maximum: 5
+            - type: "null"
+        eventAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
+        note:
+          description: One free-text note for the whole context. AES-256-GCM at rest; the ciphertext never rides the wire.
+          anyOf:
+            - type: string
+              maxLength: 500
+            - type: "null"
+      additionalProperties: false
+      description: "The day around a mood entry: work, contacts, leisure and one notable event. Every field optional. Sleep,
+        activity, vitals and body symptoms are deliberately ABSENT — they are owned by their own modules and are read
+        from there, never captured a second time here."
     MedicationScheduleOutput:
       type: object
       properties:

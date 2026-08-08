@@ -11,6 +11,16 @@ const txClient = vi.hoisted(() => ({
   moodEntryTagLink: {
     findMany: vi.fn(),
   },
+  // v1.38 — the day context is replaced inside the same transaction. Answering
+  // null from `findUnique` keeps this fake honest: what a context write
+  // actually stores is proven against real Postgres in
+  // `tests/integration/mood-context.test.ts`, not by a stub that agrees with
+  // whatever it is asked.
+  moodContext: {
+    deleteMany: vi.fn(),
+    upsert: vi.fn(),
+    findUnique: vi.fn(),
+  },
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -114,6 +124,8 @@ beforeEach(() => {
   );
   txClient.moodEntry.update.mockResolvedValue(UPDATED_ENTRY as never);
   txClient.moodEntryTagLink.findMany.mockResolvedValue([]);
+  txClient.moodContext.deleteMany.mockResolvedValue({ count: 0 });
+  txClient.moodContext.findUnique.mockResolvedValue(null);
   vi.mocked(replaceTagLinks).mockResolvedValue(undefined);
   vi.mocked(replaceRatedFactorLinks).mockResolvedValue(undefined);
   // v1.7.0 sync — PUT now looks the row up via `findFirst` with a
@@ -295,6 +307,11 @@ describe("PUT /api/mood-entries/[id] — split tag replacement", () => {
       },
       moodEntryTagLink: {
         findMany: vi.fn(),
+      },
+      moodContext: {
+        deleteMany: vi.fn(),
+        upsert: vi.fn(),
+        findUnique: vi.fn(),
       },
     };
     vi.mocked(replaceTagLinks).mockImplementationOnce(async () => {

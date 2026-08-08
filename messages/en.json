@@ -891,7 +891,7 @@
     "quickTagsHelp": "Your frequent tags — one tap",
     "quickTagsExpand": "More",
     "loadError": "Could not load your mood entries.",
-    "sectionLevelA": "Five scales",
+    "sectionLevelA": "State of mind",
     "sectionLevelAHelp": "Optional. Anything you leave alone stays empty.",
     "dimensionNotAnswered": "not recorded",
     "dimensionClear": "clear",
@@ -922,6 +922,132 @@
         "low": "completely overwhelmed",
         "high": "fully able to act"
       }
+    },
+    "context": {
+      "section": {
+        "work": "Work",
+        "contacts": "Contact",
+        "leisure": "Free time",
+        "events": "Event"
+      },
+      "field": {
+        "workStatus": "Working day",
+        "workMinutes": "Time worked",
+        "overtimeMinutes": "Overtime",
+        "workLoad": "Workload",
+        "workSatisfaction": "Satisfaction with the work",
+        "contactCircles": "Who the contact was with",
+        "contactForm": "Form of contact",
+        "contactExtent": "How long it lasted",
+        "contactQuality": "Quality of the contact",
+        "contactSupport": "Support felt",
+        "leisureCategories": "What the free time went into",
+        "leisureMinutes": "Time for yourself",
+        "leisureJoy": "Enjoyment",
+        "leisureRecovery": "Recovery",
+        "eventType": "What happened",
+        "eventValence": "How it landed",
+        "eventAt": "When",
+        "notes": "Note"
+      },
+      "workStatus": {
+        "off": "Not working",
+        "partial": "Part of the day",
+        "regular": "A regular day",
+        "overtime": "Longer than usual"
+      },
+      "contactCircles": {
+        "partner": "Partner",
+        "child": "Child",
+        "family": "Family",
+        "friends": "Friends",
+        "colleagues": "Colleagues",
+        "acquaintances": "Acquaintances",
+        "professional": "Professional support",
+        "other": "Others"
+      },
+      "contactForm": {
+        "inPerson": "In person",
+        "phone": "Phone",
+        "video": "Video call",
+        "written": "Written"
+      },
+      "contactExtent": {
+        "brief": "Brief",
+        "medium": "Medium",
+        "extended": "Extended"
+      },
+      "leisureCategories": {
+        "film": "Film or series",
+        "reading": "Reading",
+        "gaming": "Gaming",
+        "music": "Music",
+        "creative": "Something creative",
+        "outing": "Out and about",
+        "garden": "Garden",
+        "cooking": "Cooking",
+        "timeWithChild": "Time with the child",
+        "relaxation": "Rest",
+        "other": "Something else"
+      },
+      "eventType": {
+        "goodNews": "Good news",
+        "badNews": "Bad news",
+        "success": "Something worked out",
+        "disappointment": "A disappointment",
+        "conflict": "A conflict",
+        "appointment": "An appointment",
+        "familyEvent": "A family occasion",
+        "change": "A change",
+        "unexpected": "Something unexpected"
+      },
+      "rating": {
+        "workLoad": {
+          "low": "no pressure",
+          "high": "under heavy pressure"
+        },
+        "workSatisfaction": {
+          "low": "not satisfied at all",
+          "high": "very satisfied"
+        },
+        "contactQuality": {
+          "low": "did not do me good",
+          "high": "did me a lot of good"
+        },
+        "contactSupport": {
+          "low": "not supported",
+          "high": "well supported"
+        },
+        "leisureJoy": {
+          "low": "no enjoyment",
+          "high": "a lot of enjoyment"
+        },
+        "leisureRecovery": {
+          "low": "not restorative",
+          "high": "very restorative"
+        },
+        "eventValence": {
+          "low": "clearly bad",
+          "high": "clearly good"
+        }
+      }
+    },
+    "dayContext": {
+      "minutesPlaceholder": "Minutes",
+      "contactsHelp": "How many people it was says nothing about the day. What counts is how the contact felt.",
+      "notePlaceholder": "Anything else that belongs to this day",
+      "notRecorded": "not recorded",
+      "linkedTitle": "From your other modules",
+      "linkedHelp": "Read from where it is kept. Change it there and it changes here.",
+      "linkedSleep": "Asleep",
+      "linkedInBed": "In bed",
+      "linkedSteps": "Steps",
+      "linkedActiveEnergy": "Active energy",
+      "linkedRestingHeartRate": "Resting heart rate",
+      "linkedHrv": "Heart rate variability",
+      "bodyLogged": "Logged in the illness journal: {count} symptoms",
+      "bodyNotLogged": "Nothing is logged in the illness journal for this day",
+      "openIllness": "Open"
     }
   },
   "medications": {
@@ -3120,8 +3246,6 @@
     "navRecovery": "Recovery",
     "workouts": {
       "title": "Workouts",
-      "askWhy": "Ask why",
-      "askWhyPrompt": "Why did this session read the way it did? Walk me through my own numbers from it.",
       "description": "Recent runs, rides, walks and strength sessions, deduped across Apple Watch and Withings sources.",
       "emptyState": {
         "title": "No workouts yet",
@@ -3646,12 +3770,21 @@
       },
       "inTargetTitle": "In your range",
       "dimensions": {
-        "title": "Five scales",
-        "none": "Nothing recorded for these five scales yet.",
+        "title": "State of mind",
+        "none": "Nothing recorded on your state of mind yet.",
         "window": "{days} days",
         "noneInWindow": "nothing in this range",
         "higherIsMore": "higher = {anchor}",
         "notRecorded": "Not recorded: {list}."
+      },
+      "contextComparison": {
+        "title": "Day context and your mood",
+        "description": "How the mood value sat on the days recorded so far carrying this entry, compared with the other days.",
+        "lower": "lower",
+        "higher": "higher",
+        "statement": "On days with “{label}” the mood averaged {direction}: {withAvg} against {withoutAvg}.",
+        "counts": "{withDays} days with, {withoutDays} days without",
+        "caveat": "That shows a connection, not a cause."
       }
     },
     "derived": {

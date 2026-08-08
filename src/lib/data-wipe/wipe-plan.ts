@@ -71,6 +71,10 @@ export const WIPE_MODELS = [
   "MedicationComplianceRollup",
 
   // ── Mood ────────────────────────────────────────────────────────────────
+  // The day context, before the entry it hangs off: it cascades either way,
+  // but a parent deleted first leaves the child's own count reporting zero for
+  // rows that existed, and the confirmation screen quotes those counts.
+  "MoodContext",
   "MoodEntry",
   "MoodEntryRollup",
   "MoodReminderDispatch",

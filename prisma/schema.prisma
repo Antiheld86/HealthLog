@@ -773,6 +773,7 @@ model User {
   googleHealthConnection                    GoogleHealthConnection?
   googleHealthOAuthStates                   GoogleHealthOAuthState[]
   moodEntries                               MoodEntry[]
+  moodContexts                              MoodContext[]
   mentalHealthAssessments                   MentalHealthAssessment[]
   moodTagsCustom                            MoodTag[]                         @relation("UserMoodTags")
   moodTagCategoriesCustom                   MoodTagCategory[]                 @relation("UserMoodTagCategories")
@@ -4133,6 +4134,12 @@ model MoodEntry {
   // `tags` untouched.
   tagLinks MoodEntryTagLink[]
 
+  /// v1.38 — the day's context, when somebody chose to add one. A separate
+  /// optional row rather than columns here: it is genuinely sparse, it is
+  /// twenty fields wide, and no reader outside the context surfaces wants it
+  /// inline.
+  context MoodContext?
+
   @@unique([userId, date, moodLoggedAt])
   // v1.12.1 — NULL-distinct external dedup key (migration 0122). Importers
   // that carry a source-stable id upsert on this; native/MANUAL entries
@@ -4162,6 +4169,100 @@ model MoodEntry {
   // inside statement_timeout. Raw SQL only (partial predicate not expressible
   // in Prisma).
   @@map("mood_entries")
+}
+
+/// v1.38 — the shape of the day around a mood entry: work, contacts, leisure,
+/// and a notable event if there was one.
+///
+/// A 1:1 optional sub-row keyed by the entry it belongs to. Every field is
+/// nullable and an entry with nothing filled in has no row at all — an empty
+/// sub-object is not a row, because a table full of all-NULL rows would say
+/// "asked and answered nothing" where the truth is "never asked".
+///
+/// **Nothing here is captured twice.** Sleep, activity and vitals belong to
+/// the modules that own them and are resolved at read time
+/// (`src/lib/mood/linked-context.ts`), never copied onto this row: a copy
+/// would go stale the moment somebody corrected a sleep session, and then two
+/// surfaces would disagree about the same night. Body symptoms and their
+/// severity belong to the illness module (`IllnessDayLog`,
+/// `IllnessSymptomLink`), which this row links to and does not duplicate.
+///
+/// The multi-select lists ride as JSON arrays in string columns, matching
+/// `MoodEntry.tags`. That column shape is not queryable and is read whole —
+/// acceptable here because every reader wants the entry's whole context
+/// anyway, and the alternative is two join tables for what is a checkbox row.
+/// A future filter over "days that included the partner" would need a real
+/// column or a join, and would be a schema change, not a query change.
+///
+/// The numeric ranges are stated in the trailing comments and enforced in Zod,
+/// not as CHECK constraints — the same trade `MoodEntryTagLink.rating`
+/// documents: a later change to a scale must not strand rows written under the
+/// old one.
+///
+/// A delegate holding a READ grant sees this row, including the decrypted
+/// note, because a grant is whole-record by design and carries no per-domain
+/// scope. That is deliberate and is stated here so nobody discovers it later:
+/// withholding part of a record from a delegate would be a new capability, not
+/// a field select.
+model MoodContext {
+  /// The entry this context belongs to, and the primary key. One context per
+  /// entry, enforced by the key rather than by application code.
+  moodEntryId String @id @map("mood_entry_id")
+  /// Carried so the context can be queried and deleted per user without a
+  /// join through the entry. Every read still pins it.
+  userId      String @map("user_id")
+
+  // ── Work ────────────────────────────────────────────────────
+  /// `off` | `partial` | `regular` | `overtime` — `WORK_STATUS_KEYS`.
+  workStatus       String? @map("work_status")
+  workMinutes      Int?    @map("work_minutes") // 0-1440
+  overtimeMinutes  Int?    @map("overtime_minutes") // 0-1440
+  workLoad         Int?    @map("work_load") // 0-10, inverse-oriented (higher is heavier)
+  workSatisfaction Int?    @map("work_satisfaction") // 0-10
+
+  // ── Contacts ────────────────────────────────────────────────
+  /// JSON array of `CONTACT_CIRCLE_KEYS`. Never scored: how many people
+  /// somebody saw is not a good or a bad number, which is why the experienced
+  /// quality below is its own field.
+  contactCircles String? @map("contact_circles")
+  /// `inPerson` | `phone` | `video` | `written` — `CONTACT_FORM_KEYS`.
+  contactForm    String? @map("contact_form")
+  /// `brief` | `medium` | `extended` — `CONTACT_EXTENT_KEYS`.
+  contactExtent  String? @map("contact_extent")
+  contactQuality Int?    @map("contact_quality") // 0-10
+  contactSupport Int?    @map("contact_support") // 0-10
+
+  // ── Leisure ─────────────────────────────────────────────────
+  /// JSON array of `LEISURE_CATEGORY_KEYS`.
+  leisureCategories String? @map("leisure_categories")
+  leisureMinutes    Int?    @map("leisure_minutes") // 0-1440
+  leisureJoy        Int?    @map("leisure_joy") // 0-10
+  leisureRecovery   Int?    @map("leisure_recovery") // 0-10
+
+  // ── A notable event ─────────────────────────────────────────
+  /// One of `EVENT_TYPE_KEYS`. One per entry: a day with two notable events
+  /// has two things worth writing in the note, and a multi-select would invite
+  /// ticking every box instead of naming the one that mattered.
+  eventType    String?   @map("event_type")
+  eventValence Int?      @map("event_valence") // -5 to +5
+  /// When it happened, if the person knew. Absent is common and means absent.
+  eventAt      DateTime? @map("event_at")
+
+  /// One free-text note for the whole context, AES-256-GCM at rest (Bytes, the
+  /// shared codec every other note column uses). One column rather than one
+  /// per section: four ciphertext columns would be four rotation entries and
+  /// four ways to forget one. Registered in `ENCRYPTED_COLUMNS` and in
+  /// `scripts/rotate-encryption-key.ts`.
+  notesEncrypted Bytes? @map("notes_encrypted")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  moodEntry MoodEntry @relation(fields: [moodEntryId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("mood_contexts")
 }
 
 // ─── Mood Tag Taxonomy (v1.8.5 W6-tax) ────────────────────────

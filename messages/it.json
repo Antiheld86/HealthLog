@@ -891,7 +891,7 @@
     "quickTagsHelp": "I tuoi tag frequenti: un tocco",
     "quickTagsExpand": "Altro",
     "loadError": "Impossibile caricare le voci dell'umore.",
-    "sectionLevelA": "Cinque scale",
+    "sectionLevelA": "Stato d'animo",
     "sectionLevelAHelp": "Facoltativo. Quello che non tocchi resta vuoto.",
     "dimensionNotAnswered": "non indicato",
     "dimensionClear": "cancella",
@@ -922,6 +922,132 @@
         "low": "completamente sopraffatto",
         "high": "pienamente capace di agire"
       }
+    },
+    "context": {
+      "section": {
+        "work": "Lavoro",
+        "contacts": "Contatti",
+        "leisure": "Tempo libero",
+        "events": "Evento"
+      },
+      "field": {
+        "workStatus": "Giornata lavorativa",
+        "workMinutes": "Tempo lavorato",
+        "overtimeMinutes": "Straordinari",
+        "workLoad": "Carico di lavoro",
+        "workSatisfaction": "Soddisfazione per il lavoro",
+        "contactCircles": "Con chi c'è stato contatto",
+        "contactForm": "Forma del contatto",
+        "contactExtent": "Durata",
+        "contactQuality": "Qualità del contatto",
+        "contactSupport": "Sostegno percepito",
+        "leisureCategories": "Come è stato speso il tempo libero",
+        "leisureMinutes": "Tempo per sé",
+        "leisureJoy": "Piacere",
+        "leisureRecovery": "Recupero",
+        "eventType": "Che cosa è successo",
+        "eventValence": "Come è stato vissuto",
+        "eventAt": "Quando",
+        "notes": "Nota"
+      },
+      "workStatus": {
+        "off": "Nessun lavoro",
+        "partial": "Parte della giornata",
+        "regular": "Giornata regolare",
+        "overtime": "Più del solito"
+      },
+      "contactCircles": {
+        "partner": "Partner",
+        "child": "Figlio o figlia",
+        "family": "Famiglia",
+        "friends": "Amici",
+        "colleagues": "Colleghi",
+        "acquaintances": "Conoscenti",
+        "professional": "Supporto professionale",
+        "other": "Altre persone"
+      },
+      "contactForm": {
+        "inPerson": "Di persona",
+        "phone": "Telefono",
+        "video": "Videochiamata",
+        "written": "Per iscritto"
+      },
+      "contactExtent": {
+        "brief": "Breve",
+        "medium": "Medio",
+        "extended": "Prolungato"
+      },
+      "leisureCategories": {
+        "film": "Film o serie",
+        "reading": "Lettura",
+        "gaming": "Videogiochi",
+        "music": "Musica",
+        "creative": "Attività creativa",
+        "outing": "Uscita",
+        "garden": "Giardino",
+        "cooking": "Cucinare",
+        "timeWithChild": "Tempo con il figlio o la figlia",
+        "relaxation": "Riposo",
+        "other": "Altro"
+      },
+      "eventType": {
+        "goodNews": "Buona notizia",
+        "badNews": "Cattiva notizia",
+        "success": "Qualcosa è riuscito",
+        "disappointment": "Una delusione",
+        "conflict": "Un conflitto",
+        "appointment": "Un appuntamento",
+        "familyEvent": "Un evento familiare",
+        "change": "Un cambiamento",
+        "unexpected": "Qualcosa di inaspettato"
+      },
+      "rating": {
+        "workLoad": {
+          "low": "nessuna pressione",
+          "high": "sotto forte pressione"
+        },
+        "workSatisfaction": {
+          "low": "per niente soddisfatto",
+          "high": "molto soddisfatto"
+        },
+        "contactQuality": {
+          "low": "non ha fatto bene",
+          "high": "ha fatto molto bene"
+        },
+        "contactSupport": {
+          "low": "senza sostegno",
+          "high": "ben sostenuto"
+        },
+        "leisureJoy": {
+          "low": "nessun piacere",
+          "high": "molto piacere"
+        },
+        "leisureRecovery": {
+          "low": "per niente rigenerante",
+          "high": "molto rigenerante"
+        },
+        "eventValence": {
+          "low": "chiaramente negativo",
+          "high": "chiaramente positivo"
+        }
+      }
+    },
+    "dayContext": {
+      "minutesPlaceholder": "Minuti",
+      "contactsHelp": "Quante persone fossero non dice nulla della giornata. Conta come è stato vissuto il contatto.",
+      "notePlaceholder": "Che altro appartiene a questa giornata",
+      "notRecorded": "non registrato",
+      "linkedTitle": "Dagli altri moduli",
+      "linkedHelp": "Letto da dove è registrato. Cambialo lì e cambia anche qui.",
+      "linkedSleep": "Dormito",
+      "linkedInBed": "A letto",
+      "linkedSteps": "Passi",
+      "linkedActiveEnergy": "Energia attiva",
+      "linkedRestingHeartRate": "Frequenza cardiaca a riposo",
+      "linkedHrv": "Variabilità cardiaca",
+      "bodyLogged": "Registrato nel diario di malattia: {count} sintomi",
+      "bodyNotLogged": "Per questa giornata non c'è nulla nel diario di malattia",
+      "openIllness": "Apri"
     }
   },
   "medications": {
@@ -3120,8 +3246,6 @@
     "navRecovery": "Recupero",
     "workouts": {
       "title": "Allenamenti",
-      "askWhy": "Perché",
-      "askWhyPrompt": "Perché questa sessione è andata così? Spiegami i miei dati di questa sessione.",
       "description": "Corse, uscite in bici, camminate e sessioni di forza recenti, deduplicati tra Apple Watch e Withings.",
       "emptyState": {
         "title": "Nessun allenamento",
@@ -3646,12 +3770,21 @@
       },
       "inTargetTitle": "Nel tuo intervallo",
       "dimensions": {
-        "title": "Cinque scale",
-        "none": "Per queste cinque scale non c'è ancora nulla.",
+        "title": "Stato d'animo",
+        "none": "Non c'è ancora nulla sullo stato d'animo.",
         "window": "{days} giorni",
         "noneInWindow": "nulla in questo periodo",
         "higherIsMore": "più alto = {anchor}",
         "notRecorded": "Non registrato: {list}."
+      },
+      "contextComparison": {
+        "title": "Contesto della giornata e il tuo umore",
+        "description": "Come si è collocato il valore dell'umore nei giorni finora registrati con questa voce, rispetto agli altri.",
+        "lower": "più basso",
+        "higher": "più alto",
+        "statement": "Nei giorni con «{label}» l'umore è stato in media {direction}: {withAvg} contro {withoutAvg}.",
+        "counts": "{withDays} giorni con, {withoutDays} giorni senza",
+        "caveat": "Questo mostra una relazione, non una causa."
       }
     },
     "derived": {

@@ -891,7 +891,7 @@
     "quickTagsHelp": "Twoje częste tagi — jedno dotknięcie",
     "quickTagsExpand": "Więcej",
     "loadError": "Nie udało się załadować wpisów nastroju.",
-    "sectionLevelA": "Pięć skal",
+    "sectionLevelA": "Samopoczucie",
     "sectionLevelAHelp": "Opcjonalne. To, czego nie ruszysz, zostaje puste.",
     "dimensionNotAnswered": "nie podano",
     "dimensionClear": "wyczyść",
@@ -922,6 +922,132 @@
         "low": "całkowicie przytłoczony",
         "high": "w pełni zdolny do działania"
       }
+    },
+    "context": {
+      "section": {
+        "work": "Praca",
+        "contacts": "Kontakty",
+        "leisure": "Czas wolny",
+        "events": "Wydarzenie"
+      },
+      "field": {
+        "workStatus": "Dzień pracy",
+        "workMinutes": "Czas pracy",
+        "overtimeMinutes": "Nadgodziny",
+        "workLoad": "Obciążenie pracą",
+        "workSatisfaction": "Zadowolenie z pracy",
+        "contactCircles": "Z kim był kontakt",
+        "contactForm": "Forma kontaktu",
+        "contactExtent": "Czas trwania",
+        "contactQuality": "Jakość kontaktu",
+        "contactSupport": "Odczuwane wsparcie",
+        "leisureCategories": "Na co poszedł czas wolny",
+        "leisureMinutes": "Czas dla siebie",
+        "leisureJoy": "Radość",
+        "leisureRecovery": "Regeneracja",
+        "eventType": "Co się wydarzyło",
+        "eventValence": "Jak zostało odebrane",
+        "eventAt": "Kiedy",
+        "notes": "Notatka"
+      },
+      "workStatus": {
+        "off": "Bez pracy",
+        "partial": "Część dnia",
+        "regular": "Zwykły dzień",
+        "overtime": "Dłużej niż zwykle"
+      },
+      "contactCircles": {
+        "partner": "Partner",
+        "child": "Dziecko",
+        "family": "Rodzina",
+        "friends": "Przyjaciele",
+        "colleagues": "Współpracownicy",
+        "acquaintances": "Znajomi",
+        "professional": "Wsparcie profesjonalne",
+        "other": "Inne osoby"
+      },
+      "contactForm": {
+        "inPerson": "Osobiście",
+        "phone": "Telefon",
+        "video": "Rozmowa wideo",
+        "written": "Pisemnie"
+      },
+      "contactExtent": {
+        "brief": "Krótki",
+        "medium": "Średni",
+        "extended": "Długi"
+      },
+      "leisureCategories": {
+        "film": "Film lub serial",
+        "reading": "Czytanie",
+        "gaming": "Gry",
+        "music": "Muzyka",
+        "creative": "Coś twórczego",
+        "outing": "Wyjście",
+        "garden": "Ogród",
+        "cooking": "Gotowanie",
+        "timeWithChild": "Czas z dzieckiem",
+        "relaxation": "Odpoczynek",
+        "other": "Coś innego"
+      },
+      "eventType": {
+        "goodNews": "Dobra wiadomość",
+        "badNews": "Zła wiadomość",
+        "success": "Coś się udało",
+        "disappointment": "Rozczarowanie",
+        "conflict": "Konflikt",
+        "appointment": "Termin",
+        "familyEvent": "Wydarzenie rodzinne",
+        "change": "Zmiana",
+        "unexpected": "Coś nieoczekiwanego"
+      },
+      "rating": {
+        "workLoad": {
+          "low": "bez presji",
+          "high": "pod dużą presją"
+        },
+        "workSatisfaction": {
+          "low": "wcale niezadowolony",
+          "high": "bardzo zadowolony"
+        },
+        "contactQuality": {
+          "low": "nie zrobił mi dobrze",
+          "high": "zrobił mi bardzo dobrze"
+        },
+        "contactSupport": {
+          "low": "bez wsparcia",
+          "high": "dobrze wspierany"
+        },
+        "leisureJoy": {
+          "low": "bez radości",
+          "high": "dużo radości"
+        },
+        "leisureRecovery": {
+          "low": "wcale nieregenerujący",
+          "high": "bardzo regenerujący"
+        },
+        "eventValence": {
+          "low": "wyraźnie zły",
+          "high": "wyraźnie dobry"
+        }
+      }
+    },
+    "dayContext": {
+      "minutesPlaceholder": "Minuty",
+      "contactsHelp": "Liczba osób nic nie mówi o dniu. Liczy się to, jak kontakt został odebrany.",
+      "notePlaceholder": "Co jeszcze należy do tego dnia",
+      "notRecorded": "nie zapisano",
+      "linkedTitle": "Z pozostałych modułów",
+      "linkedHelp": "Odczytane stamtąd, gdzie jest przechowywane. Zmień to tam, a zmieni się tutaj.",
+      "linkedSleep": "Sen",
+      "linkedInBed": "W łóżku",
+      "linkedSteps": "Kroki",
+      "linkedActiveEnergy": "Energia aktywna",
+      "linkedRestingHeartRate": "Tętno spoczynkowe",
+      "linkedHrv": "Zmienność rytmu serca",
+      "bodyLogged": "Zapisano w dzienniku choroby: {count} objawów",
+      "bodyNotLogged": "Na ten dzień nic nie zapisano w dzienniku choroby",
+      "openIllness": "Otwórz"
     }
   },
   "medications": {
@@ -3120,8 +3246,6 @@
     "navRecovery": "Regeneracja",
     "workouts": {
       "title": "Treningi",
-      "askWhy": "Dlaczego",
-      "askWhyPrompt": "Dlaczego ta sesja wypadła w ten sposób? Wyjaśnij mi moje własne wyniki.",
       "description": "Ostatnie biegi, jazdy, marsze i treningi siłowe — zdeduplikowane między Apple Watch a Withings.",
       "emptyState": {
         "title": "Brak treningów",
@@ -3646,12 +3770,21 @@
       },
       "inTargetTitle": "W Twoim zakresie",
       "dimensions": {
-        "title": "Pięć skal",
-        "none": "Dla tych pięciu skal nie ma jeszcze żadnych danych.",
+        "title": "Samopoczucie",
+        "none": "Nie zapisano jeszcze żadnych danych o samopoczuciu.",
         "window": "{days} dni",
         "noneInWindow": "brak w tym okresie",
         "higherIsMore": "wyżej = {anchor}",
         "notRecorded": "Nie zapisano: {list}."
+      },
+      "contextComparison": {
+        "title": "Kontekst dnia a nastrój",
+        "description": "Jak wypadał nastrój w dotychczas zapisanych dniach z tym wpisem, w porównaniu z pozostałymi.",
+        "lower": "niższy",
+        "higher": "wyższy",
+        "statement": "W dniach z „{label}” nastrój był średnio {direction}: {withAvg} wobec {withoutAvg}.",
+        "counts": "{withDays} dni z, {withoutDays} dni bez",
+        "caveat": "To pokazuje związek, nie przyczynę."
       }
     },
     "derived": {

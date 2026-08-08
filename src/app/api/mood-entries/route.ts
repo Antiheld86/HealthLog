@@ -25,6 +25,7 @@ import { withIdempotency } from "@/lib/idempotency";
 import { encryptNote, shapeMoodNote } from "@/lib/crypto/note-cipher";
 import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
 import { levelAForWrite, shapeLevelA } from "@/lib/mood/level-a";
+import { contextForWire, persistMoodContext } from "@/lib/mood/context";
 import { invalidateUserMood } from "@/lib/cache/invalidate";
 import { recomputeMoodBucketsForEntry } from "@/lib/rollups/mood-rollups";
 import {
@@ -114,6 +115,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
             moodTag: { select: { key: true, kind: true } },
           },
         },
+        // v1.38 — the day context, so the edit dialog can pre-populate the
+        // sections without a second round trip per row. Sparse by design: most
+        // rows carry none and the join costs nothing on those.
+        context: true,
       },
     }),
     prisma.moodEntry.count({ where }),
@@ -124,7 +129,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     meta: { total, limit, offset },
   });
 
-  const entriesWithParsedTags = entries.map(({ tagLinks, ...e }) => ({
+  const entriesWithParsedTags = entries.map(({ tagLinks, context, ...e }) => ({
     // v1.23 — decrypt `noteEncrypted` onto `note`, strip the ciphertext.
     // v1.37 — the five level-A values under the keys the create path takes,
     // so the edit form reads back what it wrote instead of mapping column
@@ -145,6 +150,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
         key: link.moodTag.key,
         rating: link.rating as number,
       })),
+    // v1.38 — the day context, or null. The ciphertext never leaves the
+    // server: `contextForWire` reads the note and drops the column.
+    context: context ? contextForWire(context) : null,
   }));
 
   return apiSuccess({
@@ -207,6 +215,7 @@ async function postMoodEntry(request: NextRequest) {
     tagKeys,
     ratedFactors,
     note,
+    context,
     moodLoggedAt,
     source,
     externalId,
@@ -257,117 +266,140 @@ async function postMoodEntry(request: NextRequest) {
     // tag-link failure must roll the entry back too — otherwise a client
     // retry on the 5xx mints a duplicate entry. The tx client is threaded
     // through the helper so both writes commit (or abort) together.
-    const { entry, persistedTagKeys, persistedRatedFactors } =
-      await prisma.$transaction(async (tx) => {
-        // v1.12.1 — when the client supplies a source-stable `externalId`,
-        // upsert on the NULL-distinct `(userId, source, externalId)` key so
-        // a re-post with the same id updates the existing row in place
-        // (idempotent re-import) instead of minting a duplicate or 409-ing.
-        // Without an `externalId`, fall back to the legacy first-write
-        // `create` exactly as before — a same-tuple re-post then trips the
-        // `(userId, date, moodLoggedAt)` unique and surfaces as a 409 below.
-        const created = externalId
-          ? await tx.moodEntry.upsert({
-              where: {
-                userId_source_externalId: {
-                  userId: user.id,
-                  source: resolvedSource,
-                  externalId,
-                },
-              },
-              create: {
+    const {
+      entry,
+      persistedTagKeys,
+      persistedRatedFactors,
+      persistedContext,
+      contextOutcome,
+    } = await prisma.$transaction(async (tx) => {
+      // v1.12.1 — when the client supplies a source-stable `externalId`,
+      // upsert on the NULL-distinct `(userId, source, externalId)` key so
+      // a re-post with the same id updates the existing row in place
+      // (idempotent re-import) instead of minting a duplicate or 409-ing.
+      // Without an `externalId`, fall back to the legacy first-write
+      // `create` exactly as before — a same-tuple re-post then trips the
+      // `(userId, date, moodLoggedAt)` unique and surfaces as a 409 below.
+      const created = externalId
+        ? await tx.moodEntry.upsert({
+            where: {
+              userId_source_externalId: {
                 userId: user.id,
-                date,
-                tz,
-                mood,
-                score,
-                ...levelA,
-                tags: tags ? JSON.stringify(tags) : null,
-                note: null,
-                noteEncrypted: encryptNote(note ?? null),
                 source: resolvedSource,
                 externalId,
-                moodLoggedAt,
               },
-              // A re-post restates pleasantness, because the label it carries
-              // always implies one and a stale A1 beside a changed mood would
-              // contradict the entry's own face. It does NOT restate the other
-              // four: `levelA` carries them only when this request did, so a
-              // client re-posting without sliders — the phone, whose build has
-              // none — leaves the stress and energy somebody answered on the
-              // web exactly where they were. An explicit null clears one.
-              update: {
-                date,
-                tz,
-                mood,
-                score,
-                ...levelA,
-                tags: tags ? JSON.stringify(tags) : null,
-                note: null,
-                noteEncrypted: encryptNote(note ?? null),
-                moodLoggedAt,
-              },
-            })
-          : await tx.moodEntry.create({
-              data: {
-                userId: user.id,
-                date,
-                tz,
-                mood,
-                score,
-                // A fresh row: an omitted dimension lands as NULL, which is
-                // the same thing the upsert's arms mean by omitting it.
-                ...levelA,
-                tags: tags ? JSON.stringify(tags) : null,
-                note: null,
-                noteEncrypted: encryptNote(note ?? null),
-                source: resolvedSource,
-                moodLoggedAt,
-              },
-            });
+            },
+            create: {
+              userId: user.id,
+              date,
+              tz,
+              mood,
+              score,
+              ...levelA,
+              tags: tags ? JSON.stringify(tags) : null,
+              note: null,
+              noteEncrypted: encryptNote(note ?? null),
+              source: resolvedSource,
+              externalId,
+              moodLoggedAt,
+            },
+            // A re-post restates pleasantness, because the label it carries
+            // always implies one and a stale A1 beside a changed mood would
+            // contradict the entry's own face. It does NOT restate the other
+            // four: `levelA` carries them only when this request did, so a
+            // client re-posting without sliders — the phone, whose build has
+            // none — leaves the stress and energy somebody answered on the
+            // web exactly where they were. An explicit null clears one.
+            update: {
+              date,
+              tz,
+              mood,
+              score,
+              ...levelA,
+              tags: tags ? JSON.stringify(tags) : null,
+              note: null,
+              noteEncrypted: encryptNote(note ?? null),
+              moodLoggedAt,
+            },
+          })
+        : await tx.moodEntry.create({
+            data: {
+              userId: user.id,
+              date,
+              tz,
+              mood,
+              score,
+              // A fresh row: an omitted dimension lands as NULL, which is
+              // the same thing the upsert's arms mean by omitting it.
+              ...levelA,
+              tags: tags ? JSON.stringify(tags) : null,
+              note: null,
+              noteEncrypted: encryptNote(note ?? null),
+              source: resolvedSource,
+              moodLoggedAt,
+            },
+          });
 
-        if (
-          (tagKeys && tagKeys.length > 0) ||
-          (ratedFactors && ratedFactors.length > 0)
-        ) {
-          // Unknown / non-RATED keys are dropped inside the helper (the
-          // catalog is the source of truth). An out-of-scale rating
-          // throws `RatedFactorOutOfRangeError`, rolling the tx back.
-          await createTagLinks(
-            created.id,
-            user.id,
-            tagKeys ?? [],
-            tx,
-            ratedFactors ?? [],
-          );
-        }
+      if (
+        (tagKeys && tagKeys.length > 0) ||
+        (ratedFactors && ratedFactors.length > 0)
+      ) {
+        // Unknown / non-RATED keys are dropped inside the helper (the
+        // catalog is the source of truth). An out-of-scale rating
+        // throws `RatedFactorOutOfRangeError`, rolling the tx back.
+        await createTagLinks(
+          created.id,
+          user.id,
+          tagKeys ?? [],
+          tx,
+          ratedFactors ?? [],
+        );
+      }
 
-        // v1.8.5 / v1.12.0 — read the persisted links back so the create
-        // response mirrors the list GET shape exactly: binary keys and
-        // rated factors split by `kind` (unknown keys already filtered).
-        const links = await tx.moodEntryTagLink.findMany({
-          where: { moodEntryId: created.id },
-          select: {
-            rating: true,
-            moodTag: { select: { key: true, kind: true } },
-          },
-        });
-
-        return {
-          entry: created,
-          persistedTagKeys: links
-            .filter((link) => link.moodTag.kind !== "RATED")
-            .map((link) => link.moodTag.key),
-          persistedRatedFactors: links
-            .filter(
-              (link) => link.moodTag.kind === "RATED" && link.rating !== null,
-            )
-            .map((link) => ({
-              key: link.moodTag.key,
-              rating: link.rating as number,
-            })),
-        };
+      // v1.38 — the day context, in the SAME transaction as the entry and
+      // its links, for the same reason they are: it is user-intended
+      // content, not a cache, so a context write that fails has to roll the
+      // entry back rather than leave a client retrying a 5xx into a
+      // duplicate entry. An absent `context` key leaves a stored one alone;
+      // a context that says nothing removes the row.
+      const contextOutcome = await persistMoodContext(
+        tx,
+        created.id,
+        user.id,
+        context,
+      );
+      const storedContext = await tx.moodContext.findUnique({
+        where: { moodEntryId: created.id },
       });
+
+      // v1.8.5 / v1.12.0 — read the persisted links back so the create
+      // response mirrors the list GET shape exactly: binary keys and
+      // rated factors split by `kind` (unknown keys already filtered).
+      const links = await tx.moodEntryTagLink.findMany({
+        where: { moodEntryId: created.id },
+        select: {
+          rating: true,
+          moodTag: { select: { key: true, kind: true } },
+        },
+      });
+
+      return {
+        entry: created,
+        contextOutcome,
+        persistedContext: storedContext,
+        persistedTagKeys: links
+          .filter((link) => link.moodTag.kind !== "RATED")
+          .map((link) => link.moodTag.key),
+        persistedRatedFactors: links
+          .filter(
+            (link) => link.moodTag.kind === "RATED" && link.rating !== null,
+          )
+          .map((link) => ({
+            key: link.moodTag.key,
+            rating: link.rating as number,
+          })),
+      };
+    });
 
     await auditLog("moodEntry.create", {
       userId: user.id,
@@ -377,7 +409,11 @@ async function postMoodEntry(request: NextRequest) {
 
     annotate({
       action: { name: "mood-entries.create" },
-      meta: { moodEntryId: entry.id, mood },
+      // `mood_context` says written / removed / untouched rather than a
+      // boolean, because "the request said nothing" and "the request cleared
+      // it" are different acts and a dashboard that folded them together
+      // could not tell an abandoned section from a deliberate one.
+      meta: { moodEntryId: entry.id, mood, mood_context: contextOutcome },
     });
 
     // v1.4.34 IW-G — bust per-user mood + achievements + analytics caches.
@@ -411,6 +447,10 @@ async function postMoodEntry(request: NextRequest) {
         tagKeys: persistedTagKeys,
         // v1.12.0 — rated factors with their per-entry score.
         ratedFactors: persistedRatedFactors,
+        // v1.38 — the stored context, lists decoded and note decrypted. Null
+        // when the entry carries none, which is a different answer from an
+        // object full of nulls and reads as one.
+        context: persistedContext ? contextForWire(persistedContext) : null,
       },
       201,
     );

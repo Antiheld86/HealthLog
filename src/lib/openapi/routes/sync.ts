@@ -8,6 +8,7 @@
 import { z } from "zod/v4";
 import type { ZodOpenApiObject } from "zod-openapi";
 import { measurementResource } from "./measurements";
+import { moodContextWire } from "./mood";
 import { dataEnvelope, stdResponses } from "./shared";
 
 // ── Sync (v1.7.0 offline / server-optional) ─────────────────────────
@@ -97,7 +98,29 @@ const syncMoodUpsert = z
     id: z.string(),
     date: z.string().describe("YYYY-MM-DD anchored to the row's `tz`."),
     mood: z.string(),
-    score: z.number().int(),
+    score: z.number().int().describe("The legacy 1-5 axis. Unchanged."),
+    a1: z
+      .number()
+      .int()
+      .nullable()
+      .describe(
+        "Pleasantness, 0-10. Server-derived from `mood` on every write, so this is populated even for rows a client posted without it. Consume the value; do not re-derive it.",
+      ),
+    a2: z
+      .number()
+      .int()
+      .nullable()
+      .describe(
+        "Stress, 0-10, INVERSE-oriented: a higher value is more stress. NULL when nobody answered it.",
+      ),
+    a3: z.number().int().nullable().describe("Energy, 0-10, or null."),
+    a4: z.number().int().nullable().describe("Connectedness, 0-10, or null."),
+    a5: z.number().int().nullable().describe("Stability, 0-10, or null."),
+    context: moodContextWire
+      .nullable()
+      .describe(
+        "The day's context, or null when the entry carries none. Null and an object of nulls are different answers.",
+      ),
     tags: z.string().nullable().describe("JSON array of tag keys, or null."),
     note: z.string().nullable(),
     moodLoggedAt: z.iso.datetime({ offset: true }),

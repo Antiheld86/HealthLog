@@ -862,6 +862,50 @@ const handler = apiHandler(
                       update: restoredData,
                     });
 
+              // The day context, rebuilt after the entry so it can bind to
+              // whatever id that entry actually got. Delete-then-write rather
+              // than an upsert with a preserve-when-absent arm: the file
+              // states the whole context or states that there was none, and a
+              // restored entry carrying half a file's context and half a live
+              // row's would be a state neither of them describes.
+              await tx.moodContext.deleteMany({
+                where: { moodEntryId: restored.id },
+              });
+              if (entry.context) {
+                const context = entry.context;
+                await tx.moodContext.create({
+                  data: {
+                    moodEntryId: restored.id,
+                    userId: ownerId,
+                    workStatus: context.workStatus ?? null,
+                    workMinutes: context.workMinutes ?? null,
+                    overtimeMinutes: context.overtimeMinutes ?? null,
+                    workLoad: context.workLoad ?? null,
+                    workSatisfaction: context.workSatisfaction ?? null,
+                    contactCircles: context.contactCircles ?? null,
+                    contactForm: context.contactForm ?? null,
+                    contactExtent: context.contactExtent ?? null,
+                    contactQuality: context.contactQuality ?? null,
+                    contactSupport: context.contactSupport ?? null,
+                    leisureCategories: context.leisureCategories ?? null,
+                    leisureMinutes: context.leisureMinutes ?? null,
+                    leisureJoy: context.leisureJoy ?? null,
+                    leisureRecovery: context.leisureRecovery ?? null,
+                    eventType: context.eventType ?? null,
+                    eventValence: context.eventValence ?? null,
+                    eventAt: context.eventAt ? new Date(context.eventAt) : null,
+                    // The note comes back the way every other dual-column
+                    // note does: ciphertext verbatim when the file carries
+                    // it, a portable file's plain text re-encrypted on the
+                    // way in.
+                    notesEncrypted:
+                      context.notesEncrypted == null
+                        ? encryptNote(context.note ?? null)
+                        : decodeEncryptedBytes(context.notesEncrypted),
+                  },
+                });
+              }
+
               await tx.moodEntryTagLink.deleteMany({
                 where: { moodEntryId: restored.id },
               });

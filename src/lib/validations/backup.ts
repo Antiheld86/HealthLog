@@ -289,6 +289,45 @@ const moodEntrySchema = z
     // RATED-only meaning, so every file written before this one parses
     // unchanged and restores identically: absent reads as none.
     structuredTags: z.array(z.string().min(1)).default([]),
+    // The day context, when the entry had one. Optional and nullable at the
+    // top: a file written before this existed carries no `context` key at all
+    // and must parse and restore exactly as it did. Every field inside is
+    // optional for the same reason a context row's columns are nullable —
+    // only the sections somebody opened say anything.
+    //
+    // The two multi-selects ride as the stored JSON string rather than as
+    // arrays, so the restore writes the column back verbatim and a file cannot
+    // arrive with a list the parser and the column disagree about. Nothing is
+    // re-validated against the vocabulary here: a backup restores what the
+    // account had, and a key retired between the export and the restore is
+    // still that person's answer.
+    context: z
+      .object({
+        workStatus: z.string().nullable().optional(),
+        workMinutes: z.number().int().nullable().optional(),
+        overtimeMinutes: z.number().int().nullable().optional(),
+        workLoad: z.number().int().nullable().optional(),
+        workSatisfaction: z.number().int().nullable().optional(),
+        contactCircles: z.string().nullable().optional(),
+        contactForm: z.string().nullable().optional(),
+        contactExtent: z.string().nullable().optional(),
+        contactQuality: z.number().int().nullable().optional(),
+        contactSupport: z.number().int().nullable().optional(),
+        leisureCategories: z.string().nullable().optional(),
+        leisureMinutes: z.number().int().nullable().optional(),
+        leisureJoy: z.number().int().nullable().optional(),
+        leisureRecovery: z.number().int().nullable().optional(),
+        eventType: z.string().nullable().optional(),
+        eventValence: z.number().int().nullable().optional(),
+        eventAt: isoDateTime.nullable().optional(),
+        // Same pair as the entry's own note: a portable file carries the
+        // plain text, a disaster-recovery file the ciphertext.
+        note: z.string().nullable().optional(),
+        notesEncrypted: base64BytesSchema.nullable().optional(),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
   })
   .passthrough();
 

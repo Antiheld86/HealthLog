@@ -891,7 +891,7 @@
     "quickTagsHelp": "Tus etiquetas frecuentes: un toque",
     "quickTagsExpand": "Más",
     "loadError": "No se pudieron cargar tus registros de estado de ánimo.",
-    "sectionLevelA": "Cinco escalas",
+    "sectionLevelA": "Estado emocional",
     "sectionLevelAHelp": "Opcional. Lo que no toques queda vacío.",
     "dimensionNotAnswered": "sin indicar",
     "dimensionClear": "borrar",
@@ -922,6 +922,132 @@
         "low": "completamente desbordado",
         "high": "con plena capacidad de acción"
       }
+    },
+    "context": {
+      "section": {
+        "work": "Trabajo",
+        "contacts": "Contactos",
+        "leisure": "Tiempo libre",
+        "events": "Acontecimiento"
+      },
+      "field": {
+        "workStatus": "Jornada laboral",
+        "workMinutes": "Tiempo trabajado",
+        "overtimeMinutes": "Horas extra",
+        "workLoad": "Carga de trabajo",
+        "workSatisfaction": "Satisfacción con el trabajo",
+        "contactCircles": "Con quién hubo contacto",
+        "contactForm": "Forma de contacto",
+        "contactExtent": "Duración",
+        "contactQuality": "Calidad del contacto",
+        "contactSupport": "Apoyo percibido",
+        "leisureCategories": "En qué se empleó el tiempo libre",
+        "leisureMinutes": "Tiempo para ti",
+        "leisureJoy": "Disfrute",
+        "leisureRecovery": "Recuperación",
+        "eventType": "Qué ocurrió",
+        "eventValence": "Cómo sentó",
+        "eventAt": "Cuándo",
+        "notes": "Nota"
+      },
+      "workStatus": {
+        "off": "Sin trabajar",
+        "partial": "Parte del día",
+        "regular": "Jornada normal",
+        "overtime": "Más de lo habitual"
+      },
+      "contactCircles": {
+        "partner": "Pareja",
+        "child": "Hijo o hija",
+        "family": "Familia",
+        "friends": "Amistades",
+        "colleagues": "Colegas",
+        "acquaintances": "Conocidos",
+        "professional": "Apoyo profesional",
+        "other": "Otras personas"
+      },
+      "contactForm": {
+        "inPerson": "En persona",
+        "phone": "Teléfono",
+        "video": "Videollamada",
+        "written": "Por escrito"
+      },
+      "contactExtent": {
+        "brief": "Breve",
+        "medium": "Medio",
+        "extended": "Prolongado"
+      },
+      "leisureCategories": {
+        "film": "Cine o series",
+        "reading": "Lectura",
+        "gaming": "Videojuegos",
+        "music": "Música",
+        "creative": "Algo creativo",
+        "outing": "Salida",
+        "garden": "Jardín",
+        "cooking": "Cocinar",
+        "timeWithChild": "Tiempo con el hijo o la hija",
+        "relaxation": "Descanso",
+        "other": "Otra cosa"
+      },
+      "eventType": {
+        "goodNews": "Buenas noticias",
+        "badNews": "Malas noticias",
+        "success": "Algo salió bien",
+        "disappointment": "Una decepción",
+        "conflict": "Un conflicto",
+        "appointment": "Una cita",
+        "familyEvent": "Un acontecimiento familiar",
+        "change": "Un cambio",
+        "unexpected": "Algo inesperado"
+      },
+      "rating": {
+        "workLoad": {
+          "low": "sin presión",
+          "high": "bajo mucha presión"
+        },
+        "workSatisfaction": {
+          "low": "nada satisfecho",
+          "high": "muy satisfecho"
+        },
+        "contactQuality": {
+          "low": "no sentó bien",
+          "high": "sentó muy bien"
+        },
+        "contactSupport": {
+          "low": "sin apoyo",
+          "high": "muy apoyado"
+        },
+        "leisureJoy": {
+          "low": "sin disfrute",
+          "high": "mucho disfrute"
+        },
+        "leisureRecovery": {
+          "low": "nada reparador",
+          "high": "muy reparador"
+        },
+        "eventValence": {
+          "low": "claramente malo",
+          "high": "claramente bueno"
+        }
+      }
+    },
+    "dayContext": {
+      "minutesPlaceholder": "Minutos",
+      "contactsHelp": "Cuántas personas fueron no dice nada del día. Lo que cuenta es cómo se sintió el contacto.",
+      "notePlaceholder": "Cualquier otra cosa que forme parte de este día",
+      "notRecorded": "sin registrar",
+      "linkedTitle": "De tus otros módulos",
+      "linkedHelp": "Se lee de donde está guardado. Cámbialo allí y cambia aquí.",
+      "linkedSleep": "Dormido",
+      "linkedInBed": "En la cama",
+      "linkedSteps": "Pasos",
+      "linkedActiveEnergy": "Energía activa",
+      "linkedRestingHeartRate": "Pulso en reposo",
+      "linkedHrv": "Variabilidad cardiaca",
+      "bodyLogged": "Registrado en el diario de enfermedad: {count} síntomas",
+      "bodyNotLogged": "No hay nada registrado en el diario de enfermedad para este día",
+      "openIllness": "Abrir"
     }
   },
   "medications": {
@@ -3120,8 +3246,6 @@
     "navRecovery": "Recuperación",
     "workouts": {
       "title": "Entrenamientos",
-      "askWhy": "Por qué",
-      "askWhyPrompt": "¿Por qué salió así esta sesión? Explícame mis propios datos de ella.",
       "description": "Carreras, salidas en bici, paseos y sesiones de fuerza recientes, deduplicados entre Apple Watch y Withings.",
       "emptyState": {
         "title": "Aún no hay entrenamientos",
@@ -3646,12 +3770,21 @@
       },
       "inTargetTitle": "En tu rango",
       "dimensions": {
-        "title": "Cinco escalas",
-        "none": "Todavía no hay nada registrado en estas cinco escalas.",
+        "title": "Estado emocional",
+        "none": "Todavía no hay nada registrado sobre tu estado emocional.",
         "window": "{days} días",
         "noneInWindow": "nada en este periodo",
         "higherIsMore": "más alto = {anchor}",
         "notRecorded": "Sin registrar: {list}."
+      },
+      "contextComparison": {
+        "title": "Contexto del día y tu estado de ánimo",
+        "description": "Cómo se situó el valor de ánimo en los días registrados hasta ahora con esta entrada, frente al resto.",
+        "lower": "más bajo",
+        "higher": "más alto",
+        "statement": "En los días con «{label}» el ánimo promedió {direction}: {withAvg} frente a {withoutAvg}.",
+        "counts": "{withDays} días con, {withoutDays} días sin",
+        "caveat": "Esto muestra una relación, no una causa."
       }
     },
     "derived": {

@@ -23,7 +23,7 @@ vi.mock("@/lib/db", () => ({
       createMany: vi.fn(),
     },
     workoutSamples: {
-      createMany: vi.fn(),
+      createManyAndReturn: vi.fn(),
     },
     user: {
       findUnique: vi.fn(),
@@ -109,6 +109,23 @@ function makeRequest(
   });
 }
 
+/**
+ * `workout.findMany` serves two callers in this route: the pre-flight
+ * probe for rows that already exist (it passes a `where`), and — inside
+ * the fake above — the stand-in for `INSERT ... RETURNING` (`select`
+ * only). Keying on `select.id` alone stopped telling the two apart once
+ * the probe began selecting `id` so an enrichment can address the stored
+ * workout, so the RETURNING arm is the one WITHOUT a `where`.
+ */
+function mockInsertReturning(
+  rows: Array<{ id: string; source: string; externalId: string }>,
+) {
+  vi.mocked(prisma.workout.findMany).mockImplementation((async (args: {
+    where?: unknown;
+    select?: Record<string, unknown>;
+  }) => (args.where === undefined && args.select?.id ? rows : [])) as never);
+}
+
 function validWorkout(
   externalId: string,
   overrides: Record<string, unknown> = {},
@@ -161,7 +178,13 @@ beforeEach(() => {
   );
   vi.mocked(prisma.workout.findFirst).mockResolvedValue(null);
   vi.mocked(prisma.workoutRoute.createMany).mockResolvedValue({ count: 0 });
-  vi.mocked(prisma.workoutSamples.createMany).mockResolvedValue({ count: 0 });
+  // The series write reports which rows landed, so an enrichment can tell
+  // an attach from a row a concurrent writer got in first. The fake
+  // echoes every row back as landed.
+  vi.mocked(prisma.workoutSamples.createManyAndReturn).mockImplementation(
+    (async (args: { data: Array<{ workoutId: string }> }) =>
+      args.data.map((row) => ({ workoutId: row.workoutId }))) as never,
+  );
   // v1.4.43 W9 — default to no per-user source-priority override so
   // the write-time picker walks the canonical default ladder. Tests
   // that exercise a custom ladder override this in-line.
@@ -434,25 +457,18 @@ describe("POST /api/workouts/batch — per-entry status envelope", () => {
         createdAt: new Date("2026-05-14T10:00:01.000Z"),
       },
     ] as never);
-    vi.mocked(prisma.workout.findMany).mockImplementation((async (args: {
-      select?: Record<string, unknown>;
-    }) => {
-      if (args.select?.id) {
-        return [
-          {
-            id: "apple-id",
-            source: "APPLE_HEALTH",
-            externalId: "shared-external-id",
-          },
-          {
-            id: "manual-id",
-            source: "MANUAL",
-            externalId: "shared-external-id",
-          },
-        ];
-      }
-      return [];
-    }) as never);
+    mockInsertReturning([
+      {
+        id: "apple-id",
+        source: "APPLE_HEALTH",
+        externalId: "shared-external-id",
+      },
+      {
+        id: "manual-id",
+        source: "MANUAL",
+        externalId: "shared-external-id",
+      },
+    ]);
 
     const res = await POST(
       makeRequest({
@@ -480,20 +496,13 @@ describe("POST /api/workouts/batch — nested route attachment", () => {
     vi.mocked(prisma.workout.createMany).mockResolvedValue({ count: 1 });
     // Post-insert lookup returns the newly-inserted workout id so the
     // route can be attached by FK.
-    vi.mocked(prisma.workout.findMany).mockImplementation((async (args: {
-      select?: { id?: true; source?: true; externalId?: true };
-    }) => {
-      if (args.select?.id) {
-        return [
-          {
-            id: "wkt-fresh-id",
-            source: "APPLE_HEALTH",
-            externalId: "uuid-with-route",
-          },
-        ];
-      }
-      return [];
-    }) as never);
+    mockInsertReturning([
+      {
+        id: "wkt-fresh-id",
+        source: "APPLE_HEALTH",
+        externalId: "uuid-with-route",
+      },
+    ]);
 
     const res = await POST(
       makeRequest({
@@ -523,20 +532,13 @@ describe("POST /api/workouts/batch — nested route attachment", () => {
 describe("POST /api/workouts/batch — per-workout HR series (v1.10.0)", () => {
   it("creates a WorkoutSamples row for an indoor workout (samples, no route)", async () => {
     vi.mocked(prisma.workout.createMany).mockResolvedValue({ count: 1 });
-    vi.mocked(prisma.workout.findMany).mockImplementation((async (args: {
-      select?: { id?: true };
-    }) => {
-      if (args.select?.id) {
-        return [
-          {
-            id: "wkt-indoor-id",
-            source: "APPLE_HEALTH",
-            externalId: "uuid-indoor",
-          },
-        ];
-      }
-      return [];
-    }) as never);
+    mockInsertReturning([
+      {
+        id: "wkt-indoor-id",
+        source: "APPLE_HEALTH",
+        externalId: "uuid-indoor",
+      },
+    ]);
 
     const res = await POST(
       makeRequest({
@@ -556,8 +558,9 @@ describe("POST /api/workouts/batch — per-workout HR series (v1.10.0)", () => {
     // The route table is untouched — an indoor workout has no GPS route.
     expect(prisma.workoutRoute.createMany).not.toHaveBeenCalled();
     // The HR series lands in the dedicated child table by FK.
-    expect(prisma.workoutSamples.createMany).toHaveBeenCalledTimes(1);
-    const call = vi.mocked(prisma.workoutSamples.createMany).mock.calls[0]?.[0];
+    expect(prisma.workoutSamples.createManyAndReturn).toHaveBeenCalledTimes(1);
+    const call = vi.mocked(prisma.workoutSamples.createManyAndReturn).mock
+      .calls[0]?.[0];
     const rows = (
       call as {
         data: Array<{
@@ -575,20 +578,13 @@ describe("POST /api/workouts/batch — per-workout HR series (v1.10.0)", () => {
 
   it("attaches both a route and an HR series on one workout", async () => {
     vi.mocked(prisma.workout.createMany).mockResolvedValue({ count: 1 });
-    vi.mocked(prisma.workout.findMany).mockImplementation((async (args: {
-      select?: { id?: true };
-    }) => {
-      if (args.select?.id) {
-        return [
-          {
-            id: "wkt-both-id",
-            source: "APPLE_HEALTH",
-            externalId: "uuid-both",
-          },
-        ];
-      }
-      return [];
-    }) as never);
+    mockInsertReturning([
+      {
+        id: "wkt-both-id",
+        source: "APPLE_HEALTH",
+        externalId: "uuid-both",
+      },
+    ]);
 
     const res = await POST(
       makeRequest({
@@ -610,14 +606,15 @@ describe("POST /api/workouts/batch — per-workout HR series (v1.10.0)", () => {
     );
     expect(res.status).toBe(200);
     expect(prisma.workoutRoute.createMany).toHaveBeenCalledTimes(1);
-    expect(prisma.workoutSamples.createMany).toHaveBeenCalledTimes(1);
+    expect(prisma.workoutSamples.createManyAndReturn).toHaveBeenCalledTimes(1);
     const routeRows = (
       vi.mocked(prisma.workoutRoute.createMany).mock.calls[0]?.[0] as {
         data: Array<{ workoutId: string }>;
       }
     ).data;
     const sampleRows = (
-      vi.mocked(prisma.workoutSamples.createMany).mock.calls[0]?.[0] as {
+      vi.mocked(prisma.workoutSamples.createManyAndReturn).mock
+        .calls[0]?.[0] as {
         data: Array<{ workoutId: string }>;
       }
     ).data;
@@ -632,7 +629,7 @@ describe("POST /api/workouts/batch — per-workout HR series (v1.10.0)", () => {
       makeRequest({ workouts: [validWorkout("uuid-no-series")] }),
     );
     expect(res.status).toBe(200);
-    expect(prisma.workoutSamples.createMany).not.toHaveBeenCalled();
+    expect(prisma.workoutSamples.createManyAndReturn).not.toHaveBeenCalled();
   });
 });
 

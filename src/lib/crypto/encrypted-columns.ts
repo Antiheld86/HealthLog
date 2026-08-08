@@ -204,6 +204,10 @@ export const ENCRYPTED_COLUMNS: readonly EncryptedColumn[] = [
   // IllnessDayLog / LabResult note columns above; Bytes via the shared codec.
   { model: "MoodEntry", field: "noteEncrypted", kind: "bytes" },
   { model: "Measurement", field: "notesEncrypted", kind: "bytes" },
+  // v1.38 — the one free-text note on a mood entry's day context. Same codec
+  // as the entry note beside it; one column for the whole context rather than
+  // one per section, so there is one rotation entry rather than four.
+  { model: "MoodContext", field: "notesEncrypted", kind: "bytes" },
 
   // ───── v1.25 medication free-text notes (Bytes columns) ─────
   // Side-effect log note, dose-change titration note, and inventory-item

@@ -54,6 +54,8 @@ import { apiSuccess, apiError } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { readNote } from "@/lib/crypto/note-cipher";
+import { levelAForWire } from "@/lib/mood/level-a";
+import { contextForWire, type MoodContextWire } from "@/lib/mood/context";
 import { TOMBSTONE_RETENTION_DAYS } from "@/lib/auth/native-client";
 import {
   decodeCursor,
@@ -107,6 +109,25 @@ interface MoodUpsert {
   date: string;
   mood: string;
   score: number;
+  /**
+   * v1.38 — the five level-A self-state values, each 0-10 and each nullable.
+   * `a2` is inverse-oriented: a higher number means more stress, and a client
+   * that wants "up is better" flips the sign itself rather than the server
+   * storing a flipped value.
+   *
+   * Server-authoritative: `a1` is derived from the five-point label on every
+   * write, so a client that sends only `mood` still mirrors a complete row.
+   */
+  a1: number | null;
+  a2: number | null;
+  a3: number | null;
+  a4: number | null;
+  a5: number | null;
+  /**
+   * v1.38 — the day's context, or null when the entry carries none. Null and
+   * an object of nulls are different answers and the feed keeps them apart.
+   */
+  context: MoodContextWire | null;
   tags: string | null;
   note: string | null;
   moodLoggedAt: string;
@@ -299,6 +320,12 @@ export const GET = apiHandler(async (request: NextRequest) => {
           date: true,
           mood: true,
           score: true,
+          moodA1: true,
+          stressA2: true,
+          energyA3: true,
+          connectionA4: true,
+          stabilityA5: true,
+          context: true,
           tags: true,
           note: true,
           noteEncrypted: true,
@@ -407,6 +434,10 @@ export const GET = apiHandler(async (request: NextRequest) => {
         date: row.date,
         mood: row.mood,
         score: row.score,
+        // Under the same wire keys the write path accepts, so a client reads
+        // back exactly what it can post.
+        ...levelAForWire(row),
+        context: row.context ? contextForWire(row.context) : null,
         tags: row.tags,
         note: readNote(row.noteEncrypted, row.note),
         moodLoggedAt: row.moodLoggedAt.toISOString(),

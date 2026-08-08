@@ -20,22 +20,55 @@ import {
 
 // v1.4.25 W16b — typed workout batch ingest response envelope. Mirrors
 // the measurements batch shape but reports the `workouts` count rather
-// than the entries count, and the `skipped` field is reserved (the
-// Zod schema rejects malformed entries with a 400 before the per-entry
-// pass, so today's responses always carry an empty array).
+// than the entries count. `skipped` carries the entries the server
+// refused: an unusable external id, or a `samples` array that failed
+// validation (`reason: "invalid_samples"`).
+//
+// `enriched` says the entry matched a stored workout that had no
+// heart-rate series and the series it carried was attached. The
+// workout row itself was not written, so such an entry also counts
+// towards `duplicates`. That rule is part of the published contract,
+// not just a note here: it rides the field descriptions below, because
+// a client summing the counters has to know which bucket an
+// enrichment lands in.
 const workoutBatchEntryResult = z
   .object({
     index: z.number().int().nonnegative(),
-    status: z.enum(["inserted", "duplicate", "skipped"]),
-    reason: z.string().optional(),
+    status: z
+      .enum(["inserted", "duplicate", "enriched", "skipped"])
+      .describe(
+        "`inserted`: a new workout row. `duplicate`: the workout was already stored and nothing was written. `enriched`: the workout was already stored and the heart-rate series this entry carried was attached to it; the workout row itself was not written, and the entry also counts towards the top-level `duplicates`. `skipped`: the server refused the entry, see `reason`.",
+      ),
+    reason: z
+      .string()
+      .optional()
+      .describe(
+        "Why a `skipped` entry was refused: `unstable_external_id` for an id that does not survive a client restart, `invalid_samples` for a heart-rate series that failed validation.",
+      ),
   })
   .meta({ id: "WorkoutBatchEntryResult" });
 
 const workoutBatchResponse = z
   .object({
-    processed: z.number().int().nonnegative(),
-    inserted: z.number().int().nonnegative(),
-    duplicates: z.number().int().nonnegative(),
+    processed: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe(
+        "Entries in the request. Equals `inserted + duplicates + skipped.length`.",
+      ),
+    inserted: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe("Workout rows this request wrote."),
+    duplicates: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe(
+        "Entries that wrote no workout row because the workout was already stored. The top-level counters count workout rows, so an entry reported as `enriched` counts here as well even though its heart-rate series was attached.",
+      ),
     skipped: z.array(
       z.object({
         index: z.number().int().nonnegative(),
@@ -275,7 +308,7 @@ export const workoutPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Measurements"],
       summary: "Typed workout batch ingest (v1.4.25 W16b)",
       description:
-        "Server-side ingest endpoint for HKWorkout records (iOS) and Withings activity rows (server-to-server). Up to 100 workouts per call; nested route geometry (GeoJSON LineString) is capped at 20 000 points and stored in a 1:1 `WorkoutRoute` row keyed by `workoutId`. Idempotent via the `Idempotency-Key` header (replay window 24h). Per-entry status (`inserted | duplicate | skipped`) lets the iOS sync cursor checkpoint accurately. The request body ceiling is 5 MB enforced at the HTTP layer — clients above the ceiling receive a 413 with `workout.batch.payload_too_large`.",
+        'Server-side ingest endpoint for HKWorkout records (iOS) and Withings activity rows (server-to-server). Up to 100 workouts per call; nested route geometry (GeoJSON LineString) is capped at 20 000 points and stored in a 1:1 `WorkoutRoute` row keyed by `workoutId`. Idempotent via the `Idempotency-Key` header (replay window 24h). Per-entry status (`inserted | duplicate | enriched | skipped`) lets the iOS sync cursor checkpoint accurately. An entry matching a stored workout is first-write-wins for the workout row; when it carries a `samples` array and the stored workout has no heart-rate series, the series is attached and the entry reports `enriched` (repeatable: a workout that already has a series is a no-op). An entry whose `samples` array fails validation is refused on its own with `reason: "invalid_samples"` — the rest of the batch still lands. The request body ceiling is 5 MB enforced at the HTTP layer — clients above the ceiling receive a 413 with `workout.batch.payload_too_large`.',
       requestBody: {
         required: true,
         content: { "application/json": { schema: createBatchWorkoutSchema } },

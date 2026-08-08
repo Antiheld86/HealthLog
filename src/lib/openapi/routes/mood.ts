@@ -25,6 +25,14 @@ import {
 import { moodTagLayoutSchema } from "@/lib/mood/tag-layout";
 import { moodLevelEnum, moodSourceEnum } from "@/lib/validations/mood";
 import {
+  CONTACT_CIRCLE_KEYS,
+  CONTACT_EXTENT_KEYS,
+  CONTACT_FORM_KEYS,
+  EVENT_TYPE_KEYS,
+  LEISURE_CATEGORY_KEYS,
+  WORK_STATUS_KEYS,
+} from "@/lib/mood/context-vocabulary";
+import {
   dataEnvelope,
   errorEnvelope,
   stdResponses,
@@ -188,6 +196,77 @@ const notFoundResponse = {
   },
 } as const;
 
+/**
+ * v1.38 — the day's context on a mood entry, in the one shape both the write
+ * path and the sync feed use.
+ *
+ * Every field optional and nullable. The two multi-selects are closed key
+ * lists; a value outside them is refused rather than stored, which is what
+ * keeps the analytics and the six locale label sets from drifting apart from
+ * the data.
+ *
+ * Exported so `./sync.ts` publishes the same object rather than declaring a
+ * second one — two definitions of one payload is how a client ends up decoding
+ * a field the server stopped sending.
+ */
+export const moodContextWire = z
+  .object({
+    workStatus: z
+      .enum(WORK_STATUS_KEYS)
+      .nullish()
+      .describe("Shape of the working day."),
+    workMinutes: z.number().int().min(0).max(1440).nullish(),
+    overtimeMinutes: z.number().int().min(0).max(1440).nullish(),
+    workLoad: z
+      .number()
+      .int()
+      .min(0)
+      .max(10)
+      .nullish()
+      .describe(
+        "0-10, INVERSE-oriented: a higher value is a heavier day, not a better one.",
+      ),
+    workSatisfaction: z.number().int().min(0).max(10).nullish(),
+    contactCircles: z
+      .array(z.enum(CONTACT_CIRCLE_KEYS))
+      .nullish()
+      .describe(
+        "Who the day's contact was with. Multi-select. Never scored: the count of people is not a good or a bad number.",
+      ),
+    contactForm: z.enum(CONTACT_FORM_KEYS).nullish(),
+    contactExtent: z.enum(CONTACT_EXTENT_KEYS).nullish(),
+    contactQuality: z.number().int().min(0).max(10).nullish(),
+    contactSupport: z.number().int().min(0).max(10).nullish(),
+    leisureCategories: z.array(z.enum(LEISURE_CATEGORY_KEYS)).nullish(),
+    leisureMinutes: z.number().int().min(0).max(1440).nullish(),
+    leisureJoy: z.number().int().min(0).max(10).nullish(),
+    leisureRecovery: z.number().int().min(0).max(10).nullish(),
+    eventType: z
+      .enum(EVENT_TYPE_KEYS)
+      .nullish()
+      .describe("One notable event. One per entry, not a list."),
+    eventValence: z
+      .number()
+      .int()
+      .min(-5)
+      .max(5)
+      .nullish()
+      .describe("-5 (clearly bad) to +5 (clearly good)."),
+    eventAt: z.iso.datetime({ offset: true }).nullish(),
+    note: z
+      .string()
+      .max(500)
+      .nullish()
+      .describe(
+        "One free-text note for the whole context. AES-256-GCM at rest; the ciphertext never rides the wire.",
+      ),
+  })
+  .meta({
+    id: "MoodContext",
+    description:
+      "The day around a mood entry: work, contacts, leisure and one notable event. Every field optional. Sleep, activity, vitals and body symptoms are deliberately ABSENT — they are owned by their own modules and are read from there, never captured a second time here.",
+  });
+
 // ── Bulk mood backfill (iOS SyncMode) — mirrors the route's
 // `bulkPayloadSchema` / `bulkEntrySchema` and the batch-envelope response.
 const bulkMoodEntry = z
@@ -212,6 +291,38 @@ const bulkMoodEntry = z
         "Rated mood factors; an out-of-scale rating marks THIS entry skipped, never the batch.",
       ),
     note: z.string().max(500).optional(),
+    a1: z
+      .number()
+      .int()
+      .min(0)
+      .max(10)
+      .nullish()
+      .describe(
+        "Pleasantness, 0-10. Optional: the server DERIVES it from `mood` when the entry does not carry one, so an older build that sends only the five-point label still writes a complete row. A value sent here wins over the derivation.",
+      ),
+    a2: z
+      .number()
+      .int()
+      .min(0)
+      .max(10)
+      .nullish()
+      .describe(
+        'Stress, 0-10, INVERSE-oriented: a higher value is more stress. Stored exactly as set; a client that wants "up is better" flips the sign itself.',
+      ),
+    a3: z.number().int().min(0).max(10).nullish().describe("Energy, 0-10."),
+    a4: z
+      .number()
+      .int()
+      .min(0)
+      .max(10)
+      .nullish()
+      .describe("Connectedness, 0-10."),
+    a5: z.number().int().min(0).max(10).nullish().describe("Stability, 0-10."),
+    context: moodContextWire
+      .nullish()
+      .describe(
+        "The day's context. Absent leaves a stored context untouched on a re-post; an empty one removes it.",
+      ),
     moodLoggedAt: z.iso
       .datetime({ offset: true })
       .describe("ISO instant the entry was logged."),

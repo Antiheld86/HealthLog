@@ -1,6 +1,7 @@
 /**
- * Pair guard binding `prisma/schema.prisma`'s `MoodEntry` and
- * `MoodEntryTagLink` models to the disaster-recovery backup selects.
+ * Pair guard binding `prisma/schema.prisma`'s `MoodEntry`,
+ * `MoodEntryTagLink` and `MoodContext` models to the disaster-recovery backup
+ * selects.
  *
  * The sibling of `measurement-backup-completeness.test.ts`, written as its own
  * file rather than as a second describe inside it, because that guard's own
@@ -27,7 +28,8 @@
  * this goes red naming that column; add a scalar to the model without adding
  * it to the select and it goes red naming the new one; rename the mapper's
  * `moodEntry` parameter and the serialization assertion goes red on all of
- * them at once.
+ * them at once. The same three hold for `MOOD_CONTEXT_BACKUP_SELECT` and the
+ * `moodContext` mapper parameter beside it.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -50,6 +52,16 @@ const BACKUP_BUILDER = join(
  */
 const EXCLUDED_MOOD_ENTRY_COLUMNS: Record<string, string> = {
   userId: "user-scoped backup; owner is re-derived from the restoring account",
+};
+
+const EXCLUDED_MOOD_CONTEXT_COLUMNS: Record<string, string> = {
+  moodEntryId:
+    "re-bound to the restored parent row's id; the context rides inside its entry",
+  userId: "user-scoped backup; owner is re-derived from the restoring account",
+  createdAt:
+    "the sub-row's own bookkeeping stamp; the entry carries the moment the person logged the day, and the context has nothing separate to say about when it was typed",
+  updatedAt:
+    "the sub-row's own bookkeeping stamp, moved by every write; a restore re-stamps it and nothing reads the old value",
 };
 
 const EXCLUDED_TAG_LINK_COLUMNS: Record<string, string> = {
@@ -173,6 +185,11 @@ describe("mood backup completeness", () => {
     models,
   );
   const linkSelected = selectFields(source, "MOOD_ENTRY_TAG_LINK_SELECT");
+  const contextColumns = scalarFields(
+    modelBlock(schema, "MoodContext"),
+    models,
+  );
+  const contextSelected = selectFields(source, "MOOD_CONTEXT_BACKUP_SELECT");
 
   it("parses both ends into a plausible shape", () => {
     expect(models.size).toBeGreaterThan(50);
@@ -194,6 +211,47 @@ describe("mood backup completeness", () => {
     expect(linkColumns).not.toContain("moodEntry");
     expect(linkColumns).not.toContain("moodTag");
     expect(linkSelected.length).toBeGreaterThan(0);
+
+    expect(contextColumns.length).toBeGreaterThan(15);
+    expect(contextColumns).toContain("notesEncrypted");
+    expect(contextColumns).toContain("eventAt");
+    expect(contextColumns).not.toContain("moodEntry");
+    expect(contextColumns).not.toContain("user");
+    expect(contextSelected.length).toBeGreaterThan(15);
+  });
+
+  it("the backup select covers every MoodContext column", () => {
+    const missing = contextColumns.filter(
+      (c) =>
+        !contextSelected.includes(c) && !(c in EXCLUDED_MOOD_CONTEXT_COLUMNS),
+    );
+
+    if (missing.length > 0) {
+      const report = missing.map((c) => `  ❌ ${c}`).join("\n");
+      throw new Error(
+        `MOOD_CONTEXT_BACKUP_SELECT omits ${missing.length} column(s) of the MoodContext model:\n${report}\n\n` +
+          "A disaster-recovery restore brings these back as NULL, which reads " +
+          "as an answer nobody gave rather than as a lost one. Add each to " +
+          "the select and to both serialization arms, extend " +
+          "`moodContextSchema` in the backup validations and the restore " +
+          "write — or add it to EXCLUDED_MOOD_CONTEXT_COLUMNS with the reason " +
+          "the backup is correct to drop it.",
+      );
+    }
+  });
+
+  it("every selected MoodContext column reaches a serialized payload", () => {
+    const emitted = serialisedFields(source, "moodContext");
+    const dropped = contextSelected.filter((c) => !emitted.has(c));
+
+    if (dropped.length > 0) {
+      const report = dropped.map((c) => `  ❌ ${c}`).join("\n");
+      throw new Error(
+        `${dropped.length} selected MoodContext column(s) reach neither serialization arm:\n${report}\n\n` +
+          "The query pays for them and no payload carries them, so a restore " +
+          "cannot put them back.",
+      );
+    }
   });
 
   it("the backup select covers every MoodEntry column", () => {
@@ -287,6 +345,15 @@ describe("mood backup completeness", () => {
       expect(
         linkColumns,
         `${column} is excluded but is no longer a MoodEntryTagLink column`,
+      ).toContain(column);
+      expect(reason.length).toBeGreaterThan(20);
+    }
+    for (const [column, reason] of Object.entries(
+      EXCLUDED_MOOD_CONTEXT_COLUMNS,
+    )) {
+      expect(
+        contextColumns,
+        `${column} is excluded but is no longer a MoodContext column`,
       ).toContain(column);
       expect(reason.length).toBeGreaterThan(20);
     }

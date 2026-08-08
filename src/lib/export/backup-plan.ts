@@ -80,6 +80,7 @@ export const BACKED_UP_MODELS = [
 
   // ── Mood ──────────────────────────────────────────────────────────────────
   "MoodEntry",
+  "MoodContext",
   "MoodEntryTagLink",
   "MoodTag",
   "MoodTagCategory",
@@ -226,6 +227,7 @@ export const TWO_ENDED_MODELS = [
   "MedicationIntakeEvent",
   "MedicationSideEffect",
   "MoodEntry",
+  "MoodContext",
   "MoodEntryTagLink",
   "MoodTag",
   "LabResult",

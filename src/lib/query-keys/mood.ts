@@ -42,6 +42,22 @@ export const moodKeys = {
    */
   moodEntriesDay: (date: string) => ["mood-entries", "day", date] as const,
 
+  /**
+   * v1.38 — what the sleep, activity, vitals and illness modules already know
+   * about one local day, read by the mood capture sheet and the entry detail.
+   *
+   * Keyed by the day AND the zone: the same calendar date read under two
+   * timezones covers two different windows, and one key for both would serve
+   * whichever answer arrived first.
+   *
+   * Its own prefix rather than a segment under `["mood-entries"]`, and
+   * deliberately: nothing here comes from a mood row, so a mood write has no
+   * reason to invalidate it, and putting it under that prefix would refetch
+   * four modules' figures every time somebody tapped a face.
+   */
+  moodLinkedContext: (date: string, tz: string) =>
+    ["mood-linked-context", date, tz] as const,
+
   moodAnalytics: () => ["mood-analytics"] as const,
   /**
    * v1.8.5 — pre-computed mood-insights aggregates (heatmap, distribution,

@@ -887,6 +887,10 @@ const DELEGABLE_ROUTES: Record<string, DelegableEntry> = {
     domain: "mind",
     why: "The record's mood entries. The nested include is the tag vocabulary — a key and a kind, no identifiers. Note that `GET /api/mood/tags` is refused and stays refused: it pulls the owner's tag LAYOUT, which is a presentation preference and belongs to the person, not the record.",
   },
+  "app/api/mood/linked-context/route.ts": {
+    domain: "record",
+    why: "What the sleep, activity, vitals and illness modules already hold for one of the record's days, read-only. It is reached from a mood surface and it is NOT a mind read: the payload is sleep minutes, steps, active energy, resting heart rate, heart-rate variability and an illness day-log with its symptom keys. Declared `mind` it let a mood-only delegate walk arbitrary dates and read two sections the owner had declined to share, with no entry needing to exist for the date. Admitted on the whole-record grant only, like the other cross-section reads; a scoped grant is refused rather than served a filtered day.",
+  },
   "app/api/mood-entries/[id]/route.ts": {
     domain: "mind",
     why: "One mood entry of the record, fetch-then-guard against the resolved user.",
@@ -1856,8 +1860,9 @@ const ACTOR_ROUTES: Record<string, string> = {
  * managed-record configuration adds one more: 196 → 197. The bounded
  * read-only profile summary makes the next explicit admission: 197 → 198.
  * The two initial Cycle reads follow as separate, scoped admissions: 198 → 200.
+ * The mood day's linked figures, read-only, add one: 200 → 201.
  */
-const FROZEN_ENTRY_COUNT = 212;
+const FROZEN_ENTRY_COUNT = 213;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —

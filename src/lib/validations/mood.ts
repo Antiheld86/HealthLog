@@ -9,6 +9,20 @@
 import { z } from "zod/v4";
 import { validateEntryInstant } from "@/lib/validations/entry-instant";
 import { assertStableExternalId } from "@/lib/validations/external-id";
+import {
+  CONTACT_CIRCLE_KEYS,
+  CONTACT_EXTENT_KEYS,
+  CONTACT_FORM_KEYS,
+  CONTEXT_MINUTES_MAX,
+  CONTEXT_MINUTES_MIN,
+  CONTEXT_RATING_MAX,
+  CONTEXT_RATING_MIN,
+  CONTEXT_VALENCE_MAX,
+  CONTEXT_VALENCE_MIN,
+  EVENT_TYPE_KEYS,
+  LEISURE_CATEGORY_KEYS,
+  WORK_STATUS_KEYS,
+} from "@/lib/mood/context-vocabulary";
 
 // --- CRUD schemas for mood entries ---
 
@@ -114,6 +128,77 @@ const ratedFactors = z.array(ratedFactor).max(30);
 // (`src/lib/mood/dimensions.ts`) carries the anchors the numbers mean.
 const levelADimension = z.number().int().min(0).max(10);
 
+// v1.38 — the day's context. Every enum below derives from
+// `context-vocabulary.ts`, which is what makes "a value the vocabulary does
+// not name cannot be stored" structural rather than a convention: adding a key
+// to the stored set means adding it to the list the labels and the analytics
+// read too, in one edit.
+const contextRating = z
+  .number()
+  .int()
+  .min(CONTEXT_RATING_MIN)
+  .max(CONTEXT_RATING_MAX);
+const contextMinutes = z
+  .number()
+  .int()
+  .min(CONTEXT_MINUTES_MIN)
+  .max(CONTEXT_MINUTES_MAX);
+
+/**
+ * Optional on create and on patch, and every field inside it optional too.
+ *
+ * The bounds live here rather than as database CHECKs, matching
+ * `MoodEntryTagLink.rating`: an out-of-range value is a client error and
+ * answers 422 through `returnAllZodIssues`, and a later change to a scale
+ * cannot strand rows written under the old one.
+ *
+ * Sleep, activity, vitals and body symptoms are deliberately absent. They are
+ * owned by other modules and are read from them
+ * (`src/lib/mood/linked-context.ts`); accepting them here would mint a second
+ * home for the same fact.
+ */
+export const moodContextSchema = z.object({
+  workStatus: z.enum(WORK_STATUS_KEYS).nullable().optional(),
+  workMinutes: contextMinutes.nullable().optional(),
+  overtimeMinutes: contextMinutes.nullable().optional(),
+  workLoad: contextRating.nullable().optional(),
+  workSatisfaction: contextRating.nullable().optional(),
+  contactCircles: z
+    .array(z.enum(CONTACT_CIRCLE_KEYS))
+    .max(CONTACT_CIRCLE_KEYS.length)
+    .nullable()
+    .optional(),
+  contactForm: z.enum(CONTACT_FORM_KEYS).nullable().optional(),
+  contactExtent: z.enum(CONTACT_EXTENT_KEYS).nullable().optional(),
+  contactQuality: contextRating.nullable().optional(),
+  contactSupport: contextRating.nullable().optional(),
+  leisureCategories: z
+    .array(z.enum(LEISURE_CATEGORY_KEYS))
+    .max(LEISURE_CATEGORY_KEYS.length)
+    .nullable()
+    .optional(),
+  leisureMinutes: contextMinutes.nullable().optional(),
+  leisureJoy: contextRating.nullable().optional(),
+  leisureRecovery: contextRating.nullable().optional(),
+  eventType: z.enum(EVENT_TYPE_KEYS).nullable().optional(),
+  eventValence: z
+    .number()
+    .int()
+    .min(CONTEXT_VALENCE_MIN)
+    .max(CONTEXT_VALENCE_MAX)
+    .nullable()
+    .optional(),
+  // The same plausibility bound the entry's own instant carries: no future
+  // instants beyond the clock-skew tolerance, nothing before 1900.
+  eventAt: validateEntryInstant(
+    z.iso.datetime({ offset: true }).transform((s) => new Date(s)),
+  )
+    .nullable()
+    .optional(),
+  // Capped like the entry note beside it. One note for the whole context.
+  note: z.string().max(500).nullable().optional(),
+});
+
 export const createMoodEntrySchema = z
   .object({
     mood: moodLevelEnum,
@@ -145,6 +230,12 @@ export const createMoodEntrySchema = z
     // `tags: ["note:<text>"]` workaround. Capped at 500 chars so the
     // Coach evidence shelf renders cleanly without truncating chips.
     note: z.string().max(500).optional(),
+    // v1.38 — the day's context. Absent leaves an existing context alone on
+    // the `update:` arm of an `externalId` upsert, for the same reason A2 to
+    // A5 are left alone: a phone re-posting an entry from a build that has no
+    // context surface must not blank one somebody filled in on the web. A
+    // context that says nothing removes the row.
+    context: moodContextSchema.nullable().optional(),
     // v1.17 W1b — plausibility bound (shared `validateEntryInstant`): no
     // future instants beyond a 5-min clock-skew tolerance, no instant before
     // 1900. Mirrors the measurement + medication-intake bound.
@@ -186,6 +277,10 @@ export const updateMoodEntrySchema = z.object({
   a4: levelADimension.nullable().optional(),
   a5: levelADimension.nullable().optional(),
   note: z.string().max(500).nullable().optional(),
+  // v1.38 — full replacement of the context when present, matching the way
+  // `tagKeys` and `ratedFactors` work on this path: omit to leave it alone,
+  // send it to replace it, send `null` (or an empty one) to remove the row.
+  context: moodContextSchema.nullable().optional(),
   // v1.17 W1b — same plausibility bound on the edit path.
   moodLoggedAt: validateEntryInstant(
     z.iso.datetime({ offset: true }).transform((s) => new Date(s)),
@@ -219,3 +314,4 @@ export const listMoodEntriesSchema = z.object({
 export type CreateMoodEntryInput = z.infer<typeof createMoodEntrySchema>;
 export type UpdateMoodEntryInput = z.infer<typeof updateMoodEntrySchema>;
 export type ListMoodEntriesInput = z.infer<typeof listMoodEntriesSchema>;
+export type MoodContextRequest = z.infer<typeof moodContextSchema>;

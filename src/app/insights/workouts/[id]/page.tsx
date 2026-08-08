@@ -9,7 +9,6 @@ import { useTranslations } from "@/lib/i18n/context";
 import { useWorkoutDetail } from "@/hooks/use-workouts";
 import { useModulePageGuard } from "@/hooks/use-module-page-guard";
 import { BackLink } from "@/components/ui/back-link";
-import { CoachLaunchButton } from "@/components/insights/coach-launch-button";
 import { SubPageShell } from "@/components/insights/sub-page-shell";
 import { Skeleton } from "@/components/ui/skeleton";
 import { QueryErrorCard } from "@/components/ui/query-error-card";
@@ -31,7 +30,7 @@ import {
  * Layout, top to bottom (mobile-first single column):
  *   hero header → reserved Activity-Insight seam (renders nothing today)
  *   → stats grid + sport-average line → HR curve → effort zones → GPS
- *   route → per-km splits → "that day" → coach launch.
+ *   route → per-km splits → "that day".
  *
  * "That day" answers the last question the page is for: what the rest of
  * the day looked like around the session. It renders the day's own pulse
@@ -40,8 +39,8 @@ import {
  *
  * Every data-less section returns `null` (hide, don't render empty), so
  * an aggregates-only workout (a Strava ride with no wearable, a manual
- * entry) reads as hero + stats + "that day" + coach — compact but
- * honest, no empty shells.
+ * entry) reads as hero + stats + "that day" — compact but honest, no
+ * empty shells.
  *
  * Data flows from `GET /api/workouts/{id}?compact=1` (v1.4.32 + the #67
  * enrichment fields). The `canonicalId` pointer still resolves a
@@ -120,18 +119,6 @@ export default function InsightsWorkoutDetailPage({
           <WorkoutDetailRoute workout={data} />
           <WorkoutDetailSplits workout={data} />
           <WorkoutDetailDayContext workout={data} />
-          {/* 2026-07-17 UX-flows audit F6-1 — `workouts` narrows the
-              snapshot the first coach turn reads. v1.31.0 — `workoutId` pins
-              THIS session's own numbers as one additional snapshot section, so
-              the answer is about this workout rather than about training in
-              general, and the opener auto-sends so it lands directly. */}
-          <CoachLaunchButton
-            scope={{ metric: "workouts" }}
-            workoutId={data.id}
-            label={t("insights.workouts.askWhy")}
-            prefill={t("insights.workouts.askWhyPrompt")}
-            autoSend
-          />
         </>
       )}
     </SubPageShell>
