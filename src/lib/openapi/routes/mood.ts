@@ -386,7 +386,134 @@ const bulkMoodResponse = z
   })
   .meta({ id: "BulkMoodResponse" });
 
+// ── The day's two readings ───────────────────────────────────────────
+//
+// Published as the RESOLVED value. The server computes the expected value, the
+// band, the count, the deviation and the age; the client renders them. Nothing
+// here is a hint the client is meant to re-derive — two clients deriving the
+// same figure is how they start disagreeing about it, and this figure is about
+// somebody's health record.
+
+const moodPrognosisContribution = z
+  .object({
+    feature: z
+      .string()
+      .describe(
+        "Stable feature identifier: `dimension:a2`, `context:workLoad`, `context:workStatus=off` or `linked:steps`. A client that does not recognise one skips it — an older row can name a feature a later model dropped.",
+      ),
+    contribution: z
+      .number()
+      .describe(
+        "Signed: how far this feature moved the expected value away from the account's own average day. Ordered by absolute size, largest first.",
+      ),
+  })
+  .meta({ id: "MoodPrognosisContribution" });
+
+const moodPrognosisPresent = z.object({
+  present: z.literal(true),
+  date: z.string().describe("The local day this is about, `YYYY-MM-DD`."),
+  predicted: z
+    .number()
+    .describe(
+      "The expected pleasantness (A1) for that day, 0-10, on the account's own past pattern. A counterfactual, never a measurement — and never to be displayed without `n` and the band.",
+    ),
+  ciLow: z.number().nullable(),
+  ciHigh: z
+    .number()
+    .nullable()
+    .describe(
+      "The band, from the validation residuals. It widens when the model fits badly, so a wide band is the signal to present the value cautiously.",
+    ),
+  n: z
+    .number()
+    .int()
+    .describe(
+      "Complete days the fit used. Display it WHEREVER `predicted` is displayed: a value built from 30 days and one built from 300 look identical otherwise.",
+    ),
+  modelVersion: z.string(),
+  computedAt: z.iso.datetime({ offset: true }),
+  ageDays: z
+    .number()
+    .int()
+    .nullable()
+    .describe("Whole days between that day and the reader's today."),
+  current: z
+    .boolean()
+    .describe(
+      "Whether it is fresh enough to back a present-tense sentence. False means the copy must name the day it is about.",
+    ),
+  provisional: z
+    .boolean()
+    .describe("True below 60 days of history: label it as provisional."),
+  stage: z.enum(["provisional", "regular", "seasonal"]),
+  entries: z.number().int().describe("Days of history behind the ladder."),
+  seasonalUnlocked: z.boolean(),
+  selfAssessment: z
+    .number()
+    .int()
+    .nullable()
+    .describe(
+      "The person's own rating for that day, stored exactly as they gave it. It LEADS: it is the primary value on any surface that shows both, and it is never merged with `predicted`.",
+    ),
+  deviation: z
+    .enum(["within", "above", "below"])
+    .nullable()
+    .describe(
+      "Where the self-assessment sat against the BAND, not against `predicted`. `within` means the day went as the account's own past days suggest.",
+    ),
+  deviationAmount: z
+    .number()
+    .nullable()
+    .describe("How far outside the band, in scale points. `0` when inside."),
+  contributions: z.array(moodPrognosisContribution),
+});
+
+const moodPrognosisAbsent = z.object({
+  present: z.literal(false),
+  reason: z
+    .enum(["no-output-yet", "learning-phase", "no-pattern"])
+    .describe(
+      "`no-output-yet`: too few days for anything. `learning-phase`: enough to describe, not to compare. `no-pattern`: enough days, nothing steady enough in them. None of the three is an error and none is a zero.",
+    ),
+  entries: z.number().int(),
+  nextThreshold: z
+    .number()
+    .int()
+    .nullable()
+    .describe("Days at which the next step unlocks, when a count is missing."),
+});
+
+const moodPrognosisResponse = z
+  .union([moodPrognosisPresent, moodPrognosisAbsent])
+  .meta({
+    id: "MoodPrognosis",
+    description:
+      "Two separate readings of one day: what the person recorded, and what a comparison with their own past days would have expected. They are never merged — the distance between them is the finding, and a single blended figure destroys it. The comparison is a regularised regression over the account's own history: observational only, never causal. Any copy built on it must state the value as a counterfactual (a value around X would have been expected), must carry `n`, and must not say that anything caused anything.",
+  });
+
 export const moodPaths: NonNullable<ZodOpenApiObject["paths"]> = {
+  "/api/mood/prognosis": {
+    get: {
+      tags: ["Mood"],
+      summary: "The day's own rating and what the account's days imply (v1.38)",
+      description:
+        "The newest stored comparison for the account, with the person's own rating for that day beside it. Written nightly by a job and never by a request: the value cannot be overwritten, which is what keeps the two readings separate. Absence is explicit (`present: false` with a reason and a count) and is a normal answer, not an error — the comparison refuses when the history does not support one. Whole-record read: the fit takes the day's context AND the sleep, activity and recovery figures the owning modules hold, and it names them, so a section-scoped grant is refused rather than served a filtered list. Gated: `module.disabled` 403 when the mood module is off.",
+      responses: {
+        "200": {
+          description: "The day's two readings, or an explained absence.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                moodPrognosisResponse,
+                "MoodPrognosisEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
   "/api/mood-entries/bulk": {
     post: {
       tags: ["Mood"],

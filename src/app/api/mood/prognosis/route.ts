@@ -26,6 +26,8 @@
  * overwrite them — `src/__tests__/mood-prediction-write-surface-guard.test.ts`
  * holds that, and this file is one of the ones it scans.
  */
+import type { NextRequest } from "next/server";
+
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiSuccess } from "@/lib/api-response";
 import { readMoodPrognosis } from "@/lib/analytics/mood-prognosis/read";
@@ -34,7 +36,14 @@ import { requireModuleEnabled } from "@/lib/modules/gate";
 
 export const dynamic = "force-dynamic";
 
-export const GET = apiHandler(async () => {
+// The request is declared although the handler reads nothing off it: the
+// wrapper takes the method and the path from it for the wide event, and
+// `requireRecordAuth` reads the method to decide whether a `read` declaration
+// really is a read. A handler with no parameter types as zero-arity, and a
+// caller that then omits the request turns every method check into "unknown",
+// which escalates a read to a write and refuses a delegate for the wrong
+// reason.
+export const GET = apiHandler(async (_request: NextRequest) => {
   // `record`: see the file header. A scoped grant is refused here by
   // construction rather than served a narrowed payload.
   const { user } = await requireRecordAuth("read", "record");

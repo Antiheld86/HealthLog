@@ -175,6 +175,69 @@ describe("level-A blocks reach the feature set with their own ages", () => {
     expect(features.mood?.dimensionsAsOfNote).toBeUndefined();
   });
 
+  it("carries the day's forecast with its own age, and its own instruction", async () => {
+    await seedUser();
+    await seedEntry(0, { mood: "GUT", score: 4, a1: 7, a2: 3 });
+    // A forecast about the day before yesterday. Written straight to the
+    // table: the job's own path is proven in `mood-prognosis-ladder.test.ts`,
+    // and what this case is about is what the assistant is handed.
+    await getPrismaClient().moodPrediction.create({
+      data: {
+        userId: USER,
+        date: shiftDateKey(todayKey(), -3),
+        predicted: 5.4,
+        ciLow: 4.1,
+        ciHigh: 6.8,
+        n: 42,
+        modelVersion: "mood-ridge-1",
+        features: JSON.stringify([
+          { feature: "dimension:a2", contribution: 0.9 },
+        ]),
+        computedAt: new Date(Date.now() - 3 * DAY_MS),
+      },
+    });
+
+    const features = await extractFeatures(USER, false);
+    const prognosis = features.mood?.prognosis;
+    expect(
+      prognosis,
+      "features.mood carries no prognosis block; the assistant sees neither the value nor the fact that there is none",
+    ).toBeDefined();
+    expect(prognosis!.present).toBe(true);
+    expect(prognosis!.predicted).toBe(5.4);
+    expect(prognosis!.n).toBe(42);
+    expect(prognosis!.ciLow).toBe(4.1);
+    expect(prognosis!.ciHigh).toBe(6.8);
+    // Three days old: the same freshness rule the dimensions use, from the
+    // same module, so nothing may state it as today.
+    expect(prognosis!.daysAgo).toBe(3);
+    expect(prognosis!.current).toBe(false);
+    expect(
+      prognosis!.staleNotice,
+      "a stale forecast ships without the instruction that makes it safe to read",
+    ).toBeTruthy();
+    expect(prognosis!.staleNotice).toContain(shiftDateKey(todayKey(), -3));
+    expect(prognosis!.staleNotice!.toLowerCase()).toContain("do not describe");
+    // And the wording rule rides with the values rather than being inferred.
+    expect(prognosis!.note.toLowerCase()).toContain("counterfactual");
+    expect(prognosis!.note.toLowerCase()).toContain("never merge");
+  });
+
+  it("states the absence of a forecast rather than omitting it", async () => {
+    await seedUser();
+    await seedEntry(0, { mood: "GUT", score: 4, a1: 7 });
+
+    const features = await extractFeatures(USER, false);
+    const prognosis = features.mood?.prognosis;
+    expect(prognosis).toBeDefined();
+    // Absence is a field, not a missing key: a model told "there is none yet"
+    // says so, and a model told nothing estimates one.
+    expect(prognosis!.present).toBe(false);
+    expect(prognosis!.reason).toBe("no-output-yet");
+    expect(prognosis!.entries).toBe(1);
+    expect(prognosis!.predicted).toBeUndefined();
+  });
+
   it("leaves the legacy scale line untouched", async () => {
     await seedUser();
     await seedEntry(0, { mood: "GUT", score: 4, a1: 7 });
