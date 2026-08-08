@@ -317,6 +317,58 @@ describe("GET /api/mood/prognosis", () => {
     expect(typeof body.data.ciLow).toBe("number");
   });
 
+  it("refuses below the floor even while a stale row survives, and never emits an out-of-enum stage", async () => {
+    // The gap the read path has to close on its own. The job runs nightly, so
+    // between an entry deletion and the next 04:35 pass a MoodPrediction row
+    // outlives its own eligibility. If the read path trusted the row it would
+    // answer present:true with a value the account no longer has the data to
+    // support — and with stage "insufficient", which is not in the published
+    // enum, so a strict client decode fails the whole payload. The read path
+    // must agree with the job's own stale rule: below the floor is absence.
+    await seedUser();
+    await seedDays(40);
+    await runJob();
+    expect((await storedRows()).length).toBeGreaterThan(0);
+
+    // Delete back to 20 rated days — under the 30-day forecast floor, but
+    // still inside the learning band, so the refusal reason is a real rung
+    // rather than the empty-account one. Deliberately DO NOT run the job: the
+    // point is what the route answers in the window before the sweep clears
+    // the row. The existing "clears a stale forecast" case runs the job before
+    // reading, which is exactly why it never saw this.
+    await getPrismaClient().moodEntry.deleteMany({
+      where: { userId: USER, date: { gte: dayKey(20) } },
+    });
+    expect(
+      (await storedRows()).length,
+      "the row must still be on disk — otherwise this proves nothing about the read path",
+    ).toBeGreaterThan(0);
+
+    await signIn(USER);
+    const { GET } = await import("@/app/api/mood/prognosis/route");
+    const res = await GET(
+      new NextRequest("http://localhost/api/mood/prognosis"),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: {
+        present: boolean;
+        reason?: string;
+        stage?: string;
+        predicted?: number;
+      };
+    };
+    expect(
+      body.data.present,
+      "the read path served a forecast to an account below every floor",
+    ).toBe(false);
+    expect(body.data).not.toHaveProperty("predicted");
+    // The out-of-enum stage a strict Codable decode chokes on must never leave
+    // the route at all.
+    expect(body.data.stage).toBeUndefined();
+    expect(body.data.reason).toBe("learning-phase");
+  });
+
   it("refuses a delegate whose grant does not open the whole record", async () => {
     await seedUser();
     await seedDays(40);

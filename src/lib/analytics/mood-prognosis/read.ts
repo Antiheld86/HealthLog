@@ -57,7 +57,13 @@ export interface PrognosisPresent {
   current: boolean;
   /** Below the regular threshold the forecast is labelled provisional. */
   provisional: boolean;
-  stage: PrognosisStage;
+  /**
+   * The rung the value is shown at. Only the three rungs that CARRY a value —
+   * a below-floor reading never reaches here, it becomes the absence shape —
+   * so the type matches the published enum exactly and an `insufficient` /
+   * `learning` stage cannot be constructed for a present reading.
+   */
+  stage: Extract<PrognosisStage, "provisional" | "regular" | "seasonal">;
   /** Days of history the ladder was read against. */
   entries: number;
   /** Whether weekday and seasonal comparisons have unlocked. */
@@ -166,18 +172,32 @@ export async function readMoodPrognosis(
     };
   }
 
-  const [entries, entry] = await Promise.all([
-    countQualifyingDays(userId, now),
-    prisma.moodEntry.findFirst({
-      where: { userId, date: row.date, deletedAt: null, moodA1: { not: null } },
-      orderBy: { moodLoggedAt: "desc" },
-      select: { moodA1: true },
-    }),
-  ]);
+  const entries = await countQualifyingDays(userId, now);
+
+  // A row on disk is not enough to answer with. The job writes nightly, so
+  // between an entry deletion and the next pass a row outlives its own
+  // eligibility. The read path re-reads the ladder and refuses below the
+  // floor, exactly as the job would — otherwise this route serves a value the
+  // account no longer has the data to support for up to a day, and it serves
+  // it under a stage ("insufficient" / "learning") that is not in the
+  // published enum, which fails a strict client decode of the whole payload.
+  const gate = forecastGate(entries);
+  if (!gate.present) {
+    return {
+      present: false,
+      reason: gate.reason,
+      entries,
+      nextThreshold: gate.nextThreshold,
+    };
+  }
 
   const today = moodDateKey(now, timezone ?? DEFAULT_TIMEZONE);
   const ageDays = dayKeyAgeInDays(row.date, today);
-  const gate = forecastGate(entries);
+  const entry = await prisma.moodEntry.findFirst({
+    where: { userId, date: row.date, deletedAt: null, moodA1: { not: null } },
+    orderBy: { moodLoggedAt: "desc" },
+    select: { moodA1: true },
+  });
   const selfAssessment = entry?.moodA1 ?? null;
   const against =
     selfAssessment === null
@@ -195,7 +215,11 @@ export async function readMoodPrognosis(
     computedAt: row.computedAt.toISOString(),
     ageDays,
     current: isCurrentForTodayClaim(ageDays),
-    provisional: gate.present ? gate.provisional : true,
+    // `gate` is the present variant here — the absence arm returned above — so
+    // the stage is one of provisional / regular / seasonal, never the
+    // out-of-enum "insufficient" or "learning" a stale row could otherwise
+    // carry onto the wire.
+    provisional: gate.provisional,
     stage: gate.stage,
     entries,
     seasonalUnlocked: seasonalComparisonsUnlocked(entries),
