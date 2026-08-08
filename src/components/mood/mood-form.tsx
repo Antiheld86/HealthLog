@@ -52,6 +52,15 @@ import {
   seedA1FromMood,
   type LevelAState,
 } from "./mood-level-a-fields";
+import {
+  EMPTY_MOOD_CONTEXT,
+  MoodContextSections,
+  MoodLinkedDaySection,
+  contextIsEmpty,
+  moodContextPayload,
+  type MoodContextState,
+} from "./mood-context-fields";
+import { dayOfLocalInput, useLinkedDayContext } from "./use-linked-day-context";
 import { MoodQuickTags } from "./mood-quick-tags";
 import { useRecentTags } from "./recent-tags";
 import { moodFaceIcon } from "./mood-tag-icons";
@@ -128,6 +137,9 @@ export function MoodForm({ onSuccess, onCancel, footerSlot }: MoodFormProps) {
   const [levelA, setLevelA] = useState<LevelAState>(EMPTY_LEVEL_A);
   const [a1Touched, setA1Touched] = useState(false);
   const [levelAOpen, setLevelAOpen] = useState(false);
+  // v1.38 — the day's context. Four closed sections; nothing here is required
+  // and an entry that never opens one stores no context row at all.
+  const [context, setContext] = useState<MoodContextState>(EMPTY_MOOD_CONTEXT);
   const [tagsInput, setTagsInput] = useState("");
   // v1.8.5 — structured-tag keys picked from the taxonomy catalog.
   const [tagKeys, setTagKeys] = useState<string[]>([]);
@@ -154,6 +166,9 @@ export function MoodForm({ onSuccess, onCancel, footerSlot }: MoodFormProps) {
     // A level-A value the user set counts as typed input: Reset must ask
     // before it discards an answer that took five slider moves.
     Object.values(levelA).some((v) => v !== null) ||
+    // A filled context section is typed input too: Reset asks before it
+    // discards a day somebody described.
+    !contextIsEmpty(context) ||
     note.trim() !== "";
 
   // v1.37 — picking a face suggests a pleasantness value; the suggestion
@@ -184,6 +199,7 @@ export function MoodForm({ onSuccess, onCancel, footerSlot }: MoodFormProps) {
     setLevelA(EMPTY_LEVEL_A);
     setA1Touched(false);
     setLevelAOpen(false);
+    setContext(EMPTY_MOOD_CONTEXT);
     setTagsInput("");
     setTagKeys([]);
     setNote("");
@@ -225,6 +241,11 @@ export function MoodForm({ onSuccess, onCancel, footerSlot }: MoodFormProps) {
         // v1.37 — only the values somebody answered. An untouched slider
         // sends nothing, and the server writes NULL rather than a middle.
         ...levelACreatePayload(levelA),
+        // v1.38 — omitted when nothing was answered, so the create stores no
+        // context row rather than a row of NULLs.
+        ...(contextIsEmpty(context)
+          ? {}
+          : { context: moodContextPayload(context) }),
         moodLoggedAt: timestamp,
       });
 
@@ -294,6 +315,16 @@ export function MoodForm({ onSuccess, onCancel, footerSlot }: MoodFormProps) {
   // only after a mood face is picked, so the icon-first hero is the
   // primary input and a fast log is a single tap + Save.
   const moodPicked = mood !== "";
+
+  // v1.38 — what the other modules already hold for the day being logged.
+  // Keyed on the timestamp field, so moving the entry to yesterday shows
+  // yesterday's night. Only fetched once a face is picked: an unopened sheet
+  // must not cost four modules a query.
+  // No third argument, and deliberately: this entry does not exist yet, so it
+  // has no stored zone. It will be anchored to the browser's, which is the
+  // zone the hook falls back to — the figures shown here are the figures the
+  // saved row will sit beside.
+  const linked = useLinkedDayContext(dayOfLocalInput(moodLoggedAt), moodPicked);
 
   // v1.17.0 — the "Note & details" badge counts the free-text tags entered
   // plus the note (when present), so a collapsed section communicates what
@@ -419,6 +450,17 @@ export function MoodForm({ onSuccess, onCancel, footerSlot }: MoodFormProps) {
             open={levelAOpen}
             onOpenChange={setLevelAOpen}
           />
+
+          {/* v1.38 — the day around the entry: work, contacts, leisure and a
+              notable event. Four closed sections; opening none of them is a
+              complete entry. */}
+          <MoodContextSections value={context} onChange={setContext} />
+
+          {/* v1.38 — read-only, and read from the modules that own it. Sleep,
+              activity and vitals are never asked for a second time here; the
+              body line links into the illness journal instead of growing a
+              second symptom form. */}
+          <MoodLinkedDaySection linked={linked} />
 
           {/* v1.17.0 — "Note & details": free-text tags, GLP-1 quick-tags,
               and the note field. The badge counts whichever of these carry

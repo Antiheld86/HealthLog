@@ -16,6 +16,7 @@ import { resolveUserTimezone } from "@/lib/tz/resolver";
 import { userDayKey } from "@/lib/tz/format";
 import { isCurrentForTodayClaim } from "@/lib/insights/measurement-freshness";
 import { computeMoodDimensionSeries } from "@/lib/insights/mood-dimension-series";
+import { computeContextMoodComparison } from "@/lib/insights/mood-context-crosstab";
 import { MOOD_DIMENSIONS } from "@/lib/mood/dimensions";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 import {
@@ -201,6 +202,105 @@ async function buildMoodDimensionFeatures(
 }
 
 /**
+ * The day-context comparisons, as the model may state them.
+ *
+ * Every row has already cleared the day floors and a family-wide
+ * Benjamini-Hochberg correction, so nothing here is a raw p < 0.05 finding.
+ * The counts ride with each row and the block carries one sentence saying
+ * what the rows are and are not — a model follows a stated constraint far
+ * more reliably than it infers one from a field name, and the constraint here
+ * is the difference between an observation and a claim about somebody's life.
+ *
+ * Bounded: the same 90-day window the dimensions use, and the comparison's own
+ * cap on how many rows survive.
+ */
+async function buildMoodContextBlock(userId: string): Promise<{
+  context?: {
+    note: string;
+    comparisons: Array<{
+      field: string;
+      value: string;
+      withDays: number;
+      withoutDays: number;
+      withAvg: number;
+      withoutAvg: number;
+    }>;
+  };
+}> {
+  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  const rows = await prisma.moodEntry.findMany({
+    where: {
+      userId,
+      deletedAt: null,
+      moodLoggedAt: { gte: since },
+      context: { isNot: null },
+    },
+    orderBy: { moodLoggedAt: "desc" },
+    take: 2000,
+    select: {
+      date: true,
+      moodA1: true,
+      context: {
+        select: {
+          workStatus: true,
+          contactCircles: true,
+          contactForm: true,
+          contactExtent: true,
+          leisureCategories: true,
+          eventType: true,
+        },
+      },
+    },
+  });
+  if (rows.length === 0) return {};
+
+  // Days WITHOUT a context belong on the "without" side of every comparison,
+  // so the second read takes the whole window rather than only the rows above.
+  const allDays = await prisma.moodEntry.findMany({
+    where: { userId, deletedAt: null, moodLoggedAt: { gte: since } },
+    orderBy: { moodLoggedAt: "desc" },
+    take: 2000,
+    select: { date: true, moodA1: true },
+  });
+  const contextByDay = new Map(rows.map((row) => [row.date, row.context]));
+
+  const comparisons = computeContextMoodComparison(
+    allDays.map((row) => {
+      const context = contextByDay.get(row.date) ?? null;
+      return {
+        day: row.date,
+        moodA1: row.moodA1,
+        workStatus: context?.workStatus ?? null,
+        contactCircles: context?.contactCircles ?? null,
+        contactForm: context?.contactForm ?? null,
+        contactExtent: context?.contactExtent ?? null,
+        leisureCategories: context?.leisureCategories ?? null,
+        eventType: context?.eventType ?? null,
+      };
+    }),
+  );
+  if (comparisons.length === 0) return {};
+
+  return {
+    context: {
+      note:
+        "Each row compares the average mood value on days that carried a " +
+        "context entry against the days that did not, over the last 90 days. " +
+        "These are associations and nothing more: state them with their day " +
+        "counts, and never say that the context caused the mood.",
+      comparisons: comparisons.map((row) => ({
+        field: row.field,
+        value: row.value,
+        withDays: row.withDays,
+        withoutDays: row.withoutDays,
+        withAvg: row.withAvg,
+        withoutAvg: row.withoutAvg,
+      })),
+    },
+  };
+}
+
+/**
  * The dimensions block and the note that says how to read it beside the
  * block-level `asOf`. Absent entirely when nobody has answered a dimension,
  * so an account that only ever taps a face carries neither key.
@@ -346,6 +446,27 @@ export interface AggregatedFeatures {
      * Present only alongside `dimensions`.
      */
     dimensionsAsOfNote?: string;
+    /**
+     * v1.38 — how the average mood value sat on days carrying each day-context
+     * entry against the days that did not, over the last 90 days.
+     *
+     * Present only when at least one comparison cleared the day floors and the
+     * family-wide correction. The `note` beside the rows states what they are:
+     * a model that is told in a sentence that these are associations states
+     * them as associations, and one that is left to infer it from a field name
+     * does not.
+     */
+    context?: {
+      note: string;
+      comparisons: Array<{
+        field: string;
+        value: string;
+        withDays: number;
+        withoutDays: number;
+        withAvg: number;
+        withoutAvg: number;
+      }>;
+    };
   };
   sleep?: {
     avg7: number | null;
@@ -1241,6 +1362,7 @@ export async function extractFeatures(
       trend30,
       totalEntries: moodTotalEntries,
       ...(await buildMoodDimensionBlock(userId)),
+      ...(await buildMoodContextBlock(userId)),
       coverage: {
         count: moodTotalEntries,
         spanDays,

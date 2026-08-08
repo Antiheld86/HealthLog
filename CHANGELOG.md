@@ -4,6 +4,46 @@
 
 ### Added
 
+- A mood entry can now carry the shape of the day around it. Four sections sit
+  below the sliders — work, contacts, leisure, and one notable event — and
+  every one of them is closed until you open it, so a quick check-in is still
+  a face and Save. What you fill in is counted on the closed section's header,
+  so nothing you wrote is out of sight without a hint that it is there. The
+  work section asks how the day went and how long it ran, the contacts section
+  asks who and how it felt rather than how many people, the leisure section
+  asks what the free time went into, and the event section holds one thing
+  that happened with a note beside it. That note is encrypted at rest like
+  every other free-text field.
+
+- Sleep, activity and vitals are not asked for a second time. They are read
+  from the modules that already hold them and shown read-only beside the
+  entry, with the source of each figure named and a way in to correct it
+  there. Correct a sleep session in the sleep module and the mood entry shows
+  the corrected figure the next time you open it, because nothing was copied.
+  A figure nobody recorded reads as not recorded rather than as zero, and a
+  module you have switched off leaves its block out entirely instead of
+  showing empty rows: sleep answers to the sleep module, resting heart rate
+  and heart-rate variability to recovery, the body line to the illness
+  journal. Steps and active energy have no module of their own and are always
+  shown, which is how the rest of the app already treats them. Body symptoms
+  stay in the illness journal, linked rather than duplicated.
+
+  Where two devices reported the same day, the figures follow the source order
+  you set rather than adding both together. A phone and a watch both counting
+  your steps is the ordinary case, and summing the pair would have shown a day
+  you did not walk.
+
+- Where the app compares the day's context to the day's mood, it names how
+  many days each side of the comparison rests on, right beside the sentence,
+  and it describes a connection rather than a cause. The comparison runs the
+  same statistics the tag board already uses, including the correction that
+  keeps a wide sweep from turning one-in-twenty noise into a finding.
+
+- The iOS contract now carries both the five mood values and the day context.
+  Everything is optional and nothing an existing build sends has changed
+  meaning: an app that posts only a five-point label still writes a complete
+  entry, because the server derives the pleasantness value from that label.
+
 - Workouts recorded before the phone learned to send heart-rate detail can
   pick that detail up afterwards. When the app sends a session the server
   already holds and the payload carries the reading-by-reading heart rate

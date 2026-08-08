@@ -19,6 +19,16 @@ const txClient = {
   moodEntryTagLink: {
     findMany: vi.fn().mockResolvedValue([]),
   },
+  // v1.38 — the day context is written inside the same transaction, and the
+  // route reads it back for the response. A fake that answered a row here
+  // regardless of what was written would prove nothing, so `findUnique`
+  // answers null and the context-carrying claims live in the integration
+  // suite (`tests/integration/mood-context.test.ts`) against real Postgres.
+  moodContext: {
+    deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+    upsert: vi.fn(),
+    findUnique: vi.fn().mockResolvedValue(null),
+  },
 };
 
 vi.mock("@/lib/db", () => ({
