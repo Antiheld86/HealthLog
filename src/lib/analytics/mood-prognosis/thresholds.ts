@@ -54,7 +54,26 @@ export const MIN_ENTRIES_FOR_FORECAST = 30;
 /** Below this, a forecast is shown but labelled provisional. */
 export const MIN_ENTRIES_FOR_REGULAR_FORECAST = 60;
 
-/** Below this, no weekday and no seasonal comparison. */
+/**
+ * Below this, a weekday or seasonal comparison built on the forecast may not
+ * be shown.
+ *
+ * Two things it does NOT do, both worth stating because the omission is a
+ * decision rather than an oversight:
+ *
+ *   * It does not retro-gate the weekday board the mood insights page has
+ *     carried for releases. That board is built from the entry aggregates,
+ *     not from this fit, and it has its own floors; hiding it from accounts
+ *     under ninety days would take a surface away from people who have been
+ *     reading it, to enforce a rule about a different calculation.
+ *   * It does not build a second weekday board. One exists, and a second
+ *     answer to "how do your Mondays go" is exactly the drift this milestone
+ *     spent its effort avoiding.
+ *
+ * What it does is gate the `seasonalUnlocked` flag the forecast publishes, so
+ * any surface that wants to hang a weekday claim off THIS comparison — the
+ * clients included — asks one place whether the history supports one.
+ */
 export const MIN_ENTRIES_FOR_SEASONAL = 90;
 
 /**
