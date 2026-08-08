@@ -283,7 +283,14 @@
     "familyHistoryColCondition": "Schorzenie",
     "familyHistoryColAgeAtOnset": "Wiek zachorowania",
     "labsSourceRangeNote": "* Zakres referencyjny pochodzi z samego wyniku i różni się od zapisanego zakresu:",
-    "labsCatalogRangeLabel": "zapisany zakres"
+    "labsCatalogRangeLabel": "zapisany zakres",
+    "visitsTitle": "Wizyty lekarskie",
+    "visitsColDate": "Data",
+    "visitsColPractice": "Gabinet",
+    "visitsColKind": "Rodzaj",
+    "visitsColReason": "Powód",
+    "visitsColOutcome": "Wynik",
+    "visitsColConditions": "Choroby"
   },
   "errorBoundary": {
     "title": "Coś poszło nie tak",
@@ -5978,7 +5985,9 @@
       "rangeCustomEnd": "Do",
       "errorGeneric": "Nie udało się wygenerować eksportu. Spróbuj ponownie.",
       "errorRateLimit": "Osiągnięto limit eksportów w tej godzinie.",
-      "errorModuleDisabled": "Eksport dokumentacji jest wyłączony dla tego konta."
+      "errorModuleDisabled": "Eksport dokumentacji jest wyłączony dla tego konta.",
+      "visitOffer": "{when} zaplanowano wizytę: {what}.",
+      "visitOfferApply": "Raport do tego dnia"
     },
     "globalExcludedInjectionSitesLabel": "Globalnie wykluczone miejsca iniekcji",
     "globalExcludedInjectionSitesHint": "Nigdy nieproponowane i odrzucane przy rejestracji, nawet jeśli lek je preferuje.",
@@ -9719,7 +9728,8 @@
     "sensitiveHint": "Nic tu nie jest wstępnie wybrane. Wybierz każdą pozycję samodzielnie.",
     "scopeNone": "Nic jeszcze nie wybrano. Wybierz, co ma się znaleźć w dokumencie, albo zastosuj raport standardowy.",
     "scopeCount": "{count} pozycji z {groups} obszarów",
-    "scopeSensitive": "w tym {names}"
+    "scopeSensitive": "w tym {names}",
+    "leafVisits": "Wizyty lekarskie"
   },
   "recordSharing": {
     "banner": {

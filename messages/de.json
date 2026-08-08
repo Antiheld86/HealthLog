@@ -283,7 +283,14 @@
     "familyHistoryColCondition": "Erkrankung",
     "familyHistoryColAgeAtOnset": "Alter bei Beginn",
     "labsSourceRangeNote": "* Der Referenzbereich stammt aus dem Befund und weicht vom gespeicherten Bereich ab:",
-    "labsCatalogRangeLabel": "gespeicherter Bereich"
+    "labsCatalogRangeLabel": "gespeicherter Bereich",
+    "visitsTitle": "Arztbesuche",
+    "visitsColDate": "Datum",
+    "visitsColPractice": "Praxis",
+    "visitsColKind": "Art",
+    "visitsColReason": "Anlass",
+    "visitsColOutcome": "Ergebnis",
+    "visitsColConditions": "Erkrankungen"
   },
   "errorBoundary": {
     "title": "Da ist etwas schiefgelaufen",
@@ -5978,7 +5985,9 @@
       "rangeCustomEnd": "Bis",
       "errorGeneric": "Der Export konnte nicht erstellt werden. Bitte erneut versuchen.",
       "errorRateLimit": "Das Exportlimit für diese Stunde ist erreicht.",
-      "errorModuleDisabled": "Der Gesundheitsakten-Export ist für dieses Konto ausgeschaltet."
+      "errorModuleDisabled": "Der Gesundheitsakten-Export ist für dieses Konto ausgeschaltet.",
+      "visitOffer": "Am {when} steht ein Termin an: {what}.",
+      "visitOfferApply": "Bericht bis dahin"
     },
     "globalExcludedInjectionSitesLabel": "Global ausgeschlossene Injektionsstellen",
     "globalExcludedInjectionSitesHint": "Nie angeboten und beim Erfassen abgelehnt, auch wenn eine Medikation sie bevorzugt.",
@@ -9719,7 +9728,8 @@
     "sensitiveHint": "Hier ist nie etwas vorausgewählt. Wählen Sie jeden Eintrag selbst.",
     "scopeNone": "Noch nichts ausgewählt. Wählen Sie aus, was enthalten sein soll, oder übernehmen Sie den Standardbericht.",
     "scopeCount": "{count} Einträge aus {groups} Bereichen",
-    "scopeSensitive": "inkl. {names}"
+    "scopeSensitive": "inkl. {names}",
+    "leafVisits": "Arztbesuche"
   },
   "recordSharing": {
     "banner": {

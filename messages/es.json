@@ -283,7 +283,14 @@
     "familyHistoryColCondition": "Afección",
     "familyHistoryColAgeAtOnset": "Edad de inicio",
     "labsSourceRangeNote": "* El rango de referencia procede del propio informe y difiere del rango guardado:",
-    "labsCatalogRangeLabel": "rango guardado"
+    "labsCatalogRangeLabel": "rango guardado",
+    "visitsTitle": "Visitas médicas",
+    "visitsColDate": "Fecha",
+    "visitsColPractice": "Consulta",
+    "visitsColKind": "Tipo",
+    "visitsColReason": "Motivo",
+    "visitsColOutcome": "Resultado",
+    "visitsColConditions": "Enfermedades"
   },
   "errorBoundary": {
     "title": "Algo ha salido mal",
@@ -5978,7 +5985,9 @@
       "rangeCustomEnd": "Hasta",
       "errorGeneric": "No se pudo generar la exportación. Inténtelo de nuevo.",
       "errorRateLimit": "Ha alcanzado el límite de exportaciones de esta hora.",
-      "errorModuleDisabled": "La exportación del expediente está desactivada para esta cuenta."
+      "errorModuleDisabled": "La exportación del expediente está desactivada para esta cuenta.",
+      "visitOffer": "El {when} hay una cita: {what}.",
+      "visitOfferApply": "Informe hasta esa fecha"
     },
     "globalExcludedInjectionSitesLabel": "Sitios de inyección excluidos globalmente",
     "globalExcludedInjectionSitesHint": "Nunca se ofrecen y se rechazan al registrar una dosis, aunque un medicamento los prefiera.",
@@ -9719,7 +9728,8 @@
     "sensitiveHint": "Aquí nunca hay nada preseleccionado. Elija cada entrada usted mismo.",
     "scopeNone": "Nada seleccionado todavía. Elija qué incluir o aplique el informe estándar.",
     "scopeCount": "{count} entradas de {groups} áreas",
-    "scopeSensitive": "incl. {names}"
+    "scopeSensitive": "incl. {names}",
+    "leafVisits": "Visitas médicas"
   },
   "recordSharing": {
     "banner": {

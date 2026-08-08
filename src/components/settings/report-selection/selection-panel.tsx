@@ -44,6 +44,7 @@ import { DateField } from "@/components/ui/date-field";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
+import { ReportVisitOffer } from "./report-visit-offer";
 import { Switch } from "@/components/ui/switch";
 import { useRovingRadioGroup } from "@/hooks/use-roving-radio-group";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
@@ -252,6 +253,15 @@ export function HealthRecordExportPanel() {
             ) : null}
           </div>
         </div>
+
+        {/* Never auto-applies: pressing it is what opens the custom window and
+            sets its end date. */}
+        <ReportVisitOffer
+          onUseVisitDate={(endDay) => {
+            setCustomRange(true);
+            setEndDate(endDay);
+          }}
+        />
 
         {customRange ? (
           <div className="grid gap-4 sm:grid-cols-2">

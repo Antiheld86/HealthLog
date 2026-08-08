@@ -283,7 +283,14 @@
     "familyHistoryColCondition": "Condition",
     "familyHistoryColAgeAtOnset": "Age at onset",
     "labsSourceRangeNote": "* The reference range comes from the report itself and differs from the saved range:",
-    "labsCatalogRangeLabel": "saved range"
+    "labsCatalogRangeLabel": "saved range",
+    "visitsTitle": "Visits",
+    "visitsColDate": "Date",
+    "visitsColPractice": "Practice",
+    "visitsColKind": "Kind",
+    "visitsColReason": "Reason",
+    "visitsColOutcome": "Outcome",
+    "visitsColConditions": "Conditions"
   },
   "errorBoundary": {
     "title": "Something went wrong",
@@ -5978,7 +5985,9 @@
       "rangeCustomEnd": "To",
       "errorGeneric": "The export could not be generated. Please try again.",
       "errorRateLimit": "You have reached the export limit for this hour.",
-      "errorModuleDisabled": "The health record export is switched off for this account."
+      "errorModuleDisabled": "The health record export is switched off for this account.",
+      "visitOffer": "An appointment is coming up on {when}: {what}.",
+      "visitOfferApply": "Report up to then"
     },
     "globalExcludedInjectionSitesLabel": "Globally excluded injection sites",
     "globalExcludedInjectionSitesHint": "Never offered and rejected when logging a dose, even if a medication prefers them.",
@@ -9719,7 +9728,8 @@
     "sensitiveHint": "Nothing here is ever preselected. Pick each entry yourself.",
     "scopeNone": "Nothing selected yet. Choose what to include, or apply the standard report.",
     "scopeCount": "{count} entries from {groups} areas",
-    "scopeSensitive": "incl. {names}"
+    "scopeSensitive": "incl. {names}",
+    "leafVisits": "Visits"
   },
   "recordSharing": {
     "banner": {

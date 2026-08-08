@@ -216,6 +216,17 @@ function seed() {
       resolvedAt: new Date("2026-01-20T00:00:00.000Z"),
     },
   ];
+  rows.encounter = [
+    {
+      occurredAt: new Date("2026-02-05T09:00:00.000Z"),
+      kind: "SPECIALIST",
+      status: "DONE",
+      reasonEncrypted: null,
+      outcomeEncrypted: null,
+      practitioner: { name: "Sample practice", specialty: "Cardiology" },
+      conditionLinks: [],
+    },
+  ];
   rows.allergy = [
     {
       substance: "Penicillin",
@@ -262,6 +273,7 @@ describe("per-leaf gating sweep", () => {
     expect(allPayload.allergies).not.toBeNull();
     expect(allPayload.familyHistory).not.toBeNull();
     expect(allPayload.illnessEpisodes).not.toBeNull();
+    expect(allPayload.visits).not.toBeNull();
     expect(allPayload.mood).not.toBeNull();
     expect(allPayload.cycle).not.toBeNull();
     expect(allPayload.anamnesis).not.toBeNull();
@@ -415,6 +427,7 @@ describe("zero read for unchosen leaves", () => {
     ["ALLERGIES", "allergy"],
     ["LAB_RESULTS", "labResult"],
     ["ILLNESS_EPISODES", "illnessEpisode"],
+    ["VISITS", "encounter"],
     ["ANAMNESIS", "userHealthProfile"],
     ["ANAMNESIS", "healthProfileFactRevision"],
   ];
@@ -474,6 +487,7 @@ describe("the empty selection serves nothing", () => {
     expect(payload.allergies).toBeNull();
     expect(payload.familyHistory).toBeNull();
     expect(payload.illnessEpisodes).toBeNull();
+    expect(payload.visits).toBeNull();
     expect(payload.anamnesis).toBeNull();
     expect(payload.cycle).toBeNull();
     expect(payload.mood).toBeNull();

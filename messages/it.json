@@ -283,7 +283,14 @@
     "familyHistoryColCondition": "Condizione",
     "familyHistoryColAgeAtOnset": "Età di esordio",
     "labsSourceRangeNote": "* L'intervallo di riferimento proviene dal referto stesso e differisce da quello salvato:",
-    "labsCatalogRangeLabel": "intervallo salvato"
+    "labsCatalogRangeLabel": "intervallo salvato",
+    "visitsTitle": "Visite mediche",
+    "visitsColDate": "Data",
+    "visitsColPractice": "Studio",
+    "visitsColKind": "Tipo",
+    "visitsColReason": "Motivo",
+    "visitsColOutcome": "Esito",
+    "visitsColConditions": "Malattie"
   },
   "errorBoundary": {
     "title": "Qualcosa è andato storto",
@@ -5978,7 +5985,9 @@
       "rangeCustomEnd": "Al",
       "errorGeneric": "Non è stato possibile generare l'esportazione. Riprova.",
       "errorRateLimit": "Hai raggiunto il limite di esportazioni per questa ora.",
-      "errorModuleDisabled": "L'esportazione della cartella è disattivata per questo account."
+      "errorModuleDisabled": "L'esportazione della cartella è disattivata per questo account.",
+      "visitOffer": "Il {when} c'è un appuntamento: {what}.",
+      "visitOfferApply": "Referto fino a quella data"
     },
     "globalExcludedInjectionSitesLabel": "Siti di iniezione esclusi globalmente",
     "globalExcludedInjectionSitesHint": "Mai proposti e rifiutati alla registrazione, anche se un farmaco li preferisce.",
@@ -9719,7 +9728,8 @@
     "sensitiveHint": "Qui non è mai preselezionato nulla. Scegli ogni voce tu stesso.",
     "scopeNone": "Ancora niente selezionato. Scegli cosa includere oppure applica il referto standard.",
     "scopeCount": "{count} voci da {groups} aree",
-    "scopeSensitive": "incl. {names}"
+    "scopeSensitive": "incl. {names}",
+    "leafVisits": "Visite mediche"
   },
   "recordSharing": {
     "banner": {

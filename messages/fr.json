@@ -283,7 +283,14 @@
     "familyHistoryColCondition": "Affection",
     "familyHistoryColAgeAtOnset": "Âge au début",
     "labsSourceRangeNote": "* La plage de référence provient du compte rendu lui-même et diffère de la plage enregistrée :",
-    "labsCatalogRangeLabel": "plage enregistrée"
+    "labsCatalogRangeLabel": "plage enregistrée",
+    "visitsTitle": "Consultations",
+    "visitsColDate": "Date",
+    "visitsColPractice": "Cabinet",
+    "visitsColKind": "Type",
+    "visitsColReason": "Motif",
+    "visitsColOutcome": "Résultat",
+    "visitsColConditions": "Maladies"
   },
   "errorBoundary": {
     "title": "Une erreur est survenue",
@@ -5978,7 +5985,9 @@
       "rangeCustomEnd": "Au",
       "errorGeneric": "L'export n'a pas pu être généré. Veuillez réessayer.",
       "errorRateLimit": "Vous avez atteint la limite d'exports pour cette heure.",
-      "errorModuleDisabled": "L'export du dossier est désactivé pour ce compte."
+      "errorModuleDisabled": "L'export du dossier est désactivé pour ce compte.",
+      "visitOffer": "Un rendez-vous est prévu le {when} : {what}.",
+      "visitOfferApply": "Rapport jusque-là"
     },
     "globalExcludedInjectionSitesLabel": "Sites d'injection exclus globalement",
     "globalExcludedInjectionSitesHint": "Jamais proposés et refusés à l'enregistrement, même si un médicament les privilégie.",
@@ -9719,7 +9728,8 @@
     "sensitiveHint": "Rien n'est jamais présélectionné ici. Choisissez chaque élément vous-même.",
     "scopeNone": "Rien de sélectionné pour l'instant. Choisissez ce qui doit figurer, ou appliquez le compte rendu standard.",
     "scopeCount": "{count} éléments issus de {groups} domaines",
-    "scopeSensitive": "dont {names}"
+    "scopeSensitive": "dont {names}",
+    "leafVisits": "Consultations"
   },
   "recordSharing": {
     "banner": {

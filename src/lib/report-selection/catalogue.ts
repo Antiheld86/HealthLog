@@ -46,6 +46,7 @@ export type StructuredLeafId =
   | "GLP1_THERAPY"
   | "ALLERGIES"
   | "ILLNESS_EPISODES"
+  | "VISITS"
   | "FAMILY_HISTORY"
   | "MOOD"
   | "CYCLE"
@@ -199,13 +200,14 @@ export const STRUCTURED_LEAF_GROUP: Record<StructuredLeafId, ReportGroupId> = {
   GLP1_THERAPY: "medications",
   ALLERGIES: "history",
   ILLNESS_EPISODES: "history",
+  VISITS: "history",
   FAMILY_HISTORY: "sensitive",
   MOOD: "sensitive",
   CYCLE: "sensitive",
   ANAMNESIS: "sensitive",
 };
 
-/** i18n label keys for the 14 structured leaves. */
+/** i18n label keys for the 15 structured leaves. */
 export const STRUCTURED_LEAF_LABEL_KEYS: Record<StructuredLeafId, string> = {
   PATIENT_IDENTITY: "reportSelection.leafPatientIdentity",
   INSURANCE: "reportSelection.leafInsurance",
@@ -217,6 +219,7 @@ export const STRUCTURED_LEAF_LABEL_KEYS: Record<StructuredLeafId, string> = {
   GLP1_THERAPY: "reportSelection.leafGlp1Therapy",
   ALLERGIES: "reportSelection.leafAllergies",
   ILLNESS_EPISODES: "reportSelection.leafIllnessEpisodes",
+  VISITS: "reportSelection.leafVisits",
   FAMILY_HISTORY: "reportSelection.leafFamilyHistory",
   MOOD: "reportSelection.leafMood",
   CYCLE: "reportSelection.leafCycle",
@@ -306,6 +309,10 @@ export const LEAF_MODULE: Partial<Record<ReportLeafId, ModuleKey>> = {
   MEDICATION_ADMINISTRATIONS: "medications",
   MEDICATION_COMPLIANCE: "medications",
   GLP1_THERAPY: "medications",
+  // VISITS is deliberately absent, like ALLERGIES beside it. A visit carries
+  // no module of its own — it is core, like the checkups page it lives on —
+  // and the whole report is already gated by `doctorReport`. Reading the
+  // absence as an oversight is the mistake this comment exists to prevent.
 };
 
 /** Every measurement leaf id, in enum order. */

@@ -64,6 +64,7 @@ import {
   loadAnamnesis,
   loadFamilyHistory,
   loadIllnessEpisodes,
+  loadVisits,
   loadLabResults,
 } from "./clinical-records";
 
@@ -498,6 +499,7 @@ export async function collectDoctorReportData(
     cycle,
     labResults,
     illnessEpisodes,
+    visits,
     allergies,
     familyHistory,
     anamnesis,
@@ -510,6 +512,9 @@ export async function collectDoctorReportData(
       : Promise.resolve(null),
     gate.admits("ILLNESS_EPISODES")
       ? loadIllnessEpisodes(userId, start, end)
+      : Promise.resolve(null),
+    gate.admits("VISITS")
+      ? loadVisits(userId, start, end)
       : Promise.resolve(null),
     gate.admits("ALLERGIES") ? loadAllergies(userId) : Promise.resolve(null),
     gate.admits("FAMILY_HISTORY")
@@ -579,6 +584,7 @@ export async function collectDoctorReportData(
     cycle,
     labResults,
     illnessEpisodes,
+    visits,
     allergies,
     familyHistory,
     anamnesis,
