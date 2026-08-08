@@ -10,7 +10,7 @@
  * canonical column (`disableCoach` / `cycleTrackingEnabled`) via the existing
  * per-column endpoints — never the module-allowlist the gate ignores for them.
  *
- * Test strategy mirrors `advanced-research-mode.test.tsx`: mock
+ * Test strategy mirrors `advanced-account-delete.test.tsx`: mock
  * `@tanstack/react-query` so the rendered tree executes under SSR
  * (`renderToStaticMarkup`), capture the `useMutation` config to assert the
  * PATCH body + the `authMe()` invalidation directly, and mock `useAuth` to

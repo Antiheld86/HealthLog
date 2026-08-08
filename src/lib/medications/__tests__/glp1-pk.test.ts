@@ -4,30 +4,13 @@ import {
   GLP1_DRUG_IDS,
   type Glp1DrugId,
 } from "@/lib/medications/glp1-knowledge";
-import {
-  computeOneCompartment,
-  RESEARCH_MODE_DISCLAIMER_VERSION,
-  shotPhaseAt,
-} from "@/lib/medications/glp1-pk";
+import { computeOneCompartment, shotPhaseAt } from "@/lib/medications/glp1-pk";
 
 const ASOF = new Date("2026-05-14T12:00:00Z");
 
 function hoursBefore(ms: Date, hours: number): Date {
   return new Date(ms.getTime() - hours * 60 * 60 * 1000);
 }
-
-describe("RESEARCH_MODE_DISCLAIMER_VERSION", () => {
-  it("is a non-empty string", () => {
-    expect(typeof RESEARCH_MODE_DISCLAIMER_VERSION).toBe("string");
-    expect(RESEARCH_MODE_DISCLAIMER_VERSION.length).toBeGreaterThan(0);
-  });
-
-  it("matches the YYYY-MM-DD.N version stamp shape", () => {
-    expect(RESEARCH_MODE_DISCLAIMER_VERSION).toMatch(
-      /^\d{4}-\d{2}-\d{2}\.\d+$/,
-    );
-  });
-});
 
 describe("computeOneCompartment", () => {
   describe("per-drug smoke test", () => {

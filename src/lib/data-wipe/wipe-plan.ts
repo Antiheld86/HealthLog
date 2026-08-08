@@ -376,9 +376,6 @@ export const USER_RESET = {
   globalExcludedInjectionSites: [],
   moodReminderEnabled: false,
   notificationPrefs: Prisma.DbNull,
-  researchModeEnabled: false,
-  researchModeAcknowledgedAt: null,
-  researchModeAcknowledgedVersion: null,
 
   // Back to the start of the tour — the record it was built around is gone
   onboardingCompletedAt: null,

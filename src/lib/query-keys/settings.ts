@@ -52,7 +52,6 @@ export const settingsKeys = {
   /** v1.15.12 H1 — admin overview "update available" check against the
    * latest GitHub release tag (best-effort, day-stale). */
   versionUpdateCheck: () => ["version", "update-check"] as const,
-  researchMode: () => ["research-mode"] as const,
 
   /**
    * v1.23 — the Data & Privacy dashboard's read-only retention + encryption

@@ -24,7 +24,7 @@ import { I18nProvider } from "@/lib/i18n/context";
 
 // The Radix Dialog portals at runtime, so its body never materialises in
 // static markup. Collapse the primitives to plain wrappers (same trick as
-// the ResearchModeAcknowledgmentDialog suite) so the footer is reachable.
+// the dose-history dialog suite) so the footer is reachable.
 vi.mock("@/components/ui/dialog", () => {
   const Pass = ({ children }: { children?: React.ReactNode }) => (
     <div>{children}</div>
