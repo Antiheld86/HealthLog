@@ -394,6 +394,55 @@ describe("mood context write path (real Postgres)", () => {
     expect(entries[1].moodA1).toBe(9);
   });
 
+  it("the bulk path skips an out-of-range dimension without failing the batch", async () => {
+    // The endpoint's own description promises that a bad value marks THAT
+    // entry skipped and never the batch. `a1`..`a5` sat in the batch schema
+    // and 422'd all of it, so the words and the behaviour disagreed.
+    const { POST } = await import("@/app/api/mood-entries/bulk/route");
+    const res = await POST(
+      postRequest("/api/mood-entries/bulk", {
+        entries: [
+          {
+            mood: "GUT",
+            moodLoggedAt: "2026-05-25T08:00:00.000Z",
+            externalId: "ios-dim-1",
+            a3: 7,
+          },
+          {
+            mood: "OKAY",
+            moodLoggedAt: "2026-05-25T12:00:00.000Z",
+            externalId: "ios-dim-2",
+            a1: 11,
+          },
+          {
+            mood: "SUPER_GUT",
+            moodLoggedAt: "2026-05-25T18:00:00.000Z",
+            externalId: "ios-dim-3",
+          },
+        ],
+      }),
+    );
+    // Not 422: one bad row must not cost the other two.
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: {
+        inserted: number;
+        skipped: Array<{ index: number; reason: string }>;
+      };
+    };
+    expect(body.data.inserted).toBe(2);
+    expect(body.data.skipped).toEqual([
+      { index: 1, reason: "invalid_dimensions" },
+    ]);
+
+    const entries = await getPrismaClient().moodEntry.findMany({
+      orderBy: { moodLoggedAt: "asc" },
+    });
+    expect(entries).toHaveLength(2);
+    expect(entries[0].energyA3).toBe(7);
+    expect(entries[1].moodA1).toBe(9);
+  });
+
   it("the sync feed carries both levels under the keys the write path takes", async () => {
     const { POST } = await import("@/app/api/mood-entries/route");
     await POST(

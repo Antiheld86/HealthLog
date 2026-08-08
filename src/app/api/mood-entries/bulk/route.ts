@@ -100,14 +100,21 @@ const bulkEntrySchema = z.object({
    * v1.38 — the five level-A self-state values, each 0-10, each optional.
    * A batch that carries none still writes complete rows: the server derives
    * `a1` from the five-point label, so an older client build needs no change
-   * to stay correct. A value out of range marks THIS entry skipped and never
-   * the batch, which is what the per-entry parse below is for.
+   * to stay correct.
+   *
+   * `unknown` here and parsed with {@link bulkDimensionsSchema} PER ENTRY in
+   * the loop below, for the same reason `context` is: the doc comment beside
+   * this field used to promise that an out-of-range value marks THIS entry
+   * skipped while the field itself sat in the batch schema and 422'd all five
+   * hundred. The words were right and the code was not. A phone draining a
+   * year of local history must not lose the year to one row.
+   * @per-entry-parse: bulkDimensionsSchema, in the loop below
    */
-  a1: z.number().int().min(0).max(10).nullable().optional(),
-  a2: z.number().int().min(0).max(10).nullable().optional(),
-  a3: z.number().int().min(0).max(10).nullable().optional(),
-  a4: z.number().int().min(0).max(10).nullable().optional(),
-  a5: z.number().int().min(0).max(10).nullable().optional(),
+  a1: z.unknown().optional(),
+  a2: z.unknown().optional(),
+  a3: z.unknown().optional(),
+  a4: z.unknown().optional(),
+  a5: z.unknown().optional(),
   /**
    * v1.38 — the day's context. Optional, and absent leaves a stored context
    * alone on a re-post, matching the single-entry path: a build with no
@@ -137,6 +144,23 @@ const bulkEntrySchema = z.object({
    * @external-id-checked-per-entry: src/app/api/mood-entries/bulk/route.ts
    */
   externalId: z.string().min(1).max(120).optional(),
+});
+
+/**
+ * The five dimensions, validated for one entry.
+ *
+ * The bound is the scale itself, matching the single-entry schema exactly —
+ * one definition of "0 to 10" would be better still, but the single-entry
+ * schema states it as a shared const and this one has to answer per entry, so
+ * the two are pinned to each other by
+ * `src/app/api/mood-entries/__tests__/bulk-dimension-bounds.test.ts` instead.
+ */
+const bulkDimensionsSchema = z.object({
+  a1: z.number().int().min(0).max(10).nullable().optional(),
+  a2: z.number().int().min(0).max(10).nullable().optional(),
+  a3: z.number().int().min(0).max(10).nullable().optional(),
+  a4: z.number().int().min(0).max(10).nullable().optional(),
+  a5: z.number().int().min(0).max(10).nullable().optional(),
 });
 
 const bulkPayloadSchema = z.object({
@@ -321,6 +345,27 @@ async function postBulk(request: NextRequest): Promise<Response> {
       continue;
     }
 
+    // The five dimensions, parsed for THIS entry. Out of range skips this row
+    // and nothing else.
+    const parsedDimensions = bulkDimensionsSchema.safeParse({
+      a1: entry.a1,
+      a2: entry.a2,
+      a3: entry.a3,
+      a4: entry.a4,
+      a5: entry.a5,
+    });
+    if (!parsedDimensions.success) {
+      const reason = "invalid_dimensions";
+      skipped.push({ index: i, reason });
+      results.push({
+        index: i,
+        status: "skipped",
+        reason,
+        ...(entry.externalId ? { externalId: entry.externalId } : {}),
+      });
+      continue;
+    }
+
     const date = moodDateKey(entry.moodLoggedAt, tz);
     const score = getScoreForMood(entry.mood);
     // v1.37 / v1.38 — the same resolution the single-entry path uses:
@@ -328,13 +373,7 @@ async function postBulk(request: NextRequest): Promise<Response> {
     // the other four present only when this entry carried them. An omitted
     // dimension is left alone rather than written as null, so a row that
     // already carries hand-set values keeps them across a re-import.
-    const levelA = levelAForWrite(entry.mood, {
-      a1: entry.a1,
-      a2: entry.a2,
-      a3: entry.a3,
-      a4: entry.a4,
-      a5: entry.a5,
-    });
+    const levelA = levelAForWrite(entry.mood, parsedDimensions.data);
 
     try {
       // v1.12.1 — when the entry carries a source-stable `externalId`,
