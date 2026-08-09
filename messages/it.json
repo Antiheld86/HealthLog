@@ -427,7 +427,7 @@
       "evening": "Buonasera"
     },
     "welcomeBack": "{greeting}, bentornato.",
-    "welcomeBackWithName": "{greeting} {name}, bentornato.",
+    "welcomeBackWithName": "{greeting}, {name}, bentornato.",
     "greetingSalutation": "Ciao, {name}",
     "streakLabel": "giorni di fila",
     "weight": "Peso",
@@ -4615,6 +4615,8 @@
     },
     "sharedRecord": {
       "managedSettings": {
+        "saveError": "Salvataggio non riuscito. Riprova.",
+        "validationError": "Controlla i tuoi dati.",
         "profile": {
           "title": "Profilo",
           "displayName": "Nome visualizzato",

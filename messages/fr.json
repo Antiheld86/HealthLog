@@ -427,7 +427,7 @@
       "evening": "Bonsoir"
     },
     "welcomeBack": "{greeting}, content de te revoir.",
-    "welcomeBackWithName": "{greeting} {name}, content de te revoir.",
+    "welcomeBackWithName": "{greeting}, {name}, content de te revoir.",
     "greetingSalutation": "Bonjour, {name}",
     "streakLabel": "jours d’affilée",
     "weight": "Poids",
@@ -4615,6 +4615,8 @@
     },
     "sharedRecord": {
       "managedSettings": {
+        "saveError": "Échec de l'enregistrement. Réessayez.",
+        "validationError": "Vérifiez vos saisies.",
         "profile": {
           "title": "Profil",
           "displayName": "Nom affiché",

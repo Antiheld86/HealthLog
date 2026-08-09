@@ -1010,9 +1010,13 @@ export function ManagedRecordSettingsSection({
             saveLabel={t("common.save")}
             settings={query.data.settings}
           />
-          {save.isError || validationFailed ? (
+          {validationFailed ? (
             <p className="text-destructive text-sm" role="alert">
-              {t("common.networkError")}
+              {t("settings.sharedRecord.managedSettings.validationError")}
+            </p>
+          ) : save.isError ? (
+            <p className="text-destructive text-sm" role="alert">
+              {t("settings.sharedRecord.managedSettings.saveError")}
             </p>
           ) : null}
         </>

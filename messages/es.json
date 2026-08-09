@@ -427,7 +427,7 @@
       "evening": "Buenas tardes"
     },
     "welcomeBack": "{greeting}, te damos la bienvenida de nuevo.",
-    "welcomeBackWithName": "{greeting} {name}, te damos la bienvenida de nuevo.",
+    "welcomeBackWithName": "{greeting}, {name}, te damos la bienvenida de nuevo.",
     "greetingSalutation": "Hola, {name}",
     "streakLabel": "días seguidos",
     "weight": "Peso",
@@ -4615,6 +4615,8 @@
     },
     "sharedRecord": {
       "managedSettings": {
+        "saveError": "No se pudo guardar. Inténtalo de nuevo.",
+        "validationError": "Revisa tus datos.",
         "profile": {
           "title": "Perfil",
           "displayName": "Nombre visible",
@@ -6024,7 +6026,7 @@
       "scopeTitle": "Qué contiene este enlace",
       "scopeInsuranceExcluded": "Los datos del seguro nunca se comparten por enlace.",
       "statusNeedsReselect": "Elegir contenido de nuevo",
-      "reselectReason": "Este enlace mostraba un alcance que nadie eligió, por eso se cerró. Cree uno nuevo y elija su contenido.",
+      "reselectReason": "Este enlace mostraba un alcance que nadie eligió, por eso se cerró. Crea uno nuevo y elige su contenido.",
       "reselectAction": "Crear un reemplazo",
       "createDetail": "El token se muestra una sola vez al crearlo — guárdalo entonces; no se puede recuperar."
     },
@@ -9836,8 +9838,8 @@
     "standardHint": "Un clic rellena lo que suele necesitar una consulta general. Cada entrada sigue siendo editable.",
     "groupCount": "{on}/{total}",
     "groupDisclosure": "Mostrar las entradas de {group}",
-    "sensitiveHint": "Aquí nunca hay nada preseleccionado. Elija cada entrada usted mismo.",
-    "scopeNone": "Nada seleccionado todavía. Elija qué incluir o aplique el informe estándar.",
+    "sensitiveHint": "Aquí nunca hay nada preseleccionado. Elige cada entrada tú mismo.",
+    "scopeNone": "Nada seleccionado todavía. Elige qué incluir o aplica el informe estándar.",
     "scopeCount": "{count} entradas de {groups} áreas",
     "scopeSensitive": "incl. {names}",
     "leafVisits": "Visitas médicas",

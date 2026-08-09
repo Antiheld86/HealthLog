@@ -427,7 +427,7 @@
       "evening": "Guten Abend"
     },
     "welcomeBack": "{greeting}, willkommen zurück.",
-    "welcomeBackWithName": "{greeting} {name}, willkommen zurück.",
+    "welcomeBackWithName": "{greeting}, {name}, willkommen zurück.",
     "greetingSalutation": "Hallo, {name}",
     "streakLabel": "Tage in Folge",
     "weight": "Gewicht",
@@ -4615,6 +4615,8 @@
     },
     "sharedRecord": {
       "managedSettings": {
+        "saveError": "Speichern fehlgeschlagen. Bitte erneut versuchen.",
+        "validationError": "Bitte prüfe deine Eingaben.",
         "profile": {
           "title": "Profil",
           "displayName": "Anzeigename",
@@ -6024,7 +6026,7 @@
       "scopeTitle": "Was dieser Link enthält",
       "scopeInsuranceExcluded": "Versichertendaten werden über einen Link nie geteilt.",
       "statusNeedsReselect": "Inhalt neu wählen",
-      "reselectReason": "Dieser Link lieferte einen Umfang, den niemand gewählt hatte, und wurde deshalb geschlossen. Legen Sie einen neuen an und wählen Sie den Inhalt.",
+      "reselectReason": "Dieser Link lieferte einen Umfang, den niemand gewählt hatte, und wurde deshalb geschlossen. Lege einen neuen an und wähle den Inhalt.",
       "reselectAction": "Ersatz anlegen",
       "createDetail": "Der Token wird nur einmal bei der Erstellung angezeigt — sichere ihn dann; er lässt sich nicht wiederherstellen."
     },
@@ -9836,8 +9838,8 @@
     "standardHint": "Ein Klick füllt aus, was ein normaler Arztbesuch meist braucht. Jeder Eintrag bleibt änderbar.",
     "groupCount": "{on}/{total}",
     "groupDisclosure": "Einträge in {group} anzeigen",
-    "sensitiveHint": "Hier ist nie etwas vorausgewählt. Wählen Sie jeden Eintrag selbst.",
-    "scopeNone": "Noch nichts ausgewählt. Wählen Sie aus, was enthalten sein soll, oder übernehmen Sie den Standardbericht.",
+    "sensitiveHint": "Hier ist nie etwas vorausgewählt. Wähle jeden Eintrag selbst.",
+    "scopeNone": "Noch nichts ausgewählt. Wähle aus, was enthalten sein soll, oder übernimm den Standardbericht.",
     "scopeCount": "{count} Einträge aus {groups} Bereichen",
     "scopeSensitive": "inkl. {names}",
     "leafVisits": "Arztbesuche",

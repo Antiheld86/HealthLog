@@ -427,7 +427,7 @@
       "evening": "Dobry wieczór"
     },
     "welcomeBack": "{greeting}, witaj ponownie.",
-    "welcomeBackWithName": "{greeting} {name}, witaj ponownie.",
+    "welcomeBackWithName": "{greeting}, {name}, witaj ponownie.",
     "greetingSalutation": "Cześć, {name}",
     "streakLabel": "dni z rzędu",
     "weight": "Waga",
@@ -4615,6 +4615,8 @@
     },
     "sharedRecord": {
       "managedSettings": {
+        "saveError": "Nie udało się zapisać. Spróbuj ponownie.",
+        "validationError": "Sprawdź wprowadzone dane.",
         "profile": {
           "title": "Profil",
           "displayName": "Wyświetlana nazwa",

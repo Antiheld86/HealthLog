@@ -427,7 +427,7 @@
       "evening": "Good evening"
     },
     "welcomeBack": "{greeting}, welcome back.",
-    "welcomeBackWithName": "{greeting} {name}, welcome back.",
+    "welcomeBackWithName": "{greeting}, {name}, welcome back.",
     "greetingSalutation": "Hi, {name}",
     "streakLabel": "days in a row",
     "weight": "Weight",
@@ -4615,6 +4615,8 @@
     },
     "sharedRecord": {
       "managedSettings": {
+        "saveError": "Couldn't save. Please try again.",
+        "validationError": "Please check your entries.",
         "profile": {
           "title": "Profile",
           "displayName": "Display name",
