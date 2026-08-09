@@ -182,6 +182,26 @@ describe("fetchGeoLite2Databases — fail-soft", () => {
     expect(resetCacheSpy).not.toHaveBeenCalled();
   });
 
+  it("never leaks the licence key into the error on a fetch-layer throw", async () => {
+    // safeFetch embeds the full target URL — which carries `license_key=<secret>`
+    // — in its thrown message. The download timeout was raised to 120s for slow
+    // self-host links, so timeouts are an expected path; the reported error must
+    // name the failure without the URL, or the key lands on stdout / Loki.
+    safeFetchMock.mockRejectedValue(
+      new SafeFetchError(
+        "safeFetch aborted (TimeoutError): https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=test-licence-key&suffix=tar.gz",
+        "timeout",
+      ),
+    );
+
+    const result = await fetchGeoLite2Databases();
+
+    expect(result.status).toBe("failed");
+    expect(result.error).toBeDefined();
+    expect(result.error).not.toContain("test-licence-key");
+    expect(result.error).not.toContain("license_key");
+  });
+
   it("promotes nothing when the first edition succeeds but the second fails", async () => {
     // The atomicity contract: City downloads + extracts fine, ASN 401s. Since
     // not every edition was staged, NOTHING is promoted — no GeoLite2-City.mmdb

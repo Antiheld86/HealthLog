@@ -110,7 +110,7 @@ export function redactSecrets(input: string): string {
       // `passphrase` that derives the encrypted-export key must never land in
       // `http.path` / error strings reaching Loki / Glitchtip.
       .replace(
-        /([?&])(secret|code|token|ticket|api[_-]?key|insurance(?:number)?|kvnr|totp|mfa|backup[_-]?code|recovery[_-]?code|passphrase)=[^&\s]+/gi,
+        /([?&])(secret|code|token|ticket|api[_-]?key|license[_-]?key|insurance(?:number)?|kvnr|totp|mfa|backup[_-]?code|recovery[_-]?code|passphrase)=[^&\s]+/gi,
         "$1$2=[REDACTED]",
       )
   );

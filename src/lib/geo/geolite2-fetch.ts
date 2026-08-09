@@ -35,7 +35,7 @@ import zlib from "node:zlib";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { getEvent } from "@/lib/logging/context";
-import { safeFetch } from "@/lib/safe-fetch";
+import { safeFetch, SafeFetchError } from "@/lib/safe-fetch";
 import {
   geoLiteDir,
   offlineGeoReady,
@@ -173,18 +173,30 @@ async function downloadAndExtractEdition(
   destDir: string,
 ): Promise<string> {
   const url = buildMaxmindDownloadUrl(edition.editionId, licenseKey);
-  const res = await safeFetch(
-    url,
-    { headers: { Accept: "application/gzip" } },
-    {
-      // The permalink 302s to a signed CDN, so follow redirects; keep the
-      // connect-time public-host pin so a rebinding cannot swing the hop onto
-      // a private/metadata address.
-      followRedirects: true,
-      requirePublicHost: true,
-      timeoutMs: DOWNLOAD_TIMEOUT_MS,
-    },
-  );
+  // The URL carries `license_key=<secret>` in its query string. safeFetch
+  // embeds the full URL in its thrown error message, and the wide-event
+  // warning / job-failure paths do not redact it, so a bare re-throw would
+  // print the licence key to stdout, Loki and GlitchTip on any timeout or
+  // network error. Re-throw with the edition and the error KIND only, never
+  // the URL.
+  let res: Response;
+  try {
+    res = await safeFetch(
+      url,
+      { headers: { Accept: "application/gzip" } },
+      {
+        // The permalink 302s to a signed CDN, so follow redirects; keep the
+        // connect-time public-host pin so a rebinding cannot swing the hop onto
+        // a private/metadata address.
+        followRedirects: true,
+        requirePublicHost: true,
+        timeoutMs: DOWNLOAD_TIMEOUT_MS,
+      },
+    );
+  } catch (err) {
+    const kind = err instanceof SafeFetchError ? err.kind : "network";
+    throw new Error(`${edition.editionId} download failed (${kind})`);
+  }
   if (!res.ok) {
     // 401 = wrong key / unsigned EULA, 403 = throttle, 5xx = MaxMind-side.
     throw new Error(
