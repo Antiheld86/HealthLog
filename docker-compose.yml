@@ -88,6 +88,16 @@ x-healthlog-env: &healthlog_env
   # value in .env reaches the container (the `environment:` block is a
   # whitelist). See docs/self-hosting/geolite2.md.
   GEOLITE2_DIR: "${GEOLITE2_DIR:-/opt/geolite2}"
+  # MaxMind licence key for the RUNTIME GeoLite2 fetch (issue #659). Set this
+  # and the worker downloads GeoLite2-City + GeoLite2-ASN itself into
+  # GEOLITE2_DIR on the next boot and monthly thereafter — no image rebuild,
+  # no manual mount. Get a free key at
+  # https://www.maxmind.com/en/geolite2/signup (My Account -> Manage License
+  # Keys). Leave it unset and nothing is fetched (mounting your own databases
+  # or IP_GEO_LOOKUP_DISABLED=1 both still work). Listed here so an operator
+  # value in .env reaches the container (the `environment:` block is a
+  # whitelist). See docs/self-hosting/geolite2.md.
+  MAXMIND_LICENSE_KEY: "${MAXMIND_LICENSE_KEY:-}"
   # all = bundle web + worker in this container (default, single-host)
   # web = serve HTTP only; pair with a separate app-worker service
   HEALTHLOG_PROCESS_TYPE: "${HEALTHLOG_PROCESS_TYPE:-all}"

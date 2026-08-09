@@ -104,6 +104,7 @@ const subsystemSurface = {
   "host-metric-sample": { audience: "system" },
   "feedback-aggregator": { audience: "system" },
   "geo-backfill": { audience: "system" },
+  "geolite2-fetch": { audience: "system" },
   "tls-pin-monitor": { audience: "system" },
   "pr-detection": { audience: "system" },
   "medication-inventory-expire": { audience: "system" },

@@ -6,6 +6,8 @@
  */
 import { type Job } from "pg-boss";
 import { runGeoBackfill } from "@/lib/jobs/geo-backfill";
+import { fetchGeoLite2Databases } from "@/lib/geo/geolite2-fetch";
+import { type Geolite2FetchPayload } from "@/lib/jobs/geolite2-fetch";
 import { runTlsPinMonitor } from "@/lib/jobs/tls-pin-monitor";
 import { type PrDetectionPayload } from "@/lib/jobs/pr-detection";
 import { jobDone, jobFailed, type JobOutcome } from "@/lib/jobs/job-outcome";
@@ -135,6 +137,52 @@ export async function handleGeoBackfill(
     } finally {
       geoBackfillRunning = false;
     }
+  });
+}
+
+/**
+ * Runtime GeoLite2 fetch worker (issue #659). Downloads + places the offline
+ * MMDBs when a `MAXMIND_LICENSE_KEY` is set, so a self-hoster on the published
+ * image gets the offline geo tier without a rebuild or a manual mount. The
+ * fetch is fail-soft (a failure leaves the previous databases untouched); the
+ * boot mode only fetches when no database is present yet, the cron mode always
+ * refreshes. Skips (no key, egress disabled, already present) complete the job;
+ * a genuine download/extract failure fails it so pg-boss's default retries get
+ * a few attempts before the monthly cron catches the next window.
+ */
+export async function handleGeolite2Fetch(
+  jobs: Job<Geolite2FetchPayload>[],
+): Promise<JobOutcome> {
+  return withBackgroundEvent("job.geolite2_fetch", async (evt) => {
+    // Batched worker mode always hands us an array; the queue is single-flight
+    // in practice, so this loop is ~always one job.
+    let lastStatus = "none";
+    let failure: JobOutcome | null = null;
+    for (const job of jobs) {
+      const mode = job.data?.mode === "boot" ? "boot" : "refresh";
+      const result = await fetchGeoLite2Databases({
+        skipIfPresent: mode === "boot",
+      });
+      lastStatus = result.status;
+      evt.addMeta("geolite2_fetch_mode", mode);
+      evt.addMeta("geolite2_fetch_status", result.status);
+      if (result.status === "fetched") {
+        evt.addMeta("geolite2_fetch_editions", result.editions.join(","));
+      }
+      if (result.status === "failed" && failure === null) {
+        evt.addWarning(
+          `geolite2-fetch failed: ${result.error ?? "unknown error"}`,
+        );
+        failure = jobFailed(
+          "geolite2 fetch failed",
+          new Error(result.error ?? "unknown error"),
+        );
+      }
+    }
+    return (
+      failure ??
+      jobDone({ geolite2_fetch_status: lastStatus, jobs: jobs.length })
+    );
   });
 }
 

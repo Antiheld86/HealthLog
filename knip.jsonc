@@ -117,7 +117,16 @@
     "@openai/codex-security",
     "postcss",
   ],
-  "ignoreBinaries": ["docker", "docker-compose", "pg_isready", "tsx", "cosign"],
+  "ignoreBinaries": [
+    "docker",
+    "docker-compose",
+    "pg_isready",
+    "tsx",
+    "cosign",
+    // The runtime GeoLite2 fetch extracts in pure Node, but its test builds a
+    // MaxMind-shaped tar.gz fixture with the POSIX `tar` (present in CI + dev).
+    "tar",
+  ],
   // Scoped to a single file: an export used only inside its own module is not
   // a finding. It is also why the default pass cannot answer the question the
   // production pass answers — this setting is about exports, not reachability.
