@@ -69,6 +69,8 @@ import {
 import { toMeasurementReminderDto } from "@/lib/measurement-reminders/dto";
 import { calendarDaysUntil } from "@/lib/measurement-reminders/due-day";
 import { fenceUserText, scrubFenceMarkers } from "@/lib/ai/coach/data-fence";
+import { decryptFromBytes } from "@/lib/ai/coach/bytes-codec";
+import { listTargetsBySource } from "@/lib/links";
 import type { McpAuthContext } from "./auth";
 
 /**
@@ -872,7 +874,16 @@ const getIntegrationStatusOutput: z.ZodRawShape = {
     .optional(),
 };
 
-/** Output schema for `get_preventive_care` — the Vorsorge due-list. */
+/**
+ * Output schema for `get_preventive_care` — the Vorsorge due-list, plus the
+ * upcoming appointments booked as visits.
+ *
+ * `appointments` is a NAMED field on this same result rather than a second
+ * due-list tool: an assistant asked "what is coming up" gets one answer instead
+ * of having to know there are two lists. The Vorsorge `checkups` arm stays free
+ * of `ENCOUNTER`-origin reminders (Phase 1 excluded them); the appointments are
+ * read from `Encounter` directly, so the two never blur.
+ */
 const getPreventiveCareOutput: z.ZodRawShape = {
   present: z.boolean(),
   checkups: z
@@ -887,7 +898,72 @@ const getPreventiveCareOutput: z.ZodRawShape = {
       }),
     )
     .optional(),
+  appointments: z
+    .array(
+      z.object({
+        occurredAt: z.string(),
+        practitioner: z.string().nullable(),
+        specialty: z.string().nullable(),
+        kind: z.string(),
+        reason: z.string().nullable(),
+      }),
+    )
+    .optional(),
 };
+
+/**
+ * Output schema for `get_visits` — the account's own past visits, bounded.
+ *
+ * Follows `get_preventive_care`'s shape: every field beyond `present` is
+ * optional so a grounded `{ present: false }` miss and a full hit both validate
+ * against one schema (the ChatGPT Apps-SDK conformance rule the other reads
+ * follow). Absence is `{ present: false }`, never `{ present: true, visits: [] }`
+ * — "you have never recorded a visit" and "you have no visits" are different
+ * claims and only the first is true when the list is empty.
+ */
+const getVisitsOutput: z.ZodRawShape = {
+  present: z.boolean(),
+  windowMonths: z.number().optional(),
+  visits: z
+    .array(
+      z.object({
+        occurredAt: z.string(),
+        status: z.string(),
+        kind: z.string(),
+        practitioner: z.string().nullable(),
+        specialty: z.string().nullable(),
+        reason: z.string().nullable(),
+        outcome: z.string().nullable(),
+        conditions: z.array(z.string()),
+      }),
+    )
+    .optional(),
+};
+
+/** Default trailing window for `get_visits` when the caller names none. */
+const DEFAULT_VISITS_WINDOW_MONTHS = 12;
+/** Hard cap on the `get_visits` window, so an unbounded read is impossible. */
+const MAX_VISITS_WINDOW_MONTHS = 60;
+/** Newest-first cap on the visits one `get_visits` call returns. */
+const MAX_VISITS = 50;
+/** Newest-first cap on the appointments folded into `get_preventive_care`. */
+const MAX_APPOINTMENTS = 25;
+
+/**
+ * Decrypt a visit's `Bytes` free-text column, fail-soft to null.
+ *
+ * A key-rotation gap on one row reads as a missing reason/outcome, never as a
+ * thrown tool call that takes the whole list down. Same codec + fail-soft
+ * contract as `src/lib/encounters/dto.ts`.
+ */
+function decryptVisitText(value: Uint8Array | null): string | null {
+  if (!value || value.byteLength === 0) return null;
+  try {
+    return decryptFromBytes(value);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Output schema for `get_nutrients` — either the presence overview (no
@@ -1546,11 +1622,43 @@ export const MCP_TOOLS: McpToolDefinition[] = [
     name: "get_preventive_care",
     title: "Get preventive-care due-list",
     description:
-      "Fetch the user's own configured preventive-care (Vorsorge) reminders — upcoming and overdue checkups with their next-due dates. Surfaces only the reminders the user has already set up (it never invents screening recommendations). Each item carries its label, optional measurement type, next-due instant, an overdue flag, and last-completed date. Returns { present: false } when no reminders are configured.",
+      "Fetch what preventive care is coming up: the user's own configured preventive-care (Vorsorge) reminders (upcoming and overdue checkups with their next-due dates) AND the appointments they have booked as future visits. Surfaces only the reminders the user has already set up (it never invents screening recommendations); each checkup carries its label, optional measurement type, next-due instant, an overdue flag, and last-completed date. Each `appointments` entry carries its date, practitioner name + specialty, visit kind, and the visit's own free-text reason. Returns { present: false } only when neither a reminder nor an appointment exists.",
     inputShape: {},
     annotations: READ_ONLY_ANNOTATIONS,
     outputShape: getPreventiveCareOutput,
     async run(ctx) {
+      const now = new Date();
+      // Upcoming appointments ride alongside the Vorsorge due-list, read from
+      // `Encounter` (a booked visit in the future). They are a NAMED field on
+      // this result, not a second tool, so "what is coming up" is one answer.
+      const appointmentRows = await prisma.encounter.findMany({
+        where: {
+          userId: ctx.userId,
+          deletedAt: null,
+          status: "PLANNED",
+          occurredAt: { gt: now },
+        },
+        orderBy: { occurredAt: "asc" },
+        take: MAX_APPOINTMENTS,
+        include: { practitioner: { select: { name: true, specialty: true } } },
+      });
+      const appointments = appointmentRows.map((r) => {
+        const reason = decryptVisitText(r.reasonEncrypted);
+        return {
+          occurredAt: r.occurredAt.toISOString(),
+          practitioner: r.practitioner
+            ? scrubFenceMarkers(r.practitioner.name)
+            : null,
+          specialty: r.practitioner?.specialty
+            ? scrubFenceMarkers(r.practitioner.specialty)
+            : null,
+          kind: r.kind,
+          // A visit's reason is user- and document-derived free text, so it
+          // rides the same USER_TEXT wrapping every other free-text field uses.
+          reason: reason !== null ? fenceUserText(reason) : null,
+        };
+      });
+
       const reminders = await prisma.measurementReminder.findMany({
         // A booked visit's one-shot reminder rides this same engine with
         // `origin: ENCOUNTER`. It is not a checkup and must not appear on a
@@ -1570,7 +1678,11 @@ export const MCP_TOOLS: McpToolDefinition[] = [
           { createdAt: "asc" },
         ],
       });
-      if (reminders.length === 0) {
+      // Present when EITHER arm carries something: a person with a booked
+      // appointment but no configured Vorsorge reminder still has preventive
+      // care coming up, and hiding the appointment behind `present: false`
+      // would be the silent-zero this contract forbids.
+      if (reminders.length === 0 && appointments.length === 0) {
         annotate({
           action: { name: "mcp.tool.invoked" },
           meta: { tool: "get_preventive_care", present: false },
@@ -1587,7 +1699,6 @@ export const MCP_TOOLS: McpToolDefinition[] = [
         select: { timezone: true },
       });
       const timezone = user?.timezone || DEFAULT_TIMEZONE;
-      const now = new Date();
       const checkups = reminders.map((r) => {
         const dto = toMeasurementReminderDto(r);
         return {
@@ -1607,7 +1718,11 @@ export const MCP_TOOLS: McpToolDefinition[] = [
         action: { name: "mcp.tool.invoked" },
         meta: { tool: "get_preventive_care", present: true },
       });
-      return { present: true, checkups };
+      return {
+        present: true,
+        ...(checkups.length > 0 ? { checkups } : {}),
+        ...(appointments.length > 0 ? { appointments } : {}),
+      };
     },
   },
   // ── v1.30 coverage review (G1) — the nutrients pipeline ─────────────
@@ -1780,6 +1895,121 @@ export const MCP_TOOLS: McpToolDefinition[] = [
         classificationSource: "device" as const,
         recordings,
       };
+    },
+  },
+  // ── v1.38 — the visit history, bounded ──────────────────────────────
+  {
+    name: "get_visits",
+    title: "Get past doctor visits",
+    description:
+      "Fetch the user's own past doctor visits over a bounded window (default: the last 12 months) so a question like 'when did I last see a cardiologist' is answerable from the record. Each visit carries its date, lifecycle status (DONE / CANCELLED / NO_SHOW — a no-show is not a visit that happened), kind, practitioner name + specialty, the visit's own free-text reason and outcome, and the labels of any conditions it was filed against. Optionally narrow to one practitioner by a name substring. Newest first, bounded. Returns { present: false } when the user has never recorded a visit — distinct from a filtered read that simply matched none.",
+    inputShape: {
+      months: z
+        .number()
+        .int()
+        .min(1)
+        .max(MAX_VISITS_WINDOW_MONTHS)
+        .optional()
+        .describe(
+          "Trailing window in months. Defaults to 12, capped at 60. Past visits only — a future appointment is surfaced by get_preventive_care, not here.",
+        ),
+      practitioner: z
+        .string()
+        .min(1)
+        .max(120)
+        .optional()
+        .describe(
+          "Optional case-insensitive name substring to narrow to one practitioner (e.g. a surname read back from an earlier result). Omit for every practitioner.",
+        ),
+    },
+    annotations: READ_ONLY_ANNOTATIONS,
+    outputShape: getVisitsOutput,
+    async run(ctx, args) {
+      const months =
+        typeof args.months === "number"
+          ? args.months
+          : DEFAULT_VISITS_WINDOW_MONTHS;
+      const practitioner =
+        typeof args.practitioner === "string" && args.practitioner.trim()
+          ? args.practitioner.trim()
+          : undefined;
+      const now = new Date();
+      const cutoff = new Date(now);
+      cutoff.setMonth(cutoff.getMonth() - months);
+
+      const rows = await prisma.encounter.findMany({
+        // `userId` is the resolved session's, never an argument — a visit
+        // belonging to another account is unreachable by construction.
+        where: {
+          userId: ctx.userId,
+          deletedAt: null,
+          occurredAt: { gte: cutoff, lte: now },
+          ...(practitioner
+            ? {
+                practitioner: {
+                  is: {
+                    name: { contains: practitioner, mode: "insensitive" },
+                    deletedAt: null,
+                  },
+                },
+              }
+            : {}),
+        },
+        orderBy: { occurredAt: "desc" },
+        take: MAX_VISITS,
+        include: { practitioner: { select: { name: true, specialty: true } } },
+      });
+
+      // Absence is explicit. An empty list is { present: false } — "you have
+      // never recorded a visit" — NEVER { present: true, visits: [] }, which
+      // would read as "you have no visits", a claim the empty read cannot make.
+      if (rows.length === 0) {
+        annotate({
+          action: { name: "mcp.tool.invoked" },
+          meta: { tool: "get_visits", present: false },
+        });
+        return { present: false };
+      }
+
+      // The linked condition labels, one grouped read for the whole page, from
+      // the same link service every other visit surface goes through.
+      const conditionsBySource = await listTargetsBySource(prisma, {
+        userId: ctx.userId,
+        sourceKind: "encounter",
+        sourceIds: rows.map((r) => r.id),
+        targetKind: "conditionEpisode",
+      });
+
+      const visits = rows.map((r) => {
+        const reason = decryptVisitText(r.reasonEncrypted);
+        const outcome = decryptVisitText(r.outcomeEncrypted);
+        return {
+          occurredAt: r.occurredAt.toISOString(),
+          status: r.status,
+          kind: r.kind,
+          practitioner: r.practitioner
+            ? scrubFenceMarkers(r.practitioner.name)
+            : null,
+          specialty: r.practitioner?.specialty
+            ? scrubFenceMarkers(r.practitioner.specialty)
+            : null,
+          // Reason and outcome are user- and document-derived free text, so
+          // they ride the USER_TEXT wrapping; the markers are stripped from the
+          // content they wrap. A condition label is the user's own free text
+          // too — scrubbed of any forged marker before it enters the payload.
+          reason: reason !== null ? fenceUserText(reason) : null,
+          outcome: outcome !== null ? fenceUserText(outcome) : null,
+          conditions: (conditionsBySource.get(r.id) ?? []).map((c) =>
+            scrubFenceMarkers(c.label),
+          ),
+        };
+      });
+
+      annotate({
+        action: { name: "mcp.tool.invoked" },
+        meta: { tool: "get_visits", present: true },
+      });
+      return { present: true, windowMonths: months, visits };
     },
   },
   ...searchAndFetchTools(),
