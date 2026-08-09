@@ -45,18 +45,18 @@ function renderCard(node: React.ReactNode) {
   );
 }
 
-const cases: Array<[string, React.ReactNode]> = [
-  ["SecuritySessionsCard", <SecuritySessionsCard isAuthenticated />],
-  ["SecurityActivityCard", <SecurityActivityCard isAuthenticated />],
-  ["TrustedDevicesCard", <TrustedDevicesCard isAuthenticated />],
-  ["CoachMemorySection", <CoachMemorySection isAuthenticated />],
-  ["CoachRemindersSection", <CoachRemindersSection isAuthenticated />],
-  ["AboutMeSection", <AboutMeSection isAuthenticated />],
+const cases: Array<[string, () => React.ReactNode]> = [
+  ["SecuritySessionsCard", () => <SecuritySessionsCard isAuthenticated />],
+  ["SecurityActivityCard", () => <SecurityActivityCard isAuthenticated />],
+  ["TrustedDevicesCard", () => <TrustedDevicesCard isAuthenticated />],
+  ["CoachMemorySection", () => <CoachMemorySection isAuthenticated />],
+  ["CoachRemindersSection", () => <CoachRemindersSection isAuthenticated />],
+  ["AboutMeSection", () => <AboutMeSection isAuthenticated />],
 ];
 
 describe("settings read-error family — a read failure is foreground and recoverable", () => {
   it.each(cases)("%s renders a query-error row with retry", (_name, node) => {
-    const html = renderCard(node);
+    const html = renderCard(node());
     expect(html).toContain('data-slot="query-error-row"');
     expect(html).toContain('data-slot="query-error-row-retry"');
     // No bare red line: the alert is the primitive now.

@@ -29,15 +29,15 @@ function render(node: React.ReactNode) {
   );
 }
 
-const cases: Array<[string, React.ReactNode]> = [
-  ["RecentAuditPreview", <RecentAuditPreview />],
-  ["CoachFeedbackSection", <CoachFeedbackSection />],
-  ["AiQualitySection", <AiQualitySection />],
+const cases: Array<[string, () => React.ReactNode]> = [
+  ["RecentAuditPreview", () => <RecentAuditPreview />],
+  ["CoachFeedbackSection", () => <CoachFeedbackSection />],
+  ["AiQualitySection", () => <AiQualitySection />],
 ];
 
 describe("admin read-error family — a read failure is foreground and recoverable", () => {
   it.each(cases)("%s renders a query-error row with retry", (_name, node) => {
-    const html = render(node);
+    const html = render(node());
     expect(html).toContain('data-slot="query-error-row"');
     expect(html).toContain('data-slot="query-error-row-retry"');
     expect(html).not.toContain("bg-destructive/10");
