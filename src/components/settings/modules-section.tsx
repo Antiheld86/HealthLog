@@ -202,7 +202,7 @@ export function ModulesSection() {
   return (
     <SettingsCard>
       {/* The "what this section does" hint rides the header's standard
-          description slot; the body follows at the settings-wide mt-4
+          description slot; the body follows on the card's gap-based
           header→content rhythm instead of the former mb-2/mb-3 one-offs. */}
       <SettingsCardHeader
         icon={Blocks}

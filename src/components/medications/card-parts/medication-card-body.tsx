@@ -250,9 +250,9 @@ export function MedicationCardBody({
       //
       // v1.16.12 — the shadcn card primitive's airy `gap-4 md:gap-6` between
       // header and content read as a wide gulf below the category badge before
-      // the first content line; tightened to a uniform `gap-3` here (the
-      // header keeps its own `pb-2.5`) so the name / class / next-intake block
-      // reads as one tight stack without touching the shared primitive.
+      // the first content line; tightened to a uniform `gap-3` here so the
+      // name / class / next-intake block reads as one tight stack without
+      // touching the shared primitive.
       //
       // v1.29.x — `highlighted` adds a transient ring (mirrors
       // `<DocumentCard highlighted>`) for the Today digest's deep-link

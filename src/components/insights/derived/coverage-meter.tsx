@@ -66,11 +66,12 @@ export interface CoverageMeterProps {
  * Dot tint per confidence band. Points at the *semantic* feedback tokens
  * (`--success` / `--warning` / `--destructive`), not the raw `--dracula-*`
  * primitives, so the dots track the AA-safe `:root.light` overrides on the
- * white card — straight `bg-dracula-yellow` cleared barely 1.1:1 on white
- * and read near-invisible. The four bands collapse onto the three semantic
- * severities (medium + low both ride the caution `--warning`); the lit-dot
- * count + the percent label carry the medium↔low distinction, never colour
- * alone.
+ * white card. (The raw primitives now carry their own light overrides in
+ * globals.css as well, so this is concept cohesion with the score language
+ * rather than the only contrast-safe path it once was.) The four bands
+ * collapse onto the three semantic severities (medium + low both ride the
+ * caution `--warning`); the lit-dot count + the percent label carry the
+ * medium↔low distinction, never colour alone.
  */
 const BAND_DOT_CLASS: Record<DerivedConfidenceBand, string> = {
   high: "bg-success",

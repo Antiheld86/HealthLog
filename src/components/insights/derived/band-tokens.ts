@@ -12,10 +12,12 @@
  * `--destructive: #cb3a2a`) precisely because straight Dracula
  * green/orange on a white `--card` clears only ~1.1–1.5:1 — under AA.
  * Painting the band off the semantic token means every score surface
- * tracks that light-mode correction automatically, in both themes; the
- * raw `--dracula-*` primitives do NOT carry a light override. A
- * green/yellow/red band is the one semantic the whole v1.10 score
- * language extends.
+ * tracks that light-mode correction automatically, in both themes. The
+ * raw `--dracula-*` primitives now carry their own AA-tuned light
+ * overrides too (globals.css `:root.light`), so chart code that passes
+ * `var(--dracula-*)` references is theme-safe; the band still rides the
+ * semantic token because a green/yellow/red band is the one semantic the
+ * whole v1.10 score language extends.
  */
 
 export type ScoreBand = "green" | "yellow" | "red";
