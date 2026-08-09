@@ -1354,7 +1354,7 @@ export default function DashboardPageClient({
                 key="respiratoryRate"
                 label={t("measurements.typeRespiratoryRate")}
                 latest={respRateSummary?.latest ?? null}
-                unit="breaths/min"
+                unit={t("insights.units.respiratoryRate")}
                 avg7={respRateSummary?.avg7 ?? null}
                 avg30={respRateSummary?.avg30 ?? null}
                 slope30={respRateSummary?.slope30 ?? null}
