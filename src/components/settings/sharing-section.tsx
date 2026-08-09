@@ -39,6 +39,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { QueryErrorCard } from "@/components/ui/query-error-card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import {
@@ -106,7 +108,12 @@ function ShareLinksCard() {
     expiryDays: number;
   } | null>(null);
 
-  const { data: links } = useQuery({
+  const {
+    data: links,
+    isError,
+    isLoading,
+    refetch,
+  } = useQuery({
     queryKey: queryKeys.shareLinks(),
     queryFn: () =>
       apiGet<{ shareLinks: ShareLinkSummary[] }>("/api/share-links").then(
@@ -147,180 +154,193 @@ function ShareLinksCard() {
         initialExpiryDays={prefill?.expiryDays}
       />
 
-      <div className="space-y-2">
-        <h3 className="text-sm font-medium">
-          {t("settings.sharing.activeTitle")}
-        </h3>
-        {activeLinks.length === 0 ? (
-          <EmptyState
-            size="compact"
-            data-testid="share-active-empty"
-            title={t("settings.sharing.noActive")}
-          />
-        ) : (
-          <ul className="space-y-2" data-testid="share-active-list">
-            {activeLinks.map((link) => (
-              <li
-                key={link.id}
-                className="bg-muted/30 border-border space-y-2 rounded-lg border p-3"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <p className="min-w-0 flex-1 text-sm font-medium break-words">
-                    {link.label}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <Badge className="bg-success/15 text-success text-xs">
-                      {t("settings.sharing.statusActive")}
-                    </Badge>
-                    {link.protected && (
-                      <Badge
-                        variant="outline"
-                        className="gap-1 text-xs"
-                        data-testid="share-protected-badge"
-                      >
-                        <KeyRound className="h-2.5 w-2.5" />
-                        {t("settings.sharing.protected")}
-                      </Badge>
-                    )}
-                    {link.documentCount > 0 && (
-                      <Badge
-                        variant="outline"
-                        className="gap-1 text-xs"
-                        data-testid="share-doc-count-badge"
-                        aria-label={t("settings.sharing.documentCount", {
-                          count: link.documentCount,
-                        })}
-                      >
-                        <FileText className="h-2.5 w-2.5" />
-                        {link.documentCount}
-                      </Badge>
-                    )}
-                  </div>
-                </div>
-                <p className="text-muted-foreground text-xs">
-                  <span className="font-medium">
-                    {t("settings.sharing.created")}:
-                  </span>{" "}
-                  {formatDate(link.createdAt)}
-                </p>
-                <p className="text-muted-foreground text-xs">
-                  <span className="font-medium">
-                    {t("settings.sharing.expires")}:
-                  </span>{" "}
-                  {formatDateTime(link.expiresAt)}
-                </p>
-                <p className="text-muted-foreground text-xs">
-                  <span className="font-medium">
-                    {t("settings.sharing.accessCount")}:
-                  </span>{" "}
-                  {link.accessCount}
-                  {link.lastAccessAt
-                    ? ` · ${formatDateTime(link.lastAccessAt)}`
-                    : ""}
-                </p>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="min-h-11 w-full sm:min-h-9"
-                    >
-                      <Trash2 className="mr-2 h-3.5 w-3.5" />
-                      {t("settings.sharing.revoke")}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>
-                        {t("settings.sharing.revoke")}
-                      </AlertDialogTitle>
-                      <AlertDialogDescription>
-                        {t("settings.sharing.revokeDescription")}
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>
-                        {t("common.cancel")}
-                      </AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={() => revokeMutation.mutate(link.id)}
-                      >
-                        {t("settings.sharing.revoke")}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {inactiveLinks.length > 0 && (
-        <div className="space-y-2">
-          <button
-            type="button"
-            onClick={() => setShowRevoked((prev) => !prev)}
-            className="text-foreground hover:text-primary text-sm font-medium transition-colors"
-          >
-            {t("settings.sharing.inactiveTitle", {
-              count: inactiveLinks.length,
-            })}
-          </button>
-          {showRevoked && (
-            <ul className="space-y-2" data-testid="share-inactive-list">
-              {inactiveLinks.map((link) => (
-                <li
-                  key={link.id}
-                  className="bg-muted/20 border-border space-y-1.5 rounded-lg border p-3"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <p className="min-w-0 flex-1 text-sm font-medium break-words">
-                      {link.label}
+      {isError ? (
+        // A read failure must not read as "no active links" on a clinical
+        // sharing surface — that is the §6 fall-through this card must avoid.
+        <QueryErrorCard onRetry={() => refetch()} />
+      ) : isLoading ? (
+        <div className="space-y-2" data-testid="share-links-loading">
+          <Skeleton className="h-24 w-full rounded-lg" />
+          <Skeleton className="h-24 w-full rounded-lg" />
+        </div>
+      ) : (
+        <>
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium">
+              {t("settings.sharing.activeTitle")}
+            </h3>
+            {activeLinks.length === 0 ? (
+              <EmptyState
+                size="compact"
+                data-testid="share-active-empty"
+                title={t("settings.sharing.noActive")}
+              />
+            ) : (
+              <ul className="space-y-2" data-testid="share-active-list">
+                {activeLinks.map((link) => (
+                  <li
+                    key={link.id}
+                    className="bg-muted/30 border-border space-y-2 rounded-lg border p-3"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <p className="min-w-0 flex-1 text-sm font-medium break-words">
+                        {link.label}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge className="bg-success/15 text-success text-xs">
+                          {t("settings.sharing.statusActive")}
+                        </Badge>
+                        {link.protected && (
+                          <Badge
+                            variant="outline"
+                            className="gap-1 text-xs"
+                            data-testid="share-protected-badge"
+                          >
+                            <KeyRound className="h-2.5 w-2.5" />
+                            {t("settings.sharing.protected")}
+                          </Badge>
+                        )}
+                        {link.documentCount > 0 && (
+                          <Badge
+                            variant="outline"
+                            className="gap-1 text-xs"
+                            data-testid="share-doc-count-badge"
+                            aria-label={t("settings.sharing.documentCount", {
+                              count: link.documentCount,
+                            })}
+                          >
+                            <FileText className="h-2.5 w-2.5" />
+                            {link.documentCount}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-muted-foreground text-xs">
+                      <span className="font-medium">
+                        {t("settings.sharing.created")}:
+                      </span>{" "}
+                      {formatDate(link.createdAt)}
                     </p>
-                    <Badge variant="secondary" className="text-xs">
-                      {link.needsReselection
-                        ? t("settings.sharing.statusNeedsReselect")
-                        : link.revokedAt
-                          ? t("settings.sharing.statusRevoked")
-                          : t("settings.sharing.statusExpired")}
-                    </Badge>
-                  </div>
-                  {/* A link whose frozen scope predates the selection model.
+                    <p className="text-muted-foreground text-xs">
+                      <span className="font-medium">
+                        {t("settings.sharing.expires")}:
+                      </span>{" "}
+                      {formatDateTime(link.expiresAt)}
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      <span className="font-medium">
+                        {t("settings.sharing.accessCount")}:
+                      </span>{" "}
+                      {link.accessCount}
+                      {link.lastAccessAt
+                        ? ` · ${formatDateTime(link.lastAccessAt)}`
+                        : ""}
+                    </p>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="min-h-11 w-full sm:min-h-9"
+                        >
+                          <Trash2 className="mr-2 h-3.5 w-3.5" />
+                          {t("settings.sharing.revoke")}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>
+                            {t("settings.sharing.revoke")}
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            {t("settings.sharing.revokeDescription")}
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>
+                            {t("common.cancel")}
+                          </AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => revokeMutation.mutate(link.id)}
+                          >
+                            {t("settings.sharing.revoke")}
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {inactiveLinks.length > 0 && (
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => setShowRevoked((prev) => !prev)}
+                className="text-foreground hover:text-primary text-sm font-medium transition-colors"
+              >
+                {t("settings.sharing.inactiveTitle", {
+                  count: inactiveLinks.length,
+                })}
+              </button>
+              {showRevoked && (
+                <ul className="space-y-2" data-testid="share-inactive-list">
+                  {inactiveLinks.map((link) => (
+                    <li
+                      key={link.id}
+                      className="bg-muted/20 border-border space-y-1.5 rounded-lg border p-3"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <p className="min-w-0 flex-1 text-sm font-medium break-words">
+                          {link.label}
+                        </p>
+                        <Badge variant="secondary" className="text-xs">
+                          {link.needsReselection
+                            ? t("settings.sharing.statusNeedsReselect")
+                            : link.revokedAt
+                              ? t("settings.sharing.statusRevoked")
+                              : t("settings.sharing.statusExpired")}
+                        </Badge>
+                      </div>
+                      {/* A link whose frozen scope predates the selection model.
                       It served a scope nobody chose, so it was closed; the
                       owner re-mints above with the label, window and expiry
                       still in front of them. */}
-                  {link.needsReselection ? (
-                    <div
-                      className="space-y-1.5"
-                      data-testid={`share-needs-reselect-${link.id}`}
-                    >
+                      {link.needsReselection ? (
+                        <div
+                          className="space-y-1.5"
+                          data-testid={`share-needs-reselect-${link.id}`}
+                        >
+                          <p className="text-muted-foreground text-xs">
+                            {t("settings.sharing.reselectReason")}
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="min-h-11 sm:min-h-9"
+                            data-testid={`share-reselect-${link.id}`}
+                            onClick={() => setPrefill(prefillFrom(link))}
+                          >
+                            {t("settings.sharing.reselectAction")}
+                          </Button>
+                        </div>
+                      ) : null}
                       <p className="text-muted-foreground text-xs">
-                        {t("settings.sharing.reselectReason")}
+                        <span className="font-medium">
+                          {t("settings.sharing.accessCount")}:
+                        </span>{" "}
+                        {link.accessCount}
                       </p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="min-h-11 sm:min-h-9"
-                        data-testid={`share-reselect-${link.id}`}
-                        onClick={() => setPrefill(prefillFrom(link))}
-                      >
-                        {t("settings.sharing.reselectAction")}
-                      </Button>
-                    </div>
-                  ) : null}
-                  <p className="text-muted-foreground text-xs">
-                    <span className="font-medium">
-                      {t("settings.sharing.accessCount")}:
-                    </span>{" "}
-                    {link.accessCount}
-                  </p>
-                </li>
-              ))}
-            </ul>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
-        </div>
+        </>
       )}
     </SettingsCard>
   );
