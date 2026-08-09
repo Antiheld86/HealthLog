@@ -4,11 +4,13 @@ import { prisma } from "@/lib/db";
 import {
   apiSuccess,
   apiError,
+  getClientIp,
   returnAllZodIssues,
   safeJson,
 } from "@/lib/api-response";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
+import { auditLog } from "@/lib/auth/audit";
 import {
   createCustomTagSchema,
   mintCustomTagKey,
@@ -84,6 +86,14 @@ export const POST = apiHandler(async (request: NextRequest) => {
       scaleMax: true,
       inverse: true,
     },
+  });
+
+  // The custom label is encrypted at rest and never logged; the ledger row
+  // records the mint (icon only) so a created tag leaves a trace.
+  await auditLog("mood.tag.custom.create", {
+    userId: user.id,
+    ipAddress: getClientIp(request),
+    details: { icon: created.icon },
   });
 
   annotate({

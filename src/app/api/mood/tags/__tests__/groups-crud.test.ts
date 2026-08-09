@@ -55,6 +55,7 @@ vi.mock("next/headers", () => ({
 import { POST } from "../groups/route";
 import { PATCH, DELETE } from "../groups/[key]/route";
 import { getSession } from "@/lib/auth/session";
+import { auditLog } from "@/lib/auth/audit";
 import { CUSTOM_CATEGORY_ID } from "@/lib/mood/custom-tags";
 
 const SESSION_OK = {
@@ -228,6 +229,13 @@ describe("DELETE /api/mood/tags/groups/:key", () => {
     expect(db.moodTagCategory.update).not.toHaveBeenCalled();
     // Re-home still ran first — purge removes the group, never the tags.
     expect(db.moodTag.updateMany).toHaveBeenCalled();
+    // A group delete/purge leaves a ledger row recording purge + re-home.
+    expect(vi.mocked(auditLog)).toHaveBeenCalledWith(
+      "mood.tag.group.delete",
+      expect.objectContaining({
+        details: expect.objectContaining({ purge: true }),
+      }),
+    );
   });
 
   it("404s a non-custom key and a foreign group", async () => {

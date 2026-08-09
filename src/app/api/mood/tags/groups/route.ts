@@ -4,11 +4,13 @@ import { prisma } from "@/lib/db";
 import {
   apiSuccess,
   apiError,
+  getClientIp,
   returnAllZodIssues,
   safeJson,
 } from "@/lib/api-response";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
+import { auditLog } from "@/lib/auth/audit";
 import {
   createCustomGroupSchema,
   mintCustomCategoryKey,
@@ -65,6 +67,14 @@ export const POST = apiHandler(async (request: NextRequest) => {
       userId: user.id,
     },
     select: { key: true, icon: true },
+  });
+
+  // The group label is encrypted at rest and never logged; the ledger row
+  // records the mint (icon only) so a created group leaves a trace.
+  await auditLog("mood.tag.group.create", {
+    userId: user.id,
+    ipAddress: getClientIp(request),
+    details: { icon: created.icon },
   });
 
   annotate({

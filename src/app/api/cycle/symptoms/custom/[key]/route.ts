@@ -101,6 +101,19 @@ export const PATCH = apiHandler(
       select: { key: true, icon: true, isActive: true, labelEncrypted: true },
     });
 
+    // Symmetry with the DELETE sibling: an edit to a custom symptom leaves a
+    // ledger row too. The decrypted label is never logged (see the docstring);
+    // we record only which fields the write touched and the resulting active
+    // state, so the trace stays free of reproductive free text.
+    await auditLog("cycle.symptom.custom.update", {
+      userId: user.id,
+      ipAddress: getClientIp(request),
+      details: {
+        fields: Object.keys(parsed.data),
+        isActive: updated.isActive,
+      },
+    });
+
     annotate({ action: { name: "cycle.symptom.custom.update" } });
 
     return apiSuccess({

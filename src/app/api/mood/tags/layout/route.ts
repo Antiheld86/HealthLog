@@ -121,6 +121,11 @@ export const PUT = apiHandler(async (request: NextRequest) => {
   });
   if ("conflict" in guarded) return guarded.conflict;
 
+  // No audit row by design: the layout blob is a per-user display ordering
+  // (group order + tag placements), not a health-data write. It destroys
+  // nothing and fires on every drag-to-reorder save, so a ledger row here
+  // would be noise rather than forensics. The wide-event annotate still
+  // carries it for observability.
   annotate({
     action: { name: "mood.tag.layout.update" },
     meta: {

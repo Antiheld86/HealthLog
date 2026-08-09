@@ -4,11 +4,13 @@ import { prisma, toJson } from "@/lib/db";
 import {
   apiSuccess,
   apiError,
+  getClientIp,
   returnAllZodIssues,
   safeJson,
 } from "@/lib/api-response";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
+import { auditLog } from "@/lib/auth/audit";
 import {
   updateCustomGroupSchema,
   encryptCustomLabel,
@@ -69,6 +71,17 @@ export const PATCH = apiHandler(
         icon: true,
         isActive: true,
         labelEncrypted: true,
+      },
+    });
+
+    // The group label is encrypted at rest and never logged; the ledger row
+    // records only which fields changed and the resulting active state.
+    await auditLog("mood.tag.group.update", {
+      userId: user.id,
+      ipAddress: getClientIp(request),
+      details: {
+        fields: Object.keys(parsed.data),
+        isActive: updated.isActive,
       },
     });
 
@@ -142,6 +155,14 @@ export const DELETE = apiHandler(
       }
 
       return rehomed.count;
+    });
+
+    // Non-destructive to tags and links (they re-home), but the group row is
+    // retired or purged; the ledger records which, and how many tags re-homed.
+    await auditLog("mood.tag.group.delete", {
+      userId: user.id,
+      ipAddress: getClientIp(request),
+      details: { purge, rehomedCount },
     });
 
     annotate({

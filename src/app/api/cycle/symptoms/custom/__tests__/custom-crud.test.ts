@@ -50,6 +50,7 @@ import { PATCH, DELETE } from "../[key]/route";
 import { getSession } from "@/lib/auth/session";
 import { requireCycleEnabled } from "@/lib/cycle/gate";
 import { apiError } from "@/lib/api-response";
+import { auditLog } from "@/lib/auth/audit";
 
 const SESSION_OK = {
   session: { id: "s1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -215,6 +216,14 @@ describe("PATCH/DELETE /api/cycle/symptoms/custom/:key", () => {
     );
     expect(res.status).toBe(200);
     expect(db.cycleSymptom.count).not.toHaveBeenCalled();
+    // An edit leaves a ledger row too, symmetric with the DELETE sibling.
+    // The decrypted label is never in the audit details, only the field names.
+    expect(vi.mocked(auditLog)).toHaveBeenCalledWith(
+      "cycle.symptom.custom.update",
+      expect.objectContaining({
+        details: expect.objectContaining({ fields: expect.any(Array) }),
+      }),
+    );
   });
 
   it("soft-deactivates by default and hard-deletes on ?purge=true", async () => {

@@ -44,6 +44,7 @@ import { POST } from "../custom/route";
 import { PATCH, DELETE } from "../custom/[key]/route";
 import { PUT } from "../[key]/hidden/route";
 import { getSession } from "@/lib/auth/session";
+import { auditLog } from "@/lib/auth/audit";
 
 const SESSION_OK = {
   session: { id: "s1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -247,6 +248,14 @@ describe("PATCH/DELETE /api/mood/tags/custom/:key", () => {
     );
     expect(purge.status).toBe(200);
     expect(db.moodTag.delete).toHaveBeenCalledWith({ where: { id: "id1" } });
+    // A purge cascades `mood_entry_tag_links` and unpicks history, so it must
+    // leave a ledger row recording that it happened.
+    expect(vi.mocked(auditLog)).toHaveBeenCalledWith(
+      "mood.tag.custom.delete",
+      expect.objectContaining({
+        details: expect.objectContaining({ purge: true }),
+      }),
+    );
   });
 });
 
