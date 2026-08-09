@@ -72,8 +72,12 @@ const MoodInsightsBreakdowns = dynamic(
  * Reads the pre-computed aggregate bundle from `/api/mood/insights` (cheap
  * cached server read, no LLM) and paints the calendar and the assessment
  * itself, handing the payload to the deferred breakdown module for everything
- * under them. Renders nothing while loading / on error / on an empty data set
- * so the page degrades gracefully to the line chart.
+ * under them. On an empty data set the sections render nothing so the page
+ * degrades to the line chart; a failed read is not silent, though — the "rest"
+ * region surfaces a `QueryErrorRow` with retry (§6) and shows the loading
+ * skeleton while fetching. The heatmap / assessment regions stay invisible
+ * during load and error so the page never stacks three frames (see the
+ * region split below).
  */
 
 /**
