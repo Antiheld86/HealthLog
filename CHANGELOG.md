@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Copy across several screens reads tighter. The insight-page metric explainers now open on a one-line definition rather than a paragraph of general guidance, with the longer background staying behind the knowledge disclosure where it already lived; the measurements subtitle and the daily-briefing setup prompt each drop a redundant sentence, and the mood self-rating card takes a short title so it stops wrapping and stops reusing a word from the assessment beside it. Wording that had drifted between neighbouring screens is settled too, so the measurement delete prompts, the practitioner label on the visit and vaccination forms, and the visit-saved toasts all match the screens they ship with.
+
 ## [1.37.4] — 2026-08-09
 
 ### Fixed
