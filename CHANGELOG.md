@@ -8,6 +8,7 @@
 - A failed load of your share links now says so, with a way to retry, instead of quietly showing "no active share links" as if you had never shared anything. The same held for the API and connector token lists on the security screens.
 - A read that fails now shows a clear, recoverable error across the app instead of an empty list or a silent gap. The sharing and token screens, the ECG detail and list, the cycle and mood insights, the dashboard preventive-care tile, the checkups list, and the admin console all say when a read failed and offer a retry, rather than reading as "nothing here".
 - The AI consent and connector notes in Settings render as normal text now, not faint fine print, so the copy you are meant to read before turning a feature on is legible.
+- The record-a-visit action on the checkups list now appears only where there is a real practice visit behind the reminder. A reminder you satisfy yourself in the app, like weighing in or a mood check-in, no longer offers to file a visit it never involved.
 - The respiratory-rate tile on the dashboard shows its unit in your own language instead of a fixed English label, and the personalized greeting carries its comma.
 
 ### Removed
