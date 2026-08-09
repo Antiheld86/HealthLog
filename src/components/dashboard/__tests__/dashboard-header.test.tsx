@@ -16,13 +16,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { I18nProvider } from "@/lib/i18n/context";
 
-const moduleGate = vi.hoisted(() => ({ nutrientsEnabled: true }));
-
-vi.mock("@/hooks/use-module-enabled", () => ({
-  useModuleEnabled: (moduleKey: string) =>
-    moduleKey === "nutrients" ? moduleGate.nutrientsEnabled : true,
-}));
-
 vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenu: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
@@ -77,29 +70,18 @@ describe("<DashboardHeader> — greeting", () => {
   });
 });
 
-describe("<DashboardHeader> — nutrients module gate", () => {
-  it("hides only the water quick-add item when nutrients are disabled", () => {
-    moduleGate.nutrientsEnabled = false;
-
+describe("<DashboardHeader> — quick-add menu", () => {
+  it("offers measurement, mood and medication, and no water entry", () => {
     const html = renderSSR(
       <DashboardHeader onQuickEntry={() => undefined} />,
       "en",
     );
 
-    expect(html).not.toContain("Log water");
     expect(html).toContain("Log measurement");
     expect(html).toContain("Log mood");
     expect(html).toContain("Log medication intake");
-  });
-
-  it("keeps the water quick-add item available when nutrients are enabled", () => {
-    moduleGate.nutrientsEnabled = true;
-
-    const html = renderSSR(
-      <DashboardHeader onQuickEntry={() => undefined} />,
-      "en",
-    );
-
-    expect(html).toContain("Log water");
+    // Water logging was removed from the app; the dashboard quick-add offers
+    // no water entry.
+    expect(html).not.toContain("Log water");
   });
 });

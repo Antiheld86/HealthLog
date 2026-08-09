@@ -50,10 +50,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
     where: {
       userId: user.id,
       deletedAt: null,
-      // Both plaintext columns, because a person looks a practice up by
-      // whichever of the two they remember: the doctor's name on the referral
-      // or the practice name on the door. Searching only the name made the
-      // second attempt return nothing and read as "not in the address book".
+      // Three plaintext columns, because a person looks a practice up by
+      // whichever they remember: the doctor's name on the referral, the
+      // practice name on the door, or the field they need ("Zahnmedizin").
+      // Searching only name + practice made the specialty attempt return
+      // nothing and read as "not in the address book".
       ...(parsed.data.q
         ? {
             OR: [
@@ -65,6 +66,12 @@ export const GET = apiHandler(async (request: NextRequest) => {
               },
               {
                 practice: {
+                  contains: parsed.data.q,
+                  mode: "insensitive" as const,
+                },
+              },
+              {
+                specialty: {
                   contains: parsed.data.q,
                   mode: "insensitive" as const,
                 },

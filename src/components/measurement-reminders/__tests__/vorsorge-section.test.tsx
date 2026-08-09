@@ -277,6 +277,83 @@ describe("<VorsorgeSection> loading + empty", () => {
     expect(html).toContain("text-warning");
   });
 
+  it("offers the file-visit action on a free-text appointment reminder", () => {
+    // A free-text reminder (no measurementType) stands for a real practice
+    // visit: "you went" is only ever recorded by filing a visit, so the
+    // affordance belongs here.
+    const reminder: MeasurementReminder = {
+      id: "appointment",
+      label: "Dentist appointment",
+      measurementType: null,
+      intervalDays: 365,
+      rrule: null,
+      anchorDate: null,
+      endsOn: null,
+      origin: "VORSORGE",
+      nextDueAt: null,
+      notifyHour: 9,
+      location: null,
+      lastSatisfiedAt: null,
+      enabled: true,
+      createdAt: "2030-01-01T00:00:00.000Z",
+      updatedAt: "2030-01-01T00:00:00.000Z",
+    } as MeasurementReminder;
+    remindersMock.mockReturnValue({ data: [reminder], isLoading: false });
+    const html = render(<VorsorgeSection />);
+    expect(html).toContain('data-slot="vorsorge-file-visit"');
+  });
+
+  it("hides the file-visit action on a self-measurement reminder", () => {
+    // A typed reminder (Gewicht, Blutdruck, a screening check-in) is
+    // satisfied by a reading or a check-in inside the app — there is no
+    // appointment behind it, so the visit affordance must not appear.
+    const reminder: MeasurementReminder = {
+      id: "self-measure",
+      label: "Measure blood pressure",
+      measurementType: "BLOOD_PRESSURE_SYS",
+      intervalDays: 7,
+      rrule: null,
+      anchorDate: null,
+      endsOn: null,
+      origin: "VORSORGE",
+      nextDueAt: null,
+      notifyHour: 9,
+      location: null,
+      lastSatisfiedAt: null,
+      enabled: true,
+      createdAt: "2030-01-01T00:00:00.000Z",
+      updatedAt: "2030-01-01T00:00:00.000Z",
+    } as MeasurementReminder;
+    remindersMock.mockReturnValue({ data: [reminder], isLoading: false });
+    const html = render(<VorsorgeSection />);
+    expect(html).not.toContain('data-slot="vorsorge-file-visit"');
+  });
+
+  it("hides the file-visit action on a screening check-in reminder", () => {
+    // A screening reminder (PHQ-9 / GAD-7) is a self-administered check-in,
+    // not a practice visit.
+    const reminder: MeasurementReminder = {
+      id: "screening-visit",
+      label: "PHQ-9 check-in",
+      measurementType: "PHQ9_SCORE",
+      intervalDays: 28,
+      rrule: null,
+      anchorDate: null,
+      endsOn: null,
+      origin: "VORSORGE",
+      nextDueAt: null,
+      notifyHour: 9,
+      location: null,
+      lastSatisfiedAt: null,
+      enabled: true,
+      createdAt: "2030-01-01T00:00:00.000Z",
+      updatedAt: "2030-01-01T00:00:00.000Z",
+    } as MeasurementReminder;
+    remindersMock.mockReturnValue({ data: [reminder], isLoading: false });
+    const html = render(<VorsorgeSection />);
+    expect(html).not.toContain('data-slot="vorsorge-file-visit"');
+  });
+
   it("translates a COACH-origin label i18n key and shows the neutral badge", () => {
     const reminder: MeasurementReminder = {
       id: "c1",

@@ -369,32 +369,26 @@ describe("linking a document to an illness episode", () => {
 });
 
 describe("the capture picker's kinds", () => {
-  const ALL = ["measurement", "medication", "mood", "water"] as const;
+  const ALL = ["measurement", "medication", "mood"] as const;
 
   it("offers everything in the caller's own record", () => {
     expect(
-      visibleCaptureKinds({ canAdd: true, canManage: true }, true, [...ALL]),
-    ).toEqual(["measurement", "medication", "mood", "water"]);
+      visibleCaptureKinds({ canAdd: true, canManage: true }, [...ALL]),
+    ).toEqual(["measurement", "medication", "mood"]);
   });
 
   it("offers a delegate only what the delegation admits", () => {
-    // A reading and a dose are admitted verbs. A mood entry and a glass of
-    // water are not, and the server refuses them under a switch.
+    // A reading and a dose are admitted verbs. A mood entry is not, and the
+    // server refuses it under a switch.
     expect(
-      visibleCaptureKinds({ canAdd: true, canManage: false }, true, [...ALL]),
+      visibleCaptureKinds({ canAdd: true, canManage: false }, [...ALL]),
     ).toEqual(["measurement", "medication"]);
   });
 
   it("offers a read-only delegate nothing", () => {
     expect(
-      visibleCaptureKinds({ canAdd: false, canManage: false }, true, [...ALL]),
+      visibleCaptureKinds({ canAdd: false, canManage: false }, [...ALL]),
     ).toEqual([]);
-  });
-
-  it("still honours the module gate for the owner", () => {
-    expect(
-      visibleCaptureKinds({ canAdd: true, canManage: true }, false, [...ALL]),
-    ).toEqual(["measurement", "medication", "mood"]);
   });
 });
 
@@ -471,11 +465,8 @@ describe("a form opened before the record answered", () => {
    * top of the file applies.
    */
   it("withdraws a capture form the shrunken offer no longer holds", () => {
-    // The chooser offered four; the answer arrives and offers two.
+    // The chooser offered three; the answer arrives and offers two.
     expect(admittedCaptureKind("mood", ["measurement", "medication"])).toBe(
-      null,
-    );
-    expect(admittedCaptureKind("water", ["measurement", "medication"])).toBe(
       null,
     );
     // …and leaves an admitted one exactly where it was.
@@ -488,7 +479,6 @@ describe("a form opened before the record answered", () => {
   it("withdraws a dashboard quick-entry sheet the delegation does not admit", () => {
     const DELEGATE = { canAdd: true, canManage: false };
     expect(admittedQuickEntry("mood", DELEGATE)).toBe(null);
-    expect(admittedQuickEntry("water", DELEGATE)).toBe(null);
     expect(admittedQuickEntry("measurement", DELEGATE)).toBe("measurement");
     expect(admittedQuickEntry("medicationIntake", DELEGATE)).toBe(
       "medicationIntake",
@@ -497,24 +487,14 @@ describe("a form opened before the record answered", () => {
 
   it("withdraws every quick-entry sheet from a read-only delegate", () => {
     const READER = { canAdd: false, canManage: false };
-    for (const sheet of [
-      "measurement",
-      "mood",
-      "medicationIntake",
-      "water",
-    ] as const) {
+    for (const sheet of ["measurement", "mood", "medicationIntake"] as const) {
       expect(admittedQuickEntry(sheet, READER), sheet).toBe(null);
     }
   });
 
   it("leaves the owner's own sheets alone", () => {
     const OWNER_CAPS = { canAdd: true, canManage: true };
-    for (const sheet of [
-      "measurement",
-      "mood",
-      "medicationIntake",
-      "water",
-    ] as const) {
+    for (const sheet of ["measurement", "mood", "medicationIntake"] as const) {
       expect(admittedQuickEntry(sheet, OWNER_CAPS), sheet).toBe(sheet);
     }
     expect(admittedQuickEntry(null, OWNER_CAPS)).toBe(null);

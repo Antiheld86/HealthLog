@@ -349,9 +349,7 @@
       "medication": "Farmaco",
       "medicationDescription": "Segna una dose come assunta",
       "mood": "Umore",
-      "moodDescription": "Registra umore e tag",
-      "water": "Acqua",
-      "waterDescription": "Aggiungi rapidamente l’acqua bevuta"
+      "moodDescription": "Registra umore e tag"
     },
     "cycle": "Ciclo",
     "labs": "Esami",
@@ -455,7 +453,6 @@
     "quickAddMeasurement": "Registra misurazione",
     "quickAddMood": "Registra umore",
     "quickAddMedicationIntake": "Registra assunzione",
-    "quickAddWater": "Registra acqua",
     "customizeDashboard": "Personalizza dashboard",
     "medicationIntakeQuickAdd": {
       "sheetTitle": "Registra assunzione del farmaco",
@@ -9654,17 +9651,11 @@
         "dayInvalid": "Le voci riportavano una data che il server non ha potuto accettare. Questo può succedere quando l'orologio o il fuso orario dal lato che invia i dati non sono corretti: vale la pena controllare.",
         "upsertFailed": "Queste voci hanno raggiunto il server, ma un problema da questa parte ne ha impedito il salvataggio. Non devi fare nulla.",
         "unknown": "Queste voci sono arrivate ma non è stato possibile salvarle."
-      }
+      },
+      "moduleEnableError": "Non è stato possibile attivare il modulo nutrienti. Riprova."
     },
     "hydration": {
-      "referenceMeta": "Apporto di riferimento {value} {unit}/giorno · EFSA",
-      "quickAddTitle": "Aggiungi acqua",
-      "quickAddCustomLabel": "Quantità personalizzata (mL)",
-      "quickAddCustomPlaceholder": "250",
-      "quickAddSubmit": "Aggiungi",
-      "quickAddError": "Salvataggio non riuscito. Riprova.",
-      "quickAddSuccess": "Aggiunti {amount} mL di acqua.",
-      "editTotal": "Modifica il totale di oggi"
+      "referenceMeta": "Apporto di riferimento {value} {unit}/giorno · EFSA"
     },
     "caffeine": {
       "ceilingMeta": "Limite di sicurezza {value} {unit}/giorno · EFSA"
@@ -10285,7 +10276,7 @@
     "description": "La tua rubrica: scrivi uno studio una volta e selezionalo ovunque.",
     "linkLabel": "Rubrica",
     "add": "Voce",
-    "searchPlaceholder": "Cerca nome o studio",
+    "searchPlaceholder": "Cerca nome, studio o specializzazione",
     "loadError": "Impossibile caricare la rubrica.",
     "emptyTitle": "Nessuna voce",
     "emptyDescription": "Aggiungi uno studio per poterlo scegliere quando registri un appuntamento.",
@@ -10304,6 +10295,17 @@
     "saveFailed": "Non è stato possibile salvare la voce.",
     "deleteTitle": "Eliminare questa voce?",
     "deleteDescription": "I tuoi appuntamenti esistenti restano e conservano questo nome.",
-    "deleteFailed": "Non è stato possibile eliminare la voce."
+    "deleteFailed": "Non è stato possibile eliminare la voce.",
+    "noSpecialtyGroup": "Senza specializzazione"
+  },
+  "links": {
+    "picker": {
+      "add": "Aggiungi",
+      "done": "Fatto",
+      "selectAll": "Seleziona tutto",
+      "searchPlaceholder": "Cerca",
+      "searchNoMatch": "Nessun risultato",
+      "remove": "Rimuovi"
+    }
   }
 }

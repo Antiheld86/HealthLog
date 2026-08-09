@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Activity, GlassWater, Pill, Waves } from "lucide-react";
+import { Activity, Pill, Waves } from "lucide-react";
 
 import { MeasurementForm } from "@/components/measurements/measurement-form";
 import { MoodForm } from "@/components/mood/mood-form";
 import { MedicationIntakeQuickAdd } from "@/components/dashboard/medication-intake-quick-add";
-import { WaterQuickAddSheet } from "@/components/insights/nutrients/water-quick-add-sheet";
 import { ResponsiveSheet } from "@/components/ui/responsive-sheet";
 import {
   AlertDialog,
@@ -20,7 +19,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { sheetBodyHasUnsavedInput } from "@/components/dashboard/quick-entry-sheets";
 import { useTranslations } from "@/lib/i18n/context";
-import { useModuleEnabled } from "@/hooks/use-module-enabled";
 import {
   useRecordCapabilities,
   type RecordCapabilities,
@@ -29,12 +27,11 @@ import {
 /**
  * The center "Log" capture action (iOS parity — the bottom bar's
  * middle slot is a capture CTA, not a destination). It opens a small
- * picker that routes to four existing quick-entry surfaces:
+ * picker that routes to three existing quick-entry surfaces:
  *
  *   - Measurement → `<MeasurementForm>` (the `/measurements` add form)
  *   - Medication  → `<MedicationIntakeQuickAdd>` (dashboard quick-add)
  *   - Mood        → `<MoodForm>` (the `/mood` add form, 5-face flow)
- *   - Water       → `<WaterQuickAddSheet>` (the hydration quick-add)
  *
  * The picker reuses each existing capture component rather than
  * rebuilding parallel forms.
@@ -50,16 +47,16 @@ import {
  * instead of closing unconditionally.
  */
 
-type CaptureKind = "measurement" | "medication" | "mood" | "water";
+type CaptureKind = "measurement" | "medication" | "mood";
 
 /**
- * v1.36.x — which of the four capture surfaces a delegation admits.
+ * v1.36.x — which of the capture surfaces a delegation admits.
  *
  * A WRITE grant covers entering a reading and marking a dose. It does not
- * cover a mood entry or a glass of water: those verbs stay on the owner's own
- * authentication and the server refuses them under a switch. The picker is the
- * fastest path into all four on a phone, so it is the surface where offering
- * an unadmitted one costs the most.
+ * cover a mood entry: that verb stays on the owner's own authentication and
+ * the server refuses it under a switch. The picker is the fastest path into
+ * all three on a phone, so it is the surface where offering an unadmitted one
+ * costs the most.
  */
 const DELEGABLE_CAPTURE_KINDS: ReadonlySet<CaptureKind> = new Set([
   "measurement",
@@ -71,7 +68,6 @@ const CAPTURE_KIND_ORDER: ReadonlyArray<CaptureKind> = [
   "measurement",
   "medication",
   "mood",
-  "water",
 ];
 
 /**
@@ -81,7 +77,7 @@ const CAPTURE_KIND_ORDER: ReadonlyArray<CaptureKind> = [
  * matters. `resolveRecordCapabilities(undefined)` answers "your own record"
  * until `/api/auth/me` settles — deliberately, so no add button blanks on
  * every cold load — and the switch flow ends in a hard reload that wipes the
- * persisted query cache. So a delegate's first paint offers all four kinds for
+ * persisted query cache. So a delegate's first paint offers all kinds for
  * as long as that query takes. `chooseKind` refused an unoffered kind at tap
  * time and then never asked again, so a tap landing inside that window opened
  * a form and left it open once the answer arrived: the delegate ends up
@@ -103,17 +99,15 @@ export function admittedCaptureKind(
 }
 
 /**
- * The capture kinds to offer, given what the record allows and whether the
- * nutrients module is on. Exported pure so the delegation rule can be pinned
- * without opening a sheet: an SSR test cannot tap the button that opens it.
+ * The capture kinds to offer, given what the record allows. Exported pure so
+ * the delegation rule can be pinned without opening a sheet: an SSR test
+ * cannot tap the button that opens it.
  */
 export function visibleCaptureKinds(
   caps: Pick<RecordCapabilities, "canAdd" | "canManage">,
-  nutrientsEnabled: boolean,
   kinds: ReadonlyArray<CaptureKind>,
 ): CaptureKind[] {
   return kinds.filter((kind) => {
-    if (kind === "water" && !nutrientsEnabled) return false;
     if (caps.canManage) return true;
     return caps.canAdd && DELEGABLE_CAPTURE_KINDS.has(kind);
   });
@@ -128,13 +122,8 @@ interface CapturePickerProps {
 
 export function CapturePicker({ open, onOpenChange }: CapturePickerProps) {
   const { t } = useTranslations();
-  const nutrientsEnabled = useModuleEnabled("nutrients");
   const capabilities = useRecordCapabilities();
-  const offered = visibleCaptureKinds(
-    capabilities,
-    nutrientsEnabled,
-    CAPTURE_KIND_ORDER,
-  );
+  const offered = visibleCaptureKinds(capabilities, CAPTURE_KIND_ORDER);
   const [kind, setKind] = useState<CaptureKind | null>(null);
   // Re-derived on every render, never latched: the offer can shrink under a
   // sheet that is already open. See `admittedCaptureKind`.
@@ -193,12 +182,6 @@ export function CapturePicker({ open, onOpenChange }: CapturePickerProps) {
       description: t("nav.capture.moodDescription"),
       icon: Waves,
     },
-    {
-      kind: "water",
-      label: t("nav.capture.water"),
-      description: t("nav.capture.waterDescription"),
-      icon: GlassWater,
-    },
   ];
   const options = allOptions.filter((opt) => offered.includes(opt.kind));
 
@@ -206,7 +189,6 @@ export function CapturePicker({ open, onOpenChange }: CapturePickerProps) {
     measurement: t("measurements.addMeasurement"),
     medication: t("nav.capture.medication"),
     mood: t("mood.addEntry"),
-    water: t("nutrients.hydration.quickAddTitle"),
   };
   // `openKind === null` keeps the form sheet closed (the title is unread
   // then); the mood label is the harmless default, matching the prior
@@ -250,7 +232,7 @@ export function CapturePicker({ open, onOpenChange }: CapturePickerProps) {
 
       {/* The chosen capture surface, reusing the existing form. */}
       <ResponsiveSheet
-        open={openKind !== null && openKind !== "water"}
+        open={openKind !== null}
         onOpenChange={handleFormOpenChange}
         title={formTitle}
         footer={<div ref={setFooterEl} className="flex w-full" />}
@@ -277,14 +259,6 @@ export function CapturePicker({ open, onOpenChange }: CapturePickerProps) {
           />
         )}
       </ResponsiveSheet>
-
-      {openKind === "water" && (
-        <WaterQuickAddSheet
-          open
-          onOpenChange={handleFormOpenChange}
-          onSuccess={closeForm}
-        />
-      )}
 
       {/* v1.30.1 — confirm before discarding a partly-filled capture
           form when the sheet is dismissed by an overlay tap, Escape,

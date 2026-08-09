@@ -349,9 +349,7 @@
       "medication": "Médicament",
       "medicationDescription": "Marquer une dose comme prise",
       "mood": "Humeur",
-      "moodDescription": "Enregistrez votre humeur et des étiquettes",
-      "water": "Eau",
-      "waterDescription": "Ajoutez rapidement votre consommation d’eau"
+      "moodDescription": "Enregistrez votre humeur et des étiquettes"
     },
     "cycle": "Cycle",
     "labs": "Analyses",
@@ -455,7 +453,6 @@
     "quickAddMeasurement": "Saisir une mesure",
     "quickAddMood": "Saisir une humeur",
     "quickAddMedicationIntake": "Saisir une prise",
-    "quickAddWater": "Saisir de l’eau",
     "customizeDashboard": "Personnaliser le tableau de bord",
     "medicationIntakeQuickAdd": {
       "sheetTitle": "Saisir une prise de médicament",
@@ -9654,17 +9651,11 @@
         "dayInvalid": "Les entrées portaient une date que le serveur n'a pas pu accepter. Cela peut arriver quand l'horloge ou le fuseau horaire du côté qui envoie les données est incorrect — cela vaut la peine de vérifier.",
         "upsertFailed": "Ces entrées sont arrivées jusqu'au serveur, mais un problème de notre côté a empêché leur enregistrement. Tu n'as rien à faire.",
         "unknown": "Ces entrées sont arrivées mais n'ont pas pu être enregistrées."
-      }
+      },
+      "moduleEnableError": "Le module nutriments n'a pas pu être activé. Réessaie."
     },
     "hydration": {
-      "referenceMeta": "Apport de référence {value} {unit}/jour · EFSA",
-      "quickAddTitle": "Ajouter de l'eau",
-      "quickAddCustomLabel": "Quantité personnalisée (mL)",
-      "quickAddCustomPlaceholder": "250",
-      "quickAddSubmit": "Ajouter",
-      "quickAddError": "Échec de l'enregistrement — réessayez.",
-      "quickAddSuccess": "{amount} mL d’eau ajoutés.",
-      "editTotal": "Modifier le total du jour"
+      "referenceMeta": "Apport de référence {value} {unit}/jour · EFSA"
     },
     "caffeine": {
       "ceilingMeta": "Plafond de sécurité {value} {unit}/jour · EFSA"
@@ -10285,7 +10276,7 @@
     "description": "Votre carnet d'adresses : saisissez un cabinet une fois, choisissez-le partout.",
     "linkLabel": "Carnet d'adresses",
     "add": "Entrée",
-    "searchPlaceholder": "Rechercher un nom ou un cabinet",
+    "searchPlaceholder": "Rechercher un nom, un cabinet ou une spécialité",
     "loadError": "Impossible de charger le carnet d'adresses.",
     "emptyTitle": "Aucune entrée",
     "emptyDescription": "Ajoutez un cabinet pour pouvoir le choisir lors d'un rendez-vous.",
@@ -10304,6 +10295,17 @@
     "saveFailed": "L'entrée n'a pas pu être enregistrée.",
     "deleteTitle": "Supprimer cette entrée ?",
     "deleteDescription": "Vos rendez-vous existants restent et conservent ce nom.",
-    "deleteFailed": "L'entrée n'a pas pu être supprimée."
+    "deleteFailed": "L'entrée n'a pas pu être supprimée.",
+    "noSpecialtyGroup": "Sans spécialité"
+  },
+  "links": {
+    "picker": {
+      "add": "Ajouter",
+      "done": "Terminé",
+      "selectAll": "Tout sélectionner",
+      "searchPlaceholder": "Rechercher",
+      "searchNoMatch": "Aucun résultat",
+      "remove": "Retirer"
+    }
   }
 }

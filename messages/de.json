@@ -349,9 +349,7 @@
       "medication": "Medikament",
       "medicationDescription": "Eine Dosis als genommen markieren",
       "mood": "Stimmung",
-      "moodDescription": "Stimmung und Tags erfassen",
-      "water": "Wasser",
-      "waterDescription": "Wasseraufnahme schnell hinzufügen"
+      "moodDescription": "Stimmung und Tags erfassen"
     },
     "cycle": "Zyklus",
     "labs": "Laborwerte",
@@ -455,7 +453,6 @@
     "quickAddMeasurement": "Messung erfassen",
     "quickAddMood": "Stimmung erfassen",
     "quickAddMedicationIntake": "Einnahme erfassen",
-    "quickAddWater": "Wasser erfassen",
     "customizeDashboard": "Dashboard anpassen",
     "medicationIntakeQuickAdd": {
       "sheetTitle": "Medikamenteneinnahme erfassen",
@@ -9654,17 +9651,11 @@
         "dayInvalid": "Die Einträge trugen ein Datum, das der Server nicht akzeptieren konnte. Das kann passieren, wenn Uhrzeit oder Zeitzone auf der sendenden Seite falsch eingestellt sind — das lohnt sich zu prüfen.",
         "upsertFailed": "Diese Einträge haben den Server erreicht, aber ein Problem auf unserer Seite hat verhindert, dass sie gespeichert wurden. Du musst nichts weiter tun.",
         "unknown": "Diese Einträge sind angekommen, konnten aber nicht gespeichert werden."
-      }
+      },
+      "moduleEnableError": "Das Nährstoffmodul konnte nicht aktiviert werden. Versuch es noch mal."
     },
     "hydration": {
-      "referenceMeta": "Richtwert {value} {unit}/Tag · EFSA",
-      "quickAddTitle": "Wasser hinzufügen",
-      "quickAddCustomLabel": "Eigene Menge (ml)",
-      "quickAddCustomPlaceholder": "250",
-      "quickAddSubmit": "Hinzufügen",
-      "quickAddError": "Konnte nicht gespeichert werden — versuch's noch mal.",
-      "quickAddSuccess": "{amount} ml Wasser hinzugefügt.",
-      "editTotal": "Heutige Summe bearbeiten"
+      "referenceMeta": "Richtwert {value} {unit}/Tag · EFSA"
     },
     "caffeine": {
       "ceilingMeta": "Sichere Obergrenze {value} {unit}/Tag · EFSA"
@@ -10285,7 +10276,7 @@
     "description": "Dein eigenes Adressbuch — einmal tippen, überall auswählen.",
     "linkLabel": "Adressbuch",
     "add": "Eintrag",
-    "searchPlaceholder": "Name oder Praxis suchen",
+    "searchPlaceholder": "Name, Praxis oder Fachrichtung suchen",
     "loadError": "Adressbuch konnte nicht geladen werden.",
     "emptyTitle": "Noch kein Eintrag",
     "emptyDescription": "Lege eine Praxis an, damit du sie beim Termin auswählen kannst.",
@@ -10304,6 +10295,17 @@
     "saveFailed": "Eintrag konnte nicht gespeichert werden.",
     "deleteTitle": "Eintrag löschen?",
     "deleteDescription": "Deine bisherigen Termine bleiben erhalten und behalten diesen Namen.",
-    "deleteFailed": "Eintrag konnte nicht gelöscht werden."
+    "deleteFailed": "Eintrag konnte nicht gelöscht werden.",
+    "noSpecialtyGroup": "Ohne Fachrichtung"
+  },
+  "links": {
+    "picker": {
+      "add": "Hinzufügen",
+      "done": "Fertig",
+      "selectAll": "Alle auswählen",
+      "searchPlaceholder": "Suchen",
+      "searchNoMatch": "Kein Treffer",
+      "remove": "Entfernen"
+    }
   }
 }

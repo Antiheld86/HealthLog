@@ -349,9 +349,7 @@
       "medication": "Lek",
       "medicationDescription": "Oznacz dawkę jako przyjętą",
       "mood": "Nastrój",
-      "moodDescription": "Zapisz nastrój i tagi",
-      "water": "Woda",
-      "waterDescription": "Szybko dodaj ilość wypitej wody"
+      "moodDescription": "Zapisz nastrój i tagi"
     },
     "cycle": "Cykl",
     "labs": "Wyniki badań",
@@ -455,7 +453,6 @@
     "quickAddMeasurement": "Zarejestruj pomiar",
     "quickAddMood": "Zarejestruj nastrój",
     "quickAddMedicationIntake": "Zarejestruj przyjęcie",
-    "quickAddWater": "Zapisz wodę",
     "customizeDashboard": "Dostosuj pulpit",
     "medicationIntakeQuickAdd": {
       "sheetTitle": "Zarejestruj przyjęcie leku",
@@ -9654,17 +9651,11 @@
         "dayInvalid": "Wpisy zawierały datę, której serwer nie mógł zaakceptować. Może się to zdarzyć, gdy zegar lub strefa czasowa po stronie wysyłającej są nieprawidłowe — warto to sprawdzić.",
         "upsertFailed": "Te wpisy dotarły do serwera, ale problem po naszej stronie uniemożliwił ich zapisanie. Nie musisz nic robić.",
         "unknown": "Te wpisy dotarły, ale nie udało się ich zapisać."
-      }
+      },
+      "moduleEnableError": "Nie udało się włączyć modułu składników odżywczych. Spróbuj ponownie."
     },
     "hydration": {
-      "referenceMeta": "Zalecane spożycie {value} {unit}/dzień · EFSA",
-      "quickAddTitle": "Dodaj wodę",
-      "quickAddCustomLabel": "Własna ilość (mL)",
-      "quickAddCustomPlaceholder": "250",
-      "quickAddSubmit": "Dodaj",
-      "quickAddError": "Nie udało się zapisać — spróbuj ponownie.",
-      "quickAddSuccess": "Dodano {amount} mL wody.",
-      "editTotal": "Edytuj dzisiejszą sumę"
+      "referenceMeta": "Zalecane spożycie {value} {unit}/dzień · EFSA"
     },
     "caffeine": {
       "ceilingMeta": "Bezpieczny limit {value} {unit}/dzień · EFSA"
@@ -10285,7 +10276,7 @@
     "description": "Twoja własna książka adresowa — wpisz gabinet raz, wybieraj go wszędzie.",
     "linkLabel": "Książka adresowa",
     "add": "Wpis",
-    "searchPlaceholder": "Szukaj nazwiska lub gabinetu",
+    "searchPlaceholder": "Szukaj nazwiska, gabinetu lub specjalizacji",
     "loadError": "Nie udało się wczytać książki adresowej.",
     "emptyTitle": "Brak wpisów",
     "emptyDescription": "Dodaj gabinet, aby móc go wybrać przy zapisywaniu wizyty.",
@@ -10304,6 +10295,17 @@
     "saveFailed": "Nie udało się zapisać wpisu.",
     "deleteTitle": "Usunąć ten wpis?",
     "deleteDescription": "Twoje dotychczasowe wizyty pozostają i zachowują tę nazwę.",
-    "deleteFailed": "Nie udało się usunąć wpisu."
+    "deleteFailed": "Nie udało się usunąć wpisu.",
+    "noSpecialtyGroup": "Bez specjalizacji"
+  },
+  "links": {
+    "picker": {
+      "add": "Dodaj",
+      "done": "Gotowe",
+      "selectAll": "Zaznacz wszystko",
+      "searchPlaceholder": "Szukaj",
+      "searchNoMatch": "Brak wyników",
+      "remove": "Usuń"
+    }
   }
 }

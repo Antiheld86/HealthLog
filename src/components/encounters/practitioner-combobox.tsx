@@ -128,9 +128,11 @@ export function PractitionerCombobox({
                       <span className="text-foreground block truncate">
                         {row.name}
                       </span>
-                      {row.practice ? (
+                      {row.practice || row.specialty ? (
                         <span className="text-muted-foreground block truncate text-xs">
-                          {row.practice}
+                          {[row.practice, row.specialty]
+                            .filter(Boolean)
+                            .join(" · ")}
                         </span>
                       ) : null}
                     </span>

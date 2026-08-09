@@ -12,7 +12,7 @@
  * has every reason to fear their history goes with it.
  */
 import { ContactRound, Pencil, Plus, Search, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -60,7 +60,32 @@ export function PractitionerList({ enabled = true }: { enabled?: boolean }) {
     setSession((n) => n + 1);
   };
 
-  const rows = list.data ?? [];
+  const rows = useMemo(() => list.data ?? [], [list.data]);
+
+  // Group the flat list by specialty so a long address book reads by field
+  // ("Zahnmedizin", "Hausarzt", …) instead of one undifferentiated column.
+  // Specialty is exact free-text: each distinct string is its own group,
+  // named groups sorted alphabetically, the unspecified rows collected into
+  // one group that always sits last. When nothing carries a specialty the
+  // headers are suppressed — a lone "no specialty" heading over every row is
+  // noise, so the list degrades to the flat form it had before.
+  const groups = useMemo(() => {
+    const bySpecialty = new Map<string | null, Practitioner[]>();
+    for (const row of rows) {
+      const key = row.specialty?.trim() ? row.specialty.trim() : null;
+      const bucket = bySpecialty.get(key);
+      if (bucket) bucket.push(row);
+      else bySpecialty.set(key, [row]);
+    }
+    const named = [...bySpecialty.entries()]
+      .filter((entry): entry is [string, Practitioner[]] => entry[0] !== null)
+      .sort((a, b) => a[0].localeCompare(b[0]));
+    const unspecified = bySpecialty.get(null);
+    return unspecified
+      ? [...named, [null, unspecified] as [null, Practitioner[]]]
+      : named;
+  }, [rows]);
+  const showGroupHeadings = groups.some(([specialty]) => specialty !== null);
 
   const addButton = canManage ? (
     <Button
@@ -127,57 +152,72 @@ export function PractitionerList({ enabled = true }: { enabled?: boolean }) {
           ctaSize="lg"
         />
       ) : (
-        <ul className="space-y-2" data-slot="practitioner-list">
-          {rows.map((row) => (
-            <li key={row.id}>
-              <Card className="gap-2 py-3 md:py-4">
-                <CardContent className="flex items-center gap-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-foreground truncate text-sm font-medium">
-                      {row.name}
-                    </p>
-                    {row.practice || row.specialty ? (
-                      <p className="text-foreground truncate text-sm">
-                        {[row.practice, row.specialty]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </p>
-                    ) : null}
-                    {row.location ? (
-                      <p className="text-muted-foreground truncate text-xs">
-                        {row.location}
-                      </p>
-                    ) : null}
-                  </div>
-                  {canManage ? (
-                    <div className="flex shrink-0 items-center gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-11"
-                        aria-label={t("common.edit")}
-                        onClick={() => openSheet(row)}
-                      >
-                        <Pencil className="size-4" aria-hidden />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-11"
-                        aria-label={t("common.delete")}
-                        onClick={() => setDeleting(row)}
-                      >
-                        <Trash2 className="size-4" aria-hidden />
-                      </Button>
-                    </div>
-                  ) : null}
-                </CardContent>
-              </Card>
-            </li>
+        <div className="space-y-4" data-slot="practitioner-list">
+          {groups.map(([specialty, groupRows]) => (
+            <div key={specialty ?? "__unspecified__"} className="space-y-2">
+              {showGroupHeadings ? (
+                <h2
+                  className="text-muted-foreground px-1 text-xs font-medium"
+                  data-slot="practitioner-group-heading"
+                  data-specialty={specialty ?? ""}
+                >
+                  {specialty ?? t("practitioners.noSpecialtyGroup")}
+                </h2>
+              ) : null}
+              <ul className="space-y-2">
+                {groupRows.map((row) => (
+                  <li key={row.id}>
+                    <Card className="gap-2 py-3 md:py-4">
+                      <CardContent className="flex items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-foreground truncate text-sm font-medium">
+                            {row.name}
+                          </p>
+                          {row.practice || row.specialty ? (
+                            <p className="text-foreground truncate text-sm">
+                              {[row.practice, row.specialty]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </p>
+                          ) : null}
+                          {row.location ? (
+                            <p className="text-muted-foreground truncate text-xs">
+                              {row.location}
+                            </p>
+                          ) : null}
+                        </div>
+                        {canManage ? (
+                          <div className="flex shrink-0 items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-11"
+                              aria-label={t("common.edit")}
+                              onClick={() => openSheet(row)}
+                            >
+                              <Pencil className="size-4" aria-hidden />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-11"
+                              aria-label={t("common.delete")}
+                              onClick={() => setDeleting(row)}
+                            >
+                              <Trash2 className="size-4" aria-hidden />
+                            </Button>
+                          </div>
+                        ) : null}
+                      </CardContent>
+                    </Card>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
 
       <PractitionerSheet

@@ -940,19 +940,26 @@ function VorsorgeCard({
    * checkbox uses, so a person who does both gets one satisfaction and no
    * error.
    */
-  const fileVisitButton = canManage ? (
-    <Button
-      type="button"
-      variant="outline"
-      className="min-h-11 w-full"
-      data-slot="vorsorge-file-visit"
-      onClick={onFileVisit}
-      disabled={busy}
-    >
-      <CalendarPlus className="h-4 w-4" />
-      {t("measurementReminders.fileVisit")}
-    </Button>
-  ) : null;
+  // The file-visit action belongs only to a free-text reminder — a real
+  // practice visit, where "you went" is recorded by filing a visit. A typed
+  // reminder (Gewicht, Blutdruck, a screening check-in) is satisfied by a
+  // reading or a check-in inside the app, so it carries no visit affordance.
+  // `resolve.ts` states the same boundary server-side: an appointment reminder
+  // is free-text by construction.
+  const fileVisitButton =
+    canManage && !isLinked ? (
+      <Button
+        type="button"
+        variant="outline"
+        className="min-h-11 w-full"
+        data-slot="vorsorge-file-visit"
+        onClick={onFileVisit}
+        disabled={busy}
+      >
+        <CalendarPlus className="h-4 w-4" />
+        {t("measurementReminders.fileVisit")}
+      </Button>
+    ) : null;
 
   const primaryButton = canManage ? (
     <Button
@@ -1047,8 +1054,9 @@ function VorsorgeCard({
               ) : null}
               {/* Icon-only in the dense list, labelled in the cards branch —
                   the same action either way, never one branch offering what
-                  the other withholds. */}
-              {canManage ? (
+                  the other withholds. Free-text reminders only: a typed /
+                  screening reminder has no practice visit behind it. */}
+              {canManage && !isLinked ? (
                 <Button
                   type="button"
                   variant="outline"

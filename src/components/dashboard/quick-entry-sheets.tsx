@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Quick-entry sheets for the dashboard: measurement, mood, medication
- * intake, and water behind the shared ResponsiveSheet primitive
+ * Quick-entry sheets for the dashboard: measurement, mood, and medication
+ * intake behind the shared ResponsiveSheet primitive
  * (bottom-sheet on `<md`, centred Dialog on `md+`), plus the
  * confirm-before-discard guard for dirty forms.
  *
@@ -24,7 +24,6 @@ import {
 import { MeasurementForm } from "@/components/measurements/measurement-form";
 import { MoodForm } from "@/components/mood/mood-form";
 import { MedicationIntakeQuickAdd } from "@/components/dashboard/medication-intake-quick-add";
-import { WaterQuickAddSheet } from "@/components/insights/nutrients/water-quick-add-sheet";
 import { useTranslations } from "@/lib/i18n/context";
 import {
   useRecordCapabilities,
@@ -32,15 +31,14 @@ import {
 } from "@/hooks/use-record-capabilities";
 
 export type QuickEntryDialog =
-  "measurement" | "mood" | "medicationIntake" | "water" | null;
+  "measurement" | "mood" | "medicationIntake" | null;
 
 /**
- * v1.36.x — which of the four the delegation admits, and the same rule the
+ * v1.36.x — which of the three the delegation admits, and the same rule the
  * capture picker states at length.
  *
- * A WRITE grant covers entering a reading and marking a dose. A mood entry and
- * a glass of water are not admitted verbs and the server refuses both under a
- * switch.
+ * A WRITE grant covers entering a reading and marking a dose. A mood entry is
+ * not an admitted verb and the server refuses it under a switch.
  */
 const DELEGABLE_QUICK_ENTRIES: ReadonlySet<NonNullable<QuickEntryDialog>> =
   new Set(["measurement", "medicationIntake"]);
@@ -52,7 +50,7 @@ const DELEGABLE_QUICK_ENTRIES: ReadonlySet<NonNullable<QuickEntryDialog>> =
  * whole gate — so it held only for as long as the answer was already known.
  * `resolveRecordCapabilities(undefined)` reads as the caller's own record
  * until `/api/auth/me` settles, and the switch flow ends in a hard reload that
- * wipes the persisted cache, so a delegate's first paint carries all four menu
+ * wipes the persisted cache, so a delegate's first paint carries all menu
  * items. One of them opened a sheet that then stayed open on a form the server
  * refuses.
  *
@@ -215,11 +213,6 @@ export function QuickEntrySheets({
           footerSlot={medicationIntakeFooterEl}
         />
       </ResponsiveSheet>
-      <WaterQuickAddSheet
-        open={openSheet === "water"}
-        onOpenChange={handleQuickEntryOpenChange}
-        onSuccess={onClose}
-      />
 
       {/* v1.11.3 F3 — confirm before discarding a partly-filled
           quick-entry form when the sheet is dismissed by an overlay
