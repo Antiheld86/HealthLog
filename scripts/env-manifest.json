@@ -140,6 +140,10 @@
         {
           "name": "GEOLITE2_DIR",
           "purpose": "Directory holding GeoLite2-City.mmdb + GeoLite2-ASN.mmdb. Point it at a read-only mount to bring your own databases. Default /opt/geolite2."
+        },
+        {
+          "name": "MAXMIND_LICENSE_KEY",
+          "purpose": "MaxMind licence key for the runtime GeoLite2 fetch (issue #659). Set it and the worker downloads both databases into GEOLITE2_DIR on boot and monthly, no rebuild or manual mount. Free at maxmind.com/en/geolite2/signup."
         }
       ]
     },
