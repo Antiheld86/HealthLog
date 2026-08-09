@@ -10297,5 +10297,15 @@
     "deleteDescription": "Tus citas anteriores se mantienen y conservan este nombre.",
     "deleteFailed": "No se pudo eliminar la entrada.",
     "noSpecialtyGroup": "Sin especialidad"
+  },
+  "links": {
+    "picker": {
+      "add": "Añadir",
+      "done": "Listo",
+      "selectAll": "Seleccionar todo",
+      "searchPlaceholder": "Buscar",
+      "searchNoMatch": "Sin coincidencias",
+      "remove": "Quitar"
+    }
   }
 }

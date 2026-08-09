@@ -10,6 +10,7 @@
 - The AI consent and connector notes in Settings render as normal text now, not faint fine print, so the copy you are meant to read before turning a feature on is legible.
 - The record-a-visit action on the checkups list now appears only where there is a real practice visit behind the reminder. A reminder you satisfy yourself in the app, like weighing in or a mood check-in, no longer offers to file a visit it never involved.
 - The practices and doctors address book searches by specialty now, so typing "Zahnmedizin" finds the dentist even when the name and practice hold nothing of the sort. The list groups its entries under their specialty, with the ones you left unspecified gathered at the end, and the visit form's picker shows each contact's field beside the practice.
+- Linking documents, lab results and illnesses to a visit is searchable now instead of a flat list you had to scroll. Each link block shows what you have picked as removable chips over an add button that opens a searchable sheet; lab results gather under their panel and sample date so you can attach a whole day's panel in one tap, and documents gather by month. The vaccination form uses the same picker for its document link.
 - The respiratory-rate tile on the dashboard shows its unit in your own language instead of a fixed English label, and the personalized greeting carries its comma.
 
 ### Removed

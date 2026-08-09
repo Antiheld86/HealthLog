@@ -10297,5 +10297,15 @@
     "deleteDescription": "Your existing visits stay, and they keep this name.",
     "deleteFailed": "The entry could not be deleted.",
     "noSpecialtyGroup": "No specialty"
+  },
+  "links": {
+    "picker": {
+      "add": "Add",
+      "done": "Done",
+      "selectAll": "Select all",
+      "searchPlaceholder": "Search",
+      "searchNoMatch": "No match",
+      "remove": "Remove"
+    }
   }
 }

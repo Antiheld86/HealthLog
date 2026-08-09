@@ -10297,5 +10297,15 @@
     "deleteDescription": "Vos rendez-vous existants restent et conservent ce nom.",
     "deleteFailed": "L'entrée n'a pas pu être supprimée.",
     "noSpecialtyGroup": "Sans spécialité"
+  },
+  "links": {
+    "picker": {
+      "add": "Ajouter",
+      "done": "Terminé",
+      "selectAll": "Tout sélectionner",
+      "searchPlaceholder": "Rechercher",
+      "searchNoMatch": "Aucun résultat",
+      "remove": "Retirer"
+    }
   }
 }

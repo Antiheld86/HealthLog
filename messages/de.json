@@ -10297,5 +10297,15 @@
     "deleteDescription": "Deine bisherigen Termine bleiben erhalten und behalten diesen Namen.",
     "deleteFailed": "Eintrag konnte nicht gelöscht werden.",
     "noSpecialtyGroup": "Ohne Fachrichtung"
+  },
+  "links": {
+    "picker": {
+      "add": "Hinzufügen",
+      "done": "Fertig",
+      "selectAll": "Alle auswählen",
+      "searchPlaceholder": "Suchen",
+      "searchNoMatch": "Kein Treffer",
+      "remove": "Entfernen"
+    }
   }
 }

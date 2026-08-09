@@ -10297,5 +10297,15 @@
     "deleteDescription": "I tuoi appuntamenti esistenti restano e conservano questo nome.",
     "deleteFailed": "Non è stato possibile eliminare la voce.",
     "noSpecialtyGroup": "Senza specializzazione"
+  },
+  "links": {
+    "picker": {
+      "add": "Aggiungi",
+      "done": "Fatto",
+      "selectAll": "Seleziona tutto",
+      "searchPlaceholder": "Cerca",
+      "searchNoMatch": "Nessun risultato",
+      "remove": "Rimuovi"
+    }
   }
 }

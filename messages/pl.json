@@ -10297,5 +10297,15 @@
     "deleteDescription": "Twoje dotychczasowe wizyty pozostają i zachowują tę nazwę.",
     "deleteFailed": "Nie udało się usunąć wpisu.",
     "noSpecialtyGroup": "Bez specjalizacji"
+  },
+  "links": {
+    "picker": {
+      "add": "Dodaj",
+      "done": "Gotowe",
+      "selectAll": "Zaznacz wszystko",
+      "searchPlaceholder": "Szukaj",
+      "searchNoMatch": "Brak wyników",
+      "remove": "Usuń"
+    }
   }
 }
