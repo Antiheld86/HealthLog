@@ -169,7 +169,7 @@ export function resolveGeoProviderHost(): string {
  * as unset, otherwise a stack that merely lists the variable would read
  * the process working directory and silently lose the offline tier.
  */
-function geoLiteDir(): string {
+export function geoLiteDir(): string {
   const configured = process.env.GEOLITE2_DIR?.trim();
   return configured ? configured : "/opt/geolite2";
 }
@@ -252,15 +252,28 @@ function getAsnReader(): MmdbReader<AsnResponse> | null {
 }
 
 /**
- * Test-only — reset the lazy reader cache so a test can swap the
- * `GEOLITE2_DIR` between cases without leaking the previous Reader.
- * Not exported from the public surface; the tests import via the
- * module-level alias.
+ * Reset the lazy MMDB reader cache so the next lookup re-reads the files
+ * from `geoLiteDir()`. The runtime GeoLite2 fetch (`src/lib/geo/geolite2-fetch.ts`)
+ * calls this after it places freshly downloaded databases, so a running worker
+ * picks them up without a restart — the readers latch `null` on the first miss,
+ * so without this a process that booted before the files landed would keep
+ * resolving online forever. Also clears the one-shot "offline unavailable"
+ * admin-notification latch, since the offline tier may now be present.
  */
-export function __resetGeoLite2CacheForTests(): void {
+export function resetGeoLite2ReaderCache(): void {
   cache.city = undefined;
   cache.asn = undefined;
   notifiedThisProcess = false;
+}
+
+/**
+ * Test-only — reset the lazy reader cache so a test can swap the
+ * `GEOLITE2_DIR` between cases without leaking the previous Reader. Extends
+ * the runtime reset with the per-IP location cache, which production has no
+ * reason to drop.
+ */
+export function __resetGeoLite2CacheForTests(): void {
+  resetGeoLite2ReaderCache();
   GEO_CACHE.clear();
 }
 

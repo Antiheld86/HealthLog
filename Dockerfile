@@ -179,8 +179,16 @@ RUN mkdir -p /opt/prisma-cli && \
 #
 # Attribution (CC BY-SA 4.0): see `docs/audit/v1427-summary.md` and
 # `/about` in the running app.
-RUN mkdir -p /opt/geolite2
-COPY assets/geolite2/ /opt/geolite2/
+#
+# v1.37.7 (issue #659) — the directory is owned by the unprivileged `nextjs`
+# user so the runtime worker can WRITE it: a self-hoster who sets
+# MAXMIND_LICENSE_KEY on the published image has the databases fetched into
+# this directory at runtime (src/lib/geo/geolite2-fetch.ts) with no rebuild or
+# manual mount. `tar`/`gzip` for the extraction ship in the busybox base. A
+# read-only bind mount at this path (the bring-your-own-database route) still
+# works — the runtime fetch just fails soft and the mounted files stand.
+RUN mkdir -p /opt/geolite2 && chown nextjs:nodejs /opt/geolite2
+COPY --chown=nextjs:nodejs assets/geolite2/ /opt/geolite2/
 
 # ISO-8601 build timestamp — /api/version returns it as `builtAt`.
 # Declared this late in the stage on purpose: the value differs on

@@ -18,6 +18,12 @@
 import { PgBoss } from "pg-boss";
 import { GEO_BACKFILL_QUEUE, GEO_BACKFILL_CRON } from "@/lib/jobs/geo-backfill";
 import {
+  GEOLITE2_FETCH_QUEUE,
+  GEOLITE2_FETCH_CRON,
+  enqueueGeolite2FetchBootDiscovery,
+  type Geolite2FetchPayload,
+} from "@/lib/jobs/geolite2-fetch";
+import {
   TLS_PIN_MONITOR_QUEUE,
   TLS_PIN_MONITOR_CRON,
 } from "@/lib/jobs/tls-pin-monitor";
@@ -176,6 +182,7 @@ import {
   handleHostMetricSample,
   handleFeedbackAggregator,
   handleGeoBackfill,
+  handleGeolite2Fetch,
   handleTlsPinMonitor,
   handlePrDetection,
 } from "./ops-handlers";
@@ -335,6 +342,12 @@ const allQueues = [
   HOST_METRIC_QUEUE,
   FEEDBACK_AGGREGATOR_QUEUE,
   GEO_BACKFILL_QUEUE,
+  // v1.37.7 (issue #659) — runtime GeoLite2 fetch. A self-hoster who sets
+  // MAXMIND_LICENSE_KEY on the published image gets the offline geo tier
+  // without a rebuild or a manual mount: boot discovery fetches when no
+  // database is present, a monthly cron keeps a keyed host current. Without
+  // this entry pg-boss never provisions the queue and both silently no-op.
+  GEOLITE2_FETCH_QUEUE,
   // v1.12.2 ios-coord — TLS leaf SPKI-change monitor. The iOS client
   // pins the served leaf certificate; this queue probes it every 6 h and
   // alarms when the served SPKI leaves the operator's known-good set.
@@ -472,6 +485,11 @@ const schedules: ScheduleEntry[] = [
   // long tail of audit rows that landed with the offline MMDB
   // missing or the online provider unreachable.
   [GEO_BACKFILL_QUEUE, GEO_BACKFILL_CRON, cronIsTheRetry],
+  // v1.37.7 (issue #659) — monthly runtime GeoLite2 refresh (8th, 04:00
+  // Europe/Berlin, past MaxMind's first-Tuesday reissue). Deliberately NOT
+  // cronIsTheRetry: a month between ticks is far too long to be the retry, so
+  // the queue keeps pg-boss's default retries for a transient MaxMind hiccup.
+  [GEOLITE2_FETCH_QUEUE, GEOLITE2_FETCH_CRON],
   // v1.12.2 ios-coord — every-6-hour TLS leaf SPKI probe (:07 off the
   // hourly sync crons). Surfaces a pinned-leaf rotation well inside the
   // ≥11-day re-pin window the iOS release owner needs.
@@ -714,6 +732,14 @@ export async function registerMaintenanceQueues(
     GEO_BACKFILL_QUEUE,
     { localConcurrency: 1 },
     handleGeoBackfill,
+  );
+  // v1.37.7 (issue #659) — runtime GeoLite2 fetch. Single-flight: one download
+  // at a time, and two ticks racing the same atomic place is wasted bandwidth.
+  await createAndWork<Geolite2FetchPayload>(
+    boss,
+    GEOLITE2_FETCH_QUEUE,
+    { localConcurrency: 1 },
+    handleGeolite2Fetch,
   );
   // v1.12.2 ios-coord — TLS leaf SPKI-change monitor. Single-flight: one
   // short outbound TLS handshake per tick, no benefit to overlapping ticks.
@@ -1472,6 +1498,22 @@ export async function enqueueMaintenanceBootDiscovery(): Promise<void> {
     workerLog(
       "error",
       "[document-thumbnail-backfill] boot discovery threw an unexpected error",
+      err,
+    );
+  }
+
+  // v1.37.7 (issue #659) — runtime GeoLite2 fetch. Only enqueues when a
+  // MAXMIND_LICENSE_KEY is set, egress is not disabled, and the offline tier
+  // is not already present — so a self-hoster who sets the key on the
+  // published image gets the databases fetched on the next worker boot without
+  // a rebuild or a manual mount.
+  try {
+    const { enqueued } = await enqueueGeolite2FetchBootDiscovery();
+    workerLog("info", `[geolite2-fetch] boot discovery: enqueued=${enqueued}`);
+  } catch (err) {
+    workerLog(
+      "error",
+      "[geolite2-fetch] boot discovery threw an unexpected error",
       err,
     );
   }
