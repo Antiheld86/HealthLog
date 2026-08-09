@@ -883,7 +883,10 @@ export function DocumentsView() {
         description={t("documents.subtitle")}
         actions={
           canManage ? (
-            <Button onClick={() => uploadInputRef.current?.click()}>
+            <Button
+              className="min-h-11 sm:min-h-9"
+              onClick={() => uploadInputRef.current?.click()}
+            >
               <Upload className="size-4" aria-hidden />
               {t("documents.pageUpload")}
             </Button>
@@ -940,7 +943,10 @@ export function DocumentsView() {
           ctaSize="lg"
           action={
             canManage ? (
-              <Button onClick={() => uploadInputRef.current?.click()}>
+              <Button
+                className="min-h-11 sm:min-h-9"
+                onClick={() => uploadInputRef.current?.click()}
+              >
                 <Upload className="size-4" aria-hidden />
                 {t("documents.empty.action")}
               </Button>

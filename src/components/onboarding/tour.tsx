@@ -695,7 +695,7 @@ export function OnboardingTour({
         {/* `flex-wrap` keeps long localised labels (Skip / Back / Next) from
             forcing a horizontal scrollbar inside the card — the row wraps
             instead, so the primary action is always reachable. */}
-        <footer className="mt-5 flex flex-wrap items-center justify-between gap-2">
+        <footer className="mt-4 flex flex-wrap items-center justify-between gap-2">
           <Button
             type="button"
             variant="ghost"

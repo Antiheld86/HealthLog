@@ -443,7 +443,7 @@ export function RecommendationCard({
 
       {/* v1.21.0 (C4 H2) — discreet "ask the Coach about this rec" link,
           aligned under the rec text (the number gutter is `ml-6`). */}
-      <div className="mt-1 ml-5">
+      <div className="mt-1 ml-6">
         <AskCoachAction
           question={coachQuestion}
           scope={coachScopeSource ? { metric: coachScopeSource } : undefined}

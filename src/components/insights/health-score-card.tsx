@@ -310,7 +310,7 @@ export function HealthScoreCard({
         PANEL_COLUMN_CLASS,
         // `h-full` lets the hero band's `items-stretch` equalise the column
         // against the greeting; `mt-auto` on the foot collects the slack.
-        "flex h-full flex-col gap-3.5",
+        "flex h-full flex-col gap-3",
         className,
       )}
     >
@@ -827,7 +827,7 @@ export function HealthScoreCardSkeleton({ className }: { className?: string }) {
         PANEL_CHROME_CLASS,
         "border-border/60",
         PANEL_COLUMN_CLASS,
-        "flex h-full flex-col gap-3.5",
+        "flex h-full flex-col gap-3",
         PANEL_RESERVE_CLASS,
         className,
       )}
@@ -838,7 +838,7 @@ export function HealthScoreCardSkeleton({ className }: { className?: string }) {
           keeps these blocks under the minimum above, so the minimum is the
           thing that decides the height. */}
       <Skeleton className="h-4 w-24" />
-      <Skeleton className="h-15 w-28" />
+      <Skeleton className="h-14 w-28" />
       <Skeleton className="h-2 w-full rounded-full" />
       <div className="space-y-1">
         <Skeleton className="h-4 w-40" />

@@ -108,7 +108,7 @@ function DataResetCard() {
       {msg && (
         <p
           role="alert"
-          className={`mt-3 text-sm ${msgType === "success" ? "text-success" : "text-destructive"}`}
+          className={`text-sm ${msgType === "success" ? "text-success" : "text-destructive"}`}
         >
           {msg}
         </p>
@@ -246,7 +246,7 @@ function AccountDeleteCard() {
       {msg && (
         <p
           role="alert"
-          className={`mt-3 text-sm ${msgType === "success" ? "text-success" : "text-destructive"}`}
+          className={`text-sm ${msgType === "success" ? "text-success" : "text-destructive"}`}
         >
           {msg}
         </p>

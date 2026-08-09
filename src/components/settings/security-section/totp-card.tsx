@@ -325,9 +325,9 @@ export function TotpCard({
 
         {/* ── Fresh recovery codes (post-confirm or post-regen) ── */}
         {freshCodes && (
-          <div>
+          <div className="space-y-3">
             <RecoveryCodesPanel codes={freshCodes} />
-            <SettingsCardActions className="mt-3">
+            <SettingsCardActions>
               <Button
                 type="button"
                 variant="outline"

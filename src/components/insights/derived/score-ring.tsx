@@ -56,7 +56,7 @@ const SIZE: Record<
   NonNullable<ScoreRingProps["size"]>,
   { px: number; numberClass: string; labelClass: string }
 > = {
-  sm: { px: 120, numberClass: "text-3xl", labelClass: "text-[11px]" },
+  sm: { px: 120, numberClass: "text-3xl", labelClass: "text-2xs" },
   md: { px: 168, numberClass: "text-5xl", labelClass: "text-xs" },
   lg: { px: 232, numberClass: "text-7xl", labelClass: "text-sm" },
 };
@@ -284,7 +284,7 @@ export function ScoreRing({
       {!hasScore && (
         <span
           data-slot="score-ring-provisional"
-          className="text-muted-foreground absolute inset-x-0 bottom-0 line-clamp-1 px-1 text-center text-[10px] leading-tight"
+          className="text-muted-foreground text-2xs absolute inset-x-0 bottom-0 line-clamp-1 px-1 text-center leading-tight"
         >
           {t("insights.derived.scoreRing.provisionalCaption")}
         </span>

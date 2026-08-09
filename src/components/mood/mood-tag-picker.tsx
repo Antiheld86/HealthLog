@@ -184,7 +184,7 @@ export function MoodTagPicker({
                       }`}
                     >
                       <TagIcon className="h-5 w-5" aria-hidden="true" />
-                      <span className="text-[11px] leading-tight">{label}</span>
+                      <span className="text-2xs leading-tight">{label}</span>
                     </button>
                   );
                 })}
@@ -337,7 +337,7 @@ function AddTagTile({
       className="border-border/70 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring focus-visible:ring-offset-background flex min-h-16 w-[4.5rem] flex-col items-center justify-center gap-1 rounded-xl border border-dashed p-2 text-center transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
     >
       <Plus className="h-5 w-5" aria-hidden="true" />
-      <span className="text-[11px] leading-tight">{label}</span>
+      <span className="text-2xs leading-tight">{label}</span>
     </button>
   );
 }
