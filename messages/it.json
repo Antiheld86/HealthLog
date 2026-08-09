@@ -560,7 +560,7 @@
   },
   "measurements": {
     "title": "Misurazioni",
-    "subtitle": "Registra le misurazioni e consulta lo storico completo. Tendenze e analisi sono in Analisi.",
+    "subtitle": "Registra le misurazioni e consulta lo storico completo.",
     "addMeasurement": "Aggiungi",
     "editMeasurement": "Modifica misurazione",
     "type": "Tipo",
@@ -2517,7 +2517,7 @@
       "emptyAction": "Genera briefing",
       "loadingLabel": "Preparazione del briefing",
       "noProviderTitle": "Nessun provider IA collegato",
-      "noProviderDescription": "Punta HealthLog verso un modello locale (Ollama, LM Studio: nulla lascia la tua rete) o usa la tua chiave OpenAI o Anthropic, e il riepilogo quotidiano trasforma le tue misurazioni in un riassunto in linguaggio chiaro, ad esempio: «peso in calo di 1,2 kg in due settimane, battito a riposo stabile a 58, pressione nel range 6 giorni su 7». La configurazione richiede circa un minuto.",
+      "noProviderDescription": "Punta HealthLog verso un modello locale (Ollama, LM Studio: nulla lascia la tua rete) o usa la tua chiave OpenAI o Anthropic, e il riepilogo quotidiano trasforma le tue misurazioni in un riassunto in linguaggio chiaro. La configurazione richiede circa un minuto.",
       "noProviderAction": "Apri impostazioni IA",
       "staleNoProviderHint": "Questo briefing non può aggiornarsi: nessun provider IA è collegato.",
       "refreshFailedHint": "Impossibile aggiornare il briefing: viene mostrato l'ultimo.",
@@ -3777,11 +3777,11 @@
         "caveat": "Questo mostra una relazione, non una causa."
       },
       "prognosis": {
-        "title": "La tua valutazione e ciò che suggeriscono le tue giornate passate",
+        "title": "La tua autovalutazione",
         "selfLabel": "La tua valutazione",
         "expectedLabel": "Atteso in base alle tue abitudini",
         "band": "Intervallo da {low} a {high}",
-        "statement": "In base alle tue abitudini finora, per {date} ci si sarebbe attesi un valore intorno a {value}. Ricavato da {n} giornate che contengono tutto ciò che serve al confronto.",
+        "statement": "In base alle tue abitudini finora, per {date} ci si sarebbe attesi un valore intorno a {value}. Ricavato da {n} giornate comparabili.",
         "provisional": "Ancora provvisorio: lo schema si appoggia su poche giornate.",
         "notToday": "Questo descrive {date}, non oggi.",
         "deviationWithin": "La tua valutazione rientra in questo intervallo.",
@@ -3792,7 +3792,7 @@
         "weightedDown": "{label} — contava verso un valore atteso più basso",
         "caveat": "È un confronto con le tue giornate passate, non un'affermazione su come una giornata sia andata a finire così.",
         "learning": "Fase di apprendimento: {entries} giornate su {threshold} registrate. Il confronto compare quando ce ne sono abbastanza.",
-        "noPattern": "Nelle {entries} giornate registrate finora non c'è nulla di abbastanza costante per confrontare una giornata. Registrare il contesto della giornata rende confrontabile una parte maggiore.",
+        "noPattern": "Nelle {entries} giornate registrate finora non c'è nulla di abbastanza costante per confrontare una giornata. Quando registri anche il contesto della giornata, ne rendi confrontabile una parte maggiore.",
         "featureValue": "{field}: {value}"
       }
     },

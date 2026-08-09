@@ -560,7 +560,7 @@
   },
   "measurements": {
     "title": "Pomiary",
-    "subtitle": "Zapisuj pomiary i przeglądaj pełną historię. Trendy i analizy znajdziesz w Analizach.",
+    "subtitle": "Zapisuj pomiary i przeglądaj pełną historię.",
     "addMeasurement": "Dodaj",
     "editMeasurement": "Edytuj pomiar",
     "type": "Typ",
@@ -2517,7 +2517,7 @@
       "emptyAction": "Wygeneruj briefing",
       "loadingLabel": "Przygotowanie briefingu",
       "noProviderTitle": "Brak połączonego dostawcy AI",
-      "noProviderDescription": "Skieruj HealthLog na model lokalny (Ollama, LM Studio — nic nie opuszcza Twojej sieci) lub podaj własny klucz OpenAI albo Anthropic, a codzienne podsumowanie zamieni Twoje pomiary w zrozumiały opis — na przykład: „waga niższa o 1,2 kg w dwa tygodnie, tętno spoczynkowe stabilne na 58, ciśnienie w normie przez 6 z 7 dni”. Konfiguracja zajmuje około minuty.",
+      "noProviderDescription": "Skieruj HealthLog na model lokalny (Ollama, LM Studio — nic nie opuszcza Twojej sieci) lub podaj własny klucz OpenAI albo Anthropic, a codzienne podsumowanie zamieni Twoje pomiary w zrozumiały opis. Konfiguracja zajmuje około minuty.",
       "noProviderAction": "Otwórz ustawienia AI",
       "staleNoProviderHint": "Tego briefingu nie można odświeżyć — nie połączono żadnego dostawcy AI.",
       "refreshFailedHint": "Nie udało się odświeżyć briefingu — pokazujemy poprzedni.",
@@ -3777,11 +3777,11 @@
         "caveat": "To pokazuje związek, nie przyczynę."
       },
       "prognosis": {
-        "title": "Twoja ocena i to, co sugerują twoje dotychczasowe dni",
+        "title": "Twoja samoocena",
         "selfLabel": "Twoja ocena",
         "expectedLabel": "Oczekiwane na podstawie twoich wzorców",
         "band": "Zakres od {low} do {high}",
-        "statement": "Na podstawie twoich dotychczasowych wzorców dla {date} należałoby oczekiwać wartości około {value}. Wyliczone z {n} dni, które zawierają wszystko, czego potrzebuje porównanie.",
+        "statement": "Na podstawie twoich dotychczasowych wzorców dla {date} należałoby oczekiwać wartości około {value}. Wyliczone z {n} porównywalnych dni.",
         "provisional": "Jeszcze wstępne: wzorzec opiera się na krótkim odcinku dni.",
         "notToday": "To opisuje {date}, nie dzisiaj.",
         "deviationWithin": "Twoja własna ocena mieści się w tym zakresie.",
@@ -3792,7 +3792,7 @@
         "weightedDown": "{label} — liczyło się w stronę niższej oczekiwanej wartości",
         "caveat": "To porównanie z twoimi wcześniejszymi dniami, nie stwierdzenie, jak doszło do takiego przebiegu dnia.",
         "learning": "Faza uczenia: zapisano {entries} z {threshold} dni. Porównanie pojawi się, gdy będzie ich dość.",
-        "noPattern": "W zapisanych dotąd {entries} dniach nic nie jest na tyle regularne, by porównać z tym dzień. Zapisywanie kontekstu dnia sprawia, że więcej da się porównać.",
+        "noPattern": "W zapisanych dotąd {entries} dniach nic nie jest na tyle regularne, by porównać z nimi dzień. Gdy zapisujesz też kontekst dnia, więcej da się porównać.",
         "featureValue": "{field}: {value}"
       }
     },

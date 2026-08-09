@@ -560,7 +560,7 @@
   },
   "measurements": {
     "title": "Mesures",
-    "subtitle": "Saisis tes mesures et consulte l'historique complet. Les tendances et analyses sont dans Analyses.",
+    "subtitle": "Saisis tes mesures et consulte l'historique complet.",
     "addMeasurement": "Ajouter",
     "editMeasurement": "Modifier la mesure",
     "type": "Type",
@@ -2517,7 +2517,7 @@
       "emptyAction": "Générer le briefing",
       "loadingLabel": "Préparation du briefing",
       "noProviderTitle": "Aucun fournisseur d'IA connecté",
-      "noProviderDescription": "Faites pointer HealthLog vers un modèle local (Ollama, LM Studio — rien ne quitte votre réseau) ou utilisez votre propre clé OpenAI ou Anthropic, et le résumé quotidien transforme vos propres relevés en un résumé en langage clair — par exemple : « poids en baisse de 1,2 kg en deux semaines, pouls au repos stable à 58, tension dans la cible 6 jours sur 7 ». La configuration prend environ une minute.",
+      "noProviderDescription": "Faites pointer HealthLog vers un modèle local (Ollama, LM Studio — rien ne quitte votre réseau) ou utilisez votre propre clé OpenAI ou Anthropic, et le résumé quotidien transforme vos propres relevés en un résumé en langage clair. La configuration prend environ une minute.",
       "noProviderAction": "Ouvrir les réglages IA",
       "staleNoProviderHint": "Ce briefing ne peut pas être actualisé — aucun fournisseur d'IA n'est connecté.",
       "refreshFailedHint": "Impossible d'actualiser le briefing — affichage du précédent.",
@@ -3777,11 +3777,11 @@
         "caveat": "Cela montre un lien, pas une cause."
       },
       "prognosis": {
-        "title": "Ton évaluation et ce que suggèrent tes journées passées",
+        "title": "Ton auto-évaluation",
         "selfLabel": "Ton évaluation",
         "expectedLabel": "Attendu selon tes propres habitudes",
         "band": "Plage de {low} à {high}",
-        "statement": "D'après tes habitudes jusqu'ici, une valeur autour de {value} aurait été attendue pour {date}. Établi à partir de {n} journées réunissant tout ce dont la comparaison a besoin.",
+        "statement": "D'après tes habitudes jusqu'ici, une valeur autour de {value} aurait été attendue pour {date}. Établi à partir de {n} journées comparables.",
         "provisional": "Encore provisoire : le motif repose sur une courte série de journées.",
         "notToday": "Cela décrit {date}, pas aujourd'hui.",
         "deviationWithin": "Ta propre évaluation se situe dans cette plage.",
@@ -3792,7 +3792,7 @@
         "weightedDown": "{label} — comptait vers une valeur attendue plus basse",
         "caveat": "C'est une comparaison avec tes propres journées passées, pas une affirmation sur la manière dont une journée s'est déroulée.",
         "learning": "Phase d'apprentissage : {entries} journées sur {threshold} enregistrées. La comparaison apparaît une fois qu'il y en a assez.",
-        "noPattern": "Dans les {entries} journées enregistrées jusqu'ici, rien n'est assez régulier pour comparer une journée. Noter le contexte d'une journée en rend davantage comparable.",
+        "noPattern": "Dans les {entries} journées enregistrées jusqu'ici, rien n'est assez régulier pour comparer une journée. Quand tu notes aussi le contexte d'une journée, tu en rends davantage comparable.",
         "featureValue": "{field} : {value}"
       }
     },

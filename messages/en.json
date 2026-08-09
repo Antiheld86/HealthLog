@@ -560,7 +560,7 @@
   },
   "measurements": {
     "title": "Measurements",
-    "subtitle": "Log readings and browse the full history. Trends and analysis live under Insights.",
+    "subtitle": "Log readings and browse the full history.",
     "addMeasurement": "Add",
     "editMeasurement": "Edit measurement",
     "type": "Type",
@@ -2517,7 +2517,7 @@
       "emptyAction": "Generate briefing",
       "loadingLabel": "Synthesising today's briefing",
       "noProviderTitle": "No AI provider connected",
-      "noProviderDescription": "Point HealthLog at a local model (Ollama, LM Studio — nothing leaves your network) or bring your own OpenAI or Anthropic key, and the daily briefing turns your own readings into a plain-language summary — for example: “weight down 1.2 kg over two weeks, resting pulse steady at 58, blood pressure in range on 6 of 7 days.” Setup takes about a minute.",
+      "noProviderDescription": "Point HealthLog at a local model (Ollama, LM Studio — nothing leaves your network) or bring your own OpenAI or Anthropic key, and the daily briefing turns your own readings into a plain-language summary. Setup takes about a minute.",
       "noProviderAction": "Open AI settings",
       "staleNoProviderHint": "This briefing can't refresh — no AI provider is connected.",
       "refreshFailedHint": "Couldn't refresh the briefing — showing the last one.",
@@ -3777,11 +3777,11 @@
         "caveat": "That shows a connection, not a cause."
       },
       "prognosis": {
-        "title": "Your rating, and what your own days suggest",
+        "title": "Your self-rating",
         "selfLabel": "Your rating",
         "expectedLabel": "Expected on your own pattern",
         "band": "Range {low} to {high}",
-        "statement": "On your own patterns so far, a value around {value} would have been expected for {date}. Built from {n} days that carried everything the comparison needs.",
+        "statement": "On your own patterns so far, a value around {value} would have been expected for {date}. Built from {n} comparable days.",
         "provisional": "Still provisional: the pattern rests on a short stretch of days.",
         "notToday": "This describes {date}, not today.",
         "deviationWithin": "Your own rating sits inside that range.",
@@ -3792,7 +3792,7 @@
         "weightedDown": "{label} — counted towards a lower expected value",
         "caveat": "This is a comparison with your own past days, not a statement about how a day came to go the way it did.",
         "learning": "Learning phase: {entries} of {threshold} days recorded. A comparison appears once there are enough of them.",
-        "noPattern": "Nothing in the {entries} days recorded so far is steady enough to compare a day against. Recording a day's context makes more of it comparable.",
+        "noPattern": "Nothing in the {entries} days recorded so far is steady enough to compare a day against. When you also capture a day's context, more of it becomes comparable.",
         "featureValue": "{field}: {value}"
       }
     },

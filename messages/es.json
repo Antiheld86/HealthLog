@@ -560,7 +560,7 @@
   },
   "measurements": {
     "title": "Mediciones",
-    "subtitle": "Registra lecturas y consulta el historial completo. Las tendencias y los análisis están en Análisis.",
+    "subtitle": "Registra lecturas y consulta el historial completo.",
     "addMeasurement": "Añadir",
     "editMeasurement": "Editar medición",
     "type": "Tipo",
@@ -2517,7 +2517,7 @@
       "emptyAction": "Generar resumen",
       "loadingLabel": "Preparando el resumen",
       "noProviderTitle": "Ningún proveedor de IA conectado",
-      "noProviderDescription": "Apunta HealthLog a un modelo local (Ollama, LM Studio: nada sale de tu red) o usa tu propia clave de OpenAI o Anthropic, y el resumen diario convierte tus propias mediciones en un resumen en lenguaje claro; por ejemplo: «peso 1,2 kg menos en dos semanas, pulso en reposo estable en 58, tensión en rango 6 de 7 días». La configuración lleva alrededor de un minuto.",
+      "noProviderDescription": "Apunta HealthLog a un modelo local (Ollama, LM Studio: nada sale de tu red) o usa tu propia clave de OpenAI o Anthropic, y el resumen diario convierte tus propias mediciones en un resumen en lenguaje claro. La configuración lleva alrededor de un minuto.",
       "noProviderAction": "Abrir ajustes de IA",
       "staleNoProviderHint": "Este briefing no puede actualizarse: no hay ningún proveedor de IA conectado.",
       "refreshFailedHint": "No se pudo actualizar el briefing: se muestra el anterior.",
@@ -3777,11 +3777,11 @@
         "caveat": "Esto muestra una relación, no una causa."
       },
       "prognosis": {
-        "title": "Tu valoración y lo que sugieren tus días anteriores",
+        "title": "Tu autoevaluación",
         "selfLabel": "Tu valoración",
         "expectedLabel": "Esperado según tus propios patrones",
         "band": "Rango de {low} a {high}",
-        "statement": "Según tus patrones hasta ahora, para {date} cabría esperar un valor en torno a {value}. Calculado a partir de {n} días que reúnen todo lo que la comparación necesita.",
+        "statement": "Según tus patrones hasta ahora, para {date} cabría esperar un valor en torno a {value}. Calculado a partir de {n} días comparables.",
         "provisional": "Todavía provisional: el patrón se apoya en pocos días.",
         "notToday": "Esto describe {date}, no hoy.",
         "deviationWithin": "Tu propia valoración está dentro de ese rango.",
@@ -3792,7 +3792,7 @@
         "weightedDown": "{label}: contó hacia un valor esperado más bajo",
         "caveat": "Es una comparación con tus propios días anteriores, no una afirmación sobre cómo llegó a transcurrir un día.",
         "learning": "Fase de aprendizaje: {entries} de {threshold} días registrados. La comparación aparece cuando haya suficientes.",
-        "noPattern": "En los {entries} días registrados hasta ahora no hay nada lo bastante constante para comparar un día. Registrar el contexto del día hace comparable una parte mayor.",
+        "noPattern": "En los {entries} días registrados hasta ahora no hay nada lo bastante constante para comparar un día. Cuando anotas también el contexto del día, se puede comparar una parte mayor.",
         "featureValue": "{field}: {value}"
       }
     },

@@ -560,7 +560,7 @@
   },
   "measurements": {
     "title": "Messungen",
-    "subtitle": "Werte erfassen und die vollständige Historie einsehen. Trends und Auswertungen findest du unter Auswertungen.",
+    "subtitle": "Werte erfassen und die vollständige Historie einsehen.",
     "addMeasurement": "Hinzufügen",
     "editMeasurement": "Messwert bearbeiten",
     "type": "Typ",
@@ -2517,7 +2517,7 @@
       "emptyAction": "Briefing erstellen",
       "loadingLabel": "Briefing wird zusammengestellt",
       "noProviderTitle": "Kein KI-Anbieter verbunden",
-      "noProviderDescription": "Richte HealthLog auf ein lokales Modell (Ollama, LM Studio – nichts verlässt dein Netzwerk) oder hinterlege deinen eigenen OpenAI- oder Anthropic-Schlüssel, und das tägliche Briefing fasst deine eigenen Messwerte in klarer Sprache zusammen – zum Beispiel: „Gewicht in zwei Wochen um 1,2 kg gesunken, Ruhepuls stabil bei 58, Blutdruck an 6 von 7 Tagen im Zielbereich.“ Die Einrichtung dauert etwa eine Minute.",
+      "noProviderDescription": "Richte HealthLog auf ein lokales Modell (Ollama, LM Studio – nichts verlässt dein Netzwerk) oder hinterlege deinen eigenen OpenAI- oder Anthropic-Schlüssel, und das tägliche Briefing fasst deine eigenen Messwerte in klarer Sprache zusammen. Die Einrichtung dauert etwa eine Minute.",
       "noProviderAction": "Zu den KI-Einstellungen",
       "staleNoProviderHint": "Dieses Briefing kann nicht aktualisiert werden — es ist kein KI-Anbieter verbunden.",
       "refreshFailedHint": "Briefing konnte nicht aktualisiert werden — es wird das letzte angezeigt.",
@@ -3777,11 +3777,11 @@
         "caveat": "Das zeigt einen Zusammenhang, keine Ursache."
       },
       "prognosis": {
-        "title": "Deine Einschätzung und was deine bisherigen Tage nahelegen",
+        "title": "Selbsteinschätzung",
         "selfLabel": "Deine Einschätzung",
         "expectedLabel": "Auf Basis deiner Muster erwartet",
         "band": "Bereich {low} bis {high}",
-        "statement": "Auf Basis deiner bisherigen Muster wäre für {date} ein Wert um {value} zu erwarten gewesen. Ermittelt aus {n} Tagen, die alles enthalten, was der Vergleich braucht.",
+        "statement": "Auf Basis deiner bisherigen Muster wäre für {date} ein Wert um {value} zu erwarten gewesen. Ermittelt aus {n} vergleichbaren Tagen.",
         "provisional": "Noch vorläufig: das Muster stützt sich auf eine kurze Strecke von Tagen.",
         "notToday": "Das beschreibt {date}, nicht heute.",
         "deviationWithin": "Deine eigene Einschätzung liegt in diesem Bereich.",
@@ -3792,7 +3792,7 @@
         "weightedDown": "{label} — zählte in Richtung eines niedrigeren erwarteten Werts",
         "caveat": "Das ist ein Vergleich mit deinen eigenen bisherigen Tagen, keine Aussage darüber, wie ein Tag zustande gekommen ist.",
         "learning": "Lernphase: {entries} von {threshold} Tagen erfasst. Ein Vergleich erscheint, sobald genug davon zusammengekommen sind.",
-        "noPattern": "In den bisher erfassten {entries} Tagen ist nichts gleichmäßig genug, um einen Tag damit zu vergleichen. Wer den Kontext eines Tages mit erfasst, macht mehr davon vergleichbar.",
+        "noPattern": "In den bisher erfassten {entries} Tagen ist noch nichts gleichmäßig genug, um einen Tag damit zu vergleichen. Wenn du auch den Kontext eines Tages festhältst, wird mehr davon vergleichbar.",
         "featureValue": "{field}: {value}"
       }
     },
