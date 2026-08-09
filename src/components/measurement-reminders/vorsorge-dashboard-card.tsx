@@ -30,7 +30,8 @@ import {
 import type { EncounterKind } from "@/generated/prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { TileHeader } from "@/components/insights/tile-header";
 import { ListRow } from "@/components/ui/list-row";
 import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { ResponsiveSheet } from "@/components/ui/responsive-sheet";
@@ -142,10 +143,11 @@ export function VorsorgeDashboardCard() {
   return (
     <Card data-slot="vorsorge-dashboard-card" className="h-full">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-sm">
-          <CalendarClock className="h-4 w-4" aria-hidden="true" />
-          {t("measurementReminders.sectionTitle")}
-        </CardTitle>
+        <TileHeader
+          size="sm"
+          icon={CalendarClock}
+          title={t("measurementReminders.sectionTitle")}
+        />
       </CardHeader>
       <CardContent className="space-y-2">
         {showLoading ? (

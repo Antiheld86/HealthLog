@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { ResponsiveSheet } from "@/components/ui/responsive-sheet";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiGet } from "@/lib/api/api-fetch";
 import { formatDate } from "@/lib/format";
@@ -63,26 +64,23 @@ export function CustomMetricList() {
       className="border-border space-y-3 border-t pt-6"
       data-slot="custom-metric-list"
     >
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold tracking-tight">
-            {t("customMetrics.sectionTitle")}
-          </h2>
-          <p className="text-muted-foreground truncate text-xs sm:text-sm">
-            {t("customMetrics.sectionSubtitle")}
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="min-h-11 shrink-0 sm:min-h-9"
-          onClick={() => setAddOpen(true)}
-          aria-label={t("customMetrics.add")}
-        >
-          <Plus className="h-4 w-4" />
-          <span className="hidden sm:inline">{t("customMetrics.add")}</span>
-        </Button>
-      </div>
+      <SectionHeading
+        icon={Gauge}
+        title={t("customMetrics.sectionTitle")}
+        subtitle={t("customMetrics.sectionSubtitle")}
+        action={
+          <Button
+            variant="outline"
+            size="sm"
+            className="min-h-11 shrink-0 sm:min-h-9"
+            onClick={() => setAddOpen(true)}
+            aria-label={t("customMetrics.add")}
+          >
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">{t("customMetrics.add")}</span>
+          </Button>
+        }
+      />
 
       {isLoading ? (
         <Card aria-hidden="true">

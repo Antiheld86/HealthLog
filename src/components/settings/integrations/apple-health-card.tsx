@@ -82,7 +82,7 @@ function DeliveryDiagnostic({
 
   return (
     <div className="space-y-2" data-testid="apple-health-delivery">
-      <h3 className="text-sm font-semibold">
+      <h3 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
         {t("settings.appleHealth.delivery.title")}
       </h3>
       {status.lastSyncedAt ? (
@@ -181,7 +181,7 @@ export function AppleHealthCard({ enabled }: { enabled: boolean }) {
         />
 
         <div className="space-y-2">
-          <h3 className="text-sm font-semibold">
+          <h3 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
             {t("settings.appleHealth.setupTitle")}
           </h3>
           <ol className="text-muted-foreground list-decimal space-y-2 pl-5 text-sm">

@@ -326,7 +326,7 @@ export function WithingsCard({
           </p>
         )}
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold">
+          <h3 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
             {t("settings.withingsCredentials")}
           </h3>
           {!status?.configured && (

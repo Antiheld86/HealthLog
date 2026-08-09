@@ -15,6 +15,7 @@ import { History } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { TileHeader } from "@/components/insights/tile-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTranslations } from "@/lib/i18n/context";
 
@@ -42,12 +43,11 @@ export function IllnessInsightsCard({
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center gap-2">
-          <History className="text-muted-foreground h-4 w-4" aria-hidden />
-          <h2 className="text-base font-semibold">
-            {t("illness.insights.title")}
-          </h2>
-        </div>
+        <TileHeader
+          icon={History}
+          titleAs="h2"
+          title={t("illness.insights.title")}
+        />
       </CardHeader>
       <CardContent>
         {counts.isLoading ? (

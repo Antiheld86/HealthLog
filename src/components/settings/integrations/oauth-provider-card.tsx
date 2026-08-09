@@ -332,7 +332,7 @@ export function OAuthProviderCard({
 
         {credentials && (
           <div className="space-y-3" data-testid={`${provider}-credentials`}>
-            <h3 className="text-sm font-semibold">
+            <h3 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
               {t(`${i18nPrefix}Credentials`)}
             </h3>
             {!status?.hasOwnCredentials && (
