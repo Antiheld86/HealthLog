@@ -12,7 +12,7 @@
  */
 import { useMemo } from "react";
 import Link from "next/link";
-import { Activity, GlassWater, Pill, Plus, Waves, Wrench } from "lucide-react";
+import { Activity, Pill, Plus, Waves, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,7 +24,6 @@ import { PageHeader } from "@/components/ui/page-header";
 import { useTranslations } from "@/lib/i18n/context";
 import { useAuth } from "@/hooks/use-auth";
 import { useMounted } from "@/hooks/use-mounted";
-import { useModuleEnabled } from "@/hooks/use-module-enabled";
 import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { getHourForTimeZone } from "@/components/dashboard/range-display";
 import type { QuickEntryDialog } from "@/components/dashboard/quick-entry-sheets";
@@ -37,11 +36,10 @@ export function DashboardHeader({
   const { t } = useTranslations();
   const { user } = useAuth();
   const mounted = useMounted();
-  const nutrientsEnabled = useModuleEnabled("nutrients");
-  // v1.36.x — the dashboard quick-add offers four kinds; a delegation admits
-  // two of them (a reading, a dose). Mood and water stay with the account
-  // whose record it is, and the customize shortcut points at a settings page
-  // sharing does not cover at all.
+  // v1.36.x — the dashboard quick-add offers three kinds; a delegation admits
+  // two of them (a reading, a dose). Mood stays with the account whose record
+  // it is, and the customize shortcut points at a settings page sharing does
+  // not cover at all.
   const { canAdd, canManage } = useRecordCapabilities();
 
   // The pre-hero greeting derivation, kept hydration-safe: `user` comes
@@ -166,12 +164,6 @@ export function DashboardHeader({
                   <Pill className="mr-2 h-4 w-4" aria-hidden="true" />
                   {t("dashboard.quickAddMedicationIntake")}
                 </DropdownMenuItem>
-                {nutrientsEnabled && canManage && (
-                  <DropdownMenuItem onClick={() => onQuickEntry("water")}>
-                    <GlassWater className="mr-2 h-4 w-4" aria-hidden="true" />
-                    {t("dashboard.quickAddWater")}
-                  </DropdownMenuItem>
-                )}
               </DropdownMenuContent>
             </DropdownMenu>
           )}

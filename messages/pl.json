@@ -349,9 +349,7 @@
       "medication": "Lek",
       "medicationDescription": "Oznacz dawkę jako przyjętą",
       "mood": "Nastrój",
-      "moodDescription": "Zapisz nastrój i tagi",
-      "water": "Woda",
-      "waterDescription": "Szybko dodaj ilość wypitej wody"
+      "moodDescription": "Zapisz nastrój i tagi"
     },
     "cycle": "Cykl",
     "labs": "Wyniki badań",
@@ -455,7 +453,6 @@
     "quickAddMeasurement": "Zarejestruj pomiar",
     "quickAddMood": "Zarejestruj nastrój",
     "quickAddMedicationIntake": "Zarejestruj przyjęcie",
-    "quickAddWater": "Zapisz wodę",
     "customizeDashboard": "Dostosuj pulpit",
     "medicationIntakeQuickAdd": {
       "sheetTitle": "Zarejestruj przyjęcie leku",
@@ -9654,17 +9651,11 @@
         "dayInvalid": "Wpisy zawierały datę, której serwer nie mógł zaakceptować. Może się to zdarzyć, gdy zegar lub strefa czasowa po stronie wysyłającej są nieprawidłowe — warto to sprawdzić.",
         "upsertFailed": "Te wpisy dotarły do serwera, ale problem po naszej stronie uniemożliwił ich zapisanie. Nie musisz nic robić.",
         "unknown": "Te wpisy dotarły, ale nie udało się ich zapisać."
-      }
+      },
+      "moduleEnableError": "Nie udało się włączyć modułu składników odżywczych. Spróbuj ponownie."
     },
     "hydration": {
-      "referenceMeta": "Zalecane spożycie {value} {unit}/dzień · EFSA",
-      "quickAddTitle": "Dodaj wodę",
-      "quickAddCustomLabel": "Własna ilość (mL)",
-      "quickAddCustomPlaceholder": "250",
-      "quickAddSubmit": "Dodaj",
-      "quickAddError": "Nie udało się zapisać — spróbuj ponownie.",
-      "quickAddSuccess": "Dodano {amount} mL wody.",
-      "editTotal": "Edytuj dzisiejszą sumę"
+      "referenceMeta": "Zalecane spożycie {value} {unit}/dzień · EFSA"
     },
     "caffeine": {
       "ceilingMeta": "Bezpieczny limit {value} {unit}/dzień · EFSA"

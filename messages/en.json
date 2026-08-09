@@ -349,9 +349,7 @@
       "medication": "Medication",
       "medicationDescription": "Mark a dose as taken",
       "mood": "Mood",
-      "moodDescription": "Log your mood and tags",
-      "water": "Water",
-      "waterDescription": "Quickly add your water intake"
+      "moodDescription": "Log your mood and tags"
     },
     "cycle": "Cycle",
     "labs": "Labs",
@@ -455,7 +453,6 @@
     "quickAddMeasurement": "Log measurement",
     "quickAddMood": "Log mood",
     "quickAddMedicationIntake": "Log medication intake",
-    "quickAddWater": "Log water",
     "customizeDashboard": "Customize dashboard",
     "medicationIntakeQuickAdd": {
       "sheetTitle": "Log medication intake",
@@ -9654,17 +9651,11 @@
         "dayInvalid": "The entries carried a date the server couldn't accept. This can happen when the clock or time zone on the sending side is wrong — it's worth checking.",
         "upsertFailed": "These entries reached the server, but a problem on this end kept them from being saved. There's nothing you need to do.",
         "unknown": "These entries arrived but couldn't be stored."
-      }
+      },
+      "moduleEnableError": "The nutrients module couldn't be turned on. Please try again."
     },
     "hydration": {
-      "referenceMeta": "Reference intake {value} {unit}/day · EFSA",
-      "quickAddTitle": "Add water",
-      "quickAddCustomLabel": "Custom amount (mL)",
-      "quickAddCustomPlaceholder": "250",
-      "quickAddSubmit": "Add",
-      "quickAddError": "Couldn't save that — try again.",
-      "quickAddSuccess": "{amount} mL water added.",
-      "editTotal": "Edit today's total"
+      "referenceMeta": "Reference intake {value} {unit}/day · EFSA"
     },
     "caffeine": {
       "ceilingMeta": "Safe-level ceiling {value} {unit}/day · EFSA"

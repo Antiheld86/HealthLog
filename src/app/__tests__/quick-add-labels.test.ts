@@ -40,7 +40,6 @@ interface Messages {
      * Hinzufügen, Hinzufügen, Hinzufügen" with no way to discriminate.
      */
     quickAddMedicationIntake: string;
-    quickAddWater: string;
   };
 }
 
@@ -69,23 +68,18 @@ describe("dashboard quick-add submenu labels", () => {
       const measurement = messages.dashboard.quickAddMeasurement;
       const mood = messages.dashboard.quickAddMood;
       const medicationIntake = messages.dashboard.quickAddMedicationIntake;
-      const water = messages.dashboard.quickAddWater;
       const trigger = messages.common.add;
 
       // Non-empty
       expect(measurement.trim().length).toBeGreaterThan(0);
       expect(mood.trim().length).toBeGreaterThan(0);
       expect(medicationIntake.trim().length).toBeGreaterThan(0);
-      expect(water.trim().length).toBeGreaterThan(0);
 
       // Distinct from each other — the icon is decorative (aria-hidden),
       // so the only thing distinguishing the rows is the visible text.
       expect(measurement).not.toBe(mood);
       expect(measurement).not.toBe(medicationIntake);
       expect(mood).not.toBe(medicationIntake);
-      expect(measurement).not.toBe(water);
-      expect(mood).not.toBe(water);
-      expect(medicationIntake).not.toBe(water);
 
       // Distinct from the trigger label. The trigger sits ABOVE the menu
       // and announces itself first; if a menu item then repeats the same
@@ -93,7 +87,6 @@ describe("dashboard quick-add submenu labels", () => {
       expect(measurement).not.toBe(trigger);
       expect(mood).not.toBe(trigger);
       expect(medicationIntake).not.toBe(trigger);
-      expect(water).not.toBe(trigger);
     },
   );
 });

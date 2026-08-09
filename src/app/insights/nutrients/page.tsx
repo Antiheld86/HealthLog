@@ -100,7 +100,7 @@ export default function InsightsNutrientsPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.authMe() });
     },
-    onError: () => toast.error(t("nutrients.hydration.quickAddError")),
+    onError: () => toast.error(t("nutrients.page.moduleEnableError")),
   });
 
   if (!nutrientsEnabled) {

@@ -10,6 +10,10 @@
 - The AI consent and connector notes in Settings render as normal text now, not faint fine print, so the copy you are meant to read before turning a feature on is legible.
 - The respiratory-rate tile on the dashboard shows its unit in your own language instead of a fixed English label, and the personalized greeting carries its comma.
 
+### Removed
+
+- Logging water by hand inside the app is gone. The water entry on the capture menu, the dashboard quick-add and the hydration card have all been removed. Water that syncs in from another app through Apple Health still arrives and still shows on the hydration card with its daily total, history and reference line.
+
 ## [1.37.3] — 2026-08-09
 
 ### Added

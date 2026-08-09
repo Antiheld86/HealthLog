@@ -310,7 +310,7 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     // out (50+ failed CI runs since v1.4.13). Specs that need the
     // tour can opt back in by mocking `/api/auth/me`.
     // Nutrients is intentionally opt-in in production. The shared fixture
-    // enables it because the water-capture specs exercise that real gate.
+    // enables it so the nutrients/hydration display specs render the card.
     await pool.query(
       `INSERT INTO users
         (id, username, email, password_hash, role,

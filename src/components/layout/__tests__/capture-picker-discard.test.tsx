@@ -8,7 +8,6 @@ const hookState = vi.hoisted(() => ({
 }));
 const captureState = vi.hoisted(() => ({
   dirty: true,
-  nutrientsEnabled: true,
 }));
 
 // v1.36.x — the picker asks what the record allows before it offers a kind.
@@ -52,10 +51,6 @@ vi.mock("@/lib/i18n/context", () => ({
   useTranslations: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("@/hooks/use-module-enabled", () => ({
-  useModuleEnabled: () => captureState.nutrientsEnabled,
-}));
-
 vi.mock("@/components/dashboard/quick-entry-sheets", () => ({
   sheetBodyHasUnsavedInput: () => captureState.dirty,
 }));
@@ -89,9 +84,6 @@ vi.mock("@/components/mood/mood-form", () => ({
 }));
 vi.mock("@/components/dashboard/medication-intake-quick-add", () => ({
   MedicationIntakeQuickAdd: markedComponent("MedicationIntakeQuickAdd"),
-}));
-vi.mock("@/components/insights/nutrients/water-quick-add-sheet", () => ({
-  WaterQuickAddSheet: markedComponent("WaterQuickAddSheet"),
 }));
 
 import { CapturePicker } from "../capture-picker";
@@ -129,68 +121,53 @@ function findMarked(tree: ReactNode, displayName: string): TestElement | null {
   );
 }
 
-class WaterDraftHarness {
-  private mounted = false;
-  private amount = "";
-
-  observe(tree: ReactNode): TestElement | null {
-    const sheet = findMarked(tree, "WaterQuickAddSheet");
-    if (!sheet) {
-      this.mounted = false;
-      this.amount = "";
-    } else if (!this.mounted) {
-      this.mounted = true;
-      this.amount = "";
-    }
-    return sheet;
-  }
-
-  fill(value: string) {
-    expect(this.mounted).toBe(true);
-    this.amount = value;
-  }
-
-  value() {
-    return this.amount;
-  }
+/**
+ * The chosen capture surface lives in the second `ResponsiveSheet` (the
+ * first hosts the kind chooser). Its `open` prop reflects the picked kind
+ * and its `onOpenChange` is the dirty-dismiss interceptor under test.
+ */
+function formSheet(tree: ReactNode): TestElement {
+  const sheets = elementsIn(tree).filter(
+    (element) =>
+      typeof element.type === "function" &&
+      "displayName" in element.type &&
+      element.type.displayName === "ResponsiveSheet",
+  );
+  expect(sheets.length).toBeGreaterThanOrEqual(2);
+  return sheets[1];
 }
 
-describe("<CapturePicker> — confirmed water discard", () => {
+describe("<CapturePicker> — confirmed capture-form discard", () => {
   beforeEach(() => {
     hookState.cursor = 0;
     hookState.values.length = 0;
     captureState.dirty = true;
-    captureState.nutrientsEnabled = true;
   });
 
-  it("reopens with a fresh custom amount after confirmed discard", () => {
-    const draft = new WaterDraftHarness();
+  it("asks before discarding a dirty form and closes on confirm", () => {
     let tree = renderPicker();
-    draft.observe(tree);
 
-    const waterOption = findByTestId(tree, "capture-picker-water");
-    (waterOption.props.onClick as () => void)();
+    // Choose the mood capture; the form sheet opens with the mood form.
+    const moodOption = findByTestId(tree, "capture-picker-mood");
+    (moodOption.props.onClick as () => void)();
 
     tree = renderPicker();
-    const waterSheet = draft.observe(tree);
-    expect(waterSheet?.props.open).toBe(true);
-    draft.fill("375");
+    expect(formSheet(tree).props.open).toBe(true);
+    expect(findMarked(tree, "MoodForm")).not.toBeNull();
 
-    (waterSheet?.props.onOpenChange as (open: boolean) => void)(false);
+    // A dirty dismiss must not close outright — it raises the confirm.
+    (formSheet(tree).props.onOpenChange as (open: boolean) => void)(false);
     tree = renderPicker();
     const confirmDiscard = findMarked(tree, "AlertDialogAction");
     expect(confirmDiscard).not.toBeNull();
-    expect(draft.observe(tree)?.props.open).toBe(true);
-    expect(draft.value()).toBe("375");
+    // The form stays open behind the confirm.
+    expect(formSheet(tree).props.open).toBe(true);
+    expect(findMarked(tree, "MoodForm")).not.toBeNull();
+
+    // Confirming the discard closes the form.
     (confirmDiscard?.props.onClick as () => void)();
-
     tree = renderPicker();
-    expect(draft.observe(tree)).toBeNull();
-
-    const reopenedWaterOption = findByTestId(tree, "capture-picker-water");
-    (reopenedWaterOption.props.onClick as () => void)();
-    tree = renderPicker();
-    expect(draft.observe(tree)?.props.open).toBe(true);
-    expect(draft.value()).toBe("");
+    expect(formSheet(tree).props.open).toBe(false);
+    expect(findMarked(tree, "MoodForm")).toBeNull();
   });
 });

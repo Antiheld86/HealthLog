@@ -3,13 +3,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { I18nProvider } from "@/lib/i18n/context";
 
-const moduleGate = vi.hoisted(() => ({ nutrientsEnabled: true }));
-
-vi.mock("@/hooks/use-module-enabled", () => ({
-  useModuleEnabled: (moduleKey: string) =>
-    moduleKey === "nutrients" ? moduleGate.nutrientsEnabled : true,
-}));
-
 // v1.36.x — the picker asks what the record allows before it offers a kind.
 // These fixtures are the caller's own record, which is every kind; the
 // delegation cases are covered in
@@ -45,10 +38,6 @@ vi.mock("@/components/dashboard/medication-intake-quick-add", () => ({
   MedicationIntakeQuickAdd: () => <div data-testid="medication-form" />,
 }));
 
-vi.mock("@/components/insights/nutrients/water-quick-add-sheet", () => ({
-  WaterQuickAddSheet: () => <div data-testid="water-quick-add-sheet" />,
-}));
-
 import { CapturePicker } from "../capture-picker";
 
 function render() {
@@ -59,25 +48,15 @@ function render() {
   );
 }
 
-describe("<CapturePicker> — nutrients module gate", () => {
-  it("hides and unmounts only water capture when nutrients are disabled", () => {
-    moduleGate.nutrientsEnabled = false;
-
+describe("<CapturePicker> — offered kinds", () => {
+  it("offers measurement, medication and mood, and no water entry", () => {
     const html = render();
 
-    expect(html).not.toContain('data-testid="capture-picker-water"');
-    expect(html).not.toContain('data-testid="water-quick-add-sheet"');
     expect(html).toContain('data-testid="capture-picker-measurement"');
     expect(html).toContain('data-testid="capture-picker-medication"');
     expect(html).toContain('data-testid="capture-picker-mood"');
-  });
-
-  it("keeps water capture available when nutrients are enabled", () => {
-    moduleGate.nutrientsEnabled = true;
-
-    const html = render();
-
-    expect(html).toContain('data-testid="capture-picker-water"');
-    expect(html).not.toContain('data-testid="water-quick-add-sheet"');
+    // Water logging was removed from the app; the picker offers no water
+    // entry (water arrives by sync only).
+    expect(html).not.toContain('data-testid="capture-picker-water"');
   });
 });

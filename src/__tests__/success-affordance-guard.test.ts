@@ -193,9 +193,6 @@ const PINNED_AFFORDANCES: Record<
   "src/components/insights/mood/mood-tag-metric-crosstab.tsx": {
     "text-success": 1,
   },
-  "src/components/insights/nutrients/water-quick-add-sheet.tsx": {
-    "toast.success": 2,
-  },
   "src/components/insights/personal-record-badge.tsx": { "text-success": 1 },
   "src/components/insights/recommendation-feedback.tsx": { "text-success": 3 },
   "src/components/labs/biomarker-form.tsx": { "toast.success": 1 },

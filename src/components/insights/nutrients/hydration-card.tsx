@@ -1,16 +1,13 @@
 "use client";
 
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { GlassWater, Plus } from "lucide-react";
+import { GlassWater } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TileHeader } from "@/components/insights/tile-header";
 import { NutrientDailyBarChartDynamic } from "@/components/charts/nutrient-daily-bar-chart-dynamic";
-import { WaterQuickAddSheet } from "@/components/insights/nutrients/water-quick-add-sheet";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
 import { apiGet } from "@/lib/api/api-fetch";
 import { queryKeys } from "@/lib/query-keys";
@@ -24,14 +21,14 @@ const WINDOW_DAYS = 30;
  * Today's total (all sources summed) as the content value, a muted EFSA
  * reference-intake meta line (omitted when the profile has no sex on
  * file — the catalog's own contract), a 30-day bar chart with a dashed
- * reference line, and the quick-add entry point. No ring, no attainment
- * colour — the bar chart with a reference line IS the context
- * (UI-STANDARDS: value stays foreground, never coloured by attainment).
+ * reference line. No ring, no attainment colour — the bar chart with a
+ * reference line IS the context (UI-STANDARDS: value stays foreground,
+ * never coloured by attainment). Display only: water arrives by sync
+ * (Apple Health etc.), there is no in-app water entry here.
  */
 export function HydrationCard() {
   const { t } = useTranslations();
   const fmt = useFormatters();
-  const [sheetOpen, setSheetOpen] = useState(false);
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.nutrientDaily("water", WINDOW_DAYS),
@@ -50,22 +47,7 @@ export function HydrationCard() {
   return (
     <Card data-slot="nutrients-hydration-card">
       <CardHeader>
-        <TileHeader
-          icon={GlassWater}
-          title={t("nutrients.names.water")}
-          right={
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => setSheetOpen(true)}
-              data-slot="nutrients-hydration-add"
-            >
-              <Plus className="size-4" aria-hidden="true" />
-              {t("nutrients.hydration.quickAddTitle")}
-            </Button>
-          }
-        />
+        <TileHeader icon={GlassWater} title={t("nutrients.names.water")} />
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading || !data ? (
@@ -100,11 +82,6 @@ export function HydrationCard() {
           </>
         )}
       </CardContent>
-      <WaterQuickAddSheet
-        open={sheetOpen}
-        onOpenChange={setSheetOpen}
-        todayTotalMl={Math.round(todayTotal)}
-      />
     </Card>
   );
 }
