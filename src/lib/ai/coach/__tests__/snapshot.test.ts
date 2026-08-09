@@ -21,6 +21,12 @@ vi.mock("@/lib/db", () => ({
     illnessEpisode: { findMany: vi.fn(async () => []) },
     // v1.18.11 (#65) — the labs context block reads recent lab results.
     labResult: { findMany: vi.fn(async () => []) },
+    // v1.38 — the visits context block reads upcoming appointments + the most
+    // recent past visit.
+    encounter: {
+      findMany: vi.fn(async () => []),
+      findFirst: vi.fn(async () => null),
+    },
   },
 }));
 

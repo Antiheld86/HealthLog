@@ -17,6 +17,10 @@ vi.mock("@/lib/db", () => ({
     user: { findUnique: vi.fn() },
     illnessEpisode: { findMany: vi.fn(async () => []) },
     labResult: { findMany: vi.fn(async () => []) },
+    encounter: {
+      findMany: vi.fn(async () => []),
+      findFirst: vi.fn(async () => null),
+    },
   },
 }));
 
@@ -103,6 +107,10 @@ const prismaMock = prisma as unknown as {
   medication: { findMany: ReturnType<typeof vi.fn> };
   workout: { findMany: ReturnType<typeof vi.fn> };
   user: { findUnique: ReturnType<typeof vi.fn> };
+  encounter: {
+    findMany: ReturnType<typeof vi.fn>;
+    findFirst: ReturnType<typeof vi.fn>;
+  };
 };
 const featuresMock = extractFeatures as unknown as ReturnType<typeof vi.fn>;
 
@@ -339,6 +347,51 @@ describe("buildCoachSnapshot — budgeting + progressive degradation", () => {
     // medication block: every environment block appears in the dropped
     // list, and the compliance block keeps its recent detail.
     expect(droppedBlocks).toContain("audioExposureEnvironment");
+    expect(droppedBlocks).not.toContain("compliance");
+  });
+
+  it("sheds the visits block among the first, before any clinical cluster", async () => {
+    // A booked appointment three days out and a recent past visit put a visits
+    // block on the snapshot. Null free text keeps the fixture decrypt-free.
+    const day = 24 * 60 * 60 * 1000;
+    prismaMock.encounter.findMany.mockResolvedValue([
+      {
+        occurredAt: new Date(Date.now() + 3 * day),
+        kind: "SPECIALIST",
+        reasonEncrypted: null,
+        outcomeEncrypted: null,
+        practitioner: { name: "Dr. Herz", specialty: "Cardiology" },
+      },
+    ]);
+    prismaMock.encounter.findFirst.mockResolvedValue({
+      occurredAt: new Date(Date.now() - 30 * day),
+      kind: "ROUTINE",
+      reasonEncrypted: null,
+      outcomeEncrypted: null,
+      practitioner: null,
+    });
+
+    const out = await buildCoachSnapshot("user-1", {
+      sources: ALL_SOURCES,
+      window: "allTime",
+    });
+    const snapshot = JSON.parse(out.snapshotJson) as Record<string, unknown>;
+    // The clinical core keeps its detail …
+    expect(
+      (snapshot.compliance as { timeline?: { recent?: unknown } } | undefined)
+        ?.timeline?.recent,
+    ).toBeDefined();
+
+    const truncated = annotateCalls.find(
+      (c) => c.name === "coach.snapshot.truncated",
+    );
+    const droppedBlocks = (truncated?.meta?.droppedBlocks ?? []) as string[];
+    const droppedClusters = (truncated?.meta?.droppedClusters ??
+      []) as string[];
+    // … while the visits block is registered on the lowest-priority cluster and
+    // is shed under the cap, and never the medication core.
+    expect(droppedClusters).toContain("environment");
+    expect(droppedBlocks).toContain("visits");
     expect(droppedBlocks).not.toContain("compliance");
   });
 

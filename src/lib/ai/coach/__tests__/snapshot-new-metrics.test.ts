@@ -15,6 +15,10 @@ vi.mock("@/lib/db", () => ({
     user: { findUnique: vi.fn() },
     illnessEpisode: { findMany: vi.fn(async () => []) },
     labResult: { findMany: vi.fn(async () => []) },
+    encounter: {
+      findMany: vi.fn(async () => []),
+      findFirst: vi.fn(async () => null),
+    },
   },
 }));
 
