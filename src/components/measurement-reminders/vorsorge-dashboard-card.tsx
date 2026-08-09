@@ -32,6 +32,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ListRow } from "@/components/ui/list-row";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { ResponsiveSheet } from "@/components/ui/responsive-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MeasurementForm } from "@/components/measurements/measurement-form";
@@ -78,7 +79,7 @@ export function VorsorgeDashboardCard() {
   // the dashboard summary offering what the dedicated page withholds was the
   // tell that this row had never been asked.
   const { canManage } = useRecordCapabilities();
-  const { data: reminders, isError } = useMeasurementReminders();
+  const { data: reminders, isError, refetch } = useMeasurementReminders();
 
   // A query's `isLoading` is not a hydration-safe branch: TanStack reports the
   // optimistic mount fetch on the client's very first render and cannot on the
@@ -153,6 +154,10 @@ export function VorsorgeDashboardCard() {
               <Skeleton key={i} className="h-12 w-full" />
             ))}
           </div>
+        ) : isError ? (
+          // A read failure must not read as "no upcoming reminders" — a missed
+          // checkup is the harm behind that fall-through (§6).
+          <QueryErrorRow onRetry={() => refetch()} />
         ) : upcoming.length === 0 ? (
           <div className="space-y-2">
             <p className="text-muted-foreground text-sm">
