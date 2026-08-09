@@ -188,6 +188,7 @@ export function BaselineForm() {
   return (
     <section aria-labelledby="onboarding-baseline-title" className="space-y-6">
       <header className="space-y-2">
+        {/* Onboarding hero H1: intentionally semibold, not the app-wide bold PageHeader H1 (UI-STANDARDS §5 hero exception). Do not sweep to font-bold. */}
         <h1
           id="onboarding-baseline-title"
           tabIndex={-1}

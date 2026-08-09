@@ -5,6 +5,8 @@
 ### Changed
 
 - Copy across several screens reads tighter. The insight-page metric explainers now open on a one-line definition rather than a paragraph of general guidance, with the longer background staying behind the knowledge disclosure where it already lived; the measurements subtitle and the daily-briefing setup prompt each drop a redundant sentence, and the mood self-rating card takes a short title so it stops wrapping and stops reusing a word from the assessment beside it. Wording that had drifted between neighbouring screens is settled too, so the measurement delete prompts, the practitioner label on the visit and vaccination forms, and the visit-saved toasts all match the screens they ship with.
+- The settings for a managed profile now use the same controls as the rest of the app. The forms for a delegated profile carry the shared date picker, dropdowns, text fields and switches instead of a plainer set of their own, so the birth date reads and saves in your own date order rather than depending on the browser, and each form keeps its save button at the end with any error shown just above it.
+- Spacing and tap targets read more evenly across settings, the dashboard and the charts. A handful of off-scale gaps are back on the spacing scale, the document upload buttons meet the mobile tap size their neighbours already set, the revoke on a share link is a right-aligned row action rather than a full-width red bar on every row, and a few empty and loading states now use the shared components so they match their siblings.
 
 ## [1.37.4] — 2026-08-09
 

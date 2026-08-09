@@ -60,20 +60,36 @@ ruleTester.run("spacing-scale", rule, {
       code: '<CardHeader className="pb-2" />',
       filename: "/repo/src/components/__tests__/example.test.tsx",
     },
-    // The card-shell `5` check is scoped to the bg-card+border pair, so the
+    // The card-shell check is scoped to the bg-card+border pair, so the
     // justified list-marker inset never trips it (no shell).
     {
       code: '<ul className="list-disc pl-5 space-y-1" />',
       filename: APP_FILE,
     },
-    // A directional inset ON a shell is out of scope (pl-5/pr-5 not banned).
-    {
-      code: '<div className="bg-card border-border rounded-xl border pl-5" />',
-      filename: APP_FILE,
-    },
-    // Form-body rhythm without a shell surface is fine.
+    // Off-scale spacing without a shell surface is fine — a form-body
+    // `space-y-5` rhythm and a half-step gap outside a shell both pass.
     {
       code: '<form className="space-y-5" />',
+      filename: APP_FILE,
+    },
+    {
+      code: '<div className="flex flex-col gap-3.5" />',
+      filename: APP_FILE,
+    },
+    // The sanctioned `1.5` half-step is on-scale, even on a shell.
+    {
+      code: '<div className="bg-card border-border rounded-xl border gap-1.5" />',
+      filename: APP_FILE,
+    },
+    // A deliberate negative margin is never matched (boundary anchored).
+    {
+      code: '<div className="bg-card border-border rounded-full border -mt-5" />',
+      filename: APP_FILE,
+    },
+    // Height is a dimension, not a scale step — `h-15` on a shell is out of
+    // this rule's scope by design.
+    {
+      code: '<div className="bg-card border-border rounded-xl border h-15" />',
       filename: APP_FILE,
     },
     // A shell already on-scale is fine.
@@ -138,30 +154,64 @@ ruleTester.run("spacing-scale", rule, {
     {
       code: '<div className="bg-card border-border rounded-xl border p-5" />',
       filename: APP_FILE,
-      errors: [{ messageId: "cardShellStep5" }],
+      errors: [{ messageId: "cardShellOffScale" }],
     },
     // …py-5, …space-y-5, …gap-5 on a shell all trip it.
     {
       code: '<section className="bg-card rounded-lg border py-5" />',
       filename: APP_FILE,
-      errors: [{ messageId: "cardShellStep5" }],
+      errors: [{ messageId: "cardShellOffScale" }],
     },
     {
       code: '<div className="bg-card border-border rounded-xl border gap-5 flex" />',
       filename: APP_FILE,
-      errors: [{ messageId: "cardShellStep5" }],
+      errors: [{ messageId: "cardShellOffScale" }],
     },
-    // Split across cn() args — the join still sees the shell + the step-5.
+    // The `7` step is banned with the `5` step.
+    {
+      code: '<div className="bg-card border-border rounded-xl border p-7" />',
+      filename: APP_FILE,
+      errors: [{ messageId: "cardShellOffScale" }],
+    },
+    // Half-steps other than 1.5 on a shell: gap-3.5, space-y-3.5, py-2.5.
+    {
+      code: '<div className="bg-card border-border rounded-xl border flex flex-col gap-3.5" />',
+      filename: APP_FILE,
+      errors: [{ messageId: "cardShellOffScale" }],
+    },
+    {
+      code: '<div className="bg-card border rounded-xl space-y-3.5" />',
+      filename: APP_FILE,
+      errors: [{ messageId: "cardShellOffScale" }],
+    },
+    {
+      code: '<div className="bg-card border-border rounded-lg border py-2.5" />',
+      filename: APP_FILE,
+      errors: [{ messageId: "cardShellOffScale" }],
+    },
+    // The directional `pl-`/`ml-` spellings that slipped the `5`-only check
+    // now trip it on a shell.
+    {
+      code: '<div className="bg-card border-border rounded-xl border pl-5" />',
+      filename: APP_FILE,
+      errors: [{ messageId: "cardShellOffScale" }],
+    },
+    {
+      code: '<div className="bg-card border-border rounded-xl border ml-5" />',
+      filename: APP_FILE,
+      errors: [{ messageId: "cardShellOffScale" }],
+    },
+    // Split across cn() args — the join still sees the shell + the step.
     {
       code: '<div className={cn("bg-card border rounded-xl", "p-5")} />',
       filename: APP_FILE,
-      errors: [{ messageId: "cardShellStep5" }],
+      errors: [{ messageId: "cardShellOffScale" }],
     },
     // Modifier-prefixed step on a shell.
     {
       code: '<div className="bg-card border-border rounded-xl border sm:p-5" />',
       filename: APP_FILE,
-      errors: [{ messageId: "cardShellStep5" }],
+      errors: [{ messageId: "cardShellOffScale" }],
     },
   ],
 });

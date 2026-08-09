@@ -14,6 +14,7 @@
  */
 import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { TileHeader } from "@/components/insights/tile-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -101,9 +102,7 @@ export function IllnessDayTimeline({
   return (
     <Card>
       <CardHeader>
-        <h2 className="text-base font-semibold">
-          {t("illness.timeline.title")}
-        </h2>
+        <TileHeader titleAs="h2" title={t("illness.timeline.title")} />
       </CardHeader>
       <CardContent className="space-y-3">
         {isLoading ? (

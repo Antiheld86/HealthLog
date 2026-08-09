@@ -10,6 +10,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { apiFetchRaw, apiPut } from "@/lib/api/api-fetch";
 import { formatDateTime } from "@/lib/format";
 import { useTranslations } from "@/lib/i18n/context";
@@ -199,8 +200,54 @@ export function RuntimeActionsRow({
   void userProvider;
 
   return (
+    // §12 — the action row is the LAST thing in the block. The raw-data
+    // setting and every status line (last-generated, test / regenerate
+    // result) sit ABOVE it, never under it.
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
+      {canRegenerate && (
+        <div className="bg-muted/50 rounded-lg p-3">
+          <div className="flex items-center justify-between gap-4">
+            <div className="pr-2">
+              <p className="text-sm font-medium">{t("settings.rawData")}</p>
+              <p className="text-muted-foreground text-xs">
+                {privacyMode === "raw"
+                  ? t("settings.rawDataOnDescription")
+                  : t("settings.rawDataOffDescription")}
+              </p>
+            </div>
+            <Switch
+              aria-label={t("settings.rawData")}
+              checked={privacyMode === "raw"}
+              onCheckedChange={togglePrivacy}
+            />
+          </div>
+          {privacyMode === "raw" && (
+            <div className="bg-warning/15 text-warning mt-2 rounded-lg p-2 text-xs">
+              {t("settings.rawDataWarning")}
+            </div>
+          )}
+        </div>
+      )}
+
+      {lastInsightLine && (
+        <p className="text-muted-foreground text-xs">{lastInsightLine}</p>
+      )}
+      {testMsg && (
+        <p
+          className={`text-xs ${testOk ? "text-success" : "text-destructive"}`}
+        >
+          {testMsg}
+        </p>
+      )}
+      {regenMsg && (
+        <p
+          className={`text-xs ${regenOk ? "text-success" : "text-destructive"}`}
+        >
+          {regenMsg}
+        </p>
+      )}
+
+      <SettingsCardActions align="start">
         <Button
           type="button"
           size="sm"
@@ -233,52 +280,7 @@ export function RuntimeActionsRow({
             {t("settings.regenerateInsights")}
           </Button>
         )}
-        {lastInsightLine && (
-          <span className="text-muted-foreground text-xs">
-            {lastInsightLine}
-          </span>
-        )}
-      </div>
-
-      {canRegenerate && (
-        <div className="bg-muted/50 rounded-lg p-3">
-          <div className="flex items-center justify-between gap-4">
-            <div className="pr-2">
-              <p className="text-sm font-medium">{t("settings.rawData")}</p>
-              <p className="text-muted-foreground text-xs">
-                {privacyMode === "raw"
-                  ? t("settings.rawDataOnDescription")
-                  : t("settings.rawDataOffDescription")}
-              </p>
-            </div>
-            <Switch
-              aria-label={t("settings.rawData")}
-              checked={privacyMode === "raw"}
-              onCheckedChange={togglePrivacy}
-            />
-          </div>
-          {privacyMode === "raw" && (
-            <div className="bg-warning/15 text-warning mt-2 rounded-lg p-2 text-xs">
-              {t("settings.rawDataWarning")}
-            </div>
-          )}
-        </div>
-      )}
-
-      {testMsg && (
-        <p
-          className={`text-xs ${testOk ? "text-success" : "text-destructive"}`}
-        >
-          {testMsg}
-        </p>
-      )}
-      {regenMsg && (
-        <p
-          className={`text-xs ${regenOk ? "text-success" : "text-destructive"}`}
-        >
-          {regenMsg}
-        </p>
-      )}
+      </SettingsCardActions>
     </div>
   );
 }

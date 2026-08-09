@@ -1,5 +1,7 @@
 "use client";
 
+import { Spline } from "lucide-react";
+
 import { useAnalyticsQuery } from "@/lib/queries/use-analytics-query";
 import { useFeatureFlags } from "@/hooks/use-feature-flags";
 import { useTranslations } from "@/lib/i18n/context";
@@ -8,6 +10,7 @@ import type {
   CorrelationResult,
 } from "@/lib/insights/correlations";
 import { CorrelationCard } from "@/components/insights/correlation-card";
+import { SectionHeading } from "@/components/ui/section-heading";
 
 /**
  * v1.12.0 — per-metric correlation card.
@@ -82,9 +85,10 @@ export function MetricCorrelationCard({ slug }: MetricCorrelationCardProps) {
       aria-label={t("insights.correlationRow.title")}
       className="space-y-2"
     >
-      <h2 className="text-lg font-semibold">
-        {t("insights.correlationRow.title")}
-      </h2>
+      <SectionHeading
+        icon={Spline}
+        title={t("insights.correlationRow.title")}
+      />
       <CorrelationCard result={result} />
       {/* v1.18.6 (DISC-01) — the "observational, not causal / talk to your
           doctor" disclaimer is removed; the one-time onboarding acknowledgment

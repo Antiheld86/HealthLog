@@ -285,10 +285,18 @@ export function AccountSection() {
   }
 
   if (!mounted || isLoading) {
+    // §13 — a loading section paints its card + header, not a bare centered
+    // spinner (reference: admin/coach-feedback-section).
     return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="text-primary h-8 w-8 animate-spin motion-reduce:animate-none" />
-      </div>
+      <SettingsCard>
+        <SettingsCardHeader icon={User} title={t("settings.profile")} />
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
+          <span className="text-muted-foreground text-sm">
+            {t("common.loading")}
+          </span>
+        </div>
+      </SettingsCard>
     );
   }
 

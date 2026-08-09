@@ -13,6 +13,7 @@ const render = (
   family: Parameters<typeof ManagedRecordSettingsForm>[0]["family"],
   settings: Record<string, unknown>,
   locale: (typeof LOCALES)[number] = "en",
+  error?: string,
 ) =>
   renderToStaticMarkup(
     <I18nProvider initialLocale={locale}>
@@ -22,6 +23,7 @@ const render = (
         onSave={vi.fn()}
         saveLabel="Save"
         settings={settings}
+        error={error}
       />
     </I18nProvider>,
   );
@@ -71,6 +73,53 @@ describe("managed record settings forms", () => {
       expect(html).not.toContain("<textarea");
     },
   );
+
+  it("gives the profile date of birth a DateField, never a native date input", () => {
+    const html = render("profile", { timezone: "Europe/Berlin" });
+    // The DateField primitive marks itself; the browser-locale native
+    // `type="date"` trap (v1.25.4) must be gone.
+    expect(html).toContain('data-slot="date-field"');
+    expect(html).not.toContain('type="date"');
+    // Its hidden mirror still carries the submit name.
+    expect(html).toContain('name="dateOfBirth"');
+  });
+
+  it.each([
+    "profile",
+    "modules",
+    "notifications",
+    "thresholds",
+    "coach",
+  ] as const)(
+    "orders the %s action row last, with the error above it (§12)",
+    (family) => {
+      const settingsByFamily: Record<string, Record<string, unknown>> = {
+        profile: { timezone: "Europe/Berlin" },
+        modules: { modulePreferences: {} },
+        notifications: {},
+        thresholds: { overrides: {}, effective: {} },
+        coach: {},
+      };
+      const html = render(family, settingsByFamily[family], "en", "Boom");
+      const actionAt = html.indexOf('data-slot="settings-card-actions"');
+      const alertAt = html.indexOf('role="alert"');
+      // The action row exists and is a real SettingsCardActions.
+      expect(actionAt).toBeGreaterThan(-1);
+      // The error line renders, and it sits ABOVE the action row.
+      expect(alertAt).toBeGreaterThan(-1);
+      expect(alertAt).toBeLessThan(actionAt);
+      // Nothing renders after the action row inside the form.
+      expect(html.indexOf("</form>")).toBeGreaterThan(actionAt);
+    },
+  );
+
+  it("toggles the managed modules with a Switch, matching the owner section", () => {
+    const html = render("modules", { modulePreferences: { mood: true } });
+    // The Switch primitive (role="switch") replaces the bare checkbox the
+    // owner module section never used; the hidden mirror keeps the submit name.
+    expect(html).toContain('role="switch"');
+    expect(html).toContain('name="mood"');
+  });
 
   it("renders every direct module and threshold metric for a fresh record", () => {
     const modules = render("modules", { modulePreferences: {} });

@@ -17,16 +17,25 @@
  *     modifier-prefixed (`md:pb-2`) and arbitrary-value (`pb-[10px]`) forms.
  *     Non-numeric suffixes (`pb-safe`) never match.
  *
- *  2. `cardShellStep5` — no off-scale `5` step (20 px, banned by §2) on a
- *     hand-rolled card SHELL. The shell heuristic (§7.2) keys off the
- *     `bg-card` + `border` pair on ONE element: a `p-5` / `px-5` / `py-5` /
- *     `space-y-5` / `gap-5` there sits denser than every sibling `<Card>`
- *     (which is `p-4 md:p-6`), and the 4 px step reads next to a conformant
- *     card on the same viewport. Deliberately NARROW: it fires only when the
- *     same element paints a card surface, so justified `pl-5`/`pl-7`
- *     list-marker insets (no `bg-card`) and form-body `space-y-5` rhythm (no
- *     shell) never trip it. Hand-rolled shells sweep to `p-4 md:p-6`
- *     (or `p-3` for a dense inner tile); new surfaces compose `<Card>`.
+ *  2. `cardShellOffScale` — no off-scale spacing step on a hand-rolled card
+ *     SHELL. The scale (§2) is `1 / 1.5 / 2 / 3 / 4 / 6 / 8 / 10`; the `5`
+ *     (20 px) and `7` (28 px) steps and every half-step other than `1.5`
+ *     (`2.5`, `3.5`, …) are banned. The shell heuristic (§7.2) keys off the
+ *     `bg-card` + `border` pair on ONE element: a `p-5` / `py-2.5` /
+ *     `space-y-3.5` / `gap-3.5` / `ml-5` there sits off the scale next to
+ *     every sibling `<Card>` (which is `p-4 md:p-6`), and reads on the same
+ *     viewport. The prefix set is the full spacing family — padding
+ *     (`p/px/py/pt/pb/pl/pr`), margin (`m/mx/my/mt/mb/ml/mr`), gap
+ *     (`gap/gap-x/gap-y`), and `space-x/space-y` — so the `pl-`/`ml-`/`gap-`
+ *     spellings that slipped the earlier `5`-only check are covered.
+ *     Deliberately NARROW: it fires only when the same element paints a card
+ *     surface, so a justified `pl-5` list-marker inset (no `bg-card`), a
+ *     form-body `space-y-5` rhythm (no shell), and a deliberate negative
+ *     margin (`-mt-5`, never matched) never trip it. Height (`h-`) is a
+ *     dimension, not a scale step (`h-11` tap floor, `h-14`, `h-64` are all
+ *     legal), so it is out of scope by design. Hand-rolled shells sweep to
+ *     `p-4 md:p-6` (or `p-3` for a dense inner tile); new surfaces compose
+ *     `<Card>`.
  *
  * Both checks collect strings from the whole `className` subtree, so
  * `cn("…", cond && "…")`, ternaries, and template literals are all seen.
@@ -63,12 +72,20 @@ const SLOT_NAMES = new Set(["CardHeader", "CardContent"]);
 const SHELL_BG_RE = /\bbg-card\b/;
 const SHELL_BORDER_RE = /\bborder(?:-|\b)/;
 
-// The banned `5` step (20 px) on a shell — the subset §7.2 scopes to an
-// error-clean rule: p-5 / px-5 / py-5 / space-y-5 / gap-5, with optional
-// modifier prefixes (`sm:p-5`). Directional insets (`pl-5`/`pr-5`) and
-// half-steps are intentionally OUT of scope (see the header).
-const SHELL_STEP5_RE =
-  /(?:^|\s)(?:[^\s"']*:)*((?:p|px|py|space-y|gap)-5)(?=\s|$)/;
+// An off-scale spacing step on a shell — the banned `5` / `7` integer steps
+// and any half-step other than `1.5` (`2.5`, `3.5`, …), across the full
+// spacing prefix family (padding, margin, gap, space), with optional modifier
+// prefixes (`sm:p-5`). A leading `-` (negative margin) is never matched
+// because the prefix has to sit at a `(?:^|\s)` / modifier boundary. Height
+// (`h-`) is a dimension, not a scale step, and is intentionally OUT of scope.
+const SPACING_PREFIX =
+  "space-x|space-y|gap-x|gap-y|gap|px|py|pt|pb|pl|pr|p|mx|my|mt|mb|ml|mr|m";
+// `5` or `7`; or a half-step whose integer part is anything but `1`
+// (`0.5`, `2.5`…`9.5`, `10.5`+), so the sanctioned `1.5` is left alone.
+const OFF_SCALE_STEP = "5|7|(?:[02-9]|\\d\\d+)\\.5";
+const SHELL_OFFSCALE_RE = new RegExp(
+  `(?:^|\\s)(?:[^\\s"']*:)*((?:${SPACING_PREFIX})-(?:${OFF_SCALE_STEP}))(?=\\s|$)`,
+);
 
 function toPosix(filename) {
   return filename.replace(/\\/g, "/");
@@ -148,14 +165,14 @@ const spacingScaleRule = {
     type: "problem",
     docs: {
       description:
-        "Spacing-scale discipline — no pt-*/pb-* overrides on gap-based Card slots, and no off-scale `5` step on a bg-card+border shell.",
+        "Spacing-scale discipline — no pt-*/pb-* overrides on gap-based Card slots, and no off-scale spacing step (`5`/`7`/half-steps) on a bg-card+border shell.",
     },
     schema: [],
     messages: {
       slotPadding:
         '"{{match}}" on <{{element}}> fights the gap-based Card contract — the header→body distance comes from the parent flex gap, so slot padding stacks on top of it (or is a no-op). Tune density on the Card itself instead: <Card className="gap-2 py-3 md:py-4">.',
-      cardShellStep5:
-        'Off-scale "{{match}}" (20 px) on a bg-card+border shell — the `5` step is banned (UI-STANDARDS §2) and reads denser than every sibling <Card> (p-4 md:p-6). Sweep the shell to `p-4 md:p-6` (or `p-3` for a dense inner tile); new surfaces should compose <Card>.',
+      cardShellOffScale:
+        'Off-scale "{{match}}" on a bg-card+border shell — the scale is 1/1.5/2/3/4/6/8/10, so the `5`/`7` steps and half-steps other than 1.5 are banned (UI-STANDARDS §2) and read off next to every sibling <Card> (p-4 md:p-6). Sweep the shell to an on-scale step (`p-4 md:p-6`, or `p-3` for a dense inner tile); new surfaces should compose <Card>.',
     },
   },
   create(context) {
@@ -197,11 +214,11 @@ const spacingScaleRule = {
         // seen together even when split across cn() args, then report once.
         const joined = strings.map((s) => s.text).join(" ");
         if (SHELL_BG_RE.test(joined) && SHELL_BORDER_RE.test(joined)) {
-          const m = SHELL_STEP5_RE.exec(joined);
+          const m = SHELL_OFFSCALE_RE.exec(joined);
           if (m) {
             context.report({
               node: classNameAttr,
-              messageId: "cardShellStep5",
+              messageId: "cardShellOffScale",
               data: { match: m[1] },
             });
           }

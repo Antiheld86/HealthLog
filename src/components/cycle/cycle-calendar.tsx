@@ -177,7 +177,7 @@ export function CycleCalendar({
           <div
             key={i}
             role="columnheader"
-            className="text-muted-foreground pb-1 text-center text-[11px] font-medium uppercase"
+            className="text-muted-foreground text-2xs pb-1 text-center font-medium uppercase"
           >
             {wk}
           </div>

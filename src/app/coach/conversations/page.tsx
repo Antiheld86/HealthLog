@@ -282,7 +282,7 @@ function CoachConversationsBody() {
                                 aria-hidden="true"
                               />
                               {(c.attachments?.length ?? 0) > 1 ? (
-                                <span className="text-[10px] font-semibold tabular-nums">
+                                <span className="text-2xs font-semibold tabular-nums">
                                   {c.attachments?.length}
                                 </span>
                               ) : null}

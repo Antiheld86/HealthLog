@@ -72,13 +72,13 @@ export function DoseHistoryColumnRulings() {
             <dt className="text-foreground flex flex-wrap items-baseline gap-x-2 text-xs">
               <code className="font-mono">{ruling.column}</code>
               <span
-                className="text-muted-foreground text-[0.6875rem] uppercase"
+                className="text-muted-foreground text-2xs uppercase"
                 data-verdict={ruling.verdict}
               >
                 {verdictFor(ruling.verdict)}
               </span>
               {ruling.jsonOnly && (
-                <span className="text-muted-foreground text-[0.6875rem]">
+                <span className="text-muted-foreground text-2xs">
                   {t("settings.sections.export.import.doseHistory.jsonOnly")}
                 </span>
               )}

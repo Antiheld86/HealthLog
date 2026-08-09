@@ -73,7 +73,7 @@ export function RichChartTooltip({
   return (
     <div
       data-slot="rich-chart-tooltip"
-      className="bg-card border-border min-w-[140px] rounded-xl border p-2.5 text-xs shadow-lg"
+      className="bg-card border-border min-w-[140px] rounded-xl border p-3 text-xs shadow-lg"
       style={{
         // The card itself is layered above the chart's own SVG; without
         // an explicit background the gradient bleeds through the

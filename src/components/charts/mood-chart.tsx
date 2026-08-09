@@ -18,6 +18,7 @@ import { useEffect, useState, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { TagChip } from "@/components/ui/tag-chip";
 import { useTranslations } from "@/lib/i18n/context";
 import { makeBucketLabelFormatters } from "@/lib/charts/bucket-label";
 import { readStoredTimezone } from "@/lib/timezone-mirror";
@@ -1033,17 +1034,15 @@ export function MoodChart({
             back to side-by-side. */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2">
-            <CardTitle className="text-base font-medium">
-              {displayTitle}
-            </CardTitle>
+            <CardTitle className="text-base">{displayTitle}</CardTitle>
             {activeBucket !== "day" && (
-              <span className="bg-muted/40 text-muted-foreground hidden rounded-md px-1.5 py-0.5 text-[10px] font-medium tracking-wide uppercase sm:inline-flex">
+              <TagChip className="hidden tracking-wide uppercase sm:inline-flex">
                 {t(
                   activeBucket === "week"
                     ? "charts.bucketWeekly"
                     : "charts.bucketMonthly",
                 )}
-              </span>
+              </TagChip>
             )}
             {/* v1.4.16 B8 — comparison caption (mood).
                 v1.4.19 A2 — hidden on mobile to free up the title row. */}
