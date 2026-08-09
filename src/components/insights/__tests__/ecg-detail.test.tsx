@@ -78,18 +78,21 @@ describe("<EcgDetail> — non-diagnostic framing", () => {
     expect(html).toContain("as reported by the recording device");
   });
 
-  it("says a failed read failed instead of painting an empty recording", () => {
+  it("shows a recoverable read failure instead of painting an empty recording", () => {
     useQueryMock.mockReturnValue({
       data: undefined,
       isLoading: false,
       isError: true,
+      refetch: vi.fn(),
     });
     const html = renderToStaticMarkup(
       <I18nProvider initialLocale="en">
         <EcgDetail recordingId="ecg_1" />
       </I18nProvider>,
     );
-    expect(html).toContain('data-slot="ecg-detail-error"');
+    // The failure is a recoverable card, not a muted "no data" line.
+    expect(html).toContain('data-slot="query-error-card"');
+    expect(html).toContain('data-slot="query-error-retry"');
     expect(html).not.toContain('data-slot="ecg-trace"');
   });
 });

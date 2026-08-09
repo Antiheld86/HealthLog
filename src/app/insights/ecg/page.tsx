@@ -9,6 +9,7 @@ import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { apiGet } from "@/lib/api/api-fetch";
 import { Button } from "@/components/ui/button";
+import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { SubPageShell } from "@/components/insights/sub-page-shell";
 import { MetricEmptyState } from "@/components/insights/metric-empty-state";
 import { EcgSection } from "@/components/insights/ecg-section";
@@ -38,11 +39,26 @@ export default function InsightsEcgPage() {
   // Reuse the SAME query cell `<EcgSection>` reads (`insightsEcgList`) so the
   // page and the section share one cache entry. The page only needs the
   // `hasRecordings` flag to choose between the empty state and the section.
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.insightsEcgList(),
     queryFn: () => apiGet<{ hasRecordings: boolean }>("/api/insights/ecg"),
     enabled: isAuthenticated,
   });
+
+  // A read failure must be visible, not a heading over an empty body that
+  // reads the same as "still loading" (§6). The section teaser below unmounts
+  // silently on error, which is right for the overview but wrong for the page
+  // the user opened to see this list.
+  if (isError) {
+    return (
+      <SubPageShell
+        title={t("insights.ecg.sectionTitle")}
+        description={t("insights.subPage.ecgDescription")}
+      >
+        <QueryErrorCard onRetry={() => refetch()} />
+      </SubPageShell>
+    );
+  }
 
   // Data-availability empty state — a direct URL hit (or deleted recordings)
   // lands here without a section to show. Mirrors the sub-page convention:
