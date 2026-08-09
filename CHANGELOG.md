@@ -1,6 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [1.37.3] — 2026-08-09
+
+### Added
+
+- An immunization record. A new Vaccinations module, switched on under Settings then Modules, keeps a lifetime Impfpass. Each dose sits under the disease it protects against, with its place in the series worked out on the server, so a combination shot appears under every component it covers. You add a dose by picking from a catalogue of around thirty entries, searched by disease or antigen name, or by typing it the way your pass reads; a date plus one of those two is all that is required, and the lot number, the injection site, the practice, a link to a visit and an encrypted note are each optional. Where the catalogue knows a schedule it shows it with its source, as information rather than advice. A dose that carries a booster interval offers a prefilled reminder you can edit or decline, and confirming it writes an ordinary preventive-care reminder that appears on the checkups page and moves itself forward when you log the next dose. A vaccination scan in the document vault can attach to its record, the record can link documents it already holds, and the doctor report gains an immunization section you can leave out. The module rides the record-sharing model, so a parent can keep a child's Impfpass under a managed profile. Six languages throughout, including the catalogue names, and never a brand name.
 
 ### Fixed
 
@@ -24,6 +28,8 @@
   one already made for you.
 - The write and manage descriptions on the invite form are one line each now,
   with the full detail behind the info icon instead of a wall of text.
+- A preventive-care reminder set to the longest interval the engine allows no longer loses its next date when a dose is logged against it. The reminder now moves a full cycle forward instead of falling silent.
+- The catalogue and practice pickers now carry a name for a screen reader; a control that only showed an icon was unnamed before.
 
 ## [1.37.2] — 2026-08-08
 
@@ -52,6 +58,8 @@
   single figure, and it names which of the things you recorded weighed most on
   that day. It describes a connection between things you wrote down. It never
   claims a cause.
+
+  The rework this reading sits on grew from a concept Kai worked out in detail. Thanks, Kai.
 
   Below fifteen days there is nothing at all. Between fifteen and thirty the
   page says how far along it is instead of guessing. Between thirty and sixty
