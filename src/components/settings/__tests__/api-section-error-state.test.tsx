@@ -55,7 +55,9 @@ describe("ApiSection — a token-read failure is honest, not empty", () => {
     const html = render();
     expect(html).toContain('data-slot="query-error-card"');
     expect(html).toContain('data-slot="query-error-retry"');
-    expect(html).not.toContain('data-testid="settings-api-tokens-active-empty"');
+    expect(html).not.toContain(
+      'data-testid="settings-api-tokens-active-empty"',
+    );
     expect(html).not.toContain("No active tokens");
   });
 });
