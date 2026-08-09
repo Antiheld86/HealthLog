@@ -8,6 +8,8 @@ import { Loader2, Plus, RefreshCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { QueryErrorCard } from "@/components/ui/query-error-card";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
@@ -349,7 +351,13 @@ export function CycleView() {
                     {t("cycle.calendar.loading")}
                   </p>
                 ) : calendarError ? (
-                  <TabError onRetry={() => void calendar.refetch()} />
+                  // Inside the calendar card already — a borderless row keeps
+                  // it in line with the plain loading line above it (§3/§6).
+                  <QueryErrorRow
+                    message={t("cycle.loadError")}
+                    onRetry={() => void calendar.refetch()}
+                    className="border-0 bg-transparent p-0"
+                  />
                 ) : (
                   <>
                     {/* Cold start: the grid carries no fertile/ovulation/phase
@@ -388,11 +396,10 @@ export function CycleView() {
 
           <TabsContent value="predictions" className="mt-4 space-y-4">
             {calendarError ? (
-              <Card>
-                <CardContent className="py-4">
-                  <TabError onRetry={() => void calendar.refetch()} />
-                </CardContent>
-              </Card>
+              <QueryErrorCard
+                title={t("cycle.loadError")}
+                onRetry={() => void calendar.refetch()}
+              />
             ) : (
               <>
                 <PredictionsPanel
@@ -419,11 +426,10 @@ export function CycleView() {
 
           <TabsContent value="insights" className="mt-4 space-y-4">
             {insights.isError ? (
-              <Card>
-                <CardContent className="py-4">
-                  <TabError onRetry={() => void insights.refetch()} />
-                </CardContent>
-              </Card>
+              <QueryErrorCard
+                title={t("cycle.loadError")}
+                onRetry={() => void insights.refetch()}
+              />
             ) : (
               <>
                 <CyclePhaseHeadline
@@ -439,11 +445,10 @@ export function CycleView() {
 
           <TabsContent value="settings" className="mt-4">
             {profileQuery.isError ? (
-              <Card>
-                <CardContent className="py-4">
-                  <TabError onRetry={() => void profileQuery.refetch()} />
-                </CardContent>
-              </Card>
+              <QueryErrorCard
+                title={t("cycle.loadError")}
+                onRetry={() => void profileQuery.refetch()}
+              />
             ) : profileQuery.isLoading ? (
               <div className="flex h-32 items-center justify-center">
                 <Loader2 className="text-muted-foreground h-6 w-6 animate-spin motion-reduce:animate-none" />
@@ -480,25 +485,3 @@ export function CycleView() {
 }
 
 /** A compact in-place error + Retry for a failed tab read. */
-function TabError({ onRetry }: { onRetry: () => void }) {
-  const { t } = useTranslations();
-  return (
-    <div
-      role="alert"
-      data-slot="cycle-tab-error"
-      className="text-muted-foreground flex flex-col items-start gap-3 text-sm sm:flex-row sm:items-center sm:justify-between"
-    >
-      <span>{t("cycle.loadError")}</span>
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        onClick={onRetry}
-        className="gap-1.5"
-      >
-        <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-        <span>{t("common.retry")}</span>
-      </Button>
-    </div>
-  );
-}
