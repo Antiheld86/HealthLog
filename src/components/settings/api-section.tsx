@@ -406,9 +406,9 @@ function ApiTokensCard() {
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button
-                              variant="outline"
+                              variant="destructive"
                               size="sm"
-                              className="text-destructive border-destructive/30 min-h-11 w-full"
+                              className="min-h-11 w-full"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                               {t("settings.tokenRevoke")}

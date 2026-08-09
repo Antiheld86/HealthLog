@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -122,9 +123,7 @@ function McpConnectionsCard() {
         ) : isLoading ? (
           <Skeleton className="h-24 w-full rounded-lg" />
         ) : list.length === 0 ? (
-          <p className="text-muted-foreground rounded-lg border border-dashed px-3 py-4 text-center text-sm">
-            {t("settings.mcp.noConnections")}
-          </p>
+          <EmptyState size="compact" title={t("settings.mcp.noConnections")} />
         ) : (
           <ul className="space-y-2">
             {list.map((conn) => (
@@ -157,9 +156,9 @@ function McpConnectionsCard() {
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button
-                      variant="outline"
+                      variant="destructive"
                       size="sm"
-                      className="text-destructive border-destructive/30 min-h-11 w-full"
+                      className="min-h-11 w-full"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                       {t("settings.mcp.connectionRevoke")}
@@ -440,9 +439,7 @@ function McpTokensCard() {
           ) : isLoading ? (
             <Skeleton className="h-24 w-full rounded-lg" />
           ) : activeTokens.length === 0 ? (
-            <p className="text-muted-foreground rounded-lg border border-dashed px-3 py-4 text-center text-sm">
-              {t("settings.noActiveTokens")}
-            </p>
+            <EmptyState size="compact" title={t("settings.noActiveTokens")} />
           ) : (
             <ul className="space-y-2">
               {activeTokens.map((tok) => {
@@ -490,9 +487,9 @@ function McpTokensCard() {
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button
-                          variant="outline"
+                          variant="destructive"
                           size="sm"
-                          className="text-destructive border-destructive/30 min-h-11 w-full"
+                          className="min-h-11 w-full"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                           {t("settings.tokenRevoke")}

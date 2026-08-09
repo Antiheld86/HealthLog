@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/ui/empty-state";
 import { QueryErrorCard } from "@/components/ui/query-error-card";
 import Link from "next/link";
 import { Bell, Settings, AlertCircle } from "lucide-react";
@@ -201,22 +202,21 @@ export default function NotificationsPage() {
           description={t("notifications.subtitle")}
           actions={headerActions}
         />
-        <div className="bg-card border-border max-w-2xl rounded-xl border p-6">
-          <div className="flex flex-col items-center gap-4 py-8 text-center">
-            <Bell className="text-muted-foreground h-12 w-12" />
-            <p className="text-muted-foreground text-sm">
-              {t("notifications.noChannels")}
-            </p>
-            {/* Channel setup lives in Settings → Integrations since v1.25.7;
-                point the CTA at that anchor, not the reminder-types screen. */}
+        <EmptyState
+          className="max-w-2xl"
+          icon={<Bell className="size-6" />}
+          title={t("notifications.noChannels")}
+          /* Channel setup lives in Settings → Integrations since v1.25.7;
+             point the CTA at that anchor, not the reminder-types screen. */
+          action={
             <Button asChild variant="outline">
               <Link href="/settings/integrations#channels">
                 <Settings className="h-4 w-4" />
                 {t("notifications.goToSettings")}
               </Link>
             </Button>
-          </div>
-        </div>
+          }
+        />
       </div>
     );
   }

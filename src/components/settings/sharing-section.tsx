@@ -236,12 +236,15 @@ function ShareLinksCard() {
                         ? ` · ${formatDateTime(link.lastAccessAt)}`
                         : ""}
                     </p>
+                    {/* §12 — a right-aligned row action, not a full-width
+                        destructive strip stacked once per link (which reads as
+                        an alarm wall on a list of shares). */}
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button
                           variant="destructive"
                           size="sm"
-                          className="min-h-11 w-full sm:min-h-9"
+                          className="ml-auto flex min-h-11 w-fit sm:min-h-9"
                         >
                           <Trash2 className="mr-2 h-3.5 w-3.5" />
                           {t("settings.sharing.revoke")}
