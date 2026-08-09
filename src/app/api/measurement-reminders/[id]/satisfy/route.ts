@@ -15,6 +15,7 @@ import { apiSuccess, apiError, getClientIp } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { satisfyReminder } from "@/lib/measurement-reminders/satisfy";
 import { toMeasurementReminderDto } from "@/lib/measurement-reminders/dto";
+import { isScreeningReminderType } from "@/lib/validations/measurement-reminders";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -37,6 +38,19 @@ export const POST = apiHandler(
     });
     if (!existing || existing.userId !== user.id) {
       return apiError("Measurement reminder not found", 404);
+    }
+
+    // Defense-in-depth: a screening reminder (PHQ-9 / GAD-7 / WHO-5 / SCI)
+    // resolves ONLY from the server-written *_SCORE row a completed check-in
+    // produces — never from a manual "done." The client already routes a
+    // screening to `/mental-wellbeing` instead of offering this action, so a
+    // satisfy landing here is a crafted request; refusing it keeps a screening
+    // from reading as completed with no assessment behind it.
+    if (isScreeningReminderType(existing.measurementType)) {
+      return apiError(
+        "Screening reminders resolve from a completed check-in, not a manual satisfy",
+        409,
+      );
     }
 
     const userRow = await prisma.user.findUnique({

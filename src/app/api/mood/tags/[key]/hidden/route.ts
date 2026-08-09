@@ -62,6 +62,11 @@ export const PUT = apiHandler(
       });
     }
 
+    // No audit row by design: hiding or showing a catalogue tag is a per-user
+    // display preference, not a health-data write. It destroys nothing (the
+    // catalogue tag and every entry that used it are untouched), so a ledger
+    // row here would be noise rather than forensics. The wide-event annotate
+    // still carries it for observability.
     annotate({
       action: { name: "mood.tag.hidden.set" },
       meta: { hidden: parsed.data.hidden },

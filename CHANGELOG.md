@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.37.6] — 2026-08-09
+
+### Security
+
+- A mental-wellbeing screening reminder (PHQ-9, GAD-7, WHO-5, SCI) can no longer be marked done through a crafted request. A screening resolves only from the score a completed check-in produces, so the satisfy and complete routes now refuse a screening reminder outright rather than trusting that the app never offers that action for one.
+
+### Changed
+
+- Editing a custom mood tag, a custom tag group or a custom cycle symptom now records an audit entry, the same way deleting one already did. Removing a custom tag or symptom together with its history leaves a trace of the change. Hiding a catalogue tag and reordering the layout stay out of the audit log by design, since those are display preferences rather than a change to your record.
+
 ## [1.37.5] — 2026-08-09
 
 ### Changed

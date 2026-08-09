@@ -4,11 +4,13 @@ import { prisma } from "@/lib/db";
 import {
   apiSuccess,
   apiError,
+  getClientIp,
   returnAllZodIssues,
   safeJson,
 } from "@/lib/api-response";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
+import { auditLog } from "@/lib/auth/audit";
 import {
   updateCustomTagSchema,
   encryptCustomLabel,
@@ -89,6 +91,17 @@ export const PATCH = apiHandler(
       },
     });
 
+    // The custom label is encrypted at rest and never logged; the ledger row
+    // records only which fields the edit touched and the resulting active state.
+    await auditLog("mood.tag.custom.update", {
+      userId: user.id,
+      ipAddress: getClientIp(request),
+      details: {
+        fields: Object.keys(parsed.data),
+        isActive: updated.isActive,
+      },
+    });
+
     annotate({ action: { name: "mood.tag.custom.update" } });
 
     return apiSuccess({
@@ -132,6 +145,14 @@ export const DELETE = apiHandler(
         data: { isActive: false },
       });
     }
+
+    // A purge hard-deletes the tag and cascades its `mood_entry_tag_links`,
+    // unpicking historical entries — a destruction that must leave a ledger row.
+    await auditLog("mood.tag.custom.delete", {
+      userId: user.id,
+      ipAddress: getClientIp(request),
+      details: { purge },
+    });
 
     annotate({ action: { name: "mood.tag.custom.delete" }, meta: { purge } });
 

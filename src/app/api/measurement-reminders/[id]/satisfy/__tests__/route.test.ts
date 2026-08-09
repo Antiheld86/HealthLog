@@ -1,10 +1,10 @@
 /**
- * v1.18.6 — explicit-completion route (iOS #23 follow-up).
+ * v1.17.1 — manual "Erledigt" (satisfy) route.
  *
- * Covers: marks done via the shared primitive, idempotent no-op surfaces
- * completed=false, owner-scoped 404 on a cross-user / tombstoned id, and the
- * structural no-double-notify guarantee (the route delegates to
- * `satisfyReminder` and never reaches the notification dispatcher).
+ * Covers: a free-text Vorsorge resolves through the shared primitive,
+ * owner-scoped 404 on a cross-user / tombstoned id, and the defense-in-depth
+ * screening refusal (a screening reminder may only resolve from the
+ * server-written score row, never a crafted manual satisfy).
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
@@ -12,9 +12,6 @@ import { NextRequest } from "next/server";
 vi.mock("@/lib/api-handler", () => ({
   apiHandler: <T extends (...args: unknown[]) => unknown>(fn: T) => fn,
   requireAuth: vi.fn(async () => ({ user: { id: "u1", locale: "en" } })),
-  // v1.37.0 — the mutating arms resolve the RECORD at MANAGE. `actor` is the
-  // caller and equals `user` for everyone acting on their own reminders,
-  // which is what this suite exercises.
   requireRecordAuth: vi.fn(async () => ({
     user: { id: "u1", locale: "en" },
     actor: { id: "u1", locale: "en" },
@@ -51,9 +48,9 @@ import { POST } from "../route";
 const ROW = {
   id: "r1",
   userId: "u1",
-  label: "Blutdruck messen",
-  measurementType: "BLOOD_PRESSURE_SYS",
-  intervalDays: 7,
+  label: "Blutbild",
+  measurementType: null, // free-text Vorsorge (resolves only on a manual satisfy)
+  intervalDays: 365,
   rrule: null,
   anchorDate: null,
   endsOn: null,
@@ -70,10 +67,8 @@ const ROW = {
 
 function makeRequest(): NextRequest {
   return new NextRequest(
-    "http://localhost/api/measurement-reminders/r1/complete",
-    {
-      method: "POST",
-    },
+    "http://localhost/api/measurement-reminders/r1/satisfy",
+    { method: "POST" },
   );
 }
 
@@ -84,12 +79,12 @@ beforeEach(() => {
   findUserMock.mockResolvedValue({ timezone: "Europe/Berlin" });
 });
 
-describe("POST /api/measurement-reminders/[id]/complete", () => {
-  it("marks the reminder done via the shared primitive and returns completed=true", async () => {
+describe("POST /api/measurement-reminders/[id]/satisfy", () => {
+  it("satisfies a free-text Vorsorge via the shared primitive", async () => {
     findFirstMock.mockResolvedValue(ROW);
     satisfyReminderMock.mockResolvedValue({
       satisfied: true,
-      nextDueAt: new Date("2026-06-25T07:00:00Z"),
+      nextDueAt: new Date("2027-06-25T07:00:00Z"),
     });
     findUniqueOrThrowMock.mockResolvedValue({
       ...ROW,
@@ -100,33 +95,8 @@ describe("POST /api/measurement-reminders/[id]/complete", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.error).toBeNull();
-    expect(body.data.completed).toBe(true);
-    expect(body.data.reminder.id).toBe("r1");
-    expect(body.data.reminder.lastSatisfiedAt).toBe("2026-06-18T08:00:00.000Z");
-    // The route delegates to the ONE shared satisfaction primitive.
+    expect(body.data.id).toBe("r1");
     expect(satisfyReminderMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("is idempotent: an already-satisfied reminder is a 200 no-op with completed=false", async () => {
-    findFirstMock.mockResolvedValue({
-      ...ROW,
-      lastSatisfiedAt: new Date("2026-06-18T08:00:00Z"),
-    });
-    // Forward-only guard inside the primitive returns satisfied=false.
-    satisfyReminderMock.mockResolvedValue({
-      satisfied: false,
-      nextDueAt: null,
-    });
-    findUniqueOrThrowMock.mockResolvedValue({
-      ...ROW,
-      lastSatisfiedAt: new Date("2026-06-18T08:00:00Z"),
-    });
-
-    const res = await POST(makeRequest(), params);
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.data.completed).toBe(false);
-    expect(body.data.reminder.id).toBe("r1");
   });
 
   it("is owner-scoped: a cross-user reminder 404s and never satisfies", async () => {
@@ -146,26 +116,25 @@ describe("POST /api/measurement-reminders/[id]/complete", () => {
   });
 
   it("refuses a screening reminder with 409 and never satisfies (defense-in-depth)", async () => {
-    // A crafted completion of a PHQ-9 screening: the client never offers this
-    // (it routes to /mental-wellbeing), and a screening may only resolve from
-    // the server-written score row. The route must not let it read as done.
-    findFirstMock.mockResolvedValue({ ...ROW, measurementType: "PHQ9_SCORE" });
+    findFirstMock.mockResolvedValue({ ...ROW, measurementType: "GAD7_SCORE" });
 
     const res = await POST(makeRequest(), params);
     expect(res.status).toBe(409);
     expect(satisfyReminderMock).not.toHaveBeenCalled();
   });
 
-  it("still allows a manual completion of a typed numeric reminder", async () => {
-    // Typed numeric reminders (a BP row here) legitimately support a manual
-    // "complete"; the screening guard must not catch them.
-    findFirstMock.mockResolvedValue(ROW); // measurementType: BLOOD_PRESSURE_SYS
+  it("still allows a manual satisfy of a typed numeric reminder", async () => {
+    findFirstMock.mockResolvedValue({
+      ...ROW,
+      measurementType: "BLOOD_PRESSURE_SYS",
+    });
     satisfyReminderMock.mockResolvedValue({
       satisfied: true,
-      nextDueAt: new Date("2026-06-25T07:00:00Z"),
+      nextDueAt: new Date("2026-07-02T07:00:00Z"),
     });
     findUniqueOrThrowMock.mockResolvedValue({
       ...ROW,
+      measurementType: "BLOOD_PRESSURE_SYS",
       lastSatisfiedAt: new Date("2026-06-18T08:00:00Z"),
     });
 
