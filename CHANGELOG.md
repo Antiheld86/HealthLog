@@ -1,6 +1,14 @@
 # Changelog
 
-## [1.37.6] — 2026-08-09
+## [1.37.7] — 2026-08-09
+
+### Added
+
+- A self-hoster running the published image can now set MAXMIND_LICENSE_KEY as a runtime environment variable and the app fetches the GeoLite2 City and ASN databases itself, so login locations resolve offline without a rebuild or a manual database mount. It fetches once on worker boot when the key is set and the databases are absent, refreshes monthly, and never blocks anything: any download error leaves the previous databases in place and the online lookup keeps answering. A read-only mounted database still wins. Documented as the third way to supply GeoLite2 in the self-hosting guide. Refs #659.
+
+### Security
+
+- The MaxMind licence key no longer appears in a log line when the runtime GeoLite2 fetch fails. The download URL carries the key in its query string, and the failure path used to print the full URL; it now reports only the edition and the kind of error, and the central log redactor also masks a license_key parameter wherever one might otherwise slip through.
 
 ### Security
 
