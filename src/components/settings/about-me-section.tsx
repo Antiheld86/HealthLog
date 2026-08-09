@@ -49,6 +49,7 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { SettingsInfoTile } from "@/components/settings/_info-tile";
 import { Label } from "@/components/ui/label";
 import { ConfirmButton } from "@/components/ui/confirm-button";
@@ -325,13 +326,10 @@ export function AboutMeSection({
       )}
 
       {query.isError && (
-        <p
-          role="status"
-          aria-live="polite"
-          className="text-destructive text-sm"
-        >
-          {t("settings.ai.aboutMe.loadError")}
-        </p>
+        <QueryErrorRow
+          message={t("settings.ai.aboutMe.loadError")}
+          onRetry={() => query.refetch()}
+        />
       )}
 
       <p className="text-muted-foreground border-border border-t pt-3 text-xs">

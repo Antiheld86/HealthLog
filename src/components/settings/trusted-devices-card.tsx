@@ -15,6 +15,7 @@ import { Loader2, ShieldCheck } from "lucide-react";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { ConfirmButton } from "@/components/ui/confirm-button";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
@@ -39,7 +40,7 @@ export function TrustedDevicesCard({
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<string | null>(null);
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.trustedDevices(),
     queryFn: () =>
       apiGet<{ devices: TrustedDeviceRow[] }>("/api/auth/me/trusted-devices"),
@@ -102,9 +103,10 @@ export function TrustedDevicesCard({
         )}
 
         {isError && (
-          <p role="alert" className="text-destructive text-sm">
-            {t("settings.security.trustedDevices.loadError")}
-          </p>
+          <QueryErrorRow
+            message={t("settings.security.trustedDevices.loadError")}
+            onRetry={() => refetch()}
+          />
         )}
 
         {devices.length > 0 && (

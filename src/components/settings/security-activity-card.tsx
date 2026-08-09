@@ -15,6 +15,7 @@ import { ChevronDown, Loader2, ShieldCheck } from "lucide-react";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { EmptyState } from "@/components/ui/empty-state";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { apiGet } from "@/lib/api/api-fetch";
@@ -62,7 +63,7 @@ export function SecurityActivityCard({
   const [open, setOpen] = useState(false);
   const regionId = useId();
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.securityActivity(),
     queryFn: () =>
       apiGet<{ events: ActivityRow[] }>("/api/auth/me/security-activity"),
@@ -102,9 +103,10 @@ export function SecurityActivityCard({
         )}
 
         {isError && (
-          <p role="alert" className="text-destructive text-sm">
-            {t("settings.security.activityLoadError")}
-          </p>
+          <QueryErrorRow
+            message={t("settings.security.activityLoadError")}
+            onRetry={() => refetch()}
+          />
         )}
 
         {!isLoading && !isError && events.length === 0 && (

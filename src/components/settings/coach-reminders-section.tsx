@@ -22,6 +22,7 @@ import { BellRing, Check, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { formatDateOrRelative } from "@/lib/format";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
@@ -165,13 +166,10 @@ export function CoachRemindersSection({
       <p className="text-sm">{t("settings.ai.coachReminders.detail")}</p>
 
       {query.isError && (
-        <p
-          role="status"
-          aria-live="polite"
-          className="text-destructive text-sm"
-        >
-          {t("settings.ai.coachReminders.loadError")}
-        </p>
+        <QueryErrorRow
+          message={t("settings.ai.coachReminders.loadError")}
+          onRetry={() => query.refetch()}
+        />
       )}
 
       {!query.isError && reminders.length === 0 ? (
