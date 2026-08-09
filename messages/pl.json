@@ -6283,7 +6283,7 @@
       "connectDescription": "Wklej ten adres URL w konfiguracji własnego łącznika asystenta, a następnie autoryzuj za pomocą poniższego tokenu lub zaloguj się po wyświetleniu monitu.",
       "tokensTitle": "Tokeny łącznika",
       "tokensDescription": "Wygeneruj token tylko do odczytu, aby połączyć asystenta.",
-      "scopeNote": "Tokeny są ograniczone do health:read — dostęp tylko do odczytu własnych danych. Nigdy nie mogą uzyskać dostępu do funkcji administracyjnych.",
+      "scopeNote": "Domyślnie tokeny mają dostęp tylko do odczytu własnych danych. Dostęp do zapisu jest opcjonalny i włączany dla każdego tokena przełącznikiem poniżej. Tokeny nigdy nie mogą uzyskać dostępu do funkcji administracyjnych.",
       "writeScopeToggleLabel": "Zezwól na zapis (health:write)",
       "writeScopeNote": "Dodaje zakres health:write, aby asystent mógł zapisywać nowe pomiary i wpisy nastroju na Twoim koncie. Każdy zapis jest najpierw potwierdzany. Token nadal nie może usuwać ani edytować istniejących wpisów, zmieniać leków ani uzyskiwać dostępu do funkcji REST lub administracyjnych. Pozostaw wyłączone, aby uzyskać dostęp tylko do odczytu.",
       "connectionsTitle": "Połączeni asystenci",

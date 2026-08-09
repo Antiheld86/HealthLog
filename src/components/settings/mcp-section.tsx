@@ -340,7 +340,7 @@ function McpTokensCard() {
       <p className="text-sm">{t("settings.mcp.tokensDetail")}</p>
 
       <div className="space-y-4">
-        <p className="text-muted-foreground text-xs leading-relaxed">
+        <p className="text-sm leading-relaxed">
           {t("settings.mcp.scopeNote")}
         </p>
 
@@ -355,7 +355,7 @@ function McpTokensCard() {
               aria-label={t("settings.mcp.writeScopeToggleLabel")}
             />
           </div>
-          <p className="text-muted-foreground text-xs leading-relaxed">
+          <p className="text-sm leading-relaxed">
             {t("settings.mcp.writeScopeNote")}
           </p>
         </div>
