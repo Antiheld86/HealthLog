@@ -104,8 +104,11 @@ export function CentralCodexSwitch({
           role="note"
           className="border-border space-y-3 rounded-lg border border-dashed px-3 py-2.5"
         >
-          <div className="text-muted-foreground flex items-start gap-2 text-xs">
-            <ShieldAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          <div className="flex items-start gap-2 text-sm">
+            <ShieldAlert
+              className="text-muted-foreground mt-0.5 size-3.5 shrink-0"
+              aria-hidden
+            />
             <p className="min-w-0">{t("settings.ai.centralCodex.honesty")}</p>
           </div>
           <div className="flex flex-wrap gap-2">
