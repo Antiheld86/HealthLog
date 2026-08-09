@@ -13,11 +13,10 @@ import {
   Key,
   Loader2,
   Map,
-  RefreshCw,
   Server,
   Users,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateTime } from "@/lib/format";
 import { SettingsCard } from "@/components/settings/settings-card";
@@ -128,7 +127,7 @@ export function FailingJobsCard({
 export function SystemStatusSection() {
   const { t } = useTranslations();
   const fmt = useFormatters();
-  const { data: status, isError, refetch, isFetching } = useSystemStatus();
+  const { data: status, isError, refetch } = useSystemStatus();
   const { data: version } = usePublicVersion();
 
   return (
@@ -273,28 +272,12 @@ export function SystemStatusSection() {
           // v1.4.16 Wave-C MED — pair the alert with a Retry button so a
           // transient 500 (rolling deploy, DB blip) doesn't require a
           // full page reload to recover.
-          <div
-            role="alert"
-            className="text-destructive bg-destructive/10 border-destructive/30 flex flex-col items-start gap-2 rounded-md border px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
-          >
-            <span>{t("admin.systemStatusLoadError")}</span>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={isFetching}
-              onClick={() => void refetch()}
-              className="min-h-9"
-              data-testid="system-status-retry"
-            >
-              {isFetching ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
-              ) : (
-                <RefreshCw className="h-3.5 w-3.5" />
-              )}
-              {t("admin.systemStatusRetry")}
-            </Button>
-          </div>
+          <QueryErrorRow
+            message={t("admin.systemStatusLoadError")}
+            onRetry={() => void refetch()}
+            retryLabel={t("admin.systemStatusRetry")}
+            retrySlot="system-status-retry"
+          />
         ) : (
           <div className="flex items-center gap-2">
             <Loader2 className="text-muted-foreground h-4 w-4 animate-spin motion-reduce:animate-none" />

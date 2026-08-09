@@ -39,6 +39,7 @@ import { useMemo } from "react";
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { Activity } from "lucide-react";
 
 import { SettingsCard } from "@/components/settings/settings-card";
@@ -142,7 +143,7 @@ export function HostMetricsChart() {
   const { t } = useTranslations();
   const fmt = useFormatters();
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.adminHostMetrics("2h"),
     queryFn: async () => {
       return apiGet<HostMetricsApiResponse>("/api/admin/host-metrics?since=2h");
@@ -195,12 +196,10 @@ export function HostMetricsChart() {
             </span>
           }
         />
-        <p
-          role="alert"
-          className="text-destructive bg-destructive/10 border-destructive/30 rounded-md border px-3 py-2 text-xs"
-        >
-          {t("admin.hostMetrics.loadError")}
-        </p>
+        <QueryErrorRow
+          message={t("admin.hostMetrics.loadError")}
+          onRetry={() => void refetch()}
+        />
       </SettingsCard>
     );
   }
