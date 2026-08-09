@@ -10276,7 +10276,7 @@
     "description": "Twoja własna książka adresowa — wpisz gabinet raz, wybieraj go wszędzie.",
     "linkLabel": "Książka adresowa",
     "add": "Wpis",
-    "searchPlaceholder": "Szukaj nazwiska lub gabinetu",
+    "searchPlaceholder": "Szukaj nazwiska, gabinetu lub specjalizacji",
     "loadError": "Nie udało się wczytać książki adresowej.",
     "emptyTitle": "Brak wpisów",
     "emptyDescription": "Dodaj gabinet, aby móc go wybrać przy zapisywaniu wizyty.",
@@ -10295,6 +10295,7 @@
     "saveFailed": "Nie udało się zapisać wpisu.",
     "deleteTitle": "Usunąć ten wpis?",
     "deleteDescription": "Twoje dotychczasowe wizyty pozostają i zachowują tę nazwę.",
-    "deleteFailed": "Nie udało się usunąć wpisu."
+    "deleteFailed": "Nie udało się usunąć wpisu.",
+    "noSpecialtyGroup": "Bez specjalizacji"
   }
 }

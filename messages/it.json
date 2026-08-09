@@ -10276,7 +10276,7 @@
     "description": "La tua rubrica: scrivi uno studio una volta e selezionalo ovunque.",
     "linkLabel": "Rubrica",
     "add": "Voce",
-    "searchPlaceholder": "Cerca nome o studio",
+    "searchPlaceholder": "Cerca nome, studio o specializzazione",
     "loadError": "Impossibile caricare la rubrica.",
     "emptyTitle": "Nessuna voce",
     "emptyDescription": "Aggiungi uno studio per poterlo scegliere quando registri un appuntamento.",
@@ -10295,6 +10295,7 @@
     "saveFailed": "Non è stato possibile salvare la voce.",
     "deleteTitle": "Eliminare questa voce?",
     "deleteDescription": "I tuoi appuntamenti esistenti restano e conservano questo nome.",
-    "deleteFailed": "Non è stato possibile eliminare la voce."
+    "deleteFailed": "Non è stato possibile eliminare la voce.",
+    "noSpecialtyGroup": "Senza specializzazione"
   }
 }

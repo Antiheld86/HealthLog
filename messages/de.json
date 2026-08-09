@@ -10276,7 +10276,7 @@
     "description": "Dein eigenes Adressbuch — einmal tippen, überall auswählen.",
     "linkLabel": "Adressbuch",
     "add": "Eintrag",
-    "searchPlaceholder": "Name oder Praxis suchen",
+    "searchPlaceholder": "Name, Praxis oder Fachrichtung suchen",
     "loadError": "Adressbuch konnte nicht geladen werden.",
     "emptyTitle": "Noch kein Eintrag",
     "emptyDescription": "Lege eine Praxis an, damit du sie beim Termin auswählen kannst.",
@@ -10295,6 +10295,7 @@
     "saveFailed": "Eintrag konnte nicht gespeichert werden.",
     "deleteTitle": "Eintrag löschen?",
     "deleteDescription": "Deine bisherigen Termine bleiben erhalten und behalten diesen Namen.",
-    "deleteFailed": "Eintrag konnte nicht gelöscht werden."
+    "deleteFailed": "Eintrag konnte nicht gelöscht werden.",
+    "noSpecialtyGroup": "Ohne Fachrichtung"
   }
 }

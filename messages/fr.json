@@ -10276,7 +10276,7 @@
     "description": "Votre carnet d'adresses : saisissez un cabinet une fois, choisissez-le partout.",
     "linkLabel": "Carnet d'adresses",
     "add": "Entrée",
-    "searchPlaceholder": "Rechercher un nom ou un cabinet",
+    "searchPlaceholder": "Rechercher un nom, un cabinet ou une spécialité",
     "loadError": "Impossible de charger le carnet d'adresses.",
     "emptyTitle": "Aucune entrée",
     "emptyDescription": "Ajoutez un cabinet pour pouvoir le choisir lors d'un rendez-vous.",
@@ -10295,6 +10295,7 @@
     "saveFailed": "L'entrée n'a pas pu être enregistrée.",
     "deleteTitle": "Supprimer cette entrée ?",
     "deleteDescription": "Vos rendez-vous existants restent et conservent ce nom.",
-    "deleteFailed": "L'entrée n'a pas pu être supprimée."
+    "deleteFailed": "L'entrée n'a pas pu être supprimée.",
+    "noSpecialtyGroup": "Sans spécialité"
   }
 }
