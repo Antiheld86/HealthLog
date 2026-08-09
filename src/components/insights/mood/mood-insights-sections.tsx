@@ -7,6 +7,7 @@ import { CalendarDays, Sparkles } from "lucide-react";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { TileHeader } from "@/components/insights/tile-header";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import { queryKeys } from "@/lib/query-keys";
@@ -100,7 +101,7 @@ export function MoodInsightsSections({
   const { isAuthenticated } = useAuth();
   const { t } = useTranslations();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.moodInsights(),
     queryFn: async () => {
       return apiGet<MoodInsightsResponse>("/api/mood/insights");
@@ -115,6 +116,15 @@ export function MoodInsightsSections({
     // stack three skeletons down the page.
     return region === "rest" ? (
       <Skeleton className="h-48 w-full rounded-lg" />
+    ) : null;
+  }
+
+  if (isError) {
+    // §6 — a failed read is not an empty page. Surface it once, in the main
+    // "rest" region (mirroring the loading convention above), rather than
+    // stacking an identical row in all three regions down the page.
+    return region === "rest" ? (
+      <QueryErrorRow onRetry={() => refetch()} />
     ) : null;
   }
 

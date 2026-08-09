@@ -35,6 +35,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { QueryErrorCard } from "@/components/ui/query-error-card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
@@ -77,7 +79,12 @@ function McpConnectionsCard() {
   const { isAuthenticated } = useAuth();
   const queryClient = useQueryClient();
 
-  const { data: connections } = useQuery({
+  const {
+    data: connections,
+    isError,
+    isLoading,
+    refetch,
+  } = useQuery({
     queryKey: queryKeys.mcpConnections(),
     queryFn: async () => apiGet<McpConnectionInfo[]>("/api/mcp/connections"),
     enabled: isAuthenticated,
@@ -110,7 +117,11 @@ function McpConnectionsCard() {
       <p className="text-sm">{t("settings.mcp.connectionsDetail")}</p>
 
       <div className="space-y-4">
-        {list.length === 0 ? (
+        {isError ? (
+          <QueryErrorCard onRetry={() => refetch()} />
+        ) : isLoading ? (
+          <Skeleton className="h-24 w-full rounded-lg" />
+        ) : list.length === 0 ? (
           <p className="text-muted-foreground rounded-lg border border-dashed px-3 py-4 text-center text-sm">
             {t("settings.mcp.noConnections")}
           </p>
@@ -264,7 +275,12 @@ function McpTokensCard() {
   const [tokenMsg, setTokenMsg] = useState<string | null>(null);
   const [tokenCopied, setTokenCopied] = useState(false);
 
-  const { data: tokens } = useQuery({
+  const {
+    data: tokens,
+    isError,
+    isLoading,
+    refetch,
+  } = useQuery({
     queryKey: queryKeys.mcpTokens(),
     queryFn: async () => apiGet<McpTokenInfo[]>("/api/mcp/tokens"),
     enabled: isAuthenticated,
@@ -340,9 +356,7 @@ function McpTokensCard() {
       <p className="text-sm">{t("settings.mcp.tokensDetail")}</p>
 
       <div className="space-y-4">
-        <p className="text-muted-foreground text-xs leading-relaxed">
-          {t("settings.mcp.scopeNote")}
-        </p>
+        <p className="text-sm leading-relaxed">{t("settings.mcp.scopeNote")}</p>
 
         <div className="border-border bg-muted/30 space-y-2 rounded-lg border p-3">
           <div className="flex items-center justify-between gap-4">
@@ -355,7 +369,7 @@ function McpTokensCard() {
               aria-label={t("settings.mcp.writeScopeToggleLabel")}
             />
           </div>
-          <p className="text-muted-foreground text-xs leading-relaxed">
+          <p className="text-sm leading-relaxed">
             {t("settings.mcp.writeScopeNote")}
           </p>
         </div>
@@ -421,7 +435,11 @@ function McpTokensCard() {
           <p className="mb-2 text-sm font-medium">
             {t("settings.activeTokensTitle")}
           </p>
-          {activeTokens.length === 0 ? (
+          {isError ? (
+            <QueryErrorCard onRetry={() => refetch()} />
+          ) : isLoading ? (
+            <Skeleton className="h-24 w-full rounded-lg" />
+          ) : activeTokens.length === 0 ? (
             <p className="text-muted-foreground rounded-lg border border-dashed px-3 py-4 text-center text-sm">
               {t("settings.noActiveTokens")}
             </p>

@@ -18,6 +18,7 @@ import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { apiGet, apiDelete } from "@/lib/api/api-fetch";
@@ -48,7 +49,7 @@ export function SecuritySessionsCard({
   const [open, setOpen] = useState(false);
   const regionId = useId();
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.sessions(),
     queryFn: () => apiGet<{ sessions: SessionRow[] }>("/api/auth/me/sessions"),
     enabled: isAuthenticated,
@@ -117,9 +118,10 @@ export function SecuritySessionsCard({
         )}
 
         {isError && (
-          <p role="alert" className="text-destructive text-sm">
-            {t("settings.security.sessionsLoadError")}
-          </p>
+          <QueryErrorRow
+            message={t("settings.security.sessionsLoadError")}
+            onRetry={() => refetch()}
+          />
         )}
 
         {!isLoading && !isError && sessions.length === 0 && (

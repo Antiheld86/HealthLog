@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { ResponsiveSheet } from "@/components/ui/responsive-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { apiGet, apiPost } from "@/lib/api/api-fetch";
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
 import { invalidateKeys, queryKeys } from "@/lib/query-keys";
@@ -132,9 +133,10 @@ export function DocumentLinkPicker({
             ))}
           </div>
         ) : list.isError ? (
-          <p role="alert" className="text-destructive text-sm">
-            {t("documents.list.loadError")}
-          </p>
+          <QueryErrorRow
+            message={t("documents.list.loadError")}
+            onRetry={() => list.refetch()}
+          />
         ) : documents.length === 0 ? (
           <p className="text-muted-foreground py-4 text-center text-sm">
             {t("documents.linkPicker.empty")}

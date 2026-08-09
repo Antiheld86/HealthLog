@@ -7,6 +7,7 @@ import { apiGet } from "@/lib/api/api-fetch";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
 import { EcgWaveform } from "@/components/insights/ecg-waveform";
 import { InsightSectionCard } from "@/components/insights/insight-section-card";
+import { QueryErrorCard } from "@/components/ui/query-error-card";
 import {
   ecgResultLabel,
   isNonNormalEcg,
@@ -41,7 +42,7 @@ export function EcgDetail({ recordingId }: { recordingId: string }) {
   const { t } = useTranslations();
   const fmt = useFormatters();
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.insightsEcgDetail(recordingId, false),
     queryFn: async () => {
       try {
@@ -55,15 +56,13 @@ export function EcgDetail({ recordingId }: { recordingId: string }) {
   });
 
   if (isError) {
-    // A failed read must never read as "no data" (UI-STANDARDS §6).
+    // A failed read must never read as "no data" (UI-STANDARDS §6), and the
+    // alert is content, not muted meta — it also has to be recoverable.
     return (
-      <p
-        data-slot="ecg-detail-error"
-        role="alert"
-        className="text-muted-foreground text-sm"
-      >
-        {t("insights.ecg.loadError")}
-      </p>
+      <QueryErrorCard
+        title={t("insights.ecg.loadError")}
+        onRetry={() => refetch()}
+      />
     );
   }
 

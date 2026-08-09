@@ -38,7 +38,6 @@ import {
   CalendarPlus,
   CheckCircle2,
   Plus,
-  RefreshCw,
   Wrench,
 } from "lucide-react";
 
@@ -76,6 +75,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { DateField } from "@/components/ui/date-field";
 import { EmptyState } from "@/components/ui/empty-state";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LineChart, MoreVertical, Pencil, Trash2 } from "lucide-react";
@@ -703,23 +703,10 @@ export function VorsorgeSection({
       )}
 
       {!isLoading && isError && (
-        <div
-          role="alert"
-          data-slot="vorsorge-error"
-          className="text-muted-foreground flex flex-col items-start gap-3 py-8 text-sm sm:flex-row sm:items-center sm:justify-between"
-        >
-          <span>{t("measurementReminders.loadError")}</span>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => void refetch()}
-            className="gap-1.5"
-          >
-            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>{t("common.retry")}</span>
-          </Button>
-        </div>
+        <QueryErrorRow
+          message={t("measurementReminders.loadError")}
+          onRetry={() => void refetch()}
+        />
       )}
 
       {!isLoading && !isError && (reminders?.length ?? 0) === 0 && (

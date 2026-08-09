@@ -427,7 +427,7 @@
       "evening": "Bonsoir"
     },
     "welcomeBack": "{greeting}, content de te revoir.",
-    "welcomeBackWithName": "{greeting} {name}, content de te revoir.",
+    "welcomeBackWithName": "{greeting}, {name}, content de te revoir.",
     "greetingSalutation": "Bonjour, {name}",
     "streakLabel": "jours d’affilée",
     "weight": "Poids",
@@ -4615,6 +4615,8 @@
     },
     "sharedRecord": {
       "managedSettings": {
+        "saveError": "Échec de l'enregistrement. Réessayez.",
+        "validationError": "Vérifiez vos saisies.",
         "profile": {
           "title": "Profil",
           "displayName": "Nom affiché",
@@ -6283,7 +6285,7 @@
       "connectDescription": "Collez cette URL dans la configuration du connecteur personnalisé de votre assistant, puis autorisez avec le jeton ci-dessous ou connectez-vous lorsque vous y êtes invité.",
       "tokensTitle": "Jetons du connecteur",
       "tokensDescription": "Générez un jeton en lecture seule pour connecter un assistant.",
-      "scopeNote": "Les jetons sont limités à health:read : accès en lecture seule à vos propres données. Ils ne peuvent jamais atteindre les fonctions d'administration.",
+      "scopeNote": "Par défaut, les jetons n'ont qu'un accès en lecture à vos propres données. L'accès en écriture est optionnel et s'active par jeton avec le commutateur ci-dessous. Les jetons ne peuvent jamais atteindre les fonctions d'administration.",
       "writeScopeToggleLabel": "Autoriser l'enregistrement (health:write)",
       "writeScopeNote": "Ajoute la portée health:write pour que l'assistant puisse enregistrer de nouvelles mesures et entrées d'humeur dans votre compte. Chaque écriture est d'abord confirmée. Le jeton ne peut toujours pas supprimer ni modifier des entrées existantes, changer les médicaments, ni atteindre les fonctions REST ou d'administration. Laissez désactivé pour un accès en lecture seule.",
       "connectionsTitle": "Assistants connectés",

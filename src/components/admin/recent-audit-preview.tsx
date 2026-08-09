@@ -19,6 +19,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { formatDateTime } from "@/lib/format";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
@@ -37,7 +38,7 @@ interface AuditLogResponse {
 export function RecentAuditPreview() {
   const { t } = useTranslations();
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.adminAuditOverview(),
     queryFn: async () => {
       return apiGet<AuditLogResponse>(
@@ -82,12 +83,10 @@ export function RecentAuditPreview() {
             </span>
           </div>
         ) : isError ? (
-          <div
-            role="alert"
-            className="text-destructive bg-destructive/10 border-destructive/30 rounded-md border px-3 py-2 text-sm"
-          >
-            {t("admin.overview.auditLoadError")}
-          </div>
+          <QueryErrorRow
+            message={t("admin.overview.auditLoadError")}
+            onRetry={() => void refetch()}
+          />
         ) : entries.length === 0 ? (
           // v1.4.15 phase-C5: compact + plain so it nests inside the
           // overview card without doubling the dashed border. Reuses

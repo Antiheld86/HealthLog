@@ -34,6 +34,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -152,13 +153,10 @@ export function CoachMemorySection({
       <p className="text-sm">{t("settings.ai.coachMemory.detail")}</p>
 
       {query.isError && (
-        <p
-          role="status"
-          aria-live="polite"
-          className="text-destructive text-sm"
-        >
-          {t("settings.ai.coachMemory.loadError")}
-        </p>
+        <QueryErrorRow
+          message={t("settings.ai.coachMemory.loadError")}
+          onRetry={() => query.refetch()}
+        />
       )}
 
       {!query.isError && facts.length === 0 ? (

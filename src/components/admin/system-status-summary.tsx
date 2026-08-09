@@ -16,12 +16,13 @@ import { Clock, Cog, Database, Globe, Loader2, Server } from "lucide-react";
 import { formatDateTime } from "@/lib/format";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { useTranslations } from "@/lib/i18n/context";
 import { StatusItem, usePublicVersion, useSystemStatus } from "./_shared";
 
 export function SystemStatusSummary() {
   const { t } = useTranslations();
-  const { data: status, isError } = useSystemStatus();
+  const { data: status, isError, refetch } = useSystemStatus();
   const { data: version } = usePublicVersion();
 
   return (
@@ -90,12 +91,10 @@ export function SystemStatusSummary() {
           )}
         </div>
       ) : isError ? (
-        <div
-          role="alert"
-          className="text-destructive bg-destructive/10 border-destructive/30 rounded-md border px-3 py-2 text-sm"
-        >
-          {t("admin.overview.snapshotLoadError")}
-        </div>
+        <QueryErrorRow
+          message={t("admin.overview.snapshotLoadError")}
+          onRetry={() => void refetch()}
+        />
       ) : (
         <div className="flex items-center gap-2">
           <Loader2

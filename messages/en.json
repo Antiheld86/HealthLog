@@ -427,7 +427,7 @@
       "evening": "Good evening"
     },
     "welcomeBack": "{greeting}, welcome back.",
-    "welcomeBackWithName": "{greeting} {name}, welcome back.",
+    "welcomeBackWithName": "{greeting}, {name}, welcome back.",
     "greetingSalutation": "Hi, {name}",
     "streakLabel": "days in a row",
     "weight": "Weight",
@@ -4615,6 +4615,8 @@
     },
     "sharedRecord": {
       "managedSettings": {
+        "saveError": "Couldn't save. Please try again.",
+        "validationError": "Please check your entries.",
         "profile": {
           "title": "Profile",
           "displayName": "Display name",
@@ -6283,7 +6285,7 @@
       "connectDescription": "Paste this URL into your assistant's custom-connector setup, then authorize with the token below or sign in when prompted.",
       "tokensTitle": "Connector tokens",
       "tokensDescription": "Mint a read-only token to connect an assistant.",
-      "scopeNote": "Tokens are scoped to health:read — read-only access to your own records. They can never reach admin functions.",
+      "scopeNote": "Tokens grant read-only access to your own records by default. Write access is optional and enabled per token with the toggle below. The tokens can never reach admin functions.",
       "writeScopeToggleLabel": "Allow logging (health:write)",
       "writeScopeNote": "Adds the health:write scope so the assistant can log new measurements and mood entries to your account. Every write is confirmed first. The token still can't delete or edit existing entries, change medications, or reach REST or admin functions. Leave off for read-only access.",
       "connectionsTitle": "Connected assistants",

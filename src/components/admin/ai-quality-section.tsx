@@ -23,6 +23,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Sparkles, Loader2 } from "lucide-react";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { apiGet } from "@/lib/api/api-fetch";
@@ -102,12 +103,10 @@ export function AiQualitySection() {
           </span>
         </div>
       ) : query.isError ? (
-        <div
-          role="alert"
-          className="text-destructive bg-destructive/10 border-destructive/30 rounded-md border p-3 text-sm"
-        >
-          {t("admin.aiQuality.loadError")}
-        </div>
+        <QueryErrorRow
+          message={t("admin.aiQuality.loadError")}
+          onRetry={() => void query.refetch()}
+        />
       ) : !hasData ? (
         <p className="text-muted-foreground text-sm">
           {t("admin.aiQuality.empty")}

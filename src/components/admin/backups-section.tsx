@@ -36,6 +36,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -286,7 +287,7 @@ export function BackupsSection() {
   const fmt = useFormatters();
   const queryClient = useQueryClient();
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.adminBackups(),
     queryFn: async () => {
       return apiGet<BackupsList>("/api/admin/backups");
@@ -596,12 +597,10 @@ export function BackupsSection() {
           </span>
         </div>
       ) : isError ? (
-        <div
-          role="alert"
-          className="text-destructive bg-destructive/10 border-destructive/30 rounded-md border px-3 py-2 text-sm"
-        >
-          {t("admin.section.backups.loadError")}
-        </div>
+        <QueryErrorRow
+          message={t("admin.section.backups.loadError")}
+          onRetry={() => void refetch()}
+        />
       ) : rows.length === 0 ? (
         // v1.4.15 phase-C5: replace bare text with the EmptyState
         // primitive. The header already exposes "Backup now" but a

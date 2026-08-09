@@ -89,6 +89,21 @@ describe("<VorsorgeSection> loading + empty", () => {
     expect(html).not.toContain('data-slot="empty-state"');
   });
 
+  it("surfaces a read failure through the shared query-error primitive with retry", () => {
+    remindersMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch: vi.fn(),
+    });
+    const html = render(<VorsorgeSection />);
+    expect(html).toContain('data-slot="query-error-row"');
+    expect(html).toContain('data-slot="query-error-row-retry"');
+    // Not the empty state, and no longer the muted bespoke row.
+    expect(html).not.toContain('data-slot="empty-state"');
+    expect(html).not.toContain('data-slot="vorsorge-error"');
+  });
+
   it("routes the no-data case through the shared EmptyState with an action", () => {
     remindersMock.mockReturnValue({ data: [], isLoading: false });
     const html = render(<VorsorgeSection />);
