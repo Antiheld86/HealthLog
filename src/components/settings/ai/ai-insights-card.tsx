@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { MedicalDisclaimer } from "@/components/common/medical-disclaimer";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
+import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
@@ -61,38 +62,61 @@ export function AiInsightsCard({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const { data: insightsSettings } = useQuery({
+  // A read failure must surface, not be swallowed into a null that renders the
+  // default provider form as if the account were configured that way (§6). The
+  // queryFns throw on a non-OK response so the query reports `isError`, and the
+  // card paints an honest error instead of a misleading form.
+  const {
+    data: insightsSettings,
+    isError: settingsError,
+    refetch: refetchSettings,
+  } = useQuery({
     queryKey: queryKeys.insightsSettings(),
     queryFn: async () => {
       const res = await apiFetchRaw("/api/insights/settings");
-      if (!res.ok) return null;
+      if (!res.ok) throw new Error("insights settings read failed");
       const json = await res.json();
       return json.data as InsightsSettings;
     },
     enabled: isAuthenticated,
   });
 
-  const { data: userProvider } = useQuery({
+  const {
+    data: userProvider,
+    isError: providerError,
+    refetch: refetchProvider,
+  } = useQuery({
     queryKey: queryKeys.userAiProvider(),
     queryFn: async () => {
       const res = await apiFetchRaw("/api/user/ai-provider");
-      if (!res.ok) return null;
+      if (!res.ok) throw new Error("user AI provider read failed");
       const json = await res.json();
       return json.data as UserAIProvider;
     },
     enabled: isAuthenticated,
   });
 
-  const { data: chainData } = useQuery({
+  const {
+    data: chainData,
+    isError: chainError,
+    refetch: refetchChain,
+  } = useQuery({
     queryKey: queryKeys.insightsProviderChain(),
     queryFn: async () => {
       const res = await apiFetchRaw("/api/insights/provider-chain");
-      if (!res.ok) return null;
+      if (!res.ok) throw new Error("insights provider chain read failed");
       const json = await res.json();
       return json.data as ProviderChainData;
     },
     enabled: isAuthenticated,
   });
+
+  const hasReadError = settingsError || providerError || chainError;
+  function retryReads() {
+    void refetchSettings();
+    void refetchProvider();
+    void refetchChain();
+  }
 
   // v1.16.13 — heal the web AI-consent receipt on mount. The server-side
   // consent gate (admin-openai egress) requires an active `ai_full`
@@ -160,65 +184,71 @@ export function AiInsightsCard({
       />
 
       <div className="space-y-4">
-        <ActiveProviderSelect
-          value={selectedProvider}
-          onChange={pickProvider}
-        />
+        {hasReadError ? (
+          <QueryErrorCard onRetry={retryReads} />
+        ) : (
+          <>
+            <ActiveProviderSelect
+              value={selectedProvider}
+              onChange={pickProvider}
+            />
 
-        <ProviderConfigCard
-          provider={selectedProvider}
-          insightsSettings={insightsSettings}
-          userProvider={userProvider}
-        />
+            <ProviderConfigCard
+              provider={selectedProvider}
+              insightsSettings={insightsSettings}
+              userProvider={userProvider}
+            />
 
-        <FallbackChainCard
-          chain={chainData?.configuredChain ?? []}
-          selected={selectedProvider}
-          onSelect={pickProvider}
-        />
+            <FallbackChainCard
+              chain={chainData?.configuredChain ?? []}
+              selected={selectedProvider}
+              onSelect={pickProvider}
+            />
 
-        {/* v1.22 (#89) — per-user response timeout (mainly for slow
+            {/* v1.22 (#89) — per-user response timeout (mainly for slow
             local/self-hosted backends). */}
-        <ResponseTimeoutCard userProvider={userProvider} />
+            <ResponseTimeoutCard userProvider={userProvider} />
 
-        {/* Read uploaded vault documents automatically with AI (opt-in). */}
-        <AutoReadCard />
+            {/* Read uploaded vault documents automatically with AI (opt-in). */}
+            <AutoReadCard />
 
-        {/* Use the operator's shared central Codex connection (opt-in; only
+            {/* Use the operator's shared central Codex connection (opt-in; only
             renders when the operator has connected it). */}
-        <CentralCodexSwitch settings={insightsSettings} />
+            <CentralCodexSwitch settings={insightsSettings} />
 
-        {/* The standing consent and the one control that withdraws it. It
+            {/* The standing consent and the one control that withdraws it. It
             sits last because it governs everything above rather than
             configuring any single provider. */}
-        <AiConsentCard isAuthenticated={isAuthenticated} />
+            <AiConsentCard isAuthenticated={isAuthenticated} />
 
-        <RuntimeActionsRow
-          provider={selectedProvider}
-          userProvider={userProvider}
-          canRegenerate={
-            insightsSettings?.codexStatus === "connected" ||
-            insightsSettings?.hasAdminKey ||
-            Boolean(userProvider?.provider)
-          }
-          privacyMode={insightsSettings?.privacyMode ?? "aggregated"}
-          lastInsightAt={insightsSettings?.lastInsightAt ?? null}
-          onRegenerated={() =>
-            queryClient.invalidateQueries({
-              queryKey: queryKeys.insightsRoot(),
-            })
-          }
-          onPrivacyChanged={() =>
-            queryClient.invalidateQueries({
-              queryKey: queryKeys.insightsRoot(),
-            })
-          }
-        />
+            <RuntimeActionsRow
+              provider={selectedProvider}
+              userProvider={userProvider}
+              canRegenerate={
+                insightsSettings?.codexStatus === "connected" ||
+                insightsSettings?.hasAdminKey ||
+                Boolean(userProvider?.provider)
+              }
+              privacyMode={insightsSettings?.privacyMode ?? "aggregated"}
+              lastInsightAt={insightsSettings?.lastInsightAt ?? null}
+              onRegenerated={() =>
+                queryClient.invalidateQueries({
+                  queryKey: queryKeys.insightsRoot(),
+                })
+              }
+              onPrivacyChanged={() =>
+                queryClient.invalidateQueries({
+                  queryKey: queryKeys.insightsRoot(),
+                })
+              }
+            />
 
-        {/* v1.25 — the data-posture statement lives where the provider key is
+            {/* v1.25 — the data-posture statement lives where the provider key is
             configured: self-hosted, data stays on this instance, BYOK / local
             model, no third-party analytics. One calm line, not a banner. */}
-        <MedicalDisclaimer variant="dataPosture" />
+            <MedicalDisclaimer variant="dataPosture" />
+          </>
+        )}
       </div>
     </SettingsCard>
   );
