@@ -8540,7 +8540,7 @@
       "lot": "Numer serii",
       "site": "Miejsce podania",
       "siteNone": "Nie podano",
-      "practitioner": "Gabinet / lekarz",
+      "practitioner": "Gabinet lub lekarz",
       "note": "Notatka",
       "linkDocuments": "Powiąż dokument",
       "linkNothingToOffer": "Brak dokumentów."
@@ -10215,8 +10215,8 @@
     "createTitle": "Zapisz wizytę",
     "editTitle": "Edytuj wizytę",
     "formDescription": "Wymagana jest tylko data.",
-    "created": "Wizyta zapisana.",
-    "updated": "Wizyta zaktualizowana.",
+    "created": "Wizyta zapisana",
+    "updated": "Wizyta zaktualizowana",
     "saveFailed": "Nie udało się zapisać wizyty.",
     "checkupNotClosed": "Wizyta zapisana. Badanie pozostaje otwarte — twój dostęp tego nie obejmuje.",
     "status": {

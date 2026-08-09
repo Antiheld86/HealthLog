@@ -8540,7 +8540,7 @@
       "lot": "Numéro de lot",
       "site": "Site d'injection",
       "siteNone": "Non précisé",
-      "practitioner": "Cabinet / médecin",
+      "practitioner": "Cabinet ou médecin",
       "note": "Note",
       "linkDocuments": "Associer un document",
       "linkNothingToOffer": "Aucun document pour l'instant."
@@ -10215,8 +10215,8 @@
     "createTitle": "Enregistrer un rendez-vous",
     "editTitle": "Modifier le rendez-vous",
     "formDescription": "Seule la date est obligatoire.",
-    "created": "Rendez-vous enregistré.",
-    "updated": "Rendez-vous mis à jour.",
+    "created": "Rendez-vous enregistré",
+    "updated": "Rendez-vous mis à jour",
     "saveFailed": "Le rendez-vous n'a pas pu être enregistré.",
     "checkupNotClosed": "Rendez-vous enregistré. Le dépistage reste ouvert : votre accès ne le couvre pas.",
     "status": {

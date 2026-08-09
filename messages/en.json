@@ -8540,7 +8540,7 @@
       "lot": "Lot number",
       "site": "Injection site",
       "siteNone": "Not specified",
-      "practitioner": "Practice / doctor",
+      "practitioner": "Practice or doctor",
       "note": "Note",
       "linkDocuments": "Link a document",
       "linkNothingToOffer": "No documents yet."
@@ -10215,8 +10215,8 @@
     "createTitle": "Record a visit",
     "editTitle": "Edit visit",
     "formDescription": "Only the date is required.",
-    "created": "Visit saved.",
-    "updated": "Visit updated.",
+    "created": "Visit saved",
+    "updated": "Visit updated",
     "saveFailed": "The visit could not be saved.",
     "checkupNotClosed": "Visit saved. The checkup stays open — your access does not cover that.",
     "status": {

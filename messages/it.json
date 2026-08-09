@@ -8540,7 +8540,7 @@
       "lot": "Numero di lotto",
       "site": "Sede di iniezione",
       "siteNone": "Non specificato",
-      "practitioner": "Studio / medico",
+      "practitioner": "Studio o medico",
       "note": "Nota",
       "linkDocuments": "Collega un documento",
       "linkNothingToOffer": "Nessun documento ancora."
@@ -10215,8 +10215,8 @@
     "createTitle": "Registra un appuntamento",
     "editTitle": "Modifica appuntamento",
     "formDescription": "Solo la data è obbligatoria.",
-    "created": "Appuntamento salvato.",
-    "updated": "Appuntamento aggiornato.",
+    "created": "Appuntamento salvato",
+    "updated": "Appuntamento aggiornato",
     "saveFailed": "Non è stato possibile salvare l'appuntamento.",
     "checkupNotClosed": "Appuntamento salvato. Il controllo resta aperto: il tuo accesso non lo comprende.",
     "status": {

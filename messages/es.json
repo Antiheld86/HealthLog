@@ -8540,7 +8540,7 @@
       "lot": "Número de lote",
       "site": "Lugar de aplicación",
       "siteNone": "Sin especificar",
-      "practitioner": "Consulta / médico",
+      "practitioner": "Consulta o médico",
       "note": "Nota",
       "linkDocuments": "Vincular un documento",
       "linkNothingToOffer": "Aún no hay documentos."
@@ -10215,8 +10215,8 @@
     "createTitle": "Registrar una cita",
     "editTitle": "Editar la cita",
     "formDescription": "Solo la fecha es obligatoria.",
-    "created": "Cita guardada.",
-    "updated": "Cita actualizada.",
+    "created": "Cita guardada",
+    "updated": "Cita actualizada",
     "saveFailed": "No se pudo guardar la cita.",
     "checkupNotClosed": "Cita guardada. La revisión sigue pendiente: tu acceso no lo permite.",
     "status": {
