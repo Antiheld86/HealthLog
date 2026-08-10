@@ -507,6 +507,10 @@ export async function buildFullBackupPayload(
               cyclicOnWeeks: s.cyclicOnWeeks,
               cyclicOffWeeks: s.cyclicOffWeeks,
               doseWindows: s.doseWindows,
+              // #219 — per-schedule units per dose. Decimal → string like the
+              // medication-level column; NULL (inherit) stays NULL.
+              unitsPerDose:
+                s.unitsPerDose == null ? null : s.unitsPerDose.toString(),
             }
           : {}),
         windowStart: s.windowStart,

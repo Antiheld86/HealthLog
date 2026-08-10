@@ -127,6 +127,9 @@ const medicationScheduleSchema = z
     windowEnd: z.string().min(1),
     label: z.string().nullable().optional(),
     dose: z.string().nullable().optional(),
+    // #219 — per-schedule units per dose. Serialised as a Decimal string in a
+    // DR file (or a number in a hand-authored one); NULL means inherit.
+    unitsPerDose: z.union([z.string(), z.number()]).nullable().optional(),
     daysOfWeek: z.string().nullable().optional(),
     timesOfDay: z.array(z.string()).optional(),
     reminderGraceMinutes: z.number().int().nullable().optional(),
