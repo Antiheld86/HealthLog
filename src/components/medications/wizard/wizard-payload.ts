@@ -184,6 +184,18 @@ export interface ScheduleDraft {
   subControls: CadenceSubControls;
   timesOfDay: string[];
   /**
+   * #219 — per-schedule dose override (empty = inherit the medication
+   * `dose`). Lets a "1-0.5-0.5" split ride ONE medication with three
+   * schedules at different doses instead of three separate drugs.
+   */
+  dose?: string;
+  /**
+   * #219 — per-schedule units-consumed-per-dose (empty = inherit the
+   * medication `unitsPerDose`). Decrements the right tablet count for a
+   * morning-whole / noon-half plan.
+   */
+  unitsPerDose?: string;
+  /**
    * v1.15.18 — per-dose explicit on-time windows. One entry per dose
    * time the user widened beyond the symmetric ±1h default; a time with
    * no entry keeps the default band. Empty when every dose uses the
@@ -248,6 +260,15 @@ export interface WizardPayload {
   /** Mirrors `schedules[activeScheduleIndex].timesOfDay`. */
   timesOfDay: string[];
   /**
+   * #219 — mirrors `schedules[activeScheduleIndex].dose`. The per-slot
+   * dose + units inputs on Step 7 read + write these flat slots; the
+   * active-draft helpers keep them in sync with the schedule list. Empty
+   * string = inherit the medication-level value.
+   */
+  scheduleDose: string;
+  /** #219 — mirrors `schedules[activeScheduleIndex].unitsPerDose`. */
+  scheduleUnitsPerDose: string;
+  /**
    * v1.15.18 — mirrors `schedules[activeScheduleIndex].doseWindows`. The
    * per-dose window editor in Step 7 reads + writes this flat slot; the
    * active-draft helpers keep it in sync with the schedule list.
@@ -298,6 +319,8 @@ export function emptyWizardPayload(): WizardPayload {
     cadence: draft.cadence,
     subControls: draft.subControls,
     timesOfDay: draft.timesOfDay,
+    scheduleDose: draft.dose ?? "",
+    scheduleUnitsPerDose: draft.unitsPerDose ?? "",
     doseWindows: draft.doseWindows ?? [],
     startsOn: todayUtc(),
     endsOn: null,
@@ -326,6 +349,14 @@ export function commitActiveDraft(payload: WizardPayload): WizardPayload {
     cadence: payload.cadence,
     subControls: payload.subControls,
     timesOfDay: payload.timesOfDay,
+    // #219 — project the per-slot dose / units flat mirror onto the draft.
+    // Empty string collapses to undefined so the encode path omits the
+    // field and the schedule inherits the medication-level value.
+    dose: payload.scheduleDose.trim() === "" ? undefined : payload.scheduleDose,
+    unitsPerDose:
+      payload.scheduleUnitsPerDose.trim() === ""
+        ? undefined
+        : payload.scheduleUnitsPerDose,
     doseWindows: payload.doseWindows,
   };
   const schedules = payload.schedules.slice();
@@ -351,6 +382,8 @@ export function setActiveSchedule(
     cadence: draft.cadence,
     subControls: draft.subControls,
     timesOfDay: draft.timesOfDay,
+    scheduleDose: draft.dose ?? "",
+    scheduleUnitsPerDose: draft.unitsPerDose ?? "",
     doseWindows: draft.doseWindows ?? [],
   };
 }
@@ -372,6 +405,8 @@ export function addSchedule(payload: WizardPayload): WizardPayload {
     cadence: draft.cadence,
     subControls: draft.subControls,
     timesOfDay: draft.timesOfDay,
+    scheduleDose: draft.dose ?? "",
+    scheduleUnitsPerDose: draft.unitsPerDose ?? "",
   };
 }
 
@@ -397,6 +432,8 @@ export function removeSchedule(
     cadence: draft.cadence,
     subControls: draft.subControls,
     timesOfDay: draft.timesOfDay,
+    scheduleDose: draft.dose ?? "",
+    scheduleUnitsPerDose: draft.unitsPerDose ?? "",
   };
 }
 
@@ -578,6 +615,17 @@ export interface CreateMedicationBody {
     rollingIntervalDays?: number;
     daysOfWeek?: number[];
     intervalWeeks?: number;
+    /** #219 — per-schedule dose override. Omitted = inherit `dose`. */
+    dose?: string;
+    /** #219 — per-schedule units per dose. Omitted = inherit `unitsPerDose`. */
+    unitsPerDose?: number;
+    /**
+     * #219 — schedule type. PRN routes a per-draft as-needed slot onto the
+     * SAME medication (an as-needed extra dose alongside scheduled ones)
+     * instead of flipping the whole-medication `asNeeded` flag. Omitted =
+     * SCHEDULED.
+     */
+    scheduleType?: "SCHEDULED" | "PRN";
     /** v1.15.18 — per-dose explicit on-time windows. Omitted when none. */
     doseWindows?: DoseWindowEntry[];
   }>;
@@ -626,6 +674,11 @@ export function encodeScheduleDraft(
   oneShotMedication: boolean,
 ): CreateMedicationBody["schedules"][number] {
   const isOneShot = oneShotMedication || draft.mode === "oneShot";
+  // #219 — a per-draft as-needed slot rides the SAME medication as a PRN
+  // schedule (never due / reminded / scored), so an as-needed extra dose
+  // sits alongside the scheduled ones instead of splitting into a second
+  // drug. A PRN slot carries no cadence.
+  const isPrn = draft.mode === "asNeeded";
   const times = sortTimes(
     isOneShot ? draft.timesOfDay.slice(0, 1) : draft.timesOfDay,
   );
@@ -638,6 +691,14 @@ export function encodeScheduleDraft(
     timesOfDay: times,
   };
   if (draft.id) out.id = draft.id;
+  // #219 — per-slot dose + units overrides. Empty / whitespace collapses to
+  // omitted so the schedule inherits the medication-level value.
+  if (draft.dose && draft.dose.trim() !== "") out.dose = draft.dose.trim();
+  if (draft.unitsPerDose && draft.unitsPerDose.trim() !== "") {
+    const parsed = Number.parseFloat(draft.unitsPerDose);
+    if (Number.isFinite(parsed) && parsed > 0) out.unitsPerDose = parsed;
+  }
+  if (isPrn) out.scheduleType = "PRN";
   // v1.15.18 — emit only the explicit windows that still name a live dose
   // time and actually differ from the default ±1h band (a point-equivalent
   // window leaves the column on the default derivation).
@@ -648,7 +709,10 @@ export function encodeScheduleDraft(
     );
     if (windows.length > 0) out.doseWindows = windows;
   }
-  if (!isOneShot) {
+  // #219 — a PRN slot carries no cadence (the schedule validator rejects a
+  // PRN with rrule / rollingIntervalDays), so suppress the recurrence block
+  // exactly as the one-shot path does.
+  if (!isOneShot && !isPrn) {
     if (draft.cadence.rrule !== null) {
       out.rrule = draft.cadence.rrule;
     } else if (draft.cadence.rollingIntervalDays !== null) {
@@ -695,7 +759,15 @@ export function buildCreateBody(
   // v1.16.11 — an as-needed medication carries NO schedule at all; the
   // wizard clears the list client-side (the server 422s otherwise).
   const isOneShot = committed.mode === "oneShot";
-  const isAsNeeded = committed.mode === "asNeeded";
+  // #219 — an as-needed slot only flips the WHOLE-medication asNeeded flag
+  // (zero schedules, never due / scored) when EVERY draft is as-needed. When
+  // an as-needed draft sits alongside scheduled ones it is emitted as a PRN
+  // schedule on the same medication (see `encodeScheduleDraft`), so a
+  // scheduled plan can carry an as-needed extra dose without a second drug.
+  const hasScheduledDraft = committed.schedules.some(
+    (d) => d.mode !== "asNeeded",
+  );
+  const isAsNeeded = !isOneShot && !hasScheduledDraft;
   const draftsToEmit = isAsNeeded
     ? []
     : isOneShot
@@ -972,11 +1044,15 @@ export interface MedicationPayload {
     windowEnd: string;
     label?: string | null;
     dose?: string | null;
+    /** #219 — per-schedule units per dose (edit-hydrate). NULL = inherit. */
+    unitsPerDose?: number | null;
     daysOfWeek?: number[];
     intervalWeeks?: number;
     timesOfDay?: string[];
     rrule?: string | null;
     rollingIntervalDays?: number | null;
+    /** #219 — per-schedule as-needed slot (PRN) round-trips as a mode. */
+    scheduleType?: string | null;
     /** v1.15.18 — per-dose explicit on-time windows (edit-hydrate). */
     doseWindows?: DoseWindowEntry[] | null;
   }>;
@@ -1004,6 +1080,9 @@ interface MedicationScheduleSnapshot {
   id?: string;
   windowStart: string;
   windowEnd: string;
+  dose?: string | null;
+  unitsPerDose?: number | null;
+  scheduleType?: string | null;
   daysOfWeek?: number[];
   intervalWeeks?: number;
   timesOfDay?: string[];
@@ -1023,13 +1102,23 @@ function hydrateScheduleDraft(
       : schedule.windowStart
         ? [schedule.windowStart]
         : ["08:00"];
+  // #219 — a PRN schedule round-trips as an as-needed draft; every other
+  // type hydrates as recurring (one-shot is driven by the medication flag).
+  const isPrn = !oneShot && schedule.scheduleType === "PRN";
   const draft: ScheduleDraft = {
-    mode: oneShot ? "oneShot" : "recurring",
+    mode: oneShot ? "oneShot" : isPrn ? "asNeeded" : "recurring",
     cadence: cadence.value,
     subControls: cadence.subControls,
     timesOfDay: times,
   };
   if (schedule.id) draft.id = schedule.id;
+  // #219 — round-trip the per-slot dose + units so an edit keeps the split.
+  if (typeof schedule.dose === "string" && schedule.dose.trim() !== "") {
+    draft.dose = schedule.dose;
+  }
+  if (typeof schedule.unitsPerDose === "number" && schedule.unitsPerDose > 0) {
+    draft.unitsPerDose = String(schedule.unitsPerDose);
+  }
   // v1.15.18 — round-trip the persisted per-dose windows so an edit keeps
   // the user's explicit ranges instead of resetting them to the default.
   if (schedule.doseWindows && schedule.doseWindows.length > 0) {
@@ -1089,6 +1178,8 @@ export function hydrateWizardPayload(
     cadence: first.cadence,
     subControls: first.subControls,
     timesOfDay: first.timesOfDay,
+    scheduleDose: first.dose ?? "",
+    scheduleUnitsPerDose: first.unitsPerDose ?? "",
     doseWindows: first.doseWindows ?? [],
     startsOn: initial.startsOn ?? base.startsOn,
     endsOn: initial.endsOn,

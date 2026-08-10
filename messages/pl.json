@@ -1476,6 +1476,11 @@
             "evening": "Wieczór",
             "night": "Noc"
           },
+          "overrideHint": "Opcjonalnie — ustaw inną dawkę lub liczbę jednostek tylko dla tej pory. Pozostaw puste, aby użyć wartości domyślnej leku.",
+          "doseOverrideLabel": "Dawka dla tej pory (opcjonalnie)",
+          "doseOverridePlaceholder": "np. pół tabletki",
+          "unitsOverrideLabel": "Jednostki zużyte o tej porze",
+          "unitsOverrideInherit": "Domyślnie",
           "short": "Godziny"
         },
         "step8": {
@@ -2061,6 +2066,7 @@
     "logInjectionSiteConfirm": "Zapisz miejsce",
     "logInjectionSiteNoneAvailable": "Brak dostępnego miejsca iniekcji — wszystkie miejsca są wykluczone w Twoich ustawieniach.",
     "logInjectionSiteSaveFailed": "Nie udało się zapisać miejsca iniekcji. Spróbuj ponownie.",
+    "perSlotUnits": "{units} na dawkę",
     "trackInjectionSitesToggle": "Rejestruj miejsca iniekcji",
     "trackInjectionSitesHint": "Po przyjęciu dawki zapytaj, którego miejsca użyto, i zaproponuj kolejną rotację.",
     "allowedSitesLabel": "Dozwolone miejsca",
