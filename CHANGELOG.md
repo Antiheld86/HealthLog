@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.37.10] — 2026-08-10
+
+### Added
+
+- A medication can take a different dose at each time of day, all from the one supply. If you take one tablet in the morning and half a tablet at noon and at night, that is one medication with three times now, not two separate entries that split your stock in two. Each time slot carries its own dose and its own count of units consumed, so the supply counts down by the right amount at each one. An occasional as-needed dose is a slot on the same medication too, drawing from the same box, rather than a third phantom entry. Existing medications are unchanged, and one that does not set a per-slot amount keeps counting down exactly as before.
+
 ## [1.37.9] — 2026-08-10
 
 ### Added
