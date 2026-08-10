@@ -13,6 +13,7 @@ import { formatDateTime, formatTime } from "@/lib/format";
 import { getDateTimeFormat } from "@/lib/intl/formatter-cache";
 import { getMedicationCategoryLabel } from "@/lib/medications/category-label";
 import { formatDose } from "@/lib/medications/format-dose";
+import { formatUnitsPerDose } from "@/components/medications/units-per-dose";
 import { reduceCurrentWindowStatus } from "@/lib/medications/window-status";
 import { resolveNextDueDayLabel } from "@/lib/medications/next-due-day-label";
 import { resolveDisplayedSlotInstant } from "@/components/medications/card-parts/displayed-slot-instant";
@@ -52,6 +53,8 @@ interface Schedule {
   /** Cadence fields the supply-runway estimate reads (v1.16.11). */
   rrule?: string | null;
   rollingIntervalDays?: number | null;
+  /** #219 — per-schedule units consumed per dose. NULL inherits the med level. */
+  unitsPerDose?: number | null;
 }
 
 interface Medication {
@@ -446,6 +449,15 @@ export function MedicationCard({
                 <span className="text-dose-accent hidden font-medium sm:inline">
                   {" "}
                   — {formatDose(s.dose, t)}
+                </span>
+              )}
+              {typeof s.unitsPerDose === "number" && s.unitsPerDose > 0 && (
+                <span className="text-muted-foreground hidden sm:inline">
+                  {" "}
+                  ·{" "}
+                  {t("medications.perSlotUnits", {
+                    units: formatUnitsPerDose(s.unitsPerDose),
+                  })}
                 </span>
               )}
             </>
