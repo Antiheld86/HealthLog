@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.37.11] — 2026-08-10
+
+### Changed
+
+- The lifestyle-context card in Anamnese saves in one action. Smoking, alcohol and shift-work each had their own save button; now you set what you want across all three and one Save writes them together, with a single confirmation. If one of them cannot be saved, that entry stays unsaved and says so while the others go through, rather than a single message hiding which one failed.
+
 ## [1.37.10] — 2026-08-10
 
 ### Added
