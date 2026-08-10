@@ -1476,6 +1476,11 @@
             "evening": "Evening",
             "night": "Night"
           },
+          "overrideHint": "Optional — set a different dose or unit count just for this time of day. Leave blank to use the medication's default.",
+          "doseOverrideLabel": "Dose for this time (optional)",
+          "doseOverridePlaceholder": "e.g. half a tablet",
+          "unitsOverrideLabel": "Units consumed at this time",
+          "unitsOverrideInherit": "Default",
           "short": "Times"
         },
         "step8": {
@@ -2061,6 +2066,7 @@
     "logInjectionSiteConfirm": "Save site",
     "logInjectionSiteNoneAvailable": "No injection site is available — every site is excluded in your settings.",
     "logInjectionSiteSaveFailed": "Could not save the injection site. Please try again.",
+    "perSlotUnits": "{units} per dose",
     "trackInjectionSitesToggle": "Track injection sites",
     "trackInjectionSitesHint": "After a dose is taken, ask which site was used and suggest the next rotation.",
     "allowedSitesLabel": "Allowed sites",

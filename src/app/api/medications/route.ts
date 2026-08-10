@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { Prisma } from "@/generated/prisma/client";
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate, getEvent } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
@@ -21,6 +22,7 @@ import {
 import { serializeScheduleRecurrence } from "@/lib/medication-schedule";
 import { invalidateUserMedications } from "@/lib/cache/invalidate";
 import { readMedicationsListCached } from "@/lib/medications/list-read";
+import { serializeScheduleUnitsPerDose } from "@/lib/medications/schedule-units-dto";
 import { NextRequest } from "next/server";
 
 // v1.32.25 — blast-radius cap on externally-mirrored medications per user.
@@ -66,7 +68,11 @@ export const GET = apiHandler(async () => {
  * nothing was written.
  */
 async function respondWithExistingMirror(
-  medication: Record<string, unknown> & { id: string; unitsPerDose: unknown },
+  medication: Record<string, unknown> & {
+    id: string;
+    unitsPerDose: unknown;
+    schedules: Array<{ unitsPerDose: Prisma.Decimal | null }>;
+  },
 ): Promise<Response> {
   let category = "OTHER";
   try {
@@ -88,6 +94,8 @@ async function respondWithExistingMirror(
   return apiSuccess({
     ...medication,
     unitsPerDose: Number(medication.unitsPerDose),
+    // #219 — Decimal → number for the per-schedule column too.
+    schedules: serializeScheduleUnitsPerDose(medication.schedules),
     category,
   });
 }
@@ -311,6 +319,12 @@ export const POST = apiHandler(async (request: NextRequest) => {
               windowEnd: s.windowEnd,
               label: s.label ?? null,
               dose: s.dose ?? null,
+              // #219 — per-schedule inventory units. Field-by-field (no mass
+              // assignment); absent leaves the column NULL so the consume
+              // hook inherits the medication-level units_per_dose.
+              ...(s.unitsPerDose !== undefined && {
+                unitsPerDose: s.unitsPerDose,
+              }),
               daysOfWeek: serializeScheduleRecurrence({
                 daysOfWeek: s.daysOfWeek ?? [],
                 intervalWeeks: s.intervalWeeks ?? 1,
@@ -398,6 +412,8 @@ export const POST = apiHandler(async (request: NextRequest) => {
     {
       ...medication,
       unitsPerDose: Number(medication.unitsPerDose),
+      // #219 — Decimal → number for the per-schedule column too.
+      schedules: serializeScheduleUnitsPerDose(medication.schedules),
       category: normalizedCategory,
     },
     201,

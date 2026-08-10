@@ -23,6 +23,7 @@ import { apiGet, apiPost } from "@/lib/api/api-fetch";
 import { formatDateTime, formatTime } from "@/lib/format";
 import { getMedicationCategoryLabel } from "@/lib/medications/category-label";
 import { formatDose } from "@/lib/medications/format-dose";
+import { formatUnitsPerDose } from "@/components/medications/units-per-dose";
 import { getDayOfWeekInTz } from "@/lib/tz/local-day";
 import { type InjectionSiteKey } from "@/lib/medications/injection-sites";
 import { LogInjectionSiteDialog } from "@/components/medications/log-injection-site-dialog";
@@ -72,6 +73,8 @@ interface ScheduleLite {
   /** Cadence fields the supply-runway estimate reads (v1.16.11). */
   rrule?: string | null;
   rollingIntervalDays?: number | null;
+  /** #219 — per-schedule units consumed per dose. NULL inherits the med level. */
+  unitsPerDose?: number | null;
 }
 
 interface DoseChangeLite {
@@ -483,6 +486,16 @@ export function Glp1MedicationCard({
               — {formatDose(schedule.dose, t)}
             </span>
           )}
+          {typeof schedule?.unitsPerDose === "number" &&
+            schedule.unitsPerDose > 0 && (
+              <span className="text-muted-foreground hidden sm:inline">
+                {" "}
+                ·{" "}
+                {t("medications.perSlotUnits", {
+                  units: formatUnitsPerDose(schedule.unitsPerDose),
+                })}
+              </span>
+            )}
         </>
       )
     ) : null;

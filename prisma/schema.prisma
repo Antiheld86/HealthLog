@@ -2738,6 +2738,16 @@ model MedicationSchedule {
   windowEnd            String                 @map("window_end") // HH:mm format, e.g. "10:00"
   label                String? // e.g. "Morning", "Evening"
   dose                 String? // Per-schedule dose override; null = use Medication.dose
+  /// v1.37.10 (#219) — per-schedule inventory units consumed per dose. The
+  /// intake consumption hook counts UNITS (tablets, ampoules, puffs); a
+  /// split-dose plan takes a different unit count at different times of day
+  /// (a whole tablet in the morning, a half at noon). NULL inherits the
+  /// medication-level `Medication.unitsPerDose`, so every existing row keeps
+  /// its current behaviour. Same Decimal(10,4) grain + curated fraction /
+  /// whole-number posture as the medication-level column; the consume hook
+  /// matches a taken intake's slot to its schedule by wall-clock time and
+  /// reads this first, falling back to the medication level on NULL.
+  unitsPerDose         Decimal?               @map("units_per_dose") @db.Decimal(10, 4)
   /// Legacy string encoding of the cadence ("null | 1,3,5 | i2;1,3,5").
   /// v1.5 writes go to `rrule` / `rollingIntervalDays` and v1.5.1 flipped
   /// the readers to consult the new fields first.

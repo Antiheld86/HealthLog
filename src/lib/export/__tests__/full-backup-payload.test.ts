@@ -131,6 +131,8 @@ function makePrisma() {
               scheduleType: "CYCLIC",
               cyclicOnWeeks: 3,
               cyclicOffWeeks: 1,
+              // #219 — per-schedule units per dose (a half tablet at this slot).
+              unitsPerDose: { toString: () => "0.5000" },
               doseWindows: [
                 { timeOfDay: "08:00", start: "07:30", end: "09:00" },
               ],
@@ -502,6 +504,8 @@ describe("buildFullBackupPayload disaster-recovery mode", () => {
               scheduleType: "CYCLIC",
               cyclicOnWeeks: 3,
               cyclicOffWeeks: 1,
+              // #219 — Decimal → string, round-tripped through the DR payload.
+              unitsPerDose: "0.5000",
             }),
           ],
         }),

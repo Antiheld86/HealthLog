@@ -5,6 +5,10 @@ import { Moon, Sun, Sunrise, Sunset } from "lucide-react";
 import { TimesOfDayChips } from "@/components/medications/scheduling/times-of-day-chips";
 import { DoseWindowEditor } from "@/components/medications/scheduling/dose-window-editor";
 import type { DoseWindowScale } from "@/components/medications/scheduling/dose-window";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { UNITS_PER_DOSE_OPTIONS } from "@/components/medications/units-per-dose";
 import { useTranslations } from "@/lib/i18n/context";
 
 import type { StepProps } from "./step1-name";
@@ -105,6 +109,77 @@ export function Step7Times({ payload, applyPartial }: StepProps) {
         onChange={(doseWindows) => applyPartial({ doseWindows })}
         scale={scaleForCadence(payload)}
       />
+
+      {/* #219 — per-schedule dose + units override. Leaving both blank keeps
+          the medication-level values, so a single-dose plan is unchanged; a
+          split plan (a whole tablet in the morning, a half at noon) sets a
+          different value on each schedule of ONE medication. */}
+      <div
+        className="border-border/60 space-y-3 rounded-lg border p-3"
+        data-slot="wizard-schedule-override"
+      >
+        <p className="text-muted-foreground text-xs">
+          {t("medications.wizard.steps.step7.overrideHint")}
+        </p>
+        <div className="space-y-2">
+          <Label htmlFor="wizard-schedule-dose" className="text-sm">
+            {t("medications.wizard.steps.step7.doseOverrideLabel")}
+          </Label>
+          <Input
+            id="wizard-schedule-dose"
+            type="text"
+            value={payload.scheduleDose}
+            onChange={(e) => applyPartial({ scheduleDose: e.target.value })}
+            placeholder={t(
+              "medications.wizard.steps.step7.doseOverridePlaceholder",
+            )}
+            maxLength={50}
+            autoComplete="off"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label id="wizard-schedule-units-label" className="text-sm">
+            {t("medications.wizard.steps.step7.unitsOverrideLabel")}
+          </Label>
+          <div
+            role="group"
+            aria-labelledby="wizard-schedule-units-label"
+            data-slot="wizard-schedule-units"
+            className="flex flex-wrap gap-1.5"
+          >
+            <Button
+              type="button"
+              size="sm"
+              variant={
+                payload.scheduleUnitsPerDose === "" ? "default" : "outline"
+              }
+              aria-pressed={payload.scheduleUnitsPerDose === ""}
+              className="min-w-10"
+              onClick={() => applyPartial({ scheduleUnitsPerDose: "" })}
+            >
+              {t("medications.wizard.steps.step7.unitsOverrideInherit")}
+            </Button>
+            {UNITS_PER_DOSE_OPTIONS.map((opt) => {
+              const selected = payload.scheduleUnitsPerDose === opt.raw;
+              return (
+                <Button
+                  key={opt.raw}
+                  type="button"
+                  size="sm"
+                  variant={selected ? "default" : "outline"}
+                  aria-pressed={selected}
+                  className="min-w-10 tabular-nums"
+                  onClick={() =>
+                    applyPartial({ scheduleUnitsPerDose: opt.raw })
+                  }
+                >
+                  {opt.label}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

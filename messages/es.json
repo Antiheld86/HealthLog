@@ -1476,6 +1476,11 @@
             "evening": "Tarde",
             "night": "Noche"
           },
+          "overrideHint": "Opcional: define una dosis o un número de unidades distinto solo para esta hora. Déjalo en blanco para usar el valor predeterminado del medicamento.",
+          "doseOverrideLabel": "Dosis para esta hora (opcional)",
+          "doseOverridePlaceholder": "p. ej. media pastilla",
+          "unitsOverrideLabel": "Unidades consumidas a esta hora",
+          "unitsOverrideInherit": "Predeterminado",
           "short": "Horas"
         },
         "step8": {
@@ -2061,6 +2066,7 @@
     "logInjectionSiteConfirm": "Guardar sitio",
     "logInjectionSiteNoneAvailable": "No hay ningún sitio de inyección disponible: todos los sitios están excluidos en tu configuración.",
     "logInjectionSiteSaveFailed": "No se pudo guardar el sitio de inyección. Inténtalo de nuevo.",
+    "perSlotUnits": "{units} por dosis",
     "trackInjectionSitesToggle": "Registrar sitios de inyección",
     "trackInjectionSitesHint": "Tras administrar una dosis, pregunta qué sitio se usó y sugiere la siguiente rotación.",
     "allowedSitesLabel": "Sitios permitidos",

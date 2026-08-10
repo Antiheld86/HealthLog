@@ -1476,6 +1476,11 @@
             "evening": "Abends",
             "night": "Nachts"
           },
+          "overrideHint": "Optional — für diese Uhrzeit eine abweichende Dosis oder Stückzahl festlegen. Leer lassen, um den Standard des Medikaments zu verwenden.",
+          "doseOverrideLabel": "Dosis für diese Uhrzeit (optional)",
+          "doseOverridePlaceholder": "z. B. eine halbe Tablette",
+          "unitsOverrideLabel": "Verbrauchte Einheiten zu dieser Uhrzeit",
+          "unitsOverrideInherit": "Standard",
           "short": "Zeiten"
         },
         "step8": {
@@ -2061,6 +2066,7 @@
     "logInjectionSiteConfirm": "Stelle speichern",
     "logInjectionSiteNoneAvailable": "Keine Injektionsstelle verfügbar — alle Stellen sind in deinen Einstellungen ausgeschlossen.",
     "logInjectionSiteSaveFailed": "Injektionsstelle konnte nicht gespeichert werden. Bitte versuche es erneut.",
+    "perSlotUnits": "{units} pro Dosis",
     "trackInjectionSitesToggle": "Injektionsstellen erfassen",
     "trackInjectionSitesHint": "Nach einer eingenommenen Dosis nach der verwendeten Stelle fragen und die nächste Rotation vorschlagen.",
     "allowedSitesLabel": "Erlaubte Stellen",

@@ -581,6 +581,9 @@ const handler = apiHandler(
                     windowEnd: s.windowEnd,
                     label: s.label ?? null,
                     dose: s.dose ?? null,
+                    // #219 — per-schedule units per dose. Prisma coerces the
+                    // Decimal string; NULL / absent stays NULL (inherit).
+                    unitsPerDose: s.unitsPerDose ?? null,
                     daysOfWeek: s.daysOfWeek ?? null,
                     timesOfDay: s.timesOfDay ?? [],
                     reminderGraceMinutes: s.reminderGraceMinutes ?? null,
