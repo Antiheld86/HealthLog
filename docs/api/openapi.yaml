@@ -15349,6 +15349,12 @@ components:
           description: Per-schedule dose override. NULL means the schedule inherits `Medication.dose`.
           type: string
           maxLength: 50
+        unitsPerDose:
+          description: Per-schedule inventory units consumed per dose (#219). A whole number 1-100 or a supported fraction (¼ / ⅓
+            / ½ / ⅔ / ¾) for a split pill. Omitted / NULL means the schedule inherits `Medication.unitsPerDose`. Lets
+            one medication decrement a different tablet count at different times of day (a whole tablet in the morning,
+            a half at noon).
+          type: number
         daysOfWeek:
           description: Legacy day-of-week filter (0=Sunday..6=Saturday). v1.5 reads new writes through `rrule` first; this field
             is preserved for pre-v1.5 rows and is the input the route serialises into the persisted `days_of_week`
