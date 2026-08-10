@@ -329,11 +329,32 @@ async function installA11yMocks(page: Page) {
     }),
   );
 
+  // Matches the current `MoodInsightsResponse` (mood-insights-shared.tsx): the
+  // sections short-circuit on `summary.totalEntries === 0` and then read
+  // `heatmap.cells`, so `totalEntries` and a populated `heatmap` are both
+  // required or the page throws into its error boundary. Breakdown arrays are
+  // present-but-empty; the correlations block carries every metric key.
   await page.route("**/api/mood/insights", (route) =>
     fulfilJson(route, {
-      summary: { count: 1 },
-      tagBreakdown: [],
-      trends: [],
+      summary: { totalEntries: 1, inTargetPct: null },
+      heatmap: {
+        windowDays: 30,
+        cells: [{ date: "2026-07-20", score: 4, samples: 1 }],
+      },
+      distribution: [],
+      weekday: [],
+      timeOfDay: { buckets: [], reliable: false, best: null, worst: null },
+      stability: null,
+      tags: [],
+      structuredTags: [],
+      narratives: [],
+      correlations: {
+        sleep: { result: null, points: [], n: 0 },
+        steps: { result: null, points: [], n: 0 },
+        pulse: { result: null, points: [], n: 0 },
+        weight: { result: null, points: [], n: 0 },
+        bloodPressureSystolic: { result: null, points: [], n: 0 },
+      },
     }),
   );
 
@@ -687,6 +708,15 @@ const INSIGHTS_ROUTES: readonly RouteCase[] = [
   {
     name: "/insights/weight metric subpage",
     path: "/insights/weight",
+    painted: (page) => page.locator(".recharts-wrapper").first(),
+  },
+  {
+    // Mood is event-driven, so its sub-page renders the heatmap and the mood
+    // line chart from `/api/mood/insights` rather than a MeasurementType series.
+    // Gate on the line chart's recharts wrapper — the same painted signal the
+    // weight sub-page uses — so the scan waits for the heavy content to land.
+    name: "/insights/mood metric subpage",
+    path: "/insights/mood",
     painted: (page) => page.locator(".recharts-wrapper").first(),
   },
   {
