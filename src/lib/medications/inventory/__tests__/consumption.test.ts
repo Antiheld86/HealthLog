@@ -32,10 +32,18 @@ interface FakeEvent {
   id: string;
   userId: string;
   medicationId: string;
+  scheduledFor: Date;
   takenAt: Date | null;
   skipped: boolean;
   deletedAt: Date | null;
   inventoryConsumption: unknown;
+}
+
+/** #219 — a schedule row the per-slot units resolver reads. */
+interface FakeSchedule {
+  timesOfDay: string[];
+  windowStart: string;
+  unitsPerDose: number | null;
 }
 
 interface FakeItem {
@@ -57,6 +65,10 @@ interface FakeState {
   events: FakeEvent[];
   items: FakeItem[];
   unitsPerDose: number;
+  // #219 — per-slot resolver inputs. Default to no schedules + UTC so every
+  // pre-existing scenario inherits the medication-level `unitsPerDose`.
+  schedules?: FakeSchedule[];
+  timezone?: string;
 }
 
 type OrderSpec = Record<
@@ -86,7 +98,12 @@ function sortRows(rows: FakeItem[], orderBy: OrderSpec[]): FakeItem[] {
 function makeClient(state: FakeState) {
   return {
     medication: {
-      findFirst: vi.fn(async () => ({ unitsPerDose: state.unitsPerDose })),
+      findFirst: vi.fn(async () => ({
+        unitsPerDose: state.unitsPerDose,
+        // #219 — the per-slot resolver reads the user's zone + the schedules.
+        user: { timezone: state.timezone ?? "UTC" },
+        schedules: state.schedules ?? [],
+      })),
     },
     medicationIntakeEvent: {
       findFirst: vi.fn(
@@ -94,6 +111,17 @@ function makeClient(state: FakeState) {
           state.events.find(
             (e) => e.id === args.where.id && e.userId === args.where.userId,
           ) ?? null,
+      ),
+      // #219 — the import-batch path loads each event's scheduledFor anchor.
+      findMany: vi.fn(
+        async (args: {
+          where: { id: { in: string[] }; userId: string };
+        }) =>
+          state.events.filter(
+            (e) =>
+              args.where.id.in.includes(e.id) &&
+              e.userId === args.where.userId,
+          ),
       ),
       // The hooks' atomic claim — evaluate the conditional WHERE the way
       // Postgres would (the gate fields plus the stamp predicate:
@@ -216,6 +244,7 @@ function takenEvent(overrides: Partial<FakeEvent> = {}): FakeEvent {
     id: "evt-1",
     userId: "user-1",
     medicationId: "med-1",
+    scheduledFor: NOW,
     takenAt: NOW,
     skipped: false,
     deletedAt: null,
