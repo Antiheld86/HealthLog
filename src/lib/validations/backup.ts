@@ -65,6 +65,11 @@ import {
   healthProfileFactKindSchema,
   isHealthProfileFactValue,
 } from "@/lib/validations/health-profile-facts";
+import {
+  advanceDirectiveStatusSchema,
+  emergencyBloodTypeSchema,
+  organDonorStatusSchema,
+} from "@/lib/validations/emergency-profile";
 
 export const BACKUP_SCHEMA_VERSION = "2" as const;
 const LEGACY_BACKUP_SCHEMA_VERSION = "1" as const;
@@ -529,6 +534,20 @@ const healthProfileBackupSchema = z
     aiIncludedSections: z
       .array(healthProfileAiSectionSchema)
       .default([...DEFAULT_HEALTH_PROFILE_AI_SECTIONS]),
+    // Emergency profile: three plaintext enums (carried by value in both
+    // purposes), three free-text columns following the ciphertext-or-plaintext
+    // split of the self-context fields above.
+    emergencyBloodType: emergencyBloodTypeSchema.nullable().default(null),
+    organDonorStatus: organDonorStatusSchema.nullable().default(null),
+    advanceDirectiveStatus: advanceDirectiveStatusSchema
+      .nullable()
+      .default(null),
+    emergencyContacts: z.string().nullable().default(null),
+    emergencyImplants: z.string().nullable().default(null),
+    emergencyNote: z.string().nullable().default(null),
+    emergencyContactsEncrypted: base64BytesSchema.nullable().optional(),
+    emergencyImplantsEncrypted: base64BytesSchema.nullable().optional(),
+    emergencyNoteEncrypted: base64BytesSchema.nullable().optional(),
     aboutMeEncrypted: base64BytesSchema.nullable().optional(),
     conditionsEncrypted: base64BytesSchema.nullable().optional(),
     allergiesEncrypted: base64BytesSchema.nullable().optional(),

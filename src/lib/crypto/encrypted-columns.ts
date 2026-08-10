@@ -167,6 +167,25 @@ export const ENCRYPTED_COLUMNS: readonly EncryptedColumn[] = [
     field: "pendingQuestionsEncrypted",
     kind: "bytes",
   },
+  // v1.38 — emergency ("Notfalldaten") free text: contacts, implants/devices,
+  // and the ICE note. Same Bytes codec as the self-context columns above; the
+  // three enum companions (blood type, organ-donor, advance-directive) are
+  // plaintext closed sets and are deliberately NOT here.
+  {
+    model: "UserHealthProfile",
+    field: "emergencyContactsEncrypted",
+    kind: "bytes",
+  },
+  {
+    model: "UserHealthProfile",
+    field: "emergencyImplantsEncrypted",
+    kind: "bytes",
+  },
+  {
+    model: "UserHealthProfile",
+    field: "emergencyNoteEncrypted",
+    kind: "bytes",
+  },
 
   // ───── Effective-dated health profile facts (Bytes column) ─────
   {

@@ -32,6 +32,11 @@ import {
   type HealthProfileAiSection,
   type HealthProfileFactKind,
 } from "@/lib/validations/health-profile-facts";
+import type {
+  AdvanceDirectiveStatusValue,
+  EmergencyBloodTypeValue,
+  OrganDonorStatusValue,
+} from "@/lib/validations/emergency-profile";
 
 export interface ProfileBackupOptions {
   purpose?: "portable-export" | "disaster-recovery";
@@ -59,6 +64,22 @@ export interface HealthProfileBackupEntry {
   allergiesEncrypted?: string | null;
   coachFocusEncrypted?: string | null;
   aiIncludedSections: HealthProfileAiSection[];
+  /**
+   * Emergency ("Notfalldaten") profile. The three enums are plaintext closed
+   * sets, carried by value in both purposes exactly like `aiIncludedSections`.
+   * The three free-text columns follow the same split as the self-context above:
+   * a portable export decrypts them into `emergency*`, a DR payload leaves those
+   * null and carries the ciphertext in `emergency*Encrypted`.
+   */
+  emergencyBloodType: EmergencyBloodTypeValue | null;
+  organDonorStatus: OrganDonorStatusValue | null;
+  advanceDirectiveStatus: AdvanceDirectiveStatusValue | null;
+  emergencyContacts: string | null;
+  emergencyImplants: string | null;
+  emergencyNote: string | null;
+  emergencyContactsEncrypted?: string | null;
+  emergencyImplantsEncrypted?: string | null;
+  emergencyNoteEncrypted?: string | null;
   /**
    * Server-derived clarifying questions awaiting an answer, encrypted JSON.
    *
@@ -248,6 +269,19 @@ export async function buildProfileBackupSection(
             HealthProfileAiSection[] | undefined) ?? [
             ...DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
           ],
+          emergencyBloodType: profileRow.emergencyBloodType ?? null,
+          organDonorStatus: profileRow.organDonorStatus ?? null,
+          advanceDirectiveStatus: profileRow.advanceDirectiveStatus ?? null,
+          emergencyContacts: null,
+          emergencyImplants: null,
+          emergencyNote: null,
+          emergencyContactsEncrypted: toBase64(
+            profileRow.emergencyContactsEncrypted,
+          ),
+          emergencyImplantsEncrypted: toBase64(
+            profileRow.emergencyImplantsEncrypted,
+          ),
+          emergencyNoteEncrypted: toBase64(profileRow.emergencyNoteEncrypted),
           aboutMeEncrypted: toBase64(profileRow.aboutMeEncrypted),
           conditionsEncrypted: toBase64(profileRow.conditionsEncrypted),
           allergiesEncrypted: toBase64(profileRow.allergiesEncrypted),
@@ -279,6 +313,21 @@ export async function buildProfileBackupSection(
             HealthProfileAiSection[] | undefined) ?? [
             ...DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
           ],
+          emergencyBloodType: profileRow.emergencyBloodType ?? null,
+          organDonorStatus: profileRow.organDonorStatus ?? null,
+          advanceDirectiveStatus: profileRow.advanceDirectiveStatus ?? null,
+          emergencyContacts: decryptProfileFieldSoft(
+            profileRow.emergencyContactsEncrypted,
+            "emergencyContacts",
+          ),
+          emergencyImplants: decryptProfileFieldSoft(
+            profileRow.emergencyImplantsEncrypted,
+            "emergencyImplants",
+          ),
+          emergencyNote: decryptProfileFieldSoft(
+            profileRow.emergencyNoteEncrypted,
+            "emergencyNote",
+          ),
         }
     : null;
 
@@ -639,6 +688,27 @@ export async function restoreProfileData(
           p.coachFocusEncrypted,
           p.coachFocus,
           "coachFocus",
+        ),
+        // Emergency profile. The enums restore by value (null clears);
+        // the three free-text columns follow the same ciphertext-or-plaintext
+        // resolution as the self-context columns above.
+        emergencyBloodType: p.emergencyBloodType,
+        organDonorStatus: p.organDonorStatus,
+        advanceDirectiveStatus: p.advanceDirectiveStatus,
+        emergencyContactsEncrypted: resolveProfileColumn(
+          p.emergencyContactsEncrypted,
+          p.emergencyContacts,
+          "emergencyContacts",
+        ),
+        emergencyImplantsEncrypted: resolveProfileColumn(
+          p.emergencyImplantsEncrypted,
+          p.emergencyImplants,
+          "emergencyImplants",
+        ),
+        emergencyNoteEncrypted: resolveProfileColumn(
+          p.emergencyNoteEncrypted,
+          p.emergencyNote,
+          "emergencyNote",
         ),
         // Portable exports do not carry the pending questions at all, so
         // `undefined` means "this file has nothing to say" and the account
