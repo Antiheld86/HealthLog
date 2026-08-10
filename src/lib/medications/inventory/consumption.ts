@@ -36,6 +36,7 @@
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
 import { toJson } from "@/lib/db";
 import { annotate } from "@/lib/logging/context";
+import { wallClockInTz } from "@/lib/tz/wall-clock";
 import { computeExpiresAt, computeInventoryState } from "./state-machine";
 
 /** The Prisma surface the consumption hook needs. A bare transaction
@@ -58,6 +59,52 @@ type TxClient = Pick<
 export interface InventoryConsumptionEntry {
   itemId: string;
   units: number;
+}
+
+/** The per-schedule fields the units resolver needs. */
+export interface ScheduleUnitsInput {
+  timesOfDay: string[];
+  windowStart: string;
+  unitsPerDose: Prisma.Decimal | null;
+}
+
+/**
+ * v1.37.10 (#219) — resolve the inventory units ONE taken intake consumes.
+ *
+ * A medication owns N schedules, and each may now carry its own
+ * `unitsPerDose` (a whole tablet in the morning, a half at noon). An intake
+ * event has no schedule foreign key; it binds to its slot by `scheduledFor`.
+ * We match the intake's wall-clock time-of-day in the user's zone against
+ * each schedule's `timesOfDay` (falling back to the legacy `windowStart`
+ * when a schedule has no times) and read the FIRST matching schedule's
+ * `unitsPerDose`. A NULL per-slot value, or no slot match at all, inherits
+ * the medication-level `medicationUnitsPerDose` — so a medication whose
+ * schedules all leave the column NULL (every pre-#219 row) resolves exactly
+ * as it did before.
+ */
+export function resolveUnitsPerDose(input: {
+  scheduledFor: Date;
+  timeZone: string | null | undefined;
+  medicationUnitsPerDose: Prisma.Decimal;
+  schedules: readonly ScheduleUnitsInput[];
+}): number {
+  const { scheduledFor, timeZone, medicationUnitsPerDose, schedules } = input;
+  const wall = wallClockInTz(scheduledFor, timeZone ?? undefined);
+  const hhmm = `${String(wall.hour).padStart(2, "0")}:${String(
+    wall.minute,
+  ).padStart(2, "0")}`;
+  for (const schedule of schedules) {
+    if (schedule.unitsPerDose === null) continue;
+    const times =
+      schedule.timesOfDay.length > 0
+        ? schedule.timesOfDay
+        : [schedule.windowStart];
+    if (times.includes(hhmm)) {
+      const perSlot = Number(schedule.unitsPerDose);
+      if (perSlot > 0) return perSlot;
+    }
+  }
+  return Number(medicationUnitsPerDose);
 }
 
 /**
@@ -186,15 +233,41 @@ export async function consumeForIntake(input: {
 
       const medication = await tx.medication.findFirst({
         where: { id: medicationId, userId },
-        select: { unitsPerDose: true },
+        select: {
+          unitsPerDose: true,
+          user: { select: { timezone: true } },
+          // v1.37.10 (#219) — the per-slot units resolver needs each
+          // schedule's own units + its slot times to bind the taken
+          // intake to the right dose size.
+          schedules: {
+            select: {
+              timesOfDay: true,
+              windowStart: true,
+              unitsPerDose: true,
+            },
+          },
+        },
       });
       if (!medication) return;
+      // v1.37.10 (#219) — the event carries no schedule FK; bind it to its
+      // slot by wall-clock time and read that schedule's `unitsPerDose`,
+      // inheriting the medication-level column on NULL / no match.
+      const event = await tx.medicationIntakeEvent.findFirst({
+        where: { id: eventId, userId },
+        select: { scheduledFor: true },
+      });
+      if (!event) return;
       // v1.16.12 — Decimal column; a dose may consume a FRACTION of a
       // unit (½ / ¼ tablet for a split pill). Convert to a JS number for
       // the arithmetic below (unit counts stay well within double
       // precision) and gate at > 0, NOT at ≥ 1 — the old `Math.max(1, …)`
       // clamp would silently turn a half-tablet dose back into a whole one.
-      const unitsPerDose = Number(medication.unitsPerDose);
+      const unitsPerDose = resolveUnitsPerDose({
+        scheduledFor: event.scheduledFor,
+        timeZone: medication.user.timezone,
+        medicationUnitsPerDose: medication.unitsPerDose,
+        schedules: medication.schedules,
+      });
       if (!(unitsPerDose > 0)) return;
 
       // Candidate containers, in consumption order: the open container
@@ -359,15 +432,35 @@ export async function consumeImportedIntakesBatch(input: {
 
     const medication = await tx.medication.findFirst({
       where: { id: medicationId, userId },
-      select: { unitsPerDose: true },
+      select: {
+        unitsPerDose: true,
+        user: { select: { timezone: true } },
+        schedules: {
+          select: {
+            timesOfDay: true,
+            windowStart: true,
+            unitsPerDose: true,
+          },
+        },
+      },
     });
     if (!medication) {
       throw new Error("Imported intake medication no longer exists");
     }
-    const unitsPerDose = Number(medication.unitsPerDose);
-    if (!(unitsPerDose > 0)) {
+    if (!(Number(medication.unitsPerDose) > 0)) {
       throw new Error("Imported intake medication has an invalid dose size");
     }
+    // v1.37.10 (#219) — each imported dose binds to its slot by
+    // `scheduledFor`, so a per-slot `unitsPerDose` decrements the right
+    // unit count even on the batch-import path. Load the anchors once.
+    const scheduledForById = new Map<string, Date>(
+      (
+        await tx.medicationIntakeEvent.findMany({
+          where: { id: { in: events.map(({ eventId }) => eventId) }, userId },
+          select: { id: true, scheduledFor: true },
+        })
+      ).map((row) => [row.id, row.scheduledFor]),
+    );
 
     const [inUse, active] = await Promise.all([
       tx.medicationInventoryItem.findMany({
@@ -408,7 +501,15 @@ export async function consumeImportedIntakesBatch(input: {
     let autoOpened = 0;
 
     for (const event of events) {
-      let owed = unitsPerDose;
+      const scheduledFor = scheduledForById.get(event.eventId);
+      let owed = scheduledFor
+        ? resolveUnitsPerDose({
+            scheduledFor,
+            timeZone: medication.user.timezone,
+            medicationUnitsPerDose: medication.unitsPerDose,
+            schedules: medication.schedules,
+          })
+        : Number(medication.unitsPerDose);
       const stamp: InventoryConsumptionEntry[] = [];
       for (const item of items) {
         if (owed <= 0) break;
