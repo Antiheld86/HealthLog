@@ -33,10 +33,12 @@ async function consumedUnits(
   });
   const stamp = row.inventoryConsumption;
   if (!Array.isArray(stamp)) return 0;
-  return stamp.reduce(
+  return stamp.reduce<number>(
     (sum, entry) =>
       sum +
-      (entry && typeof (entry as { units?: unknown }).units === "number"
+      (entry &&
+      typeof entry === "object" &&
+      typeof (entry as { units?: unknown }).units === "number"
         ? (entry as { units: number }).units
         : 0),
     0,
