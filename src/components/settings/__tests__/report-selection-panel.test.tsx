@@ -187,7 +187,7 @@ describe("<HealthRecordExportPanel> — the first run", () => {
     // These six carry the standard template's leaves. On a first run they read
     // 0/n like every other group: the template is a button, not a starting
     // state.
-    expect(groupChip(html, "identity")).toBe("0/2");
+    expect(groupChip(html, "identity")).toBe("0/3");
     expect(groupChip(html, "vitals")).toBe("0/7");
     expect(groupChip(html, "body")).toBe("0/12");
     expect(groupChip(html, "labs")).toBe("0/1");

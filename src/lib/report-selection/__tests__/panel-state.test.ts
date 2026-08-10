@@ -48,11 +48,14 @@ describe("scope picker state", () => {
     // control covers something they cannot see or reach.
     const identity = REPORT_GROUPS.find((g) => g.id === "identity")!;
     const rendered = identity.leaves.filter((l) => l !== "INSURANCE");
-    const selected = new Set<ReportLeafId>(["PATIENT_IDENTITY"]);
-    expect(groupCount(rendered, selected)).toEqual({ on: 1, total: 1 });
+    // The share-link form renders identity minus insurance: patient identity
+    // and the emergency leaf. Selecting both is "all" of the rendered set even
+    // though the catalogue group also carries the hidden insurance leaf.
+    const selected = new Set<ReportLeafId>(["PATIENT_IDENTITY", "EMERGENCY"]);
+    expect(groupCount(rendered, selected)).toEqual({ on: 2, total: 2 });
     expect(groupCheckState(rendered, selected)).toBe("all");
-    // And the whole group, for contrast.
-    expect(groupCount(identity.leaves, selected)).toEqual({ on: 1, total: 2 });
+    // And the whole group, for contrast: insurance is unselected and hidden.
+    expect(groupCount(identity.leaves, selected)).toEqual({ on: 2, total: 3 });
   });
 
   it("never adds a leaf the surface does not render", () => {

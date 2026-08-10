@@ -62,6 +62,7 @@ import { buildAdministrationLedger, buildGlp1Block } from "./medications";
 import {
   loadAllergies,
   loadAnamnesis,
+  loadEmergency,
   loadFamilyHistory,
   loadIllnessEpisodes,
   loadImmunizations,
@@ -505,6 +506,7 @@ export async function collectDoctorReportData(
     allergies,
     familyHistory,
     anamnesis,
+    emergency,
   ] = await Promise.all([
     gate.admits("CYCLE")
       ? buildCycleExportSummary(userId, end.toISOString().slice(0, 10))
@@ -528,6 +530,7 @@ export async function collectDoctorReportData(
       ? loadFamilyHistory(userId)
       : Promise.resolve(null),
     gate.admits("ANAMNESIS") ? loadAnamnesis(userId) : Promise.resolve(null),
+    gate.admits("EMERGENCY") ? loadEmergency(userId) : Promise.resolve(null),
   ]);
 
   const identityOn = gate.admits("PATIENT_IDENTITY");
@@ -596,5 +599,6 @@ export async function collectDoctorReportData(
     allergies,
     familyHistory,
     anamnesis,
+    emergency,
   };
 }

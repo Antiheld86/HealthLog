@@ -591,6 +591,51 @@ describe("doctor-report illness section", () => {
   });
 });
 
+// ── emergency first page ── the Notfalldaten sheet owns page one, but only
+// when the aggregator populated `data.emergency` (the EMERGENCY leaf admitted
+// AND the profile holds something). A null payload — which is exactly what the
+// aggregator returns when the leaf is NOT admitted — withholds the page.
+describe("doctor-report emergency first page", () => {
+  const EMERGENCY: NonNullable<DoctorReportData["emergency"]> = {
+    bloodType: "O_NEG",
+    organDonor: "YES",
+    advanceDirective: "EXISTS",
+    contacts: "ICE contact on the recorded number",
+    contactsUnreadable: false,
+    implants: null,
+    implantsUnreadable: false,
+    note: null,
+    noteUnreadable: false,
+  };
+
+  it("prints the emergency sheet on page one when emergency data is present", async () => {
+    const { t } = getServerTranslator("en");
+    const data = makeData({ emergency: EMERGENCY });
+    const options = { t, locale: "en" as const, now: FIXED_NOW };
+    const text = await extractText(renderDoctorReportPdfBytes(data, options));
+    expect(text).toContain("Emergency information");
+    expect(text).toContain("O negative");
+    expect(text).toContain("ICE contact on the recorded number");
+    // The baseline report is two pages; the emergency sheet plus its page break
+    // add exactly one.
+    expect(buildDoctorReportPdfDocument(data, options).getNumberOfPages()).toBe(
+      3,
+    );
+  });
+
+  it("withholds the emergency page when the leaf was not admitted (payload null)", async () => {
+    const { t } = getServerTranslator("en");
+    const data = makeData({ emergency: null });
+    const options = { t, locale: "en" as const, now: FIXED_NOW };
+    const text = await extractText(renderDoctorReportPdfBytes(data, options));
+    expect(text).not.toContain("Emergency information");
+    // No emergency page, no extra page break: back to the two-page baseline.
+    expect(buildDoctorReportPdfDocument(data, options).getNumberOfPages()).toBe(
+      2,
+    );
+  });
+});
+
 describe("extracted doctor-report section boundaries", () => {
   it("header/profile prefers the legal name and renders insurance identity", async () => {
     const data = makeData({

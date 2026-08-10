@@ -25,6 +25,11 @@ import type {
   ShiftScheduleValue,
   SmokingStatusValue,
 } from "@/lib/validations/health-profile-facts";
+import type {
+  AdvanceDirectiveStatusValue,
+  EmergencyBloodTypeValue,
+  OrganDonorStatusValue,
+} from "@/lib/validations/emergency-profile";
 
 export interface DoctorReportStats {
   avg: number;
@@ -394,6 +399,25 @@ export interface DoctorReportData {
     unreadableFacts: Array<
       "SMOKING_STATUS" | "ALCOHOL_PATTERN" | "SHIFT_SCHEDULE"
     >;
+  } | null;
+  /**
+   * Emergency ("Notfalldaten") facts for the page-one section. Present only
+   * when the `EMERGENCY` leaf was admitted AND at least one field holds a
+   * value; null otherwise, and the PDF then emits no emergency page. The three
+   * enums cross as constants (the renderer names them in the report's language);
+   * the free text decrypts fail-soft, an `*Unreadable` flag distinguishing a
+   * key-rotation gap from a genuinely unset field.
+   */
+  emergency?: {
+    bloodType: EmergencyBloodTypeValue | null;
+    organDonor: OrganDonorStatusValue | null;
+    advanceDirective: AdvanceDirectiveStatusValue | null;
+    contacts: string | null;
+    contactsUnreadable: boolean;
+    implants: string | null;
+    implantsUnreadable: boolean;
+    note: string | null;
+    noteUnreadable: boolean;
   } | null;
 }
 

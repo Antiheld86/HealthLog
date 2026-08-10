@@ -253,7 +253,19 @@ function seed() {
   rows.familyHistoryEntry = [
     { relationship: "MOTHER", condition: "Hypertension", ageAtOnset: 50 },
   ];
-  rows.userHealthProfileUnique = [{ conditionsEncrypted: new Uint8Array([1]) }];
+  rows.userHealthProfileUnique = [
+    {
+      conditionsEncrypted: new Uint8Array([1]),
+      // Emergency profile: a real blood type makes the EMERGENCY leaf change
+      // the payload, so the sweep can prove its control is not inert.
+      emergencyBloodType: "O_POS",
+      organDonorStatus: "YES",
+      advanceDirectiveStatus: "EXISTS",
+      emergencyContactsEncrypted: null,
+      emergencyImplantsEncrypted: null,
+      emergencyNoteEncrypted: null,
+    },
+  ];
   rows.healthProfileFactRevision = [
     {
       kind: "SMOKING_STATUS",
@@ -290,6 +302,7 @@ describe("per-leaf gating sweep", () => {
     expect(allPayload.mood).not.toBeNull();
     expect(allPayload.cycle).not.toBeNull();
     expect(allPayload.anamnesis).not.toBeNull();
+    expect(allPayload.emergency).not.toBeNull();
     expect(allPayload.glp1).not.toBeNull();
     expect(allPayload.medications.length).toBeGreaterThan(0);
     expect(allPayload.medicationAdministrations?.length ?? 0).toBeGreaterThan(
@@ -443,17 +456,27 @@ describe("zero read for unchosen leaves", () => {
     ["VISITS", "encounter"],
     ["IMMUNIZATIONS", "vaccinationRecord"],
     ["ANAMNESIS", "userHealthProfile"],
+    ["EMERGENCY", "userHealthProfile"],
     ["ANAMNESIS", "healthProfileFactRevision"],
   ];
+
+  // ANAMNESIS and EMERGENCY both read `userHealthProfile`, so withholding one
+  // while the other stays selected still queries the table. Both must be off
+  // before the read stops — the zero-read guarantee is over the SET of leaves
+  // that touch a table, not each one in isolation.
+  const TABLE_READERS: Record<string, ReportLeafId[]> = {
+    userHealthProfile: ["ANAMNESIS", "EMERGENCY"],
+  };
 
   it.each(gated)(
     "never queries %s's table when it was not chosen",
     async (leaf, model) => {
       calls.length = 0;
+      const withheld = new Set<ReportLeafId>(TABLE_READERS[model] ?? [leaf]);
       await collectDoctorReportData(
         "u1",
         RANGE,
-        selectionFromLeaves(ALL_LEAF_IDS.filter((l) => l !== leaf)),
+        selectionFromLeaves(ALL_LEAF_IDS.filter((l) => !withheld.has(l))),
         { moduleMap: moduleMap() },
       );
       expect(calls).not.toContain(model);
@@ -503,6 +526,7 @@ describe("the empty selection serves nothing", () => {
     expect(payload.illnessEpisodes).toBeNull();
     expect(payload.visits).toBeNull();
     expect(payload.anamnesis).toBeNull();
+    expect(payload.emergency).toBeNull();
     expect(payload.cycle).toBeNull();
     expect(payload.mood).toBeNull();
     expect(payload.glp1).toBeNull();

@@ -62,15 +62,16 @@ describe("share-link create form — re-mint seeding", () => {
     const html = render(<ShareLinkCreateForm />);
     expect(html).toContain('data-testid="report-scope-picker-share"');
     expect(html).toContain('data-testid="report-group-row-identity-share"');
-    // The server refuses the leaf with a 422; a control that cannot be
-    // honoured has no business rendering, so the identity group is one leaf
-    // wide here and two wide in the export panel. Nothing in it is on: a new
-    // link starts with an empty scope on every surface.
+    // The server refuses the insurance leaf with a 422; a control that cannot
+    // be honoured has no business rendering, so the identity group is two
+    // leaves wide here (patient identity + emergency) and three wide in the
+    // export panel. Nothing in it is on: a new link starts with an empty scope
+    // on every surface.
     const row = html.match(
       /data-testid="report-group-row-identity-share"[\s\S]*?<\/div>/,
     )?.[0];
     expect(row).toBeDefined();
-    expect(row).toContain(">0/1<");
+    expect(row).toContain(">0/2<");
     // The fenced tier renders its leaves unconditionally; none is checked.
     expect(html).toContain('data-testid="report-leaf-MOOD-share"');
     expect(html).not.toContain('data-testid="report-leaf-INSURANCE-share"');
