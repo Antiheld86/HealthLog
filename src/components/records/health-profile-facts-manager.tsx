@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -84,6 +84,24 @@ export function HealthProfileFactsManager() {
   const [drafts, setDrafts] = useState<
     Partial<Record<HealthProfileFactKind, string>>
   >({});
+  // Kinds whose last save attempt failed. A per-kind flag rather than a single
+  // banner, so a partial failure names which entry the user still has to redo
+  // instead of hiding it behind one green toast.
+  const [failedKinds, setFailedKinds] = useState<
+    Partial<Record<HealthProfileFactKind, boolean>>
+  >({});
+  // Live copy of the draft set. State drives the controlled Selects; this ref
+  // is what the one footer Save reads at click time, so a multi-field save
+  // always writes the latest selections and never a value a render lagged on.
+  const draftsRef = useRef<Partial<Record<HealthProfileFactKind, string>>>({});
+
+  const editDraft = (kind: HealthProfileFactKind, value: string) => {
+    draftsRef.current = { ...draftsRef.current, [kind]: value };
+    setDrafts(draftsRef.current);
+    // Editing a kind clears its stale failure marker; the next Save decides its
+    // outcome afresh.
+    setFailedKinds((old) => (old[kind] ? { ...old, [kind]: undefined } : old));
+  };
 
   const query = useQuery({
     queryKey: queryKeys.healthProfileFacts(),
@@ -92,38 +110,78 @@ export function HealthProfileFactsManager() {
 
   const save = useMutation({
     mutationKey: queryKeys.healthProfileFacts(),
-    mutationFn: async (input: {
-      kind: HealthProfileFactKind;
-      value: string;
-      current: FactDto | null;
-    }) => {
-      if (input.current) {
-        return apiPatch<FactDto>(`/api/anamnesis/facts/${input.current.id}`, {
-          value: input.value,
-        });
-      }
-      return apiPost<FactDto>("/api/anamnesis/facts", {
+    // One Save for the whole tile: iterate only the dirty kinds, fire the right
+    // bitemporal call per kind (PATCH a revision, POST a first value), and settle
+    // them together so a single 409 cannot take the healthy writes down with it.
+    mutationFn: async (
+      inputs: Array<{
+        kind: HealthProfileFactKind;
+        value: string;
+        current: FactDto | null;
+      }>,
+    ) => {
+      const settled = await Promise.allSettled(
+        inputs.map((input) =>
+          input.current
+            ? apiPatch<FactDto>(`/api/anamnesis/facts/${input.current.id}`, {
+                value: input.value,
+              })
+            : apiPost<FactDto>("/api/anamnesis/facts", {
+                kind: input.kind,
+                value: input.value,
+              }),
+        ),
+      );
+      return inputs.map((input, index) => ({
         kind: input.kind,
-        value: input.value,
-      });
+        outcome: settled[index],
+      }));
     },
-    onSuccess: (_data, input) => {
-      setDrafts((current) => ({ ...current, [input.kind]: undefined }));
-      toastWrittenOutcome("success", t("records.profileFacts.savedToast"));
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.healthProfileFacts(),
+    onSuccess: (results) => {
+      const succeeded = results.filter((r) => r.outcome.status === "fulfilled");
+      const failed = results.filter((r) => r.outcome.status === "rejected");
+
+      // Clear the drafts and the failure flags only for the kinds that landed.
+      // A kind that 409'd keeps its draft on screen so the user can retry it.
+      const remaining = { ...draftsRef.current };
+      for (const { kind } of succeeded) delete remaining[kind];
+      draftsRef.current = remaining;
+      setDrafts(remaining);
+      setFailedKinds((current) => {
+        const next = { ...current };
+        for (const { kind } of succeeded) next[kind] = undefined;
+        for (const { kind } of failed) next[kind] = true;
+        return next;
       });
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.insightsAdvisor(),
-      });
-    },
-    onError: (error) => {
-      if (isStaleFactTarget(error)) {
+
+      if (succeeded.length > 0) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.healthProfileFacts(),
+        });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.insightsAdvisor(),
+        });
+      } else if (
+        failed.some((r) =>
+          isStaleFactTarget((r.outcome as PromiseRejectedResult).reason),
+        )
+      ) {
+        // Nothing persisted, but a stale target means our view is behind the
+        // server; refetch so the next attempt revises the current revision.
         queryClient.invalidateQueries({
           queryKey: queryKeys.healthProfileFacts(),
         });
       }
-      toast.error(t("records.profileFacts.saveError"));
+
+      if (failed.length === 0) {
+        toastWrittenOutcome("success", t("records.profileFacts.savedToast"));
+      } else {
+        toast.error(
+          t("records.profileFacts.savePartialError", {
+            kinds: failed.map((r) => t(KIND_LABEL[r.kind])).join(", "),
+          }),
+        );
+      }
     },
   });
 
@@ -191,14 +249,36 @@ export function HealthProfileFactsManager() {
     (revision) => revision.validUntil !== null,
   );
 
+  // A kind is dirty when its draft differs from the stored value and is not the
+  // empty placeholder. `isDirty` drives the render (Save enabled state); the
+  // footer re-collects the same set from the ref at click time.
+  const isDirty = (kind: HealthProfileFactKind, draft: string | undefined) => {
+    const current = query.data?.current[kind] ?? null;
+    return draft !== undefined && draft !== "" && draft !== current?.value;
+  };
+  const dirtyCount = HEALTH_PROFILE_FACT_KINDS.filter((kind) =>
+    isDirty(kind, drafts[kind]),
+  ).length;
+  const collectDirtyInputs = () =>
+    HEALTH_PROFILE_FACT_KINDS.flatMap((kind) => {
+      const draft = draftsRef.current[kind];
+      if (!isDirty(kind, draft)) return [];
+      return [
+        {
+          kind,
+          value: draft as string,
+          current: query.data?.current[kind] ?? null,
+        },
+      ];
+    });
+
   return (
     <div className="space-y-6" data-slot="health-profile-facts-manager">
       <div className="grid gap-4 md:grid-cols-3">
         {HEALTH_PROFILE_FACT_KINDS.map((kind) => {
           const current = query.data?.current[kind] ?? null;
           const value = drafts[kind] ?? current?.value ?? "";
-          const dirty =
-            drafts[kind] !== undefined && drafts[kind] !== current?.value;
+          const failed = failedKinds[kind] === true;
           return (
             <div key={kind} className="space-y-2">
               <Label htmlFor={`health-profile-fact-${kind}`}>
@@ -207,9 +287,7 @@ export function HealthProfileFactsManager() {
               <Select
                 value={value}
                 disabled={disabled}
-                onValueChange={(next) =>
-                  setDrafts((old) => ({ ...old, [kind]: next }))
-                }
+                onValueChange={(next) => editDraft(kind, next)}
               >
                 <SelectTrigger id={`health-profile-fact-${kind}`}>
                   <SelectValue
@@ -228,14 +306,22 @@ export function HealthProfileFactsManager() {
                   ))}
                 </SelectContent>
               </Select>
-              {/* One action row per entry (UI-STANDARDS §11 + the action-row
-                  rule): right-aligned, primary last, the quiet destructive
-                  beside it. Two full-width stacked blocks — a grey disabled
-                  slab over a red-outlined one — carried the same visual weight
-                  as the field they belong to and ran into each other when
-                  scanned, which is what "Save" directly above "Remove smoking
-                  status" read as. */}
-              <div className="flex items-center justify-end gap-2 pt-1">
+              {/* Per-entry row now carries only the quiet destructive action:
+                  saving is one shared footer button (UI-STANDARDS §11), so the
+                  three fields no longer each stack their own grey Save slab.
+                  When a shared Save partially fails, the kind that didn't land
+                  says so here rather than behind the toast. */}
+              <div className="flex items-center justify-between gap-2 pt-1">
+                {failed ? (
+                  <span
+                    className="text-destructive text-xs"
+                    data-slot={`health-profile-fact-error-${kind}`}
+                  >
+                    {t("records.profileFacts.saveKindError")}
+                  </span>
+                ) : (
+                  <span aria-hidden />
+                )}
                 {current ? (
                   <ConfirmButton
                     // Short label inside the row; the full phrase stays the
@@ -264,25 +350,30 @@ export function HealthProfileFactsManager() {
                     slot={`health-profile-fact-remove-${kind}`}
                   />
                 ) : null}
-                <Button
-                  type="button"
-                  size="sm"
-                  className="min-h-11 sm:min-h-9"
-                  disabled={disabled || !dirty || !value}
-                  onClick={() => save.mutate({ kind, value, current })}
-                >
-                  {save.isPending && save.variables?.kind === kind && (
-                    <Loader2
-                      className="size-4 animate-spin motion-reduce:animate-none"
-                      aria-hidden
-                    />
-                  )}
-                  {t("records.profileFacts.save")}
-                </Button>
               </div>
             </div>
           );
         })}
+      </div>
+
+      {/* One Save for the whole tile. It writes only the dirty kinds and stays
+          disabled until at least one field differs from its stored value. */}
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          size="sm"
+          className="min-h-11 sm:min-h-9"
+          disabled={disabled || dirtyCount === 0}
+          onClick={() => save.mutate(collectDirtyInputs())}
+        >
+          {save.isPending && (
+            <Loader2
+              className="size-4 animate-spin motion-reduce:animate-none"
+              aria-hidden
+            />
+          )}
+          {t("records.profileFacts.save")}
+        </Button>
       </div>
 
       {closedHistory.length > 0 && (
