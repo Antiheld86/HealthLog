@@ -27,6 +27,9 @@ vi.mock("@/components/records/allergy-manager", () => ({
 vi.mock("@/components/records/family-history-manager", () => ({
   FamilyHistoryManager: () => null,
 }));
+vi.mock("@/components/records/emergency-profile-manager", () => ({
+  EmergencyProfileManager: () => null,
+}));
 
 function renderSection(): string {
   return renderToStaticMarkup(

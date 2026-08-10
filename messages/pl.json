@@ -295,7 +295,43 @@
     "immunizationsColDate": "Data",
     "immunizationsColVaccine": "Szczepionka",
     "immunizationsColDose": "Dawka",
-    "immunizationsColLot": "Seria"
+    "immunizationsColLot": "Seria",
+    "emergency": {
+      "title": "Informacje na wypadek nagły",
+      "subtitle": "Do użycia w sytuacji nagłej. Dane deklarowane; potwierdź, jeśli to możliwe.",
+      "none": "Nie podano",
+      "unreadable": "Nie udało się odczytać zapisanej wartości",
+      "bloodType": "Grupa krwi",
+      "bloodTypeUnknown": "Nieznana",
+      "bloodTypeValues": {
+        "A_POS": "A dodatnia",
+        "A_NEG": "A ujemna",
+        "B_POS": "B dodatnia",
+        "B_NEG": "B ujemna",
+        "AB_POS": "AB dodatnia",
+        "AB_NEG": "AB ujemna",
+        "O_POS": "0 dodatnia",
+        "O_NEG": "0 ujemna"
+      },
+      "severeAllergies": "Ciężkie alergie",
+      "activeMedications": "Aktualne leki",
+      "chronicConditions": "Choroby przewlekłe",
+      "implants": "Implanty i urządzenia",
+      "advanceDirective": "Oświadczenie woli pacjenta",
+      "advanceDirectiveValues": {
+        "EXISTS": "Istnieje",
+        "NONE": "Brak",
+        "UNKNOWN": "Nie podano"
+      },
+      "organDonor": "Dawca narządów",
+      "organDonorValues": {
+        "YES": "Tak",
+        "NO": "Nie",
+        "UNKNOWN": "Nie podano"
+      },
+      "contacts": "Kontakty w nagłych wypadkach",
+      "notes": "Dodatkowe uwagi"
+    }
   },
   "errorBoundary": {
     "title": "Coś poszło nie tak",
@@ -9311,6 +9347,46 @@
       "loadError": "Nie udało się wczytać Twoich chorób.",
       "savedToast": "Choroby zapisane.",
       "saveError": "Nie udało się zapisać. Spróbuj ponownie."
+    },
+    "emergency": {
+      "cardTitle": "Informacje na wypadek nagły",
+      "cardDescription": "To, czego ratownik potrzebuje najpierw: grupa krwi, kontakty, oświadczenia.",
+      "bloodType": "Grupa krwi",
+      "organDonor": "Dawca narządów",
+      "advanceDirective": "Oświadczenie woli pacjenta",
+      "contacts": "Kontakty w nagłych wypadkach",
+      "implants": "Implanty i urządzenia",
+      "note": "Dodatkowe uwagi",
+      "notRecorded": "Nie podano",
+      "bloodTypeValues": {
+        "A_POS": "A dodatnia",
+        "A_NEG": "A ujemna",
+        "B_POS": "B dodatnia",
+        "B_NEG": "B ujemna",
+        "AB_POS": "AB dodatnia",
+        "AB_NEG": "AB ujemna",
+        "O_POS": "0 dodatnia",
+        "O_NEG": "0 ujemna",
+        "UNKNOWN": "Nieznana"
+      },
+      "organDonorValues": {
+        "YES": "Tak",
+        "NO": "Nie",
+        "UNKNOWN": "Nie podano"
+      },
+      "advanceDirectiveValues": {
+        "EXISTS": "Istnieje",
+        "NONE": "Brak",
+        "UNKNOWN": "Nie podano"
+      },
+      "contactsPlaceholder": "Imię i numer telefonu osoby do kontaktu",
+      "implantsPlaceholder": "np. rozrusznik serca, pompa insulinowa, implant metalowy",
+      "notePlaceholder": "Wszystko, co lekarz powinien wiedzieć w nagłym wypadku",
+      "reportHint": "Pojawia się na pierwszej stronie raportu dla lekarza.",
+      "save": "Zapisz",
+      "savedToast": "Informacje na wypadek nagły zapisane",
+      "saveError": "Nie udało się zapisać informacji na wypadek nagły.",
+      "loadError": "Nie udało się wczytać informacji na wypadek nagły."
     }
   },
   "environment": {
@@ -9834,7 +9910,8 @@
     "scopeCount": "{count} pozycji z {groups} obszarów",
     "scopeSensitive": "w tym {names}",
     "leafVisits": "Wizyty lekarskie",
-    "leafImmunizations": "Szczepienia"
+    "leafImmunizations": "Szczepienia",
+    "leafEmergency": "Informacje na wypadek nagły (grupa krwi, kontakty, oświadczenia)"
   },
   "recordSharing": {
     "banner": {

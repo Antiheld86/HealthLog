@@ -295,7 +295,43 @@
     "immunizationsColDate": "Datum",
     "immunizationsColVaccine": "Impfstoff",
     "immunizationsColDose": "Dosis",
-    "immunizationsColLot": "Charge"
+    "immunizationsColLot": "Charge",
+    "emergency": {
+      "title": "Notfalldaten",
+      "subtitle": "Für den Einsatz im Notfall. Selbst angegeben; wenn möglich prüfen.",
+      "none": "Nicht erfasst",
+      "unreadable": "Gespeicherter Wert konnte nicht gelesen werden",
+      "bloodType": "Blutgruppe",
+      "bloodTypeUnknown": "Unbekannt",
+      "bloodTypeValues": {
+        "A_POS": "A positiv",
+        "A_NEG": "A negativ",
+        "B_POS": "B positiv",
+        "B_NEG": "B negativ",
+        "AB_POS": "AB positiv",
+        "AB_NEG": "AB negativ",
+        "O_POS": "0 positiv",
+        "O_NEG": "0 negativ"
+      },
+      "severeAllergies": "Schwere Allergien",
+      "activeMedications": "Aktuelle Medikamente",
+      "chronicConditions": "Chronische Erkrankungen",
+      "implants": "Implantate und Geräte",
+      "advanceDirective": "Patientenverfügung",
+      "advanceDirectiveValues": {
+        "EXISTS": "Vorhanden",
+        "NONE": "Keine",
+        "UNKNOWN": "Keine Angabe"
+      },
+      "organDonor": "Organspender",
+      "organDonorValues": {
+        "YES": "Ja",
+        "NO": "Nein",
+        "UNKNOWN": "Keine Angabe"
+      },
+      "contacts": "Notfallkontakte",
+      "notes": "Weitere Hinweise"
+    }
   },
   "errorBoundary": {
     "title": "Da ist etwas schiefgelaufen",
@@ -9311,6 +9347,46 @@
       "loadError": "Vorerkrankungen konnten nicht geladen werden.",
       "savedToast": "Erkrankungen gespeichert.",
       "saveError": "Speichern fehlgeschlagen. Bitte versuche es erneut."
+    },
+    "emergency": {
+      "cardTitle": "Notfalldaten",
+      "cardDescription": "Was Rettungskräfte zuerst brauchen: Blutgruppe, Kontakte, Verfügungen.",
+      "bloodType": "Blutgruppe",
+      "organDonor": "Organspender",
+      "advanceDirective": "Patientenverfügung",
+      "contacts": "Notfallkontakte",
+      "implants": "Implantate und Geräte",
+      "note": "Weitere Hinweise",
+      "notRecorded": "Nicht erfasst",
+      "bloodTypeValues": {
+        "A_POS": "A positiv",
+        "A_NEG": "A negativ",
+        "B_POS": "B positiv",
+        "B_NEG": "B negativ",
+        "AB_POS": "AB positiv",
+        "AB_NEG": "AB negativ",
+        "O_POS": "0 positiv",
+        "O_NEG": "0 negativ",
+        "UNKNOWN": "Unbekannt"
+      },
+      "organDonorValues": {
+        "YES": "Ja",
+        "NO": "Nein",
+        "UNKNOWN": "Keine Angabe"
+      },
+      "advanceDirectiveValues": {
+        "EXISTS": "Vorhanden",
+        "NONE": "Keine",
+        "UNKNOWN": "Keine Angabe"
+      },
+      "contactsPlaceholder": "Name und Telefonnummer für den Notfall",
+      "implantsPlaceholder": "z. B. Herzschrittmacher, Insulinpumpe, Metallimplantat",
+      "notePlaceholder": "Alles, was im Notfall wichtig sein könnte",
+      "reportHint": "Dies erscheint auf der ersten Seite deines Arztberichts.",
+      "save": "Speichern",
+      "savedToast": "Notfalldaten gespeichert",
+      "saveError": "Notfalldaten konnten nicht gespeichert werden.",
+      "loadError": "Notfalldaten konnten nicht geladen werden."
     }
   },
   "environment": {
@@ -9834,7 +9910,8 @@
     "scopeCount": "{count} Einträge aus {groups} Bereichen",
     "scopeSensitive": "inkl. {names}",
     "leafVisits": "Arztbesuche",
-    "leafImmunizations": "Impfungen"
+    "leafImmunizations": "Impfungen",
+    "leafEmergency": "Notfalldaten (Blutgruppe, Kontakte, Verfügungen)"
   },
   "recordSharing": {
     "banner": {

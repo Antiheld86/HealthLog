@@ -295,7 +295,43 @@
     "immunizationsColDate": "Data",
     "immunizationsColVaccine": "Vaccino",
     "immunizationsColDose": "Dose",
-    "immunizationsColLot": "Lotto"
+    "immunizationsColLot": "Lotto",
+    "emergency": {
+      "title": "Informazioni di emergenza",
+      "subtitle": "Da usare in situazioni acute. Autodichiarato; confermare se possibile.",
+      "none": "Non registrato",
+      "unreadable": "Impossibile leggere il valore salvato",
+      "bloodType": "Gruppo sanguigno",
+      "bloodTypeUnknown": "Sconosciuto",
+      "bloodTypeValues": {
+        "A_POS": "A positivo",
+        "A_NEG": "A negativo",
+        "B_POS": "B positivo",
+        "B_NEG": "B negativo",
+        "AB_POS": "AB positivo",
+        "AB_NEG": "AB negativo",
+        "O_POS": "0 positivo",
+        "O_NEG": "0 negativo"
+      },
+      "severeAllergies": "Allergie gravi",
+      "activeMedications": "Farmaci attuali",
+      "chronicConditions": "Malattie croniche",
+      "implants": "Impianti e dispositivi",
+      "advanceDirective": "Disposizioni anticipate di trattamento",
+      "advanceDirectiveValues": {
+        "EXISTS": "Presenti",
+        "NONE": "Nessuna",
+        "UNKNOWN": "Non indicato"
+      },
+      "organDonor": "Donatore di organi",
+      "organDonorValues": {
+        "YES": "Sì",
+        "NO": "No",
+        "UNKNOWN": "Non indicato"
+      },
+      "contacts": "Contatti di emergenza",
+      "notes": "Note aggiuntive"
+    }
   },
   "errorBoundary": {
     "title": "Qualcosa è andato storto",
@@ -9311,6 +9347,46 @@
       "loadError": "Impossibile caricare le tue patologie.",
       "savedToast": "Patologie salvate.",
       "saveError": "Impossibile salvare. Riprova."
+    },
+    "emergency": {
+      "cardTitle": "Informazioni di emergenza",
+      "cardDescription": "Ciò che serve subito ai soccorritori: gruppo sanguigno, contatti, disposizioni.",
+      "bloodType": "Gruppo sanguigno",
+      "organDonor": "Donatore di organi",
+      "advanceDirective": "Disposizioni anticipate di trattamento",
+      "contacts": "Contatti di emergenza",
+      "implants": "Impianti e dispositivi",
+      "note": "Note aggiuntive",
+      "notRecorded": "Non registrato",
+      "bloodTypeValues": {
+        "A_POS": "A positivo",
+        "A_NEG": "A negativo",
+        "B_POS": "B positivo",
+        "B_NEG": "B negativo",
+        "AB_POS": "AB positivo",
+        "AB_NEG": "AB negativo",
+        "O_POS": "0 positivo",
+        "O_NEG": "0 negativo",
+        "UNKNOWN": "Sconosciuto"
+      },
+      "organDonorValues": {
+        "YES": "Sì",
+        "NO": "No",
+        "UNKNOWN": "Non indicato"
+      },
+      "advanceDirectiveValues": {
+        "EXISTS": "Presenti",
+        "NONE": "Nessuna",
+        "UNKNOWN": "Non indicato"
+      },
+      "contactsPlaceholder": "Nome e numero di telefono di chi chiamare",
+      "implantsPlaceholder": "es. pacemaker, microinfusore, impianto metallico",
+      "notePlaceholder": "Qualsiasi cosa un medico dovrebbe sapere in emergenza",
+      "reportHint": "Compare sulla prima pagina del referto medico.",
+      "save": "Salva",
+      "savedToast": "Informazioni di emergenza salvate",
+      "saveError": "Impossibile salvare le informazioni di emergenza.",
+      "loadError": "Impossibile caricare le informazioni di emergenza."
     }
   },
   "environment": {
@@ -9834,7 +9910,8 @@
     "scopeCount": "{count} voci da {groups} aree",
     "scopeSensitive": "incl. {names}",
     "leafVisits": "Visite mediche",
-    "leafImmunizations": "Vaccinazioni"
+    "leafImmunizations": "Vaccinazioni",
+    "leafEmergency": "Informazioni di emergenza (gruppo sanguigno, contatti, disposizioni)"
   },
   "recordSharing": {
     "banner": {
