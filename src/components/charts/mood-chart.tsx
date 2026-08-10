@@ -17,8 +17,9 @@ import {
 import { useEffect, useState, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { TagChip } from "@/components/ui/tag-chip";
+import { TileHeader } from "@/components/insights/tile-header";
 import { useTranslations } from "@/lib/i18n/context";
 import { makeBucketLabelFormatters } from "@/lib/charts/bucket-label";
 import { readStoredTimezone } from "@/lib/timezone-mirror";
@@ -1034,7 +1035,7 @@ export function MoodChart({
             back to side-by-side. */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2">
-            <CardTitle className="text-base">{displayTitle}</CardTitle>
+            <TileHeader title={displayTitle} />
             {activeBucket !== "day" && (
               <TagChip className="hidden tracking-wide uppercase sm:inline-flex">
                 {t(
