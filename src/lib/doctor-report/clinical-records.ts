@@ -18,6 +18,10 @@ import { decryptAllergyReaction } from "@/lib/doctor-report-helpers";
 import type { DoctorReportData } from "@/lib/doctor-report-types";
 import { decryptFromBytes } from "@/lib/ai/coach/bytes-codec";
 import { decryptHealthProfileFactValue } from "@/lib/profile/health-facts";
+import {
+  emergencyProfileHasContent,
+  readEmergencyProfile,
+} from "@/lib/profile/emergency-profile";
 import type {
   HealthProfileFactKind,
   HealthProfileFactValue,
@@ -307,6 +311,23 @@ export async function loadFamilyHistory(
     select: { relationship: true, condition: true, ageAtOnset: true },
   });
   return rows.length > 0 ? rows : null;
+}
+
+/**
+ * Emergency ("Notfalldaten") facts for the page-one section. The caller owns
+ * the selection gate, so reaching this function always means EMERGENCY was
+ * admitted. Returns null when nothing is worth surfacing, so the PDF emits no
+ * page over an emergency profile the person never filled in — the presence half
+ * of the page gate, kept beside the read so the two cannot drift.
+ *
+ * The DTO shape is exactly the report's emergency shape, so it crosses through
+ * unchanged. Free text decrypts fail-soft inside `readEmergencyProfile`.
+ */
+export async function loadEmergency(
+  userId: string,
+): Promise<DoctorReportData["emergency"]> {
+  const dto = await readEmergencyProfile(userId);
+  return emergencyProfileHasContent(dto) ? dto : null;
 }
 
 /**

@@ -150,6 +150,42 @@
     "height": "Height",
     "period": "Reporting period",
     "createdOn": "Created on",
+    "emergency": {
+      "title": "Emergency information",
+      "subtitle": "For use in an acute situation. Self-reported; confirm where possible.",
+      "none": "Not recorded",
+      "unreadable": "Stored value could not be read",
+      "bloodType": "Blood type",
+      "bloodTypeUnknown": "Unknown",
+      "bloodTypeValues": {
+        "A_POS": "A positive",
+        "A_NEG": "A negative",
+        "B_POS": "B positive",
+        "B_NEG": "B negative",
+        "AB_POS": "AB positive",
+        "AB_NEG": "AB negative",
+        "O_POS": "O positive",
+        "O_NEG": "O negative"
+      },
+      "severeAllergies": "Severe allergies",
+      "activeMedications": "Current medications",
+      "chronicConditions": "Chronic conditions",
+      "implants": "Implants and devices",
+      "advanceDirective": "Advance directive",
+      "advanceDirectiveValues": {
+        "EXISTS": "Exists",
+        "NONE": "None",
+        "UNKNOWN": "Not stated"
+      },
+      "organDonor": "Organ donor",
+      "organDonorValues": {
+        "YES": "Yes",
+        "NO": "No",
+        "UNKNOWN": "Not stated"
+      },
+      "contacts": "Emergency contacts",
+      "notes": "Additional notes"
+    },
     "vitalsTitle": "Vital signs — Summary",
     "colParameter": "Parameter",
     "colCurrent": "Current",
@@ -9311,6 +9347,46 @@
       "loadError": "Couldn't load your conditions.",
       "savedToast": "Conditions saved.",
       "saveError": "Could not save. Please try again."
+    },
+    "emergency": {
+      "cardTitle": "Emergency information",
+      "cardDescription": "What a first responder needs first: blood type, contacts, directives.",
+      "bloodType": "Blood type",
+      "organDonor": "Organ donor",
+      "advanceDirective": "Advance directive",
+      "contacts": "Emergency contacts",
+      "implants": "Implants and devices",
+      "note": "Additional notes",
+      "notRecorded": "Not recorded",
+      "bloodTypeValues": {
+        "A_POS": "A positive",
+        "A_NEG": "A negative",
+        "B_POS": "B positive",
+        "B_NEG": "B negative",
+        "AB_POS": "AB positive",
+        "AB_NEG": "AB negative",
+        "O_POS": "O positive",
+        "O_NEG": "O negative",
+        "UNKNOWN": "Unknown"
+      },
+      "organDonorValues": {
+        "YES": "Yes",
+        "NO": "No",
+        "UNKNOWN": "Not stated"
+      },
+      "advanceDirectiveValues": {
+        "EXISTS": "Exists",
+        "NONE": "None",
+        "UNKNOWN": "Not stated"
+      },
+      "contactsPlaceholder": "Name and phone number of who to call",
+      "implantsPlaceholder": "e.g. pacemaker, insulin pump, metal implant",
+      "notePlaceholder": "Anything a clinician should know in an emergency",
+      "reportHint": "This appears on the first page of your doctor report.",
+      "save": "Save",
+      "savedToast": "Emergency information saved",
+      "saveError": "Couldn't save your emergency information.",
+      "loadError": "Couldn't load your emergency information."
     }
   },
   "environment": {
@@ -9834,7 +9910,8 @@
     "scopeCount": "{count} entries from {groups} areas",
     "scopeSensitive": "incl. {names}",
     "leafVisits": "Visits",
-    "leafImmunizations": "Immunizations"
+    "leafImmunizations": "Immunizations",
+    "leafEmergency": "Emergency information (blood type, contacts, directives)"
   },
   "recordSharing": {
     "banner": {

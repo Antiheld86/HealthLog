@@ -25,6 +25,7 @@ import {
 import type { Locale } from "./i18n/config";
 import { isValidTimezone } from "./tz/format";
 import type { DoctorReportData } from "./doctor-report-data";
+import { buildEmergencyFirstPageSection } from "./doctor-report-pdf/emergency-first-page-section";
 import { buildHeaderProfileSection } from "./doctor-report-pdf/header-profile-section";
 import { buildMeasurementsChartsSection } from "./doctor-report-pdf/measurements-charts-section";
 import { buildMedicationMoodWellnessSection } from "./doctor-report-pdf/medication-mood-wellness-section";
@@ -289,6 +290,15 @@ export function buildDoctorReportPdfDocument(
   };
 
   let cursor = pdfCursorState(doc, margin);
+  // The emergency sheet owns page one. It renders only when emergency data is
+  // present (the aggregator gates on the EMERGENCY leaf + presence), and when it
+  // does, an explicit page break sends the rest of the report to page two so the
+  // opening page carries nothing else.
+  if (data.emergency) {
+    cursor = buildEmergencyFirstPageSection(context, cursor);
+    doc.addPage();
+    cursor = pdfCursorState(doc, margin);
+  }
   cursor = buildHeaderProfileSection(context, cursor);
   cursor = buildMeasurementsChartsSection(context, cursor);
   cursor = buildMedicationMoodWellnessSection(context, cursor);

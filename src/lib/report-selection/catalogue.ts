@@ -37,6 +37,7 @@ import { MEASUREMENT_TYPE_LABEL_KEYS } from "@/lib/measurements/type-label-keys"
  */
 export type StructuredLeafId =
   | "PATIENT_IDENTITY"
+  | "EMERGENCY"
   | "INSURANCE"
   | "GLUCOSE_PANEL"
   | "LAB_RESULTS"
@@ -192,6 +193,7 @@ export const MEASUREMENT_LEAF_GROUP: Record<MeasurementType, ReportGroupId> = {
 /** Structured leaf → group. Exhaustive over the closed union. */
 export const STRUCTURED_LEAF_GROUP: Record<StructuredLeafId, ReportGroupId> = {
   PATIENT_IDENTITY: "identity",
+  EMERGENCY: "identity",
   INSURANCE: "identity",
   GLUCOSE_PANEL: "glucose",
   LAB_RESULTS: "labs",
@@ -209,9 +211,10 @@ export const STRUCTURED_LEAF_GROUP: Record<StructuredLeafId, ReportGroupId> = {
   ANAMNESIS: "sensitive",
 };
 
-/** i18n label keys for the 16 structured leaves. */
+/** i18n label keys for the 17 structured leaves. */
 export const STRUCTURED_LEAF_LABEL_KEYS: Record<StructuredLeafId, string> = {
   PATIENT_IDENTITY: "reportSelection.leafPatientIdentity",
+  EMERGENCY: "reportSelection.leafEmergency",
   INSURANCE: "reportSelection.leafInsurance",
   GLUCOSE_PANEL: "reportSelection.leafGlucosePanel",
   LAB_RESULTS: "reportSelection.leafLabResults",

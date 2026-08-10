@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.37.9] — 2026-08-10
+
+### Added
+
+- You can record the data that matters in an emergency: blood type, an organ-donor and an advance-directive status, plus emergency contacts, implants or devices, and a free note. Enter it under Anamnese, the same place the allergies and family history live. The contacts, implants and note are encrypted at rest like the rest of your sensitive record, and every field carries through backup and restore.
+- The doctor report can open with a one-page emergency summary a clinician can read at a glance: blood type, severe allergies, current medications, chronic conditions, implants, the advance-directive and organ-donor lines, contacts and the note. The page only appears when you have recorded something for it, and it is part of the report you choose to share, so it travels with the report to the practice rather than sitting somewhere separate.
+
 ## [1.37.8] — 2026-08-10
 
 ### Added

@@ -25,6 +25,7 @@ import { SENSITIVE_LEAF_IDS, type ReportLeafId } from "./catalogue";
  */
 export const STANDARD_TEMPLATE_LEAVES: readonly ReportLeafId[] = [
   "PATIENT_IDENTITY",
+  "EMERGENCY",
   "INSURANCE",
   "BLOOD_PRESSURE_SYS",
   "BLOOD_PRESSURE_DIA",

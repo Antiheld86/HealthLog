@@ -369,12 +369,17 @@ async function main() {
   // ───── UserHealthProfile (Bytes columns) ─────
   // "aboutMeEncrypted" "conditionsEncrypted" "allergiesEncrypted"
   // "coachFocusEncrypted" "pendingQuestionsEncrypted"
+  // "emergencyContactsEncrypted" "emergencyImplantsEncrypted"
+  // "emergencyNoteEncrypted"
   for (const field of [
     "aboutMeEncrypted",
     "conditionsEncrypted",
     "allergiesEncrypted",
     "coachFocusEncrypted",
     "pendingQuestionsEncrypted",
+    "emergencyContactsEncrypted",
+    "emergencyImplantsEncrypted",
+    "emergencyNoteEncrypted",
   ]) {
     results.push(
       await rotateBytesColumn(

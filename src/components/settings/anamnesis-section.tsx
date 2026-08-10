@@ -23,6 +23,7 @@ import {
   EyeOff,
   HeartPulse,
   ShieldAlert,
+  Siren,
   Users,
 } from "lucide-react";
 
@@ -33,6 +34,7 @@ import { useModuleEnabled } from "@/hooks/use-module-enabled";
 
 import { AllergyManager } from "@/components/records/allergy-manager";
 import { ConditionsManager } from "@/components/records/conditions-manager";
+import { EmergencyProfileManager } from "@/components/records/emergency-profile-manager";
 import { FamilyHistoryManager } from "@/components/records/family-history-manager";
 import { AiProfileInclusionManager } from "@/components/records/ai-profile-inclusion-manager";
 import { HealthProfileFactsManager } from "@/components/records/health-profile-facts-manager";
@@ -89,6 +91,15 @@ export function AnamnesisSection() {
           description={t("records.family.cardDescription")}
         />
         <FamilyHistoryManager />
+      </SettingsCard>
+
+      <SettingsCard>
+        <SettingsCardHeader
+          icon={Siren}
+          title={t("records.emergency.cardTitle")}
+          description={t("records.emergency.cardDescription")}
+        />
+        <EmergencyProfileManager />
       </SettingsCard>
 
       <p className="text-muted-foreground text-xs">{t("records.disclaimer")}</p>

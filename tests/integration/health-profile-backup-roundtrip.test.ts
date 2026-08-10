@@ -24,6 +24,9 @@ async function seedProfile() {
       role: "USER",
     },
   });
+  const emergencyContactsCiphertext = encryptToBytes(
+    "ICE contact, reachable on the recorded number",
+  );
   await prisma.userHealthProfile.create({
     data: {
       id: "profile-roundtrip-row",
@@ -31,6 +34,13 @@ async function seedProfile() {
       aboutMeEncrypted: encryptToBytes("Works rotating shifts"),
       conditionsEncrypted: encryptToBytes("Asthma"),
       aiIncludedSections: ["CONDITIONS", "SMOKING_STATUS", "SHIFT_SCHEDULE"],
+      // Emergency profile: three plaintext enums + three encrypted columns.
+      emergencyBloodType: "O_NEG",
+      organDonorStatus: "YES",
+      advanceDirectiveStatus: "EXISTS",
+      emergencyContactsEncrypted: emergencyContactsCiphertext,
+      emergencyImplantsEncrypted: encryptToBytes("Pacemaker fitted 2021"),
+      emergencyNoteEncrypted: encryptToBytes("Reacts to contrast dye"),
     },
   });
 
@@ -68,13 +78,14 @@ async function seedProfile() {
     },
   });
 
-  return { user, currentCiphertext };
+  return { user, currentCiphertext, emergencyContactsCiphertext };
 }
 
 describe("health profile disaster-recovery round trip", () => {
   it("restores deleted encrypted profile rows and effective-dated history", async () => {
     const prisma = getPrismaClient();
-    const { user, currentCiphertext } = await seedProfile();
+    const { user, currentCiphertext, emergencyContactsCiphertext } =
+      await seedProfile();
     const built = await buildFullBackupPayload(prisma, user.id, {
       purpose: "disaster-recovery",
     });
@@ -115,6 +126,21 @@ describe("health profile disaster-recovery round trip", () => {
       "SMOKING_STATUS",
       "SHIFT_SCHEDULE",
     ]);
+
+    // Every emergency column has to survive the round trip. The three enums
+    // come back by value; the three encrypted columns come back as ciphertext,
+    // and the contact column decrypts to exactly what was seeded. Dropping any
+    // one of the six from the profile backup builder turns the matching
+    // assertion red naming that column.
+    expect(profile.emergencyBloodType).toBe("O_NEG");
+    expect(profile.organDonorStatus).toBe("YES");
+    expect(profile.advanceDirectiveStatus).toBe("EXISTS");
+    expect(profile.emergencyContactsEncrypted).not.toBeNull();
+    expect(profile.emergencyImplantsEncrypted).not.toBeNull();
+    expect(profile.emergencyNoteEncrypted).not.toBeNull();
+    expect(Buffer.from(profile.emergencyContactsEncrypted!)).toEqual(
+      Buffer.from(emergencyContactsCiphertext),
+    );
 
     const revisions = await prisma.healthProfileFactRevision.findMany({
       where: { userId: user.id },
