@@ -176,7 +176,11 @@ export class WideEventBuilder {
   addWarning(msg: string): this {
     this.elevateLevel("warn");
     if (!this.event.warnings) this.event.warnings = [];
-    this.event.warnings.push(msg);
+    // Scrub on the way in, like setError / setHttp / addExternalCall. A warning
+    // often carries an outbound error string, which for several integrations is
+    // the request URL with a credential in it (a bot token, an OAuth code, a
+    // licence key). The redaction contract is the builder's, not each caller's.
+    this.event.warnings.push(redactSecrets(msg));
     return this;
   }
 

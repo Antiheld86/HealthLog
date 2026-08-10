@@ -43,6 +43,7 @@ import { buildTrajectorySnapshotBlock } from "./trajectory-snapshot";
 import { buildCycleSnapshotBlock } from "./cycle-snapshot";
 import { buildIllnessSnapshotBlock } from "./illness-snapshot";
 import { buildLabsSnapshotBlock } from "./labs-snapshot";
+import { buildVisitsSnapshotBlock } from "./visits-snapshot";
 import {
   buildReferenceGroundingBlock,
   type GroundingMetricInput,
@@ -881,6 +882,14 @@ async function buildCoachSnapshotImpl(
   // capped) so the Coach can answer "what was my LDL" without re-deriving.
   const labsBlockPromise = buildLabsSnapshotBlock(userId, now);
 
+  // v1.38 — doctor-visit context. Like illness/labs it is attempted always (a
+  // visit is core, never module-gated) and short-circuits to null when there is
+  // neither an upcoming appointment inside the 14-day horizon nor a past visit.
+  // UNLIKE illness/labs it IS registered for degradation below (against the
+  // lowest-priority cluster), because a visit history is low-frequency context
+  // the Coach can lose under budget pressure without losing a safety flag.
+  const visitsBlockPromise = buildVisitsSnapshotBlock(userId, now);
+
   const [
     moodRows,
     complianceMeds,
@@ -897,6 +906,7 @@ async function buildCoachSnapshotImpl(
     cycleBlock,
     illnessBlock,
     labsBlock,
+    visitsBlock,
   ] = await Promise.all([
     moodRowsPromise,
     complianceMedsPromise,
@@ -913,6 +923,7 @@ async function buildCoachSnapshotImpl(
     cycleBlockPromise,
     illnessBlockPromise,
     labsBlockPromise,
+    visitsBlockPromise,
   ]);
 
   buildCoreMetricsBlocks({
@@ -1145,6 +1156,18 @@ async function buildCoachSnapshotImpl(
   // biomarker, never the decrypted note.
   if (labsBlock) {
     snapshot.labs = labsBlock;
+  }
+
+  // v1.38 — doctor-visit context. Registered for degradation, and placed
+  // EXPLICITLY rather than left to inherit the tail of the list by accident: a
+  // visit history is low-frequency, high-signal-but-losable context, so it maps
+  // to `skin_temp` (the `environment` cluster, the tail of CLUSTER_PRIORITY),
+  // which puts it among the first blocks the budget degrader sheds — before any
+  // clinical cluster. Unlike illness (which carries the Rest Mode safety flag)
+  // there is no reason to protect it from truncation.
+  if (visitsBlock) {
+    snapshot.visits = visitsBlock;
+    registerBlock("visits", "skin_temp");
   }
 
   // ── v1.22 (W9) — adherence storyline (B5), changepoints (C1), signal-trust

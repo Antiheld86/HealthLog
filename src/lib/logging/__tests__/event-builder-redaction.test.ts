@@ -36,6 +36,18 @@ describe("wide-event builder — redaction at every entry point", () => {
     expect(emitted(b)).not.toContain("AAH-SuperSecretBotTokenValue");
   });
 
+  it("scrubs a credential that arrives through addWarning", () => {
+    // A warning often carries an outbound error string, and for several
+    // integrations that string is the request URL with a secret in it (a
+    // GeoLite2 download carries the licence key). It must be scrubbed on the
+    // way in, the same as setError / setHttp / addExternalCall.
+    const b = new WideEventBuilder("background");
+    b.addWarning(
+      "geolite2 download failed: https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=SECRET_MAXMIND_KEY&suffix=tar.gz",
+    );
+    expect(emitted(b)).not.toContain("SECRET_MAXMIND_KEY");
+  });
+
   it("scrubs an API key that arrives through addMeta", () => {
     const b = new WideEventBuilder("http");
     b.addMeta(

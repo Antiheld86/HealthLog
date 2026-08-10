@@ -47,6 +47,9 @@ vi.mock("@/lib/db", () => ({
     medicationScheduleRevision: { groupBy: vi.fn(async () => []) },
     integrationStatus: { findMany: vi.fn(async () => []) },
     measurementReminder: { findMany: vi.fn(async () => []) },
+    // v1.38 — the visit history read + the appointments folded into
+    // get_preventive_care both read the Encounter table.
+    encounter: { findMany: vi.fn(async () => []) },
     // v1.30 (G1) — the nutrients pipeline.
     nutrientIntakeDay: {
       findMany: vi.fn(async () => []),
@@ -71,6 +74,20 @@ vi.mock("@/lib/integrations/status", () => ({
 }));
 vi.mock("@/lib/measurement-reminders/dto", () => ({
   toMeasurementReminderDto: vi.fn((r) => r),
+}));
+// v1.38 — get_visits resolves its linked condition labels through the shared
+// link service; stub the batched read so the tool-wiring tests never reach a
+// DB. Its own logic is covered in the link-service suite.
+vi.mock("@/lib/links", () => ({
+  listTargetsBySource: vi.fn(async () => new Map()),
+}));
+// v1.38 — get_visits decrypts a visit's reason/outcome; stub the codec so the
+// wiring tests never need a live ENCRYPTION key. The fail-soft decrypt path is
+// exercised by returning ciphertext bytes and asserting the fenced plaintext.
+vi.mock("@/lib/ai/coach/bytes-codec", () => ({
+  decryptFromBytes: vi.fn((buf: Uint8Array) =>
+    Buffer.from(buf).toString("utf8"),
+  ),
 }));
 // v1.30 (G1) — `get_nutrients` delegates to the nutrients-read engine; stub
 // only the DB-touching entry point so the tool-wiring tests below never reach
@@ -137,6 +154,8 @@ import { isModuleEnabled } from "@/lib/modules/gate";
 import { getAssistantFlags } from "@/lib/feature-flags";
 import { getNutrients } from "@/lib/mcp/nutrients-read";
 import { loadIntradayPulse } from "@/lib/analytics/intraday-pulse-io";
+import { listTargetsBySource } from "@/lib/links";
+import { decryptFromBytes } from "@/lib/ai/coach/bytes-codec";
 import type { McpAuthContext } from "../auth";
 
 const CTX: McpAuthContext = {
@@ -193,6 +212,8 @@ describe("MCP tool registry — surface", () => {
         "get_intraday_pulse",
         // v1.30 coverage review (G3) — ECG recording metadata.
         "get_ecg_recordings",
+        // v1.38 — the bounded visit history.
+        "get_visits",
       ].sort(),
     );
   });
@@ -639,6 +660,13 @@ describe("get_integration_status", () => {
 });
 
 describe("get_preventive_care", () => {
+  // The global beforeEach resets every mock, so re-arm the appointments read
+  // (folded in v1.38) to an empty list; the checkup-focused cases below leave
+  // it empty and the appointments fold is exercised in its own describe.
+  beforeEach(() => {
+    vi.mocked(prisma.encounter.findMany).mockResolvedValue([] as never);
+  });
+
   it("surfaces the configured reminder due-list with overdue flags", async () => {
     vi.mocked(prisma.measurementReminder.findMany).mockResolvedValue([
       { id: "r-1" },
@@ -782,6 +810,147 @@ describe("get_preventive_care", () => {
         timezone: "UTC",
       } as never);
     }
+  });
+});
+
+describe("get_preventive_care — upcoming appointments fold in", () => {
+  it("carries booked appointments as a named field alongside the checkups", async () => {
+    vi.mocked(prisma.measurementReminder.findMany).mockResolvedValue(
+      [] as never,
+    );
+    vi.mocked(prisma.encounter.findMany).mockResolvedValue([
+      {
+        id: "enc-2",
+        occurredAt: new Date("2030-01-01T09:00:00.000Z"),
+        status: "PLANNED",
+        kind: "ROUTINE",
+        reasonEncrypted: null,
+        practitioner: { name: "Dr. Wolke", specialty: "General practice" },
+      },
+    ] as never);
+    const result = (await tool("get_preventive_care").run(CTX, {})) as {
+      present: boolean;
+      checkups?: unknown;
+      appointments: Array<Record<string, unknown>>;
+    };
+    // No Vorsorge reminder, but an appointment exists → present, appointments
+    // carried, and no empty `checkups` array left dangling.
+    expect(result.present).toBe(true);
+    expect(result.checkups).toBeUndefined();
+    expect(result.appointments).toHaveLength(1);
+    expect(result.appointments[0]).toMatchObject({
+      practitioner: "Dr. Wolke",
+      specialty: "General practice",
+      kind: "ROUTINE",
+      reason: null,
+    });
+    // It reads FUTURE, PLANNED visits only — never the past history.
+    const arg = vi.mocked(prisma.encounter.findMany).mock.calls[0][0] as {
+      where: Record<string, unknown>;
+    };
+    expect(arg.where.status).toBe("PLANNED");
+    expect(arg.where.userId).toBe("user-1");
+  });
+
+  it("stays { present: false } when neither a reminder nor an appointment exists", async () => {
+    vi.mocked(prisma.measurementReminder.findMany).mockResolvedValue(
+      [] as never,
+    );
+    vi.mocked(prisma.encounter.findMany).mockResolvedValue([] as never);
+    const result = (await tool("get_preventive_care").run(CTX, {})) as {
+      present: boolean;
+    };
+    expect(result.present).toBe(false);
+  });
+});
+
+describe("get_visits", () => {
+  function visitRow(overrides: Record<string, unknown> = {}) {
+    return {
+      id: "enc-1",
+      occurredAt: new Date("2026-06-01T09:00:00.000Z"),
+      status: "DONE",
+      kind: "SPECIALIST",
+      reasonEncrypted: Buffer.from("chest pain follow-up", "utf8"),
+      outcomeEncrypted: Buffer.from("all clear", "utf8"),
+      practitioner: { name: "Dr. Herz", specialty: "Cardiology" },
+      ...overrides,
+    };
+  }
+
+  it("returns the bounded list, newest first, with fenced free text and linked conditions", async () => {
+    vi.mocked(decryptFromBytes).mockImplementation((buf: Uint8Array) =>
+      Buffer.from(buf).toString("utf8"),
+    );
+    vi.mocked(prisma.encounter.findMany).mockResolvedValue([
+      visitRow(),
+    ] as never);
+    vi.mocked(listTargetsBySource).mockResolvedValue(
+      new Map([["enc-1", [{ id: "ep-1", label: "Hypertension", date: null }]]]),
+    );
+
+    const result = (await tool("get_visits").run(CTX, {})) as {
+      present: boolean;
+      windowMonths: number;
+      visits: Array<Record<string, unknown>>;
+    };
+    expect(result.present).toBe(true);
+    expect(result.windowMonths).toBe(12);
+    expect(result.visits).toHaveLength(1);
+    const v = result.visits[0];
+    expect(v.status).toBe("DONE");
+    expect(v.kind).toBe("SPECIALIST");
+    expect(v.practitioner).toBe("Dr. Herz");
+    expect(v.specialty).toBe("Cardiology");
+    // Reason + outcome ride the USER_TEXT wrapping.
+    expect(v.reason).toContain("<<<USER_TEXT_START>>>");
+    expect(v.reason).toContain("chest pain follow-up");
+    expect(v.outcome).toContain("all clear");
+    expect(v.conditions).toEqual(["Hypertension"]);
+  });
+
+  // WR-10 — the absence contract, the check that must never be decorative. An
+  // empty list is honest absence, not empty success. { present: true,
+  // visits: [] } would tell the model "you have no visits" when the truth is
+  // "you have never recorded one".
+  it("returns { present: false } — never { present: true, visits: [] } — when the account has never recorded a visit", async () => {
+    vi.mocked(prisma.encounter.findMany).mockResolvedValue([] as never);
+    const result = (await tool("get_visits").run(CTX, {})) as {
+      present: boolean;
+      visits?: unknown;
+    };
+    expect(result.present).toBe(false);
+    expect(result).not.toHaveProperty("visits");
+    expect(result.visits).toBeUndefined();
+  });
+
+  it("scopes the read to the caller and never accepts a userId argument", async () => {
+    vi.mocked(prisma.encounter.findMany).mockResolvedValue([] as never);
+    await tool("get_visits").run(CTX, { userId: "someone-else", months: 6 });
+    const arg = vi.mocked(prisma.encounter.findMany).mock.calls[0][0] as {
+      where: Record<string, unknown>;
+      take: number;
+    };
+    expect(arg.where.userId).toBe("user-1");
+    expect(arg.where.deletedAt).toBeNull();
+    expect(arg.take).toBe(50);
+    // The window arg narrows the range; the injected userId body field is
+    // ignored entirely.
+    expect(arg.where.occurredAt).toBeDefined();
+  });
+
+  it("narrows to one practitioner by a case-insensitive name substring", async () => {
+    vi.mocked(prisma.encounter.findMany).mockResolvedValue([] as never);
+    await tool("get_visits").run(CTX, { practitioner: "herz" });
+    const arg = vi.mocked(prisma.encounter.findMany).mock.calls[0][0] as {
+      where: {
+        practitioner?: { is?: { name?: { contains?: string; mode?: string } } };
+      };
+    };
+    expect(arg.where.practitioner?.is?.name).toEqual({
+      contains: "herz",
+      mode: "insensitive",
+    });
   });
 });
 

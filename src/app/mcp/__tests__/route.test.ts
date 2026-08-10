@@ -112,6 +112,8 @@ const READ_TOOLS = [
   "get_nutrients",
   "get_intraday_pulse",
   "get_ecg_recordings",
+  // v1.38 — the bounded visit history.
+  "get_visits",
 ].sort();
 
 /** A valid, narrow-scope (`health:read`) token resolution. */
