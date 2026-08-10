@@ -426,6 +426,61 @@ describe("buildCreateBody", () => {
     expect(hydratedDefault.unitsPerDose).toBe("1");
   });
 
+  it("carries a per-slot dose + units onto the body and round-trips them on edit-hydrate (#219)", () => {
+    // A split plan: this schedule takes half a tablet, overriding the
+    // medication-level dose + units. The flat mirror is what Step 7 writes.
+    const p: WizardPayload = {
+      ...withCadence("daily"),
+      treatmentRow: "bloodPressure",
+      timesOfDay: ["12:00"],
+      startsOn: new Date(Date.UTC(2026, 4, 28)),
+      endsOn: null,
+      scheduleDose: "0.5 tablet",
+      scheduleUnitsPerDose: "0.5",
+    };
+    const body = buildCreateBody(p);
+    // This is the assertion that goes RED when the encode path stops
+    // emitting the per-slot fields on save.
+    expect(body.schedules[0].dose).toBe("0.5 tablet");
+    expect(body.schedules[0].unitsPerDose).toBe(0.5);
+
+    // A blank override omits both, so the schedule inherits the med level.
+    const inherit = buildCreateBody({
+      ...p,
+      scheduleDose: "",
+      scheduleUnitsPerDose: "",
+    });
+    expect(inherit.schedules[0].dose).toBeUndefined();
+    expect(inherit.schedules[0].unitsPerDose).toBeUndefined();
+
+    // Edit-hydrate: a persisted schedule carrying the split round-trips back
+    // onto the draft (and the flat mirror) so an edit keeps it.
+    const hydrated = hydrateWizardPayload({
+      id: "m1",
+      name: "Foo",
+      dose: "1 tablet",
+      category: "BLOOD_PRESSURE",
+      notificationsEnabled: true,
+      startsOn: null,
+      endsOn: null,
+      oneShot: false,
+      schedules: [
+        {
+          windowStart: "12:00",
+          windowEnd: "13:00",
+          timesOfDay: ["12:00"],
+          rrule: "FREQ=DAILY",
+          dose: "0.5 tablet",
+          unitsPerDose: 0.5,
+        },
+      ],
+    });
+    expect(hydrated.scheduleDose).toBe("0.5 tablet");
+    expect(hydrated.scheduleUnitsPerDose).toBe("0.5");
+    expect(hydrated.schedules[0].dose).toBe("0.5 tablet");
+    expect(hydrated.schedules[0].unitsPerDose).toBe("0.5");
+  });
+
   it("emits DIABETES category for the diabetes row", () => {
     const p: WizardPayload = {
       ...withCadence("daily"),
