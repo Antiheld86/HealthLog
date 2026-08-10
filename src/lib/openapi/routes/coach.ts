@@ -17,6 +17,10 @@ import {
   removedHealthProfileFactSchema,
 } from "@/lib/validations/health-profile-facts";
 import {
+  emergencyProfileDtoSchema,
+  emergencyProfileUpdateSchema,
+} from "@/lib/validations/emergency-profile";
+import {
   ACCEPTED_INSIGHTS_TILE_IDS,
   INSIGHTS_SECTION_IDS,
 } from "@/lib/insights-layout";
@@ -50,6 +54,18 @@ import {
   recordRefusal,
   stdResponses,
 } from "./shared";
+
+emergencyProfileUpdateSchema.meta({
+  id: "UpdateEmergencyProfileRequest",
+  description:
+    "Partial edit of the emergency (Notfalldaten) profile. An omitted key leaves the column untouched; a `null` enum or an emptied free-text field clears it. `bloodType`, `organDonor` and `advanceDirective` are closed enums; `contacts`, `implants` and `note` are encrypted at rest. Rejects unknown keys.",
+});
+
+emergencyProfileDtoSchema.meta({
+  id: "EmergencyProfile",
+  description:
+    "The caller's emergency profile: three closed-enum facts plus three decrypted free-text fields. A free-text field is null when unset; its `*Unreadable` flag is true when ciphertext was present but could not be decrypted (a key-rotation gap, fail-soft rather than 500).",
+});
 
 // ── Coach cadence suggestions (v1.18.1) ──────────────────────────────
 // The action endpoint behind the one-tap reminder-suggestion card. The
@@ -1356,6 +1372,54 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
         ...anamnesisFactNotFoundResponse,
         ...conflictResponse409("Anamnesis fact", "anamnesis.fact.conflict"),
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/anamnesis/emergency": {
+    get: {
+      tags: ["Insights"],
+      summary: "Read the emergency profile",
+      description:
+        "Returns the caller's emergency (Notfalldaten) profile: blood type, organ-donor and advance-directive declarations, and the decrypted emergency contacts, implants/devices and ICE note. Free text decrypts fail-soft.",
+      responses: {
+        "200": {
+          description: "The emergency profile (fields null when unset).",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                emergencyProfileDtoSchema,
+                "GetEmergencyProfileResponse",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+    patch: {
+      tags: ["Insights"],
+      summary: "Update the emergency profile",
+      description:
+        "Partial edit of the emergency profile on the caller's own record. Free-text fields are AES-256-GCM encrypted before persistence. Audits as `anamnesis.emergency.update`.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: emergencyProfileUpdateSchema },
+        },
+      },
+      responses: {
+        "200": {
+          description: "The updated emergency profile.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                emergencyProfileDtoSchema,
+                "UpdateEmergencyProfileResponse",
+              ),
+            },
+          },
+        },
         ...stdResponses,
       },
     },

@@ -932,7 +932,7 @@ paths:
                       type: number
                       const: 2
                     leaves:
-                      maxItems: 93
+                      maxItems: 94
                       type: array
                       items:
                         type: string
@@ -1037,7 +1037,7 @@ paths:
                       type: number
                       const: 2
                     leaves:
-                      maxItems: 93
+                      maxItems: 94
                       type: array
                       items:
                         type: string
@@ -6840,6 +6840,93 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+        "422": *a3
+        "429": *a4
+  /api/anamnesis/emergency:
+    get:
+      tags:
+        - Insights
+      summary: Read the emergency profile
+      description: "Returns the caller's emergency (Notfalldaten) profile: blood type, organ-donor and advance-directive
+        declarations, and the decrypted emergency contacts, implants/devices and ICE note. Free text decrypts
+        fail-soft."
+      responses:
+        "200":
+          description: The emergency profile (fields null when unset).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetEmergencyProfileResponse"
+        "401": *a1
+        "422": *a3
+        "429": *a4
+    patch:
+      tags:
+        - Insights
+      summary: Update the emergency profile
+      description: Partial edit of the emergency profile on the caller's own record. Free-text fields are AES-256-GCM
+        encrypted before persistence. Audits as `anamnesis.emergency.update`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bloodType:
+                  anyOf:
+                    - type: string
+                      enum:
+                        - A_POS
+                        - A_NEG
+                        - B_POS
+                        - B_NEG
+                        - AB_POS
+                        - AB_NEG
+                        - O_POS
+                        - O_NEG
+                        - UNKNOWN
+                    - type: "null"
+                organDonor:
+                  anyOf:
+                    - type: string
+                      enum:
+                        - YES
+                        - NO
+                        - UNKNOWN
+                    - type: "null"
+                advanceDirective:
+                  anyOf:
+                    - type: string
+                      enum:
+                        - EXISTS
+                        - NONE
+                        - UNKNOWN
+                    - type: "null"
+                contacts:
+                  anyOf:
+                    - type: string
+                      maxLength: 2000
+                    - type: "null"
+                implants:
+                  anyOf:
+                    - type: string
+                      maxLength: 1000
+                    - type: "null"
+                note:
+                  anyOf:
+                    - type: string
+                      maxLength: 2000
+                    - type: "null"
+              additionalProperties: false
+      responses:
+        "200":
+          description: The updated emergency profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateEmergencyProfileResponse"
+        "401": *a1
         "422": *a3
         "429": *a4
   /api/coach/about-me/questions:
@@ -16157,7 +16244,7 @@ components:
           type: number
           const: 2
         leaves:
-          maxItems: 93
+          maxItems: 94
           type: array
           items:
             type: string
@@ -29611,6 +29698,160 @@ components:
             - id
             - kind
             - removedAt
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    GetEmergencyProfileResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            bloodType:
+              anyOf:
+                - type: string
+                  enum:
+                    - A_POS
+                    - A_NEG
+                    - B_POS
+                    - B_NEG
+                    - AB_POS
+                    - AB_NEG
+                    - O_POS
+                    - O_NEG
+                    - UNKNOWN
+                - type: "null"
+            organDonor:
+              anyOf:
+                - type: string
+                  enum:
+                    - YES
+                    - NO
+                    - UNKNOWN
+                - type: "null"
+            advanceDirective:
+              anyOf:
+                - type: string
+                  enum:
+                    - EXISTS
+                    - NONE
+                    - UNKNOWN
+                - type: "null"
+            contacts:
+              anyOf:
+                - type: string
+                - type: "null"
+            contactsUnreadable:
+              type: boolean
+            implants:
+              anyOf:
+                - type: string
+                - type: "null"
+            implantsUnreadable:
+              type: boolean
+            note:
+              anyOf:
+                - type: string
+                - type: "null"
+            noteUnreadable:
+              type: boolean
+          required:
+            - bloodType
+            - organDonor
+            - advanceDirective
+            - contacts
+            - contactsUnreadable
+            - implants
+            - implantsUnreadable
+            - note
+            - noteUnreadable
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    UpdateEmergencyProfileResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            bloodType:
+              anyOf:
+                - type: string
+                  enum:
+                    - A_POS
+                    - A_NEG
+                    - B_POS
+                    - B_NEG
+                    - AB_POS
+                    - AB_NEG
+                    - O_POS
+                    - O_NEG
+                    - UNKNOWN
+                - type: "null"
+            organDonor:
+              anyOf:
+                - type: string
+                  enum:
+                    - YES
+                    - NO
+                    - UNKNOWN
+                - type: "null"
+            advanceDirective:
+              anyOf:
+                - type: string
+                  enum:
+                    - EXISTS
+                    - NONE
+                    - UNKNOWN
+                - type: "null"
+            contacts:
+              anyOf:
+                - type: string
+                - type: "null"
+            contactsUnreadable:
+              type: boolean
+            implants:
+              anyOf:
+                - type: string
+                - type: "null"
+            implantsUnreadable:
+              type: boolean
+            note:
+              anyOf:
+                - type: string
+                - type: "null"
+            noteUnreadable:
+              type: boolean
+          required:
+            - bloodType
+            - organDonor
+            - advanceDirective
+            - contacts
+            - contactsUnreadable
+            - implants
+            - implantsUnreadable
+            - note
+            - noteUnreadable
           additionalProperties: false
         error:
           type: "null"
