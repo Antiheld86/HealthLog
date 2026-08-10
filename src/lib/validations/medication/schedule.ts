@@ -1,7 +1,13 @@
 import { z } from "zod/v4";
 
 import { SCHEDULE_TYPES } from "@/lib/medications/scheduling/recurrence";
-import { RRULE_PROPS, doseWindowEntrySchema, timeRegex } from "./base";
+import {
+  RRULE_PROPS,
+  UNITS_PER_DOSE_MESSAGE,
+  doseWindowEntrySchema,
+  isSupportedUnitsPerDose,
+  timeRegex,
+} from "./base";
 
 export const scheduleSchema = z
   .object({
@@ -28,6 +34,13 @@ export const scheduleSchema = z
       .optional()
       .describe(
         "Per-schedule dose override. NULL means the schedule inherits `Medication.dose`.",
+      ),
+    unitsPerDose: z
+      .number()
+      .refine(isSupportedUnitsPerDose, { message: UNITS_PER_DOSE_MESSAGE })
+      .optional()
+      .describe(
+        "Per-schedule inventory units consumed per dose (#219). A whole number 1-100 or a supported fraction (¼ / ⅓ / ½ / ⅔ / ¾) for a split pill. Omitted / NULL means the schedule inherits `Medication.unitsPerDose`. Lets one medication decrement a different tablet count at different times of day (a whole tablet in the morning, a half at noon).",
       ),
     daysOfWeek: z
       .array(z.number().int().min(0).max(6))

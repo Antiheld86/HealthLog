@@ -33,6 +33,7 @@ import {
   recomputeMedicationComplianceForDay,
 } from "@/lib/rollups/medication-compliance-rollups";
 import { assertMedicationOwnership } from "@/lib/medications/route-guards";
+import { serializeScheduleUnitsPerDose } from "@/lib/medications/schedule-units-dto";
 import { hhmmToMinutesOrNull } from "@/lib/medications/scheduling/hhmm";
 import { getUserTodayBounds } from "@/lib/tz/local-day";
 import { NextRequest } from "next/server";
@@ -179,6 +180,7 @@ export const GET = apiHandler(
     return apiSuccess({
       ...medication,
       unitsPerDose: Number(medication.unitsPerDose),
+      schedules: serializeScheduleUnitsPerDose(medication.schedules),
       category,
       nextDueAt: display ? display.at.toISOString() : null,
       nextDueOverdue: display?.overdue ?? false,
@@ -404,6 +406,12 @@ export const PUT = apiHandler(
           windowEnd: window.windowEnd,
           label: s.label ?? null,
           dose: s.dose ?? null,
+          // #219 — per-schedule inventory units, field-by-field. A schedule
+          // replace re-creates the rows, so absent leaves the column NULL
+          // and the consume hook inherits the medication-level value.
+          ...(s.unitsPerDose !== undefined && {
+            unitsPerDose: s.unitsPerDose,
+          }),
           daysOfWeek: serializedDaysOfWeek,
           // v1.5 first-class times-of-day.
           timesOfDay: effectiveTimesOfDay,
@@ -828,6 +836,7 @@ export const PUT = apiHandler(
     return apiSuccess({
       ...medication,
       unitsPerDose: Number(medication.unitsPerDose),
+      schedules: serializeScheduleUnitsPerDose(medication.schedules),
       category: normalizedCategory,
     });
   },

@@ -15,6 +15,7 @@
 import { prisma } from "@/lib/db";
 import { annotate, getEvent } from "@/lib/logging/context";
 import { getMedicationCategories } from "@/lib/medication-category";
+import { serializeScheduleUnitsPerDose } from "@/lib/medications/schedule-units-dto";
 import {
   computeDisplayDue,
   OVERDUE_LOOKBACK_MS,
@@ -255,6 +256,8 @@ export async function buildMedicationsList(
       // v1.16.12 — Decimal → number so the wire stays a JSON number, not
       // the string Prisma would otherwise serialise a Decimal to.
       unitsPerDose: Number(m.unitsPerDose),
+      // #219 — same Decimal → number unwrap for the per-schedule column.
+      schedules: serializeScheduleUnitsPerDose(m.schedules),
       category: categoryMap[m.id] ?? "OTHER",
       // v1.32.25 — provenance echo. Surfacing the mirror source lets the
       // web UI and an operator tell an externally-mirrored row (today only
