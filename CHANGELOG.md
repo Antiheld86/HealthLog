@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.37.8] — 2026-08-10
+
+### Added
+
+- The assistant can answer questions about your practice visits now, both what happened and what is coming up. A new reading over the assistant wire returns your visit history for a window you ask about, with the practitioner, the reason and the outcome, and it says plainly when you have never recorded a visit rather than reading an empty list as if nothing exists. Upcoming appointments arrive alongside the preventive-care due-list rather than as a separate question, so "what is coming up" has one answer. The Coach carries a small visits note as well, so it knows an appointment is near and which practice you last saw without being handed your whole visit archive.
+
+### Security
+
+- A warning written to the server log is scrubbed of secrets on the way in now, the same as an error message or a request path already was. A warning often carries an outbound error string, and for a few integrations that string is a request URL with a credential in it, so closing this entry point removes the last place a secret could reach the log unredacted.
+
 ## [1.37.7] — 2026-08-09
 
 ### Added
