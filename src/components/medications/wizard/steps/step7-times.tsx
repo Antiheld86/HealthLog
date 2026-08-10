@@ -130,7 +130,9 @@ export function Step7Times({ payload, applyPartial }: StepProps) {
             type="text"
             value={payload.scheduleDose}
             onChange={(e) => applyPartial({ scheduleDose: e.target.value })}
-            placeholder={t("medications.wizard.steps.step7.doseOverridePlaceholder")}
+            placeholder={t(
+              "medications.wizard.steps.step7.doseOverridePlaceholder",
+            )}
             maxLength={50}
             autoComplete="off"
           />
@@ -148,7 +150,9 @@ export function Step7Times({ payload, applyPartial }: StepProps) {
             <Button
               type="button"
               size="sm"
-              variant={payload.scheduleUnitsPerDose === "" ? "default" : "outline"}
+              variant={
+                payload.scheduleUnitsPerDose === "" ? "default" : "outline"
+              }
               aria-pressed={payload.scheduleUnitsPerDose === ""}
               className="min-w-10"
               onClick={() => applyPartial({ scheduleUnitsPerDose: "" })}
