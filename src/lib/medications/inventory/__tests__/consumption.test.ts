@@ -114,13 +114,10 @@ function makeClient(state: FakeState) {
       ),
       // #219 — the import-batch path loads each event's scheduledFor anchor.
       findMany: vi.fn(
-        async (args: {
-          where: { id: { in: string[] }; userId: string };
-        }) =>
+        async (args: { where: { id: { in: string[] }; userId: string } }) =>
           state.events.filter(
             (e) =>
-              args.where.id.in.includes(e.id) &&
-              e.userId === args.where.userId,
+              args.where.id.in.includes(e.id) && e.userId === args.where.userId,
           ),
       ),
       // The hooks' atomic claim — evaluate the conditional WHERE the way
