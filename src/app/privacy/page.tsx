@@ -36,8 +36,8 @@ import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-const POLICY_VERSION = "1.4.40";
-const LAST_UPDATED = "2026-05-18";
+const POLICY_VERSION = "1.37.11";
+const LAST_UPDATED = "2026-08-11";
 
 export const metadata: Metadata = {
   title: "Datenschutzerklärung / Privacy Policy — HealthLog",
@@ -353,7 +353,7 @@ export default function PrivacyPage() {
               <p>
                 HealthLog ist eine quelloffene, selbst-hostbare Anwendung zur
                 persönlichen Gesundheitsprotokollierung. Der Quellcode wird
-                unter der GNU Affero General Public License v3.0 auf{" "}
+                unter der PolyForm Noncommercial License 1.0.0 auf{" "}
                 <a
                   href="https://github.com/MBombeck/HealthLog"
                   target="_blank"
@@ -396,7 +396,7 @@ export default function PrivacyPage() {
                 >
                   github.com/MBombeck/HealthLog
                 </a>{" "}
-                under the GNU Affero General Public License v3.0. This policy
+                under the PolyForm Noncommercial License 1.0.0. This policy
                 describes how the instance serving this page and the companion
                 iOS application <em>HealthLog for iOS</em> (bundle identifier{" "}
                 <code className="bg-muted rounded px-1 py-0.5 text-xs">
@@ -436,7 +436,10 @@ export default function PrivacyPage() {
                 2.1 Konto und Authentifizierung
               </h3>
               <ul className="list-disc space-y-1 pl-5">
-                <li>E-Mail-Adresse und gewählter Benutzername.</li>
+                <li>
+                  Anzeigename und E-Mail-Adresse; optional ein vom Nutzer
+                  ausgewähltes Profilbild.
+                </li>
                 <li>
                   Passwort-Hash (Argon2id; das Klartext-Passwort wird zu keinem
                   Zeitpunkt gespeichert oder protokolliert).
@@ -481,18 +484,24 @@ export default function PrivacyPage() {
               <p>
                 Wenn der Nutzer der iOS-Anwendung Lesezugriff auf Apple
                 HealthKit erteilt, liest HealthLog Stichproben der unten
-                aufgeführten Identifier. HealthKit-Daten verbleiben auf dem
-                Gerät des Nutzers und in dessen iCloud-gestütztem
-                Health-Speicher; die iOS-Anwendung überträgt die relevant- en
-                Stichproben über HTTPS (TLS 1.3, Zertifikat-Pinning) an den
-                HealthLog-Server (Endpunkt{" "}
+                aufgeführten Identifier. Apple Health verwaltet HealthKit-Daten
+                auf dem Gerät und kann sie nach den Apple-Einstellungen des
+                Nutzers über dessen Apple-Konto synchronisieren. Das ist
+                Apple-seitiges HealthKit-Verhalten und keine iCloud- oder
+                CloudKit-Speicherung durch HealthLog. Die iOS-Anwendung
+                überträgt relevante Stichproben über HTTPS (TLS 1.3,
+                Zertifikat-Pinning) an den HealthLog-Server (Endpunkt{" "}
                 <code className="bg-muted rounded px-1 py-0.5 text-xs">
                   POST /api/measurements
                 </code>
                 ), damit die Web-Oberfläche dieselben Verläufe darstellen kann
-                wie das iPhone. Es findet keine Übertragung an Dritte statt; die
-                Daten werden ausschließlich auf der unter Abschnitt 5
-                beschriebenen Infrastruktur in Deutschland gespeichert.
+                wie das iPhone. HealthLog synchronisiert dabei die unterstützte
+                Standarddarstellung der Herzfrequenz für Trends und
+                Workout-Kontext. Das interne Experiment für einen ungefilterten
+                Roh-Herzfrequenzstrom ist in dieser öffentlichen Version nicht
+                verfügbar und wird nicht beworben oder erhoben. Eine Weitergabe
+                an einen KI-Anbieter erfolgt nur über die separat aktivierten
+                und eingewilligten Pfade in Abschnitt 2.7.
               </p>
               <p className="font-medium">HKQuantityTypeIdentifier:</p>
               <ul
@@ -621,47 +630,84 @@ export default function PrivacyPage() {
                 </li>
               </ul>
               <h3 className="text-foreground pt-2 text-base font-semibold">
-                2.6 KI-Coach und Insights — Off-Device-Transit
+                2.6 Dokumente, Scans und lokale Texterkennung
               </h3>
               <p>
-                Aktiviert der Nutzer die KI-Coach-Oberfläche und konfiguriert
-                einen Sprachmodell-Anbieter, übermittelt HealthLog auf
-                Anforderung ein Snapshot-Bündel an diesen Anbieter. Das Bündel
-                enthält Gesundheitskontext aus den oben genannten Daten
-                (Aggregate, jüngste Beobachtungen, Zielbereiche, optionaler
-                Medikamentenkontext) und{" "}
-                <strong>
-                  niemals rohe HealthKit-Identifier oder rohe Sample-IDs
-                </strong>
-                ; der Server normalisiert HK-Stichproben vorab in die interne
-                Metrik-Taxonomie. Die Übertragung erfolgt verschlüsselt (TLS
-                1.3); standardmäßig ist die KI-Coach- Funktion deaktiviert und
-                wird nur nach ausdrücklicher Nutzereinwilligung pro Anbieter
-                aktiviert (siehe Einwilli- gungsnachweis unter Abschnitt 2.7).
-                HealthLog speichert keinen langlebigen Gesprächszustand über den
-                letzten Thread hinaus. Abschnitt 4 listet die in Frage kommenden
-                Anbieter (Anthropic, OpenAI) auf.
+                Ein Profilbild sowie für den Dokumententresor ausdrücklich
+                ausgewählte Fotos, Scans und PDFs werden zum HealthLog-Server
+                hochgeladen und dem Konto zugeordnet. Beim Schnell-Erfassen von
+                Medikamenten oder Laborwerten bleibt das Quellbild dagegen auf
+                dem Gerät: Apple Vision erkennt Text lokal, und nur die vom
+                Nutzer geprüften, bearbeiteten und bestätigten Zeilen werden an
+                den Server gesendet. Das gilt nicht automatisch als Upload in
+                den Dokumententresor.
               </p>
               <h3 className="text-foreground pt-2 text-base font-semibold">
-                2.7 Einwilligungsnachweis (Consent Receipt)
+                2.7 KI-Pfade, Ziele und Einwilligung
               </h3>
               <p>
-                Jede Einwilligung in die KI-Übermittlung — sowohl die
-                Aktivierung pro Anbieter als auch Änderungen am
-                Datentiefe-Schalter — wird mit Zeitstempel, Anbieter,
-                Versionskennung des Einwilligungstextes und Hash des
-                Snapshot-Schemas als &bdquo;Consent Receipt&ldquo; persistiert.
-                Der Endpunkt zum Abruf ist{" "}
+                Externe KI ist standardmäßig deaktiviert. Vor der ersten
+                Übertragung nennt die App das konkrete Ziel und die Kategorien:
+                die Frage oder Anweisung des Nutzers, Gesundheitskontext,
+                jüngste Beobachtungen oder Aggregate, Zielbereiche und optional
+                Medikamenten-, Labor- oder Dokumentkontext. Der Server
+                normalisiert HealthKit-Daten; rohe HealthKit-Identifier und rohe
+                Sample-IDs gehören nicht zum Coach-Snapshot.
+              </p>
+              <ul className="list-disc space-y-1 pl-5">
+                <li>
+                  <strong>Server-verwaltet:</strong> Die Daten gehen zuerst an
+                  den konfigurierten HealthLog-Server und von dort an dessen
+                  eingerichtetes Anthropic-, OpenAI-, lokales, ChatGPT-OAuth-
+                  oder generisch OpenAI-kompatibles Ziel. Ein lokales oder
+                  generisches Ziel wird vom Betreiber festgelegt und kann einer
+                  eigenen Datenschutz- und Speicherrichtlinie unterliegen.
+                </li>
+                <li>
+                  <strong>Eigener Schlüssel (BYO):</strong> Das iPhone sendet
+                  direkt an OpenAI, Anthropic, Google Gemini oder einen vom
+                  Nutzer angegebenen HTTPS-Endpunkt mit OpenAI-kompatibler API.
+                  Der API-Schlüssel bleibt im iOS-Keychain und wird nicht an den
+                  HealthLog-Server gesendet.
+                </li>
+                <li>
+                  <strong>Auf dem Gerät:</strong> Apple Foundation Models und
+                  die lokale Texterkennung senden Bild, Prompt und Ergebnis an
+                  keinen Drittanbieter in der Cloud. Ein ausdrücklich gewählter
+                  Netzwerk-Endpunkt ist dagegen kein reiner On-Device-Pfad und
+                  wird vor Verwendung als Ziel angezeigt.
+                </li>
+              </ul>
+              <p>
+                Bei Dokumenten können Vorschlag, Zusammenfassung und Index nach
+                Einwilligung das gespeicherte Originalbild bzw. PDF oder den
+                erkannten Text verarbeiten. Der Dokument-Chat sendet die Frage
+                des Nutzers zusammen mit dem indexierten Kontext des gewählten
+                Dokuments und streamt eine darauf gestützte Antwort zurück. Die
+                Freigabe gilt nicht für andere Ziele. Unter{" "}
+                <em>Einstellungen → Assistent</em> kann der Nutzer externe KI
+                ausschalten oder den Anbieter wechseln; damit werden weitere
+                Server-Anfragen blockiert. Beim BYO-Pfad entfernt der Widerruf
+                zusätzlich Schlüssel und Freigabe für diesen Anbieter.
+              </p>
+              <h3 className="text-foreground pt-2 text-base font-semibold">
+                2.8 Einwilligungsnachweis (Consent Receipt)
+              </h3>
+              <p>
+                Der Server hält für server-verwaltete KI einen kontogebundenen
+                Einwilligungsnachweis mit Art, signiertem Zeitpunkt und
+                Artefakt. Der aktuelle Status ist über{" "}
                 <code className="bg-muted rounded px-1 py-0.5 text-xs">
-                  GET /api/account/consents
-                </code>
-                ; die Speicherdauer der Belege beträgt fünf Jahre, danach werden
-                sie automatisch gelöscht. Ein Widerruf wird als eigenes Receipt
-                mit umgekehrter Polarität abgelegt; der Anbieter erhält ab
-                diesem Zeitpunkt keine Snapshot-Bündel mehr.
+                  GET /api/consent/ai/latest
+                </code>{" "}
+                abrufbar. Ein Widerruf wird mit Zeitstempel festgehalten und
+                blockiert zukünftige externe Verarbeitung. Diese Nachweise
+                werden als Teil des Konto-Auditverlaufs aufbewahrt und bei der
+                Konto-Löschung kaskadiert gelöscht; es gibt keinen belegten
+                separaten festen Fünf-Jahres-Löschjob.
               </p>
               <h3 className="text-foreground pt-2 text-base font-semibold">
-                2.8 Geräte- und Integrations-Metadaten, Push
+                2.9 Geräte- und Integrations-Metadaten, Push
               </h3>
               <ul className="list-disc space-y-1 pl-5">
                 <li>
@@ -684,26 +730,32 @@ export default function PrivacyPage() {
                 </li>
               </ul>
               <h3 className="text-foreground pt-2 text-base font-semibold">
-                2.9 Sicherheits- und Audit-Logs
+                2.10 Sicherheits- und Audit-Logs
               </h3>
               <ul className="list-disc space-y-1 pl-5">
                 <li>
-                  Authentifizierungs-Ereignisse (Login-Erfolg/-Fehlschlag,
-                  Passkey-Registrierung, Passwort-Wechsel, Sitzungs- Widerruf) —
-                  90 Tage zur forensischen Aufklärung.
+                  Authentifizierungs- und Konto-Ereignisse für Sicherheit,
+                  Missbrauchsschutz und Nachvollziehbarkeit. Die Instanz löscht
+                  Audit-Zeilen täglich nach ihrem konfigurierten Fenster; der
+                  Server-Standard beträgt 365 Tage und kann vom Betreiber
+                  geändert werden.
                 </li>
                 <li>
-                  Server-Zugriffsprotokolle (Zeit, Pfad, Statuscode, User-
-                  Agent, IP) — 14 Tage zur Missbrauchsbekämpfung und
-                  Fehlersuche.
+                  Server- und Reverse-Proxy-Zugriffsprotokolle werden nur für
+                  Betrieb, Missbrauchsschutz und Fehlersuche benötigt und nach
+                  der aktiven Log-Rotation des Betreibers gelöscht. Diese
+                  Codebasis belegt kein festes 14-Tage-Fenster für die
+                  Produktions-Infrastruktur.
                 </li>
                 <li>
-                  Fehlgeschlagene APNs-Zustellungen — 30 Tage zur Wartung des
-                  Push-Pfads, danach automatische Löschung.
+                  Push-Zustellversuche aller aktivierten Kanäle enthalten Kanal,
+                  Ereignistyp, Ergebnis und Fehlerklasse, aber keinen
+                  Roh-Gesundheitswert. Ein täglicher Job löscht sie nach 90
+                  Tagen.
                 </li>
               </ul>
               <h3 className="text-foreground pt-2 text-base font-semibold">
-                2.10 Nicht erhobene Daten
+                2.11 Nicht erhobene Daten
               </h3>
               <ul className="list-disc space-y-1 pl-5">
                 <li>
@@ -738,7 +790,10 @@ export default function PrivacyPage() {
                 2.1 Account and authentication
               </h3>
               <ul className="list-disc space-y-1 pl-5">
-                <li>Email address and chosen username.</li>
+                <li>
+                  Display name and email address; optionally, a profile image
+                  selected by the user.
+                </li>
                 <li>
                   Password hash (Argon2id; the plain-text password is never
                   stored or logged).
@@ -783,16 +838,22 @@ export default function PrivacyPage() {
               <p>
                 When the user grants the iOS application read access to Apple
                 HealthKit, HealthLog reads samples for the identifiers listed
-                below. HealthKit data remains on the user&apos;s device and the
-                user&apos;s iCloud-backed Health store; the iOS application
+                below. Apple Health manages HealthKit data on the device and may
+                sync it through the user&apos;s Apple account according to Apple
+                platform settings. That is Apple-managed HealthKit behaviour,
+                not iCloud or CloudKit storage by HealthLog. The iOS application
                 copies relevant samples to the HealthLog server over HTTPS (TLS
                 1.3, certificate pinning) via{" "}
                 <code className="bg-muted rounded px-1 py-0.5 text-xs">
                   POST /api/measurements
                 </code>{" "}
-                so the web surface can render the same trends as the iPhone. No
-                third-party transit; data lives on the German-located
-                infrastructure described in section 5.
+                so the web surface can render the same trends as the iPhone.
+                HealthLog syncs the supported default heart-rate representation
+                used for trends and workout context. The internal unfiltered
+                raw-heart-rate experiment is unavailable in this public build;
+                it is neither advertised nor collected. Transit to an AI
+                provider occurs only through the separately enabled and
+                consented paths in section 2.7.
               </p>
               <p className="font-medium">HKQuantityTypeIdentifier:</p>
               <ul
@@ -918,44 +979,81 @@ export default function PrivacyPage() {
                 </li>
               </ul>
               <h3 className="text-foreground pt-2 text-base font-semibold">
-                2.6 AI Coach and Insights — off-device transit
+                2.6 Documents, scans, and local text recognition
               </h3>
               <p>
-                When the user enables the AI Coach surface and configures a
-                language-model provider, HealthLog sends a snapshot bundle to
-                that provider on demand. The bundle contains health context
-                derived from the data above (aggregates, recent observations,
-                target ranges, optional medication context) and{" "}
-                <strong>
-                  never includes raw HealthKit identifiers or raw sample IDs
-                </strong>
-                ; the server normalises HK samples into the internal metric
-                taxonomy first. Transit is encrypted (TLS 1.3). The AI Coach is
-                off by default and is enabled per- provider only after explicit
-                user consent (see consent receipt in section 2.7). HealthLog
-                does not retain long-term conversation state beyond the most
-                recent thread. Section 4 enumerates the eligible providers
-                (Anthropic, OpenAI).
+                A profile image and photos, scans, or PDFs explicitly selected
+                for the document vault are uploaded to the HealthLog server and
+                linked to the account. Medication and lab quick-entry work
+                differently: Apple Vision recognises text on the device, the
+                source image is not uploaded, and only rows the user reviews,
+                edits, and confirms are sent to the server. Quick entry does not
+                automatically save the source image in the document vault.
               </p>
               <h3 className="text-foreground pt-2 text-base font-semibold">
-                2.7 Consent receipt persistence
+                2.7 AI paths, destinations, and consent
               </h3>
               <p>
-                Every consent to AI transit — both per-provider activation and
-                changes to the data-depth toggle — is persisted as a
-                &ldquo;consent receipt&rdquo; with timestamp, provider,
-                consent-text version, and a hash of the snapshot schema. The
-                retrieval endpoint is{" "}
+                External AI is off by default. Before the first transmission,
+                the app identifies the destination and categories: the
+                user&apos;s question or instruction, health context, recent
+                observations or aggregates, target ranges, and optional
+                medication, lab, or document context. The server normalises
+                HealthKit data; raw HealthKit identifiers and raw sample IDs are
+                not part of a Coach snapshot.
+              </p>
+              <ul className="list-disc space-y-1 pl-5">
+                <li>
+                  <strong>Server-managed:</strong> data first reaches the
+                  configured HealthLog server and is then sent to that
+                  server&apos;s configured Anthropic, OpenAI, local, ChatGPT
+                  OAuth, or generic OpenAI-compatible destination. A local or
+                  generic destination is chosen by the operator and may have its
+                  own privacy and retention policy.
+                </li>
+                <li>
+                  <strong>Bring your own key (BYO):</strong> the iPhone sends
+                  directly to OpenAI, Anthropic, Google Gemini, or a
+                  user-specified HTTPS OpenAI-compatible endpoint. The API key
+                  remains in the iOS Keychain and is not sent to the HealthLog
+                  server.
+                </li>
+                <li>
+                  <strong>On device:</strong> Apple Foundation Models and local
+                  text recognition do not send the image, prompt, or result to a
+                  third-party cloud provider. An explicitly selected network
+                  endpoint is not an on-device path and is identified before
+                  use.
+                </li>
+              </ul>
+              <p>
+                For documents, suggest, summary, and index operations may
+                process the stored original image or PDF, or recognised text,
+                after consent. Per-document chat sends the user&apos;s question
+                with indexed context from the selected document and streams a
+                grounded answer back. Consent does not transfer to a different
+                destination. The user can disable external AI or change the
+                provider under <em>Settings → Assistant</em>; this blocks future
+                server requests. For BYO, revocation also removes that
+                provider&apos;s key and grant.
+              </p>
+              <h3 className="text-foreground pt-2 text-base font-semibold">
+                2.8 Consent receipt persistence
+              </h3>
+              <p>
+                For server-managed AI, the server keeps an account-bound consent
+                receipt with its kind, signed time, and artefact. The current
+                state is available through{" "}
                 <code className="bg-muted rounded px-1 py-0.5 text-xs">
-                  GET /api/account/consents
+                  GET /api/consent/ai/latest
                 </code>
-                ; receipts are retained for five years and then deleted
-                automatically. A withdrawal is recorded as a separate
-                reverse-polarity receipt; from that moment the provider receives
-                no further snapshot bundles.
+                . Withdrawal is timestamped and blocks future external
+                processing. Receipts remain part of the account audit trail and
+                are cascade-deleted with the account; no separate fixed
+                five-year cleanup job is evidenced by the server source.
               </p>
               <h3 className="text-foreground pt-2 text-base font-semibold">
-                2.8 Device and integration metadata, push
+                2.9 Device and integration metadata, push
               </h3>
               <ul className="list-disc space-y-1 pl-5">
                 <li>
@@ -978,26 +1076,30 @@ export default function PrivacyPage() {
                 </li>
               </ul>
               <h3 className="text-foreground pt-2 text-base font-semibold">
-                2.9 Security and audit
+                2.10 Security and audit
               </h3>
               <ul className="list-disc space-y-1 pl-5">
                 <li>
-                  Authentication events (login success / failure, passkey
-                  registration, password change, session revocation) — retained
-                  for 90 days for security forensics.
+                  Authentication and account events used for security, abuse
+                  prevention, and accountability. The instance removes audit
+                  rows daily according to its configured window; the server
+                  default is 365 days and the operator may change it.
                 </li>
                 <li>
-                  Server access logs (timestamp, request path, status code,
-                  user-agent, IP address) — 14 days for abuse- rate-limiting and
-                  debugging.
+                  Server and reverse-proxy access logs are needed only for
+                  operations, abuse prevention, and debugging, and are removed
+                  under the operator&apos;s active log-rotation policy. This
+                  source tree does not evidence a fixed 14-day production
+                  window.
                 </li>
                 <li>
-                  Failed APNs deliveries — 30 days to support push- pipeline
-                  maintenance, then auto-deleted.
+                  Push-delivery attempts for every enabled channel store the
+                  channel, event type, result, and error class, but no raw
+                  health value. A daily job removes them after 90 days.
                 </li>
               </ul>
               <h3 className="text-foreground pt-2 text-base font-semibold">
-                2.10 Data we do not collect
+                2.11 Data we do not collect
               </h3>
               <ul className="list-disc space-y-1 pl-5">
                 <li>
@@ -1126,13 +1228,14 @@ export default function PrivacyPage() {
           bodyDe={
             <>
               <p>
-                Folgende Anbieter können personenbezogene Daten im Auftrag des
-                Betreibers verarbeiten. Die Liste ist für den veröffentlichten
-                Funktionsumfang abschließend. Anbieter werden nur für die
-                Funktionen eingebunden, die der Nutzer ausdrücklich aktiviert
-                hat. Für jede Übertragung in Drittländer (insbesondere USA)
-                bestehen Standardvertrags- klauseln nach Art. 46 Abs. 2 lit. c
-                DSGVO mit dem jeweiligen Anbieter.
+                Folgende benannte Anbieter können personenbezogene Daten für
+                aktivierte Funktionen verarbeiten. Zusätzlich kann ein Betreiber
+                oder BYO-Nutzer einen lokalen oder generischen HTTPS-Endpunkt
+                mit OpenAI-kompatibler API festlegen. Für ein solches nutzer-
+                oder betreiberdefiniertes Ziel gelten dessen eigene Angaben zu
+                Verantwortlichkeit, Ort und Speicherdauer; deshalb ist die Liste
+                nicht als abschließend für frei konfigurierbare Ziele zu
+                verstehen.
               </p>
               <p className="text-xs">
                 Die englische Übersetzung enthält die detaillierte Auflistung
@@ -1144,13 +1247,12 @@ export default function PrivacyPage() {
           bodyEn={
             <>
               <p>
-                The following providers may process personal data on behalf of
-                the HealthLog operator. The list is exhaustive for the released
-                feature set; sub-processors are only engaged for the features
-                the user has explicitly enabled. Each transfer to a third
-                country (notably the United States) is covered by Standard
-                Contractual Clauses under Art. 46 (2) (c) GDPR with the
-                respective provider.
+                The named providers below may process personal data for enabled
+                features. An operator or BYO user may also configure a local or
+                generic HTTPS endpoint with an OpenAI-compatible API. That user-
+                or operator-specified destination is governed by its own
+                controller, location, and retention terms, so this list is not
+                exhaustive for freely configurable destinations.
               </p>
               <ul className="grid gap-3">
                 <SubProcessor
@@ -1159,8 +1261,8 @@ export default function PrivacyPage() {
                   roleEn="AI Coach and Insights provider when the user selects Anthropic Claude in settings."
                   dataDe="Coach-Snapshot-Bündel (Gesundheits-Kontext) für die Dauer der Anfrage."
                   dataEn="Coach snapshot bundle (health-data context) for the duration of the request."
-                  locationDe="USA. Anthropic nennt ein 30-Tage-Speicherfenster zur Missbrauchsüberwachung."
-                  locationEn="United States. Anthropic states a 30-day retention window for abuse-monitoring."
+                  locationDe="USA. Die Speicherdauer richtet sich nach dem für den verwendeten Anthropic-Zugang geltenden Vertrag und der verlinkten aktuellen Richtlinie."
+                  locationEn="United States. Retention follows the contract and current linked policy applicable to the Anthropic access in use."
                   policyUrl="https://www.anthropic.com/legal/privacy"
                 />
                 <SubProcessor
@@ -1169,9 +1271,19 @@ export default function PrivacyPage() {
                   roleEn="Alternative AI Coach and Insights provider when the user selects an OpenAI model in settings."
                   dataDe="Coach-Snapshot-Bündel, gleiche Struktur wie bei Anthropic."
                   dataEn="Coach snapshot bundle, same shape as the Anthropic variant."
-                  locationDe="USA. Speicherdauer richtet sich nach der OpenAI-Enterprise-Policy zum konfigurierten API-Schlüssel."
-                  locationEn="United States. Retention governed by OpenAI's enterprise policy applicable to the configured API key."
+                  locationDe="USA. Die Speicherdauer richtet sich nach dem für den verwendeten OpenAI- oder ChatGPT-OAuth-Zugang geltenden Vertrag und der verlinkten aktuellen Richtlinie."
+                  locationEn="United States. Retention follows the contract and current linked policy applicable to the OpenAI or ChatGPT OAuth access in use."
                   policyUrl="https://openai.com/policies/privacy-policy"
+                />
+                <SubProcessor
+                  name="Google LLC"
+                  roleDe="Optionales direktes BYO-Ziel, wenn der Nutzer Google Gemini mit eigenem Schlüssel auswählt."
+                  roleEn="Optional direct BYO destination when the user selects Google Gemini with their own key."
+                  dataDe="Nutzerfrage sowie der vor der Übertragung angezeigte Gesundheits-, Medikamenten-, Labor- oder Dokumentkontext."
+                  dataEn="User prompt and the health, medication, lab, or document context disclosed before transmission."
+                  locationDe="Vom gewählten Google-Dienst abhängig. Speicherdauer und Region richten sich nach dem Gemini-Zugang des Nutzers und der verlinkten aktuellen Richtlinie."
+                  locationEn="Depends on the selected Google service. Retention and region follow the user's Gemini access and the current linked policy."
+                  policyUrl="https://policies.google.com/privacy"
                 />
                 <SubProcessor
                   name="Withings SAS"
@@ -1186,11 +1298,11 @@ export default function PrivacyPage() {
                 <SubProcessor
                   name="Apple, Inc."
                   roleDe="HealthKit (lokal auf dem Gerät) und Apple Push Notification service (APNs, bei aktivierten Benachrichtigungen)."
-                  roleEn="HealthKit (on-device store; samples never leave the user's device or iCloud unless the user grants read access to HealthLog) and Apple Push Notification service (APNs, when notifications are enabled)."
+                  roleEn="Apple-managed HealthKit on the device and Apple Push Notification service (APNs) when notifications are enabled."
                   dataDe="HealthKit-Zugriff bleibt lokal. APNs empfängt Geräte-Token, Bundle-ID und Notification-Payload."
                   dataEn="HealthKit access is local to the device. APNs receives a device token, the application bundle identifier, and the notification payload."
-                  locationDe="USA. HealthKit-Daten verbleiben auf dem Gerät des Nutzers und in dessen iCloud-verschlüsselten Backups unter der Apple-ID."
-                  locationEn="United States. Apple stores HealthKit data on the user's device and iCloud-encrypted backups under the user's Apple ID."
+                  locationDe="Apple verwaltet HealthKit-Daten nach den Apple-Konto- und Health-Einstellungen des Nutzers. Das ist keine iCloud- oder CloudKit-Speicherung durch HealthLog."
+                  locationEn="Apple manages HealthKit data under the user's Apple-account and Health settings. This is not iCloud or CloudKit storage by HealthLog."
                   policyUrl="https://www.apple.com/legal/privacy/"
                 />
                 <SubProcessor
@@ -1272,27 +1384,61 @@ export default function PrivacyPage() {
               </li>
               <li>
                 <span className="text-foreground font-medium">Backups</span> —
-                täglich, verschlüsselt, 30 Tage Aufbewahrung auf einem
-                S3-kompatiblen Objektspeicher mit eigener
-                Verschlüsselungsschicht.
+                sofern der Betreiber die optionale Off-Host-Sicherung aktiviert,
+                werden tägliche Konto-Exporte mit einem separaten
+                AES-256-GCM-Schlüssel in einen S3-kompatiblen Objektspeicher
+                geschrieben. Die Aufbewahrung wird vom Betreiber und der
+                kanonischen Bucket-Lifecycle-Regel festgelegt; die Codebasis
+                kann die aktuell eingesetzte Produktionsregel nicht belegen.
               </li>
               <li>
                 <span className="text-foreground font-medium">
-                  Standard-Speicherdauern
+                  Gesundheitsdaten
                 </span>{" "}
-                — Messungen: gleitendes 5-Jahres-Fenster (Roh-Stichproben älter
-                als 5 Jahre werden automatisch verdichtet bzw. gelöscht;
-                aggregierte Verläufe bleiben). Audit-Logs: 90 Tage.
-                Server-Zugriffsprotokolle: 14 Tage. Fehl- geschlagene
-                APNs-Zustellungen: 30 Tage. Einwilligungs- belege: 5 Jahre.
+                — kontobezogene Messungen bleiben bis zur Nutzerlöschung oder
+                Konto-Löschung erhalten, soweit kein typbezogener
+                Verdichtungsjob greift. Rohe dichte Herzfrequenz-, HRV- und
+                Sauerstoffsättigungs-Stichproben werden nach 90 Tagen zu
+                stündlichen Mittelwerten verdichtet; Tages-Rollups bewahren
+                Mittelwert und Extremwerte. Es gibt keinen belegten globalen
+                Fünf-Jahres-Löschjob für alle Messungen.
+              </li>
+              <li>
+                <span className="text-foreground font-medium">
+                  Betriebs- und Einwilligungsdaten
+                </span>{" "}
+                — Audit-Logs werden täglich nach dem konfigurierten Fenster
+                gelöscht (Server-Standard: 365 Tage). Push-Zustellversuche
+                werden täglich nach 90 Tagen gelöscht. Server- und
+                Reverse-Proxy-Logs folgen der aktiven Log-Rotation des
+                Betreibers. Einwilligungsnachweise bleiben im Konto-Auditverlauf
+                bis zur Konto-Löschung. Für externe KI-Anfragen gilt die
+                Richtlinie des vor der Übertragung genannten Anbieters oder
+                Endpunktbetreibers.
+              </li>
+              <li>
+                <span className="text-foreground font-medium">
+                  Kein HealthLog-iCloud-Speicher
+                </span>{" "}
+                — HealthLog speichert Server-Datenbank, lokale Gesundheits-
+                caches, Offline-Outbox, ECG- und Workout-Payloads,
+                KI-Transkript-Cache, Medikamentenplaner-Datenbank sowie Widget-
+                und Watch-Snapshots weder in iCloud noch in CloudKit. Lokale
+                gesundheitsbezogene Speicher liegen in geschütztem App- oder
+                App-Group-Speicher, deaktivieren CloudKit soweit anwendbar und
+                sind ausdrücklich vom Geräte-Backup ausgeschlossen. Eine
+                mögliche Apple-Health-Synchronisation ist davon getrennt und
+                wird allein von Apple verwaltet.
               </li>
               <li>
                 <span className="text-foreground font-medium">Löschung</span> —
                 der Endpunkt zur Konto-Löschung läuft kaskadiert durch jede
                 nutzer-skopierte Tabelle: Gesundheitsmessungen, Sitzungen,
                 Audit-Log, Integrations-Token, Push- Abonnements, Erfolge,
-                hochgeladene Dateien. Die Löschung erfolgt sofort; Backups
-                laufen innerhalb des 30-Tage- Fensters aus.
+                hochgeladene Dateien. Die Löschung erfolgt sofort im aktiven
+                Serverbestand; neue Backups enthalten das Konto danach nicht
+                mehr, ältere Sicherungskopien laufen nach der aktiven
+                Bucket-Lifecycle-Regel des Betreibers aus.
               </li>
             </ul>
           }
@@ -1324,24 +1470,55 @@ export default function PrivacyPage() {
               </li>
               <li>
                 <span className="text-foreground font-medium">Backups</span> —
-                daily, encrypted, retained for 30 days on an S3- compatible
-                object store with its own encryption-at- rest layer.
+                when the operator enables optional off-host backup, daily
+                account exports are encrypted under a separate AES-256-GCM key
+                and written to an S3-compatible object store. Retention is set
+                by the operator and the canonical bucket lifecycle rule; the
+                source tree cannot prove the currently deployed production rule.
+              </li>
+              <li>
+                <span className="text-foreground font-medium">Health data</span>{" "}
+                — account-linked measurements remain until the user deletes them
+                or the account, unless a type-specific consolidation job
+                applies. Raw dense heart-rate, HRV, and oxygen-saturation
+                samples consolidate into hourly means after 90 days; daily
+                rollups preserve the mean and extremes. No global five-year
+                deletion job for all measurements is evidenced by the server.
               </li>
               <li>
                 <span className="text-foreground font-medium">
-                  Default retention windows
+                  Operational and consent data
                 </span>{" "}
-                — measurements: rolling 5-year window (raw samples older than 5
-                years are aggregated or removed; long-arc aggregates persist).
-                Audit logs: 90 days. Server access logs: 14 days. Failed APNs
-                deliveries: 30 days. Consent receipts: 5 years.
+                — audit logs are pruned daily under the configured window
+                (server default: 365 days). Push-delivery attempts are pruned
+                daily after 90 days. Server and reverse-proxy logs follow the
+                operator&apos;s active log rotation. Consent receipts remain in
+                the account audit trail until account deletion. External-AI
+                requests follow the policy of the provider or endpoint operator
+                identified before transmission.
+              </li>
+              <li>
+                <span className="text-foreground font-medium">
+                  No HealthLog iCloud storage
+                </span>{" "}
+                — HealthLog does not store its server database, local health
+                caches, offline outbox, ECG or workout payloads, AI transcript
+                cache, medication-reminder scheduler database, or widget and
+                Watch health snapshots in iCloud or CloudKit. Local
+                health-bearing stores use protected app or application-group
+                storage, disable CloudKit where applicable, and are explicitly
+                excluded from device backup. Apple Health may separately sync
+                HealthKit data under Apple&apos;s platform controls; that is
+                Apple-managed behaviour, not HealthLog cloud storage.
               </li>
               <li>
                 <span className="text-foreground font-medium">Deletion</span> —
                 the account-deletion endpoint cascades through every user-scoped
                 table: health observations, sessions, audit log, integration
                 tokens, push subscriptions, achievements, uploaded files.
-                Deletion is immediate; backups age out under the 30-day window.
+                Deletion is immediate in the active server store. New backups
+                then omit the account; older backup copies age out under the
+                operator&apos;s active bucket lifecycle rule.
               </li>
             </ul>
           }
@@ -1373,8 +1550,14 @@ export default function PrivacyPage() {
                 <span className="text-foreground font-medium">
                   Recht auf Löschung (Art. 17)
                 </span>{" "}
-                — <em>Einstellungen → Daten → Konto löschen</em>. Die Aktion
-                kaskadiert sofort über alle nutzer-skopierten Tabellen via{" "}
+                — <em>Einstellungen → Konto → Konto löschen</em>. Nach
+                erfolgreicher Server-Löschung entfernt die App sofort alle
+                kontogebundenen lokalen Daten. Bei einem Konto mit MFA kann die
+                App zur authentifizierten Web-Kontoseite weiterleiten, damit der
+                Nutzer den erforderlichen frischen Identitätsnachweis erbringt;
+                nach Rückkehr erkennt die App die bestätigte Löschung und führt
+                dieselbe lokale Bereinigung aus. Die Server-Aktion kaskadiert
+                über alle nutzer-skopierten Tabellen via{" "}
                 <code className="bg-muted rounded px-1 py-0.5 text-xs">
                   User.delete
                 </code>{" "}
@@ -1382,7 +1565,8 @@ export default function PrivacyPage() {
                 <code className="bg-muted rounded px-1 py-0.5 text-xs">
                   onDelete: Cascade
                 </code>
-                ; Backups laufen innerhalb des 30-Tage-Fensters aus.
+                . Neue Sicherungen enthalten das gelöschte Konto nicht; ältere
+                Kopien laufen nach der aktiven Bucket-Lifecycle-Regel aus.
               </li>
               <li>
                 <span className="text-foreground font-medium">
@@ -1439,8 +1623,13 @@ export default function PrivacyPage() {
                 <span className="text-foreground font-medium">
                   Right to erasure (Art. 17)
                 </span>{" "}
-                — <em>Settings → Data → Delete account</em>. The action cascades
-                immediately through every user-scoped table via{" "}
+                — <em>Settings → Account → Delete account</em>. After successful
+                server deletion, the app immediately removes all local
+                account-bound data. For an MFA-enrolled account, the app may
+                hand off to the authenticated web account page for the required
+                fresh identity check; on return it detects confirmed deletion
+                and performs the same local cleanup. The server action cascades
+                through every user-scoped table via{" "}
                 <code className="bg-muted rounded px-1 py-0.5 text-xs">
                   User.delete
                 </code>{" "}
@@ -1448,7 +1637,8 @@ export default function PrivacyPage() {
                 <code className="bg-muted rounded px-1 py-0.5 text-xs">
                   onDelete: Cascade
                 </code>
-                ; backups age out within the 30-day window.
+                . New backups omit the deleted account; older copies age out
+                under the active bucket lifecycle rule.
               </li>
               <li>
                 <span className="text-foreground font-medium">
@@ -1555,8 +1745,8 @@ export default function PrivacyPage() {
               <p>
                 Die Privacy-Nutrition-Labels der iOS-Anwendung in App Store
                 Connect ordnen sich folgenden Kategorien zu (jeweils{" "}
-                <em>linked to the user</em>, ausschließlich zur App- Funktion
-                verwendet):
+                <em>linked to the user</em>, zur App-Funktion und, soweit
+                angegeben, Konto-Verwaltung):
               </p>
               <ul className="list-disc space-y-1 pl-5">
                 <li>
@@ -1572,6 +1762,11 @@ export default function PrivacyPage() {
                   (Blutdruck, Blutzucker, Medikamente).
                 </li>
                 <li>
+                  <span className="text-foreground font-medium">Name</span> —
+                  Anzeigename für Profil und Berichte; App-Funktion und
+                  Konto-Verwaltung.
+                </li>
+                <li>
                   <span className="text-foreground font-medium">
                     Kontakt-Informationen
                   </span>{" "}
@@ -1581,7 +1776,16 @@ export default function PrivacyPage() {
                   <span className="text-foreground font-medium">
                     Nutzer-Inhalte
                   </span>{" "}
-                  (Notizen zu Messungen, Stimmungsnotizen).
+                  (Notizen, Prompts und Fragen, geprüfter OCR- und
+                  Dokumenttext).
+                </li>
+                <li>
+                  <span className="text-foreground font-medium">
+                    Fotos oder Videos
+                  </span>{" "}
+                  (Profilbild sowie ausdrücklich hochgeladene
+                  Dokumentfotos/-scans; Schnell-Erfassungsbilder bleiben auf dem
+                  Gerät).
                 </li>
                 <li>
                   <span className="text-foreground font-medium">Kennungen</span>{" "}
@@ -1599,6 +1803,13 @@ export default function PrivacyPage() {
                   angehängten GPS-Workout-Route.
                 </li>
               </ul>
+              <p>
+                <strong>Tracking: Nein.</strong> HealthLog verwendet keine
+                Werbung, kein anwendungsübergreifendes Tracking, keine
+                Werbemessung und kein Drittanbieter-Analytics-SDK. Optionale
+                KI-Anbieter erhalten Daten nur für die vom Nutzer ausgelöste
+                App-Funktion, nicht für Werbung oder Tracking.
+              </p>
             </>
           }
           bodyEn={
@@ -1606,7 +1817,8 @@ export default function PrivacyPage() {
               <p>
                 The iOS application&apos;s Privacy Nutrition Labels in App Store
                 Connect map to the following categories (each
-                <em> linked to the user</em>, used only for app functionality):
+                <em> linked to the user</em>, used for app functionality and,
+                where stated, account management):
               </p>
               <ul className="list-disc space-y-1 pl-5">
                 <li>
@@ -1622,6 +1834,11 @@ export default function PrivacyPage() {
                   (blood pressure, glucose, medications).
                 </li>
                 <li>
+                  <span className="text-foreground font-medium">Name</span> —
+                  display name for the profile and reports; app functionality
+                  and account management.
+                </li>
+                <li>
                   <span className="text-foreground font-medium">
                     Contact Info
                   </span>{" "}
@@ -1631,8 +1848,15 @@ export default function PrivacyPage() {
                   <span className="text-foreground font-medium">
                     User Content
                   </span>{" "}
-                  (notes attached to measurements, mood notes, bug- report
+                  (notes, prompts and questions, reviewed OCR and document
                   text).
+                </li>
+                <li>
+                  <span className="text-foreground font-medium">
+                    Photos or Videos
+                  </span>{" "}
+                  (profile image and explicitly uploaded document photos or
+                  scans; quick-entry images stay on the device).
                 </li>
                 <li>
                   <span className="text-foreground font-medium">
@@ -1653,6 +1877,12 @@ export default function PrivacyPage() {
                   attaches manually to a workout.
                 </li>
               </ul>
+              <p>
+                <strong>Tracking: No.</strong> HealthLog uses no advertising,
+                cross-app tracking, advertising measurement, or third-party
+                analytics SDK. Optional AI providers receive data only for the
+                app function the user invokes, not for advertising or tracking.
+              </p>
             </>
           }
         />

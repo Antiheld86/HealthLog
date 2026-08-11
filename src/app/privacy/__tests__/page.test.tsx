@@ -31,8 +31,8 @@ function render() {
   return renderToStaticMarkup(<PrivacyPage />);
 }
 
-const POLICY_VERSION = "1.4.40";
-const LAST_UPDATED = "2026-05-18";
+const POLICY_VERSION = "1.37.11";
+const LAST_UPDATED = "2026-08-11";
 
 describe("<PrivacyPage>", () => {
   it("renders without crashing and includes the bilingual H1", () => {
@@ -147,6 +147,7 @@ describe("<PrivacyPage>", () => {
     const expectedProviders = [
       "Anthropic",
       "OpenAI",
+      "Google LLC",
       "Withings",
       "Apple, Inc.",
       "Telegram",
@@ -183,18 +184,19 @@ describe("<PrivacyPage>", () => {
     // explicit guarantees (no raw HK identifiers, off by default,
     // encrypted in transit).
     expect(html).toContain("off by default");
-    expect(html).toContain("never includes raw HealthKit identifiers");
+    expect(html).toContain(
+      "raw HealthKit identifiers and raw sample IDs are not part",
+    );
     expect(html).toContain("Anthropic");
     expect(html).toContain("OpenAI");
   });
 
-  it("links the consent receipt endpoint with the retention window", () => {
+  it("links the consent receipt endpoint and states the actual lifecycle", () => {
     const html = render();
-    // SB-3 requirement 4: consent receipt persistence — endpoint +
-    // retention period.
-    expect(html).toContain("GET /api/account/consents");
+    expect(html).toContain("GET /api/consent/ai/latest");
     expect(html).toContain("consent receipt");
-    expect(html).toContain("five years");
+    expect(html).toContain("cascade-deleted with the account");
+    expect(html).not.toContain("receipts are retained for five years");
   });
 
   it("declares encryption in transit (TLS 1.3 + HSTS + cert pinning)", () => {
@@ -218,22 +220,69 @@ describe("<PrivacyPage>", () => {
     expect(html).toContain("operator");
   });
 
-  it("publishes the retention defaults (5y / 90d / 30d APNs)", () => {
+  it("publishes retention behavior supported by server jobs", () => {
     const html = render();
-    // SB-3 requirement 7.
-    expect(html).toContain("5-year window");
-    expect(html).toContain("Audit logs: 90 days");
-    expect(html).toContain("Failed APNs deliveries: 30 days");
+    expect(html).toContain("server default: 365 days");
+    expect(html).toContain("after 90 days");
+    expect(html).toContain("No global five-year deletion job");
+    expect(html).toContain("active bucket lifecycle rule");
   });
 
-  it("discloses the GDPR Art. 17 deletion route + cascade behaviour", () => {
+  it("discloses the current deletion route, MFA handoff, and cascade", () => {
     const html = render();
-    // SB-3 requirement 8: Settings → Daten → Konto löschen cascades
-    // through User.delete + onDelete: Cascade.
+    expect(html).toContain("Settings → Account → Delete account");
+    expect(html).toContain("MFA-enrolled account");
+    expect(html).toContain("authenticated web account page");
+    expect(html).toContain("local account-bound data");
     expect(html).toContain("Konto löschen");
     expect(html).toContain("Delete account");
     expect(html).toContain("User.delete");
     expect(html).toContain("onDelete: Cascade");
+  });
+
+  it("separates HealthLog storage from Apple-managed HealthKit sync", () => {
+    const html = render();
+    expect(html).toContain("No HealthLog iCloud storage");
+    expect(html).toContain("offline outbox");
+    expect(html).toContain("medication-reminder scheduler database");
+    expect(html).toContain("excluded from device backup");
+    expect(html).toContain("Apple-managed behaviour");
+  });
+
+  it("discloses every external AI topology and document operation", () => {
+    const html = render();
+    expect(html).toContain("Server-managed:");
+    expect(html).toContain("Bring your own key (BYO):");
+    expect(html).toContain("On device:");
+    expect(html).toContain("Google Gemini");
+    expect(html).toContain("generic OpenAI-compatible destination");
+    expect(html).toContain("stored original image or PDF");
+    expect(html).toContain("Per-document chat");
+    expect(html).toContain("Settings → Assistant");
+  });
+
+  it("states the public heart-rate representation and excludes the experiment", () => {
+    const html = render();
+    expect(html).toContain("supported default heart-rate representation");
+    expect(html).toContain("raw-heart-rate experiment is unavailable");
+  });
+
+  it("covers the linked App Store categories and declares no tracking", () => {
+    const html = render();
+    for (const category of [
+      "Health &amp; Fitness",
+      "Sensitive Info",
+      "Name",
+      "Contact Info",
+      "User Content",
+      "Photos or Videos",
+      "Identifiers",
+    ]) {
+      expect(html).toContain(category);
+    }
+    expect(html).toContain("Tracking: No.");
+    expect(html).toContain("no advertising");
+    expect(html).toContain("third-party analytics SDK");
   });
 
   it("publishes the operator email + GitHub fallback channel", () => {
