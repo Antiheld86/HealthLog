@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.37.12] — 2026-08-11
+
+### Changed
+
+- The public privacy policy now matches the current app and server data flow in German and English. It explains the in-app account-deletion route and MFA handoff, optional server-managed and bring-your-own assistant providers, on-device processing, document and OCR use, consent revocation, Apple Health sync versus HealthLog storage, retention rules, heart-rate representation, the full App Store data categories, and that HealthLog does not track you.
+
 ## [1.37.11] — 2026-08-10
 
 ### Changed

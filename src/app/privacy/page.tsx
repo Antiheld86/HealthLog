@@ -36,7 +36,7 @@ import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
-const POLICY_VERSION = "1.37.11";
+const POLICY_VERSION = "1.37.12";
 const LAST_UPDATED = "2026-08-11";
 
 export const metadata: Metadata = {
