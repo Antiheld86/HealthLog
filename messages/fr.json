@@ -9579,7 +9579,8 @@
       "readDone": "L’IA a lu votre document.",
       "read": "Lire avec l’IA",
       "reread": "Relire",
-      "reading": "Lecture…"
+      "reading": "Lecture…",
+      "notReadYet": "Ce document n’a pas encore été lu."
     },
     "contentIndex": {
       "indexPrompt": "Rendre le contenu des documents consultable.",

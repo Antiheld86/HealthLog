@@ -9579,7 +9579,8 @@
       "readDone": "Die KI hat dein Dokument gelesen.",
       "read": "Mit KI auslesen",
       "reread": "Erneut lesen",
-      "reading": "Liest…"
+      "reading": "Liest…",
+      "notReadYet": "Dieses Dokument wurde noch nicht gelesen."
     },
     "contentIndex": {
       "indexPrompt": "Dokumentinhalte durchsuchbar machen.",

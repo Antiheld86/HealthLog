@@ -9579,7 +9579,8 @@
       "readDone": "AI odczytało Twój dokument.",
       "read": "Odczytaj z AI",
       "reread": "Odczytaj ponownie",
-      "reading": "Odczytywanie…"
+      "reading": "Odczytywanie…",
+      "notReadYet": "Ten dokument nie został jeszcze odczytany."
     },
     "contentIndex": {
       "indexPrompt": "Udostępnij treść dokumentów do wyszukiwania.",

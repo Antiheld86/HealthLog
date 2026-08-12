@@ -9579,7 +9579,8 @@
       "readDone": "The AI read your document.",
       "read": "Read with AI",
       "reread": "Read again",
-      "reading": "Reading…"
+      "reading": "Reading…",
+      "notReadYet": "This document has not been read yet."
     },
     "contentIndex": {
       "indexPrompt": "Make document contents searchable.",
