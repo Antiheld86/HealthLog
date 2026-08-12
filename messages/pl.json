@@ -4984,6 +4984,8 @@
             "rateLimited": "Zbyt wiele przesłań. Poczekaj chwilę i spróbuj ponownie.",
             "tooLarge": "Ten plik jest za duży (limit 1,5 GB).",
             "failed": "Import nie powiódł się.",
+            "failureInterrupted": "Import został przerwany przed zakończeniem, zwykle przez restart serwera lub brak pamięci. Dane są bezpieczne; prześlij archiwum ponownie, aby spróbować jeszcze raz.",
+            "failureInsufficientMemory": "Limit pamięci serwera jest zbyt niski dla archiwum tej wielkości. Poproś osobę administrującą serwerem o zwiększenie limitu pamięci Node.js (NODE_OPTIONS=--max-old-space-size), a następnie prześlij archiwum ponownie.",
             "rowsImported": "Zaimportowano dotąd {count} wierszy",
             "doneSummary": "Gotowe — zaimportowano {imported} z {read} rekordów, pominięto {skipped} rekordów klinicznych.",
             "doneNothing": "Z tego archiwum nic nie zaimportowano: dotarło 0 z {read} rekordów.",

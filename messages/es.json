@@ -4984,6 +4984,8 @@
             "rateLimited": "Demasiadas subidas. Espera un momento e inténtalo de nuevo.",
             "tooLarge": "El archivo es demasiado grande (límite 1,5 GB).",
             "failed": "La importación falló.",
+            "failureInterrupted": "La importación se interrumpió antes de terminar, normalmente por un reinicio del servidor o por falta de memoria. Tus datos están a salvo; vuelve a subir el archivo para reintentarlo.",
+            "failureInsufficientMemory": "El límite de memoria del servidor es demasiado bajo para un archivo de este tamaño. Pide a quien administra el servidor que aumente el límite de memoria de Node.js (NODE_OPTIONS=--max-old-space-size) y vuelve a subir el archivo.",
             "rowsImported": "{count} filas importadas hasta ahora",
             "doneSummary": "Listo: {imported} de {read} registros importados, {skipped} registros clínicos omitidos.",
             "doneNothing": "No se importó nada de ese archivo: llegaron 0 de {read} registros.",

@@ -4984,6 +4984,8 @@
             "rateLimited": "Too many uploads. Please wait a moment and try again.",
             "tooLarge": "That file is too large (limit 1.5 GB).",
             "failed": "The import failed.",
+            "failureInterrupted": "The import was interrupted before it finished, usually by a server restart or an out-of-memory stop. Your data is safe; upload the export again to retry.",
+            "failureInsufficientMemory": "The server's memory limit is too low for an archive this size. Ask whoever runs the server to raise the Node.js heap limit (NODE_OPTIONS=--max-old-space-size), then upload the export again.",
             "rowsImported": "{count} rows imported so far",
             "doneSummary": "Done — {imported} of {read} records imported, {skipped} clinical records skipped.",
             "doneNothing": "Nothing was imported from that archive: 0 of {read} records landed.",

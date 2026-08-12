@@ -4984,6 +4984,8 @@
             "rateLimited": "Zu viele Uploads. Bitte kurz warten und erneut versuchen.",
             "tooLarge": "Diese Datei ist zu groß (Grenze 1,5 GB).",
             "failed": "Der Import ist fehlgeschlagen.",
+            "failureInterrupted": "Der Import wurde unterbrochen, bevor er fertig war, meist durch einen Server-Neustart oder Speichermangel. Die Daten sind sicher; das Archiv einfach erneut hochladen.",
+            "failureInsufficientMemory": "Das Speicherlimit des Servers ist für ein Archiv dieser Größe zu niedrig. Bitte die Betreiberin oder den Betreiber das Node.js-Heap-Limit erhöhen lassen (NODE_OPTIONS=--max-old-space-size) und das Archiv danach erneut hochladen.",
             "rowsImported": "Bisher {count} Einträge importiert",
             "doneSummary": "Fertig — {imported} von {read} Datensätzen importiert, {skipped} klinische Datensätze übersprungen.",
             "doneNothing": "Aus diesem Archiv wurde nichts importiert: 0 von {read} Datensätzen sind angekommen.",

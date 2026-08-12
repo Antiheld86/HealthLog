@@ -4984,6 +4984,8 @@
             "rateLimited": "Trop d'envois. Patientez un instant et réessayez.",
             "tooLarge": "Ce fichier est trop volumineux (limite 1,5 Go).",
             "failed": "L'import a échoué.",
+            "failureInterrupted": "L'import a été interrompu avant la fin, généralement par un redémarrage du serveur ou un manque de mémoire. Vos données sont en sécurité ; renvoyez l'archive pour réessayer.",
+            "failureInsufficientMemory": "La limite de mémoire du serveur est trop basse pour une archive de cette taille. Demandez à la personne qui administre le serveur d'augmenter la limite de mémoire de Node.js (NODE_OPTIONS=--max-old-space-size), puis renvoyez l'archive.",
             "rowsImported": "{count} lignes importées jusqu'ici",
             "doneSummary": "Terminé — {imported} enregistrements sur {read} importés, {skipped} enregistrements cliniques ignorés.",
             "doneNothing": "Rien n'a été importé de cette archive : 0 enregistrement sur {read} est arrivé.",

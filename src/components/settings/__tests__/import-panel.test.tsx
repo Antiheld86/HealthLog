@@ -27,7 +27,10 @@ vi.mock("next/navigation", () => ({
 }));
 
 import type { Locale } from "@/lib/i18n/config";
-import { AppleHealthEstimateWarning } from "../import-panel/apple-health-import-card";
+import {
+  AppleHealthEstimateWarning,
+  appleHealthFailureKind,
+} from "../import-panel/apple-health-import-card";
 import { I18nProvider } from "@/lib/i18n/context";
 import {
   ImportPanel,
@@ -114,6 +117,40 @@ describe("<AppleHealthEstimateWarning>", () => {
       );
     },
   );
+});
+
+// (issue #775) — the worker writes two machine-readable failure
+// reasons (the reconcile's `interrupted_by_restart` code and the memory
+// preflight's `insufficient_memory` prefix). The card must translate
+// them instead of echoing a raw code at the user; honest free-text
+// reasons keep passing through verbatim.
+describe("appleHealthFailureKind", () => {
+  it("maps the reconcile code onto translated copy", () => {
+    expect(appleHealthFailureKind("interrupted_by_restart")).toBe(
+      "interrupted",
+    );
+  });
+
+  it("maps the memory-preflight refusal onto translated copy", () => {
+    expect(
+      appleHealthFailureKind(
+        "insufficient_memory: export.xml declares 8192 MiB uncompressed; " +
+          "parsing it needs roughly 320 MiB of heap but the Node.js heap " +
+          "limit is 256 MiB.",
+      ),
+    ).toBe("insufficientMemory");
+  });
+
+  it("passes honest free-text reasons through verbatim", () => {
+    expect(
+      appleHealthFailureKind("Import staging file is no longer available"),
+    ).toBe("raw");
+  });
+
+  it("returns null when the job has no failure reason", () => {
+    expect(appleHealthFailureKind(null)).toBeNull();
+    expect(appleHealthFailureKind("")).toBeNull();
+  });
 });
 
 describe("EXAMPLE_IMPORT payload", () => {

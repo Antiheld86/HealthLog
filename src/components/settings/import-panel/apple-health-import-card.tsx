@@ -42,6 +42,24 @@ interface JobStatus {
   failureReason: string | null;
 }
 
+/**
+ * Classify a worker `failureReason` for display. The worker writes two
+ * machine-readable reasons — the reconcile's bare `interrupted_by_restart`
+ * code and the memory preflight's `insufficient_memory`-prefixed string
+ * (issue #775) — which must surface as translated, actionable copy
+ * instead of a raw code. Anything else is honest English free text from
+ * the parse and passes through verbatim. Exported for the SSR contract
+ * suite.
+ */
+export function appleHealthFailureKind(
+  reason: string | null,
+): "interrupted" | "insufficientMemory" | "raw" | null {
+  if (reason === null || reason.length === 0) return null;
+  if (reason === "interrupted_by_restart") return "interrupted";
+  if (reason.startsWith("insufficient_memory")) return "insufficientMemory";
+  return "raw";
+}
+
 export function AppleHealthEstimateWarning({ days }: { days: number }) {
   const { t } = useTranslations();
   return (
@@ -160,6 +178,23 @@ export function AppleHealthImportCard() {
   const isFailed = status?.status === "failed";
   const busy = uploading || isRunning;
   const percent = status?.progress?.percent ?? null;
+  const failureText = (() => {
+    const reason = status?.failureReason ?? null;
+    switch (appleHealthFailureKind(reason)) {
+      case "interrupted":
+        return t(
+          "settings.sections.export.import.appleHealth.failureInterrupted",
+        );
+      case "insufficientMemory":
+        return t(
+          "settings.sections.export.import.appleHealth.failureInsufficientMemory",
+        );
+      case "raw":
+        return reason;
+      default:
+        return null;
+    }
+  })();
   const ecg = status?.result?.ecg;
   const ecgWritten = (ecg?.imported ?? 0) + (ecg?.updated ?? 0);
 
@@ -302,7 +337,7 @@ export function AppleHealthImportCard() {
             />
             <span>
               {uploadError ??
-                status?.failureReason ??
+                failureText ??
                 t("settings.sections.export.import.appleHealth.failed")}
             </span>
           </p>
