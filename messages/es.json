@@ -5651,7 +5651,9 @@
         "withdraw": "Retirar el consentimiento",
         "confirmBody": "Las funciones de IA dejan de funcionar de inmediato. No se borra nada de lo ya registrado: usa Datos y privacidad para exportar o eliminar tu historial.",
         "confirmWithdraw": "Retirar",
-        "regrantHint": "Para volver a usar las funciones de IA, activa la lectura automática de documentos u otorga el consentimiento desde la aplicación.",
+        "regrantHint": "Si vuelves a otorgarlo, las funciones de IA podrán enviar de nuevo tus datos de salud al proveedor configurado.",
+        "grant": "Otorgar el consentimiento",
+        "grantError": "No se pudo guardar el consentimiento. Inténtalo de nuevo.",
         "error": "No se pudo guardar la retirada. Inténtalo de nuevo."
       }
     },

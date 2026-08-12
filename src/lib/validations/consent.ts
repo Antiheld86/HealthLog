@@ -53,6 +53,22 @@ export const consentPostBody = z.object({
 export type ConsentPostBody = z.infer<typeof consentPostBody>;
 
 /**
+ * Optional body for `POST /api/consent/ai/web`. The AI-settings mount posts
+ * no body at all (a heal: mints only for an account with no consent history);
+ * the explicit re-grant control on the same surface posts
+ * `{ intent: "affirmative" }`, the user's own consent act, which may
+ * supersede an earlier revocation the way any first grant would. The enum
+ * must stay in lockstep with `WebConsentGrantIntent` in
+ * `src/lib/consent/web-grant.ts`; the route narrows the parsed value to that
+ * type, so a drift fails the typecheck.
+ */
+export const webConsentGrantBody = z.object({
+  intent: z.enum(["heal", "affirmative"]).default("heal"),
+});
+
+export type WebConsentGrantBodyInput = z.input<typeof webConsentGrantBody>;
+
+/**
  * Query schema for both `/api/consent/ai/latest` GET and DELETE.
  *
  * Omitting `kind` on GET returns the latest active receipt per kind

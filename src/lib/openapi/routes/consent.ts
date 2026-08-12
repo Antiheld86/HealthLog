@@ -13,8 +13,10 @@
  *
  * - POST /api/consent/ai      — explicit grant with a signed artefact (iOS).
  * - POST /api/consent/ai/web  — idempotent `ai_full` grant for the web
- *                               client (mints if none active; heals
- *                               existing accounts on the AI-settings mount).
+ *                               client. Without a body it is the AI-settings
+ *                               mount heal (never lifts a revocation); with
+ *                               `intent: "affirmative"` it is the explicit
+ *                               grant control on the same surface.
  * - GET  /api/consent/ai/latest — latest active receipt(s).
  * - DELETE /api/consent/ai/latest — revoke the latest receipt (all kinds
  *                               when `kind` is omitted — the master OFF).
@@ -22,13 +24,23 @@
 import type { ZodOpenApiObject } from "zod-openapi";
 import { z } from "zod/v4";
 
-import { consentKindEnum, consentPostBody } from "@/lib/validations/consent";
+import {
+  consentKindEnum,
+  consentPostBody,
+  webConsentGrantBody,
+} from "@/lib/validations/consent";
 import { dataEnvelope, stdResponses } from "./shared";
 
 consentPostBody.meta({
   id: "ConsentPostBody",
   description:
     "Explicit AI-consent grant. `artefact` is an opaque signed receipt (base64 PDF or JWT, ≤ 64 KB UTF-8 bytes); `signedAt` is an ISO-8601 instant. Always appends a fresh row — re-granting after a revoke mints a new receipt.",
+});
+
+webConsentGrantBody.meta({
+  id: "WebConsentGrantBody",
+  description:
+    'Optional. Omitting the body (or sending `intent: "heal"`) is the AI-settings mount heal: it mints only for an account with no `ai_full` consent history at all, so a standing revocation is never resurrected. `intent: "affirmative"` is the user\'s own grant action and may supersede an earlier revocation, exactly as a first grant would.',
 });
 
 const consentReceiptResponse = z
@@ -106,7 +118,13 @@ export const consentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Consent"],
       summary: "Grant web AI consent (idempotent ai_full)",
       description:
-        "Mint an `ai_full` consent receipt for the calling web user if none is active; a no-op when one already exists. Mirrors the iOS master grant; the web AI-settings surface calls this on mount so existing web accounts on a shared-key deployment gain a receipt without a re-consent step. Revocation flows through DELETE /api/consent/ai/latest.",
+        'Mint an `ai_full` consent receipt for the calling web user if none is active; a no-op when one already exists. Mirrors the iOS master grant. Without a body (the mount heal) it grants only to an account with no consent history, so a revocation stands until the user grants again; with `intent: "affirmative"` (the explicit grant control) it records the user\'s own consent act, which may supersede an earlier revocation. Revocation flows through DELETE /api/consent/ai/latest.',
+      requestBody: {
+        required: false,
+        content: {
+          "application/json": { schema: webConsentGrantBody },
+        },
+      },
       responses: {
         "200": {
           description: "Grant outcome.",

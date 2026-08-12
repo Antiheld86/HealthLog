@@ -5651,7 +5651,9 @@
         "withdraw": "Einwilligung widerrufen",
         "confirmBody": "Die KI-Funktionen sind sofort abgeschaltet. Bereits erfasste Daten werden nicht gelöscht — dafür gibt es Daten & Privatsphäre.",
         "confirmWithdraw": "Widerrufen",
-        "regrantHint": "Um die KI-Funktionen wieder zu nutzen, schalte das automatische Lesen von Dokumenten ein oder erteile die Einwilligung in der App.",
+        "regrantHint": "Mit einer neuen Einwilligung dürfen die KI-Funktionen deine Gesundheitsdaten wieder an den eingestellten Anbieter senden.",
+        "grant": "Einwilligung erteilen",
+        "grantError": "Die Einwilligung konnte nicht gespeichert werden. Bitte versuche es erneut.",
         "error": "Der Widerruf konnte nicht gespeichert werden. Bitte versuche es erneut."
       }
     },

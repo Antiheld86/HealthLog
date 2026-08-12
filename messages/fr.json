@@ -5651,7 +5651,9 @@
         "withdraw": "Retirer le consentement",
         "confirmBody": "Les fonctions IA s'arrêtent immédiatement. Rien de ce qui est déjà enregistré n'est supprimé — utilise Données et confidentialité pour exporter ou effacer ton dossier.",
         "confirmWithdraw": "Retirer",
-        "regrantHint": "Pour réutiliser les fonctions IA, active la lecture automatique des documents ou donne ton consentement depuis l'application.",
+        "regrantHint": "En le redonnant, les fonctions IA pourront à nouveau transmettre tes données de santé au fournisseur configuré.",
+        "grant": "Donner le consentement",
+        "grantError": "Le consentement n'a pas pu être enregistré. Réessaie.",
         "error": "Le retrait n'a pas pu être enregistré. Réessaie."
       }
     },

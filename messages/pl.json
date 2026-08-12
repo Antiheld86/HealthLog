@@ -5651,7 +5651,9 @@
         "withdraw": "Wycofaj zgodę",
         "confirmBody": "Funkcje AI przestają działać natychmiast. Nic z już zapisanych danych nie zostaje usunięte — użyj sekcji Dane i prywatność, aby wyeksportować lub usunąć swoją historię.",
         "confirmWithdraw": "Wycofaj",
-        "regrantHint": "Aby ponownie korzystać z funkcji AI, włącz automatyczne czytanie dokumentów lub udziel zgody w aplikacji.",
+        "regrantHint": "Po ponownym udzieleniu zgody funkcje AI znów będą mogły wysyłać Twoje dane zdrowotne do skonfigurowanego dostawcy.",
+        "grant": "Udziel zgody",
+        "grantError": "Nie udało się zapisać zgody. Spróbuj ponownie.",
         "error": "Nie udało się zapisać wycofania. Spróbuj ponownie."
       }
     },

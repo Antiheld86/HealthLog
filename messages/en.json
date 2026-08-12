@@ -5651,7 +5651,9 @@
         "withdraw": "Withdraw consent",
         "confirmBody": "The AI features stop working straight away. Nothing already recorded is deleted — use Data & privacy to export or erase your record.",
         "confirmWithdraw": "Withdraw",
-        "regrantHint": "To use the AI features again, switch on automatic document reading or grant consent from the app.",
+        "regrantHint": "Granting again lets the AI features send your health data to the configured provider.",
+        "grant": "Grant consent",
+        "grantError": "The consent could not be saved. Please try again.",
         "error": "The withdrawal could not be saved. Please try again."
       }
     },

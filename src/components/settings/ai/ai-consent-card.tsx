@@ -10,11 +10,14 @@
  * surface, not behind a support request.
  *
  * The card shows the standing decision in plain words and offers the one
- * move that changes it. Withdrawing takes effect immediately — the consent
- * gate fails closed without an active receipt, so every AI surface falls
- * back to its no-consent state on the next call. Nothing already stored is
- * deleted by this; that is the export/erase path in Data & Privacy, and the
- * copy says so rather than implying more than it does.
+ * move that changes it: withdraw while consent stands, grant while it does
+ * not. Withdrawing takes effect immediately: the consent gate fails closed
+ * without an active receipt, so every AI surface falls back to its
+ * no-consent state on the next call. Granting posts an affirmative intent,
+ * which is the consent act itself and therefore may supersede an earlier
+ * revocation; the silent mount heal never does. Nothing already stored is
+ * deleted by a withdrawal; that is the export/erase path in Data & Privacy,
+ * and the copy says so rather than implying more than it does.
  * ──────────────────────────────────────────────────────────────── */
 
 import { useState } from "react";
@@ -66,6 +69,29 @@ export function AiConsentCard({
       setConfirming(false);
       // The receipt gates every AI surface, so anything that reads consent
       // state has to re-resolve — not just this card.
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.aiConsentReceipt("ai_full"),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.insightsProviderChain(),
+      });
+    },
+  });
+
+  const grant = useMutation({
+    mutationKey: queryKeys.aiConsentReceipt("ai_full"),
+    mutationFn: async () => {
+      // The affirmative intent marks this as the user's own consent act,
+      // the only web path that may lift a standing revocation. The silent
+      // mount heal posts no body and cannot.
+      const res = await apiFetchRaw("/api/consent/ai/web", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ intent: "affirmative" }),
+      });
+      if (!res.ok) throw new Error("grant failed");
+    },
+    onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: queryKeys.aiConsentReceipt("ai_full"),
       });
@@ -144,14 +170,35 @@ export function AiConsentCard({
           </Button>
         )
       ) : (
-        <p className="text-muted-foreground text-xs">
-          {t("settings.ai.consent.regrantHint")}
-        </p>
+        <div className="space-y-2">
+          <p className="text-muted-foreground text-xs">
+            {t("settings.ai.consent.regrantHint")}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            data-slot="ai-consent-grant"
+            onClick={() => grant.mutate()}
+            disabled={grant.isPending}
+          >
+            {grant.isPending ? (
+              <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />
+            ) : null}
+            {t("settings.ai.consent.grant")}
+          </Button>
+        </div>
       )}
 
       {revoke.isError ? (
         <p className="text-destructive text-xs" role="alert">
           {t("settings.ai.consent.error")}
+        </p>
+      ) : null}
+
+      {grant.isError ? (
+        <p className="text-destructive text-xs" role="alert">
+          {t("settings.ai.consent.grantError")}
         </p>
       ) : null}
     </section>

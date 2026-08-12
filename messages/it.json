@@ -5651,7 +5651,9 @@
         "withdraw": "Revoca il consenso",
         "confirmBody": "Le funzioni IA si fermano subito. Nulla di quanto già registrato viene eliminato — usa Dati e privacy per esportare o cancellare il tuo archivio.",
         "confirmWithdraw": "Revoca",
-        "regrantHint": "Per usare di nuovo le funzioni IA, attiva la lettura automatica dei documenti o concedi il consenso dall'app.",
+        "regrantHint": "Concedendolo di nuovo, le funzioni IA potranno inviare ancora i tuoi dati sanitari al provider configurato.",
+        "grant": "Concedi il consenso",
+        "grantError": "Non è stato possibile salvare il consenso. Riprova.",
         "error": "Non è stato possibile salvare la revoca. Riprova."
       }
     },
