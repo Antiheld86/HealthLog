@@ -21,6 +21,7 @@
  */
 import { createReadStream } from "node:fs";
 import { createHash } from "node:crypto";
+import { StringDecoder } from "node:string_decoder";
 import { Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import sax from "sax";
@@ -204,6 +205,25 @@ const UNATTRIBUTED_CUMULATIVE_SOURCE_HASH = createHash("sha256")
   .digest("hex");
 
 /**
+ * (issue #775) Apple serialises the `device` attribute from the live
+ * HKDevice object, embedding its runtime address:
+ * `<<HKDevice: 0x283a08640>, name:Apple Watch, …>`. That address is not
+ * stable across the export enumeration — the same physical device shows
+ * up under many addresses in one archive. Hashing it verbatim fragments
+ * the per-day source buckets toward one bucket per RECORD: an 11-million
+ * record export grows the cumulative fold map past the default 1 GB Node
+ * heap and kills the worker mid-parse. Stripping the volatile address
+ * before hashing restores the documented invariant (state bounded by
+ * actual source cardinality) — the stable parts (device name, model,
+ * hardware, software) still keep genuinely different devices apart.
+ */
+const HK_DEVICE_RUNTIME_ADDRESS = /0x[0-9a-f]+/gi;
+
+function stableDeviceIdentity(device: string | undefined): string | undefined {
+  return device?.replace(HK_DEVICE_RUNTIME_ADDRESS, "0x0");
+}
+
+/**
  * Hash the source tuple used only to keep overlapping export.xml contributors
  * separate. Records without source metadata share one stable bucket so parser
  * state remains bounded by actual source cardinality rather than record count.
@@ -217,7 +237,7 @@ export function hashCumulativeSourceIdentity(
   const sourceTuple = [
     sourceName?.trim() ?? "",
     sourceVersion?.trim() ?? "",
-    device?.trim() ?? "",
+    stableDeviceIdentity(device)?.trim() ?? "",
   ];
   if (!sourceTuple.some(Boolean)) {
     return UNATTRIBUTED_CUMULATIVE_SOURCE_HASH;
@@ -1013,10 +1033,16 @@ export async function streamParseExportXml(
   let lastProgressEmitAt = 0;
   const PROGRESS_EMIT_INTERVAL_MS = 250;
 
+  // A read chunk can end mid-way through a multi-byte UTF-8 sequence
+  // (umlauts in source names are routine); a bare `toString("utf8")`
+  // per chunk would decay those split characters to U+FFFD. The
+  // StringDecoder carries the partial sequence across chunk boundaries.
+  const utf8Decoder = new StringDecoder("utf8");
+
   const sink = new Writable({
     write(chunk: Buffer, _enc, callback) {
       try {
-        parser.write(chunk.toString("utf8"));
+        parser.write(utf8Decoder.write(chunk));
         if (pendingError) {
           callback(pendingError);
           return;
@@ -1051,6 +1077,8 @@ export async function streamParseExportXml(
     },
     final(callback) {
       try {
+        const tail = utf8Decoder.end();
+        if (tail.length > 0) parser.write(tail);
         parser.close();
         callback();
       } catch (err) {
