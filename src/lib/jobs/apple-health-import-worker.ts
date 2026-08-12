@@ -25,6 +25,7 @@
  * Locks per `.planning/research/v1434-r-1-xml-import.md` §5.1.
  */
 import { unlinkSync } from "node:fs";
+import { getHeapStatistics } from "node:v8";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { prisma, toJson } from "@/lib/db";
 import type { Job } from "pg-boss";
@@ -114,6 +115,59 @@ const APPLE_HEALTH_ECG_MAX_SAMPLES = 2_000_000;
 
 /** Concurrency cap per worker host. */
 export const APPLE_HEALTH_IMPORT_CONCURRENCY = 1;
+
+/**
+ * (issue #775) Memory preflight for the parse. The streaming pipeline
+ * keeps per-record work off the heap, so what remains resident scales
+ * with data SPAN (cumulative day-buckets, per-type counters, batch
+ * buffers), not record count — a small fraction of the XML size. The
+ * model below is deliberately generous: a fixed base for parser +
+ * batches + framework, plus 1/64 of the declared XML size for the
+ * span-bounded fold state. An 8 GiB export (the archive-level cap)
+ * needs ~320 MiB under this model — any default Node heap clears it.
+ * The preflight only refuses the truly impossible, e.g. an operator
+ * who pinned --max-old-space-size far below that, and it refuses
+ * BEFORE minutes of unpack work and with an actionable reason instead
+ * of an OOM-killed worker and a job stuck in "running".
+ */
+export const IMPORT_MEMORY_PREFLIGHT_BASE_BYTES = 192 * 1024 * 1024;
+export const IMPORT_MEMORY_PREFLIGHT_XML_DIVISOR = 64;
+
+/**
+ * Machine-readable prefix of the preflight refusal. The web UI keys
+ * its translated message off this prefix (mirroring the bare
+ * `interrupted_by_restart` code the reconcile writes); the rest of the
+ * string stays honest English for the status API and logs.
+ */
+export const INSUFFICIENT_MEMORY_REASON_PREFIX = "insufficient_memory";
+
+const MIB = 1024 * 1024;
+
+/**
+ * Returns `null` when the runtime heap can carry the declared export,
+ * otherwise the `failureReason` string for the refused import.
+ * `heapLimitBytes` is injectable for tests; production reads the real
+ * V8 limit, which reflects `NODE_OPTIONS=--max-old-space-size`.
+ */
+export function importMemoryPreflightReason(
+  declaredXmlBytes: number,
+  heapLimitBytes: number = getHeapStatistics().heap_size_limit,
+): string | null {
+  const requiredBytes =
+    IMPORT_MEMORY_PREFLIGHT_BASE_BYTES +
+    Math.ceil(declaredXmlBytes / IMPORT_MEMORY_PREFLIGHT_XML_DIVISOR);
+  if (heapLimitBytes >= requiredBytes) return null;
+  const requiredMib = Math.ceil(requiredBytes / MIB);
+  const suggestedMib = Math.max(512, requiredMib);
+  return (
+    `${INSUFFICIENT_MEMORY_REASON_PREFIX}: export.xml declares ` +
+    `${Math.ceil(declaredXmlBytes / MIB)} MiB uncompressed; parsing it needs ` +
+    `roughly ${requiredMib} MiB of heap but the Node.js heap limit is ` +
+    `${Math.floor(heapLimitBytes / MIB)} MiB. Raise it with ` +
+    `NODE_OPTIONS=--max-old-space-size=${suggestedMib} on the container ` +
+    `that runs the worker, then upload the export again.`
+  );
+}
 
 /**
  * v1.28.33 (issue #486) — job-level pg-boss overrides for the import
@@ -325,7 +379,15 @@ export async function handleAppleHealthImport(
       elapsedMs: 0,
     });
 
-    const unzip = await extractExportXml(uploadPath);
+    const unzip = await extractExportXml(uploadPath, {
+      // Refuse an export the heap demonstrably cannot carry BEFORE the
+      // multi-minute unpack, with an actionable reason instead of an
+      // OOM-killed worker (issue #775).
+      preflight: ({ declaredXmlBytes }) => {
+        const reason = importMemoryPreflightReason(declaredXmlBytes);
+        if (reason) throw new Error(reason);
+      },
+    });
     extractedXmlPath = unzip.xmlPath;
 
     // Phase 2 + 3: parsing + upserting (the parser tracks both
