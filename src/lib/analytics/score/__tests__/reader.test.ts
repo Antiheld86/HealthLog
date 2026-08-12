@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@/generated/prisma/client";
 
-import { readActivityDays, readFastingGlucoseMeasurements } from "../reader";
+import {
+  computeUserHealthScore,
+  readActivityDays,
+  readFastingGlucoseMeasurements,
+} from "../reader";
 
 function dbWithRows(rows: unknown[]) {
   return {
@@ -105,6 +109,51 @@ describe("score reader bounds and source parity", () => {
     });
 
     expect(result.days).toEqual([{ day: "2026-07-02", value: 1_000 }]);
+  });
+
+  it("reads an empty labs set as not_tracked, never read_failed", async () => {
+    // A labs-enabled account with no lab rows has honestly recorded
+    // nothing: the read SUCCEEDED and found an empty set. `read_failed`
+    // is reserved for a read that threw — showing it here would offer a
+    // Retry that can never help.
+    const db = {
+      measurement: { findMany: vi.fn().mockResolvedValue([]) },
+      mentalHealthAssessment: { findMany: vi.fn().mockResolvedValue([]) },
+      labResult: { findMany: vi.fn().mockResolvedValue([]) },
+      dismissedPriorityItem: { findUnique: vi.fn().mockResolvedValue(null) },
+    } as unknown as PrismaClient;
+
+    const report = await computeUserHealthScore({
+      prisma: db,
+      userId: "user-1",
+      now: new Date("2026-07-28T12:00:00.000Z"),
+      profile: {
+        dateOfBirth: new Date("1985-07-09"),
+        heightCm: 178,
+        timezone: "Europe/Berlin",
+        sourcePriorityJson: null,
+        thresholdsJson: null,
+      },
+      modules: {
+        glucose: true,
+        labs: true,
+        sleep: true,
+        mentalHealth: true,
+      },
+      healthScoreConfigJson: null,
+      bpTargets: null,
+      bpEnvelope: null,
+      bpEnvelopePriorWeek: null,
+      bpEnvelopePriorTwoWeeks: null,
+    });
+
+    for (const id of ["GLYCAEMIA", "LIPIDS"] as const) {
+      const pillar = report.pillars.find((p) => p.id === id)!;
+      expect(pillar.result.status).toBe("insufficient");
+      expect(
+        pillar.result.status === "insufficient" && pillar.result.reason,
+      ).toBe("not_tracked");
+    }
   });
 
   it("excludes source writers outside the current 28-day score window", async () => {
