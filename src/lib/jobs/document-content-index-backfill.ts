@@ -15,10 +15,12 @@
  *
  * Bounded + resumable: an id-cursor forward walk over the not-yet-indexed set,
  * capped at `MAX_DOCS_PER_RUN` provider calls per job and stopped the moment the
- * daily AI budget is reached. Only vision-indexable MIME types (image + PDF when
- * the provider reads PDFs) are candidates, so the walk converges — an
- * un-indexable file never re-queues work. A re-run picks up where budget /
- * the cap left off because already-indexed documents drop out of the set.
+ * daily AI budget is reached. Only vision-indexable MIME types (images + PDFs —
+ * `prepareVisionInput` passes a PDF natively when the provider reads PDFs and
+ * rasterises it to page images otherwise) are candidates, so the walk
+ * converges — an un-indexable file never re-queues work. A re-run picks up
+ * where budget / the cap left off because already-indexed documents drop out
+ * of the set.
  *
  * The queue MUST be registered in the maintenance registrar
  * (`src/lib/jobs/reminder/register-maintenance.ts`) so pg-boss provisions it.
@@ -66,6 +68,14 @@ export interface ContentIndexBackfillPayload {
 
 export interface ContentIndexBackfillSummary {
   indexed: number;
+  /**
+   * Documents visited but not indexable this run (gone by load time,
+   * undecryptable, or a PDF no rasteriser could render). Refunded, never
+   * billed, and left un-indexed for a later run.
+   */
+  skipped: number;
+  /** Documents whose provider call failed. Refunded; a later run retries. */
+  failed: number;
   reason: "ok" | "no-provider" | "no-consent" | "budget-reached";
 }
 
@@ -78,7 +88,8 @@ export async function runContentIndexBackfillForUser(
   userId: string,
 ): Promise<ContentIndexBackfillSummary> {
   const { pick } = await resolveDocumentVisionProvider(userId);
-  if (!pick) return { indexed: 0, reason: "no-provider" };
+  if (!pick)
+    return { indexed: 0, skipped: 0, failed: 0, reason: "no-provider" };
   try {
     await assertDocumentEgressConsent({
       userId,
@@ -87,17 +98,23 @@ export async function runContentIndexBackfillForUser(
     });
   } catch (err) {
     if (err instanceof ConsentRequiredError) {
-      return { indexed: 0, reason: "no-consent" };
+      return { indexed: 0, skipped: 0, failed: 0, reason: "no-consent" };
     }
     throw err;
   }
 
-  const candidateMimes = pick.pdfSupported
-    ? [...IMAGE_MIMES, "application/pdf"]
-    : [...IMAGE_MIMES];
+  // PDFs are always candidates: `prepareVisionInput` passes them natively
+  // when the provider reads PDFs and rasterises them to page images
+  // otherwise — the same path the per-document index route takes. The
+  // prefilter here only trims the walk; it must never be stricter than
+  // that per-document authority, or an image-input provider silently
+  // leaves every PDF out of "index all documents".
+  const candidateMimes = [...IMAGE_MIMES, "application/pdf"];
 
   const dailyCap = resolveDailyCap([{ providerType: pick.entry.providerType }]);
   let indexed = 0;
+  let skipped = 0;
+  let failed = 0;
   let reason: ContentIndexBackfillSummary["reason"] = "ok";
   let cursor: string | null = null;
 
@@ -135,13 +152,17 @@ export async function runContentIndexBackfillForUser(
       const document = await loadOwnedDocument(userId, id);
       if (!document) {
         await reconcileSpend(userId, reservation.reserved, 0, dateKey);
+        skipped += 1;
         continue;
       }
       const vision = await prepareVisionInput(document, pick.pdfSupported);
       if (!vision.ok) {
-        // Not vision-indexable (should be filtered by MIME, but guard) — refund
-        // and move the cursor past it so the walk keeps converging.
+        // Not vision-indexable after all (undecryptable, unreadable bytes,
+        // or a PDF the rasteriser could not render) — refund and move on so
+        // the walk keeps converging. Counted as skipped, not failed: no
+        // provider call happened.
         await reconcileSpend(userId, reservation.reserved, 0, dateKey);
+        skipped += 1;
         continue;
       }
 
@@ -170,6 +191,7 @@ export async function runContentIndexBackfillForUser(
         // A provider miss on one document must not abort the batch — refund and
         // leave it un-indexed (a later run retries it).
         await reconcileSpend(userId, reservation.reserved, 0, dateKey);
+        failed += 1;
       }
     }
 
@@ -179,9 +201,9 @@ export async function runContentIndexBackfillForUser(
 
   annotate({
     action: { name: "documents.contentIndex.backfill" },
-    meta: { indexed, reason },
+    meta: { indexed, skipped, failed, reason },
   });
-  return { indexed, reason };
+  return { indexed, skipped, failed, reason };
 }
 
 /**

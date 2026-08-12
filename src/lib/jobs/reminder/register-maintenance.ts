@@ -1148,6 +1148,8 @@ export async function registerMaintenanceQueues(
       let users = 0;
       let skipped = 0;
       let documentsIndexed = 0;
+      let documentsSkipped = 0;
+      let documentsFailed = 0;
       for (const job of jobs) {
         const { userId } = job.data;
         if (!userId) {
@@ -1155,13 +1157,19 @@ export async function registerMaintenanceQueues(
           continue;
         }
         try {
-          const { indexed, reason } =
-            await runContentIndexBackfillForUser(userId);
+          const {
+            indexed,
+            skipped: docsSkipped,
+            failed: docsFailed,
+            reason,
+          } = await runContentIndexBackfillForUser(userId);
           users++;
           documentsIndexed += indexed;
+          documentsSkipped += docsSkipped;
+          documentsFailed += docsFailed;
           workerLog(
             "info",
-            `[document-content-index-backfill] user=${userId} indexed=${indexed} reason=${reason}`,
+            `[document-content-index-backfill] user=${userId} indexed=${indexed} skipped=${docsSkipped} failed=${docsFailed} reason=${reason}`,
           );
         } catch (err) {
           recordError();
@@ -1178,6 +1186,8 @@ export async function registerMaintenanceQueues(
         users,
         skipped,
         documents_indexed: documentsIndexed,
+        documents_skipped: documentsSkipped,
+        documents_failed: documentsFailed,
       });
     },
   );
