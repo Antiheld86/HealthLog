@@ -198,6 +198,8 @@ export function documentAiErrorKey(err: unknown): string {
         return "documents.assist.errorLocalOcrDisabled";
       case "documents.inbound.providerUnsupported":
         return "documents.assist.errorProvider";
+      case "documents.inbound.notIndexed":
+        return "documents.assist.errorNotIndexed";
       default:
         return "documents.assist.errorGeneric";
     }

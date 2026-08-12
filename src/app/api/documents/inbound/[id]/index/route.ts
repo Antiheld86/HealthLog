@@ -47,6 +47,7 @@ import {
   refundDocumentAiSlot,
   type LoadedDocument,
 } from "@/lib/documents/ai-route-support";
+import { maybeAutoStageLabFacts } from "@/lib/documents/auto-stage-labs";
 import { upsertContentIndex } from "@/lib/documents/content-index";
 import {
   DocumentDescribeError,
@@ -101,7 +102,17 @@ async function finishIndex(
     action: { name: "documents.contentIndex.upsert" },
     meta: { documentId, source, tokens: tokenCount },
   });
-  return apiSuccess({ documentId, indexed: true, tokenCount });
+  // A manual read continues into the SAME lab staging the automatic index
+  // worker performs, so a skipped or failed auto run is recoverable per
+  // document without a re-upload. Every guard lives inside the helper (both
+  // modules on, still STORED with no facts, provider + consent, looks like a
+  // lab report) — a non-lab document is a tagged no-op, and a staging failure
+  // never fails the index that just succeeded.
+  const staging = await maybeAutoStageLabFacts(userId, documentId).catch(
+    () => null,
+  );
+  const labFactsStaged = staging?.staged === true ? staging.facts : 0;
+  return apiSuccess({ documentId, indexed: true, tokenCount, labFactsStaged });
 }
 
 /** TEXT mode — index browser-OCR'd text (no provider egress). */

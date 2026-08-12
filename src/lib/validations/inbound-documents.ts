@@ -488,6 +488,22 @@ export const inboundTextExtractSchema = z.object({
 
 export type InboundTextExtractInput = z.infer<typeof inboundTextExtractSchema>;
 
+/**
+ * The stored-text extract body: structure the document's OWN stored extracted
+ * text (the content index the read/index step already produced) into staged
+ * facts — no re-upload, no second read of the original. The document detail's
+ * "Extract lab values" action posts this when an automatic staging run was
+ * skipped or failed; the server refuses with `documents.inbound.notIndexed`
+ * when there is no stored text to structure.
+ */
+export const inboundStoredExtractSchema = z.object({
+  mode: z.literal("stored"),
+});
+
+export type InboundStoredExtractInput = z.infer<
+  typeof inboundStoredExtractSchema
+>;
+
 // ─── Library: store / edit / list ──────────────────────────────────────────
 
 /** A bare YYYY-MM-DD date string (no time component). */

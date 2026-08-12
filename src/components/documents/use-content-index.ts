@@ -23,13 +23,14 @@ import {
   runDocumentIndex,
   type DocumentAiMode,
   type DocumentAiTarget,
+  type DocumentIndexResult,
 } from "./document-ai-transport";
 
 /** Index / re-index one document for content search. */
 export function useIndexDocument() {
   const queryClient = useQueryClient();
   return useMutation<
-    { indexed: boolean; tokenCount: number },
+    DocumentIndexResult,
     Error,
     { mode: DocumentAiMode; target: DocumentAiTarget }
   >({

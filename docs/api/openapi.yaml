@@ -12453,10 +12453,12 @@ paths:
       description: "Optional AI enhancement on an already-stored document. Runs the dedicated OCR/vision provider over the
         stored original and stages STRUCTURED FACTS for review. AI-consent / rate / budget gated. With no provider
         configured this returns 422 (`documents.inbound.providerUnsupported`) — the stored document is untouched, only
-        the enhancement fails. Two modes by content-type: VISION (empty body) decrypts and scans the stored original
-        (PDF needs an Anthropic vision provider); TEXT (`application/json`, opt-in local OCR) `{ mode: \"text\", text }`
-        structures browser-OCR'd text. Extraction reproduces what the document states — it never interprets. Nothing
-        reaches the structured stores here; the confirm route is the only write path."
+        the enhancement fails. Three modes: VISION (empty body) decrypts and scans the stored original (PDF needs an
+        Anthropic vision provider); TEXT (`application/json`, opt-in local OCR) `{ mode: \"text\", text }` structures
+        browser-OCR'd text; STORED (`application/json`) `{ mode: \"stored\" }` structures the document's own stored
+        extracted text (its content index) — the manual recovery for a skipped/failed automatic staging run, 422
+        `documents.inbound.notIndexed` when no stored text exists. Extraction reproduces what the document states — it
+        never interprets. Nothing reaches the structured stores here; the confirm route is the only write path."
       parameters:
         - name: id
           in: path
@@ -12468,7 +12470,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/InboundTextExtractRequest"
+              $ref: "#/components/schemas/InboundExtractRequest"
       responses:
         "200":
           description: The document with its newly staged facts.
@@ -12631,7 +12633,10 @@ paths:
         gated); TEXT (`application/json` `{ mode: \"text\", text }`, opt-in local OCR) indexes browser-OCR'd text with
         no provider egress. Persists ONLY AES-256-GCM ciphertext of the text plus opaque HMAC token hashes — no
         plaintext body, no plaintext token. Gated on the existing AI consent (no separate per-user toggle). Idempotent;
-        re-indexing overwrites in place."
+        re-indexing overwrites in place. A successful index continues into the same lab auto-staging the background
+        worker performs (still-STORED lab-looking document with no facts, both modules on, provider + consent eligible);
+        `labFactsStaged` reports how many facts were staged PENDING for review — confirmation stays the only write into
+        Labs."
       parameters:
         - name: id
           in: path
@@ -17106,29 +17111,37 @@ components:
       required:
         - mode
         - text
-    InboundTextExtractRequest:
-      type: object
-      properties:
-        mode:
-          type: string
-          const: text
-        text:
-          type: string
-        kind:
-          type: string
-          enum:
-            - DOCTOR_REPORT
-            - DISCHARGE_LETTER
-            - LAB_RESULT
-            - IMAGING
-            - PRESCRIPTION
-            - REFERRAL
-            - INSURANCE
-            - VACCINATION
-            - OTHER
-      required:
-        - mode
-        - text
+    InboundExtractRequest:
+      anyOf:
+        - type: object
+          properties:
+            mode:
+              type: string
+              const: text
+            text:
+              type: string
+            kind:
+              type: string
+              enum:
+                - DOCTOR_REPORT
+                - DISCHARGE_LETTER
+                - LAB_RESULT
+                - IMAGING
+                - PRESCRIPTION
+                - REFERRAL
+                - INSURANCE
+                - VACCINATION
+                - OTHER
+          required:
+            - mode
+            - text
+        - type: object
+          properties:
+            mode:
+              type: string
+              const: stored
+          required:
+            - mode
     DocumentChatRequest:
       type: object
       properties:
@@ -38498,10 +38511,16 @@ components:
           type: boolean
         tokenCount:
           type: number
+        labFactsStaged:
+          type: number
+          description: How many lab facts the index run auto-staged for review (0 when the document is not a lab report, staging
+            was not eligible, or facts already exist). Staged facts are PENDING — the confirm route remains the only
+            write into Labs.
       required:
         - documentId
         - indexed
         - tokenCount
+        - labFactsStaged
       additionalProperties: false
     DocumentChatHistoryEnvelope:
       type: object

@@ -98,12 +98,24 @@ export async function runDocumentAi<T>(opts: {
   });
 }
 
+/** The index route's result, including the lab-staging continuation. */
+export interface DocumentIndexResult {
+  indexed: boolean;
+  tokenCount: number;
+  /**
+   * How many lab facts the read continued into staging (PENDING, for the
+   * review step). 0 when the document is not a lab report or staging was not
+   * eligible. Confirmation stays the only write into Labs.
+   */
+  labFactsStaged: number;
+}
+
 /** Populate / refresh one document's content index over the chosen transport. */
 export function runDocumentIndex(opts: {
   mode: DocumentAiMode;
   target: DocumentAiTarget;
-}): Promise<{ indexed: boolean; tokenCount: number }> {
-  return runDocumentAi<{ indexed: boolean; tokenCount: number }>({
+}): Promise<DocumentIndexResult> {
+  return runDocumentAi<DocumentIndexResult>({
     path: `/api/documents/inbound/${opts.target.documentId}/index`,
     mode: opts.mode,
     target: opts.target,

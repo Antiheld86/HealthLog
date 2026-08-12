@@ -38,6 +38,11 @@ vi.mock("@/lib/documents/content-index", () => ({
 vi.mock("@/lib/documents/provider-order", () => ({
   resolveDocumentVisionProvider: vi.fn(),
 }));
+vi.mock("@/lib/documents/auto-stage-labs", () => ({
+  maybeAutoStageLabFacts: vi
+    .fn()
+    .mockResolvedValue({ staged: false, reason: "not-lab" }),
+}));
 vi.mock("@/lib/ai/consent-guard", () => ({
   assertDocumentEgressConsent: vi.fn().mockResolvedValue(undefined),
   ConsentRequiredError: class ConsentRequiredError extends Error {},
@@ -79,6 +84,7 @@ vi.mock("next/headers", () => ({
 import { POST } from "../route";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
+import { maybeAutoStageLabFacts } from "@/lib/documents/auto-stage-labs";
 import { checkRateLimit, refundRateLimit } from "@/lib/rate-limit";
 import { reserveBudget } from "@/lib/ai/coach/budget";
 import { resolveDocumentVisionProvider } from "@/lib/documents/provider-order";
@@ -258,5 +264,56 @@ describe("POST /api/documents/inbound/[id]/index — bucket honesty", () => {
     expect(res.status).toBe(200);
     expect(transcribeDocument).toHaveBeenCalledTimes(1);
     expect(refundRateLimit).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/documents/inbound/[id]/index — staging continuation", () => {
+  beforeEach(() => {
+    vi.mocked(resolveDocumentVisionProvider).mockResolvedValue(PICK as never);
+    vi.mocked(transcribeDocument).mockResolvedValue({
+      text: "hemoglobin 14.2 reference range 12-16",
+    } as never);
+  });
+
+  it("a manual read continues into the same lab staging the auto worker performs", async () => {
+    vi.mocked(maybeAutoStageLabFacts).mockResolvedValue({
+      staged: true,
+      facts: 4,
+    } as never);
+    const res = await POST(visionReq("doc-1") as never, ctx("doc-1") as never);
+    expect(res.status).toBe(200);
+    expect(maybeAutoStageLabFacts).toHaveBeenCalledWith("user-1", "doc-1");
+    const body = await res.json();
+    expect(body.data.labFactsStaged).toBe(4);
+  });
+
+  it("reports zero staged facts as an honest zero, never an error", async () => {
+    vi.mocked(maybeAutoStageLabFacts).mockResolvedValue({
+      staged: false,
+      reason: "not-lab",
+    } as never);
+    const res = await POST(visionReq("doc-1") as never, ctx("doc-1") as never);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.labFactsStaged).toBe(0);
+  });
+
+  it("a staging failure never fails the index that just succeeded", async () => {
+    vi.mocked(maybeAutoStageLabFacts).mockRejectedValue(new Error("boom"));
+    const res = await POST(visionReq("doc-1") as never, ctx("doc-1") as never);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data).toMatchObject({ indexed: true, labFactsStaged: 0 });
+  });
+
+  it("does not reach staging when the index itself was refused", async () => {
+    vi.mocked(checkRateLimit).mockResolvedValue({
+      allowed: false,
+      remaining: 0,
+      resetAt: Date.now() + 60_000,
+    });
+    const res = await POST(visionReq("doc-1") as never, ctx("doc-1") as never);
+    expect(res.status).toBe(429);
+    expect(maybeAutoStageLabFacts).not.toHaveBeenCalled();
   });
 });

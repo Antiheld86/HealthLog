@@ -80,6 +80,7 @@ import {
 } from "@/lib/validations/inbound-documents";
 import { DocumentAiSection } from "./document-ai-section";
 import { DocumentEncounterSuggestion } from "./document-encounter-suggestion";
+import { DocumentFactsSection } from "./document-facts-review";
 import { VaccinationDocumentSuggestion } from "@/components/vaccinations/vaccination-document-suggestion";
 import { DocumentSummaryBlock } from "./document-summary-block";
 import type { DocumentAiTarget } from "./document-ai-transport";
@@ -338,7 +339,7 @@ export function DocumentDetailSheet({
   /** Whether content indexing is available (from `usage.contentIndex.enabled`). */
   contentIndexEnabled?: boolean;
 }) {
-  const { t, locale } = useTranslations();
+  const { t, tCount, locale } = useTranslations();
   const format = useFormatters();
   const queryClient = useQueryClient();
   // v1.28.52 (Documents R3) — the vault "Ask the Coach" action opens the REAL
@@ -363,9 +364,13 @@ export function DocumentDetailSheet({
   // deep-link — see the labs page's own "no per-value relation" comment),
   // so this links to the labs list rather than a single biomarker; still a
   // real jump where there was none before.
+  //
+  // APPROVED only: the link claims values that exist in Labs, and a PENDING
+  // fact is not there yet — it belongs to the review block above, which is
+  // the control that turns it into one.
   const labFactCount =
     doc?.facts.filter(
-      (fact) => fact.factType === "OBSERVATION" && fact.status !== "REJECTED",
+      (fact) => fact.factType === "OBSERVATION" && fact.status === "APPROVED",
     ).length ?? 0;
   const { user } = useAuth();
   const { canManage } = useRecordCapabilities();
@@ -606,7 +611,15 @@ export function DocumentDetailSheet({
     indexDoc.mutate(
       { mode: aiMode, target: aiTarget },
       {
-        onSuccess: () => toast.success(t("documents.ai.readDone")),
+        // A read that continued into lab staging says so — the staged values
+        // are waiting in the review block, not silently in a queue. Staged
+        // facts stay PENDING; confirmation remains the only write into Labs.
+        onSuccess: (result) =>
+          toast.success(
+            result.labFactsStaged > 0
+              ? tCount("documents.ai.readStaged", result.labFactsStaged)
+              : t("documents.ai.readDone"),
+          ),
         onError: (error) => toast.error(aiErrorText(error)),
       },
     );
@@ -1089,6 +1102,18 @@ export function DocumentDetailSheet({
                   </div>
                 </div>
               ) : null}
+
+              {/* Staged-facts review + the stored-text extract recovery. The
+                  existing extract/confirm chain finally gets its control on
+                  the document itself: pending facts open the review, a read
+                  lab document with nothing staged offers "Extract lab
+                  values" over its stored text — never a re-upload. */}
+              <DocumentFactsSection
+                doc={doc}
+                canManage={canManage}
+                aiEnabled={aiEnabled}
+                labsModuleEnabled={labsModuleEnabled}
+              />
 
               {labsModuleEnabled && labFactCount > 0 ? (
                 <Link
