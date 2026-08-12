@@ -129,6 +129,14 @@
         {
           "name": "INSIGHTS_MAX_TOKENS",
           "purpose": "Daily-briefing output-token ceiling. Default 2500, clamped to 500-8000."
+        },
+        {
+          "name": "INSIGHTS_RATE_LIMIT_PER_HOUR",
+          "purpose": "Per-user hourly ceiling for POST /api/insights/generate. Default 10; values below 1 fall back to the default."
+        },
+        {
+          "name": "DOCUMENT_AI_LIMIT_PER_HOUR",
+          "purpose": "Per-user hourly ceiling for the document-AI actions (read/index, extract, suggest, summarise share one bucket). Default 6, clamped to 1-1000."
         }
       ]
     },

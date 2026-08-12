@@ -5,6 +5,12 @@ import { NextRequest } from "next/server";
  * Content-index route (Document vault P2). Pins: vision path transcribes then
  * upserts the index; text path indexes posted OCR text with no provider;
  * provider-gated on vision; only the index sibling is written (never facts).
+ *
+ * Bucket honesty: the route charges the shared document-AI bucket up front
+ * (so a 429 stays cheap) but a slot must reflect work actually performed —
+ * a 429 names the reset instant in `meta.retryAt`, a preparation failure
+ * before any provider dispatch refunds the charged slot, and a successful
+ * dispatch keeps it.
  */
 
 vi.mock("@/lib/db", () => ({
@@ -47,7 +53,11 @@ vi.mock("@/lib/modules/gate", () => ({
 }));
 vi.mock("@/lib/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
-  rateLimitHeaders: () => ({}),
+  refundRateLimit: vi.fn().mockResolvedValue(undefined),
+  rateLimitHeaders: (result: { remaining?: number; resetAt?: number }) => ({
+    "X-RateLimit-Remaining": String(result.remaining ?? 0),
+    "X-RateLimit-Reset": new Date(result.resetAt ?? 0).toISOString(),
+  }),
 }));
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/auth/audit", () => ({
@@ -69,7 +79,10 @@ vi.mock("next/headers", () => ({
 import { POST } from "../route";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
+import { checkRateLimit, refundRateLimit } from "@/lib/rate-limit";
+import { reserveBudget } from "@/lib/ai/coach/budget";
 import { resolveDocumentVisionProvider } from "@/lib/documents/provider-order";
+import { decryptDocumentContent } from "@/lib/documents/store";
 import { transcribeDocument } from "@/lib/documents/describe";
 import { upsertContentIndex } from "@/lib/documents/content-index";
 
@@ -95,9 +108,30 @@ const textReq = (id: string, text: string) =>
     },
   );
 
+const PICK = {
+  chain: [{ providerType: "anthropic", instance: {} }],
+  pick: {
+    entry: { providerType: "anthropic", instance: {} },
+    providerType: "anthropic",
+    pdfSupported: true,
+  },
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+  vi.mocked(checkRateLimit).mockResolvedValue({
+    allowed: true,
+    remaining: 5,
+    resetAt: Date.now() + 60 * 60 * 1000,
+  });
+  vi.mocked(reserveBudget).mockResolvedValue({
+    allowed: true,
+    reserved: 1,
+  } as never);
+  vi.mocked(decryptDocumentContent).mockReturnValue(
+    Buffer.from([1, 2, 3]) as never,
+  );
   vi.mocked(prisma.inboundDocument.findFirst).mockResolvedValue({
     id: "doc-1",
     kind: "OTHER",
@@ -110,14 +144,7 @@ beforeEach(() => {
 
 describe("POST /api/documents/inbound/[id]/index", () => {
   it("vision: transcribes then upserts the index, never facts", async () => {
-    vi.mocked(resolveDocumentVisionProvider).mockResolvedValue({
-      chain: [{ providerType: "anthropic", instance: {} }],
-      pick: {
-        entry: { providerType: "anthropic", instance: {} },
-        providerType: "anthropic",
-        pdfSupported: true,
-      },
-    } as never);
+    vi.mocked(resolveDocumentVisionProvider).mockResolvedValue(PICK as never);
     vi.mocked(transcribeDocument).mockResolvedValue({
       text: "hemoglobin 14.2 leukocytes normal",
     } as never);
@@ -174,5 +201,62 @@ describe("POST /api/documents/inbound/[id]/index", () => {
     );
     expect(res.status).toBe(422);
     expect(upsertContentIndex).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/documents/inbound/[id]/index — bucket honesty", () => {
+  beforeEach(() => {
+    vi.mocked(resolveDocumentVisionProvider).mockResolvedValue(PICK as never);
+    vi.mocked(transcribeDocument).mockResolvedValue({
+      text: "hemoglobin 14.2 leukocytes normal",
+    } as never);
+  });
+
+  it("returns 429 with the reset instant in meta.retryAt when the bucket is exhausted", async () => {
+    const resetAt = Date.now() + 47 * 60_000;
+    vi.mocked(checkRateLimit).mockResolvedValue({
+      allowed: false,
+      remaining: 0,
+      resetAt,
+    });
+    const res = await POST(visionReq("doc-1") as never, ctx("doc-1") as never);
+    expect(res.status).toBe(429);
+    const body = (await res.json()) as {
+      meta?: { errorCode?: string; retryAt?: string };
+    };
+    expect(body.meta?.errorCode).toBe("documents.inbound.rateLimited");
+    expect(body.meta?.retryAt).toBe(new Date(resetAt).toISOString());
+    expect(refundRateLimit).not.toHaveBeenCalled();
+  });
+
+  it("refunds the charged slot when input preparation fails before dispatch", async () => {
+    vi.mocked(decryptDocumentContent).mockImplementation(() => {
+      throw new Error("bad codec");
+    });
+    const res = await POST(visionReq("doc-1") as never, ctx("doc-1") as never);
+    expect(res.status).toBe(422);
+    expect(refundRateLimit).toHaveBeenCalledTimes(1);
+    expect(refundRateLimit).toHaveBeenCalledWith("documents-inbound:user-1");
+    expect(transcribeDocument).not.toHaveBeenCalled();
+  });
+
+  it("refunds the charged slot when the daily budget refuses before dispatch", async () => {
+    vi.mocked(reserveBudget).mockResolvedValue({
+      allowed: false,
+      reserved: 0,
+    } as never);
+    const res = await POST(visionReq("doc-1") as never, ctx("doc-1") as never);
+    expect(res.status).toBe(429);
+    const body = (await res.json()) as { meta?: { errorCode?: string } };
+    expect(body.meta?.errorCode).toBe("documents.inbound.budgetExceeded");
+    expect(refundRateLimit).toHaveBeenCalledTimes(1);
+    expect(transcribeDocument).not.toHaveBeenCalled();
+  });
+
+  it("keeps the slot once the provider was actually dispatched", async () => {
+    const res = await POST(visionReq("doc-1") as never, ctx("doc-1") as never);
+    expect(res.status).toBe(200);
+    expect(transcribeDocument).toHaveBeenCalledTimes(1);
+    expect(refundRateLimit).not.toHaveBeenCalled();
   });
 });

@@ -393,6 +393,20 @@ verbose model gets its briefing cut off mid-JSON — the API reports
 that case as "AI response was cut off" rather than the generic
 invalid-JSON error.
 
+`DOCUMENT_AI_LIMIT_PER_HOUR` (default `6`, clamped to 1–1000) bounds
+the document-AI actions per user per hour. Read/index, extract,
+suggest and summarise share one bucket, and a slot is only consumed
+when a request actually reaches the provider — a request that fails
+during input preparation (unreadable file, exhausted daily budget,
+malformed body) hands its slot back. Raise it when users batch-read
+many documents against a generous provider budget; lower it on a
+tight one. The 429 names the actual wait (the window is an hour) and
+carries the reset instant in `X-RateLimit-Reset`.
+
+All three variables must also be listed in the compose
+`environment:` whitelist to reach the container; the shipped
+`docker-compose.yml` lists them.
+
 ## Connection test
 
 `POST /api/ai/test` runs a one-shot probe against the resolved

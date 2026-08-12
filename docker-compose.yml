@@ -199,6 +199,18 @@ x-healthlog-env: &healthlog_env
   # Listed here so an operator value in .env reaches the container (the
   # `environment:` block is a whitelist). See docs/integrations/ai-providers.md.
   INSIGHTS_MAX_TOKENS: "${INSIGHTS_MAX_TOKENS:-}"
+  # Per-user hourly ceiling for POST /api/insights/generate (optional;
+  # default 10). Was documented but missing from this whitelist, so an
+  # operator value never reached the container. See
+  # docs/integrations/ai-providers.md.
+  INSIGHTS_RATE_LIMIT_PER_HOUR: "${INSIGHTS_RATE_LIMIT_PER_HOUR:-}"
+  # Per-user hourly ceiling for the document-AI actions (read/index, extract,
+  # suggest, summarise — one shared bucket; optional; default 6, clamped
+  # 1-1000). Raise on a self-host with a generous provider budget, lower on a
+  # tight one. Listed here so an operator value in .env reaches the container
+  # (the `environment:` block is a whitelist). See
+  # docs/integrations/ai-providers.md.
+  DOCUMENT_AI_LIMIT_PER_HOUR: "${DOCUMENT_AI_LIMIT_PER_HOUR:-}"
   # v1.17.1 — SMTP transport for the email notification channel (optional,
   # all-or-none: HOST + PORT + FROM enable it; USER/PASS optional; SECURE
   # toggles implicit TLS). Listed here so operator values in .env reach the

@@ -55,20 +55,20 @@ import {
   resolveDocumentTextProvider,
   resolveDocumentVisionProvider,
 } from "@/lib/documents/provider-order";
+import {
+  checkDocumentAiRateLimit,
+  documentAiRateLimited,
+  DOCUMENT_AI_TEXT_BODY_MAX_BYTES,
+  refundDocumentAiSlot,
+} from "@/lib/documents/ai-route-support";
 import { detectOcrMimeType } from "@/lib/labs/ocr-upload";
 import { annotate } from "@/lib/logging/context";
 import { requireModuleEnabled } from "@/lib/modules/gate";
-import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { inboundTextExtractSchema } from "@/lib/validations/inbound-documents";
 
 export const dynamic = "force-dynamic";
 
 type RouteParams = { params: Promise<{ id: string }> };
-
-/** Inbound extractions are expensive (vision) / metered (text). 6/hour. */
-const EXTRACT_LIMIT_PER_HOUR = 6;
-const EXTRACT_WINDOW_MS = 60 * 60 * 1000;
-const TEXT_BODY_MAX_BYTES = 512 * 1024;
 
 /** A loaded, owner-scoped, still-extractable document row. */
 type LoadedDocument = {
@@ -213,28 +213,20 @@ async function handleTextExtract(
     surface: "insights",
   });
 
-  const rl = await checkRateLimit(
-    `documents-inbound:${userId}`,
-    EXTRACT_LIMIT_PER_HOUR,
-    EXTRACT_WINDOW_MS,
-  );
-  if (!rl.allowed) {
-    const response = apiError("Too many extractions. Try again later.", 429, {
-      errorCode: "documents.inbound.rateLimited",
-    });
-    for (const [k, v] of Object.entries(rateLimitHeaders(rl))) {
-      response.headers.set(k, v);
-    }
-    return response;
-  }
+  const rl = await checkDocumentAiRateLimit(userId);
+  if (!rl.allowed) return documentAiRateLimited(rl);
 
   const { data: body, error: jsonError } = await safeJson(request, {
-    maxBytes: TEXT_BODY_MAX_BYTES,
+    maxBytes: DOCUMENT_AI_TEXT_BODY_MAX_BYTES,
   });
-  if (jsonError) return jsonError;
+  if (jsonError) {
+    await refundDocumentAiSlot(userId);
+    return jsonError;
+  }
 
   const parsed = inboundTextExtractSchema.safeParse(body);
   if (!parsed.success) {
+    await refundDocumentAiSlot(userId);
     return apiError("Invalid document text payload", 422, {
       errorCode: "documents.inbound.extractFailed",
     });
@@ -248,6 +240,7 @@ async function handleTextExtract(
     resolveDailyCap([{ providerType: pick.entry.providerType }]),
   );
   if (!reservation.allowed) {
+    await refundDocumentAiSlot(userId);
     return apiError("Your AI usage budget for today is reached.", 429, {
       errorCode: "documents.inbound.budgetExceeded",
     });
@@ -315,23 +308,12 @@ async function handleVisionExtract(
     surface: "insights",
   });
 
-  const rl = await checkRateLimit(
-    `documents-inbound:${userId}`,
-    EXTRACT_LIMIT_PER_HOUR,
-    EXTRACT_WINDOW_MS,
-  );
-  if (!rl.allowed) {
-    const response = apiError("Too many extractions. Try again later.", 429, {
-      errorCode: "documents.inbound.rateLimited",
-    });
-    for (const [k, v] of Object.entries(rateLimitHeaders(rl))) {
-      response.headers.set(k, v);
-    }
-    return response;
-  }
+  const rl = await checkDocumentAiRateLimit(userId);
+  if (!rl.allowed) return documentAiRateLimited(rl);
 
   // Decrypt the stored original and re-derive its MIME from the bytes (never
-  // trust a stored label for the provider call).
+  // trust a stored label for the provider call). Every miss below happens
+  // before the provider dispatch, so the charged slot goes back.
   let buffer: Buffer;
   try {
     buffer = decryptDocumentContent(
@@ -339,6 +321,7 @@ async function handleVisionExtract(
       document.contentCodec,
     );
   } catch {
+    await refundDocumentAiSlot(userId);
     return apiError("Couldn't read the stored document.", 422, {
       errorCode: "documents.inbound.extractFailed",
     });
@@ -346,6 +329,7 @@ async function handleVisionExtract(
 
   const mime = detectOcrMimeType(buffer);
   if (!mime) {
+    await refundDocumentAiSlot(userId);
     return apiError(
       "This document can't be scanned. Use local OCR (text mode).",
       422,
@@ -354,6 +338,7 @@ async function handleVisionExtract(
   }
 
   if (mime === "application/pdf" && !pick.pdfSupported) {
+    await refundDocumentAiSlot(userId);
     return apiError(
       "PDF scanning needs a Claude vision provider; use local OCR instead.",
       422,
@@ -369,6 +354,7 @@ async function handleVisionExtract(
     resolveDailyCap([{ providerType: pick.entry.providerType }]),
   );
   if (!reservation.allowed) {
+    await refundDocumentAiSlot(userId);
     return apiError("Your AI usage budget for today is reached.", 429, {
       errorCode: "documents.inbound.budgetExceeded",
     });

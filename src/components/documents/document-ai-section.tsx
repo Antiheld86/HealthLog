@@ -92,6 +92,7 @@ export function DocumentAiSection({
   actionsDisabled: boolean;
   onSuggest: () => void;
   suggestPending: boolean;
+  /** Resolved user-facing error sentence (already translated), or null. */
   suggestErrorKey: string | null;
   onSummarise: (output: DocumentSummaryMode) => void;
   summaryPending: boolean;
@@ -105,6 +106,7 @@ export function DocumentAiSection({
   onDismissSuggestion: () => void;
   summaryOutput: DocumentSummaryMode | null;
   summaryResult: DocumentDescribeResult | null;
+  /** Resolved user-facing error sentence (already translated), or null. */
   summaryErrorKey: string | null;
   onCloseSummary: () => void;
   hasContentIndex: boolean;
@@ -233,7 +235,7 @@ export function DocumentAiSection({
 
           {suggestErrorKey ? (
             <p role="alert" className="text-destructive text-sm">
-              {t(suggestErrorKey)}
+              {suggestErrorKey}
             </p>
           ) : null}
 
@@ -255,7 +257,7 @@ export function DocumentAiSection({
               output={summaryOutput}
               result={summaryResult}
               isPending={summaryPending}
-              errorKey={summaryErrorKey}
+              errorText={summaryErrorKey}
               onClose={onCloseSummary}
             />
           ) : null}

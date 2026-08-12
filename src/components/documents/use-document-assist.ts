@@ -13,9 +13,12 @@
  * prefills; the summary is transient. The only mutation is the caller applying
  * a reviewed draft through the existing edit-on-commit machinery.
  */
+import { useCallback } from "react";
+
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { apiGet, ApiError } from "@/lib/api/api-fetch";
+import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import type {
   DocumentAiCapabilityDto,
@@ -129,6 +132,45 @@ export function useDocumentSummary() {
  * `meta.errorCode`; client-side precondition failures carry a `reason`. The
  * default is the calm "try again" message — never a raw provider string.
  */
+/**
+ * The actual wait, in whole minutes, behind a document-AI 429. The routes
+ * mirror the bucket's reset instant into the error meta (`retryAt`, ISO 8601);
+ * the window is an hour, so a fixed "try again in a few minutes" understated
+ * the wait for most of it. Null when the error is not a document-AI rate-limit
+ * response or carries no usable instant — the caller falls back to the generic
+ * copy. Floored at one minute: a reset seconds away still reads as "about
+ * 1 minute", never "0 minutes".
+ */
+export function documentAiRetryMinutes(err: unknown): number | null {
+  if (!(err instanceof ApiError)) return null;
+  if (err.meta?.errorCode !== "documents.inbound.rateLimited") return null;
+  const raw = err.meta?.retryAt;
+  if (typeof raw !== "string") return null;
+  const at = Date.parse(raw);
+  if (!Number.isFinite(at)) return null;
+  return Math.max(1, Math.ceil((at - Date.now()) / 60_000));
+}
+
+/**
+ * Resolve a document-AI error to the user-facing sentence. Rate-limited
+ * responses derive their copy from the ACTUAL reset instant ("try again in
+ * about N minutes"); everything else maps through `documentAiErrorKey`. The
+ * result is final text — callers render or toast it as-is.
+ */
+export function useDocumentAiErrorText(): (err: unknown) => string {
+  const { t, tCount } = useTranslations();
+  return useCallback(
+    (err: unknown) => {
+      const minutes = documentAiRetryMinutes(err);
+      if (minutes !== null) {
+        return tCount("documents.assist.errorRateLimitedWait", minutes);
+      }
+      return t(documentAiErrorKey(err));
+    },
+    [t, tCount],
+  );
+}
+
 export function documentAiErrorKey(err: unknown): string {
   if (err instanceof DocumentAssistClientError) {
     switch (err.reason) {

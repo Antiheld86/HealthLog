@@ -87,8 +87,8 @@ import { DocumentShareSheet } from "./document-share-sheet";
 import { DOCUMENT_KIND_ICONS } from "./document-kind-meta";
 import { useIndexDocument } from "./use-content-index";
 import {
-  documentAiErrorKey,
   useDocumentAiCapability,
+  useDocumentAiErrorText,
   useDocumentsAutoAiRead,
   useDocumentSummary,
   useSuggestDetails,
@@ -393,6 +393,9 @@ export function DocumentDetailSheet({
   );
   const suggest = useSuggestDetails();
   const summary = useDocumentSummary();
+  // Resolves an AI error to final copy — a 429 names the actual wait, derived
+  // from the reset instant the route mirrors into the error meta.
+  const aiErrorText = useDocumentAiErrorText();
   // Stored generation has an independent mutation state so transient
   // Summarise/Show text requests cannot change this block's spinner or result.
   const storedSummary = useDocumentSummary();
@@ -593,7 +596,7 @@ export function DocumentDetailSheet({
             queryKey: queryKeys.inboundDocument(documentId),
           });
         },
-        onError: (error) => toast.error(t(documentAiErrorKey(error))),
+        onError: (error) => toast.error(aiErrorText(error)),
       },
     );
   };
@@ -604,7 +607,7 @@ export function DocumentDetailSheet({
       { mode: aiMode, target: aiTarget },
       {
         onSuccess: () => toast.success(t("documents.ai.readDone")),
-        onError: (error) => toast.error(t(documentAiErrorKey(error))),
+        onError: (error) => toast.error(aiErrorText(error)),
       },
     );
   };
@@ -836,7 +839,7 @@ export function DocumentDetailSheet({
                 onSuggest={runSuggest}
                 suggestPending={suggest.isPending}
                 suggestErrorKey={
-                  suggest.isError ? documentAiErrorKey(suggest.error) : null
+                  suggest.isError ? aiErrorText(suggest.error) : null
                 }
                 onSummarise={runSummary}
                 summaryPending={summary.isPending}
@@ -851,7 +854,7 @@ export function DocumentDetailSheet({
                 summaryOutput={summaryOutput}
                 summaryResult={summary.data ?? null}
                 summaryErrorKey={
-                  summary.isError ? documentAiErrorKey(summary.error) : null
+                  summary.isError ? aiErrorText(summary.error) : null
                 }
                 onCloseSummary={() => {
                   setSummaryOutput(null);

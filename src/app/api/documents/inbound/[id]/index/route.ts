@@ -39,12 +39,12 @@ import {
 } from "@/lib/ai/coach/budget";
 import { auditLog } from "@/lib/auth/audit";
 import {
-  DOCUMENT_AI_BUCKET,
-  DOCUMENT_AI_LIMIT_PER_HOUR,
+  checkDocumentAiRateLimit,
+  documentAiRateLimited,
   DOCUMENT_AI_TEXT_BODY_MAX_BYTES,
-  DOCUMENT_AI_WINDOW_MS,
   loadOwnedDocument,
   prepareVisionInput,
+  refundDocumentAiSlot,
   type LoadedDocument,
 } from "@/lib/documents/ai-route-support";
 import { upsertContentIndex } from "@/lib/documents/content-index";
@@ -56,22 +56,11 @@ import { resolveDocumentVisionProvider } from "@/lib/documents/provider-order";
 import { annotate } from "@/lib/logging/context";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import { prisma } from "@/lib/db";
-import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { inboundTextExtractSchema } from "@/lib/validations/inbound-documents";
 
 export const dynamic = "force-dynamic";
 
 type RouteParams = { params: Promise<{ id: string }> };
-
-function rateLimited(rl: Awaited<ReturnType<typeof checkRateLimit>>): Response {
-  const response = apiError("Too many requests. Try again later.", 429, {
-    errorCode: "documents.inbound.rateLimited",
-  });
-  for (const [k, v] of Object.entries(rateLimitHeaders(rl))) {
-    response.headers.set(k, v);
-  }
-  return response;
-}
 
 export const POST = apiHandler(
   async (request: NextRequest, { params }: RouteParams) => {
@@ -131,19 +120,19 @@ async function handleTextIndex(
     });
   }
 
-  const rl = await checkRateLimit(
-    `${DOCUMENT_AI_BUCKET}:${userId}`,
-    DOCUMENT_AI_LIMIT_PER_HOUR,
-    DOCUMENT_AI_WINDOW_MS,
-  );
-  if (!rl.allowed) return rateLimited(rl);
+  const rl = await checkDocumentAiRateLimit(userId);
+  if (!rl.allowed) return documentAiRateLimited(rl);
 
   const { data: body, error: jsonError } = await safeJson(request, {
     maxBytes: DOCUMENT_AI_TEXT_BODY_MAX_BYTES,
   });
-  if (jsonError) return jsonError;
+  if (jsonError) {
+    await refundDocumentAiSlot(userId);
+    return jsonError;
+  }
   const parsed = inboundTextExtractSchema.safeParse(body);
   if (!parsed.success) {
+    await refundDocumentAiSlot(userId);
     return apiError("Invalid document text payload", 422, {
       errorCode: "documents.inbound.extractFailed",
     });
@@ -177,15 +166,13 @@ async function handleVisionIndex(
     surface: "insights",
   });
 
-  const rl = await checkRateLimit(
-    `${DOCUMENT_AI_BUCKET}:${userId}`,
-    DOCUMENT_AI_LIMIT_PER_HOUR,
-    DOCUMENT_AI_WINDOW_MS,
-  );
-  if (!rl.allowed) return rateLimited(rl);
+  const rl = await checkDocumentAiRateLimit(userId);
+  if (!rl.allowed) return documentAiRateLimited(rl);
 
   const vision = await prepareVisionInput(document, pick.pdfSupported);
   if (!vision.ok) {
+    // Preparation failed before any provider dispatch — the slot goes back.
+    await refundDocumentAiSlot(userId);
     if (vision.reason === "pdfNeedsAnthropic") {
       return apiError(
         "PDF scanning needs a Claude vision provider; use local OCR instead.",
@@ -213,6 +200,7 @@ async function handleVisionIndex(
     resolveDailyCap([{ providerType: pick.entry.providerType }]),
   );
   if (!reservation.allowed) {
+    await refundDocumentAiSlot(userId);
     return apiError("Your AI usage budget for today is reached.", 429, {
       errorCode: "documents.inbound.budgetExceeded",
     });

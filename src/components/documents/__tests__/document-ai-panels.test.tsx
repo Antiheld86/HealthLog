@@ -153,7 +153,7 @@ describe("<DocumentSummaryPanel>", () => {
         output="summary"
         result={null}
         isPending
-        errorKey={null}
+        errorText={null}
         onClose={noop}
       />,
     );
@@ -167,7 +167,7 @@ describe("<DocumentSummaryPanel>", () => {
         output="summary"
         result={{ summary: "A lipid panel dated 1 March 2026." }}
         isPending={false}
-        errorKey={null}
+        errorText={null}
         onClose={noop}
       />,
     );
@@ -180,7 +180,7 @@ describe("<DocumentSummaryPanel>", () => {
         output="text"
         result={{ text: "LDL 3.1 mmol/L" }}
         isPending={false}
-        errorKey={null}
+        errorText={null}
         onClose={noop}
       />,
     );
@@ -195,7 +195,7 @@ describe("<DocumentSummaryPanel>", () => {
         output="summary"
         result={null}
         isPending={false}
-        errorKey="documents.assist.errorGeneric"
+        errorText="Couldn't read the document. Try again."
         onClose={noop}
       />,
     );
@@ -209,7 +209,7 @@ describe("<DocumentSummaryPanel>", () => {
         output="summary"
         result={{ summary: "A lipid panel dated 1 March 2026." }}
         isPending={false}
-        errorKey={null}
+        errorText={null}
         onClose={noop}
       />,
     );
