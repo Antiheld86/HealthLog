@@ -325,10 +325,16 @@ async function handleChatRequest(request: NextRequest): Promise<Response> {
     }
     workingConversationId = existing.id;
     priorSummary = existing.summary ?? null;
-    priorTurns = existing.messages.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }));
+    // #781 — cancelled-turn markers (`providerType: "cancelled"`, empty body)
+    // are UI rows, not conversation content: keep them out of the provider
+    // transcript so an interrupted turn adds no empty assistant line to the
+    // prompt. They stay in the DTO the client renders.
+    priorTurns = existing.messages
+      .filter((m) => m.providerType !== "cancelled")
+      .map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
     // Ledger cross-turn sources (D3-safe): user-authored numbers + the
     // persisted tool figures of prior turns. Assistant PROSE is never read.
     priorUserMessages = existing.messages
@@ -761,6 +767,35 @@ async function handleChatRequest(request: NextRequest): Promise<Response> {
       await reconcileSpend(userId, reservation.reserved, 0, reqDateKey).catch(
         () => {},
       );
+      // #781 — the client walked away mid-generation. The request's abort
+      // signal is threaded into every provider call, so the teardown surfaces
+      // here as an abort-shaped failure with `request.signal` already flipped.
+      // Close the turn honestly instead of letting the user message dangle
+      // unanswered: persist an EMPTY assistant marker tagged
+      // `providerType: "cancelled"` (the same channel "refusal" and "nudge"
+      // already use for non-provider rows) so the thread shows the turn as
+      // interrupted and offers a retry on reload. The content is empty by
+      // construction — nothing guarded was produced, and anything the client
+      // ever SAW was persisted before the first token frame left, so no
+      // unguarded partial text is ever written. The reservation was refunded
+      // above; a retry pays exactly what a fresh turn pays.
+      if (request.signal.aborted) {
+        await appendMessage({
+          conversationId: workingConversationId,
+          role: "assistant",
+          content: "",
+          providerType: "cancelled",
+          promptVersion: PROMPT_VERSION,
+        }).catch(() => {
+          // Marker persistence is best-effort — a failure leaves the
+          // dangling user turn, which is exactly the pre-#781 state.
+        });
+        annotate({
+          action: { name: "insights.coach.cancelled" },
+          meta: { conversationId: workingConversationId },
+        });
+        return { ok: false, code: "coach.cancelled" };
+      }
       if (err instanceof AllProvidersFailedError) {
         annotate({
           action: { name: "insights.coach.providerFailed" },
@@ -1241,6 +1276,17 @@ async function handleChatRequest(request: NextRequest): Promise<Response> {
       outcome = await produceReply();
     } catch (err) {
       clearInterval(heartbeat);
+      // #781 — a client disconnect can also surface as an abort-shaped error
+      // on a path `produceReply`'s own catch does not own (e.g. a teardown
+      // rejection out of persistence). That is not a defect and nobody is
+      // listening: skip the GlitchTip forward and the error frame.
+      if (request.signal.aborted) {
+        annotate({
+          action: { name: "insights.coach.cancelled" },
+          meta: { conversationId: workingConversationId, lateAbort: true },
+        });
+        return;
+      }
       // The stream is already open, so we cannot 500: a tagged provider error
       // surfaces a graceful `coach.provider.*` frame; anything else degrades to
       // a generic unavailable frame. A genuine defect is still annotated.

@@ -540,7 +540,7 @@ const coachMessageSchema = z
       .string()
       .nullable()
       .describe(
-        "Provider that produced the reply (e.g. anthropic, openai, local, refusal); null for user turns.",
+        "Provider that produced the reply (e.g. anthropic, openai, local, refusal). The sentinel `cancelled` marks an empty assistant row closing a turn the client aborted mid-generation (navigation away); clients should render it as an interrupted turn with a retry affordance. Null for user turns.",
       ),
     promptVersion: z
       .string()
