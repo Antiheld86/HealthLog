@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { InsightResult } from "@/lib/ai/types";
 // Type-only — the runtime schemas load lazily inside `fetchAdvisor` so
@@ -476,25 +476,24 @@ export function useInsightsAdvisorQuery(
 
   // Apply the settle resolution the pure seam proves. Each poll result lands
   // in `query.data` (the poll's own cache write IS the fresh payload — no
-  // second setQueryData needed); the seam decides fresh / settle-failed /
-  // keep-waiting, and the strip toasts on the falling edge of the combined
-  // busy state. The effect keys on `dataUpdatedAt`, not the payload object:
-  // structural sharing keeps an unchanged payload reference-identical across
-  // polls, and the attempt cap must still advance on every poll.
-  const settlePayload = query.data?.payload;
-  const settleDataUpdatedAt = query.dataUpdatedAt;
-  useEffect(() => {
-    if (!settling) return;
+  // second setQueryData needed) and re-renders this hook; the seam decides
+  // fresh / settle-failed / keep-waiting. Render-phase state adjustment (the
+  // React-documented alternative to a setState-in-effect): guarded so it
+  // fires at most once per settle — resolution non-null clears `settling`,
+  // and the next render skips the whole block. Both flips land in the SAME
+  // committed render, so the strip's falling-edge toast sees the proven
+  // outcome exactly when the busy state drops.
+  if (settling) {
     const resolution = resolveAdvisorSettle(
       settling,
-      settlePayload,
+      query.data?.payload,
       readDataUpdateCount(),
     );
     if (resolution) {
       setSettling(null);
       setSettleOutcome(resolution);
     }
-  }, [settling, settlePayload, settleDataUpdatedAt, readDataUpdateCount]);
+  }
 
   const mutation = useMutation({
     mutationFn: () => fetchAdvisor({ force: true }),
