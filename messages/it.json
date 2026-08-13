@@ -4172,6 +4172,8 @@
     "regenerateRateLimited": "Limite di aggiornamento raggiunto — riprova più tardi.",
     "regenerateUnavailable": "Nessuna nuova analisi ricevuta — riprova più tardi.",
     "regenerateError": "Aggiornamento ancora in corso — riprova tra un momento.",
+    "regenerateSettling": "La valutazione è ancora in preparazione",
+    "regenerateSettleFailed": "Non è stato possibile completare l’aggiornamento. Riprova più tardi.",
     "deviceScore": {
       "learning": "Stiamo ancora imparando la tua linea di base: qualche notte in più completerà l'andamento.",
       "average": "Media a 30 giorni {value}",

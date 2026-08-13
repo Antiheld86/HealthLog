@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { InsightResult } from "@/lib/ai/types";
 // Type-only — the runtime schemas load lazily inside `fetchAdvisor` so
@@ -140,15 +140,96 @@ export const ADVISOR_REVALIDATE_POLL_MS = 25_000;
 export const ADVISOR_REVALIDATE_POLL_MAX_ATTEMPTS = 10;
 
 /**
+ * Refs #786 — the settling state a timed-out force regenerate enters.
+ *
+ * Async-truth contract, client end (the server end is documented at the head
+ * of `src/app/api/insights/generate/route.ts`): the force POST generates
+ * INLINE and keeps running after the client aborts at 45 s — the server
+ * usually writes the fresh cache moments later. A page that knows work is
+ * running must keep saying so until it can prove an outcome, so the timeout
+ * is NOT surfaced as an error. Instead the hook remembers the baseline it was
+ * showing and polls (bounded, same cadence as the revalidating poll) until it
+ * can prove one of three outcomes: the cache advanced past the baseline
+ * (fresh), a failure marker newer than the baseline appeared (settle-failed),
+ * or the attempt cap ran out (settle-failed — never wait forever).
+ */
+export interface AdvisorSettleState {
+  /** `cachedAt` of the payload shown when the client gave up (null = none). */
+  baselineCachedAt: string | null;
+  /** Whether a failure marker was ALREADY reported at that time — an
+   *  unchanged flag proves nothing about THIS generation. */
+  baselineFailed: boolean;
+  /** The query's `dataUpdateCount` when settling began; poll attempts count
+   *  from here, not from mount. */
+  startedAtUpdateCount: number;
+}
+
+/** The outcome the falling-edge toast reports for a settled regenerate. */
+export type AdvisorRegenerateOutcome = AdvisorFetchOutcome | "settle-failed";
+
+/**
+ * Decide what a settling poll result proves. Pure test seam — the effect in
+ * `useInsightsAdvisorQuery` applies the returned resolution verbatim.
+ * `null` = no evidence yet, keep polling.
+ */
+export function resolveAdvisorSettle(
+  settling: AdvisorSettleState,
+  payload:
+    | Pick<InsightAdvisorPayload, "cachedAt" | "generationFailed">
+    | null
+    | undefined,
+  dataUpdateCount: number,
+): "fresh" | "settle-failed" | null {
+  const cachedAt = payload?.cachedAt ?? null;
+  if (
+    cachedAt != null &&
+    (settling.baselineCachedAt == null ||
+      new Date(cachedAt).getTime() >
+        new Date(settling.baselineCachedAt).getTime())
+  ) {
+    return "fresh";
+  }
+  // A failure marker that FLIPPED during settling is the server saying the
+  // inline generation died after we stopped watching — an honest error. One
+  // that was already set at the baseline predates this attempt and proves
+  // nothing; keep waiting for the cache or the cap.
+  if ((payload?.generationFailed ?? false) && !settling.baselineFailed) {
+    return "settle-failed";
+  }
+  if (
+    dataUpdateCount - settling.startedAtUpdateCount >=
+    ADVISOR_REVALIDATE_POLL_MAX_ATTEMPTS
+  ) {
+    return "settle-failed";
+  }
+  return null;
+}
+
+/**
  * Decide whether the advisor query schedules its next poll. Pure so the
  * ceiling + stop conditions are unit-testable: returns the interval
  * while the last payload carries `revalidating: true`, `false` once a
  * response comes back with the flag falsy OR the attempt cap is hit.
+ *
+ * Refs #786 — settling is the SECOND poll reason: while a timed-out force
+ * regenerate awaits its real outcome the query polls regardless of the
+ * `revalidating` flag, with attempts counted from the settle start so a
+ * long-mounted page gets the full budget.
  */
 export function nextAdvisorPollInterval(
   revalidating: boolean | undefined,
   dataUpdateCount: number,
+  settling?: Pick<AdvisorSettleState, "startedAtUpdateCount"> | null,
 ): number | false {
+  if (settling) {
+    if (
+      dataUpdateCount - settling.startedAtUpdateCount >=
+      ADVISOR_REVALIDATE_POLL_MAX_ATTEMPTS
+    ) {
+      return false;
+    }
+    return ADVISOR_REVALIDATE_POLL_MS;
+  }
   if (!revalidating) return false;
   if (dataUpdateCount >= ADVISOR_REVALIDATE_POLL_MAX_ATTEMPTS) return false;
   return ADVISOR_REVALIDATE_POLL_MS;
@@ -290,8 +371,19 @@ export interface UseInsightsAdvisorResult {
    * fires the "refreshed" toast only when this is `"fresh"`, so a slow gen
    * the client gave up on (`"timeout"`) or a missing provider
    * (`"no-provider"`) never reads as "done".
+   *
+   * Refs #786 — a timed-out regenerate no longer surfaces `"timeout"` at the
+   * spinner edge: the hook keeps `regenerateSettling` true and polls until it
+   * can PROVE an outcome, then reports `"fresh"` (cache advanced) or
+   * `"settle-failed"` (newer failure marker / attempt cap) here.
    */
-  regenerateOutcome: AdvisorFetchOutcome | null;
+  regenerateOutcome: AdvisorRegenerateOutcome | null;
+  /**
+   * Refs #786 — true while a timed-out force regenerate awaits its real
+   * outcome (bounded poll). The strip keeps the button busy and says the
+   * assessment is still being prepared; NO toast fires until this falls.
+   */
+  regenerateSettling: boolean;
   /**
    * v1.15.20 — the outcome of the last settled READ. Lets surfaces
    * distinguish "no briefing yet, a generate could help" (`empty` /
@@ -340,6 +432,13 @@ export function useInsightsAdvisorQuery(
   enabled: boolean,
 ): UseInsightsAdvisorResult {
   const queryClient = useQueryClient();
+  // Refs #786 — settling state for a timed-out force regenerate (see the
+  // contract comment above `AdvisorSettleState`). `settleOutcome` carries the
+  // PROVEN outcome once settling resolves; both reset on the next regenerate.
+  const [settling, setSettling] = useState<AdvisorSettleState | null>(null);
+  const [settleOutcome, setSettleOutcome] = useState<
+    "fresh" | "settle-failed" | null
+  >(null);
   const query = useQuery({
     queryKey: queryKeys.insightsAdvisor(),
     // v1.15.20 — the cache stores the full tagged result (payload +
@@ -353,12 +452,49 @@ export function useInsightsAdvisorQuery(
     // v1.16.7 — converge a stale-served briefing in-session: while the
     // last GET reported `revalidating: true` (warm enqueued), poll on a
     // bounded interval until a response comes back with the flag falsy.
+    // Refs #786 — settling (timed-out regenerate awaiting its outcome) is
+    // the second poll reason, attempts counted from the settle start.
     refetchInterval: (query) =>
       nextAdvisorPollInterval(
         query.state.data?.payload?.revalidating,
         query.state.dataUpdateCount,
+        settling,
       ),
   });
+
+  // `dataUpdateCount` lives on the query STATE (the refetchInterval callback
+  // reads it there); the observer result only exposes `dataUpdatedAt`. Read
+  // it imperatively from the cache where the settle machinery needs it.
+  const readDataUpdateCount = useCallback(
+    () =>
+      queryClient
+        .getQueryCache()
+        .find({ queryKey: queryKeys.insightsAdvisor() })?.state
+        .dataUpdateCount ?? 0,
+    [queryClient],
+  );
+
+  // Apply the settle resolution the pure seam proves. Each poll result lands
+  // in `query.data` (the poll's own cache write IS the fresh payload — no
+  // second setQueryData needed); the seam decides fresh / settle-failed /
+  // keep-waiting, and the strip toasts on the falling edge of the combined
+  // busy state. The effect keys on `dataUpdatedAt`, not the payload object:
+  // structural sharing keeps an unchanged payload reference-identical across
+  // polls, and the attempt cap must still advance on every poll.
+  const settlePayload = query.data?.payload;
+  const settleDataUpdatedAt = query.dataUpdatedAt;
+  useEffect(() => {
+    if (!settling) return;
+    const resolution = resolveAdvisorSettle(
+      settling,
+      settlePayload,
+      readDataUpdateCount(),
+    );
+    if (resolution) {
+      setSettling(null);
+      setSettleOutcome(resolution);
+    }
+  }, [settling, settlePayload, settleDataUpdatedAt, readDataUpdateCount]);
 
   const mutation = useMutation({
     mutationFn: () => fetchAdvisor({ force: true }),
@@ -373,6 +509,25 @@ export function useInsightsAdvisorQuery(
         // client gave up at 45 s, so re-read the GET to converge — but the
         // honest toast is gated on `regenerateOutcome` below, not on this
         // invalidate.
+        //
+        // Refs #786 — on a TIMEOUT specifically, one early invalidate is not
+        // convergence: the generation routinely outlives it, the re-read
+        // serves the OLD cache, and staleTime 1 h + focus-refetch-off remove
+        // every later trigger. Enter the settling state instead: remember
+        // the baseline this page is showing and poll (bounded) until the
+        // cache provably advances or fails — the strip stays busy and no
+        // error toast fires until then.
+        if (result.outcome === "timeout") {
+          const current = queryClient.getQueryData<AdvisorFetchResult>(
+            queryKeys.insightsAdvisor(),
+          );
+          setSettleOutcome(null);
+          setSettling({
+            baselineCachedAt: current?.payload?.cachedAt ?? null,
+            baselineFailed: current?.payload?.generationFailed ?? false,
+            startedAtUpdateCount: readDataUpdateCount(),
+          });
+        }
         queryClient.invalidateQueries({
           queryKey: queryKeys.insightsAdvisor(),
         });
@@ -403,7 +558,13 @@ export function useInsightsAdvisorQuery(
   // status-query flip on a sub-page that re-renders the shell would
   // otherwise re-reconcile the whole strip mid-gesture and eat taps.
   const { mutate } = mutation;
-  const regenerate = useCallback(() => mutate(), [mutate]);
+  const regenerate = useCallback(() => {
+    // Refs #786 — a new attempt clears any previous settle verdict so a
+    // stale "fresh"/"settle-failed" cannot leak into this cycle's toast.
+    setSettling(null);
+    setSettleOutcome(null);
+    mutate();
+  }, [mutate]);
 
   return {
     payload: query.data?.payload ?? null,
@@ -413,7 +574,10 @@ export function useInsightsAdvisorQuery(
     regenerate,
     isRegenerating: mutation.isPending,
     regenerateError: (mutation.error as Error | null) ?? null,
-    regenerateOutcome: mutation.data?.outcome ?? null,
+    // Refs #786 — a proven settle verdict wins over the mutation's raw
+    // outcome ("timeout" while settling is an interim state, not a result).
+    regenerateOutcome: settleOutcome ?? mutation.data?.outcome ?? null,
+    regenerateSettling: settling !== null,
     readOutcome: query.data?.outcome ?? null,
     // Absent field (pre-v1.18.9 cached payload, or query still settling) →
     // assume a provider is present so a transient unknown never flashes a

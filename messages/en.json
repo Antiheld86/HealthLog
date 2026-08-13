@@ -4172,6 +4172,8 @@
     "regenerateRateLimited": "Refresh limit reached — please try again later.",
     "regenerateUnavailable": "No fresh analysis arrived — please try again later.",
     "regenerateError": "Still refreshing — please try again in a moment.",
+    "regenerateSettling": "Your assessment is still being prepared",
+    "regenerateSettleFailed": "The refresh could not be completed. Please try again later.",
     "deviceScore": {
       "learning": "Still learning your baseline — a few more nights will fill in the trend.",
       "average": "30-day average {value}",

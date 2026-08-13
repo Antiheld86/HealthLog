@@ -200,6 +200,7 @@ export function InsightsLayoutShell({ children }: { children: ReactNode }) {
         onRegenerate={advisorEnabled ? advisor.regenerate : undefined}
         regenerating={advisor.isRegenerating}
         regenerateOutcome={advisor.regenerateOutcome}
+        regenerateSettling={advisor.regenerateSettling}
         availability={availability}
         visibleTileIds={visibleTileIds}
         tileOrder={tileOrder}

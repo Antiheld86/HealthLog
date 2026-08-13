@@ -87,7 +87,7 @@ beforeEach(() => {
 
 describe("POST /api/documents/inbound/reindex", () => {
   it("returns the remaining un-indexed count as a NUMBER, never a boolean", async () => {
-    const res = await POST(req() as never, {} as never);
+    const res = await POST(req() as never);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(typeof body.data.enqueued).toBe("number");
@@ -98,14 +98,14 @@ describe("POST /api/documents/inbound/reindex", () => {
     vi.mocked(enqueueContentIndexBackfill).mockResolvedValue({
       enqueued: false,
     });
-    const res = await POST(req() as never, {} as never);
+    const res = await POST(req() as never);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.enqueued).toBe(0);
   });
 
   it("scopes both counts to the caller's LIVE documents (the gauge's own figures)", async () => {
-    await POST(req() as never, {} as never);
+    await POST(req() as never);
     expect(prisma.inboundDocument.count).toHaveBeenCalledWith({
       where: { userId: "user-1", deletedAt: null },
     });

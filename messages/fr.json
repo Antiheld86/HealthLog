@@ -4172,6 +4172,8 @@
     "regenerateRateLimited": "Limite d'actualisation atteinte — réessayez plus tard.",
     "regenerateUnavailable": "Aucune nouvelle analyse reçue — réessayez plus tard.",
     "regenerateError": "Actualisation en cours — réessayez dans un instant.",
+    "regenerateSettling": "L’évaluation est encore en cours de préparation",
+    "regenerateSettleFailed": "L’actualisation n’a pas pu aboutir. Réessayez plus tard.",
     "deviceScore": {
       "learning": "Nous apprenons encore votre référence : quelques nuits de plus compléteront la tendance.",
       "average": "Moyenne sur 30 jours {value}",

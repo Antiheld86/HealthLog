@@ -1,3 +1,16 @@
+/**
+ * Refs #786 — async-truth contract, server end (the client end lives in
+ * `src/components/insights/use-insights-advisor.ts`, `AdvisorSettleState`):
+ * the force POST generates INLINE and, on success, writes the fresh briefing
+ * to the user cache (`insightsCachedAt` advances) — even when the client has
+ * long since aborted its 45 s request. A failed inline generation writes a
+ * failure marker the GET reports as `generationFailed`. The client relies on
+ * exactly those two signals to settle a timed-out regenerate: it polls the
+ * GET until `cachedAt` advances past its baseline (success) or a NEWER
+ * failure marker appears (honest error). Renaming or short-circuiting either
+ * write breaks that convergence — the settling seam tests pin the client
+ * half, this comment is the server half of the contract.
+ */
 import { prisma } from "@/lib/db";
 import { auditLog } from "@/lib/auth/audit";
 import {

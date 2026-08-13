@@ -4172,6 +4172,8 @@
     "regenerateRateLimited": "Aktualisierungslimit erreicht — bitte später erneut versuchen.",
     "regenerateUnavailable": "Keine neue Analyse erhalten — bitte später erneut versuchen.",
     "regenerateError": "Aktualisierung läuft noch — bitte gleich erneut versuchen.",
+    "regenerateSettling": "Die Einschätzung wird noch erstellt",
+    "regenerateSettleFailed": "Die Aktualisierung konnte nicht abgeschlossen werden. Bitte später erneut versuchen.",
     "deviceScore": {
       "learning": "Deine Basislinie wird noch gelernt – ein paar weitere Nächte vervollständigen den Verlauf.",
       "average": "30-Tage-Durchschnitt {value}",
