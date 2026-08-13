@@ -19,6 +19,7 @@ import { invalidateReminderReads } from "@/hooks/use-measurement-reminders";
 import {
   invalidateKeys,
   queryKeys,
+  refetchInactiveDailyReads,
   vaccinationDependentKeys,
 } from "@/lib/query-keys";
 import type {
@@ -154,7 +155,14 @@ export function useLinkDocumentToVaccination() {
         targetKind: "document",
         targetIds: [documentId],
       }),
-    onSuccess: () => invalidateKeys(qc, vaccinationDependentKeys),
+    onSuccess: () =>
+      Promise.all([
+        invalidateKeys(qc, vaccinationDependentKeys),
+        // The linked-document badge can surface on the daily reads' checkup
+        // items; force the unmounted snapshot/digest to refetch like the
+        // sibling mutations do (via `invalidateReminderReads`).
+        refetchInactiveDailyReads(qc),
+      ]),
   });
 }
 

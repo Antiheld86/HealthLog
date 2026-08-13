@@ -48,7 +48,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useTranslations } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
+import { queryKeys, refetchInactiveDailyReads } from "@/lib/query-keys";
 import {
   DEFAULT_DEVICE_TYPE_PRIORITY,
   DEFAULT_SOURCE_PRIORITY,
@@ -160,10 +160,15 @@ export function SourcesSection() {
     },
     onSuccess: (saved) => {
       queryClient.setQueryData(queryKeys.sourcePriority(), saved);
-      // The analytics aggregator folds source priority into per-day
-      // canonical-row picks — flush its cache so the charts re-paint
-      // with the new picker on the next mount.
+      // The analytics aggregator, the per-chart daily aggregates, the
+      // measurement list and the dashboard snapshot all fold source
+      // priority into their per-day canonical-row picks — flush them so
+      // every chart and tile re-paints with the new picker, not only the
+      // analytics report.
       queryClient.invalidateQueries({ queryKey: queryKeys.analytics() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.chartDataRoot() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.measurements() });
+      void refetchInactiveDailyReads(queryClient);
       setDraft(null);
       toast.success(t("settings.sections.sources.saveSuccess"));
     },
@@ -179,7 +184,12 @@ export function SourcesSection() {
     },
     onSuccess: (saved) => {
       queryClient.setQueryData(queryKeys.sourcePriority(), saved);
+      // Same fan-out as the save arm: the defaults change the canonical-row
+      // picks everywhere the overrides did.
       queryClient.invalidateQueries({ queryKey: queryKeys.analytics() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.chartDataRoot() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.measurements() });
+      void refetchInactiveDailyReads(queryClient);
       setDraft(null);
       toast.success(t("settings.sections.sources.resetSuccess"));
     },

@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { SettingsInfoTile } from "./_info-tile";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
+import { queryKeys, refetchInactiveDailyReads } from "@/lib/query-keys";
 import {
   METRIC_BOUNDS,
   type ThresholdMetric,
@@ -95,6 +95,9 @@ export function ThresholdsEditorSection({ id }: { id: string }) {
       // Every chart/band depends on these thresholds — invalidate everything.
       queryClient.invalidateQueries({ queryKey: queryKeys.analytics() });
       queryClient.invalidateQueries({ queryKey: queryKeys.insightsRoot() });
+      // The dashboard bands + score context read the same thresholds through
+      // the daily reads, which are unmounted on Settings — force the refetch.
+      void refetchInactiveDailyReads(queryClient);
       toast.success(t("thresholds.saveSuccess"));
     },
     onError: (err) =>
@@ -115,6 +118,8 @@ export function ThresholdsEditorSection({ id }: { id: string }) {
       queryClient.invalidateQueries({ queryKey: queryKeys.userThresholds() });
       queryClient.invalidateQueries({ queryKey: queryKeys.analytics() });
       queryClient.invalidateQueries({ queryKey: queryKeys.insightsRoot() });
+      // Same daily-reads truth as the save arm above.
+      void refetchInactiveDailyReads(queryClient);
       toast.success(t("thresholds.resetSuccess"));
     },
     onError: () => toast.error(t("thresholds.saveError")),

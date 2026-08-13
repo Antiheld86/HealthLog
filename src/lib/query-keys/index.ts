@@ -241,6 +241,22 @@ export const medicationDependentKeys = [
 export const cycleDependentKeys = [queryKeys.cycle(), queryKeys.insightsRoot()];
 
 /**
+ * Keys invalidated when an illness episode starts, ends, is edited, deleted,
+ * restored, or a day-log lands. Rest Mode derives from the active-episode set
+ * and both daily reads annotate from it (the hero band's "unwell since" frame,
+ * the digest's paused nudges), so an episode write must reach the snapshot and
+ * digest keys, not only the `["illness"]` tree. Pair every call site with
+ * `refetchInactiveDailyReads` — the daily reads are typically unmounted while
+ * the user is on the illness surface, and a bare invalidation would mark them
+ * stale without refetching (the recurring v1.16.11/v1.29.1/v1.32.19 class).
+ */
+export const illnessDependentKeys = [
+  queryKeys.illness(),
+  queryKeys.dashboardSnapshot(),
+  queryKeys.dailyDigest(),
+];
+
+/**
  * Keys invalidated when a visit or an address-book entry changes.
  *
  * Both roots ride together in one bundle rather than two, because the two
@@ -257,6 +273,12 @@ export const cycleDependentKeys = [queryKeys.cycle(), queryKeys.insightsRoot()];
 export const encounterDependentKeys = [
   queryKeys.encounters(),
   queryKeys.practitioners(),
+  // A booked / rescheduled / removed appointment is a row the Today digest
+  // surfaces, so it must appear on the rail in the same tick as the visit
+  // list. Pair call sites with `refetchInactiveDailyReads` (or the
+  // `invalidateReminderReads` helper, which carries it) — the digest is
+  // typically unmounted while the user is on the visits surface.
+  queryKeys.dailyDigest(),
 ];
 
 /**

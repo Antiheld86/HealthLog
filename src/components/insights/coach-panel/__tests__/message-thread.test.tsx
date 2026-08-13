@@ -52,6 +52,9 @@ vi.mock("@tanstack/react-query", () => ({
     isPending: false,
     isError: false,
   }),
+  // The remember-message control resolves the client for its about-me
+  // invalidation; these render tests never trigger it.
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
 
 import {

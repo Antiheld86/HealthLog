@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Check, Loader2, Sparkles } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useTranslations } from "@/lib/i18n/context";
 import { apiPost } from "@/lib/api/api-fetch";
+import { queryKeys } from "@/lib/query-keys";
+import { invalidateReminderReads } from "@/hooks/use-measurement-reminders";
 import type { CoachSuggestedAction } from "@/lib/ai/coach/suggest-action";
 
 /**
@@ -33,13 +35,24 @@ export function SuggestedActionCard({
   action: CoachSuggestedAction;
 }) {
   const { t } = useTranslations();
+  const queryClient = useQueryClient();
   const [settled, setSettled] = useState<"applied" | "dismissed" | null>(null);
 
   const apply = useMutation({
     mutationFn: async () => {
       await apiPost("/api/coach/suggested-actions", action.params);
     },
-    onSuccess: () => setSettled("applied"),
+    onSuccess: () => {
+      // Both arms mint a reminder row the checkups list and the Today rail
+      // read; the note arm additionally lands on the coach-reminders list.
+      void invalidateReminderReads(queryClient);
+      if (action.params.actionType === "reminder.note") {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.coachRemindersAll(),
+        });
+      }
+      setSettled("applied");
+    },
     onError: () => toast.error(t("coach.suggestedAction.failed")),
   });
 
