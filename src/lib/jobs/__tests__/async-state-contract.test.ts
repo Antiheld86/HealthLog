@@ -216,7 +216,7 @@ describe("contract (a): every runDocumentSummaryJob branch writes a terminal sta
       name: "consent refused",
       setup: () => {
         vi.mocked(assertDocumentEgressConsent).mockRejectedValue(
-          new ConsentRequiredError("no consent"),
+          new ConsentRequiredError("insights"),
         );
       },
       state: "UNAVAILABLE",
