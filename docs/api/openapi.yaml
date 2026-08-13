@@ -10813,6 +10813,92 @@ paths:
         "404": *a18
         "422": *a3
         "429": *a4
+  /api/vaccinations/{id}/booster:
+    post:
+      tags:
+        - Records
+      summary: Plan a booster reminder from a dose
+      description: "Mints (or re-anchors) the booster reminder a logged dose suggests. The minted row is an ordinary `origin:
+        VORSORGE` measurement reminder carrying the dose's primary antigen as a server-side match key; it lists on the
+        preventive-care surface and rings through the same engine as every other checkup. Re-confirming re-anchors the
+        existing reminder instead of minting a second one: 201 carries a fresh mint (`minted: true`), 200 a re-anchor. A
+        free-text-only dose has no antigen to remind on and is refused with 422. Audits as
+        `vaccination.booster.planned`."
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                intervalMonths:
+                  type: integer
+                  minimum: 1
+                  maximum: 600
+                label:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+                notifyHour:
+                  type: integer
+                  minimum: 0
+                  maximum: 23
+              required:
+                - intervalMonths
+                - label
+              additionalProperties: false
+      responses:
+        "200":
+          description: Existing booster reminder re-anchored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReanchorVaccinationBoosterEnvelope"
+        "201":
+          description: Booster reminder minted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MintVaccinationBoosterEnvelope"
+        "401": *a1
+        "403": *a6
+        "404": *a18
+        "422": *a3
+        "429": *a4
+  /api/vaccinations/suggest:
+    get:
+      tags:
+        - Records
+      summary: Suggest the dose a document belongs to
+      description: Which dose does a document dated `anchor` most plausibly belong to? The document upload review asks this
+        when a scan is classified `VACCINATION`. The window (±7 days, shared with the visit moment) and the
+        one-pre-selects / many-offer-a-picker verdict are decided server-side so the browser never re-derives them.
+        Owner-scoped; the anchor is the only input and it is a date, not an id.
+      parameters:
+        - in: query
+          name: anchor
+          schema:
+            type: string
+            format: date-time
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          required: true
+      responses:
+        "200":
+          description: The suggestion verdict.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VaccinationSuggestEnvelope"
+        "401": *a1
+        "403": *a6
+        "422": *a3
+        "429": *a4
   /api/vaccinations/{id}/links:
     post:
       tags:
@@ -36582,6 +36668,136 @@ components:
         - data
         - error
       additionalProperties: false
+    ReanchorVaccinationBoosterEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            reminder:
+              $ref: "#/components/schemas/MeasurementReminderDTO"
+            minted:
+              type: boolean
+          required:
+            - reminder
+            - minted
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    MintVaccinationBoosterEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            reminder:
+              $ref: "#/components/schemas/MeasurementReminderDTO"
+            minted:
+              type: boolean
+          required:
+            - reminder
+            - minted
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    VaccinationSuggestEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/VaccinationSuggestResult"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    VaccinationSuggestResult:
+      anyOf:
+        - type: object
+          properties:
+            kind:
+              type: string
+              const: one
+            vaccination:
+              $ref: "#/components/schemas/VaccinationSuggestion"
+          required:
+            - kind
+            - vaccination
+          additionalProperties: false
+        - type: object
+          properties:
+            kind:
+              type: string
+              const: many
+            vaccinations:
+              type: array
+              items:
+                $ref: "#/components/schemas/VaccinationSuggestion"
+          required:
+            - kind
+            - vaccinations
+          additionalProperties: false
+        - type: object
+          properties:
+            kind:
+              type: string
+              const: none
+          required:
+            - kind
+          additionalProperties: false
+      description: "The SHAPE of the answer, decided server-side: `one` pre-selects that dose, `many` offers a picker over
+        `vaccinations` (bounded at 20 candidates), `none` offers nothing. A client renders the verdict and must not
+        collapse `many` into a silent auto-pick — the rule lives on the server so every client agrees."
+    VaccinationSuggestion:
+      type: object
+      properties:
+        id:
+          type: string
+        occurredAt:
+          type: string
+        antigenSlug:
+          anyOf:
+            - type: string
+            - type: "null"
+        vaccineName:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - id
+        - occurredAt
+        - antigenSlug
+        - vaccineName
+      additionalProperties: false
+      description: "One candidate dose, resolved enough to render without a second round trip: `antigenSlug` when the dose
+        carries a catalogue slug (name it from the catalogue), `vaccineName` when the person's own wording is all the
+        dose has."
     LinkVaccinationEnvelope:
       type: object
       properties:
