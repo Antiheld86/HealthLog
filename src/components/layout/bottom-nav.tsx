@@ -18,7 +18,7 @@ import {
   mobileMoreHubDestinations,
 } from "@/components/layout/nav-model";
 import type { ModuleKey } from "@/lib/modules/registry";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useMounted } from "@/hooks/use-mounted";
 import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
@@ -55,9 +55,17 @@ interface NavLink {
 // slots, plus the shared utility tail) — so the two surfaces tell one story
 // instead of two hand-curated ones that drift, and the headline invariant
 // is a tested model function rather than inline bar logic.
-const PRIMARY_LEFT: ReadonlyArray<NavLink> = [
+// The Meds slot is module-gated exactly like the Insights slot below:
+// `/medications` renders nothing when the medications module is off, so a
+// pinned tab would be a visible control over a blank page.
+const PRIMARY_LEFT: ReadonlyArray<NavLink & { requiresModule?: ModuleKey }> = [
   { href: "/", tKey: "nav.dashboard", icon: Home },
-  { href: "/medications", tKey: "nav.medications", icon: Pill },
+  {
+    href: "/medications",
+    tKey: "nav.medications",
+    icon: Pill,
+    requiresModule: "medications",
+  },
 ];
 
 // v1.18.0 — the Insights primary slot is module-gated. Insights is now a
@@ -125,18 +133,33 @@ export function BottomNav() {
   // Insights never flickers in), then the real map applies: a missing key /
   // unloaded map keeps the slot, mirroring the gate + More-hub default-on
   // contract.
-  const primaryRight = useMemo(
-    () =>
-      PRIMARY_RIGHT.filter(
-        (item) =>
-          // v1.36.0 — the fixed slot asks the shared destination model
-          // whether sharing covers it, rather than carrying its own answer:
-          // Insights is an AI surface and drops out under a switch.
-          (!sharedRecord || isDestinationInSharedRecord(item.href, sections)) &&
-          (!item.requiresModule ||
-            (mounted && user?.modules?.[item.requiresModule] !== false)),
-      ),
+  const primarySlotVisible = useCallback(
+    (item: NavLink & { requiresModule?: ModuleKey }) => {
+      // An ungated slot (Home) is pinned unconditionally — the bar always
+      // has an anchor, whatever the module map or a record switch says.
+      if (!item.requiresModule) return true;
+      return (
+        // v1.36.0 — the fixed slot asks the shared destination model
+        // whether sharing covers it, rather than carrying its own answer:
+        // Insights is an AI surface and drops out under a switch.
+        (!sharedRecord || isDestinationInSharedRecord(item.href, sections)) &&
+        mounted &&
+        user?.modules?.[item.requiresModule] !== false
+      );
+    },
     [user?.modules, mounted, sharedRecord, sections],
+  );
+
+  // Both fixed flanks run through the ONE slot filter, so a module-gated
+  // tab (Meds left, Insights right) is dropped — not relocated — when the
+  // account turned its module off, matching the More hub's exclusion.
+  const primaryLeft = useMemo(
+    () => PRIMARY_LEFT.filter(primarySlotVisible),
+    [primarySlotVisible],
+  );
+  const primaryRight = useMemo(
+    () => PRIMARY_RIGHT.filter(primarySlotVisible),
+    [primarySlotVisible],
   );
 
   function isActiveLink(href: string) {
@@ -189,7 +212,7 @@ export function BottomNav() {
         className="bg-card border-border fixed bottom-0 left-0 z-50 min-h-16 w-full border-t pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden"
       >
         <div className="mx-auto flex h-16 max-w-lg items-stretch justify-around px-1">
-          {PRIMARY_LEFT.map(renderPrimary)}
+          {primaryLeft.map(renderPrimary)}
 
           {/* Center capture action — a labeled button (NOT a link) that
               opens the capture picker. Elevated as a Floating-Action-

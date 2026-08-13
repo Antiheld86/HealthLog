@@ -61,22 +61,21 @@ function render() {
 }
 
 describe("<BottomNav> iOS-parity layout", () => {
-  it("renders the always-on flanking primary anchors (Home, Meds)", () => {
+  it("renders the always-on Home anchor", () => {
     const html = render();
-    // Home + Meds are not module-gated, so they anchor the strip on first
-    // paint. The Insights slot IS module-gated; v1.25.12 gates it behind
-    // hydration (fail-closed pre-mount) so a disabled module can't flicker
-    // in — its presence is asserted in the mounted/e2e path, not here.
-    for (const href of ["/", "/medications"]) {
-      expect(html).toContain(`href="${href}"`);
-    }
+    // Home is the one ungated primary slot, so it anchors the strip on
+    // first paint. Meds and Insights are BOTH module-gated now and follow
+    // the fail-closed-pre-mount contract; their mounted presence is pinned
+    // in bottom-nav-module-gate.test.tsx.
+    expect(html).toContain('href="/"');
   });
 
-  it("keeps the module-gated Insights slot OUT of the first-paint markup (v1.25.12)", () => {
+  it("keeps the module-gated Meds and Insights slots OUT of the first-paint markup (v1.25.12)", () => {
     const html = render();
-    // Pre-hydration the module map isn't settled; the Insights primary slot
-    // therefore fails closed (absent) rather than flickering in.
+    // Pre-hydration the module map isn't settled; a module-gated primary
+    // slot therefore fails closed (absent) rather than flickering in.
     expect(html).not.toContain('href="/insights"');
+    expect(html).not.toContain('href="/medications"');
   });
 
   it("renders the center capture action as a dialog-opening button, not a link", () => {
@@ -111,13 +110,13 @@ describe("<BottomNav> iOS-parity layout", () => {
 
   it("each strip entry meets the 44 px tap-target floor (min-h-11 min-w-11)", () => {
     const html = render();
-    // The flanking strip slots carry `min-h-11 min-w-11`. On first paint the
-    // module-gated Insights slot is fail-closed (v1.25.12), so the strip
-    // shows Home, Meds and More — three slots. We don't hard-pin the count
-    // because the mounted render adds Insights back and a future entry would
-    // also satisfy the contract.
+    // The flanking strip slots carry `min-h-11 min-w-11`. On first paint
+    // BOTH module-gated slots (Meds, Insights) are fail-closed (v1.25.12),
+    // so the strip shows Home and More — two slots. We don't hard-pin the
+    // count because the mounted render adds the gated slots back and a
+    // future entry would also satisfy the contract.
     const matches = html.match(/min-h-11 min-w-11/g) ?? [];
-    expect(matches.length).toBeGreaterThanOrEqual(3);
+    expect(matches.length).toBeGreaterThanOrEqual(2);
   });
 
   it("the center capture FAB is a larger, elevated tap target", () => {
@@ -171,9 +170,8 @@ describe("<BottomNav> iOS-parity layout", () => {
     mockUserRef.value = { id: "u1", modules: { insights: false } };
     const html = render();
     expect(html).not.toContain('href="/insights"');
-    // Sibling primary slots are unaffected.
+    // The ungated sibling anchor is unaffected.
     expect(html).toContain('href="/"');
-    expect(html).toContain('href="/medications"');
     mockUserRef.value = { id: "u1", modules: {} };
   });
 
