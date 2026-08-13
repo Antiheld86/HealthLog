@@ -20,9 +20,12 @@
  *     `MedicationDoseChange` table is the history of record; when it is
  *     empty there is genuinely no time series to plot.
  *
- * No Research-Mode gate — unlike the estimated-PK `DrugLevelChart`, this
- * curve plots only logged facts (the user's recorded dose strengths), so
- * it carries no pharmacokinetic estimate and needs no disclaimer gate.
+ * Ungated by design: this curve plots only logged facts (the user's own
+ * recorded dose strengths), so it carries no pharmacokinetic estimate and
+ * needs no disclaimer. The estimated-PK `DrugLevelChart` beside it is not
+ * gated either — the Research-Mode switch that once governed it was
+ * retired as inert — but it carries the persistent estimate disclaimer
+ * that names its numbers as modelled, not measured.
  *
  * Dracula purple tokens + the shared `<MedicationDetailSection>` chrome
  * so the GLP-1 disclosure reads as one visual group with the drug-level
