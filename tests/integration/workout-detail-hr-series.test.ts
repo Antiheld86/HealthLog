@@ -61,9 +61,18 @@ vi.mock("@/lib/db-compat", () => ({
 
 const { GET } = await import("@/app/api/workouts/[id]/route");
 
-/** Session window: 07:00 → 07:30 on a fixed day. */
-const STARTED_AT = new Date("2026-05-15T07:00:00.000Z");
-const ENDED_AT = new Date("2026-05-15T07:30:00.000Z");
+/**
+ * Session window: 07:00 → 07:30 UTC ten days ago. The pulse-window fallback
+ * only reconstructs a curve inside the dense-intraday retention horizon
+ * (`DENSE_INTRADAY_RETENTION_DAYS`, 90 days), so the fixture day must stay
+ * relative to the test run — a fixed calendar date silently aged past the
+ * horizon and turned every curve assertion red on day 91.
+ */
+const SESSION_DAY = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000)
+  .toISOString()
+  .slice(0, 10);
+const STARTED_AT = new Date(`${SESSION_DAY}T07:00:00.000Z`);
+const ENDED_AT = new Date(`${SESSION_DAY}T07:30:00.000Z`);
 const SPAN_SEC = 1800;
 
 /**
