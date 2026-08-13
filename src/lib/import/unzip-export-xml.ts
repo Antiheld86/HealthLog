@@ -46,6 +46,7 @@ import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { randomBytes } from "node:crypto";
 
 /** Signature bytes for the End-Of-Central-Directory record. */
 const EOCD_SIGNATURE = 0x06054b50;
@@ -202,9 +203,12 @@ export async function extractExportXml(
       });
     }
 
+    // Unguessable temp name: the extraction target lives in the shared
+    // system tmpdir, and a predictable name (timestamp + Math.random) is
+    // what a local pre-creation or symlink attack needs.
     const xmlPath = join(
       tmpdir(),
-      `healthlog-import-${Date.now()}-${Math.random().toString(36).slice(2, 10)}.xml`,
+      `healthlog-import-${randomBytes(12).toString("hex")}.xml`,
     );
     const xmlBytes = await streamEntryToFile(
       handle,
