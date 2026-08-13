@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { queryKeys } from "@/lib/query-keys";
@@ -772,7 +772,13 @@ export function HealthChart({
     );
   }, [preloadedSeries, preloadedCoverageDays, fetchWindow.windowDays, types]);
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, isPlaceholderData, refetch } = useQuery({
+    // A range-tab change re-keys the query; without placeholder data every
+    // switch dropped the painted chart to a skeleton for the fetch round-trip.
+    // Keeping the previous range's series visible is only honest because the
+    // render below pairs it with a visual dimming while `isPlaceholderData`
+    // is true — the old range must never masquerade as the new one.
+    placeholderData: keepPreviousData,
     // v1.4.40 W-RSC — route the chart-data key through `queryKeys.chartData`
     // so the `["chart-data"]` prefix lands in `measurementDependentKeys`
     // and a fresh measurement evicts every per-chart daily cache in one
@@ -1867,7 +1873,16 @@ export function HealthChart({
         />
       ) : (
         <>
-          <div className={`relative ${chartHeightClass}`}>
+          <div
+            // The truth half of `placeholderData: keepPreviousData` above:
+            // while the re-keyed range is still fetching, the previous
+            // range's series stays painted but visibly dimmed and inert, so
+            // it cannot masquerade as the new range.
+            aria-busy={isPlaceholderData}
+            className={`relative ${chartHeightClass} transition-opacity ${
+              isPlaceholderData ? "pointer-events-none opacity-50" : ""
+            }`}
+          >
             {visibleBands.length > 0 ? (
               // v1.4.27 R3d MB2 — band overlay positioning fix. The
               // overlay used to inset `right: 18px` while the chart

@@ -5,7 +5,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nProvider } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import type { CoachPlanDTO } from "@/hooks/use-coach-plans";
-import { PlanProposalCards } from "../plan-proposal-card";
+import {
+  PlanProposalCards,
+  PROPOSAL_POLL_MS,
+  PROPOSAL_POLL_MAX_ATTEMPTS,
+  nextProposalPollInterval,
+} from "../plan-proposal-card";
 
 /**
  * The plan-proposal confirm cards at the thread tail. SSR string render
@@ -78,5 +83,23 @@ describe("<PlanProposalCards>", () => {
     ]);
     expect(html.match(/coach-plan-proposal-card/g)?.length).toBe(2);
     expect(html).toContain("after dinner");
+  });
+});
+
+describe("nextProposalPollInterval", () => {
+  it("polls at the slow interval below the attempt ceiling", () => {
+    expect(nextProposalPollInterval(0)).toBe(PROPOSAL_POLL_MS);
+    expect(nextProposalPollInterval(PROPOSAL_POLL_MAX_ATTEMPTS - 1)).toBe(
+      PROPOSAL_POLL_MS,
+    );
+  });
+
+  it("stops polling once the attempt ceiling is reached", () => {
+    // Watched red: asserting an interval at the cap fails — the ceiling is
+    // live, not decorative.
+    expect(nextProposalPollInterval(PROPOSAL_POLL_MAX_ATTEMPTS)).toBe(false);
+    expect(nextProposalPollInterval(PROPOSAL_POLL_MAX_ATTEMPTS + 5)).toBe(
+      false,
+    );
   });
 });

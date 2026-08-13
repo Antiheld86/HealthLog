@@ -105,6 +105,7 @@ import {
 } from "./mood-context-fields";
 import { dayOfLocalInput, useLinkedDayContext } from "./use-linked-day-context";
 import { apiDelete, apiGet, apiPost, apiPut } from "@/lib/api/api-fetch";
+import { MOOD_LIST_PAGE_SIZE as PAGE_SIZE } from "@/lib/mood/list-page-size";
 import { localizedApiError } from "@/lib/api/localized-error";
 
 // Re-export the score map under the legacy local name to keep the
@@ -139,8 +140,6 @@ interface MoodEntry {
   source: string;
   moodLoggedAt: string;
 }
-
-const PAGE_SIZE = 25;
 
 const MOOD_LEVELS_LIST = [
   "SUPER_GUT",

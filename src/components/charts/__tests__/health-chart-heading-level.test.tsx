@@ -50,6 +50,9 @@ describe("<HealthChart> — card heading level", () => {
     const data = buildData();
 
     vi.doMock("@tanstack/react-query", () => ({
+      // `health-chart` imports `keepPreviousData` for its placeholder option;
+      // the identity stand-in keeps the module-level destructure satisfied.
+      keepPreviousData: (previous: unknown) => previous,
       useQuery: () => ({ data, isLoading: false }),
       useQueryClient: () => ({
         cancelQueries: () => Promise.resolve(),

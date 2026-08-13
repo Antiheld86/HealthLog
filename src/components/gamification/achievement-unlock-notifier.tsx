@@ -80,7 +80,12 @@ export function AchievementUnlockNotifier({
   // to re-render on the same cadence.
   const { data } = useAchievementsQuery({
     enabled: !!user && achievementsEnabled,
-    refetchInterval: 2 * 60 * 1000,
+    // 5 min: every in-app write already invalidates the achievements cell
+    // (the `*DependentKeys` bundles all carry it), so this poll exists ONLY
+    // to surface an unlock earned by out-of-band ingest (an iOS batch, a
+    // Withings sync). A toast for those arriving up to five minutes later is
+    // an honest trade against an app-global 2-minute poll.
+    refetchInterval: 5 * 60 * 1000,
   });
 
   useEffect(() => {
