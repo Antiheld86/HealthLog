@@ -72,10 +72,6 @@ function count(s: string, re: RegExp): number {
  * surface where the missing refetch is intentional, grouped by reason.
  */
 const NO_REFETCH_ALLOWLIST = [
-  // The digest is ACTIVE on the dashboard where the quick-add lives, so the
-  // default active invalidation already refetches it (audit B, §1: "not the
-  // bug").
-  "components/dashboard/medication-intake-quick-add.tsx",
   // Injection-site metadata saved AFTER an already-recorded (and already
   // refetched) take — it does not change any dose's due/taken state.
   "components/medications/glp1-medication-card.tsx",
