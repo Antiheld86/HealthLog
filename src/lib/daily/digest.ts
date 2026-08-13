@@ -245,6 +245,15 @@ export const JUST_IN_WINDOW_MS = 3 * 60 * 60 * 1000;
 /** The fully-resolved, IO-free input the composer folds into a digest. */
 export interface DailyDigestInput {
   now: Date;
+  /**
+   * First instant of the user's NEXT local day (profile tz), resolved by the
+   * IO seam via `getUserTodayBounds`. Bounds the dose-window rail to TODAY'S
+   * pending business: a weekly/rolling medication's default availability
+   * window opens ~25 h ahead of its anchor (one early day + the grace
+   * minutes), so without this bound Friday's rail announced Saturday's slot
+   * as due. Overdue candidates are never bounded by it.
+   */
+  todayEndExclusive: Date;
   modules: DigestModuleMap;
   /** Item kinds allowed to appear in the Today hero rail. */
   enabledHeroItemKinds: readonly PriorityItemKind[];
@@ -399,11 +408,18 @@ export const DOSE_DUE_LOOKAHEAD_MS =
  *
  * `overdue` is never inferred from the wall clock. A cached non-overdue
  * candidate whose anchor has passed stays calm/informational until refresh.
+ *
+ * A NOT-yet-overdue candidate must also fall due on the user's current local
+ * day (`dueAt < todayEndExclusive`). The engine's availability window says
+ * "takeable" — for weekly/rolling schedules that opens up to ~25 h early, and
+ * takeable-early belongs on the medication card, not on today's rail. An
+ * overdue candidate always surfaces, whatever day its anchor was.
  */
 function buildDoseWindowItems(
   meds: MedsTodayBlock,
   modules: DigestModuleMap,
   now: Date,
+  todayEndExclusive: Date,
   t: Translate,
 ): PriorityItem[] {
   if (!moduleEnabled(modules, "medications")) return [];
@@ -428,6 +444,10 @@ function buildDoseWindowItems(
     if (!candidate.overdue) {
       const dueAt = candidate.dueAt ? Date.parse(candidate.dueAt) : NaN;
       if (!Number.isFinite(dueAt)) continue;
+
+      // Today-only: a dose anchored on a later local day is a scheduled
+      // event, not today's pending business — however early its window opens.
+      if (dueAt >= todayEndExclusive.getTime()) continue;
 
       if (candidate.availableFrom !== null) {
         const availableFrom = Date.parse(candidate.availableFrom);
@@ -911,7 +931,13 @@ export function buildDailyDigest(
   // resurfaces on a following day (within its window), never lost.
   const worthALook: PriorityItem[] = [];
   worthALook.push(
-    ...buildDoseWindowItems(input.medsToday, input.modules, input.now, t),
+    ...buildDoseWindowItems(
+      input.medsToday,
+      input.modules,
+      input.now,
+      input.todayEndExclusive,
+      t,
+    ),
   );
   // A freshly-reached milestone is rare and one-per-day — surface it ahead of
   // the ambient sync / check-in items so the calm reward is not buried, but

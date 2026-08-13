@@ -121,6 +121,7 @@ const NOW = new Date("2026-07-16T09:00:00.000Z");
 function degradedDigest() {
   const input: DailyDigestInput = {
     now: NOW,
+    todayEndExclusive: new Date("2026-07-17T00:00:00.000Z"),
     modules: {},
     enabledHeroItemKinds: [...PRIORITY_ITEM_KINDS],
     score: { value: 82, band: "good", delta: 3 },

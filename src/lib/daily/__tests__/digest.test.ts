@@ -64,6 +64,8 @@ const briefing: DailyBriefing = {
 function input(over: Partial<DailyDigestInput> = {}): DailyDigestInput {
   return {
     now: NOW,
+    // NOW is 09:00Z on 2026-07-16; UTC profile day ends at next midnight.
+    todayEndExclusive: new Date("2026-07-17T00:00:00.000Z"),
     modules: {},
     enabledHeroItemKinds: [...PRIORITY_ITEM_KINDS],
     score: { value: 82, band: "good", delta: 3 },
@@ -383,7 +385,7 @@ describe("buildDailyDigest — worth-a-look rail item builders", () => {
     expect(d.worthALook.some((i) => i.kind === "dose_window")).toBe(false);
   });
 
-  it("shows a weekly future slot once its engine-derived availability window opens", () => {
+  it("shows a weekly slot due later TODAY once its engine-derived availability window opens", () => {
     const d = buildDailyDigest(
       input({
         medsToday: meds({
@@ -391,7 +393,8 @@ describe("buildDailyDigest — worth-a-look rail item builders", () => {
             {
               medicationId: "med-weekly",
               medicationName: "Weekly dose",
-              dueAt: new Date(NOW.getTime() + 24 * 60 * 60_000).toISOString(),
+              // Later today (15:00Z, same local day as NOW).
+              dueAt: new Date(NOW.getTime() + 6 * 60 * 60_000).toISOString(),
               overdue: false,
               availableFrom: new Date(NOW.getTime() - 60_000).toISOString(),
             },
@@ -410,7 +413,8 @@ describe("buildDailyDigest — worth-a-look rail item builders", () => {
     const candidate = {
       medicationId: "med-weekly",
       medicationName: "Weekly dose",
-      dueAt: new Date(NOW.getTime() + 24 * 60 * 60_000).toISOString(),
+      // Later today (19:00Z) so only the availability boundary decides.
+      dueAt: new Date(NOW.getTime() + 10 * 60 * 60_000).toISOString(),
       overdue: false,
       availableFrom: NOW.toISOString(),
     };
@@ -449,6 +453,111 @@ describe("buildDailyDigest — worth-a-look rail item builders", () => {
       t,
     );
     expect(d.worthALook.some((i) => i.kind === "dose_window")).toBe(false);
+  });
+
+  it("keeps a weekly slot due TOMORROW off the rail even when its availability window is open", () => {
+    // Regression: a weekly/rolling medication with the default window opens
+    // its availability ~25 h ahead of the anchor (1 day early-days + 60 min
+    // grace). On Friday the Saturday slot therefore became "available" and
+    // surfaced as today's pending business. A not-yet-overdue dose that is
+    // due on a LATER local day is a scheduled event, not today's card.
+    const d = buildDailyDigest(
+      input({
+        medsToday: meds({
+          dueCandidates: [
+            {
+              medicationId: "med-weekly",
+              medicationName: "Weekly dose",
+              // Tomorrow 08:00 — outside today's local day.
+              dueAt: "2026-07-17T08:00:00.000Z",
+              overdue: false,
+              // Window already open (now minus 1 h).
+              availableFrom: new Date(
+                NOW.getTime() - 60 * 60_000,
+              ).toISOString(),
+            },
+          ],
+        }),
+      }),
+      t,
+    );
+    expect(d.worthALook.some((i) => i.kind === "dose_window")).toBe(false);
+  });
+
+  it("bounds the rail on the PROFILE-tz day end, exclusive at the boundary instant", () => {
+    // A Berlin (CEST, UTC+2) profile day ends at 22:00:00Z — the seam passes
+    // that instant as `todayEndExclusive`, so the builder needs no tz math.
+    const berlinDayEnd = new Date("2026-07-16T22:00:00.000Z");
+    const candidateDue = (dueAtIso: string) =>
+      meds({
+        dueCandidates: [
+          {
+            medicationId: "med-weekly",
+            medicationName: "Weekly dose",
+            dueAt: dueAtIso,
+            overdue: false,
+            availableFrom: new Date(NOW.getTime() - 60 * 60_000).toISOString(),
+          },
+        ],
+      });
+
+    // 23:30 Berlin local — still today, stays on the rail.
+    const lateToday = buildDailyDigest(
+      input({
+        todayEndExclusive: berlinDayEnd,
+        medsToday: candidateDue("2026-07-16T21:30:00.000Z"),
+      }),
+      t,
+    );
+    // 00:30 Berlin local TOMORROW (22:30Z) — off the rail.
+    const earlyTomorrow = buildDailyDigest(
+      input({
+        todayEndExclusive: berlinDayEnd,
+        medsToday: candidateDue("2026-07-16T22:30:00.000Z"),
+      }),
+      t,
+    );
+    // Exactly local midnight — the bound is exclusive, so this is tomorrow.
+    const atBoundary = buildDailyDigest(
+      input({
+        todayEndExclusive: berlinDayEnd,
+        medsToday: candidateDue(berlinDayEnd.toISOString()),
+      }),
+      t,
+    );
+
+    expect(lateToday.worthALook.some((i) => i.kind === "dose_window")).toBe(
+      true,
+    );
+    expect(earlyTomorrow.worthALook.some((i) => i.kind === "dose_window")).toBe(
+      false,
+    );
+    expect(atBoundary.worthALook.some((i) => i.kind === "dose_window")).toBe(
+      false,
+    );
+  });
+
+  it("always keeps an OVERDUE candidate on the rail regardless of the day bound", () => {
+    const d = buildDailyDigest(
+      input({
+        medsToday: meds({
+          dueCandidates: [
+            {
+              medicationId: "med-weekly",
+              medicationName: "Weekly dose",
+              // Yesterday — engine says overdue; the day bound never applies.
+              dueAt: "2026-07-15T08:00:00.000Z",
+              overdue: true,
+              availableFrom: "2026-07-14T07:00:00.000Z",
+            },
+          ],
+        }),
+      }),
+      t,
+    );
+    const dose = d.worthALook.find((i) => i.kind === "dose_window");
+    expect(dose).toBeDefined();
+    expect(dose?.status).toBe("warning");
   });
 
   it("keeps a stale cached non-overdue scalar calm instead of dropping or escalating it", () => {

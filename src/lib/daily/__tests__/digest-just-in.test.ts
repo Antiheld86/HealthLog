@@ -38,6 +38,7 @@ function meds(): MedsTodayBlock {
 function input(over: Partial<DailyDigestInput> = {}): DailyDigestInput {
   return {
     now: NOW,
+    todayEndExclusive: new Date("2026-07-17T00:00:00.000Z"),
     modules: {},
     enabledHeroItemKinds: [...PRIORITY_ITEM_KINDS],
     score: { value: 82, band: "good", delta: 3 },
