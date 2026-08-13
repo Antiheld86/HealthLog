@@ -46,6 +46,9 @@ import {
   pickMainNightAndNaps,
   type SleepStageRow,
 } from "@/lib/analytics/sleep-night";
+import { isNearUtc } from "@/lib/tz/format";
+import { probeRollupCoverage } from "@/lib/rollups/measurement-coverage";
+import { loadUserSourcePriority } from "@/lib/rollups/measurement-read";
 import type {
   MeasurementSource,
   MeasurementType,
@@ -554,6 +557,207 @@ function buildCumulativeDailySeries(
   return [...byDay.entries()]
     .map(([day, value]) => ({ day, value }))
     .sort((a, b) => (a.day < b.day ? -1 : 1));
+}
+
+/** One tiered measurement daily-series fetch's result. */
+export interface TieredMeasurementDailySeries {
+  /**
+   * Per-type daily series, same shape `buildMeasurementDailySeries`
+   * produces. A requested type with no data maps to an empty array or is
+   * absent — callers treat both as "channel degrades to absent".
+   */
+  byType: Map<string, DailySeriesPoint[]>;
+  /**
+   * True when the RAW fallback read hit {@link MEASUREMENT_READ_CAP} —
+   * rollup-served channels read one row per day per source and cannot cap,
+   * so the flag now describes only the channels that took the raw path.
+   */
+  measurementsCapped: boolean;
+  /** Channel types served from the DAY rollup tier on this call. */
+  rollupTypes: MeasurementType[];
+}
+
+/**
+ * True for the discovery measurement channels whose daily reduction the
+ * DAY rollup tier can reproduce. Two families are structurally excluded:
+ *
+ *   - `SLEEP_DURATION` — the daily figure is the MAIN night's total asleep
+ *     minutes via `reconstructSleepSessions` (writer-dedup, midnight-spanning
+ *     session clustering, nap exclusion). A DAY bucket over per-STAGE rows
+ *     carries none of that; no composition of `count/mean/sum` recovers it.
+ *   - `CUMULATIVE_HK_TYPES` (steps, daylight, …) — the raw path collapses on
+ *     TWO axes via `pickCanonicalSourceRows`: source ladder, then device-type
+ *     ladder WITHIN the picked source (watch beats phone beats scale). Rollup
+ *     rows are per `(day, source)` only — the device-type axis is folded away
+ *     at write time, so a multi-device day would re-inflate the total the raw
+ *     path deliberately de-duplicates.
+ *
+ * Both stay on the raw path rather than shipping a silent value change.
+ */
+function isRollupSwapEligible(type: MeasurementType): boolean {
+  return type !== "SLEEP_DURATION" && !CUMULATIVE_HK_TYPES.has(type);
+}
+
+/**
+ * Collapse per-`(day, source)` DAY rollup rows into per-day MEANS across
+ * ALL sources — the exact reduction `toDailyMeans` applies to the raw
+ * rows. Deliberately NOT `collapseRollupRowsBySource`: the raw spot-metric
+ * path averages every reading of the day regardless of source, so the
+ * ladder collapse would CHANGE a multi-source day's value. The
+ * count-weighted compose (Σ sum / Σ count, preferring the exact stored
+ * `sumValue` over the `mean·count` round trip) reproduces the all-rows
+ * mean exactly up to float addition order.
+ */
+function composeRollupDailyMeans(
+  rows: Array<{
+    bucketStart: Date;
+    count: number;
+    mean: number;
+    sumValue: number | null;
+  }>,
+): DailySeriesPoint[] {
+  const byDay = new Map<string, { sum: number; count: number }>();
+  for (const r of rows) {
+    if (r.count <= 0) continue;
+    const sum = r.sumValue ?? r.mean * r.count;
+    if (!Number.isFinite(sum)) continue;
+    // DAY buckets are minted at UTC midnight; the UTC date IS the bucket's
+    // day key (the same convention graded-series and the derived baselines
+    // read the tier under).
+    const day = r.bucketStart.toISOString().slice(0, 10);
+    const acc = byDay.get(day) ?? { sum: 0, count: 0 };
+    acc.sum += sum;
+    acc.count += r.count;
+    byDay.set(day, acc);
+  }
+  return [...byDay.entries()]
+    .map(([day, acc]) => ({ day, value: acc.sum / acc.count }))
+    .sort((a, b) => (a.day < b.day ? -1 : 1));
+}
+
+/**
+ * Rollup read-swap for the correlation-discovery measurement channels: the
+ * per-day means the discovery scan needs already sit in the DAY rollup
+ * tier, so eligible spot channels read one pre-aggregated row per day per
+ * source instead of every raw reading in the 180-day window (a CGM
+ * glucose channel alone can hold tens of thousands of raw rows).
+ *
+ * Read-swap semantics (standing rule: replace, with fallback-on-miss —
+ * never both): per channel, EITHER the rollup tier serves the series OR
+ * the raw `fetchMeasurementWindowSeries` + `buildMeasurementDailySeries`
+ * path does. A channel falls back when
+ *   - the type is structurally ineligible ({@link isRollupSwapEligible}),
+ *   - the user's profile timezone is outside the near-UTC band (below),
+ *   - the coverage probe reports no DAY buckets for the type, or
+ *   - the in-window bucket read comes back empty (backfill pending).
+ *
+ * Timezone contract — the same v1.4.38 W-A guard the correlation
+ * hypotheses fast path carries: DAY buckets group rows by UTC day while
+ * the raw path keys days in the profile tz. Inside the ±3 h `isNearUtc`
+ * band the two calendars agree for every reading logged more than the
+ * tz-offset away from local midnight; readings inside that band attribute
+ * to the neighbouring day (the documented, accepted tolerance — the
+ * n ≥ 20 / FDR gates absorb the single-day phase shift). Outside the band
+ * the calendars diverge for most of the day, so the guard forces the raw
+ * path and day-key parity is preserved exactly.
+ *
+ * Window contract: buckets are read `bucketStart >= since`, so the
+ * partial OLDEST day (the one `since` lands inside) is not served — the
+ * rollup series covers full days only, while the raw path would have
+ * included that day's post-`since` readings. One day at the 180-day
+ * horizon, equivalent to the user not logging that day.
+ *
+ * NOT `readBestGranularityRollups`: its floor table routes a >90-day
+ * window to the WEEK tier first, which cannot feed a daily series — the
+ * discovery scan needs the DAY grain unconditionally.
+ */
+export async function fetchMeasurementDailySeriesTiered(
+  userId: string,
+  tz: string,
+  since: Date,
+  types: MeasurementType[],
+): Promise<TieredMeasurementDailySeries> {
+  const priorityJson = await loadUserSourcePriority(userId);
+
+  const rawTypes: MeasurementType[] = [];
+  const rollupCandidates: MeasurementType[] = [];
+  const nearUtc = isNearUtc(tz);
+  for (const type of types) {
+    if (nearUtc && isRollupSwapEligible(type)) rollupCandidates.push(type);
+    else rawTypes.push(type);
+  }
+
+  const byType = new Map<string, DailySeriesPoint[]>();
+  const rollupTypes: MeasurementType[] = [];
+
+  if (rollupCandidates.length > 0) {
+    const coverage = await probeRollupCoverage(userId);
+    const covered: MeasurementType[] = [];
+    for (const type of rollupCandidates) {
+      if (coverage.get(type) === true) covered.push(type);
+      else rawTypes.push(type);
+    }
+    if (covered.length > 0) {
+      const buckets = await prisma.measurementRollup.findMany({
+        where: {
+          userId,
+          type: { in: covered },
+          granularity: "DAY",
+          bucketStart: { gte: since },
+        },
+        orderBy: { bucketStart: "asc" },
+        select: {
+          type: true,
+          bucketStart: true,
+          count: true,
+          mean: true,
+          sumValue: true,
+        },
+      });
+      const rowsByType = new Map<string, typeof buckets>();
+      for (const bucket of buckets) {
+        const list = rowsByType.get(bucket.type) ?? [];
+        list.push(bucket);
+        rowsByType.set(bucket.type, list);
+      }
+      for (const type of covered) {
+        const series = composeRollupDailyMeans(rowsByType.get(type) ?? []);
+        if (series.length === 0) {
+          // Coverage said "has buckets" but the window resolved empty —
+          // backfill pending or all data older than the window. Fall back
+          // so a partially-backfilled account never reads a thinner series
+          // than the raw path would produce.
+          rawTypes.push(type);
+        } else {
+          byType.set(type, series);
+          rollupTypes.push(type);
+        }
+      }
+    }
+  }
+
+  let measurementsCapped = false;
+  if (rawTypes.length > 0) {
+    const rawFetch = await fetchMeasurementWindowSeries(
+      userId,
+      since,
+      rawTypes,
+    );
+    measurementsCapped = rawFetch.measurementsCapped;
+    for (const type of rawTypes) {
+      byType.set(
+        type,
+        buildMeasurementDailySeries(
+          type,
+          rawFetch.byType.get(type) ?? [],
+          tz,
+          priorityJson,
+        ),
+      );
+    }
+  }
+
+  return { byType, measurementsCapped, rollupTypes };
 }
 
 /**
