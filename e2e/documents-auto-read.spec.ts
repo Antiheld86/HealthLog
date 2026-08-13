@@ -23,6 +23,7 @@ import {
   ensureVaultFixture,
   ensureVaultAiFixture,
   AI_PROBE_DOC_ID,
+  CONTENT_DOC_ID,
 } from "./setup/vault-fixture";
 
 async function fulfilJson(
@@ -249,24 +250,23 @@ test.describe("automatic AI reading — vault per-document contract", () => {
     await expect(sheet.locator('[data-slot="document-read-ai"]')).toBeVisible();
   });
 
-  test("with auto-read ON the sheet drops the manual AI action row", async ({
+  test("with auto-read ON the sheet drops the AI row only for a read document", async ({
     page,
   }) => {
-    // Auto-read reads every upload with no per-document tap, so the manual
-    // Read / Suggest actions are redundant and the WHOLE block collapses
-    // (v1.28.22 — no status chrome; provenance lives on the vault card).
+    // Auto-read reads every upload with no per-document tap, so once a
+    // document IS read the manual Read / Suggest actions are redundant and
+    // the WHOLE block collapses (v1.28.22 — no status chrome; provenance
+    // lives on the vault card). `CONTENT_DOC_ID` ships with a content index,
+    // so it is the read-document case.
     await mockDocumentCapability(page, { egress: "external", autoRead: true });
 
-    await page.goto(`/documents?doc=${AI_PROBE_DOC_ID}`);
+    await page.goto(`/documents?doc=${CONTENT_DOC_ID}`);
     const sheet = page.getByRole("dialog");
     await expect(sheet).toBeVisible();
 
-    // v1.28.22 — with auto-read ON and nothing pending the WHOLE block
-    // collapses (no status chrome; provenance lives on the vault card), so the
-    // sheet content starts straight with the document fields. The footer's
-    // download action is the loaded-state anchor (it renders only once the
-    // document GET resolved), so the absence checks below cannot pass
-    // vacuously against the loading skeleton.
+    // The footer's download action is the loaded-state anchor (it renders
+    // only once the document GET resolved), so the absence checks below
+    // cannot pass vacuously against the loading skeleton.
     await expect(
       sheet.locator('[data-slot="document-download"]'),
     ).toBeVisible();
@@ -277,5 +277,29 @@ test.describe("automatic AI reading — vault per-document contract", () => {
       0,
     );
     await expect(sheet.locator('[data-slot="assist-suggest"]')).toHaveCount(0);
+  });
+
+  test("with auto-read ON an unread document keeps its read action", async ({
+    page,
+  }) => {
+    // v1.37.13 — auto-read reads new uploads, but a document that has no
+    // content index yet (upload predates the switch, or its read failed)
+    // still needs a way in: the AI section stays, with the manual read as
+    // the per-document recovery path. Collapsing it here would strand the
+    // document with no route to a read at all. The probe document is seeded
+    // without a content index, so it is exactly that case.
+    await mockDocumentCapability(page, { egress: "external", autoRead: true });
+
+    await page.goto(`/documents?doc=${AI_PROBE_DOC_ID}`);
+    const sheet = page.getByRole("dialog");
+    await expect(sheet).toBeVisible();
+
+    await expect(
+      sheet.locator('[data-slot="document-download"]'),
+    ).toBeVisible();
+    await expect(
+      sheet.locator('[data-slot="document-ai-section"]'),
+    ).toHaveCount(1);
+    await expect(sheet.locator('[data-slot="document-read-ai"]')).toBeVisible();
   });
 });
