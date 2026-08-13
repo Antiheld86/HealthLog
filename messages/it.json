@@ -9511,7 +9511,7 @@
           "local-empty": "Non è stato trovato testo leggibile. Sembra una scansione; un provider di visione IA può leggerla.",
           "local-unsupported": "Questo tipo di file non può essere letto per la ricerca.",
           "decrypt-error": "Il file archiviato non può essere aperto per la lettura.",
-          "raster-failed": "Le pagine del PDF non possono essere elaborate per la lettura.",
+          "raster-failed": "Le pagine del PDF non possono essere elaborate per la lettura. I formati di compressione fax digitalizzati sono una causa nota.",
           "provider-error": "Il provider IA non è riuscito a leggere questo documento all’ultimo tentativo.",
           "pdf-needs-anthropic": "Il provider IA configurato non può leggere i file PDF. Un provider Claude o l’OCR locale sì.",
           "empty-transcription": "Il provider IA non ha restituito testo per questo documento."

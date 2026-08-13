@@ -198,7 +198,16 @@ export async function rasterizePdf(
       }
     }
 
-    if (images.length === 0) return { ok: false, reason: "render-failed" };
+    if (images.length === 0) {
+      // Refs #776 — the zero-pages shape must be as loud as a throw: a
+      // document that "rendered" nothing is a failed rasterization, and the
+      // wide event is what lets an operator see WHY a scan stayed unread.
+      annotate({
+        action: { name: "documents.rasterize.failed" },
+        meta: { reason: "zero_pages", pageCount: doc.numPages },
+      });
+      return { ok: false, reason: "render-failed" };
+    }
     annotate({
       action: { name: "documents.rasterize.ok" },
       meta: { pages: images.length, cappedFrom: doc.numPages },
