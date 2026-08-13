@@ -61,6 +61,12 @@ export async function checkRateLimit(
  * once `reset_at` has passed the counter is stale and a decrement would bleed
  * into the NEXT window's budget, so an expired row is left untouched. Never
  * drops below zero (concurrent refunds after a window flip are a no-op).
+ *
+ * Known slack: if the charge's window expires and a new request opens the
+ * NEXT window before a late refund lands, the refund decrements that fresh
+ * window instead — at most one extra slot there, only on failure paths that
+ * never reached the metered work. Accepted; carrying the charge's `reset_at`
+ * through every failure path is not worth one slot of slack.
  */
 export async function refundRateLimit(key: string): Promise<void> {
   await prisma.$executeRaw`
