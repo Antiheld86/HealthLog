@@ -80,6 +80,8 @@ import { prisma } from "@/lib/db";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import { apiError } from "@/lib/api-response";
 import { checkAnalyticsReadRateLimit } from "@/lib/rate-limit";
+import { __resetAllCachesForTests } from "@/lib/cache/server-cache";
+import { syncAcceptedPatterns } from "@/lib/insights/correlation-patterns";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -88,6 +90,9 @@ const SESSION_OK = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  // The route reads through the SWR analytics cache now; a warm cell from a
+  // prior test would serve a hit and skip the builder every assertion spies on.
+  __resetAllCachesForTests();
   vi.mocked(requireModuleEnabled).mockResolvedValue({ enabled: true });
   // v1.15.20 — default to an allowing analytics-read budget.
   vi.mocked(checkAnalyticsReadRateLimit).mockResolvedValue({
@@ -155,6 +160,25 @@ describe("GET /api/insights/correlations", () => {
     expect(body.data.discovered).toEqual([]);
     expect(body.data.pairsTested).toBe(0);
     expect(body.data.fdrQ).toBeGreaterThan(0);
+  });
+
+  it("serves a cache hit without re-running the discovery reads or the pattern-sync writes", async () => {
+    // The SWR cell caches the built body for 60 s; the second GET inside that
+    // window must neither re-read the measurement window nor re-run the two
+    // `syncAcceptedPatterns` DB writes — writes on the read path were the
+    // pre-cache defect, and a hit that still wrote would reintroduce it.
+    // Watched red: with the assertion counts set to 2 (i.e. asserting the
+    // builder re-ran) this test fails, so the cache path is proven live.
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    const first = await callGet(makeReq());
+    expect(first.status).toBe(200);
+    const second = await callGet(makeReq());
+    expect(second.status).toBe(200);
+    expect(prisma.measurement.findMany).toHaveBeenCalledTimes(1);
+    expect(syncAcceptedPatterns).toHaveBeenCalledTimes(2);
+    const firstBody = (await first.json()) as { data: unknown };
+    const secondBody = (await second.json()) as { data: unknown };
+    expect(secondBody.data).toEqual(firstBody.data);
   });
 
   it("returns 403 + errorCode when the correlations flag is off", async () => {
