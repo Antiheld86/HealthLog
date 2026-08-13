@@ -2934,6 +2934,10 @@
         "railBadge": "Chat documento isolata",
         "uploadError": "Caricamento non riuscito. Riprova.",
         "notFoundError": "Quel link al documento non è più valido: verrà avviata una chat normale."
+      },
+      "interrupted": {
+        "note": "Questa risposta è stata interrotta prima di essere completata.",
+        "retry": "Chiedi di nuovo"
       }
     },
     "relativeJustNow": "proprio ora",

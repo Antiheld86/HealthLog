@@ -2934,6 +2934,10 @@
         "railBadge": "Chat de document cloisonné",
         "uploadError": "Échec du téléversement. Veuillez réessayer.",
         "notFoundError": "Ce lien de document n'est plus valide : une conversation normale démarre à la place."
+      },
+      "interrupted": {
+        "note": "Cette réponse a été interrompue avant la fin.",
+        "retry": "Reposer la question"
       }
     },
     "relativeJustNow": "à l’instant",

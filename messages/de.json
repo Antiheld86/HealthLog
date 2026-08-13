@@ -2934,6 +2934,10 @@
         "railBadge": "Dokument-Chat (abgeschottet)",
         "uploadError": "Upload fehlgeschlagen. Bitte versuche es erneut.",
         "notFoundError": "Dieser Dokumentlink ist nicht mehr gültig – es wird ein normaler Chat gestartet."
+      },
+      "interrupted": {
+        "note": "Diese Antwort wurde unterbrochen, bevor sie fertig war.",
+        "retry": "Erneut fragen"
       }
     },
     "relativeJustNow": "gerade eben",

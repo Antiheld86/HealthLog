@@ -2934,6 +2934,10 @@
         "railBadge": "Odizolowany czat dokumentu",
         "uploadError": "Przesyłanie nie powiodło się. Spróbuj ponownie.",
         "notFoundError": "Ten link do dokumentu jest już nieprawidłowy – zamiast tego rozpoczynamy zwykły czat."
+      },
+      "interrupted": {
+        "note": "Ta odpowiedź została przerwana przed ukończeniem.",
+        "retry": "Zapytaj ponownie"
       }
     },
     "relativeJustNow": "przed chwilą",

@@ -2934,6 +2934,10 @@
         "railBadge": "Chat de documento aislado",
         "uploadError": "Error al subir. Inténtalo de nuevo.",
         "notFoundError": "Ese enlace de documento ya no es válido: se iniciará un chat normal."
+      },
+      "interrupted": {
+        "note": "Esta respuesta se interrumpió antes de terminar.",
+        "retry": "Preguntar de nuevo"
       }
     },
     "relativeJustNow": "ahora mismo",

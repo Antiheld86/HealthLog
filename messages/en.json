@@ -2934,6 +2934,10 @@
         "railBadge": "Fenced document chat",
         "uploadError": "Upload failed. Please try again.",
         "notFoundError": "That document link is no longer valid — starting a normal chat instead."
+      },
+      "interrupted": {
+        "note": "This answer was interrupted before it finished.",
+        "retry": "Ask again"
       }
     },
     "relativeJustNow": "just now",
