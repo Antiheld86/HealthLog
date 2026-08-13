@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.37.17] — 2026-08-13
+
+### Changed
+
+- The correlations discovery reads its measurement series from the pre-aggregated daily tier instead of walking every raw reading over 180 days. For a dense record, glucose from a continuous sensor most of all, this turns tens of thousands of rows into at most one row per day and source. Values stay the same: the daily figures are composed to match the previous per-reading averages exactly, a channel without aggregate coverage falls back to the raw path on its own, and sleep duration, steps and daylight time keep their raw reads because their daily figures depend on session reconstruction and device de-duplication that the aggregates cannot express. Profiles far from UTC also stay on the raw path so day boundaries keep matching their timezone.
+
 ## [1.37.16] — 2026-08-13
 
 ### Changed
