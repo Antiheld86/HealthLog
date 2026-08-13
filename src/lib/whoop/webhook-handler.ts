@@ -31,6 +31,8 @@ import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { getClientIp } from "@/lib/api-response";
 import { annotate, getEvent } from "@/lib/logging/context";
 import { getGlobalBoss } from "@/lib/jobs/boss-instance";
+import { afterMeasurementMutation } from "@/lib/rollups/after-measurement-mutation";
+import type { MeasurementType } from "@/generated/prisma/client";
 
 /**
  * Maximum age of a webhook timestamp before it is treated as a replay. Five
@@ -163,6 +165,19 @@ export async function processWhoopNotification(
     // match catches every measurement derived from the deleted resource.
     if (resourceId) {
       const now = new Date();
+      // Collect the affected `(type, measuredAt)` pairs BEFORE the
+      // soft-delete — the rollup tail below needs to know which
+      // `(type, day)` buckets lose rows, and after the updateMany the
+      // pre-image is gone.
+      const affected = await prisma.measurement.findMany({
+        where: {
+          userId: connection.userId,
+          source: "WHOOP",
+          externalId: { startsWith: `${resourceId}:` },
+          deletedAt: null,
+        },
+        select: { type: true, measuredAt: true },
+      });
       await prisma.measurement.updateMany({
         where: {
           userId: connection.userId,
@@ -172,6 +187,18 @@ export async function processWhoopNotification(
         },
         data: { deletedAt: now, syncVersion: { increment: 1 } },
       });
+      // Recompute the dirtied rollup buckets + drop the affected status
+      // insights — without this the aggregates keep counting the
+      // tombstoned rows forever (ghost-aggregate class). Best-effort
+      // inside the helper; never fails the 200 to WHOOP.
+      await afterMeasurementMutation(
+        connection.userId,
+        affected.map((row) => ({
+          type: row.type as MeasurementType,
+          measuredAt: row.measuredAt,
+        })),
+        "whoop.webhook",
+      );
       if (resource === "workout") {
         // The Workout model carries no soft-delete column, so a deleted
         // WHOOP workout is removed outright (keyed by the canonical

@@ -911,8 +911,12 @@ async function ensureUserRollupsFreshImpl(
         orderBy: { computedAt: "desc" },
         select: { computedAt: true },
       }),
+      // Deliberately NOT filtered to `deletedAt: null`: a soft-delete
+      // bumps `updatedAt` on the tombstone, and that bump is exactly the
+      // staleness signal — filtering tombstones out made a deletion
+      // invisible to the probe and left the ghost aggregate "fresh".
       prisma.measurement.findFirst({
-        where: { userId, deletedAt: null },
+        where: { userId },
         orderBy: { updatedAt: "desc" },
         select: { updatedAt: true, measuredAt: true },
       }),

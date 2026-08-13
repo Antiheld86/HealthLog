@@ -759,6 +759,30 @@ describe("ensureUserRollupsFresh", () => {
     expect(queryRawUnsafe).toHaveBeenCalledTimes(1);
   });
 
+  // Watched red: restoring `deletedAt: null` to the probe's `where`
+  // makes the exact-match assertion below fail — that filter was the
+  // bug (a soft-delete bumps `updatedAt` on the tombstone, and hiding
+  // tombstones from the probe left ghost aggregates reading as fresh).
+  it("keeps tombstones visible to the freshness probe", async () => {
+    const rollupAt = new Date("2026-05-10T10:00:00.000Z");
+    const deletionAt = new Date("2026-05-10T12:00:00.000Z");
+    findFirst.mockResolvedValueOnce({ computedAt: rollupAt });
+    // Newest row is a tombstone whose soft-delete bumped `updatedAt`
+    // past the rollup watermark — the probe must see it as staleness.
+    findFirstMeasurement.mockResolvedValueOnce({
+      updatedAt: deletionAt,
+      measuredAt: new Date("2026-05-01T08:00:00.000Z"),
+    });
+    queryRawUnsafe.mockResolvedValueOnce([]);
+    const result = await ensureUserRollupsFresh("user-1");
+    expect(result.recomputed).toBe(true);
+    // Exact `where` match: the probe scopes by user only — no
+    // `deletedAt` filter that would blind it to deletions.
+    expect(findFirstMeasurement).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: "user-1" } }),
+    );
+  });
+
   it("swallows populator errors so the read path never fails", async () => {
     findFirst.mockRejectedValueOnce(new Error("pool exhausted"));
     findFirstMeasurement.mockRejectedValueOnce(new Error("pool exhausted"));
