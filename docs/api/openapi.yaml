@@ -12792,7 +12792,8 @@ paths:
         immediately; the work runs off-request on the queue.
       responses:
         "200":
-          description: Whether a backfill job was enqueued.
+          description: How many live documents the enqueued backfill still has to index (0 when everything is indexed or no job
+            was created).
           content:
             application/json:
               schema:
@@ -38680,7 +38681,9 @@ components:
       type: object
       properties:
         enqueued:
-          type: boolean
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
       required:
         - enqueued
       additionalProperties: false

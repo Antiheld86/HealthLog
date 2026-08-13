@@ -1028,12 +1028,13 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Enqueues a background job that content-indexes the caller's not-yet-indexed documents (one provider transcription each, bounded + resumable). Gated on the module, a configured vision provider (422 `documents.inbound.providerUnsupported` otherwise), and the existing AI consent (403 otherwise). Returns immediately; the work runs off-request on the queue.",
       responses: {
         "200": {
-          description: "Whether a backfill job was enqueued.",
+          description:
+            "How many live documents the enqueued backfill still has to index (0 when everything is indexed or no job was created).",
           content: {
             "application/json": {
               schema: dataEnvelope(
                 z
-                  .object({ enqueued: z.boolean() })
+                  .object({ enqueued: z.number().int().nonnegative() })
                   .meta({ id: "DocumentReindexResponse" }),
                 "DocumentReindexEnvelope",
               ),
