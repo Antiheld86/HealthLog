@@ -133,6 +133,9 @@ export interface DocumentBackupEntry {
   summaryEncrypted?: string | null;
   summaryGeneratedAt?: string | null;
   summaryState?: string;
+  /** Refs #776 — the index-attempt record, carried verbatim (canonical DR). */
+  lastIndexAttemptAt?: string | null;
+  lastIndexOutcome?: string | null;
 }
 
 export interface RecordsBackupOptions {
@@ -148,6 +151,8 @@ interface DisasterRecoveryDocumentRow {
   summaryEncrypted: Uint8Array | null;
   summaryGeneratedAt: Date | null;
   summaryState: string;
+  lastIndexAttemptAt: Date | null;
+  lastIndexOutcome: string | null;
   updatedAt: Date;
 }
 
@@ -254,6 +259,8 @@ export async function buildRecordsBackupSection(
           summaryEncrypted: true,
           summaryGeneratedAt: true,
           summaryState: true,
+          lastIndexAttemptAt: true,
+          lastIndexOutcome: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -488,6 +495,8 @@ export async function buildRecordsBackupSection(
           : null,
         summaryGeneratedAt: dr.summaryGeneratedAt?.toISOString() ?? null,
         summaryState: dr.summaryState,
+        lastIndexAttemptAt: dr.lastIndexAttemptAt?.toISOString() ?? null,
+        lastIndexOutcome: dr.lastIndexOutcome,
       };
     }
 

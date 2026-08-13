@@ -9506,6 +9506,17 @@
         "generate": "Générer le résumé",
         "generating": "Génération…"
       },
+      "index": {
+        "outcome": {
+          "local-empty": "Aucun texte lisible n’a été trouvé. Cela ressemble à un scan ; un fournisseur de vision IA peut le lire.",
+          "local-unsupported": "Ce type de fichier ne peut pas être lu pour la recherche.",
+          "decrypt-error": "Le fichier stocké n’a pas pu être ouvert pour la lecture.",
+          "raster-failed": "Les pages du PDF n’ont pas pu être rendues pour la lecture.",
+          "provider-error": "Le fournisseur d’IA n’a pas pu lire ce document lors de la dernière tentative.",
+          "pdf-needs-anthropic": "Le fournisseur d’IA configuré ne peut pas lire les fichiers PDF. Un fournisseur Claude ou l’OCR local le peut.",
+          "empty-transcription": "Le fournisseur d’IA n’a renvoyé aucun texte pour ce document."
+        }
+      },
       "loadError": "Impossible de charger ce document.",
       "saveError": "Impossible d'enregistrer la modification.",
       "deleteError": "Impossible de supprimer le document.",

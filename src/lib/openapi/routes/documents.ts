@@ -171,6 +171,18 @@ const inboundDocument = z
     contentIndexSource: z
       .enum(["vision", "text-ocr", "local-pdf", "local-ocr"])
       .nullable(),
+    lastIndexAttemptAt: z.string().nullable(),
+    lastIndexOutcome: z
+      .enum([
+        "local-empty",
+        "local-unsupported",
+        "decrypt-error",
+        "raster-failed",
+        "provider-error",
+        "pdf-needs-anthropic",
+        "empty-transcription",
+      ])
+      .nullable(),
     hasThumbnail: z.boolean(),
     createdAt: z.string(),
     updatedAt: z.string(),
@@ -178,7 +190,7 @@ const inboundDocument = z
   .meta({
     id: "InboundDocument",
     description:
-      "A stored document. The raw bytes are stored encrypted at rest and never returned; this is the metadata + staging summary. `status` is STORED for a freshly uploaded file (no extraction run). `title` is the user label (plaintext); `documentDate` is the user filing date; `reportDate` is the model-transcribed date (null until extraction runs). `servingClass` says how `/original` delivers the file — render inline (`inline`) or download-only (`attachment`); render/download by it, never by MIME guess. `hasContentIndex` is true when the document has a content-search index (auto-indexed on upload); `contentIndexSource` says how that index was produced — `vision` means an AI provider read the original, the other values are provider-free local extractions, and it is null when `hasContentIndex` is false. `hasThumbnail` is true when a preview thumbnail has been rendered in the background (fetch it from `/api/documents/inbound/{id}/thumbnail`); false means no preview yet or an unsupported type — show a placeholder. Treat an unknown `kind` value as OTHER when decoding.",
+      "A stored document. The raw bytes are stored encrypted at rest and never returned; this is the metadata + staging summary. `status` is STORED for a freshly uploaded file (no extraction run). `title` is the user label (plaintext); `documentDate` is the user filing date; `reportDate` is the model-transcribed date (null until extraction runs). `servingClass` says how `/original` delivers the file — render inline (`inline`) or download-only (`attachment`); render/download by it, never by MIME guess. `hasContentIndex` is true when the document has a content-search index (auto-indexed on upload); `contentIndexSource` says how that index was produced — `vision` means an AI provider read the original, the other values are provider-free local extractions, and it is null when `hasContentIndex` is false. `lastIndexAttemptAt` is when the most recent index attempt finished (successful or not; null when none ran); `lastIndexOutcome` says why that attempt produced no index, and is null when the attempt succeeded or none ran. `hasThumbnail` is true when a preview thumbnail has been rendered in the background (fetch it from `/api/documents/inbound/{id}/thumbnail`); false means no preview yet or an unsupported type — show a placeholder. Treat an unknown `kind` value as OTHER when decoding.",
   });
 
 const inboundDocumentDetail = inboundDocument

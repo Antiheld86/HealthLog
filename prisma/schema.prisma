@@ -7536,6 +7536,22 @@ model InboundDocument {
   /// and one mid-flight all leave it null. NONE is the default, which keeps
   /// every pre-existing row correct — none of them were ever attempted.
   summaryState       DocumentSummaryState  @default(NONE) @map("summary_state")
+  /// When the most recent content-index attempt finished (auto job, corpus
+  /// backfill, or the manual index route — they share one recorder),
+  /// successful or not. Null until any attempt ran. Diagnostic state the
+  /// detail view pairs with `lastIndexOutcome`; carried verbatim in the
+  /// disaster-recovery backup like its summary siblings.
+  lastIndexAttemptAt DateTime?             @map("last_index_attempt_at")
+  /// Why the most recent index attempt produced NO index — a closed string
+  /// enum (`DocumentIndexOutcomeValue` in
+  /// `src/lib/validations/inbound-documents.ts`): local-empty |
+  /// local-unsupported | decrypt-error | raster-failed | provider-error |
+  /// pdf-needs-anthropic | empty-transcription. Null after a successful
+  /// attempt (the `DocumentContentIndex` row itself is the success signal)
+  /// and before the first attempt. Lets the detail view tell "never tried"
+  /// from "tried and here is why it failed" instead of showing a bare
+  /// not-indexed state for both.
+  lastIndexOutcome   String?               @map("last_index_outcome")
 
   facts           ExtractedFact[]
   conditionLinks  DocumentConditionLink[]

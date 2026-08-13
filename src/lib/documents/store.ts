@@ -17,6 +17,7 @@ import type {
   InboundDocumentStatus,
 } from "@/generated/prisma/client";
 import { servingClassFor } from "@/lib/documents/upload-policy";
+import { toIndexOutcome } from "@/lib/validations/inbound-documents";
 import type {
   DocumentConditionLinkDto,
   DocumentEncounterLinkDto,
@@ -225,6 +226,15 @@ export function serialiseDocument(
     servingClass: servingClassFor(doc.mimeType),
     hasContentIndex,
     contentIndexSource: hasContentIndex ? contentIndexSource : null,
+    // Refs #776 — the attempt record travels on every DTO so the detail view
+    // can explain a missing index. Outcome only surfaces while there IS no
+    // index: once indexed, the last failure is history, not status.
+    lastIndexAttemptAt: doc.lastIndexAttemptAt
+      ? doc.lastIndexAttemptAt.toISOString()
+      : null,
+    lastIndexOutcome: hasContentIndex
+      ? null
+      : toIndexOutcome(doc.lastIndexOutcome),
     hasThumbnail,
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),

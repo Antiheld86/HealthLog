@@ -102,10 +102,13 @@ describe("rasterizePdf", () => {
   it("returns { ok: false } and never throws on malformed input", async () => {
     await expect(
       rasterizePdf(Buffer.from("this is not a pdf")),
-    ).resolves.toEqual({ ok: false });
+    ).resolves.toEqual({ ok: false, reason: "render-failed" });
   });
 
   it("returns { ok: false } on an empty buffer", async () => {
-    await expect(rasterizePdf(Buffer.alloc(0))).resolves.toEqual({ ok: false });
+    await expect(rasterizePdf(Buffer.alloc(0))).resolves.toEqual({
+      ok: false,
+      reason: "render-failed",
+    });
   });
 });

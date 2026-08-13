@@ -9506,6 +9506,17 @@
         "generate": "Wygeneruj podsumowanie",
         "generating": "Generowanie…"
       },
+      "index": {
+        "outcome": {
+          "local-empty": "Nie znaleziono czytelnego tekstu. To wygląda na skan; dostawca wizji AI może go odczytać.",
+          "local-unsupported": "Tego typu pliku nie można odczytać na potrzeby wyszukiwania.",
+          "decrypt-error": "Nie udało się otworzyć zapisanego pliku do odczytu.",
+          "raster-failed": "Nie udało się przetworzyć stron PDF do odczytu.",
+          "provider-error": "Dostawca AI nie zdołał odczytać tego dokumentu przy ostatniej próbie.",
+          "pdf-needs-anthropic": "Skonfigurowany dostawca AI nie odczytuje plików PDF. Poradzi sobie z tym dostawca Claude lub lokalny OCR.",
+          "empty-transcription": "Dostawca AI nie zwrócił tekstu dla tego dokumentu."
+        }
+      },
       "loadError": "Nie udało się wczytać tego dokumentu.",
       "saveError": "Nie udało się zapisać zmiany.",
       "deleteError": "Nie udało się usunąć dokumentu.",

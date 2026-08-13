@@ -114,6 +114,34 @@ export const DOCUMENT_SUMMARY_STATES = [
 export type DocumentSummaryStateValue =
   (typeof DOCUMENT_SUMMARY_STATES)[number];
 
+/**
+ * Refs #776 — why a document's most recent content-index attempt produced no
+ * index. Mirrors the free-String `lastIndexOutcome` column (closed here, not
+ * in the schema, so a new reason needs no migration); the detail view renders
+ * a plain-words line per value instead of a bare "not indexed" that cannot
+ * tell "never tried" from "tried and failed".
+ */
+export const DOCUMENT_INDEX_OUTCOMES = [
+  "local-empty",
+  "local-unsupported",
+  "decrypt-error",
+  "raster-failed",
+  "provider-error",
+  "pdf-needs-anthropic",
+  "empty-transcription",
+] as const;
+export type DocumentIndexOutcomeValue =
+  (typeof DOCUMENT_INDEX_OUTCOMES)[number];
+
+/** Narrow the free-String DB column to the DTO union (null when unknown). */
+export function toIndexOutcome(
+  outcome: string | null | undefined,
+): DocumentIndexOutcomeValue | null {
+  return DOCUMENT_INDEX_OUTCOMES.includes(outcome as DocumentIndexOutcomeValue)
+    ? (outcome as DocumentIndexOutcomeValue)
+    : null;
+}
+
 /** The document lifecycle states. STORED is the library default. */
 export const INBOUND_DOCUMENT_STATUSES = [
   "STORED",
@@ -347,6 +375,18 @@ export interface InboundDocumentDto {
    * a locally-indexed one and offer a richer "Read with AI" pass on the latter.
    */
   contentIndexSource: DocumentContentIndexSourceValue | null;
+  /**
+   * Refs #776 — when the most recent index attempt finished (ISO 8601),
+   * successful or not. Null until any attempt ran (pre-existing rows, or a
+   * document whose auto-index never fired).
+   */
+  lastIndexAttemptAt: string | null;
+  /**
+   * Refs #776 — why the most recent index attempt produced no index, or null
+   * (attempt succeeded, or never ran — `lastIndexAttemptAt` tells the two
+   * apart). The detail view renders the reason in plain words.
+   */
+  lastIndexOutcome: DocumentIndexOutcomeValue | null;
   /**
    * Whether the document has an encrypted preview thumbnail (rendered in the
    * background after upload). Gates the card's `<img>`: when false the card
