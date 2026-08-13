@@ -276,7 +276,8 @@ const PINNED_AFFORDANCES: Record<
   "src/components/records/family-history-form.tsx": { "toast.success": 1 },
   "src/components/records/family-history-manager.tsx": { "toast.success": 1 },
   "src/components/settings/_info-tile.tsx": { "text-success": 1 },
-  "src/components/settings/about-me-section.tsx": { "toast.success": 1 },
+  "src/components/records/about-me-note-manager.tsx": { "toast.success": 1 },
+  "src/components/records/allergy-free-text-note.tsx": { "toast.success": 1 },
   "src/components/settings/account-section/avatar-section.tsx": {
     "text-success": 1,
   },

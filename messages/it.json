@@ -5622,14 +5622,10 @@
         "profileHint": "Età e genere provengono dal tuo profilo e vengono inclusi automaticamente.",
         "freeTextLabel": "Su di me (testo libero)",
         "conditionsPlaceholder": "Es. ipertensione, diabete di tipo 2…",
-        "allergiesLabel": "Allergie e intolleranze",
         "allergiesPlaceholder": "Es. intolleranza al lattosio, allergia alla penicillina…",
         "focusPlaceholder": "Es. tieni d'occhio la mia pressione, motivami a muovermi di più…",
-        "completeness": "{answered} su {total} compilati",
         "questionsTitle": "Il Coach ha alcune domande",
-        "questionsOpenCoach": "Rispondi nel Coach",
-        "recordsLink": "Allergie, anamnesi familiare e le tue patologie preesistenti fanno parte della tua anamnesi.",
-        "recordsLinkCta": "Apri anamnesi"
+        "questionsOpenCoach": "Rispondi nel Coach"
       },
       "responseTimeoutHeading": "Timeout della risposta",
       "responseTimeoutBody": "Quanto attendere la risposta dell'IA prima di annullare. Aumentalo per un modello locale o self-hosted che ha bisogno di tempo per caricarsi alla prima richiesta.",
@@ -9303,6 +9299,12 @@
         "savedToast": "Allergia salvata",
         "updatedToast": "Allergia aggiornata",
         "saveError": "Impossibile salvare l'allergia."
+      },
+      "freeText": {
+        "label": "Nota a testo libero (allergie e intolleranze)",
+        "hint": "Un'integrazione a testo libero all'elenco strutturato qui sopra, per il contesto che una singola voce non può contenere.",
+        "savedToast": "Nota sulle allergie salvata.",
+        "saveError": "Impossibile salvare. Riprova."
       }
     },
     "family": {

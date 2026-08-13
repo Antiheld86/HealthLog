@@ -5622,14 +5622,10 @@
         "profileHint": "Alter und Geschlecht stammen aus deinem Profil und werden automatisch mitgegeben.",
         "freeTextLabel": "Über mich (Freitext)",
         "conditionsPlaceholder": "Z. B. Bluthochdruck, Typ-2-Diabetes…",
-        "allergiesLabel": "Allergien & Unverträglichkeiten",
         "allergiesPlaceholder": "Z. B. Laktoseintoleranz, Penicillin-Allergie…",
         "focusPlaceholder": "Z. B. behalte meinen Blutdruck im Blick, motiviere mich zu mehr Bewegung…",
-        "completeness": "{answered} von {total} beantwortet",
         "questionsTitle": "Der Coach hat Rückfragen",
-        "questionsOpenCoach": "Im Coach beantworten",
-        "recordsLink": "Allergien, Familienanamnese und deine Vorerkrankungen gehören zu deiner Anamnese.",
-        "recordsLinkCta": "Anamnese öffnen"
+        "questionsOpenCoach": "Im Coach beantworten"
       },
       "responseTimeoutHeading": "Antwort-Timeout",
       "responseTimeoutBody": "Wie lange auf die Antwort der KI gewartet wird, bevor abgebrochen wird. Erhöhe den Wert für ein lokales oder selbst gehostetes Modell, das beim ersten Aufruf Zeit zum Laden braucht.",
@@ -9303,6 +9299,12 @@
         "savedToast": "Allergie gespeichert",
         "updatedToast": "Allergie aktualisiert",
         "saveError": "Die Allergie konnte nicht gespeichert werden."
+      },
+      "freeText": {
+        "label": "Freitext-Ergänzung (Allergien & Unverträglichkeiten)",
+        "hint": "Eine Freitext-Ergänzung zur strukturierten Liste oben, für Kontext, den ein einzelner Eintrag nicht abbilden kann.",
+        "savedToast": "Allergie-Notiz gespeichert.",
+        "saveError": "Speichern fehlgeschlagen. Bitte versuche es erneut."
       }
     },
     "family": {

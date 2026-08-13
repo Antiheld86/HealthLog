@@ -5622,14 +5622,10 @@
         "profileHint": "Age and gender come from your profile and are included automatically.",
         "freeTextLabel": "About me (free text)",
         "conditionsPlaceholder": "E.g. hypertension, type 2 diabetes…",
-        "allergiesLabel": "Allergies & intolerances",
         "allergiesPlaceholder": "E.g. lactose intolerance, penicillin allergy…",
         "focusPlaceholder": "E.g. keep an eye on my blood pressure, motivate me to move more…",
-        "completeness": "{answered} of {total} answered",
         "questionsTitle": "The Coach has follow-up questions",
-        "questionsOpenCoach": "Answer them in the Coach",
-        "recordsLink": "Allergies, family history and your pre-existing conditions are part of your medical history.",
-        "recordsLinkCta": "Open medical history"
+        "questionsOpenCoach": "Answer them in the Coach"
       },
       "responseTimeoutHeading": "Response timeout",
       "responseTimeoutBody": "How long to wait for the AI to respond before giving up. Raise it for a local or self-hosted model that needs time to load on the first request.",
@@ -9303,6 +9299,12 @@
         "savedToast": "Allergy saved",
         "updatedToast": "Allergy updated",
         "saveError": "Couldn't save the allergy."
+      },
+      "freeText": {
+        "label": "Free-text note (allergies & intolerances)",
+        "hint": "A free-text supplement to the structured list above, for context a single entry cannot carry.",
+        "savedToast": "Allergy note saved.",
+        "saveError": "Could not save. Please try again."
       }
     },
     "family": {

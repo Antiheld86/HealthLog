@@ -25,7 +25,6 @@ import {
 } from "@/lib/profile/height-unit-display";
 import { locales, localeLabels, type Locale } from "@/lib/i18n/config";
 import { useTranslations } from "@/lib/i18n/context";
-import { AboutMeSection } from "@/components/settings/about-me-section";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { TimezonePicker } from "@/components/settings/timezone-picker";
@@ -525,12 +524,10 @@ export function AccountSection() {
           Medikamente settings section, where every medication-specific
           preference now lives. */}
 
-      {/* v1.18.1 (D8) — the AI "About me" context lives under Profil, placed
-          before Zyklus-Tracking. It is personal medical context (conditions,
-          allergies, what the Coach should watch) the daily briefing + Coach
-          read, so it belongs with the account profile rather than the AI
-          provider-configuration screen. */}
-      <AboutMeSection isAuthenticated={isAuthenticated} />
+      {/* #159 — the AI "About me" note and the free-text allergies line moved
+          to Settings → Anamnese: they are personal medical context, so they
+          sit with conditions, allergies and family history as one medical
+          history (`anamnesis-section.tsx`). */}
 
       {/* Cycle tracking is a module, and the Modules hub carries its switch.
           The second enable surface that used to sit here asked the same

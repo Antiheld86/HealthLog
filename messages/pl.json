@@ -5622,14 +5622,10 @@
         "profileHint": "Wiek i płeć pochodzą z Twojego profilu i są dołączane automatycznie.",
         "freeTextLabel": "O mnie (tekst dowolny)",
         "conditionsPlaceholder": "Np. nadciśnienie, cukrzyca typu 2…",
-        "allergiesLabel": "Alergie i nietolerancje",
         "allergiesPlaceholder": "Np. nietolerancja laktozy, alergia na penicylinę…",
         "focusPlaceholder": "Np. pilnuj mojego ciśnienia, motywuj mnie do ruchu…",
-        "completeness": "Wypełnione: {answered} z {total}",
         "questionsTitle": "Coach ma pytania",
-        "questionsOpenCoach": "Odpowiedz w Coachu",
-        "recordsLink": "Alergie, wywiad rodzinny i Twoje choroby przewlekłe są częścią Twojego wywiadu medycznego.",
-        "recordsLinkCta": "Otwórz wywiad medyczny"
+        "questionsOpenCoach": "Odpowiedz w Coachu"
       },
       "responseTimeoutHeading": "Limit czasu odpowiedzi",
       "responseTimeoutBody": "Jak długo czekać na odpowiedź AI, zanim nastąpi przerwanie. Zwiększ wartość dla lokalnego lub samodzielnie hostowanego modelu, który potrzebuje czasu na załadowanie przy pierwszym żądaniu.",
@@ -9303,6 +9299,12 @@
         "savedToast": "Alergia zapisana",
         "updatedToast": "Alergia zaktualizowana",
         "saveError": "Nie udało się zapisać alergii."
+      },
+      "freeText": {
+        "label": "Notatka tekstowa (alergie i nietolerancje)",
+        "hint": "Tekstowe uzupełnienie ustrukturyzowanej listy powyżej, na kontekst, którego pojedynczy wpis nie odda.",
+        "savedToast": "Notatka o alergiach zapisana.",
+        "saveError": "Nie udało się zapisać. Spróbuj ponownie."
       }
     },
     "family": {

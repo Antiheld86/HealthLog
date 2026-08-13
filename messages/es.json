@@ -5622,14 +5622,10 @@
         "profileHint": "La edad y el género provienen de tu perfil y se incluyen automáticamente.",
         "freeTextLabel": "Sobre mí (texto libre)",
         "conditionsPlaceholder": "P. ej. hipertensión, diabetes tipo 2…",
-        "allergiesLabel": "Alergias e intolerancias",
         "allergiesPlaceholder": "P. ej. intolerancia a la lactosa, alergia a la penicilina…",
         "focusPlaceholder": "P. ej. vigila mi tensión arterial, motívame a moverme más…",
-        "completeness": "{answered} de {total} respondidas",
         "questionsTitle": "El Coach tiene preguntas",
-        "questionsOpenCoach": "Responderlas en el Coach",
-        "recordsLink": "Las alergias, los antecedentes familiares y tus enfermedades preexistentes forman parte de tu historia clínica.",
-        "recordsLinkCta": "Abrir historia clínica"
+        "questionsOpenCoach": "Responderlas en el Coach"
       },
       "responseTimeoutHeading": "Tiempo de espera de la respuesta",
       "responseTimeoutBody": "Cuánto esperar a que responda la IA antes de cancelar. Aumenta el valor para un modelo local o autoalojado que necesita tiempo para cargarse en la primera solicitud.",
@@ -9303,6 +9299,12 @@
         "savedToast": "Alergia guardada",
         "updatedToast": "Alergia actualizada",
         "saveError": "No se ha podido guardar la alergia."
+      },
+      "freeText": {
+        "label": "Nota de texto libre (alergias e intolerancias)",
+        "hint": "Un complemento de texto libre a la lista estructurada de arriba, para contexto que una entrada individual no puede reflejar.",
+        "savedToast": "Nota de alergias guardada.",
+        "saveError": "No se pudo guardar. Inténtalo de nuevo."
       }
     },
     "family": {

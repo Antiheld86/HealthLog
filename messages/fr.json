@@ -5622,14 +5622,10 @@
         "profileHint": "L'âge et le genre proviennent de votre profil et sont inclus automatiquement.",
         "freeTextLabel": "À propos de moi (texte libre)",
         "conditionsPlaceholder": "P. ex. hypertension, diabète de type 2…",
-        "allergiesLabel": "Allergies et intolérances",
         "allergiesPlaceholder": "P. ex. intolérance au lactose, allergie à la pénicilline…",
         "focusPlaceholder": "P. ex. surveille ma tension, motive-moi à bouger davantage…",
-        "completeness": "{answered} sur {total} renseignés",
         "questionsTitle": "Le Coach a des questions",
-        "questionsOpenCoach": "Y répondre dans le Coach",
-        "recordsLink": "Les allergies, les antécédents familiaux et vos affections préexistantes font partie de vos antécédents médicaux.",
-        "recordsLinkCta": "Ouvrir les antécédents médicaux"
+        "questionsOpenCoach": "Y répondre dans le Coach"
       },
       "responseTimeoutHeading": "Délai de réponse",
       "responseTimeoutBody": "Durée d'attente de la réponse de l'IA avant d'abandonner. Augmentez-la pour un modèle local ou auto-hébergé qui a besoin de temps pour se charger à la première requête.",
@@ -9303,6 +9299,12 @@
         "savedToast": "Allergie enregistrée",
         "updatedToast": "Allergie mise à jour",
         "saveError": "Impossible d'enregistrer l'allergie."
+      },
+      "freeText": {
+        "label": "Note en texte libre (allergies et intolérances)",
+        "hint": "Un complément en texte libre à la liste structurée ci-dessus, pour un contexte qu'une entrée seule ne peut pas refléter.",
+        "savedToast": "Note d'allergies enregistrée.",
+        "saveError": "Impossible d'enregistrer. Veuillez réessayer."
       }
     },
     "family": {
