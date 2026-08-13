@@ -4172,6 +4172,8 @@
     "regenerateRateLimited": "Aktualisierungslimit erreicht — bitte später erneut versuchen.",
     "regenerateUnavailable": "Keine neue Analyse erhalten — bitte später erneut versuchen.",
     "regenerateError": "Aktualisierung läuft noch — bitte gleich erneut versuchen.",
+    "regenerateSettling": "Die Einschätzung wird noch erstellt",
+    "regenerateSettleFailed": "Die Aktualisierung konnte nicht abgeschlossen werden. Bitte später erneut versuchen.",
     "deviceScore": {
       "learning": "Deine Basislinie wird noch gelernt – ein paar weitere Nächte vervollständigen den Verlauf.",
       "average": "30-Tage-Durchschnitt {value}",
@@ -9503,6 +9505,17 @@
         "unavailable": "Für dieses Dokument konnte keine Zusammenfassung erstellt werden.",
         "generate": "Zusammenfassung erstellen",
         "generating": "Wird erstellt…"
+      },
+      "index": {
+        "outcome": {
+          "local-empty": "Es wurde kein lesbarer Text gefunden. Das sieht nach einem Scan aus; ein KI-Vision-Anbieter kann ihn lesen.",
+          "local-unsupported": "Dieser Dateityp kann für die Suche nicht gelesen werden.",
+          "decrypt-error": "Die gespeicherte Datei konnte zum Lesen nicht geöffnet werden.",
+          "raster-failed": "Die PDF-Seiten konnten zum Lesen nicht gerendert werden. Gescannte Fax-Kompressionsformate sind eine bekannte Ursache.",
+          "provider-error": "Der KI-Anbieter konnte dieses Dokument beim letzten Versuch nicht lesen.",
+          "pdf-needs-anthropic": "Der eingerichtete KI-Anbieter kann keine PDF-Dateien lesen. Ein Claude-Anbieter oder lokale OCR kann es.",
+          "empty-transcription": "Der KI-Anbieter hat für dieses Dokument keinen Text geliefert."
+        }
       },
       "loadError": "Dieses Dokument konnte nicht geladen werden.",
       "saveError": "Die Änderung konnte nicht gespeichert werden.",

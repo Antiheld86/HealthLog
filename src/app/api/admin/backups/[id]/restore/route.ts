@@ -1319,6 +1319,10 @@ const handler = apiHandler(
                   ? new Date(document.summaryGeneratedAt)
                   : null,
                 summaryState: document.summaryState as never,
+                lastIndexAttemptAt: document.lastIndexAttemptAt
+                  ? new Date(document.lastIndexAttemptAt)
+                  : null,
+                lastIndexOutcome: document.lastIndexOutcome ?? null,
                 createdAt: new Date(document.createdAt!),
                 updatedAt: new Date(document.updatedAt!),
               })),

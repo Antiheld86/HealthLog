@@ -4172,6 +4172,8 @@
     "regenerateRateLimited": "Limite di aggiornamento raggiunto — riprova più tardi.",
     "regenerateUnavailable": "Nessuna nuova analisi ricevuta — riprova più tardi.",
     "regenerateError": "Aggiornamento ancora in corso — riprova tra un momento.",
+    "regenerateSettling": "La valutazione è ancora in preparazione",
+    "regenerateSettleFailed": "Non è stato possibile completare l’aggiornamento. Riprova più tardi.",
     "deviceScore": {
       "learning": "Stiamo ancora imparando la tua linea di base: qualche notte in più completerà l'andamento.",
       "average": "Media a 30 giorni {value}",
@@ -9503,6 +9505,17 @@
         "unavailable": "Non è stato possibile generare un riepilogo per questo documento.",
         "generate": "Genera riepilogo",
         "generating": "Generazione…"
+      },
+      "index": {
+        "outcome": {
+          "local-empty": "Non è stato trovato testo leggibile. Sembra una scansione; un provider di visione IA può leggerla.",
+          "local-unsupported": "Questo tipo di file non può essere letto per la ricerca.",
+          "decrypt-error": "Il file archiviato non può essere aperto per la lettura.",
+          "raster-failed": "Le pagine del PDF non possono essere elaborate per la lettura. I formati di compressione fax digitalizzati sono una causa nota.",
+          "provider-error": "Il provider IA non è riuscito a leggere questo documento all’ultimo tentativo.",
+          "pdf-needs-anthropic": "Il provider IA configurato non può leggere i file PDF. Un provider Claude o l’OCR locale sì.",
+          "empty-transcription": "Il provider IA non ha restituito testo per questo documento."
+        }
       },
       "loadError": "Impossibile caricare questo documento.",
       "saveError": "Impossibile salvare la modifica.",

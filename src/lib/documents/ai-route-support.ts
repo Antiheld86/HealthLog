@@ -143,7 +143,15 @@ export type VisionInput =
       }[];
       documents: { mediaType: "application/pdf"; dataBase64: string }[];
     }
-  | { ok: false; reason: "decryptFailed" | "fileType" | "pdfNeedsAnthropic" };
+  | {
+      ok: false;
+      // Refs #776 — `rasterFailed` (this PDF would not render on a raster-
+      // capable build) is distinct from `pdfNeedsAnthropic` (this build /
+      // provider cannot take a PDF at all): they need different fixes, so
+      // they must not share a label.
+      reason:
+        "decryptFailed" | "fileType" | "pdfNeedsAnthropic" | "rasterFailed";
+    };
 
 /**
  * Decrypt the stored original, re-derive its MIME from the bytes (never trust
@@ -197,7 +205,14 @@ export async function prepareVisionInput(
     if (raster.ok) {
       return { ok: true, images: raster.images, documents: [] };
     }
-    return { ok: false, reason: "pdfNeedsAnthropic" };
+    // Refs #776 — a build that cannot rasterize at all is a capability gap a
+    // PDF-native (Anthropic) provider would cover; a render failure on a
+    // capable build is a property of THIS document. Report them apart.
+    return {
+      ok: false,
+      reason:
+        raster.reason === "unsupported" ? "pdfNeedsAnthropic" : "rasterFailed",
+    };
   }
 
   return {

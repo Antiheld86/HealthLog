@@ -88,7 +88,20 @@ export interface InsightsTabStripProps {
    * mounts / no regenerate) falls back to the prior unconditional success.
    */
   regenerateOutcome?:
-    "fresh" | "empty" | "rate-limited" | "timeout" | "no-provider" | null;
+    | "fresh"
+    | "empty"
+    | "rate-limited"
+    | "timeout"
+    | "no-provider"
+    | "settle-failed"
+    | null;
+  /**
+   * Refs #786 — true while a timed-out regenerate is settling (the server is
+   * still generating; the hook polls for the proven outcome). The button
+   * stays busy with a "still being prepared" label, and the falling-edge
+   * toast waits for the COMBINED busy state so no error fires mid-settle.
+   */
+  regenerateSettling?: boolean;
   /**
    * v1.4.27 F19 — analytics + event-driven availability inputs the
    * gating helper reads. When omitted the strip falls back to its
@@ -637,10 +650,38 @@ function buildTabs(
   return entries;
 }
 
+/**
+ * Refs #786 — the falling-edge toast decision as a pure seam. Maps the last
+ * settled outcome to the toast that fires when the busy state falls:
+ * `settle-failed` (a settling poll proved the generation failed, or the
+ * attempt cap ran out) gets its own honest error copy; `no-provider` stays
+ * silent (the surface already shows the connect-AI empty state); a missing
+ * outcome (legacy mounts) keeps the historical unconditional success.
+ */
+export function regenerateToastKind(
+  outcome: InsightsTabStripProps["regenerateOutcome"] | undefined,
+): { kind: "success" | "error"; messageKey: string } | null {
+  switch (outcome) {
+    case "timeout":
+      return { kind: "error", messageKey: "insights.regenerateError" };
+    case "rate-limited":
+      return { kind: "error", messageKey: "insights.regenerateRateLimited" };
+    case "empty":
+      return { kind: "error", messageKey: "insights.regenerateUnavailable" };
+    case "settle-failed":
+      return { kind: "error", messageKey: "insights.regenerateSettleFailed" };
+    case "no-provider":
+      return null;
+    default:
+      return { kind: "success", messageKey: "insights.regenerateSuccess" };
+  }
+}
+
 function InsightsTabStripImpl({
   onRegenerate,
   regenerating = false,
   regenerateOutcome,
+  regenerateSettling = false,
   availability,
   visibleTileIds,
   tileOrder,
@@ -686,24 +727,33 @@ function InsightsTabStripImpl({
   // regenerate claimed "refreshed" while serving the old text. The latest
   // outcome is read through a ref-free dep so the effect fires only on the
   // spinner edge.
-  const lastRegeneratingRef = useRef<boolean>(regenerating);
+  //
+  // Refs #786 — the edge watches the COMBINED busy state (`regenerating ||
+  // regenerateSettling`): a timed-out regenerate flows straight into
+  // settling, so the spinner never falls at 45 s and NO error toast fires
+  // while the server may still deliver. The edge fires once settling
+  // resolves, with the proven outcome — `"fresh"` (success) or
+  // `"settle-failed"` (its own honest error copy). The mapping is the pure
+  // `regenerateToastKind` seam above.
+  const busy = regenerating || regenerateSettling;
+  const lastBusyRef = useRef<boolean>(busy);
   useEffect(() => {
-    if (lastRegeneratingRef.current && !regenerating) {
-      if (regenerateOutcome === "timeout") {
-        toast.error(t("insights.regenerateError"));
-      } else if (regenerateOutcome === "rate-limited") {
-        toast.error(t("insights.regenerateRateLimited"));
-      } else if (regenerateOutcome === "empty") {
-        toast.error(t("insights.regenerateUnavailable"));
-      } else if (regenerateOutcome !== "no-provider") {
-        // `"fresh"` or legacy `undefined`/null → success.
-        toast.success(t("insights.regenerateSuccess"));
+    if (lastBusyRef.current && !busy) {
+      const decision = regenerateToastKind(regenerateOutcome);
+      if (decision) {
+        if (decision.kind === "error") {
+          toast.error(t(decision.messageKey));
+        } else {
+          toast.success(t(decision.messageKey));
+        }
       }
     }
-    lastRegeneratingRef.current = regenerating;
-  }, [regenerating, regenerateOutcome, t]);
+    lastBusyRef.current = busy;
+  }, [busy, regenerateOutcome, t]);
 
-  const regenerateLabel = t("insights.regenerateAnalysis");
+  const regenerateLabel = regenerateSettling
+    ? t("insights.regenerateSettling")
+    : t("insights.regenerateAnalysis");
   const customizeLabel = t("insights.customize");
 
   // Overflow affordance for the pill row. The row hides its scrollbar
@@ -1000,7 +1050,9 @@ function InsightsTabStripImpl({
           <button
             type="button"
             onClick={onRegenerate}
-            disabled={regenerating}
+            // Refs #786 — settling keeps the button busy: the work is still
+            // running server-side, so a retry now would only pile on.
+            disabled={busy}
             aria-label={regenerateLabel}
             title={regenerateLabel}
             data-slot="insights-tab-strip-regenerate"
@@ -1016,7 +1068,7 @@ function InsightsTabStripImpl({
               "disabled:cursor-not-allowed disabled:opacity-50",
             )}
           >
-            {regenerating ? (
+            {busy ? (
               <Loader2
                 className="h-4 w-4 animate-spin motion-reduce:animate-none"
                 aria-hidden="true"

@@ -213,3 +213,44 @@ describe("<DocumentAiSection>", () => {
     expect(html).toContain("Summarise");
   });
 });
+
+describe("<DocumentAiSection> index outcome (#776)", () => {
+  it("explains a failed index attempt in plain words, muted", () => {
+    const html = render(
+      base({ hasContentIndex: false, lastIndexOutcome: "local-empty" }),
+    );
+    expect(html).toContain('data-slot="document-index-outcome"');
+    expect(html).toContain("No readable text was found");
+    expect(html).toContain("text-muted-foreground");
+  });
+
+  it("also explains it on the auto-read unread branch", () => {
+    const html = render(
+      base({
+        autoReadEnabled: true,
+        hasContentIndex: false,
+        lastIndexOutcome: "raster-failed",
+      }),
+    );
+    expect(html).toContain('data-slot="document-index-outcome"');
+    expect(html).toContain("couldn&#x27;t be rendered");
+  });
+
+  it("says nothing once the document IS indexed (a past failure is history)", () => {
+    const html = render(
+      base({
+        hasContentIndex: true,
+        contentIndexSource: "vision",
+        lastIndexOutcome: "provider-error",
+      }),
+    );
+    expect(html).not.toContain('data-slot="document-index-outcome"');
+  });
+
+  it("says nothing when no attempt ever ran (never tried is not a failure)", () => {
+    const html = render(
+      base({ hasContentIndex: false, lastIndexOutcome: null }),
+    );
+    expect(html).not.toContain('data-slot="document-index-outcome"');
+  });
+});

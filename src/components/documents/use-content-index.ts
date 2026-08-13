@@ -41,7 +41,16 @@ export function useIndexDocument() {
   });
 }
 
-/** Fire the corpus backfill; resolves with how many docs were enqueued. */
+/**
+ * Fire the corpus backfill; resolves with how many docs were enqueued.
+ *
+ * Wire contract (#776): `enqueued` is the NUMBER of live documents the
+ * backfill still has to index — the reindex route computes it from the same
+ * live-scoped counts the usage gauge reads, and returns an honest 0 when no
+ * job was created. The toast interpolates it as a count, so this type is
+ * load-bearing: it must match the route's shape exactly (a boolean here once
+ * rendered as "Indexing true document(s)").
+ */
 export function useReindexAll() {
   const queryClient = useQueryClient();
   return useMutation<{ enqueued: number }, Error, void>({

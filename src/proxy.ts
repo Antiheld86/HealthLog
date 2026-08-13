@@ -528,9 +528,21 @@ export function proxy(request: NextRequest) {
       // HTML/SVG denied entirely, and attachment-only posture for every
       // non-passive format.
       `default-src 'none'; frame-ancestors 'self';`
-    : isDev
-      ? `default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self';`
-      : `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'${aiConnectSrc}${withingsConnectSrc}${whoopConnectSrc}${stravaConnectSrc}; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self'; report-uri ${cspReportEndpoint}; report-to csp-endpoint;`;
+    : // v1.37.15 — `frame-src 'self' blob:` + `blob:` in `img-src` (both dev
+      // and prod). Since the record fence (v1.37.0) every vault preview loads
+      // through `useFencedObjectUrl`, i.e. a `blob:` object URL: without a
+      // `frame-src` the PDF preview iframe fell through to `default-src
+      // 'self'` and was blocked loudly, and `img-src 'self' data:` degraded
+      // every blob thumbnail to its fallback icon silently. Admitting `blob:`
+      // is same-origin-tight: a blob: URL can only be minted by script running
+      // on this origin (`URL.createObjectURL`), script execution stays
+      // nonce-bound (prod), and `object-src 'none'` / `frame-ancestors
+      // 'none'` / `default-src 'self'` are unchanged — no foreign origin
+      // gains anything. Reverting the previews to direct `/api` src instead
+      // is barred by the record-fence guard.
+      isDev
+      ? `default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src 'self' blob:; connect-src 'self'; font-src 'self';`
+      : `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src 'self' blob:; connect-src 'self'${aiConnectSrc}${withingsConnectSrc}${whoopConnectSrc}${stravaConnectSrc}; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self'; report-uri ${cspReportEndpoint}; report-to csp-endpoint;`;
   response.headers.set("Content-Security-Policy", csp);
 
   // Production-only headers. HSTS carries `preload` so the domain stays

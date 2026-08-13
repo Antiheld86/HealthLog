@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HealthLog API
-  version: 1.37.14
+  version: 1.37.15
   description: >-
     Self-hosted personal-health-tracking PWA — public API surface for the iOS native client and external ingest.
 
@@ -12792,7 +12792,8 @@ paths:
         immediately; the work runs off-request on the queue.
       responses:
         "200":
-          description: Whether a backfill job was enqueued.
+          description: How many live documents the enqueued backfill still has to index (0 when everything is indexed or no job
+            was created).
           content:
             application/json:
               schema:
@@ -37856,6 +37857,22 @@ components:
                 - local-pdf
                 - local-ocr
             - type: "null"
+        lastIndexAttemptAt:
+          anyOf:
+            - type: string
+            - type: "null"
+        lastIndexOutcome:
+          anyOf:
+            - type: string
+              enum:
+                - local-empty
+                - local-unsupported
+                - decrypt-error
+                - raster-failed
+                - provider-error
+                - pdf-needs-anthropic
+                - empty-transcription
+            - type: "null"
         hasThumbnail:
           type: boolean
         createdAt:
@@ -37881,6 +37898,8 @@ components:
         - servingClass
         - hasContentIndex
         - contentIndexSource
+        - lastIndexAttemptAt
+        - lastIndexOutcome
         - hasThumbnail
         - createdAt
         - updatedAt
@@ -37892,7 +37911,9 @@ components:
         download-only (`attachment`); render/download by it, never by MIME guess. `hasContentIndex` is true when the
         document has a content-search index (auto-indexed on upload); `contentIndexSource` says how that index was
         produced — `vision` means an AI provider read the original, the other values are provider-free local
-        extractions, and it is null when `hasContentIndex` is false. `hasThumbnail` is true when a preview thumbnail has
+        extractions, and it is null when `hasContentIndex` is false. `lastIndexAttemptAt` is when the most recent index
+        attempt finished (successful or not; null when none ran); `lastIndexOutcome` says why that attempt produced no
+        index, and is null when the attempt succeeded or none ran. `hasThumbnail` is true when a preview thumbnail has
         been rendered in the background (fetch it from `/api/documents/inbound/{id}/thumbnail`); false means no preview
         yet or an unsupported type — show a placeholder. Treat an unknown `kind` value as OTHER when decoding.
     DocumentConditionLink:
@@ -38204,6 +38225,22 @@ components:
                 - local-pdf
                 - local-ocr
             - type: "null"
+        lastIndexAttemptAt:
+          anyOf:
+            - type: string
+            - type: "null"
+        lastIndexOutcome:
+          anyOf:
+            - type: string
+              enum:
+                - local-empty
+                - local-unsupported
+                - decrypt-error
+                - raster-failed
+                - provider-error
+                - pdf-needs-anthropic
+                - empty-transcription
+            - type: "null"
         hasThumbnail:
           type: boolean
         createdAt:
@@ -38249,6 +38286,8 @@ components:
         - servingClass
         - hasContentIndex
         - contentIndexSource
+        - lastIndexAttemptAt
+        - lastIndexOutcome
         - hasThumbnail
         - createdAt
         - updatedAt
@@ -38680,7 +38719,9 @@ components:
       type: object
       properties:
         enqueued:
-          type: boolean
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
       required:
         - enqueued
       additionalProperties: false

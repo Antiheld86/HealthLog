@@ -49,6 +49,7 @@ import {
 } from "@/lib/documents/ai-route-support";
 import { maybeAutoStageLabFacts } from "@/lib/documents/auto-stage-labs";
 import { upsertContentIndex } from "@/lib/documents/content-index";
+import { recordIndexAttempt } from "@/lib/documents/index-document";
 import {
   DocumentDescribeError,
   transcribeDocument,
@@ -93,6 +94,15 @@ async function finishIndex(
   source: "vision" | "text-ocr",
   tokenCount: number,
 ): Promise<Response> {
+  // Refs #776 — the manual route is the second writer of the attempt record
+  // (the auto job + backfill share `indexLoadedDocument`): a success clears
+  // any stored failure reason so the detail view stops explaining a problem
+  // that no longer exists.
+  await recordIndexAttempt(userId, documentId, {
+    indexed: true,
+    source,
+    tokenCount,
+  });
   await auditLog("documents.inbound.index", {
     userId,
     ipAddress: getClientIp(request),
@@ -183,21 +193,44 @@ async function handleVisionIndex(
   const vision = await prepareVisionInput(document, pick.pdfSupported);
   if (!vision.ok) {
     // Preparation failed before any provider dispatch — the slot goes back.
+    // Refs #776 — each failure is also recorded on the row so the detail view
+    // can explain the missing index after the toast is gone.
     await refundDocumentAiSlot(userId);
     if (vision.reason === "pdfNeedsAnthropic") {
+      await recordIndexAttempt(userId, document.id, {
+        indexed: false,
+        reason: "pdf-needs-anthropic",
+      });
       return apiError(
         "PDF scanning needs a Claude vision provider; use local OCR instead.",
         422,
         { errorCode: "documents.inbound.pdfNeedsAnthropic" },
       );
     }
+    if (vision.reason === "rasterFailed") {
+      await recordIndexAttempt(userId, document.id, {
+        indexed: false,
+        reason: "raster-failed",
+      });
+      return apiError("The PDF pages couldn't be rendered for scanning.", 422, {
+        errorCode: "documents.inbound.extractFailed",
+      });
+    }
     if (vision.reason === "fileType") {
+      await recordIndexAttempt(userId, document.id, {
+        indexed: false,
+        reason: "local-unsupported",
+      });
       return apiError(
         "This document can't be scanned. Use local OCR (text mode).",
         422,
         { errorCode: "documents.inbound.fileType" },
       );
     }
+    await recordIndexAttempt(userId, document.id, {
+      indexed: false,
+      reason: "decrypt-error",
+    });
     return apiError("Couldn't read the stored document.", 422, {
       errorCode: "documents.inbound.extractFailed",
     });
@@ -230,6 +263,22 @@ async function handleVisionIndex(
       reservation.reserved,
       dateKey,
     );
+    // Refs #776 — the empty-transcription guard, same contract as the auto
+    // path (`tryProviderIndex`): a provider answer with no text must never
+    // become a "successful" empty index. The spend stays charged (the
+    // provider was called); the honest answer is an error plus the recorded
+    // reason.
+    if (text.trim().length === 0) {
+      await recordIndexAttempt(userId, document.id, {
+        indexed: false,
+        reason: "empty-transcription",
+      });
+      return apiError(
+        "The provider returned no text for this document. Try a clearer copy.",
+        422,
+        { errorCode: "documents.inbound.extractFailed" },
+      );
+    }
     const { tokenCount } = await upsertContentIndex({
       userId,
       documentId: document.id,
@@ -240,6 +289,10 @@ async function handleVisionIndex(
     return finishIndex(request, userId, document.id, "vision", tokenCount);
   } catch (err) {
     await reconcileSpend(userId, reservation.reserved, 0, dateKey);
+    await recordIndexAttempt(userId, document.id, {
+      indexed: false,
+      reason: "provider-error",
+    });
     if (err instanceof DocumentDescribeError) {
       return apiError("Couldn't read the document. Try a clearer copy.", 422, {
         errorCode: "documents.inbound.extractFailed",

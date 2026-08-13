@@ -38,6 +38,7 @@ import { cn } from "@/lib/utils";
 import {
   isAiReadSource,
   type DocumentContentIndexSourceValue,
+  type DocumentIndexOutcomeValue,
   type DocumentSuggestionDto,
   type DocumentSummaryMode,
 } from "@/lib/validations/inbound-documents";
@@ -74,6 +75,7 @@ export function DocumentAiSection({
   onCloseSummary,
   hasContentIndex,
   contentIndexSource,
+  lastIndexOutcome = null,
   indexPending,
   onIndex,
 }: {
@@ -111,11 +113,24 @@ export function DocumentAiSection({
   onCloseSummary: () => void;
   hasContentIndex: boolean;
   contentIndexSource: DocumentContentIndexSourceValue | null;
+  /**
+   * Refs #776 — why the last index attempt produced no index (null: never
+   * tried, or the document IS indexed). Rendered as a muted plain-words line
+   * beside the read action so a failed read is explainable, not a mystery.
+   */
+  lastIndexOutcome?: DocumentIndexOutcomeValue | null;
   indexPending: boolean;
   onIndex: () => void;
 }) {
   const { t } = useTranslations();
   const aiRead = hasContentIndex && isAiReadSource(contentIndexSource);
+  // Refs #776 — only an un-indexed document explains itself; once an index
+  // exists the last failure is history. Muted per the text-colour rule: this
+  // is meta about the document, not content.
+  const indexOutcomeText =
+    !hasContentIndex && lastIndexOutcome
+      ? t(`documents.detail.index.outcome.${lastIndexOutcome}`)
+      : null;
   const readLabel = indexPending
     ? t("documents.ai.reading")
     : aiRead
@@ -231,6 +246,15 @@ export function DocumentAiSection({
                 {readLabel}
               </Button>
             </div>
+          ) : null}
+
+          {indexOutcomeText ? (
+            <p
+              data-slot="document-index-outcome"
+              className="text-muted-foreground text-xs"
+            >
+              {indexOutcomeText}
+            </p>
           ) : null}
 
           {suggestErrorKey ? (

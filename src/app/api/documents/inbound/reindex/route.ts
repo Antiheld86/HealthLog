@@ -11,6 +11,7 @@ import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiError, apiSuccess, getClientIp } from "@/lib/api-response";
 import { assertDocumentEgressConsent } from "@/lib/ai/consent-guard";
 import { auditLog } from "@/lib/auth/audit";
+import { prisma } from "@/lib/db";
 import { enqueueContentIndexBackfill } from "@/lib/jobs/document-content-index-backfill";
 import { resolveDocumentVisionProvider } from "@/lib/documents/provider-order";
 import { annotate } from "@/lib/logging/context";
@@ -58,16 +59,37 @@ export const POST = apiHandler(async (request) => {
     surface: "insights",
   });
 
-  const { enqueued } = await enqueueContentIndexBackfill(user.id);
+  const { enqueued: jobCreated } = await enqueueContentIndexBackfill(user.id);
+
+  // Wire honesty (#776): the client types `enqueued` as a NUMBER and
+  // interpolates it into "Indexing {count} document(s)" — a boolean here once
+  // rendered as "Indexing true document(s)". Report the count of live
+  // documents still lacking a content index (the exact figures the usage
+  // gauge already derives, same live-scoping: a soft-deleted document keeps
+  // its index row until hard purge, so both counts filter `deletedAt: null`).
+  // An honest 0 when no job was created — the client then says "everything is
+  // already indexed" instead of promising work nobody queued.
+  let enqueued = 0;
+  if (jobCreated) {
+    const [indexedCount, totalCount] = await Promise.all([
+      prisma.documentContentIndex.count({
+        where: { userId: user.id, document: { deletedAt: null } },
+      }),
+      prisma.inboundDocument.count({
+        where: { userId: user.id, deletedAt: null },
+      }),
+    ]);
+    enqueued = Math.max(0, totalCount - indexedCount);
+  }
 
   await auditLog("documents.inbound.reindex", {
     userId: user.id,
     ipAddress: getClientIp(request),
-    details: { enqueued },
+    details: { enqueued, jobCreated },
   });
   annotate({
     action: { name: "documents.contentIndex.backfillEnqueue" },
-    meta: { enqueued },
+    meta: { enqueued, jobCreated },
   });
 
   return apiSuccess({ enqueued });

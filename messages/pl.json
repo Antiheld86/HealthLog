@@ -4172,6 +4172,8 @@
     "regenerateRateLimited": "Osiągnięto limit odświeżeń — spróbuj ponownie później.",
     "regenerateUnavailable": "Nie otrzymano nowej analizy — spróbuj ponownie później.",
     "regenerateError": "Trwa odświeżanie — spróbuj ponownie za chwilę.",
+    "regenerateSettling": "Ocena jest wciąż przygotowywana",
+    "regenerateSettleFailed": "Nie udało się ukończyć odświeżania. Spróbuj ponownie później.",
     "deviceScore": {
       "learning": "Wciąż poznajemy Twoją linię bazową – kilka kolejnych nocy uzupełni trend.",
       "average": "Średnia z 30 dni {value}",
@@ -9503,6 +9505,17 @@
         "unavailable": "Nie udało się wygenerować podsumowania dla tego dokumentu.",
         "generate": "Wygeneruj podsumowanie",
         "generating": "Generowanie…"
+      },
+      "index": {
+        "outcome": {
+          "local-empty": "Nie znaleziono czytelnego tekstu. To wygląda na skan; dostawca wizji AI może go odczytać.",
+          "local-unsupported": "Tego typu pliku nie można odczytać na potrzeby wyszukiwania.",
+          "decrypt-error": "Nie udało się otworzyć zapisanego pliku do odczytu.",
+          "raster-failed": "Nie udało się przetworzyć stron PDF do odczytu. Znaną przyczyną są skany w faksowych formatach kompresji.",
+          "provider-error": "Dostawca AI nie zdołał odczytać tego dokumentu przy ostatniej próbie.",
+          "pdf-needs-anthropic": "Skonfigurowany dostawca AI nie odczytuje plików PDF. Poradzi sobie z tym dostawca Claude lub lokalny OCR.",
+          "empty-transcription": "Dostawca AI nie zwrócił tekstu dla tego dokumentu."
+        }
       },
       "loadError": "Nie udało się wczytać tego dokumentu.",
       "saveError": "Nie udało się zapisać zmiany.",

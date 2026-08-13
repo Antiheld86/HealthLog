@@ -55,8 +55,12 @@ vi.mock("@/lib/ai/ai-budgets", () => ({
   AI_BUDGETS: { documentSummary: { temperature: 0.3, maxTokens: 600 } },
 }));
 
-import { runDocumentSummaryJob } from "../document-summary";
+import {
+  enqueueDocumentSummary,
+  runDocumentSummaryJob,
+} from "../document-summary";
 import { prisma } from "@/lib/db";
+import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { documentAutoReadEnabled } from "@/lib/documents/document-settings";
 import { resolveDocumentVisionProvider } from "@/lib/documents/provider-order";
 import {
@@ -124,14 +128,19 @@ beforeEach(() => {
 });
 
 describe("runDocumentSummaryJob — gating", () => {
-  it("does NOTHING when the opt-in is OFF (no provider call, no write)", async () => {
+  it("does no provider work when the opt-in is OFF (only the PENDING heal may write)", async () => {
     vi.mocked(documentAutoReadEnabled).mockResolvedValue(false);
 
     await runDocumentSummaryJob({ userId: "user-1", documentId: "doc-1" });
 
     expect(resolveDocumentVisionProvider).not.toHaveBeenCalled();
     expect(runDocumentSummary).not.toHaveBeenCalled();
-    expect(prisma.inboundDocument.updateMany).not.toHaveBeenCalled();
+    // The single permitted write is the PENDING→NONE heal; nothing may claim
+    // an attempt (UNAVAILABLE/WITHHELD) or a summary (READY) here.
+    const calls = vi.mocked(prisma.inboundDocument.updateMany).mock.calls;
+    for (const [arg] of calls) {
+      expect(arg.data).toEqual({ summaryState: "NONE" });
+    }
   });
 
   it("generates and PERSISTS the summary encrypted when opt-in is ON + a provider is configured", async () => {
@@ -247,5 +256,65 @@ describe("runDocumentSummaryJob — gating", () => {
         data: expect.objectContaining({ summaryState: "READY" }),
       }),
     );
+  });
+
+  it("heals a phantom PENDING back to NONE when the opt-in is OFF", async () => {
+    vi.mocked(documentAutoReadEnabled).mockResolvedValue(false);
+
+    await runDocumentSummaryJob({ userId: "user-1", documentId: "doc-1" });
+
+    // The opt-out branch may not leave a claimed PENDING standing — the view
+    // reads PENDING as "being generated" and this run is the only writer that
+    // can resolve it. The heal is scoped to PENDING: UNAVAILABLE / WITHHELD
+    // record real attempts and stay, READY is never touched.
+    expect(prisma.inboundDocument.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ summaryState: "PENDING" }),
+        data: { summaryState: "NONE" },
+      }),
+    );
+    // Still strictly no provider work.
+    expect(resolveDocumentVisionProvider).not.toHaveBeenCalled();
+    expect(runDocumentSummary).not.toHaveBeenCalled();
+  });
+});
+
+describe("enqueueDocumentSummary — the pending contract", () => {
+  it("does not enqueue and does not claim PENDING when the opt-in is OFF", async () => {
+    vi.mocked(documentAutoReadEnabled).mockResolvedValue(false);
+    const send = vi.fn().mockResolvedValue("job-1");
+    vi.mocked(getGlobalBoss).mockReturnValue({ send } as never);
+
+    const result = await enqueueDocumentSummary("user-1", "doc-1");
+
+    // With auto-read OFF the job's only move is the opt-out no-op, so a
+    // PENDING claimed here could never be resolved to a real outcome. No job,
+    // no state write — the view keeps offering the manual action.
+    expect(result).toEqual({ enqueued: false });
+    expect(send).not.toHaveBeenCalled();
+    expect(prisma.inboundDocument.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("enqueues and claims PENDING when the opt-in is ON and a job was created", async () => {
+    const send = vi.fn().mockResolvedValue("job-1");
+    vi.mocked(getGlobalBoss).mockReturnValue({ send } as never);
+
+    const result = await enqueueDocumentSummary("user-1", "doc-1");
+
+    expect(result).toEqual({ enqueued: true });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(prisma.inboundDocument.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { summaryState: "PENDING" } }),
+    );
+  });
+
+  it("claims nothing when the boss dropped the send (no job id)", async () => {
+    const send = vi.fn().mockResolvedValue(null);
+    vi.mocked(getGlobalBoss).mockReturnValue({ send } as never);
+
+    const result = await enqueueDocumentSummary("user-1", "doc-1");
+
+    expect(result).toEqual({ enqueued: false });
+    expect(prisma.inboundDocument.updateMany).not.toHaveBeenCalled();
   });
 });

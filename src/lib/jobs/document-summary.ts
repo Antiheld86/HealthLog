@@ -109,8 +109,23 @@ export async function runDocumentSummaryJob(
   // on-demand route stays the only way to summarise). Fail-closed on a missing
   // row.
   if (!(await documentAutoReadEnabled(userId))) {
-    // Opting out is not a failed attempt — leave the state alone so the view
-    // keeps offering the manual action rather than claiming we tried.
+    // Opting out is not a failed attempt — but a claimed PENDING may not
+    // outlive this run either. PENDING promises the reader "a job will resolve
+    // this", and this job IS that resolution: with the opt-in OFF the honest
+    // terminal state is NONE (never attempted), which is what the enqueue end
+    // of the contract (`enqueueDocumentSummary`) also concludes when the pref
+    // is off. The heal is scoped to PENDING only — NONE needs no write,
+    // UNAVAILABLE / WITHHELD record real attempts, READY is a stored summary.
+    // This also drains any phantom PENDING left by a pref flip mid-flight.
+    await prisma.inboundDocument.updateMany({
+      where: {
+        id: documentId,
+        userId,
+        deletedAt: null,
+        summaryState: "PENDING",
+      },
+      data: { summaryState: "NONE" },
+    });
     annotate({
       action: { name: "documents.summary.autoSkipped" },
       meta: { documentId, reason: "opt-out" },
@@ -282,14 +297,29 @@ export async function enqueueDocumentSummary(
   userId: string,
   documentId: string,
 ): Promise<{ enqueued: boolean }> {
-  const boss = getGlobalBoss();
-  if (!boss) return { enqueued: false };
-  const payload: DocumentSummaryPayload = {
-    userId,
-    documentId,
-    enqueuedAt: new Date().toISOString(),
-  };
   try {
+    // Contract, enqueue end: PENDING may only be claimed for work the job can
+    // terminally resolve. With the auto-read opt-in OFF the job's only branch
+    // is the opt-out no-op, so enqueueing would mint a job whose sole purpose
+    // is to undo this function's own PENDING — don't. No job, no state write;
+    // the document stays NONE and the view offers the manual action. The job
+    // keeps its own pref check (belt-and-braces for a pref flipped between
+    // enqueue and run) and heals PENDING→NONE there — the other end of this
+    // contract lives in `runDocumentSummaryJob`'s opt-out branch.
+    if (!(await documentAutoReadEnabled(userId))) {
+      annotate({
+        action: { name: "documents.summary.autoSkipped" },
+        meta: { documentId, reason: "opt-out" },
+      });
+      return { enqueued: false };
+    }
+    const boss = getGlobalBoss();
+    if (!boss) return { enqueued: false };
+    const payload: DocumentSummaryPayload = {
+      userId,
+      documentId,
+      enqueuedAt: new Date().toISOString(),
+    };
     const jobId = await boss.send(DOCUMENT_SUMMARY_QUEUE, payload, {
       retryLimit: 2,
       retryDelay: 30,

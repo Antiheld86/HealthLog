@@ -66,8 +66,16 @@ export interface RasterImage {
   dataBase64: string;
 }
 
-/** Best-effort rasterization outcome — never an exception. */
-export type RasterResult = { ok: true; images: RasterImage[] } | { ok: false };
+/**
+ * Best-effort rasterization outcome — never an exception. Refs #776: a
+ * failure names its class so the caller can tell "this build cannot raster
+ * at all" (`unsupported` — the native canvas binary is unusable, a capability
+ * gap Anthropic's native PDF path would cover) from "this particular PDF
+ * would not render" (`render-failed` — malformed / encrypted / zero pages).
+ */
+export type RasterResult =
+  | { ok: true; images: RasterImage[] }
+  | { ok: false; reason: "unsupported" | "render-failed" };
 
 // Minimal structural types for the slice of the pdfjs API this module uses. A
 // type-only shape (erased at build) so we never eagerly evaluate the pdfjs
@@ -138,7 +146,7 @@ export async function rasterizePdf(
       action: { name: "documents.rasterize.failed" },
       meta: { reason: "native_canvas_unsupported" },
     });
-    return { ok: false };
+    return { ok: false, reason: "unsupported" };
   }
   try {
     // Lazy import: keeps pdfjs (DOMMatrix) + @napi-rs/canvas out of the eager
@@ -190,7 +198,16 @@ export async function rasterizePdf(
       }
     }
 
-    if (images.length === 0) return { ok: false };
+    if (images.length === 0) {
+      // Refs #776 — the zero-pages shape must be as loud as a throw: a
+      // document that "rendered" nothing is a failed rasterization, and the
+      // wide event is what lets an operator see WHY a scan stayed unread.
+      annotate({
+        action: { name: "documents.rasterize.failed" },
+        meta: { reason: "zero_pages", pageCount: doc.numPages },
+      });
+      return { ok: false, reason: "render-failed" };
+    }
     annotate({
       action: { name: "documents.rasterize.ok" },
       meta: { pages: images.length, cappedFrom: doc.numPages },
@@ -207,7 +224,7 @@ export async function rasterizePdf(
         message: err instanceof Error ? err.message.slice(0, 300) : String(err),
       },
     });
-    return { ok: false };
+    return { ok: false, reason: "render-failed" };
   } finally {
     if (task) {
       try {

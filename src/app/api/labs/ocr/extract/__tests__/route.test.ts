@@ -196,7 +196,10 @@ describe("POST /api/labs/ocr/extract — vision PDF rasterization", () => {
   });
 
   it("falls back to pdfNeedsAnthropic when rasterization fails", async () => {
-    vi.mocked(rasterizePdf).mockResolvedValue({ ok: false });
+    vi.mocked(rasterizePdf).mockResolvedValue({
+      ok: false,
+      reason: "render-failed",
+    });
 
     const res = await POST(pdfReq());
     expect(res.status).toBe(422);

@@ -1022,6 +1022,10 @@ const documentBackupSchema = z
     summaryEncrypted: base64BytesSchema.nullable().optional(),
     summaryGeneratedAt: isoDateTime.nullable().optional(),
     summaryState: z.enum(DocumentSummaryState).optional(),
+    // Refs #776 — the index-attempt record (canonical DR payloads only).
+    // Free string on purpose: a future outcome value must not fail a restore.
+    lastIndexAttemptAt: isoDateTime.nullable().optional(),
+    lastIndexOutcome: z.string().nullable().optional(),
     summary: z.string().nullable().optional(),
     createdAt: isoDateTime.optional(),
     updatedAt: isoDateTime.optional(),

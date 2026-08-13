@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.37.15] — 2026-08-13
+
+### Fixed
+
+- Re-running the assessment no longer reports a failure while the server is still writing the result. When a refresh takes longer than the browser is willing to wait, the page now keeps watching quietly until the new assessment lands, then swaps it in and confirms. Only a refresh that provably failed says so. Before, a slow refresh showed an error toast and the page held on to the old assessment until the next day.
+- Document previews show again. The security policy the app sends to the browser did not cover the way previews load since the sharing fence, so PDF previews were blocked outright and image thumbnails quietly fell back to their icons. The policy now admits exactly the app's own decrypted documents and nothing else.
+- A document uploaded while automatic AI reading is switched off no longer claims a summary is being generated forever. The upload stopped queueing summary work it is not allowed to do, a stale claim heals itself on the next pass, and documents already stuck in that state are repaired by the update. The manual summary action is offered instead, as it should have been.
+- When reading a document for search fails, the document now says why, in plain words: a scan with no readable text, a PDF whose pages would not render (scanned fax compression formats are a known cause), a provider error, or a provider that cannot take PDF files. Before, a failed read looked identical to one that never happened. An AI answer with no text in it also no longer counts as a successful read.
+- The "index all documents" confirmation shows the real number of documents queued instead of the word "true".
+
 ## [1.37.14] — 2026-08-13
 
 ### Fixed

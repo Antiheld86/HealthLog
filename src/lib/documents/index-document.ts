@@ -52,22 +52,71 @@ import { documentAutoReadEnabled } from "@/lib/documents/document-settings";
 import { localExtractText } from "@/lib/documents/local-extract";
 import { resolveDocumentVisionProvider } from "@/lib/documents/provider-order";
 import { decryptDocumentContent } from "@/lib/documents/store";
+import { prisma } from "@/lib/db";
+import { annotate } from "@/lib/logging/context";
 import { detectOcrMimeType } from "@/lib/labs/ocr-upload";
 import type { ProviderChainResolved } from "@/lib/ai/provider-runner";
+
+/**
+ * Why one document's index attempt ended without an index. Refs #776 — the
+ * provider path's specific failures are terminal reasons now: when the local
+ * fallback can only say "no text", the recorded reason is the provider path's
+ * more actionable one (a raster failure, a provider error, an empty
+ * transcription, or a PDF the picked provider cannot take), so the detail
+ * view can say WHY instead of a bare not-indexed.
+ */
+export type IndexFailureReason =
+  | "not-found"
+  | "local-empty"
+  | "local-unsupported"
+  | "decrypt-error"
+  | "raster-failed"
+  | "provider-error"
+  | "pdf-needs-anthropic"
+  | "empty-transcription";
 
 /**
  * Outcome of one document's index attempt. A provider that is not usable (none
  * configured, no consent, budget exhausted, cannot read the file, or errored)
  * is never itself a terminal outcome — the tree always falls through to the
- * free local path, so the terminal reasons are only the local ones.
+ * free local path — but its failure NOTE survives that fall-through (see
+ * `IndexFailureReason`).
  */
 export type IndexOutcome =
   | { indexed: true; source: ContentIndexSource; tokenCount: number }
-  | {
-      indexed: false;
-      reason:
-        "not-found" | "local-empty" | "local-unsupported" | "decrypt-error";
-    };
+  | { indexed: false; reason: IndexFailureReason };
+
+/**
+ * Refs #776 — record what became of this attempt on the document row, so a
+ * missing index is explainable. `lastIndexAttemptAt` always advances;
+ * `lastIndexOutcome` carries the failure reason, or null on success (the
+ * `DocumentContentIndex` row itself is the success signal). Called from
+ * `indexLoadedDocument` (the choke point the auto job and the corpus backfill
+ * share) and from the manual index route. Owner-scoped; never throws — a
+ * diagnostic write must not fail the index work it describes.
+ */
+export async function recordIndexAttempt(
+  userId: string,
+  documentId: string,
+  outcome: IndexOutcome,
+): Promise<void> {
+  // No row to explain — the document is gone or not the caller's.
+  if (!outcome.indexed && outcome.reason === "not-found") return;
+  try {
+    await prisma.inboundDocument.updateMany({
+      where: { id: documentId, userId, deletedAt: null },
+      data: {
+        lastIndexAttemptAt: new Date(),
+        lastIndexOutcome: outcome.indexed ? null : outcome.reason,
+      },
+    });
+  } catch (err) {
+    annotate({
+      action: { name: "documents.contentIndex.recordFailed" },
+      meta: { documentId, reason: err instanceof Error ? err.name : "unknown" },
+    });
+  }
+}
 
 /**
  * A resolved, consent-checked provider context. Resolve ONCE per user and reuse
@@ -115,28 +164,55 @@ export async function resolveIndexProvider(
 }
 
 /**
+ * The provider path's failure note when it falls through to local without a
+ * terminal outcome. Refs #776 — the note survives the fall-through: when the
+ * local path can only report "no text", the note is the recorded reason.
+ */
+type ProviderPathNote =
+  | "raster-failed"
+  | "pdf-needs-anthropic"
+  | "provider-error"
+  | "empty-transcription";
+
+interface ProviderPathResult {
+  outcome: IndexOutcome | null;
+  note: ProviderPathNote | null;
+}
+
+/**
  * Try the PROVIDER (vision) path for one already-loaded document. Returns a
- * terminal outcome on success/budget/provider-error, or `null` to signal
- * "fall through to local" (no usable provider, or the provider cannot read this
- * particular file — e.g. a PDF on a non-Anthropic account).
+ * terminal outcome on success / decrypt-error, or `outcome: null` to signal
+ * "fall through to local" (no usable provider, budget out, or the provider
+ * cannot read this particular file) — with a `note` naming the specific
+ * provider-side failure when there was one.
  */
 async function tryProviderIndex(
   userId: string,
   document: LoadedDocument,
   provider: ResolvedIndexProvider,
-): Promise<IndexOutcome | null> {
+): Promise<ProviderPathResult> {
   const { pick } = provider;
-  if (!pick || !provider.consentOk) return null;
+  if (!pick || !provider.consentOk) return { outcome: null, note: null };
 
   const vision = await prepareVisionInput(document, pick.pdfSupported);
   if (!vision.ok) {
     // A decrypt failure is terminal (local would fail the same way); anything
-    // else (fileType / pdfNeedsAnthropic) falls through to the local path — a
-    // text-layer PDF on a non-Anthropic account is read locally for free.
+    // else falls through to the local path — a text-layer PDF on a
+    // non-Anthropic account is read locally for free. The PDF-specific
+    // failures keep their name as the note.
     if (vision.reason === "decryptFailed") {
-      return { indexed: false, reason: "decrypt-error" };
+      return {
+        outcome: { indexed: false, reason: "decrypt-error" },
+        note: null,
+      };
     }
-    return null;
+    if (vision.reason === "rasterFailed") {
+      return { outcome: null, note: "raster-failed" };
+    }
+    if (vision.reason === "pdfNeedsAnthropic") {
+      return { outcome: null, note: "pdf-needs-anthropic" };
+    }
+    return { outcome: null, note: null };
   }
 
   const dateKey = buildDateKey();
@@ -148,7 +224,7 @@ async function tryProviderIndex(
   );
   // Budget exhausted → fall through to the free local path rather than stall;
   // a text-layer PDF stays searchable even once the AI allowance is spent.
-  if (!reservation.allowed) return null;
+  if (!reservation.allowed) return { outcome: null, note: null };
 
   try {
     const { text } = await transcribeDocument({
@@ -163,6 +239,14 @@ async function tryProviderIndex(
       reservation.reserved,
       dateKey,
     );
+    // Refs #776 — the empty-transcription guard: a provider answer with no
+    // text must NEVER become a "successful" empty index (it would mark the
+    // document indexed while making it unfindable). Fall through to local —
+    // a text-layer PDF still lands its text — and keep the note. The spend
+    // stays reconciled at the full amount: the provider was called.
+    if (text.trim().length === 0) {
+      return { outcome: null, note: "empty-transcription" };
+    }
     const { tokenCount } = await upsertContentIndex({
       userId,
       documentId: document.id,
@@ -170,12 +254,15 @@ async function tryProviderIndex(
       source: "vision",
       providerType: pick.providerType,
     });
-    return { indexed: true, source: "vision", tokenCount };
+    return {
+      outcome: { indexed: true, source: "vision", tokenCount },
+      note: null,
+    };
   } catch {
     // Refund the reservation and let the caller fall through to local — a
     // transient provider miss must never leave a text-layer PDF unsearchable.
     await reconcileSpend(userId, reservation.reserved, 0, dateKey);
-    return null;
+    return { outcome: null, note: "provider-error" };
   }
 }
 
@@ -220,15 +307,38 @@ async function tryLocalIndex(
 /**
  * Index one already-loaded document: provider-first, local-fallback. Reuses a
  * pre-resolved provider context so a batch resolves the chain once.
+ *
+ * Refs #776 — this is the choke point the auto job and the corpus backfill
+ * share, so the attempt record is written HERE: every terminal outcome lands
+ * on the row via `recordIndexAttempt`, and a provider-path failure note
+ * survives a mute local fallback ("no text" is less actionable than "the
+ * provider errored" / "the PDF would not render").
  */
 export async function indexLoadedDocument(
   userId: string,
   document: LoadedDocument,
   provider: ResolvedIndexProvider,
 ): Promise<IndexOutcome> {
-  const providerOutcome = await tryProviderIndex(userId, document, provider);
-  if (providerOutcome) return providerOutcome;
-  return tryLocalIndex(userId, document);
+  const providerResult = await tryProviderIndex(userId, document, provider);
+  let outcome: IndexOutcome;
+  if (providerResult.outcome) {
+    outcome = providerResult.outcome;
+  } else {
+    const local = await tryLocalIndex(userId, document);
+    if (
+      !local.indexed &&
+      providerResult.note &&
+      (local.reason === "local-empty" || local.reason === "local-unsupported")
+    ) {
+      // The local path can only say "no text" — the provider path knows why
+      // the richer read never happened. Record the actionable reason.
+      outcome = { indexed: false, reason: providerResult.note };
+    } else {
+      outcome = local;
+    }
+  }
+  await recordIndexAttempt(userId, document.id, outcome);
+  return outcome;
 }
 
 /**
