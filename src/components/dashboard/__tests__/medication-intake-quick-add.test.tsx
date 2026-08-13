@@ -22,9 +22,17 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { QueryClient as QueryClientType } from "@tanstack/react-query";
 
 import { I18nProvider } from "@/lib/i18n/context";
+import {
+  invalidateMedicationReads,
+  medicationDependentKeys,
+  queryKeys,
+} from "@/lib/query-keys";
 
 // Stub @tanstack/react-query so the SSR render path doesn't try to
 // reach into a real QueryClient. The default-stub returns the
@@ -317,5 +325,60 @@ describe("<MedicationIntakeQuickAdd> — SSR contract", () => {
     // German locale ships project-voice DE copy with umlauts (UTF-8
     // end-to-end, never their HTML entity form).
     expect(de).toContain("Medikamente angelegt");
+  });
+});
+
+describe("submit invalidation — the quick-add is a capture-picker surface, not only a dashboard one", () => {
+  // This form mounts from the bottom-nav capture picker on EVERY page, so a
+  // bare `invalidateKeys(medicationDependentKeys)` (default active refetch)
+  // left the unmounted Today digest + dashboard snapshot stale until the next
+  // poll — the fourth recurrence of the class `daily-reads-refetch-guard`
+  // freezes. The fix routes the submit through the blessed
+  // `invalidateMedicationReads`, exactly like take-all-due (v1.32.19).
+
+  const componentSrc = readFileSync(
+    resolve(__dirname, "../medication-intake-quick-add.tsx"),
+    "utf8",
+  );
+
+  it("routes the intake submit through the blessed invalidateMedicationReads (source pin)", () => {
+    expect(componentSrc).toContain(
+      "await invalidateMedicationReads(queryClient);",
+    );
+    expect(componentSrc).not.toContain(
+      "invalidateKeys(queryClient, medicationDependentKeys)",
+    );
+    // The submit handler pairs the blessed helper with the inline
+    // compliance-chart fan-out AFTER the intake POST landed.
+    expect(componentSrc).toMatch(
+      /async function handleSubmit\([\s\S]*?apiPost[\s\S]*?await invalidateMedicationReads\(queryClient\);[\s\S]*?complianceChartInline\(\)/,
+    );
+  });
+
+  it("forces the inactive Today hero + dashboard reads to refetch after submit", async () => {
+    // The helper the submit path awaits — asserted directly, same shape as
+    // the take-all-due suite: the bundle fans out (N keys), then the two
+    // daily reads are invalidated with `refetchType: "inactive"`, which is
+    // what actually refetches them while unmounted.
+    const invalidateQueries = vi.fn().mockResolvedValue(undefined);
+    const queryClient = {
+      invalidateQueries,
+    } as unknown as QueryClientType;
+
+    await invalidateMedicationReads(queryClient);
+
+    expect(invalidateQueries).toHaveBeenCalledTimes(
+      medicationDependentKeys.length + 2,
+    );
+    const inactive = invalidateQueries.mock.calls.filter(
+      ([arg]) =>
+        (arg as { refetchType?: string } | undefined)?.refetchType ===
+        "inactive",
+    );
+    const keys = inactive.map(([arg]) =>
+      JSON.stringify((arg as { queryKey?: unknown }).queryKey),
+    );
+    expect(keys).toContain(JSON.stringify(queryKeys.dashboardSnapshot()));
+    expect(keys).toContain(JSON.stringify(queryKeys.dailyDigest()));
   });
 });

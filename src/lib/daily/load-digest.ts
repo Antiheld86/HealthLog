@@ -22,6 +22,7 @@ import { getServerTranslator } from "@/lib/i18n/server-translator";
 import { defaultLocale, locales, type Locale } from "@/lib/i18n/config";
 import { decryptFromBytes } from "@/lib/ai/coach/bytes-codec";
 import { userDayKey } from "@/lib/tz/format";
+import { getUserTodayBounds } from "@/lib/tz/local-day";
 import { cachedSwr, caches, type ServerCache } from "@/lib/cache/server-cache";
 import { DASHBOARD_REFETCH_INTERVAL_MS } from "@/lib/queries/refetch-interval";
 import { isArrivalKind } from "@/lib/arrivals/types";
@@ -357,6 +358,12 @@ export async function loadDailyDigest(
   // Computed before the fan-out because the arrival read is keyed on it. Pure
   // (a tz format of `now`), so hoisting it costs nothing.
   const todayLocalDate = userDayKey(now, user.timezone);
+  // First instant of the user's NEXT local day (profile tz) — bounds the
+  // dose-window rail to today's business. `getUserTodayBounds` returns the
+  // inclusive last millisecond of today; +1 ms is exactly tomorrow's start.
+  const todayEndExclusive = new Date(
+    getUserTodayBounds(now, user.timezone).end.getTime() + 1,
+  );
 
   const [
     { body: snapshot, locale },
@@ -607,6 +614,7 @@ export async function loadDailyDigest(
   const digest = buildDailyDigest(
     {
       now,
+      todayEndExclusive,
       modules,
       enabledHeroItemKinds:
         options.enabledItemKinds ??

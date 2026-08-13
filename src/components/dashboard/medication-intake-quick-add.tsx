@@ -18,11 +18,7 @@ import { Loader2, Pill, Plus } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { useTranslations } from "@/lib/i18n/context";
-import {
-  invalidateKeys,
-  medicationDependentKeys,
-  queryKeys,
-} from "@/lib/query-keys";
+import { invalidateMedicationReads, queryKeys } from "@/lib/query-keys";
 import type { ScheduleWindowInput } from "@/lib/medications/window-status";
 import {
   resolveMedicationSelectionId,
@@ -61,8 +57,11 @@ import {
  *   3. Time taken. Defaults to `now` (local datetime-local format
  *      shaped the same as `MoodForm`).
  *
- * On success: invalidate `medicationDependentKeys` (medications +
- * analytics + insights + achievements) PLUS the
+ * On success: `invalidateMedicationReads` (the bundle invalidation
+ * paired with the forced inactive refetch of the Today digest and the
+ * dashboard snapshot — this form also mounts from the capture picker on
+ * every page, where both daily reads are unmounted and a bare bundle
+ * invalidation would leave them stale until the next poll) PLUS the
  * inline per-medication compliance chart key so the detail page tile
  * refreshes if it happens to be mounted elsewhere in the app.
  *
@@ -219,7 +218,7 @@ export function MedicationIntakeQuickAdd({
       );
       const eventId = created?.id;
 
-      await invalidateKeys(queryClient, medicationDependentKeys);
+      await invalidateMedicationReads(queryClient);
       // Fan-out to every inline compliance chart key (one per medication)
       // so the detail-page tile refreshes when the user re-enters it.
       await queryClient.invalidateQueries({

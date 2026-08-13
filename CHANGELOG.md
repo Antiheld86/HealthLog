@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.37.14] — 2026-08-13
+
+### Fixed
+
+- The Today rail no longer announces a weekly medication as due up to a day early. A weekly dose becomes takeable a day ahead by design, and the rail treated takeable as due, so on Friday the Saturday slot already sat there as "Medication due". The rail now keeps a non-overdue dose off the list until its actual day in your own timezone; taking it early stays possible on the medication card, which says which day it belongs to. Overdue doses appear regardless, as before.
+- A dose logged through the quick-add button updates the home page immediately. The quick-add is reachable from every page, but it only refreshed the reads of the page you were on, so coming back to the home page showed the dose as still due for up to two minutes. Logging from anywhere now refreshes the home page's daily reads the same way logging from the home page always did.
+
 ## [1.37.13] — 2026-08-13
 
 ### Added
