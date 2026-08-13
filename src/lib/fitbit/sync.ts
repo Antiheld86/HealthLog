@@ -1,5 +1,6 @@
 /** Fitbit sync orchestration and bounded cohort polling. */
 import pLimit from "p-limit";
+import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
 import { prisma } from "@/lib/db";
 import { invalidateStatusInsightsForTypes } from "@/lib/insights/comprehensive-generate";
 import { isReauthRequired, recordSyncSuccess } from "@/lib/integrations/status";
@@ -159,6 +160,14 @@ export async function syncUserFitbit(
     // here can't shrink a later resource's window.
     await markSynced(userId);
     await recordSyncSuccess(userId, "fitbit");
+  }
+
+  // Background-sync posture: mark the analytics cells stale (never hard-evict
+  // from a poll) and sweep the workouts cache so the imported rows reach the
+  // cached readers. Fires on a partial failure too — rows that DID land must
+  // not stay invisible for the rest of the TTL window.
+  if (total > 0) {
+    invalidateUserMeasurements(userId);
   }
 
   annotate({

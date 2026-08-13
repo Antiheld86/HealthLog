@@ -11,6 +11,7 @@ import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
+import { invalidateUserHealthContext } from "@/lib/cache/invalidate";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import { overwriteDetails } from "@/lib/sharing/audit-details";
@@ -184,6 +185,11 @@ export const PATCH = apiHandler(
       },
     });
 
+    // An onset / lifecycle / resolvedAt edit can flip Rest Mode — evict the
+    // cached analytics / snapshot / digest cells so the context is true on
+    // the next read.
+    invalidateUserHealthContext(user.id);
+
     annotate({
       action: {
         name: "illness.episode.update",
@@ -224,6 +230,9 @@ export const DELETE = apiHandler(
         ipAddress: getClientIp(request),
         details: { episodeId: id },
       });
+      // Deleting an active episode can flip Rest Mode off — evict the cached
+      // analytics / snapshot / digest cells.
+      invalidateUserHealthContext(user.id);
     }
 
     annotate({

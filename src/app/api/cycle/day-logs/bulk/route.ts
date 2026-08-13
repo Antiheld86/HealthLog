@@ -25,6 +25,7 @@ import {
   sanitiseZodIssues,
 } from "@/lib/api-response";
 import { prisma } from "@/lib/db";
+import { invalidateUserHealthContext } from "@/lib/cache/invalidate";
 import { withIdempotency } from "@/lib/idempotency";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { requireCycleEnabled } from "@/lib/cycle/gate";
@@ -227,6 +228,12 @@ async function postBulk(request: NextRequest): Promise<Response> {
       skipped,
     },
   });
+
+  // Landed rows change the cycle context the cached analytics / snapshot /
+  // digest cells carry — evict the analytics bucket.
+  if (inserted > 0 || updated > 0) {
+    invalidateUserHealthContext(user.id);
+  }
 
   annotate({
     action: { name: "cycle.bulk.ingest" },

@@ -40,6 +40,7 @@ import {
   emitInsertedMeasurementArrivals,
   type InsertedMeasurementArrivalRow,
 } from "@/lib/arrivals/measurement-emit";
+import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
 import { invalidateStatusInsightsForTypes } from "@/lib/insights/comprehensive-generate";
 import {
   fetchSgvEntries,
@@ -184,6 +185,14 @@ export async function syncUserNightscout(
     userId,
     entries,
   );
+
+  // Background-sync posture: mark the analytics cells stale (never hard-evict
+  // from a poll) so the inserted rows reach the cached readers. Fires on a
+  // partial failure too — rows that DID land must not stay invisible for the
+  // rest of the TTL window.
+  if (inserted > 0) {
+    invalidateUserMeasurements(userId);
+  }
 
   if (failedRows > 0) {
     // Partial write failure: keep the tick honest. `transient` because the

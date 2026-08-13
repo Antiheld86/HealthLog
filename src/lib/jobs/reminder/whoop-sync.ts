@@ -5,6 +5,7 @@
  * schedules, and boss.work registrations.
  */
 import { type Job } from "pg-boss";
+import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
 import { fireAndForget } from "@/lib/logging/fire-and-forget";
 import { recordError } from "@/lib/jobs/worker-status";
 import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
@@ -124,6 +125,12 @@ export async function runWhoopResourceSync(
           // v1.18.1 — a fresh reading landed; resolve this user's Vorsorge
           // reminders eventfully. Fire-and-forget; the cron is the net.
           if (imported > 0) {
+            // Background-sync posture: mark the analytics cells stale (never
+            // hard-evict from a poll) and sweep the workouts cache so the
+            // imported rows reach the cached readers. This driver is the only
+            // sync tail the webhook / per-resource cron paths pass through —
+            // `syncUserWhoop` covers the manual + backfill paths itself.
+            invalidateUserMeasurements(userId);
             fireAndForget(enqueueReminderSatisfy(userId), {
               action: "reminder.satisfy.enqueue",
             });

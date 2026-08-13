@@ -14,6 +14,7 @@ import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
+import { invalidateUserHealthContext } from "@/lib/cache/invalidate";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import { apiSuccess, apiError, getClientIp } from "@/lib/api-response";
@@ -55,6 +56,9 @@ export const POST = apiHandler(
         ipAddress: getClientIp(request),
         details: { episodeId: id },
       });
+      // Restoring an unresolved episode can flip Rest Mode back on — evict
+      // the cached analytics / snapshot / digest cells.
+      invalidateUserHealthContext(user.id);
     }
 
     const restored = await prisma.illnessEpisode.findUniqueOrThrow({

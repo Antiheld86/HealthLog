@@ -11,6 +11,7 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
+import { invalidateUserHealthContext } from "@/lib/cache/invalidate";
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
@@ -204,6 +205,10 @@ export const PATCH = apiHandler(
       },
     });
 
+    // A day-log edit changes the cycle context the cached analytics /
+    // snapshot / digest cells carry — evict the analytics bucket.
+    invalidateUserHealthContext(user.id);
+
     annotate({
       action: {
         name: "cycle.day-log.update",
@@ -281,6 +286,10 @@ export const DELETE = apiHandler(
           : {}),
       },
     });
+
+    // A removed day (possibly with its cycle) changes the cycle context the
+    // cached analytics / snapshot / digest cells carry — evict the bucket.
+    invalidateUserHealthContext(user.id);
 
     annotate({
       action: {

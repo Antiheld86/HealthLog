@@ -18,6 +18,7 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
+import { invalidateUserHealthContext } from "@/lib/cache/invalidate";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
@@ -104,6 +105,10 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
     ipAddress: getClientIp(request),
     details: cleared,
   });
+
+  // The purge removes every row the cached cycle context was built on —
+  // evict the analytics bucket.
+  invalidateUserHealthContext(user.id);
 
   annotate({
     action: { name: "cycle.purge" },

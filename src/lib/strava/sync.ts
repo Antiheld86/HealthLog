@@ -25,6 +25,7 @@
  */
 import { prisma } from "@/lib/db";
 import { emitInsertedWorkoutArrival } from "@/lib/arrivals/workout-emit";
+import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
 import { annotate, getEvent } from "@/lib/logging/context";
 import {
   markSyncFailureRecorded,
@@ -244,6 +245,14 @@ export async function syncUserStrava(
   }
 
   await recordSyncSuccess(userId, "strava");
+
+  // Background-sync posture: sweep the workouts cache and mark the analytics
+  // cells stale (workouts feed achievements + analytics) so the upserted rows
+  // reach the cached readers, matching the `/api/workouts/batch` writer.
+  if (imported > 0) {
+    invalidateUserMeasurements(userId);
+  }
+
   annotate({
     action: { name: "strava.sync.complete", details: { imported } },
   });

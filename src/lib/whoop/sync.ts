@@ -5,6 +5,7 @@
  * `sync-core.ts`. Resource leaves depend only on that core; this parent owns
  * the static leaf graph and the full per-user sequencing policy.
  */
+import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
 import { getEvent } from "@/lib/logging/context";
 import {
   isReauthRequired,
@@ -99,5 +100,15 @@ export async function syncUserWhoop(
   if (!anyFailed && !allSoftSkipped) {
     await recordSyncSuccess(userId, "whoop");
   }
+
+  // Background-sync posture: mark the analytics cells stale (never hard-evict
+  // from a poll) and sweep the workouts cache so the imported rows reach the
+  // cached readers. Fires on a partial failure too — rows that DID land must
+  // not stay invisible for the rest of the TTL window. The per-resource
+  // webhook/cron jobs run their own call in `runWhoopResourceSync`.
+  if (total > 0) {
+    invalidateUserMeasurements(userId);
+  }
+
   return { imported: total, failed: anyFailed || allSoftSkipped };
 }

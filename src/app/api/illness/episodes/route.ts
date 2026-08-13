@@ -14,6 +14,7 @@ import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
+import { invalidateUserHealthContext } from "@/lib/cache/invalidate";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -134,6 +135,10 @@ async function postEpisode(request: NextRequest): Promise<Response> {
     ipAddress: getClientIp(request),
     details: { episodeId: created.id, type: created.type },
   });
+
+  // A new episode can flip Rest Mode on — evict the cached analytics /
+  // snapshot / digest cells so the context is true on the next read.
+  invalidateUserHealthContext(user.id);
 
   annotate({
     action: {

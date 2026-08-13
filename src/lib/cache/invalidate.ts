@@ -271,6 +271,19 @@ export function invalidateUserMedicationListLayout(userId: string): void {
   caches.medicationListLayout.deleteByPrefix(userId);
 }
 
+/**
+ * Invalidate the analytics bucket after an illness / cycle / encounter write.
+ * `resolveRestMode` (active-episode context) feeds both the analytics report
+ * and the dashboard snapshot, and the daily-digest extras cell lives under the
+ * same bucket — all keyed `${userId}|…`. Hard-evict, mirroring the mood-write
+ * posture: these are interactive single-entry writes, and a marked-stale SWR
+ * cell would hand the user back the pre-write rest-mode / appointment context
+ * on the very next read.
+ */
+export function invalidateUserHealthContext(userId: string): void {
+  caches.analytics.deleteByPrefix(`${userId}|`);
+}
+
 /** Invalidate surfaces whose server decision includes pattern dismissal. */
 export function invalidateUserCorrelationPatterns(userId: string): void {
   caches.analytics.deleteByPrefix(`${userId}|`);
