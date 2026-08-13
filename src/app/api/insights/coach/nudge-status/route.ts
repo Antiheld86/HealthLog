@@ -26,6 +26,8 @@ import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiSuccess } from "@/lib/api-response";
 import { requireAssistantSurface } from "@/lib/feature-flags";
 import { readCoachNudgeStatus } from "@/lib/ai/coach/nudge-status";
+import { evaluateCoachContextReminders } from "@/lib/ai/coach/context-reminders";
+import { prisma } from "@/lib/db";
 
 export const GET = apiHandler(async () => {
   // The RECORD's unread signal, not the caller's. The tempting reading is that
@@ -43,10 +45,25 @@ export const GET = apiHandler(async () => {
   // switch and that is not in tension with this: chat spends the owner's AI
   // budget and writes into their conversation, and reading whether the thread
   // has something unopened does neither.
-  const { user } = await requireRecordAuth("read", "record");
+  const { user, actor } = await requireRecordAuth("read", "record");
   // Operator-level flag — an `AppSettings` singleton, unaffected by whose
   // record is open.
   await requireAssistantSurface("coach");
+
+  // NEXT_APP_OPEN Coach reminders resolve here: this poll mounts with the
+  // app chrome, which makes it the app-open signal itself. Owner-only — a
+  // delegate opening the record is not the owner opening their app, so a
+  // switched caller never satisfies the cue. Awaited so the reminder's
+  // message is already in the thread when this very response computes the
+  // unread flag; fault-isolated so an evaluator hiccup can never break the
+  // badge. Steady-state cost is one indexed query returning zero rows.
+  if (actor.id === user.id) {
+    try {
+      await evaluateCoachContextReminders(prisma, user.id, "app-open");
+    } catch (err) {
+      console.warn("[coach] app-open context evaluation failed", err);
+    }
+  }
 
   // Shared with the `/coach` RSC prefetch (`src/app/coach/page.tsx`) so both
   // readers compute the unread signal identically.

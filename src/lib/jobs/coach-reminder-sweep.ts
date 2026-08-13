@@ -38,16 +38,19 @@
  * a deterministic localized template around the user's OWN note text — the
  * words they asked to be reminded of, never anything fabricated.
  *
- * Context-cue reminders (`triggerKind: "context"`) are NOT evaluated here — that
- * is a follow-on (F4); the column exists and capture supports it, but the date
- * sweep is the high-value slice.
+ * Context-cue reminders (`triggerKind: "context"`) are evaluated eventfully:
+ * the measurement cues by the `reminder-satisfy` worker after every ingest,
+ * `NEXT_APP_OPEN` on the nudge-status read (`ai/coach/context-reminders.ts`).
+ * This sweep re-runs the measurement-cue evaluation once a day as the
+ * idempotent backstop for any ingest path that never enqueued — the same
+ * cron-behind-event pattern the Vorsorge engine uses. Every trigger
+ * converges on the ONE surfacing transaction in `ai/coach/reminder-surface.ts`.
  */
 import type { PrismaClient } from "@/generated/prisma/client";
 
 import { decryptFromBytes, encryptToBytes } from "@/lib/ai/coach/bytes-codec";
-import { getServerTranslator } from "@/lib/i18n/server-translator";
-import type { Locale } from "@/lib/i18n/config";
-import { defaultLocale, locales } from "@/lib/i18n/config";
+import { evaluateCoachContextReminders } from "@/lib/ai/coach/context-reminders";
+import { surfaceCoachReminders } from "@/lib/ai/coach/reminder-surface";
 
 export const COACH_REMINDER_SWEEP_QUEUE = "coach-reminder-sweep";
 // Daily at 05:20 Europe/Berlin — just after the 05:15 nudge tick so both
@@ -58,13 +61,15 @@ export const COACH_REMINDER_SWEEP_CRON = "20 5 * * *";
 const PLAN_REVIEW_BATCH = 200;
 /** Bound the surfacing fan-out per tick for the same reason. */
 const SURFACE_BATCH = 500;
-/** How many notes one surfacing message carries before the rest wait a tick. */
-const MAX_NOTES_PER_MESSAGE = 6;
+/** Bound the context-backstop fan-out per tick for the same reason. */
+const CONTEXT_BACKSTOP_BATCH = 500;
 
 export interface CoachReminderSweepSummary {
   /** Reminders whose moment arrived AND that reached the conversation. */
   remindersDue: number;
   planReviewsMinted: number;
+  /** Context-cue reminders the daily backstop surfaced. */
+  contextSurfaced: number;
   errored: number;
 }
 
@@ -74,34 +79,10 @@ type SweepPrisma = Pick<
   | "coachPlan"
   | "coachConversation"
   | "coachMessage"
+  | "measurement"
   | "user"
   | "$transaction"
 >;
-
-function resolveLocale(locale: string | null | undefined): Locale {
-  return locales.includes(locale as Locale)
-    ? (locale as Locale)
-    : defaultLocale;
-}
-
-/**
- * The surfacing message for one user's due reminders. Deterministic, localized,
- * and built only from the user's own note text — the sweep composes, it never
- * generates.
- */
-export function buildReminderSurfaceMessage(
-  notes: readonly string[],
-  locale: string | null | undefined,
-): { title: string; body: string } {
-  const t = getServerTranslator(resolveLocale(locale)).t;
-  const title = t("coachNudges.reminderSurfacedTitle");
-  const lead =
-    notes.length === 1
-      ? t("coachNudges.reminderSurfacedLeadOne")
-      : t("coachNudges.reminderSurfacedLeadMany", { count: notes.length });
-  const body = [lead, ...notes.map((n) => `• ${n}`)].join("\n");
-  return { title, body };
-}
 
 /**
  * Run one sweep tick. Idempotent: a reminder already `surfaced` is not
@@ -115,6 +96,7 @@ export async function runCoachReminderSweep(
   const summary: CoachReminderSweepSummary = {
     remindersDue: 0,
     planReviewsMinted: 0,
+    contextSurfaced: 0,
     errored: 0,
   };
 
@@ -207,65 +189,45 @@ export async function runCoachReminderSweep(
   }
 
   for (const [userId, rows] of byUser) {
+    // The shared surfacing step: decrypt fault-isolated per row, one
+    // localized message per user, conversation + message + status flip in
+    // ONE transaction. On failure the rows stay where they were — the next
+    // tick retries, and until then no badge claims a message that was
+    // never written.
+    const outcome = await surfaceCoachReminders(prisma, userId, rows, now);
+    summary.remindersDue += outcome.surfaced;
+    summary.errored += outcome.errored;
+  }
+
+  // ── 3. context-cue backstop ───────────────────────────────────
+  //
+  // The measurement cues fire eventfully from the `reminder-satisfy`
+  // worker; this daily pass re-evaluates them so an ingest path that
+  // never enqueued (boss unavailable, direct DB write) still resolves
+  // within a day. NEXT_APP_OPEN is deliberately absent: only a real
+  // app-open signal may satisfy it.
+  const contextRows = await prisma.coachReminder.findMany({
+    where: {
+      deletedAt: null,
+      status: { in: ["active", "due"] },
+      triggerKind: "context",
+      contextCue: { not: "NEXT_APP_OPEN" },
+    },
+    take: CONTEXT_BACKSTOP_BATCH,
+    orderBy: { createdAt: "asc" },
+    select: { userId: true },
+  });
+  for (const userId of new Set(contextRows.map((r) => r.userId))) {
     try {
-      // Decrypt fault-isolated per row: one undecryptable note must not cost
-      // the user the reminders that sit beside it.
-      const usable: { id: string; note: string }[] = [];
-      for (const row of rows) {
-        try {
-          usable.push({
-            id: row.id,
-            note: decryptFromBytes(row.noteEncrypted),
-          });
-        } catch {
-          summary.errored += 1;
-        }
-      }
-      if (usable.length === 0) continue;
-
-      const batch = usable.slice(0, MAX_NOTES_PER_MESSAGE);
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { locale: true },
-      });
-      const { title, body } = buildReminderSurfaceMessage(
-        batch.map((r) => r.note),
-        user?.locale,
+      const outcome = await evaluateCoachContextReminders(
+        prisma,
+        userId,
+        "measurement",
+        now,
       );
-
-      // Conversation + message + status flip in ONE transaction. A partial
-      // write is the failure this whole change exists to remove: a status
-      // without a message is a badge pointing at nothing, and a message
-      // without a status change re-surfaces the same note every night.
-      await prisma.$transaction(async (tx) => {
-        const conversation = await tx.coachConversation.create({
-          data: { userId, title: title.slice(0, 80) },
-        });
-        await tx.coachMessage.create({
-          data: {
-            conversationId: conversation.id,
-            role: "assistant",
-            encryptedContent: encryptToBytes(body),
-            metricSourceJson: null,
-            // Same tag the proactive nudge uses — this IS a proactive message,
-            // and the nudge cron's frequency gate reads the tag back.
-            providerType: "nudge",
-            promptVersion: null,
-          },
-        });
-        await tx.coachReminder.updateMany({
-          where: { id: { in: batch.map((r) => r.id) } },
-          data: {
-            status: "surfaced",
-            lastSurfacedAt: now,
-            surfaceCount: { increment: 1 },
-          },
-        });
-      });
-      summary.remindersDue += batch.length;
+      summary.contextSurfaced += outcome.surfaced;
+      summary.errored += outcome.errored;
     } catch {
-      // Leave the rows where they were: the next tick retries, and until then
-      // no badge claims a message that was never written.
       summary.errored += 1;
     }
   }

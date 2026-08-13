@@ -844,12 +844,14 @@ export async function registerStatusQueues(
             result: {
               reminders_due: summary.remindersDue,
               plan_reviews_minted: summary.planReviewsMinted,
+              context_surfaced: summary.contextSurfaced,
               errored: summary.errored,
             },
           });
           return jobDone({
             reminders_due: summary.remindersDue,
             plan_reviews_minted: summary.planReviewsMinted,
+            context_surfaced: summary.contextSurfaced,
             errored: summary.errored,
           });
         } catch (err) {

@@ -16,6 +16,17 @@ vi.mock("@/lib/jobs/boss-instance", () => ({
   getGlobalBoss: () => bossInstance,
 }));
 
+// The Coach context-cue evaluation rides this hook; its behaviour is pinned
+// in `src/lib/ai/coach/__tests__/context-reminders.test.ts`. Stubbed here so
+// the Vorsorge assertions stay isolated; one test below pins that the hook
+// actually fires (watched red: removing the call site in
+// `runReminderSatisfyForUser` fails it).
+const evaluateContextMock = vi.fn(async () => ({ surfaced: 0, errored: 0 }));
+vi.mock("@/lib/ai/coach/context-reminders", () => ({
+  evaluateCoachContextReminders: (...args: unknown[]) =>
+    evaluateContextMock(...args),
+}));
+
 import {
   enqueueReminderSatisfy,
   REMINDER_SATISFY_QUEUE,
@@ -226,6 +237,43 @@ describe("runReminderSatisfyForUser", () => {
     expect(summary.satisfied).toBe(0);
     expect(isModuleEnabled).toHaveBeenCalledWith("u1", "mentalHealth");
     expect(updates).toHaveLength(0);
+  });
+
+  it("evaluates the Coach context cues on the same ingest event", async () => {
+    const now = new Date("2026-06-14T20:00:00Z");
+    const { prisma } = makePrisma({ reminders: [] });
+    evaluateContextMock.mockClear();
+    evaluateContextMock.mockResolvedValueOnce({ surfaced: 2, errored: 0 });
+
+    const summary = await runReminderSatisfyForUser(prisma as never, "u1", now);
+
+    expect(evaluateContextMock).toHaveBeenCalledWith(
+      prisma,
+      "u1",
+      "measurement",
+      now,
+    );
+    expect(summary.coachContextSurfaced).toBe(2);
+  });
+
+  it("never fails the Vorsorge resolution over a Coach context error", async () => {
+    const measuredAt = new Date("2026-06-14T18:00:00Z");
+    const { prisma } = makePrisma({
+      reminders: [reminderRow()],
+      measurement: { measuredAt },
+    });
+    evaluateContextMock.mockClear();
+    evaluateContextMock.mockRejectedValueOnce(new Error("coach down"));
+
+    const summary = await runReminderSatisfyForUser(
+      prisma as never,
+      "u1",
+      new Date("2026-06-14T20:00:00Z"),
+      { isModuleEnabled: vi.fn(async () => true) },
+    );
+
+    expect(summary.satisfied).toBe(1);
+    expect(summary.failed).toBe(1);
   });
 
   it("is forward-only: a stale event is a no-op (cron + hook converge)", async () => {

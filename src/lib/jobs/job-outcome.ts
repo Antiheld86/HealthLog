@@ -54,6 +54,7 @@ export const JOB_FACT_ALLOWLIST: ReadonlySet<string> = new Set([
   "connect_tickets_deleted",
   "connections_deleted",
   "considered",
+  "context_surfaced",
   "created",
   "daily_rows_retired",
   "days_consolidated",
