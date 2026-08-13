@@ -4719,7 +4719,6 @@
           "last30days": "Letzte 30 Tage",
           "last90days": "Letzte 90 Tage",
           "allTime": "Gesamter Zeitraum",
-          "showEvidence": "Evidenz standardmäßig anzeigen",
           "excludedMetrics": "Ausgeschlossene Messwerte",
           "dataClusters": "Datenbereiche",
           "customClusters": "Eigene Auswahl von Datenbereichen verwenden",

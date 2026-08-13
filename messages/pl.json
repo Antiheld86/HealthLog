@@ -4719,7 +4719,6 @@
           "last30days": "Ostatnie 30 dni",
           "last90days": "Ostatnie 90 dni",
           "allTime": "Cały okres",
-          "showEvidence": "Domyślnie pokazuj źródła",
           "excludedMetrics": "Wykluczone metryki",
           "dataClusters": "Grupy danych",
           "customClusters": "Użyj własnego wyboru grup",

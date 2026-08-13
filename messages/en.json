@@ -4719,7 +4719,6 @@
           "last30days": "Last 30 days",
           "last90days": "Last 90 days",
           "allTime": "All time",
-          "showEvidence": "Show evidence by default",
           "excludedMetrics": "Excluded metrics",
           "dataClusters": "Data clusters",
           "customClusters": "Use a custom cluster selection",

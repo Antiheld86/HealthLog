@@ -139,7 +139,6 @@ export const GET = apiHandler(
             tone: preferences.tone,
             verbosity: preferences.verbosity,
             excludeMetrics: preferences.excludeMetrics,
-            showEvidenceByDefault: preferences.showEvidenceByDefault,
             defaultWindow: preferences.defaultWindow,
             ...(preferences.dataClusters !== undefined
               ? { dataClusters: preferences.dataClusters }
@@ -344,7 +343,6 @@ export const PATCH = apiHandler(
               tone: preferences.tone,
               verbosity: preferences.verbosity,
               excludeMetrics: preferences.excludeMetrics,
-              showEvidenceByDefault: preferences.showEvidenceByDefault,
               defaultWindow: preferences.defaultWindow,
               ...(preferences.dataClusters !== undefined
                 ? { dataClusters: preferences.dataClusters }

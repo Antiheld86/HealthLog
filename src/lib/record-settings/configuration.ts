@@ -124,7 +124,6 @@ const managedCoachPreferencesSchema = coachPrefsSchema
     tone: true,
     verbosity: true,
     excludeMetrics: true,
-    showEvidenceByDefault: true,
     defaultWindow: true,
     dataClusters: true,
   })
