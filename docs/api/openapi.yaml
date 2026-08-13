@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HealthLog API
-  version: 1.37.12
+  version: 1.37.13
   description: >-
     Self-hosted personal-health-tracking PWA — public API surface for the iOS native client and external ingest.
 
@@ -8904,10 +8904,24 @@ paths:
       tags:
         - Consent
       summary: Grant web AI consent (idempotent ai_full)
-      description: Mint an `ai_full` consent receipt for the calling web user if none is active; a no-op when one already
-        exists. Mirrors the iOS master grant; the web AI-settings surface calls this on mount so existing web accounts
-        on a shared-key deployment gain a receipt without a re-consent step. Revocation flows through DELETE
-        /api/consent/ai/latest.
+      description: "Mint an `ai_full` consent receipt for the calling web user if none is active; a no-op when one already
+        exists. Mirrors the iOS master grant. Without a body (the mount heal) it grants only to an account with no
+        consent history, so a revocation stands until the user grants again; with `intent: \"affirmative\"` (the
+        explicit grant control) it records the user's own consent act, which may supersede an earlier revocation.
+        Revocation flows through DELETE /api/consent/ai/latest."
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                intent:
+                  default: heal
+                  type: string
+                  enum:
+                    - heal
+                    - affirmative
       responses:
         "200":
           description: Grant outcome.
@@ -12453,10 +12467,12 @@ paths:
       description: "Optional AI enhancement on an already-stored document. Runs the dedicated OCR/vision provider over the
         stored original and stages STRUCTURED FACTS for review. AI-consent / rate / budget gated. With no provider
         configured this returns 422 (`documents.inbound.providerUnsupported`) — the stored document is untouched, only
-        the enhancement fails. Two modes by content-type: VISION (empty body) decrypts and scans the stored original
-        (PDF needs an Anthropic vision provider); TEXT (`application/json`, opt-in local OCR) `{ mode: \"text\", text }`
-        structures browser-OCR'd text. Extraction reproduces what the document states — it never interprets. Nothing
-        reaches the structured stores here; the confirm route is the only write path."
+        the enhancement fails. Three modes: VISION (empty body) decrypts and scans the stored original (PDF needs an
+        Anthropic vision provider); TEXT (`application/json`, opt-in local OCR) `{ mode: \"text\", text }` structures
+        browser-OCR'd text; STORED (`application/json`) `{ mode: \"stored\" }` structures the document's own stored
+        extracted text (its content index) — the manual recovery for a skipped/failed automatic staging run, 422
+        `documents.inbound.notIndexed` when no stored text exists. Extraction reproduces what the document states — it
+        never interprets. Nothing reaches the structured stores here; the confirm route is the only write path."
       parameters:
         - name: id
           in: path
@@ -12468,7 +12484,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/InboundTextExtractRequest"
+              $ref: "#/components/schemas/InboundExtractRequest"
       responses:
         "200":
           description: The document with its newly staged facts.
@@ -12495,9 +12511,11 @@ paths:
       description: "Optional AI assist on an already-stored document. Runs ONE provider call over the stored original (VISION,
         empty body) or browser-OCR'd text (TEXT, `application/json` `{ mode: \"text\", text }`, opt-in local OCR) and
         returns a `{ title, kind, documentDate }` DRAFT for the edit form. AI-consent / rate / budget gated (shares the
-        6/hour extract bucket). WRITES NOTHING — never stages facts, never flips status; the user reviews and saves. 422
-        (`documents.inbound.providerUnsupported`) with no provider configured. Never interprets or diagnoses; the title
-        is a neutral filing label."
+        per-user document-AI bucket with extract/summary/index — default 6/hour, operator-tunable via
+        `DOCUMENT_AI_LIMIT_PER_HOUR`; a slot is only consumed when the request reaches the provider, and the 429 carries
+        the reset instant in `X-RateLimit-Reset` and `meta.retryAt`). WRITES NOTHING — never stages facts, never flips
+        status; the user reviews and saves. 422 (`documents.inbound.providerUnsupported`) with no provider configured.
+        Never interprets or diagnoses; the title is a neutral filing label."
       parameters:
         - name: id
           in: path
@@ -12629,7 +12647,10 @@ paths:
         gated); TEXT (`application/json` `{ mode: \"text\", text }`, opt-in local OCR) indexes browser-OCR'd text with
         no provider egress. Persists ONLY AES-256-GCM ciphertext of the text plus opaque HMAC token hashes — no
         plaintext body, no plaintext token. Gated on the existing AI consent (no separate per-user toggle). Idempotent;
-        re-indexing overwrites in place."
+        re-indexing overwrites in place. A successful index continues into the same lab auto-staging the background
+        worker performs (still-STORED lab-looking document with no facts, both modules on, provider + consent eligible);
+        `labFactsStaged` reports how many facts were staged PENDING for review — confirmation stays the only write into
+        Labs."
       parameters:
         - name: id
           in: path
@@ -17104,29 +17125,37 @@ components:
       required:
         - mode
         - text
-    InboundTextExtractRequest:
-      type: object
-      properties:
-        mode:
-          type: string
-          const: text
-        text:
-          type: string
-        kind:
-          type: string
-          enum:
-            - DOCTOR_REPORT
-            - DISCHARGE_LETTER
-            - LAB_RESULT
-            - IMAGING
-            - PRESCRIPTION
-            - REFERRAL
-            - INSURANCE
-            - VACCINATION
-            - OTHER
-      required:
-        - mode
-        - text
+    InboundExtractRequest:
+      anyOf:
+        - type: object
+          properties:
+            mode:
+              type: string
+              const: text
+            text:
+              type: string
+            kind:
+              type: string
+              enum:
+                - DOCTOR_REPORT
+                - DISCHARGE_LETTER
+                - LAB_RESULT
+                - IMAGING
+                - PRESCRIPTION
+                - REFERRAL
+                - INSURANCE
+                - VACCINATION
+                - OTHER
+          required:
+            - mode
+            - text
+        - type: object
+          properties:
+            mode:
+              type: string
+              const: stored
+          required:
+            - mode
     DocumentChatRequest:
       type: object
       properties:
@@ -28618,7 +28647,9 @@ components:
           anyOf:
             - type: string
             - type: "null"
-          description: Provider that produced the reply (e.g. anthropic, openai, local, refusal); null for user turns.
+          description: Provider that produced the reply (e.g. anthropic, openai, local, refusal). The sentinel `cancelled` marks
+            an empty assistant row closing a turn the client aborted mid-generation (navigation away); clients should
+            render it as an interrupted turn with a retry affordance. Null for user turns.
         promptVersion:
           anyOf:
             - type: string
@@ -38496,10 +38527,16 @@ components:
           type: boolean
         tokenCount:
           type: number
+        labFactsStaged:
+          type: number
+          description: How many lab facts the index run auto-staged for review (0 when the document is not a lab report, staging
+            was not eligible, or facts already exist). Staged facts are PENDING — the confirm route remains the only
+            write into Labs.
       required:
         - documentId
         - indexed
         - tokenCount
+        - labFactsStaged
       additionalProperties: false
     DocumentChatHistoryEnvelope:
       type: object

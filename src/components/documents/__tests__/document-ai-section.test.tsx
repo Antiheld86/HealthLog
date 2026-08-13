@@ -159,16 +159,50 @@ describe("<DocumentAiSection>", () => {
     expect(html).not.toContain('data-slot="document-read-ai"');
   });
 
-  it("hides the manual AI action row when auto-read is on, keeping status", () => {
-    const html = render(base({ aiEnabled: true, autoReadEnabled: true }));
-    // Auto-read reads on upload — the manual per-document actions are gone.
-    expect(html).not.toContain('data-slot="document-read-ai"');
+  it("collapses entirely when auto-read is on and the document is read", () => {
+    const html = render(
+      base({
+        aiEnabled: true,
+        autoReadEnabled: true,
+        hasContentIndex: true,
+        contentIndexSource: "vision",
+      }),
+    );
+    // v1.28.22 — with auto-read ON, the document read, and nothing pending
+    // the WHOLE block collapses: no chrome, no status pill; the sheet content
+    // starts straight with the document fields under the preview.
+    expect(html).toBe("");
+  });
+
+  it("keeps the read action for an unread document even with auto-read on", () => {
+    // Auto-read promises reading on upload — but a document with no content
+    // index never got that read (it may predate the preference, or the pass
+    // did not complete). Collapsing here would leave the document with no
+    // path to a read at all; the recovery action must stay visible.
+    const html = render(
+      base({ aiEnabled: true, autoReadEnabled: true, hasContentIndex: false }),
+    );
+    expect(html).toContain('data-slot="document-read-ai"');
+    expect(html).toContain("Read with AI");
+    expect(html).toContain('data-slot="document-unread-note"');
+    expect(html).toContain("This document has not been read yet.");
+    // The auto-read promise still covers the extras: no suggest / summarise.
     expect(html).not.toContain('data-slot="assist-suggest"');
     expect(html).not.toContain("Summarise");
     expect(html).not.toContain("Show extracted text");
-    // v1.28.22 — with auto-read ON and nothing pending the WHOLE block
-    // collapses: no chrome, no status pill; the sheet content starts straight
-    // with the document fields under the preview.
+  });
+
+  it("still collapses an unread document when indexing is unavailable", () => {
+    // No transport can index here, so there is no action to recover with —
+    // an empty chrome box would be the only thing left to render.
+    const html = render(
+      base({
+        aiEnabled: true,
+        autoReadEnabled: true,
+        hasContentIndex: false,
+        indexEnabled: false,
+      }),
+    );
     expect(html).toBe("");
   });
 

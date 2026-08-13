@@ -22,6 +22,7 @@ import {
   ClipboardList,
   EyeOff,
   HeartPulse,
+  NotebookPen,
   ShieldAlert,
   Siren,
   Users,
@@ -33,6 +34,8 @@ import { useTranslations } from "@/lib/i18n/context";
 import { useModuleEnabled } from "@/hooks/use-module-enabled";
 
 import { AllergyManager } from "@/components/records/allergy-manager";
+import { AllergyFreeTextNote } from "@/components/records/allergy-free-text-note";
+import { AboutMeNoteManager } from "@/components/records/about-me-note-manager";
 import { ConditionsManager } from "@/components/records/conditions-manager";
 import { EmergencyProfileManager } from "@/components/records/emergency-profile-manager";
 import { FamilyHistoryManager } from "@/components/records/family-history-manager";
@@ -66,6 +69,28 @@ export function AnamnesisSection() {
           <ConditionsManager />
         </SettingsCard>
       )}
+
+      {/* #159 — the "About me" free-text note moved here from the account
+          settings: it is personal medical context the Coach and the daily
+          briefing read, so it belongs in the medical history. Same
+          AI-surface gate as the inclusion card above — the note only feeds
+          the AI surfaces, so with both disabled there is nothing to feed. */}
+      {(coachEnabled || insightsEnabled) && (
+        <SettingsCard
+          as="section"
+          aria-labelledby="records-about-me-title"
+          data-testid="records-about-me-card"
+        >
+          <SettingsCardHeader
+            icon={NotebookPen}
+            title={t("settings.ai.aboutMe.title")}
+            titleId="records-about-me-title"
+            description={t("settings.ai.aboutMe.description")}
+          />
+          <AboutMeNoteManager />
+        </SettingsCard>
+      )}
+
       <SettingsCard>
         <SettingsCardHeader
           icon={ClipboardList}
@@ -82,6 +107,10 @@ export function AnamnesisSection() {
           description={t("records.allergies.cardDescription")}
         />
         <AllergyManager />
+        {/* #159 — the free-text supplement to the structured list above,
+            moved here from the account-settings "About me" panel so both
+            allergy inputs live in one card. */}
+        <AllergyFreeTextNote />
       </SettingsCard>
 
       <SettingsCard>

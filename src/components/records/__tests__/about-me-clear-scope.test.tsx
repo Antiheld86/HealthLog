@@ -1,5 +1,10 @@
 /**
- * Settings → AI "About me": the Clear control cannot take the allergy line.
+ * Anamnese "About me" note: the Clear control cannot take the allergy line.
+ *
+ * #159 — the panel moved from the account settings into the Anamnese as
+ * `about-me-note-manager.tsx` (note) + `allergy-free-text-note.tsx` (the
+ * free-text allergy line, under the structured AllergyManager). The scoped
+ * clear is unchanged and stays pinned here.
  *
  * The control used to fire `save.mutate({ aboutMe: "", allergies: "" })` from
  * a bare `onClick`. One tap wiped a person's free-text note AND their
@@ -81,7 +86,8 @@ vi.mock("@/components/ui/confirm-button", () => ({
   ConfirmDialog: () => null,
 }));
 
-const { AboutMeSection } = await import("../about-me-section");
+const { AboutMeNoteManager } = await import("../about-me-note-manager");
+const { AllergyFreeTextNote } = await import("../allergy-free-text-note");
 
 const STORED: AboutMePayload = {
   aboutMe: "Shift work, training for a half marathon.",
@@ -102,7 +108,7 @@ function render(seed: Partial<typeof STORED> = {}) {
   return renderToStaticMarkup(
     <QueryClientProvider client={client}>
       <I18nProvider initialLocale="en">
-        <AboutMeSection isAuthenticated />
+        <AboutMeNoteManager />
       </I18nProvider>
     </QueryClientProvider>,
   );
@@ -171,10 +177,21 @@ describe("clearing allergies stays possible, in the field itself", () => {
   it("renders the allergy textarea, editable, carrying the stored value", () => {
     // Removing the field from the Clear payload only removes the untargeted
     // route. The targeted one has to still be there, or scoping the control
-    // would have taken a capability away rather than a footgun.
-    const html = render();
+    // would have taken a capability away rather than a footgun. #159 — the
+    // field lives in its own component under the structured allergy list now.
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    client.setQueryData(queryKeys.coachAboutMe(), STORED);
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <I18nProvider initialLocale="en">
+          <AllergyFreeTextNote />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
     const field = html.slice(
-      html.indexOf('data-testid="settings-about-me-allergies"'),
+      html.indexOf('data-testid="records-allergy-free-text"'),
     );
     const openTag = field.slice(0, field.indexOf(">"));
     expect(openTag).not.toContain("disabled");

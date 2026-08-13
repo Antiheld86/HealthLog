@@ -24,6 +24,12 @@ vi.mock("@/components/records/health-profile-facts-manager", () => ({
 vi.mock("@/components/records/allergy-manager", () => ({
   AllergyManager: () => null,
 }));
+vi.mock("@/components/records/allergy-free-text-note", () => ({
+  AllergyFreeTextNote: () => null,
+}));
+vi.mock("@/components/records/about-me-note-manager", () => ({
+  AboutMeNoteManager: () => <div data-slot="about-me-note" />,
+}));
 vi.mock("@/components/records/family-history-manager", () => ({
   FamilyHistoryManager: () => null,
 }));

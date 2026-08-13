@@ -2934,6 +2934,10 @@
         "railBadge": "Chat de document cloisonné",
         "uploadError": "Échec du téléversement. Veuillez réessayer.",
         "notFoundError": "Ce lien de document n'est plus valide : une conversation normale démarre à la place."
+      },
+      "interrupted": {
+        "note": "Cette réponse a été interrompue avant la fin.",
+        "retry": "Reposer la question"
       }
     },
     "relativeJustNow": "à l’instant",
@@ -4984,6 +4988,8 @@
             "rateLimited": "Trop d'envois. Patientez un instant et réessayez.",
             "tooLarge": "Ce fichier est trop volumineux (limite 1,5 Go).",
             "failed": "L'import a échoué.",
+            "failureInterrupted": "L'import a été interrompu avant la fin, généralement par un redémarrage du serveur ou un manque de mémoire. Vos données sont en sécurité ; renvoyez l'archive pour réessayer.",
+            "failureInsufficientMemory": "La limite de mémoire du serveur est trop basse pour une archive de cette taille. Demandez à la personne qui administre le serveur d'augmenter la limite de mémoire de Node.js (NODE_OPTIONS=--max-old-space-size), puis renvoyez l'archive.",
             "rowsImported": "{count} lignes importées jusqu'ici",
             "doneSummary": "Terminé — {imported} enregistrements sur {read} importés, {skipped} enregistrements cliniques ignorés.",
             "doneNothing": "Rien n'a été importé de cette archive : 0 enregistrement sur {read} est arrivé.",
@@ -5616,14 +5622,10 @@
         "profileHint": "L'âge et le genre proviennent de votre profil et sont inclus automatiquement.",
         "freeTextLabel": "À propos de moi (texte libre)",
         "conditionsPlaceholder": "P. ex. hypertension, diabète de type 2…",
-        "allergiesLabel": "Allergies et intolérances",
         "allergiesPlaceholder": "P. ex. intolérance au lactose, allergie à la pénicilline…",
         "focusPlaceholder": "P. ex. surveille ma tension, motive-moi à bouger davantage…",
-        "completeness": "{answered} sur {total} renseignés",
         "questionsTitle": "Le Coach a des questions",
-        "questionsOpenCoach": "Y répondre dans le Coach",
-        "recordsLink": "Les allergies, les antécédents familiaux et vos affections préexistantes font partie de vos antécédents médicaux.",
-        "recordsLinkCta": "Ouvrir les antécédents médicaux"
+        "questionsOpenCoach": "Y répondre dans le Coach"
       },
       "responseTimeoutHeading": "Délai de réponse",
       "responseTimeoutBody": "Durée d'attente de la réponse de l'IA avant d'abandonner. Augmentez-la pour un modèle local ou auto-hébergé qui a besoin de temps pour se charger à la première requête.",
@@ -5651,7 +5653,9 @@
         "withdraw": "Retirer le consentement",
         "confirmBody": "Les fonctions IA s'arrêtent immédiatement. Rien de ce qui est déjà enregistré n'est supprimé — utilise Données et confidentialité pour exporter ou effacer ton dossier.",
         "confirmWithdraw": "Retirer",
-        "regrantHint": "Pour réutiliser les fonctions IA, active la lecture automatique des documents ou donne ton consentement depuis l'application.",
+        "regrantHint": "En le redonnant, les fonctions IA pourront à nouveau transmettre tes données de santé au fournisseur configuré.",
+        "grant": "Donner le consentement",
+        "grantError": "Le consentement n'a pas pu être enregistré. Réessaie.",
         "error": "Le retrait n'a pas pu être enregistré. Réessaie."
       }
     },
@@ -9295,6 +9299,12 @@
         "savedToast": "Allergie enregistrée",
         "updatedToast": "Allergie mise à jour",
         "saveError": "Impossible d'enregistrer l'allergie."
+      },
+      "freeText": {
+        "label": "Note en texte libre (allergies et intolérances)",
+        "hint": "Un complément en texte libre à la liste structurée ci-dessus, pour un contexte qu'une entrée seule ne peut pas refléter.",
+        "savedToast": "Note d'allergies enregistrée.",
+        "saveError": "Impossible d'enregistrer. Veuillez réessayer."
       }
     },
     "family": {
@@ -9560,10 +9570,14 @@
       "unavailableAction": "Ouvrir les paramètres d'IA",
       "errorGeneric": "Impossible de lire le document. Réessayez.",
       "errorOcr": "Impossible de lire le texte de cette image.",
-      "errorRateLimited": "Trop de requêtes IA — réessayez dans quelques minutes.",
+      "errorRateLimited": "La limite horaire de lectures IA est atteinte. Réessayez plus tard.",
+      "errorRateLimitedWaitOne": "La limite horaire de lectures IA est atteinte. Réessayez dans environ une minute.",
+      "errorRateLimitedWaitFew": "La limite horaire de lectures IA est atteinte. Réessayez dans environ {count} minutes.",
+      "errorRateLimitedWaitOther": "La limite horaire de lectures IA est atteinte. Réessayez dans environ {count} minutes.",
       "errorBudget": "Votre budget IA du jour est épuisé.",
       "errorPdfNeedsVision": "La lecture des PDF nécessite un fournisseur de vision Claude.",
       "errorFileType": "Ce type de fichier ne peut pas être lu.",
+      "errorNotIndexed": "Lisez d’abord le document, puis extrayez.",
       "errorLocalOcrDisabled": "Activez d'abord l'OCR local dans les paramètres d'IA.",
       "errorProvider": "Aucun fournisseur d'IA n'est configuré pour cela.",
       "errorTextImageOnly": "L'OCR local ne lit que les images, pas ce fichier."
@@ -9577,9 +9591,54 @@
     },
     "ai": {
       "readDone": "L’IA a lu votre document.",
+      "readStagedOne": "L’IA a lu votre document. 1 valeur de laboratoire attend votre vérification.",
+      "readStagedFew": "L’IA a lu votre document. {count} valeurs de laboratoire attendent votre vérification.",
+      "readStagedOther": "L’IA a lu votre document. {count} valeurs de laboratoire attendent votre vérification.",
       "read": "Lire avec l’IA",
       "reread": "Relire",
-      "reading": "Lecture…"
+      "reading": "Lecture…",
+      "notReadYet": "Ce document n’a pas encore été lu."
+    },
+    "review": {
+      "title": "Vérifier les valeurs extraites",
+      "hint": "Approuvez ce qui correspond au document. Les valeurs non cochées sont écartées ; rien n’est enregistré sans votre confirmation.",
+      "openOne": "Vérifier la valeur extraite",
+      "openFew": "Vérifier les valeurs extraites ({count})",
+      "openOther": "Vérifier les valeurs extraites ({count})",
+      "includeAria": "Inclure {value}",
+      "type": {
+        "OBSERVATION": "Valeur de laboratoire",
+        "CONDITION": "Affection",
+        "MEDICATION_STATEMENT": "Médicament"
+      },
+      "statedRange": "plage indiquée {range}",
+      "needsCheck": "Vérifiez cette valeur par rapport au document, puis enregistrez-la.",
+      "verify": "Vérifier",
+      "verifySave": "Enregistrer la valeur",
+      "verifyInvalid": "Indiquez un nom et soit une valeur numérique, soit un résultat en texte, pas les deux.",
+      "verifyFailed": "La correction n’a pas pu être enregistrée. Réessayez.",
+      "fieldName": "Nom",
+      "fieldDate": "Date",
+      "fieldValue": "Valeur",
+      "fieldValueText": "Résultat (texte)",
+      "fieldUnit": "Unité",
+      "fieldDose": "Dose",
+      "unverifiedNoteOne": "1 valeur reste à vérifier et demeure en attente.",
+      "unverifiedNoteFew": "{count} valeurs restent à vérifier et demeurent en attente.",
+      "unverifiedNoteOther": "{count} valeurs restent à vérifier et demeurent en attente.",
+      "finish": "Terminer la vérification",
+      "confirmFailed": "La vérification n’a pas pu être enregistrée. Réessayez.",
+      "savedToastOne": "1 valeur enregistrée.",
+      "savedToastFew": "{count} valeurs enregistrées.",
+      "savedToastOther": "{count} valeurs enregistrées.",
+      "nothingSavedToast": "Vérification enregistrée. Aucune valeur n’a été ajoutée.",
+      "extract": "Extraire les valeurs de laboratoire",
+      "extracting": "Extraction…",
+      "extractHint": "Utilise le texte déjà lu de ce document. Les valeurs extraites attendent votre vérification ; rien n’est enregistré automatiquement.",
+      "extractEmpty": "Aucune valeur n’a pu être extraite de ce document.",
+      "failUnitRequired": "Une valeur numérique a besoin d’une unité avant de pouvoir être enregistrée.",
+      "failUnitMismatch": "L’unité indiquée ne correspond pas à l’unité enregistrée pour ce marqueur. Ajustez-la, puis terminez à nouveau la vérification.",
+      "failGeneric": "Cette valeur n’a pas pu être enregistrée."
     },
     "contentIndex": {
       "indexPrompt": "Rendre le contenu des documents consultable.",

@@ -189,7 +189,7 @@ const REGISTRY: DestructiveEntry[] = [
     confirm: ["inline-two-step"],
   },
   {
-    file: "components/settings/about-me-section.tsx",
+    file: "components/records/about-me-note-manager.tsx",
     destroys: "the free-text self-context note the Coach and briefing read",
     recovery: "permanent",
     confirm: ["ConfirmButton"],

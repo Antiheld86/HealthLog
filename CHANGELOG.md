@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.37.13] — 2026-08-13
+
+### Added
+
+- A read lab document offers its values for your lab record, right on the document. When a document is classified as a lab report, the detail view shows a review step with each extracted value, its unit and its date, and you approve or reject them one by one before anything is written. Nothing is committed without your confirmation, and a value the reader was unsure about is marked for a closer look first. Reading a document again by hand now stages values the same way the automatic path does, so a report that arrived before automatic reading was switched on is no longer stuck.
+- The hourly limit for reading documents with AI is an operator setting now, not a fixed number. Self-hosters set `DOCUMENT_AI_LIMIT_PER_HOUR` to match their provider budget. The limit message tells you when the next read is actually possible instead of a vague "try again in a few minutes", and a read that never reached the provider no longer uses up one of your slots.
+- The web AI settings can grant consent again after a withdrawal. Revoking AI consent stays a standing decision that no page visit can quietly undo; what is new is an explicit control that lets you, and only you, opt back in when you want the AI features again.
+- The Coach keeps an answer you walked away from. Navigating off the page still stops the reply, deliberately, but the conversation now shows the interrupted turn instead of losing it, coming back opens that conversation rather than a fresh chat, and a retry control asks the same question again in place.
+
+### Fixed
+
+- The health score could not read lab-based pillars. A column-name mismatch made every glycaemia and lipids read fail, so the score treated accounts with lab results as unreadable and the two pillars never scored. The reader uses the real columns now, and an account without lab results shows the pillar as not tracked rather than as an error.
+- Reading a large Apple Health export no longer exhausts the server's memory. The archive streams through the parser in bounded batches instead of accumulating in memory, so a multi-hundred-megabyte export with millions of records imports on a default self-host setup. An import the available memory genuinely cannot carry is refused up front with a message that says what to raise, and an import that was interrupted mid-run shows up as failed with a retry, rather than spinning forever.
+- Automatic document reading no longer hides the manual read action on a document that has not actually been read yet, so a single failed or skipped document has a way back.
+- Read-everything now includes PDFs for providers that accept images. The pages are rendered to images for those providers, the same way a single manual read already did, so a Codex-style setup no longer skips every PDF in the vault.
+- The About-me note and the free-text allergy notes moved from Account settings into Anamnese. The free-text notes sit directly under the structured allergy list they supplement, labelled as the place for what the structured list cannot hold, and the account page keeps to account matters.
+
 ## [1.37.12] — 2026-08-11
 
 ### Changed

@@ -182,6 +182,9 @@ export async function refreshConversationSummary(
         // fail-closed like every other decrypt in the Coach stack.
         return [];
       }
+      // #781 — skip empty bodies: a cancelled-turn marker (an empty
+      // assistant row closing an aborted turn) carries no content to fold.
+      if (!content.trim()) return [];
       return [{ role: m.role === "assistant" ? "assistant" : "user", content }];
     });
 

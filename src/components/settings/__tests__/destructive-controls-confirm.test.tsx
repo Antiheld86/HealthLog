@@ -51,10 +51,11 @@ const CONTROLS: { file: string; slots: string[] }[] = [
     file: "components/settings/trusted-devices-card.tsx",
     slots: ["revoke-trusted-device", "revoke-all-trusted-devices"],
   },
-  // The allergy wipe. Scoped to the note as well as gated — see
-  // `about-me-clear-scope.test.tsx` for the payload half.
+  // The note wipe. Scoped to the note as well as gated — see
+  // `about-me-clear-scope.test.tsx` for the payload half. #159 — the panel
+  // moved to the Anamnese as `about-me-note-manager.tsx`.
   {
-    file: "components/settings/about-me-section.tsx",
+    file: "components/records/about-me-note-manager.tsx",
     slots: ["settings-about-me-clear"],
   },
   {

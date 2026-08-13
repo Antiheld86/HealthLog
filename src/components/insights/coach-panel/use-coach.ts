@@ -586,6 +586,33 @@ export interface CoachOptimisticUserMessage {
   conversationId: string | null;
 }
 
+/**
+ * #781 — sessionStorage key recording a turn interrupted by navigation.
+ * Written by the unmount cleanup in `useSendCoachMessage` when a stream is
+ * still in flight; consumed (and cleared) by the `/coach` page on its next
+ * mount so the user lands back IN the interrupted conversation instead of a
+ * blank new chat. The value is the conversation id, or the sentinel
+ * `"latest"` when the aborted turn was creating a brand-new conversation —
+ * its id only travels on the SSE `done` frame, which never arrived, so the
+ * page resolves it via the server-authoritative most-recent thread instead.
+ */
+export const COACH_INTERRUPTED_STORAGE_KEY = "coach-interrupted-conversation";
+
+/**
+ * #781 — the resume value the unmount cleanup records, or null when nothing
+ * should be recorded. Pure so the decision is unit-testable without mounting
+ * the hook (this repo's tests are SSR-only): a settled turn records nothing,
+ * an in-flight turn records its conversation id, and an in-flight FIRST turn
+ * (id not yet known) records the `"latest"` sentinel.
+ */
+export function interruptedResumeValue(active: {
+  conversationId: string | null;
+  inProgress: boolean;
+}): string | null {
+  if (!active.inProgress) return null;
+  return active.conversationId ?? "latest";
+}
+
 const EMPTY_STREAMING: CoachStreamingMessage = {
   content: "",
   metricSource: null,
@@ -742,6 +769,48 @@ export function useSendCoachMessage(opts: UseSendCoachMessageOptions = {}) {
     optsRef.current = opts;
   }, [opts]);
 
+  // #781 — the send in flight at this moment, for the unmount cleanup below.
+  // A ref (not state): the cleanup closure must read the live value, and the
+  // bookkeeping must never re-render the surface.
+  const activeSendRef = useRef<{
+    conversationId: string | null;
+    inProgress: boolean;
+  }>({ conversationId: null, inProgress: false });
+
+  // #781 — the unmount abort below stays (it is the budget guard), but it
+  // must not be SILENT any more: record which conversation was interrupted so
+  // the next `/coach` mount reopens it (the server closes the turn with a
+  // persisted `cancelled` marker on its side), and drop the cached
+  // conversation + rail copies so the return visit refetches the
+  // just-advanced server state instead of serving a pre-abort cache entry.
+  // Its own effect, defined BEFORE the abort effect: within one component
+  // React runs unmount cleanups in definition order, and the bookkeeping
+  // must read `activeSendRef` while the send is still marked in flight
+  // (the abort's `finally` only clears the flag on a later microtask
+  // regardless, so either order is safe — this one is merely honest).
+  useEffect(() => {
+    return () => {
+      const active = activeSendRef.current;
+      const resumeValue = interruptedResumeValue(active);
+      if (resumeValue === null) return;
+      try {
+        window.sessionStorage.setItem(
+          COACH_INTERRUPTED_STORAGE_KEY,
+          resumeValue,
+        );
+      } catch {
+        // Storage can throw (private mode / quota) — the persisted
+        // cancelled marker still surfaces the interruption in history.
+      }
+      if (active.conversationId) {
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.one(active.conversationId),
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.list() });
+    };
+  }, [queryClient]);
+
   // Abort any in-flight stream when the hook unmounts. The drawer works around
   // this via `handleOpenChange`, but the full-page `/coach` surface passes no
   // `registerReset`, so navigating away mid-stream left the SSE reader loop
@@ -764,254 +833,269 @@ export function useSendCoachMessage(opts: UseSendCoachMessageOptions = {}) {
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
-
-      // v1.4.25 W5 — surface the user's message in the thread BEFORE
-      // the "Thinking…" placeholder paints. Without this the send hook
-      // only exposed the streaming assistant bubble, so the first
-      // thing the user saw was the placeholder followed by their own
-      // message landing on the next refetch — the maintainer flagged the
-      // order as confusing on the suggested-prompt chips.
-      setOptimisticUser({
-        localId: `local-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        content: params.message,
+      // #781 — mark the send in flight for the unmount cleanup. The whole
+      // body runs inside try/finally so EVERY exit (offline pre-check, fetch
+      // failure, error envelope, stream end, abort) clears the flag — an
+      // unmount after a settled turn must never record an interruption. The
+      // marker object is captured locally so a superseding send (which
+      // replaces `activeSendRef.current` with its own marker) is never
+      // cleared by the superseded send's finally.
+      const sendMarker = {
         conversationId: params.conversationId ?? null,
-      });
-      setStreaming({
-        content: "",
-        metricSource: null,
-        suggestion: null,
-        suggestedAction: null,
         inProgress: true,
-        messageId: null,
-        errorCode: null,
-        usage: null,
-      });
-
-      // v1.4.47 W8 — pre-check navigator.onLine so an airplane-mode
-      // user gets the offline-specific copy immediately rather than
-      // waiting for the fetch to fail with a generic network error.
-      if (typeof navigator !== "undefined" && navigator.onLine === false) {
-        setStreaming({
-          content: "",
-          metricSource: null,
-          suggestion: null,
-          suggestedAction: null,
-          inProgress: false,
-          messageId: null,
-          errorCode: "coach.network",
-          usage: null,
-        });
-        return null;
-      }
-
-      // v1.28.51 — resolve the target BEFORE the fetch. A doc-scoped turn
-      // resolves to the hardened fenced document endpoint; everything else to
-      // the Coach tool route. This is the prompt-injection fence's client edge.
-      const target = resolveCoachSendTarget(params);
-
-      // apiFetchRaw: the chat POST streams SSE — the envelope helpers
-      // would buffer and unwrap a body that never carries the envelope.
-      let response: Response;
+      };
+      activeSendRef.current = sendMarker;
       try {
-        response = await apiFetchRaw(target.url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "text/event-stream",
-          },
-          body: target.body,
-          signal: controller.signal,
+        // v1.4.25 W5 — surface the user's message in the thread BEFORE
+        // the "Thinking…" placeholder paints. Without this the send hook
+        // only exposed the streaming assistant bubble, so the first
+        // thing the user saw was the placeholder followed by their own
+        // message landing on the next refetch — the maintainer flagged the
+        // order as confusing on the suggested-prompt chips.
+        setOptimisticUser({
+          localId: `local-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          content: params.message,
+          conversationId: params.conversationId ?? null,
         });
-      } catch (err) {
-        if ((err as Error).name === "AbortError") return null;
         setStreaming({
           content: "",
           metricSource: null,
           suggestion: null,
           suggestedAction: null,
-          inProgress: false,
+          inProgress: true,
           messageId: null,
-          errorCode: "coach.network",
+          errorCode: null,
           usage: null,
         });
-        return null;
-      }
 
-      if (!response.body) {
-        setStreaming({
-          content: "",
-          metricSource: null,
-          suggestion: null,
-          suggestedAction: null,
-          inProgress: false,
-          messageId: null,
-          errorCode: `coach.http.${response.status}`,
-          usage: null,
-        });
-        return null;
-      }
-
-      // Even on `!response.ok`, the route may have emitted a structured
-      // `error` frame in an SSE body (e.g. 4xx/5xx + text/event-stream).
-      // Falling back to `coach.http.<status>` would discard the richer
-      // `errorCode`. Read the stream and let the parser route the frame
-      // through the same path as the success case.
-      const contentType = response.headers.get("Content-Type") ?? "";
-      const isEventStream = contentType
-        .toLowerCase()
-        .startsWith("text/event-stream");
-      if (!response.ok && !isEventStream) {
-        // v1.4.25 W5 — for JSON errors the apiHandler envelope carries
-        // a structured `error` code (e.g. `coach.budget.exceeded`).
-        // Surface the structured code directly so the drawer can show
-        // the right copy + toast variant; fall back to the generic
-        // `coach.http.<status>` only when parsing the envelope fails.
-        let structured: string | null = null;
-        try {
-          const envelope = (await response.clone().json()) as {
-            error?: unknown;
-          };
-          if (typeof envelope?.error === "string") {
-            structured = envelope.error;
-          }
-        } catch {
-          // body was not JSON; fall through to the http-status fallback
+        // v1.4.47 W8 — pre-check navigator.onLine so an airplane-mode
+        // user gets the offline-specific copy immediately rather than
+        // waiting for the fetch to fail with a generic network error.
+        if (typeof navigator !== "undefined" && navigator.onLine === false) {
+          setStreaming({
+            content: "",
+            metricSource: null,
+            suggestion: null,
+            suggestedAction: null,
+            inProgress: false,
+            messageId: null,
+            errorCode: "coach.network",
+            usage: null,
+          });
+          return null;
         }
-        setStreaming({
-          content: "",
-          metricSource: null,
-          suggestion: null,
-          suggestedAction: null,
-          inProgress: false,
-          messageId: null,
-          errorCode: structured ?? `coach.http.${response.status}`,
-          usage: null,
-        });
-        // v1.16.4 — KEEP the optimistic user bubble: a rejected turn
-        // (budget gate, 4xx) has no persisted twin coming, and dropping
-        // the bubble left the error standing next to an empty thread.
-        // The content-equality dedupe in <MessageThread> still
-        // suppresses the optimistic copy if a persisted twin lands.
-        return null;
-      }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let resolvedConversationId: string | null = null;
-      let collectedContent = "";
-      let collectedProvenance: CoachProvenance | null = null;
-      let collectedSuggestion: CoachSuggestion | null = null;
-      let collectedSuggestedAction: CoachSuggestedAction | null = null;
-      let lastError: string | null = null;
-      let messageId: string | null = null;
-      let collectedUsage: CoachUsage | null = null;
+        // v1.28.51 — resolve the target BEFORE the fetch. A doc-scoped turn
+        // resolves to the hardened fenced document endpoint; everything else to
+        // the Coach tool route. This is the prompt-injection fence's client edge.
+        const target = resolveCoachSendTarget(params);
 
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const text = decoder.decode(value, { stream: true });
-          const { events, rest } = parseSseChunk(buffer, text);
-          buffer = rest;
-          for (const evt of events) {
-            switch (evt.type) {
-              case "token":
-                collectedContent += evt.token;
-                setStreaming((prev) => ({
-                  ...prev,
-                  content: prev.content + evt.token,
-                }));
-                break;
-              case "provenance":
-                collectedProvenance = evt.metricSource;
-                setStreaming((prev) => ({
-                  ...prev,
-                  metricSource: evt.metricSource,
-                }));
-                break;
-              case "suggestion":
-                collectedSuggestion = evt.suggestion;
-                setStreaming((prev) => ({
-                  ...prev,
-                  suggestion: evt.suggestion,
-                }));
-                break;
-              case "suggestedAction":
-                collectedSuggestedAction = evt.suggestedAction;
-                setStreaming((prev) => ({
-                  ...prev,
-                  suggestedAction: evt.suggestedAction,
-                }));
-                break;
-              case "reasoning":
-                // v1.19.1 — the thinking disclosure was removed, so the
-                // additive `reasoning` frame is accepted off the wire and
-                // dropped. Kept as an explicit no-op case so the wire frame
-                // stays a recognised type rather than slipping to a default.
-                break;
-              case "done":
-                resolvedConversationId = evt.conversationId;
-                messageId = evt.messageId;
-                // v1.18.9 — additive per-turn usage envelope.
-                collectedUsage = evt.usage ?? null;
-                break;
-              case "error":
-                lastError = evt.code;
-                break;
+        // apiFetchRaw: the chat POST streams SSE — the envelope helpers
+        // would buffer and unwrap a body that never carries the envelope.
+        let response: Response;
+        try {
+          response = await apiFetchRaw(target.url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "text/event-stream",
+            },
+            body: target.body,
+            signal: controller.signal,
+          });
+        } catch (err) {
+          if ((err as Error).name === "AbortError") return null;
+          setStreaming({
+            content: "",
+            metricSource: null,
+            suggestion: null,
+            suggestedAction: null,
+            inProgress: false,
+            messageId: null,
+            errorCode: "coach.network",
+            usage: null,
+          });
+          return null;
+        }
+
+        if (!response.body) {
+          setStreaming({
+            content: "",
+            metricSource: null,
+            suggestion: null,
+            suggestedAction: null,
+            inProgress: false,
+            messageId: null,
+            errorCode: `coach.http.${response.status}`,
+            usage: null,
+          });
+          return null;
+        }
+
+        // Even on `!response.ok`, the route may have emitted a structured
+        // `error` frame in an SSE body (e.g. 4xx/5xx + text/event-stream).
+        // Falling back to `coach.http.<status>` would discard the richer
+        // `errorCode`. Read the stream and let the parser route the frame
+        // through the same path as the success case.
+        const contentType = response.headers.get("Content-Type") ?? "";
+        const isEventStream = contentType
+          .toLowerCase()
+          .startsWith("text/event-stream");
+        if (!response.ok && !isEventStream) {
+          // v1.4.25 W5 — for JSON errors the apiHandler envelope carries
+          // a structured `error` code (e.g. `coach.budget.exceeded`).
+          // Surface the structured code directly so the drawer can show
+          // the right copy + toast variant; fall back to the generic
+          // `coach.http.<status>` only when parsing the envelope fails.
+          let structured: string | null = null;
+          try {
+            const envelope = (await response.clone().json()) as {
+              error?: unknown;
+            };
+            if (typeof envelope?.error === "string") {
+              structured = envelope.error;
+            }
+          } catch {
+            // body was not JSON; fall through to the http-status fallback
+          }
+          setStreaming({
+            content: "",
+            metricSource: null,
+            suggestion: null,
+            suggestedAction: null,
+            inProgress: false,
+            messageId: null,
+            errorCode: structured ?? `coach.http.${response.status}`,
+            usage: null,
+          });
+          // v1.16.4 — KEEP the optimistic user bubble: a rejected turn
+          // (budget gate, 4xx) has no persisted twin coming, and dropping
+          // the bubble left the error standing next to an empty thread.
+          // The content-equality dedupe in <MessageThread> still
+          // suppresses the optimistic copy if a persisted twin lands.
+          return null;
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let resolvedConversationId: string | null = null;
+        let collectedContent = "";
+        let collectedProvenance: CoachProvenance | null = null;
+        let collectedSuggestion: CoachSuggestion | null = null;
+        let collectedSuggestedAction: CoachSuggestedAction | null = null;
+        let lastError: string | null = null;
+        let messageId: string | null = null;
+        let collectedUsage: CoachUsage | null = null;
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const text = decoder.decode(value, { stream: true });
+            const { events, rest } = parseSseChunk(buffer, text);
+            buffer = rest;
+            for (const evt of events) {
+              switch (evt.type) {
+                case "token":
+                  collectedContent += evt.token;
+                  setStreaming((prev) => ({
+                    ...prev,
+                    content: prev.content + evt.token,
+                  }));
+                  break;
+                case "provenance":
+                  collectedProvenance = evt.metricSource;
+                  setStreaming((prev) => ({
+                    ...prev,
+                    metricSource: evt.metricSource,
+                  }));
+                  break;
+                case "suggestion":
+                  collectedSuggestion = evt.suggestion;
+                  setStreaming((prev) => ({
+                    ...prev,
+                    suggestion: evt.suggestion,
+                  }));
+                  break;
+                case "suggestedAction":
+                  collectedSuggestedAction = evt.suggestedAction;
+                  setStreaming((prev) => ({
+                    ...prev,
+                    suggestedAction: evt.suggestedAction,
+                  }));
+                  break;
+                case "reasoning":
+                  // v1.19.1 — the thinking disclosure was removed, so the
+                  // additive `reasoning` frame is accepted off the wire and
+                  // dropped. Kept as an explicit no-op case so the wire frame
+                  // stays a recognised type rather than slipping to a default.
+                  break;
+                case "done":
+                  resolvedConversationId = evt.conversationId;
+                  messageId = evt.messageId;
+                  // v1.18.9 — additive per-turn usage envelope.
+                  collectedUsage = evt.usage ?? null;
+                  break;
+                case "error":
+                  lastError = evt.code;
+                  break;
+              }
             }
           }
-        }
-        // Final flush of any trailing frame in the residual buffer.
-        const tail = parseSseChunk(buffer, "\n\n");
-        for (const evt of tail.events) {
-          if (evt.type === "done") {
-            resolvedConversationId = evt.conversationId;
-            messageId = evt.messageId;
-            collectedUsage = evt.usage ?? null;
-          } else if (evt.type === "error") {
-            lastError = evt.code;
+          // Final flush of any trailing frame in the residual buffer.
+          const tail = parseSseChunk(buffer, "\n\n");
+          for (const evt of tail.events) {
+            if (evt.type === "done") {
+              resolvedConversationId = evt.conversationId;
+              messageId = evt.messageId;
+              collectedUsage = evt.usage ?? null;
+            } else if (evt.type === "error") {
+              lastError = evt.code;
+            }
+          }
+        } catch (err) {
+          if ((err as Error).name !== "AbortError") {
+            lastError = "coach.stream";
           }
         }
-      } catch (err) {
-        if ((err as Error).name !== "AbortError") {
-          lastError = "coach.stream";
-        }
-      }
 
-      setStreaming({
-        content: collectedContent,
-        metricSource: collectedProvenance,
-        suggestion: collectedSuggestion,
-        suggestedAction: collectedSuggestedAction,
-        inProgress: false,
-        messageId,
-        errorCode: lastError,
-        usage: collectedUsage,
-      });
-
-      if (resolvedConversationId) {
-        // Invalidate the freshly-persisted conversation + the rail so
-        // the drawer's next mount picks up the encrypted-on-disk shape
-        // and the rail orders the thread to the top.
-        queryClient.invalidateQueries({
-          queryKey: QUERY_KEYS.one(resolvedConversationId),
+        setStreaming({
+          content: collectedContent,
+          metricSource: collectedProvenance,
+          suggestion: collectedSuggestion,
+          suggestedAction: collectedSuggestedAction,
+          inProgress: false,
+          messageId,
+          errorCode: lastError,
+          usage: collectedUsage,
         });
-        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.list() });
-        optsRef.current.onDone?.(resolvedConversationId);
+
+        if (resolvedConversationId) {
+          // Invalidate the freshly-persisted conversation + the rail so
+          // the drawer's next mount picks up the encrypted-on-disk shape
+          // and the rail orders the thread to the top.
+          queryClient.invalidateQueries({
+            queryKey: QUERY_KEYS.one(resolvedConversationId),
+          });
+          queryClient.invalidateQueries({ queryKey: QUERY_KEYS.list() });
+          optsRef.current.onDone?.(resolvedConversationId);
+        }
+        // v1.4.25 W5 — drop the optimistic user bubble; the persisted
+        // twin is on its way via the invalidate-refetch above.
+        // v1.16.4 — but only when a twin IS coming (the turn resolved a
+        // conversation) or the turn succeeded outright. An errored turn
+        // without a conversation id persisted nothing; dropping the
+        // bubble then erased the user's message next to the error bubble.
+        // The content-equality dedupe in <MessageThread> still suppresses
+        // the optimistic copy if a persisted twin does land later.
+        if (resolvedConversationId || !lastError) {
+          setOptimisticUser(null);
+        }
+        return resolvedConversationId;
+      } finally {
+        sendMarker.inProgress = false;
       }
-      // v1.4.25 W5 — drop the optimistic user bubble; the persisted
-      // twin is on its way via the invalidate-refetch above.
-      // v1.16.4 — but only when a twin IS coming (the turn resolved a
-      // conversation) or the turn succeeded outright. An errored turn
-      // without a conversation id persisted nothing; dropping the
-      // bubble then erased the user's message next to the error bubble.
-      // The content-equality dedupe in <MessageThread> still suppresses
-      // the optimistic copy if a persisted twin does land later.
-      if (resolvedConversationId || !lastError) {
-        setOptimisticUser(null);
-      }
-      return resolvedConversationId;
     },
     [queryClient],
   );

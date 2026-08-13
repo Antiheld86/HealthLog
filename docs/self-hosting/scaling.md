@@ -56,6 +56,36 @@ know:
   Without a shared staging volume, imports in split mode cannot
   complete.
 
+## Apple Health import memory
+
+The import parses `export.xml` as a stream: the archive is never
+buffered whole, records flush to the database in fixed-size batches,
+and what stays resident scales with the data's calendar span, not its
+record count. Multi-year exports with millions of records parse within
+the default Node.js heap.
+
+Before parsing starts, the worker compares the archive's declared
+uncompressed size against the runtime heap limit. If the limit is too
+low to carry the export — realistically only when
+`--max-old-space-size` was pinned far below the default — the import
+fails immediately with a `failureReason` starting with
+`insufficient_memory`, naming the required and available amounts.
+Raise the limit on the container that runs the worker and re-upload:
+
+```yaml
+# docker-compose.yml
+services:
+  app:
+    environment:
+      NODE_OPTIONS: --max-old-space-size=1024
+```
+
+An import interrupted by a container restart or an out-of-memory kill
+does not stay stuck: the worker reconciles non-terminal import jobs at
+boot and every 15 minutes, flipping orphaned rows to `failed`
+(`interrupted_by_restart`) so the UI offers a retry instead of an
+endless spinner.
+
 ## Healthchecks
 
 - `app` (web) healthcheck: `wget /api/version` every 30s.

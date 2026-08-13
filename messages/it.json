@@ -2934,6 +2934,10 @@
         "railBadge": "Chat documento isolata",
         "uploadError": "Caricamento non riuscito. Riprova.",
         "notFoundError": "Quel link al documento non è più valido: verrà avviata una chat normale."
+      },
+      "interrupted": {
+        "note": "Questa risposta è stata interrotta prima di essere completata.",
+        "retry": "Chiedi di nuovo"
       }
     },
     "relativeJustNow": "proprio ora",
@@ -4984,6 +4988,8 @@
             "rateLimited": "Troppi caricamenti. Attendi un momento e riprova.",
             "tooLarge": "Il file è troppo grande (limite 1,5 GB).",
             "failed": "L'importazione non è riuscita.",
+            "failureInterrupted": "L'importazione è stata interrotta prima di finire, di solito per un riavvio del server o per memoria esaurita. I dati sono al sicuro; ricarica l'archivio per riprovare.",
+            "failureInsufficientMemory": "Il limite di memoria del server è troppo basso per un archivio di queste dimensioni. Chiedi a chi gestisce il server di aumentare il limite di memoria di Node.js (NODE_OPTIONS=--max-old-space-size), poi ricarica l'archivio.",
             "rowsImported": "{count} righe importate finora",
             "doneSummary": "Fatto: {imported} di {read} record importati, {skipped} record clinici saltati.",
             "doneNothing": "Da questo archivio non è stato importato nulla: sono arrivati 0 record su {read}.",
@@ -5616,14 +5622,10 @@
         "profileHint": "Età e genere provengono dal tuo profilo e vengono inclusi automaticamente.",
         "freeTextLabel": "Su di me (testo libero)",
         "conditionsPlaceholder": "Es. ipertensione, diabete di tipo 2…",
-        "allergiesLabel": "Allergie e intolleranze",
         "allergiesPlaceholder": "Es. intolleranza al lattosio, allergia alla penicillina…",
         "focusPlaceholder": "Es. tieni d'occhio la mia pressione, motivami a muovermi di più…",
-        "completeness": "{answered} su {total} compilati",
         "questionsTitle": "Il Coach ha alcune domande",
-        "questionsOpenCoach": "Rispondi nel Coach",
-        "recordsLink": "Allergie, anamnesi familiare e le tue patologie preesistenti fanno parte della tua anamnesi.",
-        "recordsLinkCta": "Apri anamnesi"
+        "questionsOpenCoach": "Rispondi nel Coach"
       },
       "responseTimeoutHeading": "Timeout della risposta",
       "responseTimeoutBody": "Quanto attendere la risposta dell'IA prima di annullare. Aumentalo per un modello locale o self-hosted che ha bisogno di tempo per caricarsi alla prima richiesta.",
@@ -5651,7 +5653,9 @@
         "withdraw": "Revoca il consenso",
         "confirmBody": "Le funzioni IA si fermano subito. Nulla di quanto già registrato viene eliminato — usa Dati e privacy per esportare o cancellare il tuo archivio.",
         "confirmWithdraw": "Revoca",
-        "regrantHint": "Per usare di nuovo le funzioni IA, attiva la lettura automatica dei documenti o concedi il consenso dall'app.",
+        "regrantHint": "Concedendolo di nuovo, le funzioni IA potranno inviare ancora i tuoi dati sanitari al provider configurato.",
+        "grant": "Concedi il consenso",
+        "grantError": "Non è stato possibile salvare il consenso. Riprova.",
         "error": "Non è stato possibile salvare la revoca. Riprova."
       }
     },
@@ -9295,6 +9299,12 @@
         "savedToast": "Allergia salvata",
         "updatedToast": "Allergia aggiornata",
         "saveError": "Impossibile salvare l'allergia."
+      },
+      "freeText": {
+        "label": "Nota a testo libero (allergie e intolleranze)",
+        "hint": "Un'integrazione a testo libero all'elenco strutturato qui sopra, per il contesto che una singola voce non può contenere.",
+        "savedToast": "Nota sulle allergie salvata.",
+        "saveError": "Impossibile salvare. Riprova."
       }
     },
     "family": {
@@ -9560,10 +9570,14 @@
       "unavailableAction": "Apri impostazioni IA",
       "errorGeneric": "Impossibile leggere il documento. Riprova.",
       "errorOcr": "Impossibile leggere il testo da questa immagine.",
-      "errorRateLimited": "Troppe richieste IA — riprova tra qualche minuto.",
+      "errorRateLimited": "Il limite orario di letture IA è stato raggiunto. Riprova più tardi.",
+      "errorRateLimitedWaitOne": "Il limite orario di letture IA è stato raggiunto. Riprova tra circa un minuto.",
+      "errorRateLimitedWaitFew": "Il limite orario di letture IA è stato raggiunto. Riprova tra circa {count} minuti.",
+      "errorRateLimitedWaitOther": "Il limite orario di letture IA è stato raggiunto. Riprova tra circa {count} minuti.",
       "errorBudget": "Il tuo budget IA di oggi è esaurito.",
       "errorPdfNeedsVision": "La scansione dei PDF richiede un provider di visione Claude.",
       "errorFileType": "Questo tipo di file non può essere letto.",
+      "errorNotIndexed": "Leggi prima il documento, poi estrai.",
       "errorLocalOcrDisabled": "Attiva prima l'OCR locale nelle impostazioni IA.",
       "errorProvider": "Nessun provider IA è configurato per questo.",
       "errorTextImageOnly": "L'OCR locale legge solo immagini, non questo file."
@@ -9577,9 +9591,54 @@
     },
     "ai": {
       "readDone": "L’IA ha letto il tuo documento.",
+      "readStagedOne": "L’IA ha letto il tuo documento. 1 valore di laboratorio attende la tua revisione.",
+      "readStagedFew": "L’IA ha letto il tuo documento. {count} valori di laboratorio attendono la tua revisione.",
+      "readStagedOther": "L’IA ha letto il tuo documento. {count} valori di laboratorio attendono la tua revisione.",
       "read": "Leggi con l’IA",
       "reread": "Leggi di nuovo",
-      "reading": "Lettura…"
+      "reading": "Lettura…",
+      "notReadYet": "Questo documento non è ancora stato letto."
+    },
+    "review": {
+      "title": "Rivedi i valori estratti",
+      "hint": "Approva ciò che corrisponde al documento. I valori non selezionati vengono scartati; nulla viene salvato senza la tua conferma.",
+      "openOne": "Rivedi il valore estratto",
+      "openFew": "Rivedi i valori estratti ({count})",
+      "openOther": "Rivedi i valori estratti ({count})",
+      "includeAria": "Includi {value}",
+      "type": {
+        "OBSERVATION": "Valore di laboratorio",
+        "CONDITION": "Condizione",
+        "MEDICATION_STATEMENT": "Farmaco"
+      },
+      "statedRange": "intervallo indicato {range}",
+      "needsCheck": "Controlla questo valore rispetto al documento, poi salvalo.",
+      "verify": "Controlla",
+      "verifySave": "Salva valore",
+      "verifyInvalid": "Indica un nome e un valore numerico oppure un risultato testuale, non entrambi.",
+      "verifyFailed": "La correzione non è stata salvata. Riprova.",
+      "fieldName": "Nome",
+      "fieldDate": "Data",
+      "fieldValue": "Valore",
+      "fieldValueText": "Risultato (testo)",
+      "fieldUnit": "Unità",
+      "fieldDose": "Dose",
+      "unverifiedNoteOne": "1 valore deve ancora essere controllato e resta in sospeso.",
+      "unverifiedNoteFew": "{count} valori devono ancora essere controllati e restano in sospeso.",
+      "unverifiedNoteOther": "{count} valori devono ancora essere controllati e restano in sospeso.",
+      "finish": "Concludi la revisione",
+      "confirmFailed": "La revisione non è stata salvata. Riprova.",
+      "savedToastOne": "1 valore salvato.",
+      "savedToastFew": "{count} valori salvati.",
+      "savedToastOther": "{count} valori salvati.",
+      "nothingSavedToast": "Revisione salvata. Nessun valore è stato aggiunto.",
+      "extract": "Estrai i valori di laboratorio",
+      "extracting": "Estrazione…",
+      "extractHint": "Usa il testo già letto da questo documento. I valori estratti attendono la tua revisione; nulla viene salvato automaticamente.",
+      "extractEmpty": "Non è stato possibile estrarre valori da questo documento.",
+      "failUnitRequired": "Un valore numerico ha bisogno di un’unità prima di poter essere salvato.",
+      "failUnitMismatch": "L’unità indicata non corrisponde all’unità salvata per questo marcatore. Correggila e concludi di nuovo la revisione.",
+      "failGeneric": "Questo valore non è stato salvato."
     },
     "contentIndex": {
       "indexPrompt": "Rendi ricercabile il contenuto dei documenti.",

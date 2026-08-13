@@ -18,6 +18,9 @@ vi.mock("@/lib/documents/store", () => ({
 vi.mock("@/lib/labs/ocr-upload", () => ({
   detectOcrMimeType: vi.fn(() => "image/png"),
 }));
+vi.mock("@/lib/documents/rasterize-pdf", () => ({
+  rasterizePdf: vi.fn(),
+}));
 vi.mock("@/lib/documents/describe", () => ({
   transcribeDocument: vi.fn().mockResolvedValue({ text: "glucose 90" }),
   DocumentDescribeError: class DocumentDescribeError extends Error {},
@@ -42,6 +45,9 @@ vi.mock("@/lib/jobs/boss-instance", () => ({ getGlobalBoss: vi.fn() }));
 
 import { runContentIndexBackfillForUser } from "../document-content-index-backfill";
 import { prisma } from "@/lib/db";
+import { detectOcrMimeType } from "@/lib/labs/ocr-upload";
+import { rasterizePdf } from "@/lib/documents/rasterize-pdf";
+import { transcribeDocument } from "@/lib/documents/describe";
 import { resolveDocumentVisionProvider } from "@/lib/documents/provider-order";
 import {
   assertDocumentEgressConsent,
@@ -86,7 +92,12 @@ describe("runContentIndexBackfillForUser", () => {
       pick: null,
     } as never);
     const result = await runContentIndexBackfillForUser("user-1");
-    expect(result).toEqual({ indexed: 0, reason: "no-provider" });
+    expect(result).toEqual({
+      indexed: 0,
+      skipped: 0,
+      failed: 0,
+      reason: "no-provider",
+    });
     expect(upsertContentIndex).not.toHaveBeenCalled();
   });
 
@@ -96,7 +107,12 @@ describe("runContentIndexBackfillForUser", () => {
       new ConsentRequiredError("insights" as never),
     );
     const result = await runContentIndexBackfillForUser("user-1");
-    expect(result).toEqual({ indexed: 0, reason: "no-consent" });
+    expect(result).toEqual({
+      indexed: 0,
+      skipped: 0,
+      failed: 0,
+      reason: "no-consent",
+    });
     expect(upsertContentIndex).not.toHaveBeenCalled();
   });
 
@@ -110,8 +126,87 @@ describe("runContentIndexBackfillForUser", () => {
     ] as never);
 
     const result = await runContentIndexBackfillForUser("user-1");
-    expect(result).toEqual({ indexed: 2, reason: "ok" });
+    expect(result).toEqual({
+      indexed: 2,
+      skipped: 0,
+      failed: 0,
+      reason: "ok",
+    });
     expect(upsertContentIndex).toHaveBeenCalledTimes(2);
+  });
+
+  it("includes PDFs as candidates for an image-input provider and rasterises them", async () => {
+    // The per-document authority (`prepareVisionInput`) renders a PDF to page
+    // images when the provider cannot take PDFs natively. The candidate MIME
+    // prefilter must not be stricter than that, or "index all documents"
+    // silently leaves every PDF out for exactly those providers.
+    vi.mocked(resolveDocumentVisionProvider).mockResolvedValue({
+      chain: [{ providerType: "codex", instance: {} }],
+      pick: {
+        entry: { providerType: "codex", instance: {} },
+        providerType: "codex",
+        pdfSupported: false,
+      },
+    } as never);
+    vi.mocked(prisma.inboundDocument.findMany).mockResolvedValue([
+      { id: "pdf-1" },
+    ] as never);
+    vi.mocked(detectOcrMimeType).mockReturnValueOnce(
+      "application/pdf" as never,
+    );
+    vi.mocked(rasterizePdf).mockResolvedValue({
+      ok: true,
+      images: [{ mediaType: "image/png", dataBase64: "cGFnZQ==" }],
+    } as never);
+
+    const result = await runContentIndexBackfillForUser("user-1");
+
+    // The discovery walk asked for PDFs despite pdfSupported=false…
+    const where = vi.mocked(prisma.inboundDocument.findMany).mock.calls[0]?.[0]
+      ?.where as { mimeType: { in: string[] } };
+    expect(where.mimeType.in).toContain("application/pdf");
+    // …and the document reached `prepareVisionInput`, which rasterised it.
+    expect(transcribeDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        images: [{ mediaType: "image/png", dataBase64: "cGFnZQ==" }],
+        documents: [],
+      }),
+    );
+    expect(result).toEqual({
+      indexed: 1,
+      skipped: 0,
+      failed: 0,
+      reason: "ok",
+    });
+  });
+
+  it("counts a PDF the rasteriser cannot render as skipped, not failed", async () => {
+    vi.mocked(resolveDocumentVisionProvider).mockResolvedValue({
+      chain: [{ providerType: "codex", instance: {} }],
+      pick: {
+        entry: { providerType: "codex", instance: {} },
+        providerType: "codex",
+        pdfSupported: false,
+      },
+    } as never);
+    vi.mocked(prisma.inboundDocument.findMany).mockResolvedValue([
+      { id: "pdf-1" },
+    ] as never);
+    vi.mocked(detectOcrMimeType).mockReturnValueOnce(
+      "application/pdf" as never,
+    );
+    vi.mocked(rasterizePdf).mockResolvedValue({ ok: false } as never);
+
+    const result = await runContentIndexBackfillForUser("user-1");
+    // No provider call happened, so this is a skip (retryable later), and the
+    // summary says so instead of folding it into silence.
+    expect(transcribeDocument).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      indexed: 0,
+      skipped: 1,
+      failed: 0,
+      reason: "ok",
+    });
   });
 
   it("stops when the daily budget is reached (resumable)", async () => {
@@ -128,7 +223,12 @@ describe("runContentIndexBackfillForUser", () => {
       .mockResolvedValue({ allowed: true, reserved: 1 } as never);
 
     const result = await runContentIndexBackfillForUser("user-1");
-    expect(result).toEqual({ indexed: 1, reason: "budget-reached" });
+    expect(result).toEqual({
+      indexed: 1,
+      skipped: 0,
+      failed: 0,
+      reason: "budget-reached",
+    });
     expect(upsertContentIndex).toHaveBeenCalledTimes(1);
   });
 });

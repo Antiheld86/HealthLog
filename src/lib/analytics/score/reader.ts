@@ -443,8 +443,8 @@ function scoreInputsFor(args: {
       biomarker: {
         name: string;
         unit: string;
-        referenceLow: number | null;
-        referenceHigh: number | null;
+        lowerBound: number | null;
+        upperBound: number | null;
       } | null;
     }>
   >;
@@ -597,9 +597,8 @@ function scoreInputsFor(args: {
         marker: row.biomarker?.name ?? row.analyte,
         value: row.value!,
         unit: row.unit || row.biomarker?.unit || "",
-        referenceLow: row.referenceLow ?? row.biomarker?.referenceLow ?? null,
-        referenceHigh:
-          row.referenceHigh ?? row.biomarker?.referenceHigh ?? null,
+        referenceLow: row.referenceLow ?? row.biomarker?.lowerBound ?? null,
+        referenceHigh: row.referenceHigh ?? row.biomarker?.upperBound ?? null,
         panel: row.panel,
         at: row.takenAt,
         source: row.source,
@@ -708,12 +707,18 @@ export async function computeUserHealthScore(
               panel: true,
               takenAt: true,
               source: true,
+              // The catalog's range columns are `lowerBound` / `upperBound`
+              // (`lower_bound` / `upper_bound`), not the LabResult's own
+              // `reference*` names. Prisma rejects a select against names a
+              // model does not have at query-validation time — before any
+              // row is read — so getting this wrong fails EVERY labs read,
+              // not just rows that use the catalog fallback.
               biomarker: {
                 select: {
                   name: true,
                   unit: true,
-                  referenceLow: true,
-                  referenceHigh: true,
+                  lowerBound: true,
+                  upperBound: true,
                 },
               },
             },

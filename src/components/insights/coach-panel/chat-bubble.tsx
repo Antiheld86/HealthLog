@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
 import { ApiError, apiPost } from "@/lib/api/api-fetch";
 import { useAuth } from "@/hooks/use-auth";
@@ -563,6 +564,48 @@ function ChatBubbleImpl({
             {initials ?? <User className="size-3.5" />}
           </div>
         )}
+      </div>
+    );
+  }
+
+  // #781 — the persisted cancelled-turn marker (an EMPTY assistant row the
+  // server writes when the client aborts mid-generation, e.g. navigating
+  // away). Rendered as a quiet interrupted note — muted meta text per
+  // UI-STANDARDS §3, never an alarm colour: nothing failed, the user left —
+  // plus a retry that resubmits the question that produced the turn (the
+  // regenerate closure, so the resend runs through the normal send path and
+  // every budget/rate gate). No provenance, feedback, copy, or token footer:
+  // there is no reply to act on.
+  if (providerType === "cancelled") {
+    return (
+      <div
+        data-slot="coach-bubble-cancelled"
+        className="flex items-start gap-2.5"
+      >
+        <div
+          aria-hidden="true"
+          className="from-primary to-brand-pink mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br"
+        >
+          <Sparkles className="text-background size-3.5" />
+        </div>
+        <div className="flex max-w-[calc(80%-2.625rem)] flex-col items-start gap-2">
+          <p className="text-muted-foreground text-xs leading-relaxed">
+            {t("insights.coach.interrupted.note")}
+          </p>
+          {onRegenerate && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              data-slot="coach-interrupted-retry"
+              className="min-h-11 sm:min-h-9"
+              onClick={onRegenerate}
+            >
+              <RotateCcw className="size-3.5" aria-hidden="true" />
+              {t("insights.coach.interrupted.retry")}
+            </Button>
+          )}
+        </div>
       </div>
     );
   }

@@ -2934,6 +2934,10 @@
         "railBadge": "Odizolowany czat dokumentu",
         "uploadError": "Przesyłanie nie powiodło się. Spróbuj ponownie.",
         "notFoundError": "Ten link do dokumentu jest już nieprawidłowy – zamiast tego rozpoczynamy zwykły czat."
+      },
+      "interrupted": {
+        "note": "Ta odpowiedź została przerwana przed ukończeniem.",
+        "retry": "Zapytaj ponownie"
       }
     },
     "relativeJustNow": "przed chwilą",
@@ -4984,6 +4988,8 @@
             "rateLimited": "Zbyt wiele przesłań. Poczekaj chwilę i spróbuj ponownie.",
             "tooLarge": "Ten plik jest za duży (limit 1,5 GB).",
             "failed": "Import nie powiódł się.",
+            "failureInterrupted": "Import został przerwany przed zakończeniem, zwykle przez restart serwera lub brak pamięci. Dane są bezpieczne; prześlij archiwum ponownie, aby spróbować jeszcze raz.",
+            "failureInsufficientMemory": "Limit pamięci serwera jest zbyt niski dla archiwum tej wielkości. Poproś osobę administrującą serwerem o zwiększenie limitu pamięci Node.js (NODE_OPTIONS=--max-old-space-size), a następnie prześlij archiwum ponownie.",
             "rowsImported": "Zaimportowano dotąd {count} wierszy",
             "doneSummary": "Gotowe — zaimportowano {imported} z {read} rekordów, pominięto {skipped} rekordów klinicznych.",
             "doneNothing": "Z tego archiwum nic nie zaimportowano: dotarło 0 z {read} rekordów.",
@@ -5616,14 +5622,10 @@
         "profileHint": "Wiek i płeć pochodzą z Twojego profilu i są dołączane automatycznie.",
         "freeTextLabel": "O mnie (tekst dowolny)",
         "conditionsPlaceholder": "Np. nadciśnienie, cukrzyca typu 2…",
-        "allergiesLabel": "Alergie i nietolerancje",
         "allergiesPlaceholder": "Np. nietolerancja laktozy, alergia na penicylinę…",
         "focusPlaceholder": "Np. pilnuj mojego ciśnienia, motywuj mnie do ruchu…",
-        "completeness": "Wypełnione: {answered} z {total}",
         "questionsTitle": "Coach ma pytania",
-        "questionsOpenCoach": "Odpowiedz w Coachu",
-        "recordsLink": "Alergie, wywiad rodzinny i Twoje choroby przewlekłe są częścią Twojego wywiadu medycznego.",
-        "recordsLinkCta": "Otwórz wywiad medyczny"
+        "questionsOpenCoach": "Odpowiedz w Coachu"
       },
       "responseTimeoutHeading": "Limit czasu odpowiedzi",
       "responseTimeoutBody": "Jak długo czekać na odpowiedź AI, zanim nastąpi przerwanie. Zwiększ wartość dla lokalnego lub samodzielnie hostowanego modelu, który potrzebuje czasu na załadowanie przy pierwszym żądaniu.",
@@ -5651,7 +5653,9 @@
         "withdraw": "Wycofaj zgodę",
         "confirmBody": "Funkcje AI przestają działać natychmiast. Nic z już zapisanych danych nie zostaje usunięte — użyj sekcji Dane i prywatność, aby wyeksportować lub usunąć swoją historię.",
         "confirmWithdraw": "Wycofaj",
-        "regrantHint": "Aby ponownie korzystać z funkcji AI, włącz automatyczne czytanie dokumentów lub udziel zgody w aplikacji.",
+        "regrantHint": "Po ponownym udzieleniu zgody funkcje AI znów będą mogły wysyłać Twoje dane zdrowotne do skonfigurowanego dostawcy.",
+        "grant": "Udziel zgody",
+        "grantError": "Nie udało się zapisać zgody. Spróbuj ponownie.",
         "error": "Nie udało się zapisać wycofania. Spróbuj ponownie."
       }
     },
@@ -9295,6 +9299,12 @@
         "savedToast": "Alergia zapisana",
         "updatedToast": "Alergia zaktualizowana",
         "saveError": "Nie udało się zapisać alergii."
+      },
+      "freeText": {
+        "label": "Notatka tekstowa (alergie i nietolerancje)",
+        "hint": "Tekstowe uzupełnienie ustrukturyzowanej listy powyżej, na kontekst, którego pojedynczy wpis nie odda.",
+        "savedToast": "Notatka o alergiach zapisana.",
+        "saveError": "Nie udało się zapisać. Spróbuj ponownie."
       }
     },
     "family": {
@@ -9560,10 +9570,14 @@
       "unavailableAction": "Otwórz ustawienia AI",
       "errorGeneric": "Nie udało się odczytać dokumentu. Spróbuj ponownie.",
       "errorOcr": "Nie udało się odczytać tekstu z tego obrazu.",
-      "errorRateLimited": "Zbyt wiele żądań AI — spróbuj za kilka minut.",
+      "errorRateLimited": "Godzinowy limit odczytów AI został osiągnięty. Spróbuj ponownie później.",
+      "errorRateLimitedWaitOne": "Godzinowy limit odczytów AI został osiągnięty. Spróbuj ponownie za około minutę.",
+      "errorRateLimitedWaitFew": "Godzinowy limit odczytów AI został osiągnięty. Spróbuj ponownie za około {count} minuty.",
+      "errorRateLimitedWaitOther": "Godzinowy limit odczytów AI został osiągnięty. Spróbuj ponownie za około {count} minut.",
       "errorBudget": "Twój dzisiejszy budżet AI został wyczerpany.",
       "errorPdfNeedsVision": "Skanowanie plików PDF wymaga dostawcy wizji Claude.",
       "errorFileType": "Tego typu pliku nie można odczytać.",
+      "errorNotIndexed": "Najpierw odczytaj dokument, potem wyodrębnij.",
       "errorLocalOcrDisabled": "Najpierw włącz lokalne OCR w ustawieniach AI.",
       "errorProvider": "Nie skonfigurowano dostawcy AI do tego celu.",
       "errorTextImageOnly": "Lokalne OCR odczytuje tylko obrazy, nie ten plik."
@@ -9577,9 +9591,54 @@
     },
     "ai": {
       "readDone": "AI odczytało Twój dokument.",
+      "readStagedOne": "AI odczytało Twój dokument. 1 wynik laboratoryjny czeka na Twoją weryfikację.",
+      "readStagedFew": "AI odczytało Twój dokument. {count} wyniki laboratoryjne czekają na Twoją weryfikację.",
+      "readStagedOther": "AI odczytało Twój dokument. {count} wyników laboratoryjnych czeka na Twoją weryfikację.",
       "read": "Odczytaj z AI",
       "reread": "Odczytaj ponownie",
-      "reading": "Odczytywanie…"
+      "reading": "Odczytywanie…",
+      "notReadYet": "Ten dokument nie został jeszcze odczytany."
+    },
+    "review": {
+      "title": "Przejrzyj odczytane wartości",
+      "hint": "Zatwierdź to, co zgadza się z dokumentem. Niezaznaczone wartości zostaną odrzucone; nic nie zapisuje się bez Twojego potwierdzenia.",
+      "openOne": "Przejrzyj odczytaną wartość",
+      "openFew": "Przejrzyj odczytane wartości ({count})",
+      "openOther": "Przejrzyj odczytane wartości ({count})",
+      "includeAria": "Uwzględnij {value}",
+      "type": {
+        "OBSERVATION": "Wynik laboratoryjny",
+        "CONDITION": "Schorzenie",
+        "MEDICATION_STATEMENT": "Lek"
+      },
+      "statedRange": "podany zakres {range}",
+      "needsCheck": "Sprawdź tę wartość z dokumentem, a potem ją zapisz.",
+      "verify": "Sprawdź",
+      "verifySave": "Zapisz wartość",
+      "verifyInvalid": "Podaj nazwę oraz wartość liczbową albo wynik tekstowy, nie oba naraz.",
+      "verifyFailed": "Nie udało się zapisać poprawki. Spróbuj ponownie.",
+      "fieldName": "Nazwa",
+      "fieldDate": "Data",
+      "fieldValue": "Wartość",
+      "fieldValueText": "Wynik (tekst)",
+      "fieldUnit": "Jednostka",
+      "fieldDose": "Dawka",
+      "unverifiedNoteOne": "1 wartość wymaga jeszcze sprawdzenia i pozostaje w oczekiwaniu.",
+      "unverifiedNoteFew": "{count} wartości wymagają jeszcze sprawdzenia i pozostają w oczekiwaniu.",
+      "unverifiedNoteOther": "{count} wartości wymaga jeszcze sprawdzenia i pozostaje w oczekiwaniu.",
+      "finish": "Zakończ przegląd",
+      "confirmFailed": "Nie udało się zapisać przeglądu. Spróbuj ponownie.",
+      "savedToastOne": "Zapisano 1 wartość.",
+      "savedToastFew": "Zapisano {count} wartości.",
+      "savedToastOther": "Zapisano {count} wartości.",
+      "nothingSavedToast": "Przegląd zapisany. Nie dodano żadnych wartości.",
+      "extract": "Odczytaj wyniki laboratoryjne",
+      "extracting": "Odczytywanie…",
+      "extractHint": "Korzysta z tekstu już odczytanego z tego dokumentu. Odczytane wartości czekają na Twoją weryfikację; nic nie zapisuje się automatycznie.",
+      "extractEmpty": "Z tego dokumentu nie udało się odczytać żadnych wartości.",
+      "failUnitRequired": "Wartość liczbowa potrzebuje jednostki, zanim będzie można ją zapisać.",
+      "failUnitMismatch": "Podana jednostka nie zgadza się z zapisaną jednostką tego wskaźnika. Popraw ją i zakończ przegląd ponownie.",
+      "failGeneric": "Nie udało się zapisać tej wartości."
     },
     "contentIndex": {
       "indexPrompt": "Udostępnij treść dokumentów do wyszukiwania.",

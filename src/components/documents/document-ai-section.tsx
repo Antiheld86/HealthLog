@@ -17,8 +17,13 @@
  *   - "Suggest details" drafts a title / type / date to review before saving.
  *   - "Summarise" / "Show text" surface a transient, session-only read-out.
  *
- * With auto-read ON and nothing pending to review the block collapses entirely —
- * the sheet content starts straight with the document fields under the preview.
+ * With auto-read ON, the document already read, and nothing pending to review
+ * the block collapses entirely — the sheet content starts straight with the
+ * document fields under the preview. An UNREAD document keeps the read action
+ * visible whatever the preference says: auto-read is a promise that reading
+ * happens on upload, and a document the automatic pass never reached (it may
+ * predate the preference, or the pass did not complete) would otherwise have
+ * no path to a read at all.
  *
  * Presentational: the sheet owns the mutations + capability probe and passes
  * their state + handlers down. When `aiEnabled` is false the actions collapse to
@@ -87,6 +92,7 @@ export function DocumentAiSection({
   actionsDisabled: boolean;
   onSuggest: () => void;
   suggestPending: boolean;
+  /** Resolved user-facing error sentence (already translated), or null. */
   suggestErrorKey: string | null;
   onSummarise: (output: DocumentSummaryMode) => void;
   summaryPending: boolean;
@@ -100,6 +106,7 @@ export function DocumentAiSection({
   onDismissSuggestion: () => void;
   summaryOutput: DocumentSummaryMode | null;
   summaryResult: DocumentDescribeResult | null;
+  /** Resolved user-facing error sentence (already translated), or null. */
   summaryErrorKey: string | null;
   onCloseSummary: () => void;
   hasContentIndex: boolean;
@@ -117,12 +124,16 @@ export function DocumentAiSection({
 
   // v1.28.22 — the block carries NO header/status chrome any more (the
   // provenance pill moved to the vault card's meta row; auto-read makes an
-  // in-sheet "read by AI" banner redundant). With auto-read ON and nothing
-  // pending to review, nothing below would render — collapse the whole box so
-  // the content under the preview starts straight with the fields.
+  // in-sheet "read by AI" banner redundant). With auto-read ON, the document
+  // read, and nothing pending to review, nothing below would render —
+  // collapse the whole box so the content under the preview starts straight
+  // with the fields. An unindexed document does NOT collapse (unless indexing
+  // is unavailable on this transport): it still needs its read, and this
+  // section is the only place that action lives.
   if (
     aiEnabled &&
     autoReadEnabled &&
+    (hasContentIndex || !indexEnabled) &&
     !suggestErrorKey &&
     !suggestion &&
     !summaryOutput
@@ -191,11 +202,40 @@ export function DocumentAiSection({
                 {t("documents.summary.showText")}
               </Button>
             </div>
+          ) : !hasContentIndex && indexEnabled ? (
+            // Auto-read is ON but this document has no content index: the
+            // automatic pass never reached it or did not complete. The
+            // suggest / summarise extras stay hidden (auto-read's promise
+            // covers them), but the read itself must stay reachable.
+            <div className="space-y-2">
+              <p
+                data-slot="document-unread-note"
+                className="text-muted-foreground text-xs"
+              >
+                {t("documents.ai.notReadYet")}
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                data-slot="document-read-ai"
+                onClick={onIndex}
+                disabled={indexPending || actionsDisabled}
+              >
+                <ScanText
+                  className={cn(
+                    "size-4",
+                    indexPending && "animate-pulse motion-reduce:animate-none",
+                  )}
+                  aria-hidden
+                />
+                {readLabel}
+              </Button>
+            </div>
           ) : null}
 
           {suggestErrorKey ? (
             <p role="alert" className="text-destructive text-sm">
-              {t(suggestErrorKey)}
+              {suggestErrorKey}
             </p>
           ) : null}
 
@@ -217,7 +257,7 @@ export function DocumentAiSection({
               output={summaryOutput}
               result={summaryResult}
               isPending={summaryPending}
-              errorKey={summaryErrorKey}
+              errorText={summaryErrorKey}
               onClose={onCloseSummary}
             />
           ) : null}

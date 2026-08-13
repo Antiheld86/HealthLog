@@ -202,13 +202,14 @@ export function DocumentSummaryPanel({
   output,
   result,
   isPending,
-  errorKey,
+  errorText,
   onClose,
 }: {
   output: DocumentSummaryMode;
   result: DocumentDescribeResult | null;
   isPending: boolean;
-  errorKey: string | null;
+  /** Resolved user-facing error sentence (already translated), or null. */
+  errorText: string | null;
   onClose: () => void;
 }) {
   const { t } = useTranslations();
@@ -247,9 +248,9 @@ export function DocumentSummaryPanel({
           <Skeleton className="h-3.5 w-11/12" />
           <Skeleton className="h-3.5 w-3/4" />
         </div>
-      ) : errorKey ? (
+      ) : errorText ? (
         <p role="alert" className="text-destructive text-sm">
-          {t(errorKey)}
+          {errorText}
         </p>
       ) : body !== null ? (
         <p

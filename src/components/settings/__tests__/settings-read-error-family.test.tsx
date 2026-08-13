@@ -37,7 +37,8 @@ import { SecurityActivityCard } from "../security-activity-card";
 import { TrustedDevicesCard } from "../trusted-devices-card";
 import { CoachMemorySection } from "../coach-memory-section";
 import { CoachRemindersSection } from "../coach-reminders-section";
-import { AboutMeSection } from "../about-me-section";
+import { AboutMeNoteManager } from "@/components/records/about-me-note-manager";
+import { AllergyFreeTextNote } from "@/components/records/allergy-free-text-note";
 
 function renderCard(node: React.ReactNode) {
   return renderToStaticMarkup(
@@ -51,7 +52,8 @@ const cases: Array<[string, () => React.ReactNode]> = [
   ["TrustedDevicesCard", () => <TrustedDevicesCard isAuthenticated />],
   ["CoachMemorySection", () => <CoachMemorySection isAuthenticated />],
   ["CoachRemindersSection", () => <CoachRemindersSection isAuthenticated />],
-  ["AboutMeSection", () => <AboutMeSection isAuthenticated />],
+  ["AboutMeNoteManager", () => <AboutMeNoteManager />],
+  ["AllergyFreeTextNote", () => <AllergyFreeTextNote />],
 ];
 
 describe("settings read-error family — a read failure is foreground and recoverable", () => {

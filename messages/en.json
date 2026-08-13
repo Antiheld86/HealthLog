@@ -2934,6 +2934,10 @@
         "railBadge": "Fenced document chat",
         "uploadError": "Upload failed. Please try again.",
         "notFoundError": "That document link is no longer valid — starting a normal chat instead."
+      },
+      "interrupted": {
+        "note": "This answer was interrupted before it finished.",
+        "retry": "Ask again"
       }
     },
     "relativeJustNow": "just now",
@@ -4984,6 +4988,8 @@
             "rateLimited": "Too many uploads. Please wait a moment and try again.",
             "tooLarge": "That file is too large (limit 1.5 GB).",
             "failed": "The import failed.",
+            "failureInterrupted": "The import was interrupted before it finished, usually by a server restart or an out-of-memory stop. Your data is safe; upload the export again to retry.",
+            "failureInsufficientMemory": "The server's memory limit is too low for an archive this size. Ask whoever runs the server to raise the Node.js heap limit (NODE_OPTIONS=--max-old-space-size), then upload the export again.",
             "rowsImported": "{count} rows imported so far",
             "doneSummary": "Done — {imported} of {read} records imported, {skipped} clinical records skipped.",
             "doneNothing": "Nothing was imported from that archive: 0 of {read} records landed.",
@@ -5616,14 +5622,10 @@
         "profileHint": "Age and gender come from your profile and are included automatically.",
         "freeTextLabel": "About me (free text)",
         "conditionsPlaceholder": "E.g. hypertension, type 2 diabetes…",
-        "allergiesLabel": "Allergies & intolerances",
         "allergiesPlaceholder": "E.g. lactose intolerance, penicillin allergy…",
         "focusPlaceholder": "E.g. keep an eye on my blood pressure, motivate me to move more…",
-        "completeness": "{answered} of {total} answered",
         "questionsTitle": "The Coach has follow-up questions",
-        "questionsOpenCoach": "Answer them in the Coach",
-        "recordsLink": "Allergies, family history and your pre-existing conditions are part of your medical history.",
-        "recordsLinkCta": "Open medical history"
+        "questionsOpenCoach": "Answer them in the Coach"
       },
       "responseTimeoutHeading": "Response timeout",
       "responseTimeoutBody": "How long to wait for the AI to respond before giving up. Raise it for a local or self-hosted model that needs time to load on the first request.",
@@ -5651,7 +5653,9 @@
         "withdraw": "Withdraw consent",
         "confirmBody": "The AI features stop working straight away. Nothing already recorded is deleted — use Data & privacy to export or erase your record.",
         "confirmWithdraw": "Withdraw",
-        "regrantHint": "To use the AI features again, switch on automatic document reading or grant consent from the app.",
+        "regrantHint": "Granting again lets the AI features send your health data to the configured provider.",
+        "grant": "Grant consent",
+        "grantError": "The consent could not be saved. Please try again.",
         "error": "The withdrawal could not be saved. Please try again."
       }
     },
@@ -9295,6 +9299,12 @@
         "savedToast": "Allergy saved",
         "updatedToast": "Allergy updated",
         "saveError": "Couldn't save the allergy."
+      },
+      "freeText": {
+        "label": "Free-text note (allergies & intolerances)",
+        "hint": "A free-text supplement to the structured list above, for context a single entry cannot carry.",
+        "savedToast": "Allergy note saved.",
+        "saveError": "Could not save. Please try again."
       }
     },
     "family": {
@@ -9560,10 +9570,14 @@
       "unavailableAction": "Open AI settings",
       "errorGeneric": "Couldn't read the document. Try again.",
       "errorOcr": "Couldn't read text from this image.",
-      "errorRateLimited": "Too many AI requests — try again in a few minutes.",
+      "errorRateLimited": "The hourly AI reading limit is reached. Try again later.",
+      "errorRateLimitedWaitOne": "The hourly AI reading limit is reached. Try again in about a minute.",
+      "errorRateLimitedWaitFew": "The hourly AI reading limit is reached. Try again in about {count} minutes.",
+      "errorRateLimitedWaitOther": "The hourly AI reading limit is reached. Try again in about {count} minutes.",
       "errorBudget": "Your AI budget for today is used up.",
       "errorPdfNeedsVision": "Scanning PDFs needs a Claude vision provider.",
       "errorFileType": "This file type can't be read.",
+      "errorNotIndexed": "Read the document first, then extract.",
       "errorLocalOcrDisabled": "Turn on local OCR in the AI settings first.",
       "errorProvider": "No AI provider is set up for this.",
       "errorTextImageOnly": "Local OCR reads images only — not this file."
@@ -9577,9 +9591,54 @@
     },
     "ai": {
       "readDone": "The AI read your document.",
+      "readStagedOne": "The AI read your document. 1 lab value is ready to review.",
+      "readStagedFew": "The AI read your document. {count} lab values are ready to review.",
+      "readStagedOther": "The AI read your document. {count} lab values are ready to review.",
       "read": "Read with AI",
       "reread": "Read again",
-      "reading": "Reading…"
+      "reading": "Reading…",
+      "notReadYet": "This document has not been read yet."
+    },
+    "review": {
+      "title": "Review extracted values",
+      "hint": "Approve what matches the document. Unchecked values are discarded; nothing is saved without your confirmation.",
+      "openOne": "Review extracted value",
+      "openFew": "Review extracted values ({count})",
+      "openOther": "Review extracted values ({count})",
+      "includeAria": "Include {value}",
+      "type": {
+        "OBSERVATION": "Lab value",
+        "CONDITION": "Condition",
+        "MEDICATION_STATEMENT": "Medication"
+      },
+      "statedRange": "stated range {range}",
+      "needsCheck": "Check this value against the document, then save it.",
+      "verify": "Check",
+      "verifySave": "Save value",
+      "verifyInvalid": "Enter a name and either a numeric value or a text result, not both.",
+      "verifyFailed": "The correction couldn't be saved. Try again.",
+      "fieldName": "Name",
+      "fieldDate": "Date",
+      "fieldValue": "Value",
+      "fieldValueText": "Result (text)",
+      "fieldUnit": "Unit",
+      "fieldDose": "Dose",
+      "unverifiedNoteOne": "1 value still needs checking and stays pending.",
+      "unverifiedNoteFew": "{count} values still need checking and stay pending.",
+      "unverifiedNoteOther": "{count} values still need checking and stay pending.",
+      "finish": "Finish review",
+      "confirmFailed": "The review couldn't be saved. Try again.",
+      "savedToastOne": "1 value saved.",
+      "savedToastFew": "{count} values saved.",
+      "savedToastOther": "{count} values saved.",
+      "nothingSavedToast": "Review saved. No values were added.",
+      "extract": "Extract lab values",
+      "extracting": "Extracting…",
+      "extractHint": "Uses the text already read from this document. Extracted values wait for your review; nothing is saved automatically.",
+      "extractEmpty": "No values could be extracted from this document.",
+      "failUnitRequired": "A numeric value needs a unit before it can be saved.",
+      "failUnitMismatch": "The stated unit does not match the saved unit for this marker. Adjust it, then finish the review again.",
+      "failGeneric": "This value could not be saved."
     },
     "contentIndex": {
       "indexPrompt": "Make document contents searchable.",

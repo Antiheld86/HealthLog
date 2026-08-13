@@ -2934,6 +2934,10 @@
         "railBadge": "Dokument-Chat (abgeschottet)",
         "uploadError": "Upload fehlgeschlagen. Bitte versuche es erneut.",
         "notFoundError": "Dieser Dokumentlink ist nicht mehr gültig – es wird ein normaler Chat gestartet."
+      },
+      "interrupted": {
+        "note": "Diese Antwort wurde unterbrochen, bevor sie fertig war.",
+        "retry": "Erneut fragen"
       }
     },
     "relativeJustNow": "gerade eben",
@@ -4984,6 +4988,8 @@
             "rateLimited": "Zu viele Uploads. Bitte kurz warten und erneut versuchen.",
             "tooLarge": "Diese Datei ist zu groß (Grenze 1,5 GB).",
             "failed": "Der Import ist fehlgeschlagen.",
+            "failureInterrupted": "Der Import wurde unterbrochen, bevor er fertig war, meist durch einen Server-Neustart oder Speichermangel. Die Daten sind sicher; das Archiv einfach erneut hochladen.",
+            "failureInsufficientMemory": "Das Speicherlimit des Servers ist für ein Archiv dieser Größe zu niedrig. Bitte die Betreiberin oder den Betreiber das Node.js-Heap-Limit erhöhen lassen (NODE_OPTIONS=--max-old-space-size) und das Archiv danach erneut hochladen.",
             "rowsImported": "Bisher {count} Einträge importiert",
             "doneSummary": "Fertig — {imported} von {read} Datensätzen importiert, {skipped} klinische Datensätze übersprungen.",
             "doneNothing": "Aus diesem Archiv wurde nichts importiert: 0 von {read} Datensätzen sind angekommen.",
@@ -5616,14 +5622,10 @@
         "profileHint": "Alter und Geschlecht stammen aus deinem Profil und werden automatisch mitgegeben.",
         "freeTextLabel": "Über mich (Freitext)",
         "conditionsPlaceholder": "Z. B. Bluthochdruck, Typ-2-Diabetes…",
-        "allergiesLabel": "Allergien & Unverträglichkeiten",
         "allergiesPlaceholder": "Z. B. Laktoseintoleranz, Penicillin-Allergie…",
         "focusPlaceholder": "Z. B. behalte meinen Blutdruck im Blick, motiviere mich zu mehr Bewegung…",
-        "completeness": "{answered} von {total} beantwortet",
         "questionsTitle": "Der Coach hat Rückfragen",
-        "questionsOpenCoach": "Im Coach beantworten",
-        "recordsLink": "Allergien, Familienanamnese und deine Vorerkrankungen gehören zu deiner Anamnese.",
-        "recordsLinkCta": "Anamnese öffnen"
+        "questionsOpenCoach": "Im Coach beantworten"
       },
       "responseTimeoutHeading": "Antwort-Timeout",
       "responseTimeoutBody": "Wie lange auf die Antwort der KI gewartet wird, bevor abgebrochen wird. Erhöhe den Wert für ein lokales oder selbst gehostetes Modell, das beim ersten Aufruf Zeit zum Laden braucht.",
@@ -5651,7 +5653,9 @@
         "withdraw": "Einwilligung widerrufen",
         "confirmBody": "Die KI-Funktionen sind sofort abgeschaltet. Bereits erfasste Daten werden nicht gelöscht — dafür gibt es Daten & Privatsphäre.",
         "confirmWithdraw": "Widerrufen",
-        "regrantHint": "Um die KI-Funktionen wieder zu nutzen, schalte das automatische Lesen von Dokumenten ein oder erteile die Einwilligung in der App.",
+        "regrantHint": "Mit einer neuen Einwilligung dürfen die KI-Funktionen deine Gesundheitsdaten wieder an den eingestellten Anbieter senden.",
+        "grant": "Einwilligung erteilen",
+        "grantError": "Die Einwilligung konnte nicht gespeichert werden. Bitte versuche es erneut.",
         "error": "Der Widerruf konnte nicht gespeichert werden. Bitte versuche es erneut."
       }
     },
@@ -9295,6 +9299,12 @@
         "savedToast": "Allergie gespeichert",
         "updatedToast": "Allergie aktualisiert",
         "saveError": "Die Allergie konnte nicht gespeichert werden."
+      },
+      "freeText": {
+        "label": "Freitext-Ergänzung (Allergien & Unverträglichkeiten)",
+        "hint": "Eine Freitext-Ergänzung zur strukturierten Liste oben, für Kontext, den ein einzelner Eintrag nicht abbilden kann.",
+        "savedToast": "Allergie-Notiz gespeichert.",
+        "saveError": "Speichern fehlgeschlagen. Bitte versuche es erneut."
       }
     },
     "family": {
@@ -9560,10 +9570,14 @@
       "unavailableAction": "KI-Einstellungen öffnen",
       "errorGeneric": "Dokument konnte nicht gelesen werden. Bitte erneut versuchen.",
       "errorOcr": "Aus diesem Bild konnte kein Text gelesen werden.",
-      "errorRateLimited": "Zu viele KI-Anfragen — bitte in ein paar Minuten erneut versuchen.",
+      "errorRateLimited": "Das stündliche KI-Leselimit ist erreicht. Bitte später erneut versuchen.",
+      "errorRateLimitedWaitOne": "Das stündliche KI-Leselimit ist erreicht. Bitte in etwa einer Minute erneut versuchen.",
+      "errorRateLimitedWaitFew": "Das stündliche KI-Leselimit ist erreicht. Bitte in etwa {count} Minuten erneut versuchen.",
+      "errorRateLimitedWaitOther": "Das stündliche KI-Leselimit ist erreicht. Bitte in etwa {count} Minuten erneut versuchen.",
       "errorBudget": "Dein KI-Budget für heute ist aufgebraucht.",
       "errorPdfNeedsVision": "Zum Scannen von PDFs wird ein Claude-Vision-Anbieter benötigt.",
       "errorFileType": "Dieser Dateityp kann nicht gelesen werden.",
+      "errorNotIndexed": "Lies das Dokument zuerst aus, dann extrahiere.",
       "errorLocalOcrDisabled": "Aktiviere zuerst die lokale Texterkennung in den KI-Einstellungen.",
       "errorProvider": "Dafür ist kein KI-Anbieter eingerichtet.",
       "errorTextImageOnly": "Lokale Texterkennung liest nur Bilder — nicht diese Datei."
@@ -9577,9 +9591,54 @@
     },
     "ai": {
       "readDone": "Die KI hat dein Dokument gelesen.",
+      "readStagedOne": "Die KI hat dein Dokument gelesen. 1 Laborwert wartet auf deine Prüfung.",
+      "readStagedFew": "Die KI hat dein Dokument gelesen. {count} Laborwerte warten auf deine Prüfung.",
+      "readStagedOther": "Die KI hat dein Dokument gelesen. {count} Laborwerte warten auf deine Prüfung.",
       "read": "Mit KI auslesen",
       "reread": "Erneut lesen",
-      "reading": "Liest…"
+      "reading": "Liest…",
+      "notReadYet": "Dieses Dokument wurde noch nicht gelesen."
+    },
+    "review": {
+      "title": "Ausgelesene Werte prüfen",
+      "hint": "Bestätige, was mit dem Dokument übereinstimmt. Nicht angehakte Werte werden verworfen; ohne deine Bestätigung wird nichts gespeichert.",
+      "openOne": "Ausgelesenen Wert prüfen",
+      "openFew": "Ausgelesene Werte prüfen ({count})",
+      "openOther": "Ausgelesene Werte prüfen ({count})",
+      "includeAria": "{value} übernehmen",
+      "type": {
+        "OBSERVATION": "Laborwert",
+        "CONDITION": "Erkrankung",
+        "MEDICATION_STATEMENT": "Medikament"
+      },
+      "statedRange": "angegebener Bereich {range}",
+      "needsCheck": "Prüfe diesen Wert gegen das Dokument und speichere ihn dann.",
+      "verify": "Prüfen",
+      "verifySave": "Wert speichern",
+      "verifyInvalid": "Gib einen Namen und entweder einen Zahlenwert oder ein Textergebnis an, nicht beides.",
+      "verifyFailed": "Die Korrektur konnte nicht gespeichert werden. Versuche es erneut.",
+      "fieldName": "Name",
+      "fieldDate": "Datum",
+      "fieldValue": "Wert",
+      "fieldValueText": "Ergebnis (Text)",
+      "fieldUnit": "Einheit",
+      "fieldDose": "Dosis",
+      "unverifiedNoteOne": "1 Wert muss noch geprüft werden und bleibt offen.",
+      "unverifiedNoteFew": "{count} Werte müssen noch geprüft werden und bleiben offen.",
+      "unverifiedNoteOther": "{count} Werte müssen noch geprüft werden und bleiben offen.",
+      "finish": "Prüfung abschließen",
+      "confirmFailed": "Die Prüfung konnte nicht gespeichert werden. Versuche es erneut.",
+      "savedToastOne": "1 Wert gespeichert.",
+      "savedToastFew": "{count} Werte gespeichert.",
+      "savedToastOther": "{count} Werte gespeichert.",
+      "nothingSavedToast": "Prüfung gespeichert. Es wurden keine Werte übernommen.",
+      "extract": "Laborwerte auslesen",
+      "extracting": "Liest aus…",
+      "extractHint": "Nutzt den bereits ausgelesenen Text dieses Dokuments. Ausgelesene Werte warten auf deine Prüfung; nichts wird automatisch gespeichert.",
+      "extractEmpty": "Aus diesem Dokument konnten keine Werte ausgelesen werden.",
+      "failUnitRequired": "Ein Zahlenwert braucht eine Einheit, bevor er gespeichert werden kann.",
+      "failUnitMismatch": "Die angegebene Einheit passt nicht zur gespeicherten Einheit dieses Markers. Passe sie an und schließe die Prüfung erneut ab.",
+      "failGeneric": "Dieser Wert konnte nicht gespeichert werden."
     },
     "contentIndex": {
       "indexPrompt": "Dokumentinhalte durchsuchbar machen.",

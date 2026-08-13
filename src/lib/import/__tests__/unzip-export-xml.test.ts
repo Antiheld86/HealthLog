@@ -142,6 +142,30 @@ describe("extractExportXml", () => {
     expect(extracted.toString("utf8")).toBe(payload.toString("utf8"));
   });
 
+  // (issue #775) — the preflight hook sees the declared sizes before
+  // any extraction work starts; throwing there must abort the extract
+  // with the hook's error.
+  it("aborts before extraction when the preflight hook throws", async () => {
+    const payload = Buffer.from(
+      `<?xml version="1.0"?><HealthData><ExportDate value="2026-05-15"/></HealthData>`,
+    );
+    const zip = buildMinimalZip("apple_health_export/export.xml", payload);
+    const tmp = mkdtempSync(join(tmpdir(), "healthlog-unzip-"));
+    const zipPath = join(tmp, "export.zip");
+    writeFileSync(zipPath, zip);
+
+    let seenDeclaredBytes = -1;
+    await expect(
+      extractExportXml(zipPath, {
+        preflight: ({ declaredXmlBytes }) => {
+          seenDeclaredBytes = declaredXmlBytes;
+          throw new Error("insufficient_memory: preflight refused");
+        },
+      }),
+    ).rejects.toThrow(/insufficient_memory/);
+    expect(seenDeclaredBytes).toBe(payload.length);
+  });
+
   it("throws when the export.xml member is missing", async () => {
     const payload = Buffer.from("noop");
     const zip = buildMinimalZip("other-file.txt", payload);

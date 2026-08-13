@@ -8,16 +8,31 @@ import { NextRequest } from "next/server";
  * 422s on the ENHANCEMENT only — the already-stored document is left intact
  * (no fact-staging transaction, no status flip). This is the inverse of the
  * old behaviour where the absence of a provider blocked the upload itself.
+ *
+ * STORED mode — `{ mode: "stored" }` structures the document's OWN stored
+ * extracted text (its content index) into staged facts: the manual recovery
+ * for a skipped/failed automatic staging run. Pins that the stored text is
+ * the input (the encrypted original is never touched — no re-upload), that
+ * no stored text 422s (`documents.inbound.notIndexed`) before any bucket
+ * charge, that the shared document-AI bucket applies, and that the
+ * approved-facts re-extraction refusal covers this mode too.
  */
 
-vi.mock("@/lib/db", () => ({
-  prisma: {
-    inboundDocument: { findFirst: vi.fn(), update: vi.fn() },
-    extractedFact: { deleteMany: vi.fn(), count: vi.fn() },
-    user: { findUnique: vi.fn() },
-    $transaction: vi.fn(),
-  },
-}));
+vi.mock("@/lib/db", () => {
+  const tx = {
+    extractedFact: { deleteMany: vi.fn() },
+    inboundDocument: { update: vi.fn(), findUniqueOrThrow: vi.fn() },
+  };
+  return {
+    prisma: {
+      inboundDocument: { findFirst: vi.fn(), update: vi.fn() },
+      extractedFact: { deleteMany: vi.fn(), count: vi.fn() },
+      user: { findUnique: vi.fn() },
+      $transaction: vi.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
+      __tx: tx,
+    },
+  };
+});
 
 vi.mock("@/lib/crypto", () => ({
   encrypt: vi.fn((s: string) => `v1.${s}`),
@@ -26,6 +41,19 @@ vi.mock("@/lib/crypto", () => ({
 vi.mock("@/lib/ai/coach/bytes-codec", () => ({
   encryptToBytes: vi.fn(() => new Uint8Array([1])),
   decryptFromBytes: vi.fn(() => "{}"),
+}));
+
+vi.mock("@/lib/documents/store", () => ({
+  decryptDocumentContent: vi.fn(() => Buffer.from([1, 2, 3])),
+  encryptFactData: vi.fn(() => new Uint8Array([1])),
+  encryptFactProvenance: vi.fn(() => new Uint8Array([2])),
+  serialiseDocumentDetail: vi.fn(() => ({ id: "doc-1", facts: [] })),
+}));
+vi.mock("@/lib/documents/content-index", () => ({
+  loadDocumentChatText: vi.fn(),
+}));
+vi.mock("@/lib/labs/ocr-upload", () => ({
+  detectOcrMimeType: vi.fn(() => "image/png"),
 }));
 
 vi.mock("@/lib/documents/provider-order", () => ({
@@ -54,6 +82,7 @@ vi.mock("@/lib/rate-limit", () => ({
   checkRateLimit: vi
     .fn()
     .mockResolvedValue({ allowed: true, remaining: 5, resetAt: Date.now() }),
+  refundRateLimit: vi.fn().mockResolvedValue(undefined),
   rateLimitHeaders: () => ({}),
 }));
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
@@ -76,8 +105,28 @@ vi.mock("next/headers", () => ({
 import { POST } from "../route";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
+import { auditLog } from "@/lib/auth/audit";
 import { requireModuleEnabled } from "@/lib/modules/gate";
-import { resolveDocumentVisionProvider } from "@/lib/documents/provider-order";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { loadDocumentChatText } from "@/lib/documents/content-index";
+import { runInboundExtraction } from "@/lib/documents/extract";
+import { decryptDocumentContent } from "@/lib/documents/store";
+import {
+  resolveDocumentTextProvider,
+  resolveDocumentVisionProvider,
+} from "@/lib/documents/provider-order";
+
+const tx = (
+  prisma as unknown as {
+    __tx: {
+      extractedFact: { deleteMany: ReturnType<typeof vi.fn> };
+      inboundDocument: {
+        update: ReturnType<typeof vi.fn>;
+        findUniqueOrThrow: ReturnType<typeof vi.fn>;
+      };
+    };
+  }
+).__tx;
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -94,6 +143,17 @@ function visionReq(id: string): NextRequest {
   );
 }
 
+function storedReq(id: string): NextRequest {
+  return new NextRequest(
+    new URL(`http://localhost/api/documents/inbound/${id}/extract`),
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode: "stored" }),
+    },
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
@@ -106,6 +166,11 @@ beforeEach(() => {
     status: "STORED",
   } as never);
   vi.mocked(prisma.extractedFact.count).mockResolvedValue(0 as never);
+  vi.mocked(checkRateLimit).mockResolvedValue({
+    allowed: true,
+    remaining: 5,
+    resetAt: Date.now() + 60 * 60 * 1000,
+  });
 });
 
 describe("POST /api/documents/inbound/[id]/extract", () => {
@@ -159,5 +224,98 @@ describe("POST /api/documents/inbound/[id]/extract", () => {
     );
     expect(res.status).toBe(404);
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/documents/inbound/[id]/extract — stored mode", () => {
+  beforeEach(() => {
+    vi.mocked(loadDocumentChatText).mockResolvedValue({
+      text: "Hemoglobin 13.9 g/dL reference range 12-16",
+      source: "verbatim",
+    } as never);
+    vi.mocked(resolveDocumentTextProvider).mockResolvedValue({
+      pick: {
+        providerType: "anthropic",
+        entry: { providerType: "anthropic", instance: {} },
+      },
+    } as never);
+    vi.mocked(runInboundExtraction).mockResolvedValue({
+      providerType: "anthropic",
+      reportDate: "2026-08-01",
+      facts: [
+        {
+          factType: "OBSERVATION",
+          confidence: 0.95,
+          needsReview: false,
+          data: { label: "Hemoglobin", value: 13.9, unit: "g/dL" },
+          provenance: {
+            sourceText: "",
+            anchored: false,
+            sourceOffset: null,
+            page: null,
+            confidence: 0.95,
+          },
+        },
+      ],
+    } as never);
+    tx.inboundDocument.findUniqueOrThrow.mockResolvedValue({
+      id: "doc-1",
+      facts: [{ id: "fact-1" }],
+    } as never);
+  });
+
+  it("structures the stored text and stages PENDING facts, never touching the original", async () => {
+    const res = await POST(storedReq("doc-1") as never, ctx("doc-1") as never);
+    expect(res.status).toBe(200);
+    // The stored extracted text is the input…
+    expect(runInboundExtraction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ocrText: "Hemoglobin 13.9 g/dL reference range 12-16",
+      }),
+    );
+    // …and the encrypted original is never read — no re-upload, no re-scan.
+    expect(decryptDocumentContent).not.toHaveBeenCalled();
+    // Staged through the guarded transaction (prior PENDING leftovers cleared,
+    // status flipped) — nothing here writes a structured store.
+    expect(tx.extractedFact.deleteMany).toHaveBeenCalled();
+    expect(tx.inboundDocument.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: "EXTRACTED" }),
+      }),
+    );
+    expect(auditLog).toHaveBeenCalledWith(
+      "documents.inbound.extract",
+      expect.objectContaining({
+        details: expect.objectContaining({ mode: "stored" }),
+      }),
+    );
+  });
+
+  it("422s (notIndexed) without stored text, before any bucket charge", async () => {
+    vi.mocked(loadDocumentChatText).mockResolvedValue(null as never);
+    const res = await POST(storedReq("doc-1") as never, ctx("doc-1") as never);
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { meta?: { errorCode?: string } };
+    expect(body.meta?.errorCode).toBe("documents.inbound.notIndexed");
+    expect(checkRateLimit).not.toHaveBeenCalled();
+    expect(runInboundExtraction).not.toHaveBeenCalled();
+  });
+
+  it("consumes the shared document-AI bucket honestly", async () => {
+    vi.mocked(checkRateLimit).mockResolvedValue({
+      allowed: false,
+      remaining: 0,
+      resetAt: Date.now() + 30 * 60_000,
+    });
+    const res = await POST(storedReq("doc-1") as never, ctx("doc-1") as never);
+    expect(res.status).toBe(429);
+    expect(runInboundExtraction).not.toHaveBeenCalled();
+  });
+
+  it("refuses once any fact is APPROVED, like every other extract mode", async () => {
+    vi.mocked(prisma.extractedFact.count).mockResolvedValue(1 as never);
+    const res = await POST(storedReq("doc-1") as never, ctx("doc-1") as never);
+    expect(res.status).toBe(409);
+    expect(runInboundExtraction).not.toHaveBeenCalled();
   });
 });

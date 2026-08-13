@@ -9,11 +9,14 @@
  * facts — but now against a row that already exists. Absent a provider this 422s
  * the ENHANCEMENT only; the stored document is untouched and remains filed.
  *
- * Two modes, dispatched on content-type (mirroring the original upload):
+ * Three modes:
  *   - VISION (no JSON body): decrypt the stored original, re-derive its MIME,
  *     and run the vision-capable provider over it.
  *   - TEXT (application/json, opt-in local OCR): `{ mode: "text", text }` — the
  *     browser OCR'd the document locally and posts only the text to structure.
+ *   - STORED (application/json): `{ mode: "stored" }` — structure the
+ *     document's own stored extracted text (its content index), the manual
+ *     recovery for a skipped/failed automatic staging run. No re-upload.
  *
  * The document is UNTRUSTED (prompt-injection): the server never acts on an
  * instruction inside it. The staged facts land PENDING for the mandatory
@@ -55,20 +58,24 @@ import {
   resolveDocumentTextProvider,
   resolveDocumentVisionProvider,
 } from "@/lib/documents/provider-order";
+import {
+  checkDocumentAiRateLimit,
+  documentAiRateLimited,
+  DOCUMENT_AI_TEXT_BODY_MAX_BYTES,
+  refundDocumentAiSlot,
+} from "@/lib/documents/ai-route-support";
+import { loadDocumentChatText } from "@/lib/documents/content-index";
 import { detectOcrMimeType } from "@/lib/labs/ocr-upload";
 import { annotate } from "@/lib/logging/context";
 import { requireModuleEnabled } from "@/lib/modules/gate";
-import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
-import { inboundTextExtractSchema } from "@/lib/validations/inbound-documents";
+import {
+  inboundStoredExtractSchema,
+  inboundTextExtractSchema,
+} from "@/lib/validations/inbound-documents";
 
 export const dynamic = "force-dynamic";
 
 type RouteParams = { params: Promise<{ id: string }> };
-
-/** Inbound extractions are expensive (vision) / metered (text). 6/hour. */
-const EXTRACT_LIMIT_PER_HOUR = 6;
-const EXTRACT_WINDOW_MS = 60 * 60 * 1000;
-const TEXT_BODY_MAX_BYTES = 512 * 1024;
 
 /** A loaded, owner-scoped, still-extractable document row. */
 type LoadedDocument = {
@@ -177,7 +184,16 @@ export const POST = apiHandler(
 
     const contentType = request.headers.get("content-type") ?? "";
     if (contentType.includes("application/json")) {
-      return handleTextExtract(request, user.id, document);
+      // One body read for both JSON modes, BEFORE any bucket charge — a
+      // malformed body never needs a refund because nothing was charged yet.
+      const { data: body, error: jsonError } = await safeJson(request, {
+        maxBytes: DOCUMENT_AI_TEXT_BODY_MAX_BYTES,
+      });
+      if (jsonError) return jsonError;
+      if (inboundStoredExtractSchema.safeParse(body).success) {
+        return handleStoredExtract(request, user.id, document);
+      }
+      return handleTextExtract(request, user.id, document, body);
     }
     return handleVisionExtract(request, user.id, document);
   },
@@ -188,6 +204,7 @@ async function handleTextExtract(
   request: NextRequest,
   userId: string,
   document: LoadedDocument,
+  body: unknown,
 ): Promise<Response> {
   const row = await prisma.user.findUnique({
     where: { id: userId },
@@ -213,28 +230,12 @@ async function handleTextExtract(
     surface: "insights",
   });
 
-  const rl = await checkRateLimit(
-    `documents-inbound:${userId}`,
-    EXTRACT_LIMIT_PER_HOUR,
-    EXTRACT_WINDOW_MS,
-  );
-  if (!rl.allowed) {
-    const response = apiError("Too many extractions. Try again later.", 429, {
-      errorCode: "documents.inbound.rateLimited",
-    });
-    for (const [k, v] of Object.entries(rateLimitHeaders(rl))) {
-      response.headers.set(k, v);
-    }
-    return response;
-  }
-
-  const { data: body, error: jsonError } = await safeJson(request, {
-    maxBytes: TEXT_BODY_MAX_BYTES,
-  });
-  if (jsonError) return jsonError;
+  const rl = await checkDocumentAiRateLimit(userId);
+  if (!rl.allowed) return documentAiRateLimited(rl);
 
   const parsed = inboundTextExtractSchema.safeParse(body);
   if (!parsed.success) {
+    await refundDocumentAiSlot(userId);
     return apiError("Invalid document text payload", 422, {
       errorCode: "documents.inbound.extractFailed",
     });
@@ -248,6 +249,7 @@ async function handleTextExtract(
     resolveDailyCap([{ providerType: pick.entry.providerType }]),
   );
   if (!reservation.allowed) {
+    await refundDocumentAiSlot(userId);
     return apiError("Your AI usage budget for today is reached.", 429, {
       errorCode: "documents.inbound.budgetExceeded",
     });
@@ -296,6 +298,103 @@ async function handleTextExtract(
   }
 }
 
+/**
+ * STORED mode — structure the document's OWN stored extracted text (the
+ * content index the read/index step produced) into staged facts.
+ *
+ * This is the manual recovery for a skipped or failed automatic staging run:
+ * the same text-structuring pass the auto worker performs, but user-triggered
+ * from the document detail. No re-upload, no second read of the original, no
+ * browser OCR — so the local-OCR opt-in is not required here. Everything else
+ * runs the full gauntlet: provider resolve → consent → rate limit (charged
+ * only when the provider is actually dispatched) → budget → stage PENDING for
+ * the mandatory review-then-confirm step. Nothing is committed here.
+ */
+async function handleStoredExtract(
+  request: NextRequest,
+  userId: string,
+  document: LoadedDocument,
+): Promise<Response> {
+  const chat = await loadDocumentChatText(userId, document.id);
+  if (!chat || !chat.text.trim()) {
+    return apiError("Read the document first, then extract.", 422, {
+      errorCode: "documents.inbound.notIndexed",
+    });
+  }
+
+  const { pick } = await resolveDocumentTextProvider(userId);
+  if (!pick) {
+    return apiError("No AI provider is configured", 422, {
+      errorCode: "documents.inbound.providerUnsupported",
+    });
+  }
+
+  await assertDocumentEgressConsent({
+    userId,
+    providerType: pick.providerType,
+    surface: "insights",
+  });
+
+  const rl = await checkDocumentAiRateLimit(userId);
+  if (!rl.allowed) return documentAiRateLimited(rl);
+
+  const dateKey = buildDateKey();
+  const reservation = await reserveBudget(
+    userId,
+    AI_BUDGETS.ocrExtractText.maxTokens,
+    dateKey,
+    resolveDailyCap([{ providerType: pick.entry.providerType }]),
+  );
+  if (!reservation.allowed) {
+    await refundDocumentAiSlot(userId);
+    return apiError("Your AI usage budget for today is reached.", 429, {
+      errorCode: "documents.inbound.budgetExceeded",
+    });
+  }
+
+  try {
+    const result = await runInboundExtraction({
+      provider: pick.entry.instance,
+      providerType: pick.providerType,
+      ocrText: chat.text,
+    });
+    await reconcileSpend(
+      userId,
+      reservation.reserved,
+      reservation.reserved,
+      dateKey,
+    );
+
+    const updated = await stageExtraction(document.id, userId, result);
+
+    await auditLog("documents.inbound.extract", {
+      userId,
+      ipAddress: getClientIp(request),
+      details: {
+        documentId: document.id,
+        facts: updated.facts.length,
+        mode: "stored",
+      },
+    });
+
+    return apiSuccess(serialiseDocumentDetail(updated, updated.facts));
+  } catch (err) {
+    await reconcileSpend(userId, reservation.reserved, 0, dateKey);
+    if (err instanceof InboundExtractError) {
+      return apiError("Couldn't read the document. Try a clearer copy.", 422, {
+        errorCode: "documents.inbound.extractFailed",
+      });
+    }
+    annotate({
+      action: { name: "documents.inbound.extractFailed" },
+      meta: { reason: "provider_error", mode: "stored" },
+    });
+    return apiError("Couldn't read the document. Try a clearer copy.", 502, {
+      errorCode: "documents.inbound.extractFailed",
+    });
+  }
+}
+
 /** VISION mode — run the stored original through the vision provider. */
 async function handleVisionExtract(
   request: NextRequest,
@@ -315,23 +414,12 @@ async function handleVisionExtract(
     surface: "insights",
   });
 
-  const rl = await checkRateLimit(
-    `documents-inbound:${userId}`,
-    EXTRACT_LIMIT_PER_HOUR,
-    EXTRACT_WINDOW_MS,
-  );
-  if (!rl.allowed) {
-    const response = apiError("Too many extractions. Try again later.", 429, {
-      errorCode: "documents.inbound.rateLimited",
-    });
-    for (const [k, v] of Object.entries(rateLimitHeaders(rl))) {
-      response.headers.set(k, v);
-    }
-    return response;
-  }
+  const rl = await checkDocumentAiRateLimit(userId);
+  if (!rl.allowed) return documentAiRateLimited(rl);
 
   // Decrypt the stored original and re-derive its MIME from the bytes (never
-  // trust a stored label for the provider call).
+  // trust a stored label for the provider call). Every miss below happens
+  // before the provider dispatch, so the charged slot goes back.
   let buffer: Buffer;
   try {
     buffer = decryptDocumentContent(
@@ -339,6 +427,7 @@ async function handleVisionExtract(
       document.contentCodec,
     );
   } catch {
+    await refundDocumentAiSlot(userId);
     return apiError("Couldn't read the stored document.", 422, {
       errorCode: "documents.inbound.extractFailed",
     });
@@ -346,6 +435,7 @@ async function handleVisionExtract(
 
   const mime = detectOcrMimeType(buffer);
   if (!mime) {
+    await refundDocumentAiSlot(userId);
     return apiError(
       "This document can't be scanned. Use local OCR (text mode).",
       422,
@@ -354,6 +444,7 @@ async function handleVisionExtract(
   }
 
   if (mime === "application/pdf" && !pick.pdfSupported) {
+    await refundDocumentAiSlot(userId);
     return apiError(
       "PDF scanning needs a Claude vision provider; use local OCR instead.",
       422,
@@ -369,6 +460,7 @@ async function handleVisionExtract(
     resolveDailyCap([{ providerType: pick.entry.providerType }]),
   );
   if (!reservation.allowed) {
+    await refundDocumentAiSlot(userId);
     return apiError("Your AI usage budget for today is reached.", 429, {
       errorCode: "documents.inbound.budgetExceeded",
     });

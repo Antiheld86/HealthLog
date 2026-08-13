@@ -720,7 +720,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Documents"],
       summary: "Extract facts from a stored document",
       description:
-        'Optional AI enhancement on an already-stored document. Runs the dedicated OCR/vision provider over the stored original and stages STRUCTURED FACTS for review. AI-consent / rate / budget gated. With no provider configured this returns 422 (`documents.inbound.providerUnsupported`) — the stored document is untouched, only the enhancement fails. Two modes by content-type: VISION (empty body) decrypts and scans the stored original (PDF needs an Anthropic vision provider); TEXT (`application/json`, opt-in local OCR) `{ mode: "text", text }` structures browser-OCR\'d text. Extraction reproduces what the document states — it never interprets. Nothing reaches the structured stores here; the confirm route is the only write path.',
+        'Optional AI enhancement on an already-stored document. Runs the dedicated OCR/vision provider over the stored original and stages STRUCTURED FACTS for review. AI-consent / rate / budget gated. With no provider configured this returns 422 (`documents.inbound.providerUnsupported`) — the stored document is untouched, only the enhancement fails. Three modes: VISION (empty body) decrypts and scans the stored original (PDF needs an Anthropic vision provider); TEXT (`application/json`, opt-in local OCR) `{ mode: "text", text }` structures browser-OCR\'d text; STORED (`application/json`) `{ mode: "stored" }` structures the document\'s own stored extracted text (its content index) — the manual recovery for a skipped/failed automatic staging run, 422 `documents.inbound.notIndexed` when no stored text exists. Extraction reproduces what the document states — it never interprets. Nothing reaches the structured stores here; the confirm route is the only write path.',
       parameters: [
         {
           name: "id",
@@ -734,12 +734,17 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: {
           "application/json": {
             schema: z
-              .object({
-                mode: z.literal("text"),
-                text: z.string(),
-                kind: kindEnum.optional(),
-              })
-              .meta({ id: "InboundTextExtractRequest" }),
+              .union([
+                z.object({
+                  mode: z.literal("text"),
+                  text: z.string(),
+                  kind: kindEnum.optional(),
+                }),
+                z.object({
+                  mode: z.literal("stored"),
+                }),
+              ])
+              .meta({ id: "InboundExtractRequest" }),
           },
         },
       },
@@ -769,7 +774,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Documents"],
       summary: "Suggest filing metadata (drafts only)",
       description:
-        'Optional AI assist on an already-stored document. Runs ONE provider call over the stored original (VISION, empty body) or browser-OCR\'d text (TEXT, `application/json` `{ mode: "text", text }`, opt-in local OCR) and returns a `{ title, kind, documentDate }` DRAFT for the edit form. AI-consent / rate / budget gated (shares the 6/hour extract bucket). WRITES NOTHING — never stages facts, never flips status; the user reviews and saves. 422 (`documents.inbound.providerUnsupported`) with no provider configured. Never interprets or diagnoses; the title is a neutral filing label.',
+        'Optional AI assist on an already-stored document. Runs ONE provider call over the stored original (VISION, empty body) or browser-OCR\'d text (TEXT, `application/json` `{ mode: "text", text }`, opt-in local OCR) and returns a `{ title, kind, documentDate }` DRAFT for the edit form. AI-consent / rate / budget gated (shares the per-user document-AI bucket with extract/summary/index — default 6/hour, operator-tunable via `DOCUMENT_AI_LIMIT_PER_HOUR`; a slot is only consumed when the request reaches the provider, and the 429 carries the reset instant in `X-RateLimit-Reset` and `meta.retryAt`). WRITES NOTHING — never stages facts, never flips status; the user reviews and saves. 422 (`documents.inbound.providerUnsupported`) with no provider configured. Never interprets or diagnoses; the title is a neutral filing label.',
       parameters: [
         { name: "id", in: "path", required: true, schema: { type: "string" } },
       ],
@@ -888,7 +893,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Documents"],
       summary: "Build / refresh the content-search index",
       description:
-        "Populates or refreshes one document's content-search index so search matches INSIDE its body. VISION (empty body) decrypts the stored original and runs one provider transcription (AI-consent / rate / budget gated); TEXT (`application/json` `{ mode: \"text\", text }`, opt-in local OCR) indexes browser-OCR'd text with no provider egress. Persists ONLY AES-256-GCM ciphertext of the text plus opaque HMAC token hashes — no plaintext body, no plaintext token. Gated on the existing AI consent (no separate per-user toggle). Idempotent; re-indexing overwrites in place.",
+        "Populates or refreshes one document's content-search index so search matches INSIDE its body. VISION (empty body) decrypts the stored original and runs one provider transcription (AI-consent / rate / budget gated); TEXT (`application/json` `{ mode: \"text\", text }`, opt-in local OCR) indexes browser-OCR'd text with no provider egress. Persists ONLY AES-256-GCM ciphertext of the text plus opaque HMAC token hashes — no plaintext body, no plaintext token. Gated on the existing AI consent (no separate per-user toggle). Idempotent; re-indexing overwrites in place. A successful index continues into the same lab auto-staging the background worker performs (still-STORED lab-looking document with no facts, both modules on, provider + consent eligible); `labFactsStaged` reports how many facts were staged PENDING for review — confirmation stays the only write into Labs.",
       parameters: [
         { name: "id", in: "path", required: true, schema: { type: "string" } },
       ],
@@ -915,6 +920,11 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
                     documentId: z.string(),
                     indexed: z.boolean(),
                     tokenCount: z.number(),
+                    labFactsStaged: z
+                      .number()
+                      .describe(
+                        "How many lab facts the index run auto-staged for review (0 when the document is not a lab report, staging was not eligible, or facts already exist). Staged facts are PENDING — the confirm route remains the only write into Labs.",
+                      ),
                   })
                   .meta({ id: "DocumentIndexResponse" }),
                 "DocumentIndexEnvelope",

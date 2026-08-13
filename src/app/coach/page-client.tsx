@@ -1,10 +1,11 @@
 "use client";
 
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 
 import { CoachConversation } from "@/components/insights/coach-panel/coach-conversation";
+import { COACH_INTERRUPTED_STORAGE_KEY } from "@/components/insights/coach-panel/use-coach";
 import type { CoachNudgeStatus } from "@/components/insights/layout-coach-fab";
 import type { CoachLaunchScope } from "@/lib/insights/coach-launch-context";
 import { useCoachLaunch } from "@/lib/insights/coach-launch-context";
@@ -118,6 +119,47 @@ function CoachPageBody() {
     : null;
   const seedPrefill = freshChat ? searchParams.get("ask") : null;
 
+  // #781 — a navigation away mid-reply recorded the interrupted conversation
+  // (see `COACH_INTERRUPTED_STORAGE_KEY` in `use-coach.ts`). Returning to the
+  // Coach reopens that thread — where the persisted `cancelled` marker shows
+  // the turn as interrupted and offers the retry — instead of landing on a
+  // blank new chat. Read once per mount (lazy state, SSR-guarded), cleared in
+  // an effect so it is consumed exactly once. Every EXPLICIT entry intent
+  // wins over the resume: a `?c=` thread or `?c=new`, a `?doc=`/`?workout=`
+  // scoped chat, and a `?scope=`/`?ask=` hand-off all carry their own
+  // destination.
+  const [interruptedResume] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      return window.sessionStorage.getItem(COACH_INTERRUPTED_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  });
+  useEffect(() => {
+    if (interruptedResume === null) return;
+    try {
+      window.sessionStorage.removeItem(COACH_INTERRUPTED_STORAGE_KEY);
+    } catch {
+      // Best-effort clear; a stale flag only re-opens a conversation once.
+    }
+  }, [interruptedResume]);
+  const interruptedEligible =
+    rawC === null &&
+    rawDoc === null &&
+    rawWorkout === null &&
+    launchScope === null &&
+    !seedPrefill;
+  const interruptedId =
+    interruptedEligible && interruptedResume && interruptedResume !== "latest"
+      ? interruptedResume
+      : null;
+  // A first-turn abort never learned its conversation id (it rides the SSE
+  // `done` frame) — resolve via the server-authoritative most-recent thread,
+  // which the aborted turn's server-side persistence has just bumped to the top.
+  const resumeInterruptedLatest =
+    interruptedEligible && interruptedResume === "latest";
+
   // C1 exception — an unread coach-initiated message opens the most-recent
   // conversation (which holds that proactive turn). Only consulted when the
   // entry did not pin a specific thread or ask for a fresh chat.
@@ -144,7 +186,9 @@ function CoachPageBody() {
     <CoachConversation
       surface="page"
       autoFocusComposer
-      initialConversationId={deepLinkedId}
+      // #781 — the interrupted-conversation resume seeds the same prop the
+      // `?c=` deep-link drives; the explicit deep-link always wins.
+      initialConversationId={deepLinkedId ?? interruptedId}
       // v1.28.51 — seed the document scope for a `?doc=<id>` open so the first
       // turn is created + sent through the hardened fenced document endpoint.
       initialDocumentId={seedDocumentId}
@@ -153,9 +197,10 @@ function CoachPageBody() {
       // cross-surface hand-off carried in the URL.
       launchScope={launchScope}
       prefill={seedPrefill}
-      // Default is the new-chat hero; only resume most-recent for the
-      // unread coach-initiated exception.
-      autoOpenMostRecent={hasUnreadCoachMessage}
+      // Default is the new-chat hero; resume most-recent only for the
+      // unread coach-initiated exception and the interrupted first-turn
+      // resume (#781, whose conversation id never reached the client).
+      autoOpenMostRecent={hasUnreadCoachMessage || resumeInterruptedLatest}
     />
   );
 }

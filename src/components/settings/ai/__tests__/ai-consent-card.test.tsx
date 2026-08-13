@@ -50,7 +50,7 @@ describe("AiConsentCard", () => {
     expect(html).toContain("Withdraw consent");
   });
 
-  it("reports a withdrawal and stops offering it again", () => {
+  it("reports a withdrawal, stops offering it again, and offers the grant", () => {
     const html = renderWith({
       id: "rcpt-1",
       kind: "ai_full",
@@ -60,6 +60,11 @@ describe("AiConsentCard", () => {
 
     expect(html).toContain("Withdrawn.");
     expect(html).not.toContain('data-slot="ai-consent-withdraw"');
+    // Withdrawal must be as reversible as it was easy: the same surface
+    // carries the explicit grant control, and its hint says what granting
+    // lets the app do.
+    expect(html).toContain('data-slot="ai-consent-grant"');
+    expect(html).toContain("Grant consent");
   });
 
   it("treats no receipt at all as consent not given", () => {
@@ -67,6 +72,18 @@ describe("AiConsentCard", () => {
 
     expect(html).toContain("Withdrawn.");
     expect(html).not.toContain('data-slot="ai-consent-withdraw"');
+    expect(html).toContain('data-slot="ai-consent-grant"');
+  });
+
+  it("never shows the grant control while consent stands", () => {
+    const html = renderWith({
+      id: "rcpt-1",
+      kind: "ai_full",
+      signedAt: "2026-07-01T08:00:00.000Z",
+      revokedAt: null,
+    });
+
+    expect(html).not.toContain('data-slot="ai-consent-grant"');
   });
 
   it("renders nothing for a signed-out visitor", () => {

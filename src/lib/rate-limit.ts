@@ -53,6 +53,30 @@ export async function checkRateLimit(
 }
 
 /**
+ * Give one slot back to a bucket whose charge turned out to be premature.
+ *
+ * A caller that charges the bucket up front (to keep the 429 cheap) but then
+ * fails BEFORE doing the metered work refunds the slot so the user's allowance
+ * reflects work actually performed, not attempts. Scoped to the live window:
+ * once `reset_at` has passed the counter is stale and a decrement would bleed
+ * into the NEXT window's budget, so an expired row is left untouched. Never
+ * drops below zero (concurrent refunds after a window flip are a no-op).
+ *
+ * Known slack: if the charge's window expires and a new request opens the
+ * NEXT window before a late refund lands, the refund decrements that fresh
+ * window instead — at most one extra slot there, only on failure paths that
+ * never reached the metered work. Accepted; carrying the charge's `reset_at`
+ * through every failure path is not worth one slot of slack.
+ */
+export async function refundRateLimit(key: string): Promise<void> {
+  await prisma.$executeRaw`
+    UPDATE rate_limits
+    SET count = GREATEST(count - 1, 0)
+    WHERE key = ${key} AND reset_at >= NOW()
+  `;
+}
+
+/**
  * Rate limit response headers.
  */
 export function rateLimitHeaders(

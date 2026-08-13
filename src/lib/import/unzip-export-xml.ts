@@ -19,39 +19,34 @@
  *   - Zip64 — supported for the central directory record (Apple
  *     exports easily push past the 4 GB limit on multi-year accounts).
  *
- * v1.32.1 (issue #588) — extracting the member used to run through
- * `inflateRawSync()` on a single in-memory buffer holding the WHOLE
- * inflated `export.xml` (up to `MAX_DECOMPRESSED_BYTES`) at the same
- * time the compressed-archive buffer was still resident, then
- * `writeFileSync()`'d the result in one blocking call. `extractExportXml`
- * runs on the same event loop as the web server in the default
- * single-container deployment (`src/instrumentation.ts` starts the
- * pg-boss worker in-process), so that synchronous path could pin the
- * Node main thread for minutes on a real multi-year export — freezing
- * every other request the app was serving — while briefly needing
- * roughly 2x the decompressed size in JS heap. A user hitting this saw
- * an import that never leaves "Unpacking the archive…": the phase
- * label is written to `ImportJob.status` BEFORE extraction starts and
- * only advances once `extractExportXml()` returns, so a process that
- * dies mid-extraction (OOM, restart) before that return leaves the row
- * silently stuck with no failure ever recorded. The member now streams
- * through `zlib.createInflateRaw()` into a file write stream —
- * decompression work moves off the JS event loop onto the libuv
- * threadpool in bounded chunks, and peak memory is bounded by the
- * chunk size rather than the whole decompressed payload. The
- * `MAX_DECOMPRESSED_BYTES` zip-bomb defence moves with it: the
- * streaming inflate API has no `maxOutputLength` option, so a
- * byte-counting transform enforces the cap on the real output as it
- * flows.
+ * v1.32.1 (issue #588) moved the member extraction from a synchronous
+ * whole-buffer `inflateRawSync()` onto a streamed inflate pipeline.
+ * (issue #775) finishes the job for the archive itself: the extractor
+ * used to `readFileSync()` the ENTIRE `export.zip` into one Buffer —
+ * hundreds of MB resident for the whole unpack phase on a real
+ * multi-year export, on top of everything else the worker holds. The
+ * archive is now read through a file handle: the EOCD is located in a
+ * bounded tail read (≤ 64 KiB + 22 bytes), the central directory is
+ * read as one size-capped slice, and the member bytes flow through a
+ * byte-range `createReadStream` → inflate → byte-cap → file pipeline.
+ * Peak memory is bounded by stream buffer sizes and the (small)
+ * central directory, independent of archive size.
  *
  * Locks per `.planning/research/v1434-r-1-xml-import.md` §6.1.
  */
-import { readFileSync, createWriteStream, statSync, unlinkSync } from "node:fs";
+import {
+  createReadStream,
+  createWriteStream,
+  statSync,
+  unlinkSync,
+} from "node:fs";
+import { open, type FileHandle } from "node:fs/promises";
 import { createInflateRaw } from "node:zlib";
-import { Readable, Transform } from "node:stream";
+import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { randomBytes } from "node:crypto";
 
 /** Signature bytes for the End-Of-Central-Directory record. */
 const EOCD_SIGNATURE = 0x06054b50;
@@ -78,8 +73,17 @@ const MAX_DECOMPRESSED_BYTES = 8 * 1024 * 1024 * 1024;
  */
 const MAX_COMPRESSION_RATIO = 200;
 
-/** Chunk size fed into the inflate/write pipeline per `write()` call. */
-const STREAM_CHUNK_BYTES = 1 * 1024 * 1024;
+/**
+ * Cap on the central-directory slice the extractor is willing to hold
+ * in memory. A real Apple export's central directory is a few KB (one
+ * XML member + optional ECG CSVs, ~100 bytes per entry); 64 MiB gives
+ * six orders of magnitude of headroom while refusing a forged EOCD
+ * that advertises a multi-GB directory purely to force an allocation.
+ */
+const MAX_CENTRAL_DIRECTORY_BYTES = 64 * 1024 * 1024;
+
+/** EOCD is 22 bytes plus an up-to-64 KiB trailing comment. */
+const MAX_EOCD_SEARCH = 22 + 0x10000;
 
 /** A single entry within the archive's central directory. */
 interface CentralDirectoryEntry {
@@ -105,6 +109,31 @@ export interface UnzipResult {
 }
 
 /**
+ * Central-directory metadata for the `export.xml` member, surfaced to
+ * the optional preflight hook BEFORE any extraction work starts. The
+ * declared sizes come from the archive and are attacker-controlled;
+ * they are suitable for a resource preflight, not for trust decisions
+ * (the byte-counting cap enforces the real output).
+ */
+export interface ExportXmlPreflightInfo {
+  /** Uncompressed size of export.xml as declared by the archive. */
+  declaredXmlBytes: number;
+  /** Compressed size of the export.xml member inside the archive. */
+  compressedXmlBytes: number;
+}
+
+export interface ExtractExportXmlOptions {
+  /**
+   * Called once with the member's declared sizes after the central
+   * directory is read but before extraction begins. Throwing here
+   * aborts the extraction with the thrown error — the worker uses it
+   * to refuse an import the runtime demonstrably cannot carry, before
+   * minutes of inflate work are spent.
+   */
+  preflight?: (info: ExportXmlPreflightInfo) => void | Promise<void>;
+}
+
+/**
  * Walk the central directory of `archivePath` and write the
  * `apple_health_export/export.xml` member out to a temp file.
  * Throws when the member is missing, encrypted, or compressed with
@@ -112,75 +141,247 @@ export interface UnzipResult {
  */
 export async function extractExportXml(
   archivePath: string,
+  options: ExtractExportXmlOptions = {},
 ): Promise<UnzipResult> {
-  const buf = readFileSync(archivePath);
-  const entries = readCentralDirectory(buf);
+  const handle = await open(archivePath, "r");
+  try {
+    const stat = await handle.stat();
+    const fileSize = Number(stat.size);
+    if (!Number.isSafeInteger(fileSize)) {
+      throw new Error("Archive is too large to address safely");
+    }
+    const entries = await readCentralDirectoryFromFile(handle, fileSize);
 
-  const exportXmlEntry = entries.find(
-    (e) => e.fileName.endsWith("/export.xml") || e.fileName === "export.xml",
-  );
-  if (!exportXmlEntry) {
-    throw new Error(
-      "Archive is missing the `apple_health_export/export.xml` member" +
-        " — is this a valid Apple Health export.zip?",
+    const exportXmlEntry = entries.find(
+      (e) => e.fileName.endsWith("/export.xml") || e.fileName === "export.xml",
     );
-  }
+    if (!exportXmlEntry) {
+      throw new Error(
+        "Archive is missing the `apple_health_export/export.xml` member" +
+          " — is this a valid Apple Health export.zip?",
+      );
+    }
 
+    if (
+      exportXmlEntry.compressionMethod !== 0 &&
+      exportXmlEntry.compressionMethod !== 8
+    ) {
+      throw new Error(
+        `Unsupported ZIP compression method ${exportXmlEntry.compressionMethod}` +
+          " for export.xml (expected 0=stored or 8=deflate)",
+      );
+    }
+
+    // Pre-flight zip-bomb defence. The central directory's advertised
+    // `uncompressedSize` is attacker-controlled (a malicious archive can
+    // lie), so this catches honest-but-oversized payloads early; the
+    // load-bearing defence is the byte-counting cap inside
+    // `streamEntryToFile()` which trips on the actual inflate output.
+    if (exportXmlEntry.uncompressedSize > MAX_DECOMPRESSED_BYTES) {
+      throw new Error(
+        `export.xml declares an uncompressed size of ${exportXmlEntry.uncompressedSize} bytes` +
+          ` — refusing to extract (cap is ${MAX_DECOMPRESSED_BYTES} bytes).`,
+      );
+    }
+    if (
+      exportXmlEntry.compressedSize > 0 &&
+      exportXmlEntry.uncompressedSize / exportXmlEntry.compressedSize >
+        MAX_COMPRESSION_RATIO
+    ) {
+      throw new Error(
+        `export.xml advertises a ${(
+          exportXmlEntry.uncompressedSize / exportXmlEntry.compressedSize
+        ).toFixed(0)}× compression ratio (cap is ${MAX_COMPRESSION_RATIO}×)` +
+          " — refusing as a suspected zip bomb.",
+      );
+    }
+
+    if (options.preflight) {
+      await options.preflight({
+        declaredXmlBytes: exportXmlEntry.uncompressedSize,
+        compressedXmlBytes: exportXmlEntry.compressedSize,
+      });
+    }
+
+    // Unguessable temp name: the extraction target lives in the shared
+    // system tmpdir, and a predictable name (timestamp + Math.random) is
+    // what a local pre-creation or symlink attack needs.
+    const xmlPath = join(
+      tmpdir(),
+      `healthlog-import-${randomBytes(12).toString("hex")}.xml`,
+    );
+    const xmlBytes = await streamEntryToFile(
+      handle,
+      archivePath,
+      fileSize,
+      exportXmlEntry,
+      xmlPath,
+    );
+
+    const otherMembers = entries
+      .filter((e) => e !== exportXmlEntry)
+      .map((e) => ({ name: e.fileName, bytes: e.uncompressedSize }));
+
+    return {
+      xmlPath,
+      xmlBytes,
+      otherMembers,
+    };
+  } finally {
+    await handle.close();
+  }
+}
+
+/** Read exactly `length` bytes at `position` or throw on truncation. */
+async function readExactly(
+  handle: FileHandle,
+  length: number,
+  position: number,
+): Promise<Buffer> {
   if (
-    exportXmlEntry.compressionMethod !== 0 &&
-    exportXmlEntry.compressionMethod !== 8
+    !Number.isSafeInteger(length) ||
+    !Number.isSafeInteger(position) ||
+    length < 0 ||
+    position < 0
   ) {
-    throw new Error(
-      `Unsupported ZIP compression method ${exportXmlEntry.compressionMethod}` +
-        " for export.xml (expected 0=stored or 8=deflate)",
-    );
+    throw new Error("Invalid ZIP read bounds");
   }
-
-  // Pre-flight zip-bomb defence. The central directory's advertised
-  // `uncompressedSize` is attacker-controlled (a malicious archive can
-  // lie), so this catches honest-but-oversized payloads early; the
-  // load-bearing defence is the byte-counting cap inside
-  // `streamEntryToFile()` which trips on the actual inflate output.
-  if (exportXmlEntry.uncompressedSize > MAX_DECOMPRESSED_BYTES) {
-    throw new Error(
-      `export.xml declares an uncompressed size of ${exportXmlEntry.uncompressedSize} bytes` +
-        ` — refusing to extract (cap is ${MAX_DECOMPRESSED_BYTES} bytes).`,
+  const buffer = Buffer.allocUnsafe(length);
+  let offset = 0;
+  while (offset < length) {
+    const read = await handle.read(
+      buffer,
+      offset,
+      length - offset,
+      position + offset,
     );
+    if (read.bytesRead === 0) {
+      throw new Error("Truncated ZIP archive");
+    }
+    offset += read.bytesRead;
   }
-  if (
-    exportXmlEntry.compressedSize > 0 &&
-    exportXmlEntry.uncompressedSize / exportXmlEntry.compressedSize >
-      MAX_COMPRESSION_RATIO
-  ) {
-    throw new Error(
-      `export.xml advertises a ${(
-        exportXmlEntry.uncompressedSize / exportXmlEntry.compressedSize
-      ).toFixed(0)}× compression ratio (cap is ${MAX_COMPRESSION_RATIO}×)` +
-        " — refusing as a suspected zip bomb.",
-    );
-  }
-
-  const xmlPath = join(
-    tmpdir(),
-    `healthlog-import-${Date.now()}-${Math.random().toString(36).slice(2, 10)}.xml`,
-  );
-  const xmlBytes = await streamEntryToFile(buf, exportXmlEntry, xmlPath);
-
-  const otherMembers = entries
-    .filter((e) => e !== exportXmlEntry)
-    .map((e) => ({ name: e.fileName, bytes: e.uncompressedSize }));
-
-  return {
-    xmlPath,
-    xmlBytes,
-    otherMembers,
-  };
+  return buffer;
 }
 
 /**
- * Walk the ZIP central directory and return one descriptor per member.
- * Exported for unit testing the central-directory parser independently
- * of the file-extraction path.
+ * EOCD fields after Zip64 resolution — enough to locate and size the
+ * central directory.
+ */
+interface EocdSummary {
+  entryCount: number;
+  centralDirOffset: number;
+  centralDirSize: number;
+}
+
+/**
+ * Resolve the (possibly Zip64) EOCD from a tail slice. `readAt` supplies
+ * absolute-offset reads for the Zip64 locator/record, which can sit
+ * outside the tail slice on a large archive; the buffer-based caller
+ * passes a same-buffer reader.
+ */
+async function resolveEocd(
+  tail: Buffer,
+  tailFileOffset: number,
+  eocdOffsetInTail: number,
+  readAt: (length: number, position: number) => Promise<Buffer>,
+): Promise<EocdSummary> {
+  let centralDirSize = tail.readUInt32LE(eocdOffsetInTail + 12);
+  let centralDirOffset = tail.readUInt32LE(eocdOffsetInTail + 16);
+  let entryCount = tail.readUInt16LE(eocdOffsetInTail + 10);
+
+  // Zip64 handling — when any of the three count/offset fields is the
+  // 0xFFFFFFFF / 0xFFFF sentinel, the real value lives in the Zip64
+  // EOCD record located by walking back through the locator.
+  if (
+    centralDirOffset === 0xffffffff ||
+    centralDirSize === 0xffffffff ||
+    entryCount === 0xffff
+  ) {
+    const locatorFileOffset = tailFileOffset + eocdOffsetInTail - 20;
+    if (locatorFileOffset < 0) {
+      throw new Error("Zip64 sentinels present but Zip64 locator missing");
+    }
+    const locator = await readAt(20, locatorFileOffset);
+    if (locator.readUInt32LE(0) !== ZIP64_EOCD_LOCATOR) {
+      throw new Error("Zip64 sentinels present but Zip64 locator missing");
+    }
+    const zip64EocdOffset = Number(locator.readBigUInt64LE(8));
+    const zip64Eocd = await readAt(56, zip64EocdOffset);
+    if (zip64Eocd.readUInt32LE(0) !== ZIP64_EOCD_RECORD) {
+      throw new Error("Zip64 EOCD record signature mismatch");
+    }
+    entryCount = Number(zip64Eocd.readBigUInt64LE(32));
+    centralDirSize = Number(zip64Eocd.readBigUInt64LE(40));
+    centralDirOffset = Number(zip64Eocd.readBigUInt64LE(48));
+  }
+
+  return { entryCount, centralDirOffset, centralDirSize };
+}
+
+/**
+ * Locate and parse the central directory through the file handle,
+ * without ever holding more than the tail slice + the central
+ * directory itself in memory.
+ */
+async function readCentralDirectoryFromFile(
+  handle: FileHandle,
+  fileSize: number,
+): Promise<CentralDirectoryEntry[]> {
+  if (fileSize < 22) {
+    throw new Error("Could not locate ZIP End-Of-Central-Directory record");
+  }
+  const tailLength = Math.min(fileSize, MAX_EOCD_SEARCH);
+  const tailFileOffset = fileSize - tailLength;
+  const tail = await readExactly(handle, tailLength, tailFileOffset);
+  const eocdOffsetInTail = locateEocd(tail);
+  if (eocdOffsetInTail === -1) {
+    throw new Error("Could not locate ZIP End-Of-Central-Directory record");
+  }
+
+  const summary = await resolveEocd(
+    tail,
+    tailFileOffset,
+    eocdOffsetInTail,
+    (length, position) => readExactly(handle, length, position),
+  );
+  validateCentralDirectoryBounds(summary, fileSize);
+
+  const centralDir = await readExactly(
+    handle,
+    summary.centralDirSize,
+    summary.centralDirOffset,
+  );
+  return parseCentralDirectory(
+    centralDir,
+    summary.centralDirOffset,
+    summary.entryCount,
+  );
+}
+
+function validateCentralDirectoryBounds(
+  summary: EocdSummary,
+  fileSize: number,
+): void {
+  if (summary.centralDirSize > MAX_CENTRAL_DIRECTORY_BYTES) {
+    throw new Error(
+      `ZIP central directory declares ${summary.centralDirSize} bytes` +
+        ` — refusing (cap is ${MAX_CENTRAL_DIRECTORY_BYTES} bytes).`,
+    );
+  }
+  if (
+    summary.centralDirOffset < 0 ||
+    summary.centralDirSize < 0 ||
+    summary.centralDirOffset + summary.centralDirSize > fileSize
+  ) {
+    throw new Error("ZIP central directory bounds exceed the archive");
+  }
+}
+
+/**
+ * Walk the ZIP central directory of a fully-buffered archive and return
+ * one descriptor per member. Kept as a Buffer-based API for unit tests
+ * and small in-memory archives; the production extraction path reads
+ * the directory through a file handle instead of buffering the archive.
  */
 export function readCentralDirectory(buf: Buffer): CentralDirectoryEntry[] {
   const eocdOffset = locateEocd(buf);
@@ -188,13 +389,26 @@ export function readCentralDirectory(buf: Buffer): CentralDirectoryEntry[] {
     throw new Error("Could not locate ZIP End-Of-Central-Directory record");
   }
 
+  // The whole archive is in `buf`, so absolute-offset reads are slices.
+  const resolved = resolveEocdSync(buf, eocdOffset);
+  validateCentralDirectoryBounds(resolved, buf.length);
+  const centralDir = buf.subarray(
+    resolved.centralDirOffset,
+    resolved.centralDirOffset + resolved.centralDirSize,
+  );
+  return parseCentralDirectory(
+    centralDir,
+    resolved.centralDirOffset,
+    resolved.entryCount,
+  );
+}
+
+/** Synchronous EOCD/Zip64 resolution over a fully-buffered archive. */
+function resolveEocdSync(buf: Buffer, eocdOffset: number): EocdSummary {
   let centralDirSize = buf.readUInt32LE(eocdOffset + 12);
   let centralDirOffset = buf.readUInt32LE(eocdOffset + 16);
   let entryCount = buf.readUInt16LE(eocdOffset + 10);
 
-  // Zip64 handling — when any of the three count/offset fields is the
-  // 0xFFFFFFFF / 0xFFFF sentinel, the real value lives in the Zip64
-  // EOCD record located by walking back through the locator.
   if (
     centralDirOffset === 0xffffffff ||
     centralDirSize === 0xffffffff ||
@@ -215,30 +429,47 @@ export function readCentralDirectory(buf: Buffer): CentralDirectoryEntry[] {
     centralDirSize = Number(buf.readBigUInt64LE(zip64EocdOffset + 40));
     centralDirOffset = Number(buf.readBigUInt64LE(zip64EocdOffset + 48));
   }
+  return { entryCount, centralDirOffset, centralDirSize };
+}
 
+/**
+ * Parse central-directory entries from a slice that starts at the
+ * directory's first byte. `baseOffset` is the slice's absolute file
+ * offset, used only for error reporting symmetry — entry offsets in
+ * the records themselves are already absolute.
+ */
+function parseCentralDirectory(
+  centralDir: Buffer,
+  baseOffset: number,
+  entryCount: number,
+): CentralDirectoryEntry[] {
+  void baseOffset;
   const entries: CentralDirectoryEntry[] = [];
-  let cursor = centralDirOffset;
-  const end = centralDirOffset + centralDirSize;
+  let cursor = 0;
+  const end = centralDir.length;
   while (cursor < end && entries.length < entryCount) {
-    if (buf.readUInt32LE(cursor) !== CENTRAL_FILE_HEADER) {
+    if (cursor + 46 > end) {
+      throw new Error(`Central directory entry ${entries.length} is truncated`);
+    }
+    if (centralDir.readUInt32LE(cursor) !== CENTRAL_FILE_HEADER) {
       throw new Error(
         `Central directory entry ${entries.length} has wrong signature`,
       );
     }
-    const compressionMethod = buf.readUInt16LE(cursor + 10);
-    const flags = buf.readUInt16LE(cursor + 8);
+    const compressionMethod = centralDir.readUInt16LE(cursor + 10);
+    const flags = centralDir.readUInt16LE(cursor + 8);
     if (flags & 0x0001) {
       throw new Error("Encrypted ZIP entries are not supported");
     }
-    const compressedSize32 = buf.readUInt32LE(cursor + 20);
-    const uncompressedSize32 = buf.readUInt32LE(cursor + 24);
-    const fileNameLen = buf.readUInt16LE(cursor + 28);
-    const extraLen = buf.readUInt16LE(cursor + 30);
-    const commentLen = buf.readUInt16LE(cursor + 32);
-    const localHeaderOffset32 = buf.readUInt32LE(cursor + 42);
+    const compressedSize32 = centralDir.readUInt32LE(cursor + 20);
+    const uncompressedSize32 = centralDir.readUInt32LE(cursor + 24);
+    const fileNameLen = centralDir.readUInt16LE(cursor + 28);
+    const extraLen = centralDir.readUInt16LE(cursor + 30);
+    const commentLen = centralDir.readUInt16LE(cursor + 32);
+    const localHeaderOffset32 = centralDir.readUInt32LE(cursor + 42);
 
-    const fileName = buf
-      .slice(cursor + 46, cursor + 46 + fileNameLen)
+    const fileName = centralDir
+      .subarray(cursor + 46, cursor + 46 + fileNameLen)
       .toString("utf8");
 
     let compressedSize = compressedSize32;
@@ -255,21 +486,21 @@ export function readCentralDirectory(buf: Buffer): CentralDirectoryEntry[] {
       let extraCursor = extraStart;
       const extraEnd = extraStart + extraLen;
       while (extraCursor + 4 <= extraEnd) {
-        const headerId = buf.readUInt16LE(extraCursor);
-        const dataSize = buf.readUInt16LE(extraCursor + 2);
+        const headerId = centralDir.readUInt16LE(extraCursor);
+        const dataSize = centralDir.readUInt16LE(extraCursor + 2);
         if (headerId === 0x0001) {
           // Zip64 extended-info extra field
           let dCursor = extraCursor + 4;
           if (uncompressedSize === 0xffffffff) {
-            uncompressedSize = Number(buf.readBigUInt64LE(dCursor));
+            uncompressedSize = Number(centralDir.readBigUInt64LE(dCursor));
             dCursor += 8;
           }
           if (compressedSize === 0xffffffff) {
-            compressedSize = Number(buf.readBigUInt64LE(dCursor));
+            compressedSize = Number(centralDir.readBigUInt64LE(dCursor));
             dCursor += 8;
           }
           if (localHeaderOffset === 0xffffffff) {
-            localHeaderOffset = Number(buf.readBigUInt64LE(dCursor));
+            localHeaderOffset = Number(centralDir.readBigUInt64LE(dCursor));
             dCursor += 8;
           }
           break;
@@ -290,17 +521,6 @@ export function readCentralDirectory(buf: Buffer): CentralDirectoryEntry[] {
   }
 
   return entries;
-}
-
-/**
- * Split a Buffer into fixed-size slices (no copying — `subarray` views
- * share the backing memory) so the inflate/write pipeline processes the
- * entry in bounded chunks instead of one giant `write()` call.
- */
-function* chunkBuffer(buf: Buffer, size: number): Generator<Buffer> {
-  for (let offset = 0; offset < buf.length; offset += size) {
-    yield buf.subarray(offset, Math.min(offset + size, buf.length));
-  }
 }
 
 /**
@@ -334,38 +554,53 @@ export function createByteCap(limit: number): Transform {
 
 /**
  * Stream a single ZIP entry's bytes out to `destPath`, decompressing
- * through `zlib.createInflateRaw()` when needed. Runs entirely off the
- * JS main thread (stream I/O + the libuv-threadpool-backed zlib
- * binding), so a multi-GB member no longer blocks the event loop the
- * way the old `inflateRawSync()` + `writeFileSync()` pair did. Returns
- * the number of bytes written.
+ * through `zlib.createInflateRaw()` when needed. The compressed bytes
+ * are read through a byte-range file stream rather than an archive-wide
+ * buffer, so peak memory is bounded by stream buffer sizes regardless
+ * of archive size, and the decompression work runs off the JS event
+ * loop on the libuv threadpool. Returns the number of bytes written.
  */
 async function streamEntryToFile(
-  buf: Buffer,
+  handle: FileHandle,
+  archivePath: string,
+  fileSize: number,
   entry: CentralDirectoryEntry,
   destPath: string,
 ): Promise<number> {
-  const local = entry.localHeaderOffset;
-  if (buf.readUInt32LE(local) !== LOCAL_FILE_HEADER) {
+  const local = await readExactly(handle, 30, entry.localHeaderOffset);
+  if (local.readUInt32LE(0) !== LOCAL_FILE_HEADER) {
     throw new Error(
       `Local file header for ${entry.fileName} has wrong signature`,
     );
   }
-  const localFileNameLen = buf.readUInt16LE(local + 26);
-  const localExtraLen = buf.readUInt16LE(local + 28);
-  const dataStart = local + 30 + localFileNameLen + localExtraLen;
-  const compressed = buf.subarray(dataStart, dataStart + entry.compressedSize);
+  const localFileNameLen = local.readUInt16LE(26);
+  const localExtraLen = local.readUInt16LE(28);
+  const dataStart =
+    entry.localHeaderOffset + 30 + localFileNameLen + localExtraLen;
+  if (dataStart + entry.compressedSize > fileSize) {
+    throw new Error(
+      `Member data for ${entry.fileName} exceeds the archive bounds`,
+    );
+  }
 
-  const source = Readable.from(chunkBuffer(compressed, STREAM_CHUNK_BYTES));
   const dest = createWriteStream(destPath);
   const cap = createByteCap(MAX_DECOMPRESSED_BYTES);
 
   try {
-    if (entry.compressionMethod === 0) {
-      await pipeline(source, cap, dest);
+    if (entry.compressedSize === 0) {
+      // Empty member — nothing to stream; still create the file.
+      await pipeline([], cap, dest);
     } else {
-      // Method 8 — DEFLATE, streamed through the async zlib Transform.
-      await pipeline(source, createInflateRaw(), cap, dest);
+      const source = createReadStream(archivePath, {
+        start: dataStart,
+        end: dataStart + entry.compressedSize - 1,
+      });
+      if (entry.compressionMethod === 0) {
+        await pipeline(source, cap, dest);
+      } else {
+        // Method 8 — DEFLATE, streamed through the async zlib Transform.
+        await pipeline(source, createInflateRaw(), cap, dest);
+      }
     }
   } catch (err) {
     // A mid-stream failure (byte cap trip, corrupt deflate stream) can
@@ -388,7 +623,7 @@ async function streamEntryToFile(
  * the Health export but we tolerate up to 64 KB just in case.
  */
 function locateEocd(buf: Buffer): number {
-  const searchStart = Math.max(0, buf.length - (22 + 0x10000));
+  const searchStart = Math.max(0, buf.length - MAX_EOCD_SEARCH);
   for (let i = buf.length - 22; i >= searchStart; i--) {
     if (buf.readUInt32LE(i) === EOCD_SIGNATURE) return i;
   }

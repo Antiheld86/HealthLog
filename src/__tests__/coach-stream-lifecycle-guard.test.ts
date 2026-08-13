@@ -77,6 +77,35 @@ describe("Coach streaming lifecycle", () => {
     ).toBe(true);
   });
 
+  it("the unmount cleanup records the interrupted conversation before the abort (#781)", () => {
+    const source = read("components/insights/coach-panel/use-coach.ts");
+
+    // A cleanup that writes the resume value under the storage key. Without
+    // it the unmount abort is silent again: the user returns to a blank new
+    // chat with no route back to the interrupted thread.
+    const recordsInterruption =
+      /return\s*\(\)\s*=>\s*\{[\s\S]*?interruptedResumeValue\(\s*active\s*\)[\s\S]*?sessionStorage\.setItem\(\s*COACH_INTERRUPTED_STORAGE_KEY/.test(
+        source,
+      );
+    expect(
+      recordsInterruption,
+      "use-coach.ts must record the interrupted conversation " +
+        "(COACH_INTERRUPTED_STORAGE_KEY) in an unmount cleanup",
+    ).toBe(true);
+
+    // And the recording effect must be defined BEFORE the abort effect so
+    // the flag is written while the send is still marked in flight.
+    const recordIndex = source.indexOf("COACH_INTERRUPTED_STORAGE_KEY,\n");
+    const abortIndex = source.indexOf("abortRef.current?.abort();\n    };");
+    expect(recordIndex).toBeGreaterThan(-1);
+    expect(abortIndex).toBeGreaterThan(-1);
+    expect(
+      recordIndex < abortIndex,
+      "the interruption-recording cleanup must be defined before the " +
+        "mount-scoped abort cleanup",
+    ).toBe(true);
+  });
+
   it("handleNewChat still resets too — the two paths must not diverge again", () => {
     const source = read(
       "components/insights/coach-panel/coach-conversation.tsx",

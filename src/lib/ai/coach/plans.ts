@@ -276,6 +276,9 @@ async function loadRecentTurns(
   for (const m of [...row.messages].reverse()) {
     const content = decryptOrNull(m.encryptedContent);
     if (content === null) continue;
+    // #781 — skip empty bodies: a cancelled-turn marker (an empty assistant
+    // row closing an aborted turn) carries nothing to extract from.
+    if (!content.trim()) continue;
     turns.push({ role: m.role, content });
   }
   return turns;
