@@ -9,6 +9,12 @@ vi.mock("@/lib/db", () => ({
       findUnique: vi.fn().mockResolvedValue({ timezone: "Europe/Berlin" }),
     },
     measurement: { findMany: vi.fn().mockResolvedValue([]) },
+    // Rollup read-swap — the tiered measurement fetch probes DAY-bucket
+    // coverage ($queryRaw) and reads `measurement_rollups`. Default both
+    // empty so every channel takes the raw fallback path and the existing
+    // assertions ride through unchanged.
+    measurementRollup: { findMany: vi.fn().mockResolvedValue([]) },
+    $queryRaw: vi.fn().mockResolvedValue([]),
     moodEntry: { findMany: vi.fn().mockResolvedValue([]) },
     // FDREXTEND — the route now folds two non-measurement channels in (built by
     // the shared `correlation-channel-series` helpers). Default to empty corpora
@@ -115,6 +121,12 @@ beforeEach(() => {
   (prisma.measurement.findMany as ReturnType<typeof vi.fn>).mockResolvedValue(
     [],
   );
+  // Rollup read-swap — empty coverage probe + bucket read keep every
+  // measurement channel on the raw fallback path.
+  (
+    prisma.measurementRollup.findMany as ReturnType<typeof vi.fn>
+  ).mockResolvedValue([]);
+  (prisma.$queryRaw as ReturnType<typeof vi.fn>).mockResolvedValue([]);
   (prisma.moodEntry.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([]);
   // FDREXTEND — the two non-measurement channels read their own models; default
   // them empty so neither channel produces a point.
