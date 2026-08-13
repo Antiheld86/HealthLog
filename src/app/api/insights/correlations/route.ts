@@ -45,16 +45,14 @@ import {
   syncAcceptedPatterns,
 } from "@/lib/insights/correlation-patterns";
 import {
-  buildMeasurementDailySeries,
   fetchComplianceSeries,
   fetchCustomMetricBehaviourSeries,
   fetchEnvironmentSeries,
   fetchLabDraws,
-  fetchMeasurementWindowSeries,
+  fetchMeasurementDailySeriesTiered,
   fetchMoodWindowSeries,
   fetchSymptomSeries,
 } from "@/lib/insights/correlation-channel-series";
-import { loadUserSourcePriority } from "@/lib/rollups/measurement-read";
 
 export const dynamic = "force-dynamic";
 
@@ -139,23 +137,21 @@ async function buildCorrelationsResponse(
     DISCOVERY_OUTCOMES,
   ) as MeasurementType[];
 
-  // v1.30.3 (QA F1) — the fetch + desc/cap/resort discipline now lives in
-  // `fetchMeasurementWindowSeries` / `fetchMoodWindowSeries`
-  // (`correlation-channel-series.ts`), shared with the Coach tool, the
-  // per-metric card, and the period narrative so a fourth independently-
-  // maintained copy can't drift the way the period-narrative one did.
-  const [
-    { byType: measurementsByType, measurementsCapped },
-    moodWindow,
-    priorityJson,
-  ] = await Promise.all([
-    fetchMeasurementWindowSeries(userId, since, [
+  // Rollup read-swap for the measurement channels: eligible spot channels
+  // read their per-day means from the DAY rollup tier, with per-channel
+  // fallback to the raw `fetchMeasurementWindowSeries` path on any miss
+  // (coverage gap, far-from-UTC profile tz, sleep / cumulative grain) —
+  // see `fetchMeasurementDailySeriesTiered` for the full parity contract.
+  // The SWR cache cell above stays in front of this read: the swap only
+  // lowers the cost of a cache MISS, it does not replace the cache.
+  const [measurementDaily, moodWindow] = await Promise.all([
+    fetchMeasurementDailySeriesTiered(userId, tz, since, [
       ...behaviourTypes,
       ...outcomeTypes,
     ]),
     fetchMoodWindowSeries(userId, tz, since),
-    loadUserSourcePriority(userId),
   ]);
+  const { measurementsCapped } = measurementDaily;
   const { moodDaily, moodCapped } = moodWindow;
 
   // v1.21.0 (FDREXTEND) — build the two non-measurement, non-mood channels from
@@ -180,14 +176,7 @@ async function buildCorrelationsResponse(
   ]);
 
   const points = (key: string): DailySeriesPoint[] =>
-    key === "MOOD"
-      ? moodDaily
-      : buildMeasurementDailySeries(
-          key as MeasurementType,
-          measurementsByType.get(key) ?? [],
-          tz,
-          priorityJson,
-        );
+    key === "MOOD" ? moodDaily : (measurementDaily.byType.get(key) ?? []);
 
   const series: NamedSeries[] = [];
   for (const key of DISCOVERY_BEHAVIOURS) {
@@ -287,7 +276,12 @@ async function buildCorrelationsResponse(
       // capped read still covers the recent window `discoverEmergingCorrelations`
       // needs; this only tells a dashboard the retrospective scan's older
       // half of the window may be thin.
+      // The cap can only apply to raw-path channels — rollup-served
+      // channels read one row per day per source and cannot reach it.
       measurements_capped: measurementsCapped,
+      // Rollup read-swap reach: how many measurement channels rode the DAY
+      // rollup tier on this build (the rest took the raw fallback path).
+      measurement_rollup_channels: measurementDaily.rollupTypes.length,
       mood_entries_capped: moodCapped,
       // FDREXTEND — per-channel day-counts so a dashboard can see whether the
       // two sparse new channels reached the n ≥ 20 floor or degraded to absent.
