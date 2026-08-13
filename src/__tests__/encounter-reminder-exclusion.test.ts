@@ -52,8 +52,11 @@ function read(relativePath: string): string {
  */
 const VORSORGE_READ_SITES: ReadonlyArray<{ file: string; surface: string }> = [
   {
-    file: "src/app/api/measurement-reminders/route.ts",
-    surface: "the reminder list the checkups page renders",
+    // The list query moved out of the route into the shared read so the
+    // `/checkups` SSR prefetch and `GET /api/measurement-reminders` cannot
+    // drift; the exclusion travels with the query.
+    file: "src/lib/measurement-reminders/list-read.ts",
+    surface: "the reminder list the checkups page and its SSR prefetch render",
   },
   {
     file: "src/lib/daily/load-digest.ts",

@@ -97,4 +97,45 @@ test.describe("dashboard hydration with the SSR prefetch on", () => {
     expect(witness?.seen).toBe(true);
     expect(witness?.replaced).toBe(0);
   });
+
+  // The two list-page prefetch wrappers (`/checkups`, `/mood`) hand TanStack a
+  // server-dehydrated state through the same HydrationBoundary mechanism the
+  // dashboard uses. Their page-clients render behind a `useMounted` gate, so
+  // the streamed HTML is the auth-gate shell by design — the node-identity
+  // witness has nothing to latch. What CAN break, and what these assert, is
+  // the hydration itself: a dehydrated state that disagrees with the client
+  // render surfaces as a React #418 bailout on exactly this server (the
+  // mocked suite runs with the prefetch OFF and can never see it).
+  for (const target of [
+    {
+      path: "/checkups",
+      name: "checkups",
+      readySelector: '[data-testid="checkups-tab-vorsorge"]',
+    },
+    {
+      path: "/mood",
+      name: "mood",
+      readySelector: '[data-tour-id="mood-hero"]',
+    },
+  ]) {
+    test(`hydrates ${target.name} with its prefetched list state`, async ({
+      page,
+    }) => {
+      const clientErrors: string[] = [];
+      page.on("pageerror", (error) => clientErrors.push(error.message));
+      page.on("console", (message) => {
+        if (message.type() === "error") clientErrors.push(message.text());
+      });
+
+      await page.goto(target.path);
+      await expect(page.locator(target.readySelector)).toBeVisible();
+      // Let every boundary hydrate and every post-mount refetch land before
+      // the verdict; a bailout that happens late is still a bailout.
+      await page.waitForLoadState("networkidle");
+
+      expect(
+        clientErrors.filter((message) => /418|hydrat/i.test(message)),
+      ).toEqual([]);
+    });
+  }
 });

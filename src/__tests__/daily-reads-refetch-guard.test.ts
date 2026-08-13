@@ -22,6 +22,14 @@
  * an allowlisted exception is correct — only that no NEW site invalidates a
  * daily bundle without the paired refetch, and no PAIRED site loses its refetch,
  * without someone editing this file.
+ *
+ * Both matcher families were proven live by breaking a real fix and watching
+ * the guard go red: removing the `refetchInactiveDailyReads` pairing from the
+ * illness invalidator (`components/illness/use-illness.ts`) failed the bundle
+ * assertion, and reverting the score-config save
+ * (`components/settings/score-section.tsx`) to its former bare
+ * snapshot/digest `invalidateQueries` pair failed the direct-invalidation
+ * assertion. Both fixes were then restored and the guard re-ran green.
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -41,13 +49,38 @@ const FACTORY = "lib/query-keys/index.ts";
  * per-surface key). Sites routed through `invalidateMedicationReads` do NOT
  * match — the wrapper carries the refetch internally, so they are compliant by
  * construction and correctly invisible here.
+ *
+ * The cycle / encounter / vaccination / illness families joined the matcher
+ * alongside the original three: the encounter and illness bundles now carry a
+ * daily-read key directly, the vaccination bundle's reminder root feeds the
+ * Today rail, and cycle rides along so a future daily-read key added to its
+ * bundle cannot ship an unpaired site silently (its current sites are
+ * allowlisted below with the reason).
  */
 const INVALIDATION =
-  /invalidateKeys\(\s*[^,]+,\s*\[?\s*(?:\.\.\.)?\s*(?:medicationDependentKeys|measurementDependentKeys|moodDependentKeys)\b/g;
+  /invalidateKeys\(\s*[^,]+,\s*\[?\s*(?:\.\.\.)?\s*(?:medicationDependentKeys|measurementDependentKeys|moodDependentKeys|cycleDependentKeys|encounterDependentKeys|vaccinationDependentKeys|illnessDependentKeys)\b/g;
 // Match the CALL form only (open paren), never the bare import specifier —
 // otherwise the `import { refetchInactiveDailyReads }` line would inflate the
 // count and let a file drop one paired call while still "passing".
-const REFETCH = /refetchInactiveDailyReads\(/g;
+// `invalidateReminderReads` counts as a paired refetch: it carries
+// `refetchInactiveDailyReads` internally (see `hooks/use-measurement-reminders`),
+// and the encounter / vaccination mutation sites pair through it.
+const REFETCH = /(?:refetchInactiveDailyReads|invalidateReminderReads)\(/g;
+
+/**
+ * Second matcher family — a DIRECT `invalidateQueries` on a daily-read key.
+ * Captures `<qc>.invalidateQueries({ queryKey: queryKeys.dashboardSnapshot() })`
+ * / `dailyDigest()` in every observed shape (single line, prettier-broken,
+ * with or without a `refetchType`). Group 1 carries the `refetchType` value
+ * when present: `"inactive"` and `"all"` both force the unmounted daily reads
+ * to refetch and are compliant; a bare call (or `"active"`) marks the
+ * typically-unmounted daily reads stale without refetching them — exactly the
+ * v1.16.11/v1.29.1/v1.32.19 class, one call site at a time instead of via a
+ * bundle. Known limit (mirrors the bundle matcher): a call spelling the key
+ * through a local alias rather than `queryKeys.<key>()` would slip past.
+ */
+const DIRECT_DAILY_INVALIDATION =
+  /\.invalidateQueries\(\s*\{\s*queryKey:\s*queryKeys\.(?:dashboardSnapshot|dailyDigest)\(\)\s*,?\s*(?:refetchType:\s*"(\w+)"\s*,?\s*)?\}\s*,?\s*\)/g;
 
 function sourceFiles(): string[] {
   return walkSourceFiles(SRC, { floor: 3000 })
@@ -99,6 +132,29 @@ const NO_REFETCH_ALLOWLIST = [
   "components/settings/integrations/oauth-provider-card.tsx",
   "components/settings/integrations/whoop-card.tsx",
   "components/settings/integrations/withings-card.tsx",
+  // Cycle writes: `cycleDependentKeys` carries no daily-read key and neither
+  // the dashboard snapshot nor the Today digest reads cycle rows today, so
+  // the forced refetch would be a no-op round-trip. The bundle is in the
+  // matcher so the day a daily-read key joins it, these sites surface here
+  // and must take the pairing.
+  "components/cycle/use-cycle.ts",
+].sort();
+
+/**
+ * Files allowed a DIRECT daily-read `invalidateQueries` without an inactive
+ * refetch, deliberately. Frozen like the bundle allowlist above.
+ */
+const DIRECT_NO_REFETCH_ALLOWLIST = [
+  // Background sync completion on the Settings surface — same reason as the
+  // integration cards in the bundle allowlist: the user is configuring, not
+  // acting on the hero; poll/focus convergence is intended.
+  "components/settings/integrations/google-health-card.tsx",
+  // The check-in card and the priority-item dismissal both render INSIDE the
+  // Today digest, so the digest query is mounted and the default
+  // `refetchType: "active"` refetches it immediately — the inactive arm has
+  // nothing to cover.
+  "hooks/use-coach-checkin.ts",
+  "hooks/use-priority-item-dismiss.ts",
 ].sort();
 
 describe("daily-reads refetch guard", () => {
@@ -144,6 +200,33 @@ describe("daily-reads refetch guard", () => {
     // the allowlist → fail; a paired site that loses its refetch drops into
     // this set → fail; a deliberate new exception must be added above.
     expect(nonCompliant.sort()).toEqual(NO_REFETCH_ALLOWLIST);
+  });
+
+  it("every direct daily-read invalidation forces a refetch, except the frozen allowlist", () => {
+    // A direct `invalidateQueries(dashboardSnapshot|dailyDigest)` is the
+    // single-key form of the same class the bundle matcher pins. Compliant
+    // forms: `refetchType: "inactive"` / `"all"` on the call itself, or a
+    // paired `refetchInactiveDailyReads` elsewhere in the file (then the
+    // direct call is the mounted-arm half of an explicit pair).
+    const nonCompliant: string[] = [];
+    let totalMatches = 0;
+    for (const rel of sourceFiles()) {
+      if (rel === FACTORY) continue;
+      const s = read(rel);
+      let bare = 0;
+      for (const m of s.matchAll(DIRECT_DAILY_INVALIDATION)) {
+        totalMatches++;
+        const refetchType = m[1];
+        if (refetchType !== "inactive" && refetchType !== "all") bare++;
+      }
+      if (bare > 0 && count(s, REFETCH) === 0) nonCompliant.push(rel);
+    }
+    // The matcher must be alive: the tree has known compliant call sites
+    // (the dashboard-layout section's `refetchType: "all"` pair among them).
+    // Zero matches would mean the regex rotted, not that the class is gone —
+    // the lesson of the 2026-08-01 bearer-guard blind spot.
+    expect(totalMatches).toBeGreaterThan(3);
+    expect(nonCompliant.sort()).toEqual(DIRECT_NO_REFETCH_ALLOWLIST);
   });
 
   it("the fixed intake surfaces route through the blessed helper or pair the refetch", () => {

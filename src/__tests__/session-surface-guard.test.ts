@@ -105,7 +105,7 @@ describe("S1 — the direct session-resolution set is frozen", () => {
     // with the session user's own data. Absence of a session skips the
     // prefetch rather than failing the render.
     //
-    // These five resolve through `getUnswitchedSession()`, not `getSession()`,
+    // These seven resolve through `getUnswitchedSession()`, not `getSession()`,
     // and they stay listed here BECAUSE of it. The helper is still a session
     // derivation outside `requireAuth` — moving the call one file deeper into
     // `lib/` would have taken them off this list while changing nothing about
@@ -115,6 +115,8 @@ describe("S1 — the direct session-resolution set is frozen", () => {
     // can only ever hold the caller's own. See
     // `prefetch-page-caching-guard.test.ts` for the rule that keeps a sixth
     // prefetching page from reaching for the bare helper.
+    "app/checkups/page.tsx":
+      "RSC prefetch of the session user's reminder list, skipped under a switch",
     "app/coach/page.tsx":
       "RSC prefetch of the session user's coach state, skipped under a switch",
     "app/insights/page.tsx":
@@ -123,6 +125,8 @@ describe("S1 — the direct session-resolution set is frozen", () => {
       "RSC prefetch of the session user's workouts, skipped under a switch",
     "app/medications/page.tsx":
       "RSC prefetch of the session user's medications, skipped under a switch",
+    "app/mood/page.tsx":
+      "RSC prefetch of the session user's mood list, skipped under a switch",
     "app/page.tsx":
       "RSC prefetch of the session user's dashboard snapshot, skipped under a switch",
     // Onboarding routing. Reads the actor's own onboarding step to redirect;

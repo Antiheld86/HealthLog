@@ -172,10 +172,12 @@ const prefetchingPages = walk(APP_DIR)
  */
 const PREFETCHING_ROUTES = [
   "/",
+  "/checkups",
   "/coach",
   "/insights",
   "/insights/workouts",
   "/medications",
+  "/mood",
 ] as const;
 
 describe("server-prefetching pages cannot leak a cacheable record", () => {

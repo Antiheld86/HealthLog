@@ -14,7 +14,12 @@
  * prose editor by design: the PATCH contract never accepts the encrypted
  * free-text fields.
  */
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseQueryOptions,
+} from "@tanstack/react-query";
 
 import { queryKeys } from "@/lib/query-keys";
 import { apiDelete, apiGet, apiPatch } from "@/lib/api/api-fetch";
@@ -63,12 +68,14 @@ export function useCoachPlans(opts?: {
   filter?: PlanFilter;
   enabled?: boolean;
   /**
-   * Optional poll interval (ms). The chat thread uses a slow poll because
-   * proposals land asynchronously (the memory-refresh worker runs after the
-   * turn); the management page reads once. TanStack pauses the interval in
-   * background tabs by default, so the poll never runs unwatched.
+   * Optional poll interval (ms), or TanStack's interval callback so a caller
+   * can bound its poll (the chat thread caps attempts — see
+   * `nextProposalPollInterval` in `plan-proposal-card.tsx`). Proposals land
+   * asynchronously (the memory-refresh worker runs after the turn); the
+   * management page reads once. TanStack pauses the interval in background
+   * tabs by default, so the poll never runs unwatched.
    */
-  refetchInterval?: number;
+  refetchInterval?: UseQueryOptions<CoachPlanDTO[]>["refetchInterval"];
 }) {
   const filter = opts?.filter;
   return useQuery({

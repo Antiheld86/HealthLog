@@ -50,6 +50,7 @@ import {
   collapseToTypeDayKeys,
   recomputeBucketsForMeasurement,
 } from "@/lib/rollups/measurement-rollups";
+import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
 import { invalidateStatusInsightsForTypes } from "@/lib/insights/comprehensive-generate";
 import type { SyncWriteResult } from "@/lib/outcome/written-outcome";
 import { maybeEnqueueMorningRefresh } from "@/lib/daily/morning-refresh-trigger";
@@ -275,6 +276,14 @@ export async function syncUserPolar(userId: string): Promise<SyncWriteResult> {
   void maybeEnqueueMorningRefresh(userId, insertedSleepMeasuredAts).catch(
     () => {},
   );
+
+  // Background-sync posture: mark the analytics cells stale (never hard-evict
+  // from a poll) so the imported rows reach the cached readers. Fires on a
+  // partial failure too — rows that DID land must not stay invisible for the
+  // rest of the TTL window.
+  if (imported > 0) {
+    invalidateUserMeasurements(userId);
+  }
 
   if (failures.length > 0) {
     // Partial failure: import what the healthy collections returned, but keep

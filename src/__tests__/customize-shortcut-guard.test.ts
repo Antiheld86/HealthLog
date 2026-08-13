@@ -140,7 +140,7 @@ describe("the customise shortcut is withheld inside somebody else's record", () 
     // clean tree are the same sentence otherwise, and this is a leg whose
     // verdict is an empty list.
     expect(carrying.length).toBeGreaterThan(4);
-    expect(carrying).toContain("app/mood/page.tsx");
+    expect(carrying).toContain("app/mood/page-client.tsx");
     expect(carrying).toContain("app/medications/page-client.tsx");
     for (const rel of Object.keys(NOT_A_SHARED_DESTINATION)) {
       expect(carrying, rel).toContain(rel);

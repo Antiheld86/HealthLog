@@ -70,7 +70,7 @@ import {
   withBaseToken,
 } from "@/lib/api/optimistic-token";
 import { useTranslations } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
+import { queryKeys, refetchInactiveDailyReads } from "@/lib/query-keys";
 import { useAnalyticsQuery } from "@/lib/queries/use-analytics-query";
 import {
   buildScoreConfigRows,
@@ -210,12 +210,12 @@ export function ScoreSection() {
         queryKey: queryKeys.healthScoreConfig(),
       });
       // The number now means something else. Every surface that holds a
-      // computed score has to go, or the change reads as broken.
+      // computed score has to go, or the change reads as broken. The daily
+      // reads are unmounted on the Settings page and run with
+      // `refetchOnMount: false`, so a plain invalidation marks them stale
+      // without ever refetching — force the inactive refetch instead.
       void queryClient.invalidateQueries({ queryKey: queryKeys.analytics() });
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.dashboardSnapshot(),
-      });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.dailyDigest() });
+      void refetchInactiveDailyReads(queryClient);
       toastWrittenOutcome("success", t("settings.sections.score.saved"));
     },
     onError: (err) => {

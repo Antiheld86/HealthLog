@@ -24,6 +24,7 @@ import {
   type ReminderScheduleInput,
 } from "@/lib/measurement-reminders/scheduling";
 import { toMeasurementReminderDto } from "@/lib/measurement-reminders/dto";
+import { listMeasurementReminders } from "@/lib/measurement-reminders/list-read";
 
 const DEFAULT_TIMEZONE = "Europe/Berlin";
 
@@ -38,28 +39,16 @@ async function resolveTimezone(userId: string): Promise<string> {
 export const GET = apiHandler(async () => {
   const { user } = await requireRecordAuth("read", "measurements");
 
-  const reminders = await prisma.measurementReminder.findMany({
-    // A booked visit's one-shot reminder rides this same engine with
-    // `origin: ENCOUNTER`. It is not a checkup and must not appear on a
-    // Vorsorge surface, or the list fills with appointments. Four read
-    // sites carry this exclusion; `encounter-reminder-exclusion.test.ts`
-    // proves every one of them, and the DTO mapper refuses such a row
-    // outright so a site that lost its filter fails loudly.
-    where: { userId: user.id, deletedAt: null, origin: { not: "ENCOUNTER" } },
-    // Most-urgent first; a null next-due (uncomputable / disabled) sinks
-    // to the end so the actionable items float to the top.
-    orderBy: [
-      { nextDueAt: { sort: "asc", nulls: "last" } },
-      { createdAt: "asc" },
-    ],
-  });
+  // The query (with its ENCOUNTER-origin exclusion) lives in the shared
+  // list read so this route and the `/checkups` SSR prefetch cannot drift.
+  const reminders = await listMeasurementReminders(user.id);
 
   annotate({
     action: { name: "measurement-reminders.list" },
     meta: { total: reminders.length },
   });
 
-  return apiSuccess(reminders.map(toMeasurementReminderDto));
+  return apiSuccess(reminders);
 });
 
 async function postReminder(request: NextRequest): Promise<Response> {

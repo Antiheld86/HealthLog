@@ -19,6 +19,9 @@ vi.mock("@/hooks/use-auth", () => ({
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({ data: undefined }),
   useMutation: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
+  // The remember-message control resolves the client for its about-me
+  // invalidation; the marker tests never trigger it.
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
 
 import { MessageThread } from "../message-thread";

@@ -14,12 +14,13 @@
  * vertical cost once settled.
  */
 import { useEffect, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { BookmarkPlus, Check, Loader2, X } from "lucide-react";
 
 import { useTranslations } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 import { apiPost } from "@/lib/api/api-fetch";
+import { queryKeys } from "@/lib/query-keys";
 
 export interface SelfContextAdoptOfferProps {
   /** The clarifying question the user just answered. */
@@ -47,6 +48,7 @@ export function SelfContextAdoptOffer({
   onSettled,
 }: SelfContextAdoptOfferProps) {
   const { t } = useTranslations();
+  const queryClient = useQueryClient();
   const [settled, setSettled] = useState<"adopted" | "duplicate" | null>(null);
 
   const adopt = useMutation({
@@ -57,6 +59,13 @@ export function SelfContextAdoptOffer({
       });
     },
     onSuccess: (data) => {
+      if (data.adopted) {
+        // The adoption changed the stored self-context — refresh the
+        // Settings → AI about-me read so it shows the new entry.
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.coachAboutMe(),
+        });
+      }
       setSettled(data.adopted ? "adopted" : "duplicate");
       onSettled?.(data.adopted ? "adopted" : "duplicate");
     },

@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.37.16] — 2026-08-13
+
+### Changed
+
+- The correlations page no longer recomputes its full 180-day discovery on every visit. The first request computes and caches the result server-side; repeat visits within the hour answer from the cache, and any new measurement, mood entry, illness episode or custom metric refreshes it. Accepting or dismissing a pattern still takes effect immediately.
+- Switching a chart's time range keeps the previous chart visible, slightly dimmed, while the new range loads instead of dropping to a placeholder. The dimming is deliberate: what you see during the switch is marked as the old range, not passed off as the new one.
+- The checkups and mood pages send their first page of data along with the page itself, so they render with content instead of a loading skeleton. Self-hosters can switch this off with the existing `DASHBOARD_SSR_PREFETCH` flag.
+- Two background checks are calmer now. The achievement check runs every five minutes instead of every two, since anything you do in the app updates instantly anyway and the poll only exists for data arriving from a device. The Coach plan-proposal check stops on its own instead of polling an open conversation forever.
+
+### Fixed
+
+- A checkup accepted from a Coach suggestion appears on the checkups page and the Today rail immediately. Before, it stayed invisible for up to five minutes.
+- Changing a target, a threshold or the health score configuration is reflected on the dashboard right away, including the hero bands and score context. Before, the dashboard kept showing the old configuration until its next background refresh.
+- Starting or ending an illness episode updates the dashboard's rest mode immediately, booking an appointment puts it on the Today rail immediately, and logging a vaccination dose updates the booster reminder on the rail immediately.
+- Completing a mental-health screening refreshes the checkup list right away, and changing a source priority refreshes the affected charts right away.
+- Background syncs from Fitbit, Oura, Polar, WHOOP, Strava and Nightscout now tell the server-side caches that new data arrived, so analytics and workout views pick the data up on the next read instead of waiting out the cache lifetime. The same applies to illness, cycle and appointment changes.
+- A structural test now enforces that every place that writes data a daily view reads also triggers that view's refresh, so this class of stale display cannot quietly return.
+
 ## [1.37.15] — 2026-08-13
 
 ### Fixed

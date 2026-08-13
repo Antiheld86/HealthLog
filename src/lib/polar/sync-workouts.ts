@@ -30,6 +30,7 @@
  */
 import { prisma } from "@/lib/db";
 import { emitInsertedWorkoutArrival } from "@/lib/arrivals/workout-emit";
+import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
 import { annotate, getEvent } from "@/lib/logging/context";
 import {
   markSyncFailureRecorded,
@@ -100,6 +101,13 @@ export async function syncUserPolarWorkouts(userId: string): Promise<number> {
   } catch (err) {
     await recordPolarWorkoutFailure(userId, err);
     throw markSyncFailureRecorded(err);
+  }
+
+  // Sweep the workouts cache (and mark the analytics cells stale — workouts
+  // feed achievements + analytics) so the upserted rows reach the cached
+  // readers, matching the `/api/workouts/batch` and Google Health writers.
+  if (imported > 0) {
+    invalidateUserMeasurements(userId);
   }
 
   return imported;

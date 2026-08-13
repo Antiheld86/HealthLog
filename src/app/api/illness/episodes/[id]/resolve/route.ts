@@ -11,6 +11,7 @@ import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
+import { invalidateUserHealthContext } from "@/lib/cache/invalidate";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -93,6 +94,10 @@ export const PATCH = apiHandler(
       ipAddress: getClientIp(request),
       details: { episodeId: id },
     });
+
+    // Resolving flips Rest Mode off — evict the cached analytics / snapshot /
+    // digest cells so the context is true on the next read.
+    invalidateUserHealthContext(user.id);
 
     annotate({
       action: {

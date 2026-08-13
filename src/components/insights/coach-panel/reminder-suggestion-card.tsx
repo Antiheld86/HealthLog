@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { BellPlus, Check, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useTranslations } from "@/lib/i18n/context";
 import { apiPost } from "@/lib/api/api-fetch";
+import { invalidateReminderReads } from "@/hooks/use-measurement-reminders";
 import type { CoachSuggestion } from "@/lib/ai/coach/types";
 
 /**
@@ -31,6 +32,7 @@ export function ReminderSuggestionCard({
   suggestion: CoachSuggestion;
 }) {
   const { t } = useTranslations();
+  const queryClient = useQueryClient();
   const [settled, setSettled] = useState<
     "accepted" | "dismissed" | "stopped" | null
   >(null);
@@ -44,6 +46,12 @@ export function ReminderSuggestionCard({
       return action;
     },
     onSuccess: (action) => {
+      if (action === "accept") {
+        // The accept minted a `MeasurementReminder` — refresh the checkups
+        // list and the Today rail so it does not stay invisible until the
+        // next poll.
+        void invalidateReminderReads(queryClient);
+      }
       setSettled(
         action === "accept"
           ? "accepted"

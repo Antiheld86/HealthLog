@@ -12,6 +12,7 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
+import { invalidateUserHealthContext } from "@/lib/cache/invalidate";
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
@@ -77,6 +78,10 @@ export const DELETE = apiHandler(
           : {}),
       },
     });
+
+    // A removed cycle changes the cycle context the cached analytics /
+    // snapshot / digest cells carry — evict the analytics bucket.
+    invalidateUserHealthContext(user.id);
 
     annotate({
       action: {

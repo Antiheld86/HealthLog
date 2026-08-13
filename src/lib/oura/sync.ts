@@ -51,6 +51,7 @@ import {
   emitInsertedMeasurementArrivals,
   type InsertedMeasurementArrivalRow,
 } from "@/lib/arrivals/measurement-emit";
+import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
 import { invalidateStatusInsightsForTypes } from "@/lib/insights/comprehensive-generate";
 import type { SyncWriteResult } from "@/lib/outcome/written-outcome";
 import { maybeEnqueueMorningRefresh } from "@/lib/daily/morning-refresh-trigger";
@@ -497,6 +498,14 @@ export async function syncUserOura(
   void maybeEnqueueMorningRefresh(userId, insertedSleepMeasuredAts).catch(
     () => {},
   );
+
+  // Background-sync posture: mark the analytics cells stale (never hard-evict
+  // from a poll) so the imported rows reach the cached readers. Fires on a
+  // partial failure too — rows that DID land must not stay invisible for the
+  // rest of the TTL window.
+  if (imported > 0) {
+    invalidateUserMeasurements(userId);
+  }
 
   if (result.failures.length > 0) {
     // Partial failure: keep the cycle honest. Record the failure and do NOT

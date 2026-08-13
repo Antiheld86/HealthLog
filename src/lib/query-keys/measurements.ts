@@ -72,6 +72,14 @@ export const measurementKeys = {
    * fetch window; the factory packs those into a single tuple to keep
    * the cache layout byte-identical with the pre-v1.4.40 layout.
    */
+  /**
+   * Prefix key — invalidates every `chartData(…)` / `chartSeriesBatch(…)`
+   * slot at once via TanStack's hierarchical-prefix semantics. For call
+   * sites outside the factory that need the whole per-chart cache flushed
+   * (a source-priority reorder changes every chart's canonical-row picks).
+   */
+  chartDataRoot: () => ["chart-data"] as const,
+
   chartData: (
     types: string,
     valueMode: string,

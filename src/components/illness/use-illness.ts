@@ -11,7 +11,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api/api-fetch";
-import { queryKeys } from "@/lib/query-keys";
+import {
+  illnessDependentKeys,
+  invalidateKeys,
+  queryKeys,
+  refetchInactiveDailyReads,
+} from "@/lib/query-keys";
 
 import type {
   IllnessCorrelationResponse,
@@ -119,7 +124,14 @@ export function useIllnessDayLogList(
 
 function useInvalidateIllness() {
   const qc = useQueryClient();
-  return () => qc.invalidateQueries({ queryKey: queryKeys.illness() });
+  // An episode write can flip Rest Mode, which frames the dashboard hero and
+  // the Today digest — both unmounted from here, so the bundle invalidation
+  // is paired with the forced inactive refetch. The write routes hard-evict
+  // the server analytics bucket, so the refetch returns post-write context.
+  return async () => {
+    await invalidateKeys(qc, illnessDependentKeys);
+    await refetchInactiveDailyReads(qc);
+  };
 }
 
 /** Create an episode. */

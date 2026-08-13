@@ -15,6 +15,7 @@ import {
   encounterDependentKeys,
   invalidateKeys,
   queryKeys,
+  refetchInactiveDailyReads,
 } from "@/lib/query-keys";
 import type { PractitionerDTO } from "@/lib/practitioners/dto";
 
@@ -45,7 +46,14 @@ export function usePractitioners(q?: string, enabled = true) {
 
 export function usePractitionerMutations() {
   const qc = useQueryClient();
-  const invalidate = () => invalidateKeys(qc, encounterDependentKeys);
+  // Renaming a practice changes the label a rail appointment renders under,
+  // and the daily reads are unmounted from the address book — pair the
+  // bundle invalidation with the forced inactive refetch.
+  const invalidate = () =>
+    Promise.all([
+      invalidateKeys(qc, encounterDependentKeys),
+      refetchInactiveDailyReads(qc),
+    ]);
 
   const create = useMutation({
     mutationKey: queryKeys.practitionerCreate(),

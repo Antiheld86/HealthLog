@@ -11,7 +11,7 @@ import { ConfirmButton } from "@/components/ui/confirm-button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useTranslations } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
+import { queryKeys, refetchInactiveDailyReads } from "@/lib/query-keys";
 import {
   METRIC_BOUNDS,
   type ThresholdMetric,
@@ -259,6 +259,9 @@ function TargetEditSheetBody({
       queryClient.invalidateQueries({ queryKey: queryKeys.insightsTargets() });
       queryClient.invalidateQueries({ queryKey: queryKeys.analytics() });
       queryClient.invalidateQueries({ queryKey: queryKeys.insightsRoot() });
+      // The dashboard bands + score context read the same thresholds through
+      // the daily reads, which are unmounted here — force their refetch.
+      void refetchInactiveDailyReads(queryClient);
       toast.success(t("targets.edit.saveSuccess"));
       onOpenChange(false);
     },
@@ -285,6 +288,8 @@ function TargetEditSheetBody({
       queryClient.invalidateQueries({ queryKey: queryKeys.insightsTargets() });
       queryClient.invalidateQueries({ queryKey: queryKeys.analytics() });
       queryClient.invalidateQueries({ queryKey: queryKeys.insightsRoot() });
+      // Same daily-reads truth as the save arm above.
+      void refetchInactiveDailyReads(queryClient);
       toast.success(t("targets.edit.resetSuccess"));
       onOpenChange(false);
     },

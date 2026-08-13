@@ -15,6 +15,7 @@ import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
+import { invalidateUserHealthContext } from "@/lib/cache/invalidate";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -298,6 +299,10 @@ async function postEncounter(request: NextRequest): Promise<Response> {
     ipAddress: getClientIp(request),
     details: { encounterId: created.id, status: created.status },
   });
+
+  // A booked visit must reach the cached daily-digest / snapshot cells
+  // (Today rail) on the next read — evict the analytics bucket.
+  invalidateUserHealthContext(user.id);
 
   annotate({
     action: {

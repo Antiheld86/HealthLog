@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   BookmarkPlus,
@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
 import { ApiError, apiPost } from "@/lib/api/api-fetch";
+import { queryKeys } from "@/lib/query-keys";
 import { useAuth } from "@/hooks/use-auth";
 import { ABOUT_ME_FIELD_MAX_CHARS } from "@/lib/validations/about-me";
 import {
@@ -944,6 +945,7 @@ ChatBubble.displayName = "ChatBubble";
  */
 function RememberUserMessage({ content }: { content: string }) {
   const { t } = useTranslations();
+  const queryClient = useQueryClient();
   const [settled, setSettled] = useState<"adopted" | "duplicate" | null>(null);
   // On settle the button unmounts while it holds focus, which would
   // drop keyboard focus to <body>. The confirmation paragraph takes
@@ -961,6 +963,13 @@ function RememberUserMessage({ content }: { content: string }) {
       });
     },
     onSuccess: (data) => {
+      if (data.adopted) {
+        // The adoption changed the stored self-context — refresh the
+        // Settings → AI about-me read so it shows the new entry.
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.coachAboutMe(),
+        });
+      }
       setSettled(data.adopted ? "adopted" : "duplicate");
     },
     onError: () => {

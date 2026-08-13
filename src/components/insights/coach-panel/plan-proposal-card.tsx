@@ -33,7 +33,30 @@ import {
  */
 
 /** Slow poll (ms) — proposals arrive via the post-turn background worker. */
-const PROPOSAL_POLL_MS = 20_000;
+export const PROPOSAL_POLL_MS = 20_000;
+
+/**
+ * Attempt ceiling for the proposal poll. The extractor runs right after the
+ * turn and lands its proposal within a couple of minutes; 15 polls (~5 min
+ * of coverage) catch it with margin, and every settled response counts an
+ * attempt. Without the cap an open thread polled the proposed list every
+ * 20 s indefinitely. Same bounded-poll shape as `nextAdvisorPollInterval`
+ * (`use-insights-advisor.ts`); a new turn's invalidation bumps the query and
+ * the next mount of a fresh conversation restarts the budget.
+ */
+export const PROPOSAL_POLL_MAX_ATTEMPTS = 15;
+
+/**
+ * Decide whether the proposal query schedules its next poll. Pure so the
+ * ceiling is unit-testable: returns the slow interval until the attempt cap
+ * is reached, then `false` (poll off).
+ */
+export function nextProposalPollInterval(
+  dataUpdateCount: number,
+): number | false {
+  if (dataUpdateCount >= PROPOSAL_POLL_MAX_ATTEMPTS) return false;
+  return PROPOSAL_POLL_MS;
+}
 
 type SettledOutcome = "accepted" | "declined";
 
@@ -49,7 +72,7 @@ export function PlanProposalCards({
 
   const query = useCoachPlans({
     filter: { status: "proposed" },
-    refetchInterval: PROPOSAL_POLL_MS,
+    refetchInterval: (q) => nextProposalPollInterval(q.state.dataUpdateCount),
   });
 
   // Quiet on error by design: the thread is the Coach's surface, and a failed

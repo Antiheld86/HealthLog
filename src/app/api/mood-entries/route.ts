@@ -26,6 +26,7 @@ import { encryptNote, shapeMoodNote } from "@/lib/crypto/note-cipher";
 import { moodDateKey, DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
 import { levelAForWrite, shapeLevelA } from "@/lib/mood/level-a";
 import { contextForWire, persistMoodContext } from "@/lib/mood/context";
+import { listMoodEntriesPage } from "@/lib/mood/list-read";
 import { invalidateUserMood } from "@/lib/cache/invalidate";
 import { recomputeMoodBucketsForEntry } from "@/lib/rollups/mood-rollups";
 import {
@@ -78,87 +79,21 @@ export const GET = apiHandler(async (request: NextRequest) => {
     });
   }
 
-  const { mood, source, from, to, limit, offset, sortBy, sortDir } =
-    parsed.data;
-
-  const where = {
-    userId: user.id,
-    // v1.7.0 sync — hide soft-deleted (tombstoned) rows from the list.
-    deletedAt: null,
-    ...(mood && { mood }),
-    // v1.15.13 — management-list source filter.
-    ...(source && { source }),
-    ...(from || to
-      ? {
-          date: {
-            ...(from && { gte: from }),
-            ...(to && { lte: to }),
-          },
-        }
-      : {}),
-  };
-
-  const [entries, total] = await Promise.all([
-    prisma.moodEntry.findMany({
-      where,
-      orderBy: { [sortBy]: sortDir },
-      take: limit,
-      skip: offset,
-      // v1.8.5 — include the structured-tag link keys so the edit form
-      // can pre-populate the taxonomy picker.
-      // v1.12.0 — also carry the per-link `rating` + the tag `kind` so
-      // the client can split binary tags from rated factors on hydrate.
-      include: {
-        tagLinks: {
-          select: {
-            rating: true,
-            moodTag: { select: { key: true, kind: true } },
-          },
-        },
-        // v1.38 — the day context, so the edit dialog can pre-populate the
-        // sections without a second round trip per row. Sparse by design: most
-        // rows carry none and the join costs nothing on those.
-        context: true,
-      },
-    }),
-    prisma.moodEntry.count({ where }),
-  ]);
+  // The query + wire shaping (note decryption, tag split, day context) live
+  // in the shared list read so this route and the `/mood` SSR prefetch
+  // cannot drift.
+  const body = await listMoodEntriesPage(user.id, parsed.data);
 
   annotate({
     action: { name: "mood-entries.list" },
-    meta: { total, limit, offset },
+    meta: {
+      total: body.meta.total,
+      limit: body.meta.limit,
+      offset: body.meta.offset,
+    },
   });
 
-  const entriesWithParsedTags = entries.map(({ tagLinks, context, ...e }) => ({
-    // v1.23 — decrypt `noteEncrypted` onto `note`, strip the ciphertext.
-    // v1.37 — the five level-A values under the keys the create path takes,
-    // so the edit form reads back what it wrote instead of mapping column
-    // names to wire names by hand. The column spelling is stripped, not
-    // joined: one number under two names is a choice nobody made.
-    ...shapeLevelA(shapeMoodNote(e)),
-    tags: parseTags(e.tags),
-    // v1.8.5 — flat list of binary structured-tag keys attached to the
-    // entry (rated factors are surfaced separately below).
-    tagKeys: tagLinks
-      .filter((link) => link.moodTag.kind !== "RATED")
-      .map((link) => link.moodTag.key),
-    // v1.12.0 — rated factors with their per-entry score, so the edit
-    // form re-renders the sliders without a refetch.
-    ratedFactors: tagLinks
-      .filter((link) => link.moodTag.kind === "RATED" && link.rating !== null)
-      .map((link) => ({
-        key: link.moodTag.key,
-        rating: link.rating as number,
-      })),
-    // v1.38 — the day context, or null. The ciphertext never leaves the
-    // server: `contextForWire` reads the note and drops the column.
-    context: context ? contextForWire(context) : null,
-  }));
-
-  return apiSuccess({
-    entries: entriesWithParsedTags,
-    meta: { total, limit, offset },
-  });
+  return apiSuccess(body);
 });
 
 export const POST = apiHandler(withIdempotency<[NextRequest]>(postMoodEntry));

@@ -41,6 +41,9 @@ const sampleSeries = vi.hoisted(() => {
 });
 
 vi.mock("@tanstack/react-query", () => ({
+  // `health-chart` imports `keepPreviousData` for its placeholder option;
+  // the identity stand-in keeps the module-level destructure satisfied.
+  keepPreviousData: (previous: unknown) => previous,
   useQuery: () => ({
     data: sampleSeries.map((row) => {
       const ts = Date.parse(row.measuredAt);

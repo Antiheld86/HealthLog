@@ -12,6 +12,7 @@
 import { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/db";
+import { invalidateUserHealthContext } from "@/lib/cache/invalidate";
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
@@ -195,6 +196,10 @@ async function postPeriod(request: NextRequest): Promise<Response> {
       }),
     },
   });
+
+  // A period boundary changes the cycle context the cached analytics /
+  // snapshot / digest cells carry — evict the analytics bucket.
+  invalidateUserHealthContext(user.id);
 
   annotate({
     action: {

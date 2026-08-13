@@ -17,6 +17,7 @@
  */
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiError, apiSuccess } from "@/lib/api-response";
+import { cachedSwr, caches, type ServerCache } from "@/lib/cache/server-cache";
 import { annotate } from "@/lib/logging/context";
 import { checkAnalyticsReadRateLimit } from "@/lib/rate-limit";
 import { requireAssistantSurface } from "@/lib/feature-flags";
@@ -86,16 +87,43 @@ export const GET = apiHandler(async () => {
   // Operator can hide the correlation surface entirely.
   await requireAssistantSurface("correlations");
 
-  const profile = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: { timezone: true },
-  });
-  const tz = profile?.timezone ?? "Europe/Berlin";
   // Reader's locale for the narrated `interpretation` — the correlation cards
   // render this string verbatim, so it MUST be localised (cookie / User.locale /
   // Accept-Language). Without it the never-causal sentence leaked English into a
-  // non-English UI.
+  // non-English UI. It is part of the cache key for the same reason.
   const locale = await resolveServerLocale({ userLocale: user.locale ?? null });
+
+  // The discovery scan is the most expensive uncached read the app had:
+  // ~10 parallel window reads over 180 days + Pearson/FDR in-process, paid on
+  // EVERY mount. Cache the built body in the analytics bucket (60 s fresh /
+  // 1 h stale — the bucket defaults are exactly the contract this read wants).
+  // Eviction truth comes free: every measurement / mood / medication /
+  // illness / custom-metric write sweeps the `${userId}|` prefix in this
+  // bucket, and a pattern dismiss goes through
+  // `invalidateUserCorrelationPatterns`, which sweeps it too. The
+  // `syncAcceptedPatterns` calls are DB writes and live INSIDE the builder,
+  // so a cache hit performs no write on the read path.
+  const body = await cachedSwr(
+    caches.analytics as ServerCache<
+      Awaited<ReturnType<typeof buildCorrelationsResponse>>
+    >,
+    `${user.id}|correlations|${locale}`,
+    () => buildCorrelationsResponse(user.id, locale),
+    annotate,
+  );
+
+  return apiSuccess(body);
+});
+
+async function buildCorrelationsResponse(
+  userId: string,
+  locale: Awaited<ReturnType<typeof resolveServerLocale>>,
+) {
+  const profile = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { timezone: true },
+  });
+  const tz = profile?.timezone ?? "Europe/Berlin";
   const now = new Date();
   const since = new Date(now.getTime() - WINDOW_DAYS * MS_PER_DAY);
 
@@ -121,12 +149,12 @@ export const GET = apiHandler(async () => {
     moodWindow,
     priorityJson,
   ] = await Promise.all([
-    fetchMeasurementWindowSeries(user.id, since, [
+    fetchMeasurementWindowSeries(userId, since, [
       ...behaviourTypes,
       ...outcomeTypes,
     ]),
-    fetchMoodWindowSeries(user.id, tz, since),
-    loadUserSourcePriority(user.id),
+    fetchMoodWindowSeries(userId, tz, since),
+    loadUserSourcePriority(userId),
   ]);
   const { moodDaily, moodCapped } = moodWindow;
 
@@ -141,14 +169,14 @@ export const GET = apiHandler(async () => {
     environmentSeries,
     customMetricSeries,
   ] = await Promise.all([
-    fetchComplianceSeries(user.id, tz, since),
-    fetchSymptomSeries(user.id, tz, since),
-    fetchLabDraws(user.id, tz, since),
+    fetchComplianceSeries(userId, tz, since),
+    fetchSymptomSeries(userId, tz, since),
+    fetchLabDraws(userId, tz, since),
     // v1.25 (W-ENV) — environmental-exposure behaviour channels (weather /
     // daylight). Empty when the module is off / no home set, so the channels
     // degrade to absent. The module gate is implicit: no rows ⇒ no channels.
-    fetchEnvironmentSeries(user.id, since),
-    fetchCustomMetricBehaviourSeries(user.id, tz, since),
+    fetchEnvironmentSeries(userId, since),
+    fetchCustomMetricBehaviourSeries(userId, tz, since),
   ]);
 
   const points = (key: string): DailySeriesPoint[] =>
@@ -219,13 +247,13 @@ export const GET = apiHandler(async () => {
   });
   const [retrospectiveDecisions, recentDecisions] = await Promise.all([
     syncAcceptedPatterns({
-      userId: user.id,
+      userId,
       family: PATTERN_FAMILIES.discoveryRetrospective,
       accepted: result.discovered.map(toEvidence),
       computedAt: now,
     }),
     syncAcceptedPatterns({
-      userId: user.id,
+      userId,
       family: PATTERN_FAMILIES.discoveryRecent,
       accepted: emerging.emerging.map(toEvidence),
       computedAt: now,
@@ -285,10 +313,10 @@ export const GET = apiHandler(async () => {
     },
   });
 
-  return apiSuccess({
+  return {
     ...result,
     discovered,
     emerging: emergingWithDecisions,
     labCorrelations,
-  });
-});
+  };
+}
