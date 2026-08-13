@@ -85,12 +85,23 @@ function makeParams(id: string) {
   return { params: Promise.resolve({ id }) };
 }
 
+/**
+ * Session day, ten days before the test run. The detail route's HR-curve
+ * enrichment only reaches the pulse-window fallback inside the 90-day
+ * dense-intraday retention horizon (`DENSE_INTRADAY_RETENTION_DAYS`), so a
+ * fixed calendar day silently ages out of that branch and leaves the
+ * fallback assertions green without exercising it.
+ */
+const SESSION_DAY = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000)
+  .toISOString()
+  .slice(0, 10);
+
 const BASE_ROW = {
   id: "w-1",
   userId: "user-1",
   sportType: "RUNNING",
-  startedAt: new Date("2026-05-15T07:00:00Z"),
-  endedAt: new Date("2026-05-15T07:30:00Z"),
+  startedAt: new Date(`${SESSION_DAY}T07:00:00Z`),
+  endedAt: new Date(`${SESSION_DAY}T07:30:00Z`),
   durationSec: 1800,
   totalDistanceM: 5000,
   totalEnergyKcal: 320,
@@ -104,8 +115,8 @@ const BASE_ROW = {
   externalId: "ext-w-1",
   externalSourceVersion: null,
   metadata: { hkVersion: "1" },
-  createdAt: new Date("2026-05-15T07:30:00Z"),
-  updatedAt: new Date("2026-05-15T07:30:00Z"),
+  createdAt: new Date(`${SESSION_DAY}T07:30:00Z`),
+  updatedAt: new Date(`${SESSION_DAY}T07:30:00Z`),
   route: null,
   insight: null,
 };
@@ -223,7 +234,7 @@ describe("GET /api/workouts/{id}", () => {
 
   it("dates the session by the user's timezone, not by UTC", async () => {
     // 20:00 UTC is already the NEXT calendar day in Auckland. A client that
-    // sliced the ISO timestamp would read 2026-05-15 and then pull the wrong
+    // sliced the ISO timestamp would read the session's UTC day and pull the wrong
     // day's pulse, sleep and mood around the session.
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       sourcePriorityJson: null,
@@ -232,14 +243,14 @@ describe("GET /api/workouts/{id}", () => {
     } as never);
     vi.mocked(prisma.workout.findUnique).mockResolvedValueOnce({
       ...BASE_ROW,
-      startedAt: new Date("2026-05-15T20:00:00Z"),
-      endedAt: new Date("2026-05-15T20:30:00Z"),
+      startedAt: new Date(`${SESSION_DAY}T20:00:00Z`),
+      endedAt: new Date(`${SESSION_DAY}T20:30:00Z`),
     } as never);
     vi.mocked(prisma.workout.findMany).mockResolvedValueOnce([
       {
         id: "w-1",
         source: "APPLE_HEALTH",
-        startedAt: new Date("2026-05-15T20:00:00Z"),
+        startedAt: new Date(`${SESSION_DAY}T20:00:00Z`),
         sportType: "RUNNING",
       },
     ] as never);
@@ -248,7 +259,12 @@ describe("GET /api/workouts/{id}", () => {
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(body.data.dayKey).toBe("2026-05-16");
+    const nextLocalDay = new Date(
+      new Date(`${SESSION_DAY}T00:00:00Z`).getTime() + 24 * 60 * 60 * 1000,
+    )
+      .toISOString()
+      .slice(0, 10);
+    expect(body.data.dayKey).toBe(nextLocalDay);
   });
 
   it("enriches the Apple winner with only matched WHOOP HR and zones", async () => {
@@ -447,7 +463,10 @@ describe("GET /api/workouts/{id}", () => {
             [11.01, 49.01],
           ],
         },
-        sampleTimestamps: ["2026-05-15T07:00:00Z", "2026-05-15T07:01:00Z"],
+        sampleTimestamps: [
+          `${SESSION_DAY}T07:00:00Z`,
+          `${SESSION_DAY}T07:01:00Z`,
+        ],
         createdAt: BASE_ROW.createdAt,
       },
       samples: { sampleCount: storedSamples.length, samples: storedSamples },
@@ -499,7 +518,10 @@ describe("GET /api/workouts/{id}", () => {
       route: {
         id: "wr-1",
         geometry: routeGeometry,
-        sampleTimestamps: ["2026-05-15T07:00:00Z", "2026-05-15T07:01:00Z"],
+        sampleTimestamps: [
+          `${SESSION_DAY}T07:00:00Z`,
+          `${SESSION_DAY}T07:01:00Z`,
+        ],
         createdAt: BASE_ROW.createdAt,
       },
     } as never);
@@ -518,8 +540,8 @@ describe("GET /api/workouts/{id}", () => {
     expect(body.data.route).not.toBeNull();
     expect(body.data.route.geometry).toEqual(routeGeometry);
     expect(body.data.route.sampleTimestamps).toEqual([
-      "2026-05-15T07:00:00Z",
-      "2026-05-15T07:01:00Z",
+      `${SESSION_DAY}T07:00:00Z`,
+      `${SESSION_DAY}T07:01:00Z`,
     ]);
   });
 });
@@ -580,7 +602,7 @@ describe("GET /api/workouts/{id} — aiInsight", () => {
 
   it("serves the decrypted paragraph when one exists", async () => {
     const { encryptToBytes } = await import("@/lib/ai/coach/bytes-codec");
-    const generatedAt = new Date("2026-05-15T07:35:00Z");
+    const generatedAt = new Date(`${SESSION_DAY}T07:35:00Z`);
     vi.mocked(prisma.workout.findUnique).mockResolvedValue({
       ...BASE_ROW,
       insight: {
@@ -602,7 +624,7 @@ describe("GET /api/workouts/{id} — aiInsight", () => {
       ...BASE_ROW,
       insight: {
         paragraphEncrypted: new Uint8Array([1, 2, 3]),
-        generatedAt: new Date("2026-05-15T07:35:00Z"),
+        generatedAt: new Date(`${SESSION_DAY}T07:35:00Z`),
       },
     } as never);
 
@@ -622,7 +644,7 @@ describe("GET /api/workouts/{id} — aiInsight", () => {
       ...BASE_ROW,
       insight: {
         paragraphEncrypted: new Uint8Array([0, 1, 2, 3]),
-        generatedAt: new Date("2026-05-15T07:35:00Z"),
+        generatedAt: new Date(`${SESSION_DAY}T07:35:00Z`),
       },
     } as never);
 
