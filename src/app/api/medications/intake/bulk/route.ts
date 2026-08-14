@@ -351,6 +351,10 @@ async function postBulk(request: NextRequest): Promise<Response> {
     string,
     { medicationId: string; scheduledFor: string }
   >();
+  // A landed non-skipped dose quiets an active snooze, exactly like the
+  // single-intake routes (they null `snoozedUntil` on every recorded take).
+  // Collected per medication here, cleared once after the loop.
+  const snoozeClearIds = new Set<string>();
 
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
@@ -786,6 +790,7 @@ async function postBulk(request: NextRequest): Promise<Response> {
           medicationId: entry.medicationId,
           scheduledFor: scheduledForIso,
         });
+        if (!entry.skipped) snoozeClearIds.add(entry.medicationId);
       }
     } catch (err: unknown) {
       // P2002 = unique-constraint violation. Two shapes reach here:
@@ -909,6 +914,16 @@ async function postBulk(request: NextRequest): Promise<Response> {
   // device (`X-Device-Id` = registered `Device.token`). APNs-only,
   // best-effort, fire-and-forget: the canonical rows are already
   // persisted, so a sync-push miss never affects the batch response.
+  // The single-intake routes reset a medication's snooze on every recorded
+  // take; a drained offline batch must quiet the snooze the same way, or a
+  // dose synced in later keeps counting as snoozed although it was taken.
+  if (snoozeClearIds.size > 0) {
+    await prisma.medication.updateMany({
+      where: { id: { in: [...snoozeClearIds] }, userId: user.id },
+      data: { snoozedUntil: null },
+    });
+  }
+
   if (syncSlots.size > 0) {
     queueMedicationIntakeSync({
       userId: user.id,

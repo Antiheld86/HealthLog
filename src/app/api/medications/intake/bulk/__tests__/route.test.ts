@@ -11,6 +11,8 @@ vi.mock("@/lib/db", () => ({
       findMany: vi.fn(),
       // v1.8.2 — the slot resolver loads the med via findFirst.
       findFirst: vi.fn(),
+      // A landed non-skipped dose clears the medication's snooze.
+      updateMany: vi.fn(),
     },
     medicationIntakeEvent: {
       create: vi.fn(),
@@ -322,6 +324,74 @@ describe("POST /api/medications/intake/bulk — v1.8.2 reconcile", () => {
     expect(invalidateUserMedications).toHaveBeenCalledWith("user-1", {
       evict: true,
     });
+  });
+
+  it("a landed taken write clears the medication's active snooze", async () => {
+    // The single-intake routes null `snoozedUntil` on every recorded take;
+    // before this parity fix a dose drained through the bulk route (the iOS
+    // offline-queue path) left the snooze standing and the reminder ringing.
+    vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValueOnce([
+      {
+        id: "row-pending",
+        takenAt: null,
+        skipped: false,
+        idempotencyKey: null,
+        scheduledFor: new Date("2026-06-15T05:00:00Z"),
+        source: "REMINDER",
+        createdAt: new Date("2026-06-15T00:00:00Z"),
+      },
+    ] as never);
+    vi.mocked(prisma.medicationIntakeEvent.update).mockResolvedValueOnce({
+      id: "row-pending",
+    } as never);
+
+    const res = await POST(
+      postReq({
+        entries: [
+          {
+            medicationId: "med-1",
+            scheduledFor: "2026-06-15T05:00:30.000Z",
+            takenAt: "2026-06-15T05:02:00.000Z",
+          },
+        ],
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(prisma.medication.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["med-1"] }, userId: "user-1" },
+      data: { snoozedUntil: null },
+    });
+  });
+
+  it("a landed skip leaves the snooze untouched", async () => {
+    vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValueOnce([
+      {
+        id: "row-pending",
+        takenAt: null,
+        skipped: false,
+        idempotencyKey: null,
+        scheduledFor: new Date("2026-06-15T05:00:00Z"),
+        source: "REMINDER",
+        createdAt: new Date("2026-06-15T00:00:00Z"),
+      },
+    ] as never);
+    vi.mocked(prisma.medicationIntakeEvent.update).mockResolvedValueOnce({
+      id: "row-pending",
+    } as never);
+
+    const res = await POST(
+      postReq({
+        entries: [
+          {
+            medicationId: "med-1",
+            scheduledFor: "2026-06-15T05:00:30.000Z",
+            skipped: true,
+          },
+        ],
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(prisma.medication.updateMany).not.toHaveBeenCalled();
   });
 
   it("queues exactly ONE intake-sync fan-out for a multi-entry batch", async () => {
