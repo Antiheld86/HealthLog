@@ -18,6 +18,17 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { I18nProvider } from "@/lib/i18n/context";
 
+// Now-anchored future expiry (the fixed 2027-06-01 was a fuse: once the
+// calendar passes it, an "expiring later" fixture silently becomes an
+// expired one and the assertions rot). ~300 days out keeps it a plainly
+// future date on every run; the expected strings derive from the same
+// instant so they can never drift from the fixture.
+const FUTURE_EXPIRY = new Date(Date.now() + 300 * 24 * 60 * 60 * 1000);
+const FUTURE_EXPIRY_YMD = FUTURE_EXPIRY.toISOString().slice(0, 10);
+const FUTURE_EXPIRY_ISO = `${FUTURE_EXPIRY_YMD}T00:00:00.000Z`;
+const [FE_Y, FE_M, FE_D] = FUTURE_EXPIRY_YMD.split("-");
+const FUTURE_EXPIRY_DE = `${FE_D}.${FE_M}.${FE_Y}`;
+
 const src = readFileSync(
   resolve(
     process.cwd(),
@@ -135,13 +146,13 @@ describe("<InventorySection> — item-row dates", () => {
         ...BASE,
         state: "ACTIVE",
         firstUseAt: null,
-        printedExpiry: "2027-06-01T00:00:00.000Z",
+        printedExpiry: FUTURE_EXPIRY_ISO,
       },
     ]);
     const html = render(
       <InventorySection medicationId="med-1" unitsPerDose={1} />,
     );
-    expect(html).toContain("Haltbar bis 01.06.2027");
+    expect(html).toContain(`Haltbar bis ${FUTURE_EXPIRY_DE}`);
   });
 
   it("separates the two dates when the row carries both", () => {
@@ -149,14 +160,14 @@ describe("<InventorySection> — item-row dates", () => {
       {
         ...BASE,
         firstUseAt: "2026-06-12T00:00:00.000Z",
-        printedExpiry: "2027-06-01T00:00:00.000Z",
+        printedExpiry: FUTURE_EXPIRY_ISO,
       },
     ]);
     const html = render(
       <InventorySection medicationId="med-1" unitsPerDose={1} />,
     );
     expect(html).toContain("Geöffnet 12.06.2026");
-    expect(html).toContain("Haltbar bis 01.06.2027");
+    expect(html).toContain(`Haltbar bis ${FUTURE_EXPIRY_DE}`);
     expect(html).toContain("<span>·</span>");
   });
 
@@ -174,7 +185,7 @@ describe("<AdjustInventoryDialog> — editable dates", () => {
   const item: Row = {
     ...BASE,
     firstUseAt: "2026-06-12T00:00:00.000Z",
-    printedExpiry: "2027-06-01T00:00:00.000Z",
+    printedExpiry: FUTURE_EXPIRY_ISO,
   };
 
   function renderDialog(over: Partial<Row> = {}): string {
@@ -191,7 +202,7 @@ describe("<AdjustInventoryDialog> — editable dates", () => {
     const html = renderDialog();
     expect(html).toContain('id="inventory-edit-expiry"');
     expect(html).toContain("Aufgedrucktes Haltbarkeitsdatum");
-    expect(html).toContain('value="2027-06-01"');
+    expect(html).toContain(`value="${FUTURE_EXPIRY_YMD}"`);
   });
 
   it("offers an opening-date field prefilled from the item", () => {
@@ -205,7 +216,7 @@ describe("<AdjustInventoryDialog> — editable dates", () => {
     const html = renderDialog({ firstUseAt: null, printedExpiry: null });
     expect(html).toContain('id="inventory-edit-expiry"');
     expect(html).toContain('id="inventory-edit-opened"');
-    expect(html).not.toContain("2027-06-01");
+    expect(html).not.toContain(FUTURE_EXPIRY_YMD);
     expect(html).not.toContain("2026-06-12");
   });
 

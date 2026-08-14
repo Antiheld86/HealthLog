@@ -559,6 +559,11 @@ test.describe("document vault", () => {
     // to the dialog after Chromium's PDF viewer grabs it, so Escape works
     // regardless of when the user presses it.
     await expect(dialog.locator("iframe")).toBeVisible();
+    // True grace (C3): Chromium's PDF viewer steals focus from inside the
+    // iframe and the sheet hands it back — both moves are invisible to the
+    // outer document (activeElement is "the iframe" before AND after the
+    // grab), so there is no condition to poll on. The window only needs to
+    // outlive the focus dance.
     await page.waitForTimeout(250);
     await page.keyboard.press("Escape");
     await expect(dialog).not.toBeVisible();
@@ -573,6 +578,8 @@ test.describe("document vault", () => {
     await expect(button).toBeVisible();
 
     await button.dispatchEvent("touchstart");
+    // Not a wait-for-condition sleep (C3): this IS the gesture — the finger
+    // stays down past the long-press threshold before lifting.
     await page.waitForTimeout(700);
     await button.dispatchEvent("touchend");
 

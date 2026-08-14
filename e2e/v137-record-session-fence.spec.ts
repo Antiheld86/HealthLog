@@ -326,11 +326,19 @@ test.describe.serial("FENCE record-session fence in the browser", () => {
       const accountId = await entry.getAttribute("data-account-id");
       expect(accountId).not.toBeNull();
 
+      let switchCommitted = false;
       await initiator.route("**/api/account/switch", async (route) => {
         await route.fetch();
+        switchCommitted = true;
         await route.abort();
       });
       await entry.click({ noWaitAfter: true });
+      // Poll for the server round-trip having landed (the observable half of
+      // the setup), THEN hold a short fixed window — this one is a true
+      // absence-assertion grace (C3): "the peer never painted guessed state"
+      // has no completion signal to poll on, only time in which the wrong
+      // paint could have happened.
+      await expect.poll(() => switchCommitted, { timeout: 20_000 }).toBe(true);
       await initiator.waitForTimeout(500);
 
       // The peer must never paint owner-ready state it guessed at …
@@ -386,13 +394,19 @@ test.describe.serial("FENCE record-session fence in the browser", () => {
       // Hold the response, close the tab while it is in flight. The server has
       // committed; nothing will ever broadcast the commit.
       const held = deferred();
+      // The commit is observable: flag once the server round-trip inside the
+      // route handler finishes, and poll for it instead of a fixed sleep
+      // (C3) — the tab must close AFTER the write landed, and this waits
+      // exactly that long.
+      let switchCommitted = false;
       await initiator.route("**/api/account/switch", async (route) => {
         await route.fetch();
+        switchCommitted = true;
         await held.promise;
         await route.abort();
       });
       await entry.click({ noWaitAfter: true });
-      await initiator.waitForTimeout(300);
+      await expect.poll(() => switchCommitted, { timeout: 20_000 }).toBe(true);
       held.release();
       await initiator.close();
 
@@ -591,10 +605,18 @@ test.describe.serial("FENCE record-session fence in the browser", () => {
       expect(held.scope).toBe(accountId);
 
       // Now move the context out from under it, and only then let it land.
+      // "Out from under it" is observable: the exit posts
+      // `/api/account/switch`, so poll for that request having been issued
+      // instead of sleeping and hoping the click got that far (C3).
+      let exitSwitchIssued = false;
+      await page.route("**/api/account/switch", async (route) => {
+        exitSwitchIssued = true;
+        await route.continue();
+      });
       const leaving = page
         .locator('[data-slot="shared-record-banner-exit"]')
         .click({ noWaitAfter: true });
-      await page.waitForTimeout(500);
+      await expect.poll(() => exitSwitchIssued, { timeout: 20_000 }).toBe(true);
       held.release?.();
       await leaving.catch(() => {});
 
