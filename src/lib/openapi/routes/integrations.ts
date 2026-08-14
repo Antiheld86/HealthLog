@@ -85,6 +85,30 @@ const metricFreshnessEntry = z
       "Per-metric-type last-seen timestamp with the server-computed staleness flag. Only types that have actually delivered appear — absence is absence, never an invented row.",
   });
 
+// Issue #778 — the two backfill-progress figures the server genuinely holds.
+// The iOS app drives the backfill; its queue, throttle state, and any ETA
+// live on the device and are deliberately absent here.
+const appleHealthSyncProgress = z
+  .object({
+    recordsAccepted: z
+      .number()
+      .int()
+      .describe(
+        "Measurement + workout rows carrying the `APPLE_HEALTH` source (live batch ingest and the one-shot export import both write it). Soft-deleted measurement rows are excluded.",
+      ),
+    oldestMeasuredAt: z.iso
+      .datetime({ offset: true })
+      .nullable()
+      .describe(
+        "Earliest instant reached across those rows (`measuredAt` for measurements, `startedAt` for workouts); null when nothing has arrived. During a first-run backfill this walks backwards as history lands.",
+      ),
+  })
+  .meta({
+    id: "AppleHealthSyncProgress",
+    description:
+      "Server-side Apple Health backfill progress: how many rows have been accepted and how far back in time they reach. Only what the server actually knows — no ETA, no device-side queue state.",
+  });
+
 const healthKitConfigResponse = z
   .object({
     entries: z.array(healthKitEntry),
@@ -115,6 +139,12 @@ const healthKitConfigResponse = z
       .optional()
       .describe(
         "Per-metric-type freshness for the `APPLE_HEALTH` source. Present on the GET read; omitted from the PATCH echo.",
+      ),
+    syncProgress: appleHealthSyncProgress
+      .nullable()
+      .optional()
+      .describe(
+        "Backfill/sync progress summary. Present on the GET read (null when the progress read failed); omitted from the PATCH echo.",
       ),
   })
   .meta({

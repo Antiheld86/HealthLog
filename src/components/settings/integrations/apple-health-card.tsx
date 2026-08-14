@@ -24,7 +24,7 @@ import {
 } from "@/components/settings/integration-status-pill";
 import { Button } from "@/components/ui/button";
 import { apiGet } from "@/lib/api/api-fetch";
-import { useTranslations } from "@/lib/i18n/context";
+import { useFormatters, useTranslations } from "@/lib/i18n/context";
 import type {
   MetricFreshnessEntry,
   SyncHealth,
@@ -44,7 +44,22 @@ interface HealthKitStatus {
   lastBackgroundSyncAt?: string | null;
   syncHealth?: SyncHealth;
   metricFreshness?: MetricFreshnessEntry[];
+  /** Server-side backfill progress (#778); null when the read failed. */
+  syncProgress?: {
+    recordsAccepted: number;
+    oldestMeasuredAt: string | null;
+  } | null;
 }
+
+/**
+ * How long after the last accepted batch the progress line stops claiming
+ * data is flowing. The server tracks no device-side throttle or queue state,
+ * so the only honest signal is the age of the newest batch: within the hour
+ * reads as "still arriving", beyond it as "waiting for the iPhone app" — a
+ * backfill that iOS has parked and a backfill that finished look identical
+ * from here, and the copy says neither is an error.
+ */
+const PROGRESS_WAITING_AFTER_MS = 60 * 60 * 1000;
 
 const TRIGGER_KEYS: Record<SyncTrigger, string> = {
   foreground: "settings.appleHealth.delivery.trigger.foreground",
@@ -119,6 +134,79 @@ function DeliveryDiagnostic({
   );
 }
 
+/**
+ * First-run backfill progress (#778). During the initial HealthKit backfill
+ * the card said nothing about how much had arrived or how far back it
+ * reached, so a working first run looked broken. This renders the figures
+ * the server actually holds — accepted-row count and the oldest instant
+ * reached — plus one honest state line derived from the age of the newest
+ * batch. No ETA and no percentage: the remaining queue lives on the phone
+ * and the server cannot see it.
+ */
+function SyncProgress({
+  status,
+  t,
+  now,
+}: {
+  status: HealthKitStatus;
+  t: (key: string, params?: Record<string, string | number>) => string;
+  /** Injectable reference instant, mirroring the pill's own prop. */
+  now?: Date;
+}) {
+  const formatters = useFormatters();
+  const progress = status.syncProgress;
+  // Nothing accepted and nothing synced: the delivery section's "no sync yet"
+  // line already covers the blank state — a zero-row table would only repeat it.
+  if (!progress || (progress.recordsAccepted <= 0 && !status.lastSyncedAt)) {
+    return null;
+  }
+  const reference = now ?? new Date();
+  const lastBatchAge = status.lastSyncedAt
+    ? Math.max(0, reference.getTime() - new Date(status.lastSyncedAt).getTime())
+    : null;
+  const flowing =
+    lastBatchAge !== null && lastBatchAge < PROGRESS_WAITING_AFTER_MS;
+
+  return (
+    <div className="space-y-2" data-testid="apple-health-progress">
+      <h3 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+        {t("settings.appleHealth.progress.title")}
+      </h3>
+      <dl className="space-y-1 text-sm">
+        <div className="flex flex-wrap gap-x-2">
+          <dt className="text-muted-foreground">
+            {t("settings.appleHealth.progress.receivedLabel")}
+          </dt>
+          <dd data-testid="apple-health-progress-received">
+            {formatters.integer(progress.recordsAccepted)}
+          </dd>
+        </div>
+        {progress.oldestMeasuredAt ? (
+          <div className="flex flex-wrap gap-x-2">
+            <dt className="text-muted-foreground">
+              {t("settings.appleHealth.progress.oldestLabel")}
+            </dt>
+            <dd data-testid="apple-health-progress-oldest">
+              {formatters.date(new Date(progress.oldestMeasuredAt))}
+            </dd>
+          </div>
+        ) : null}
+      </dl>
+      {lastBatchAge !== null ? (
+        <p
+          className="text-muted-foreground text-xs"
+          data-testid="apple-health-progress-state"
+          data-state={flowing ? "flowing" : "waiting"}
+        >
+          {flowing
+            ? t("settings.appleHealth.progress.flowing")
+            : t("settings.appleHealth.progress.waiting")}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function AppleHealthCard({ enabled }: { enabled: boolean }) {
   const { t } = useTranslations();
   const {
@@ -174,6 +262,8 @@ export function AppleHealthCard({ enabled }: { enabled: boolean }) {
         )}
 
         {showPill && <DeliveryDiagnostic status={status} t={t} />}
+
+        {showPill && <SyncProgress status={status} t={t} />}
 
         <MetricFreshnessDisclosure
           entries={status?.metricFreshness}

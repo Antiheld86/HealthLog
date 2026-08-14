@@ -20,6 +20,7 @@ import {
 import { annotate } from "@/lib/logging/context";
 import { prisma, toJson } from "@/lib/db";
 import { auditLog } from "@/lib/auth/audit";
+import { getAppleHealthSyncProgress } from "@/lib/integrations/apple-health-progress";
 import { getSourceFreshness } from "@/lib/integrations/metric-freshness";
 import {
   classifyMetricFreshness,
@@ -168,6 +169,16 @@ export const GET = apiHandler(async () => {
   const samples = await getSourceFreshness(user.id, "APPLE_HEALTH").catch(
     () => [],
   );
+  // Issue #778 — a first-run backfill used to be invisible from the web: the
+  // card said "last sync 2 minutes ago" while giving no sense of how much had
+  // arrived or how far back it reached. These two figures (row count + oldest
+  // instant) are everything the server actually knows about backfill
+  // progress; the phone's queue and throttle state stay on the phone and are
+  // not guessed at. Fail-soft for the same reason the freshness read is —
+  // a progress line is never worth 500-ing the config the iOS client needs.
+  const syncProgress = await getAppleHealthSyncProgress(user.id).catch(
+    () => null,
+  );
 
   return apiSuccess({
     entries,
@@ -176,6 +187,7 @@ export const GET = apiHandler(async () => {
     lastBackgroundSyncAt,
     syncHealth,
     metricFreshness: classifyMetricFreshness(samples, syncHealth.verdict),
+    syncProgress,
   });
 });
 

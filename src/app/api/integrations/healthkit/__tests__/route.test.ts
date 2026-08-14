@@ -6,9 +6,10 @@ vi.mock("@/lib/db", () => ({
     user: { findUnique: vi.fn(), update: vi.fn() },
     // v1.4.43 W6 — audit-ledger breadcrumb for validation-failed paths.
     auditLog: { create: vi.fn() },
-    // Per-metric freshness for the APPLE_HEALTH source.
-    measurement: { groupBy: vi.fn() },
-    workout: { groupBy: vi.fn() },
+    // Per-metric freshness + first-run sync progress for the APPLE_HEALTH
+    // source (#778).
+    measurement: { groupBy: vi.fn(), aggregate: vi.fn() },
+    workout: { groupBy: vi.fn(), aggregate: vi.fn() },
   },
   toJson: <T>(v: T) => v,
 }));
@@ -54,6 +55,14 @@ beforeEach(() => {
   vi.mocked(prisma.auditLog.create).mockResolvedValue({} as never);
   vi.mocked(prisma.measurement.groupBy).mockResolvedValue([] as never);
   vi.mocked(prisma.workout.groupBy).mockResolvedValue([] as never);
+  vi.mocked(prisma.measurement.aggregate).mockResolvedValue({
+    _count: { _all: 0 },
+    _min: { measuredAt: null },
+  } as never);
+  vi.mocked(prisma.workout.aggregate).mockResolvedValue({
+    _count: { _all: 0 },
+    _min: { startedAt: null },
+  } as never);
 });
 
 const callGet = GET as unknown as (req: NextRequest) => Promise<Response>;
@@ -227,6 +236,10 @@ describe("GET /api/integrations/healthkit — sync health", () => {
       lastSeenAt: string;
       stale: boolean;
     }>;
+    syncProgress: {
+      recordsAccepted: number;
+      oldestMeasuredAt: string | null;
+    } | null;
   };
 
   async function read(): Promise<Body> {
@@ -325,6 +338,43 @@ describe("GET /api/integrations/healthkit — sync health", () => {
     // delivered in the background, both read as null — never as a guess.
     expect(body.lastSyncTrigger).toBeNull();
     expect(body.lastBackgroundSyncAt).toBeNull();
+  });
+
+  // #778 — a first-run backfill was invisible from the web: nothing said how
+  // many records had arrived or how far back they reached. The GET now carries
+  // the two figures the server actually holds.
+  it("publishes the accepted-row count and the oldest instant reached", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      healthKitConfigJson: null,
+      healthKitLastSyncedAt: ago(60 * 60 * 1000),
+    } as never);
+    vi.mocked(prisma.measurement.aggregate).mockResolvedValue({
+      _count: { _all: 4200 },
+      _min: { measuredAt: new Date("2019-05-04T06:00:00.000Z") },
+    } as never);
+    vi.mocked(prisma.workout.aggregate).mockResolvedValue({
+      _count: { _all: 12 },
+      _min: { startedAt: new Date("2021-01-01T09:00:00.000Z") },
+    } as never);
+
+    const body = await read();
+    expect(body.syncProgress).toEqual({
+      recordsAccepted: 4212,
+      oldestMeasuredAt: "2019-05-04T06:00:00.000Z",
+    });
+  });
+
+  it("degrades to a null progress summary rather than failing the config read", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      healthKitConfigJson: null,
+      healthKitLastSyncedAt: ago(DAY),
+    } as never);
+    vi.mocked(prisma.measurement.aggregate).mockRejectedValue(
+      new Error("aggregate hiccup"),
+    );
+    const body = await read();
+    expect(body.syncProgress).toBeNull();
+    expect(body.syncHealth.verdict).toBe("fresh");
   });
 
   it("degrades to no per-metric data rather than failing the config read", async () => {

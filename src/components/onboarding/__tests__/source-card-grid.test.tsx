@@ -112,3 +112,23 @@ describe("<SourceCardGrid> Withings card", () => {
     expect(html).not.toContain("Connect Withings");
   });
 });
+
+// #778 — the step listed Apple Health next to the web connectors with nothing
+// saying its setup happens in the iOS app afterwards, so it read like one more
+// OAuth flow to hunt for.
+describe("<SourceCardGrid> Apple Health note", () => {
+  it("says Apple Health setup completes in the iPhone app, not on the web", () => {
+    integrationStatusState.data = undefined;
+    const html = render();
+    expect(html).toContain('data-testid="source-more-apple-health-note"');
+    expect(html).toContain("open the HealthLog app on your iPhone");
+    expect(html).toContain("no web connection");
+  });
+
+  it("keeps the Apple Health chip tappable so the note is not a dead end", () => {
+    integrationStatusState.data = undefined;
+    const html = render();
+    expect(html).toContain('data-testid="source-more-apple-health"');
+    expect(html).toContain('href="/settings/integrations"');
+  });
+});
