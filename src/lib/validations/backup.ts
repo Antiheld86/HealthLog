@@ -1108,6 +1108,10 @@ export const backupPayloadSchema = z
     vaccinations: z.array(vaccinationBackupSchema).default([]),
     vaccinationDocumentLinks: z.array(vaccinationLinkBackupSchema).default([]),
     manifest: backupManifestSchema.nullable().default(null),
+    // v1.37.19 (A6-9) — field paths a PORTABLE export could not decrypt
+    // (fail-soft nulls). Disclosed in the file so a nulled field is
+    // distinguishable from one never written. Empty/absent on DR payloads.
+    decryptFailures: z.array(z.string()).default([]),
   })
   .passthrough()
   .superRefine((payload, ctx) => {
@@ -1175,6 +1179,16 @@ export interface BackupSummary {
   intradayProfiles: number;
   /** Local days whose health score was written down as it was shown. */
   healthScoreRecords: number;
+  /** v1.37.19 (A6-8) — the visit address book. */
+  practitioners: number;
+  /** v1.37.19 (A6-8) — doctor visits, planned and past. */
+  encounters: number;
+  /** v1.37.19 (A6-8) — the three encounter link tables, summed. */
+  encounterLinks: number;
+  /** v1.37.19 (A6-8) — immunization log entries. */
+  vaccinations: number;
+  /** v1.37.19 (A6-8) — vaccination↔document links. */
+  vaccinationLinks: number;
 }
 
 export function summarizeBackup(payload: BackupPayload): BackupSummary {
@@ -1214,6 +1228,18 @@ export function summarizeBackup(payload: BackupPayload): BackupSummary {
     correlationPatterns: payload.correlationPatterns.length,
     intradayProfiles: payload.intradayProfiles.length,
     healthScoreRecords: payload.healthScoreRecords.length,
+    // v1.37.19 (A6-8) — the sections restored since 08-01 were written and
+    // restored but absent from this report, so the admin's "what did I just
+    // restore" answer silently under-counted a file that carried visits or
+    // an Impfpass.
+    practitioners: payload.practitioners.length,
+    encounters: payload.encounters.length,
+    encounterLinks:
+      payload.encounterDocumentLinks.length +
+      payload.encounterLabLinks.length +
+      payload.encounterConditionLinks.length,
+    vaccinations: payload.vaccinations.length,
+    vaccinationLinks: payload.vaccinationDocumentLinks.length,
   };
 }
 

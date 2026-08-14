@@ -175,6 +175,16 @@ export interface ProfileBackupSection {
   customMetrics: CustomMetricBackupEntry[];
   healthProfileFacts: HealthProfileFactBackupEntry[];
   correlationPatterns: CorrelationPatternBackupEntry[];
+  /**
+   * v1.37.19 (A6-9) — field paths whose ciphertext this instance could not
+   * open while building a PORTABLE export (fail-soft nulls). Disclosed in
+   * the file itself so an export with a nulled emergency field no longer
+   * reads byte-identical to one where the field was never written — the
+   * person restoring elsewhere can see exactly what was lost. Always empty
+   * on the disaster-recovery path (DR carries ciphertext verbatim and
+   * never decrypts).
+   */
+  decryptFailures: string[];
 }
 
 export interface ProfileBackupCounts {
@@ -198,6 +208,8 @@ export interface ProfileBackupCounts {
 function decryptProfileFieldSoft(
   buf: Uint8Array | null,
   field: string,
+  /** v1.37.19 (A6-9) — collector for the file's decryptFailures manifest. */
+  failures?: string[],
 ): string | null {
   if (!buf || buf.byteLength === 0) return null;
   try {
@@ -208,6 +220,7 @@ function decryptProfileFieldSoft(
         err instanceof Error ? err.message : String(err)
       }`,
     );
+    failures?.push(`healthProfile.${field}`);
     return null;
   }
 }
@@ -235,6 +248,9 @@ export async function buildProfileBackupSection(
   options: ProfileBackupOptions = {},
 ): Promise<ProfileBackupSection> {
   const disasterRecovery = options.purpose === "disaster-recovery";
+  // v1.37.19 (A6-9) — every fail-soft decrypt below records its field path
+  // here; the list rides the exported file as its decryptFailures manifest.
+  const decryptFailures: string[] = [];
 
   const [profileRow, metricRows, factRows, patternRows] = await Promise.all([
     prisma.userHealthProfile.findUnique({ where: { userId } }),
@@ -296,18 +312,22 @@ export async function buildProfileBackupSection(
           aboutMe: decryptProfileFieldSoft(
             profileRow.aboutMeEncrypted,
             "aboutMe",
+            decryptFailures,
           ),
           conditions: decryptProfileFieldSoft(
             profileRow.conditionsEncrypted,
             "conditions",
+            decryptFailures,
           ),
           allergies: decryptProfileFieldSoft(
             profileRow.allergiesEncrypted,
             "allergies",
+            decryptFailures,
           ),
           coachFocus: decryptProfileFieldSoft(
             profileRow.coachFocusEncrypted,
             "coachFocus",
+            decryptFailures,
           ),
           aiIncludedSections: (profileRow.aiIncludedSections as
             HealthProfileAiSection[] | undefined) ?? [
@@ -319,14 +339,17 @@ export async function buildProfileBackupSection(
           emergencyContacts: decryptProfileFieldSoft(
             profileRow.emergencyContactsEncrypted,
             "emergencyContacts",
+            decryptFailures,
           ),
           emergencyImplants: decryptProfileFieldSoft(
             profileRow.emergencyImplantsEncrypted,
             "emergencyImplants",
+            decryptFailures,
           ),
           emergencyNote: decryptProfileFieldSoft(
             profileRow.emergencyNoteEncrypted,
             "emergencyNote",
+            decryptFailures,
           ),
         }
     : null;
@@ -353,6 +376,7 @@ export async function buildProfileBackupSection(
       const value = decryptProfileFieldSoft(
         fact.valueEncrypted,
         `fact.${fact.kind}`,
+        decryptFailures,
       );
       const kind = fact.kind as HealthProfileFactKind;
       if (
@@ -456,6 +480,7 @@ export async function buildProfileBackupSection(
     healthProfileFacts,
     customMetrics,
     correlationPatterns,
+    decryptFailures,
   };
 }
 

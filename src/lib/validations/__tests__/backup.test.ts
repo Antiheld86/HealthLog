@@ -387,6 +387,51 @@ describe("backupPayloadSchema — v1.28 backup-completeness domains", () => {
     expect(summary.familyHistory).toBe(0);
     expect(summary.documents).toBe(0);
   });
+
+  // Watched red: with the v1.37.19 section counts removed from
+  // `summarizeBackup` (the pre-fix shape stopped at healthScoreRecords),
+  // every assertion below fails — a file carrying visits or an Impfpass
+  // was restored in full but reported as if those sections were empty.
+  it("summarizeBackup counts practitioners, encounters, links, and vaccinations", () => {
+    const ts = "2026-05-08T07:00:00.000Z";
+    const parsed = backupPayloadSchema.parse({
+      schemaVersion: "1",
+      exportedAt: ts,
+      userId: "u1",
+      practitioners: [
+        { id: "pr-1", name: "Praxis", createdAt: ts, updatedAt: ts },
+      ],
+      encounters: [
+        {
+          id: "en-1",
+          occurredAt: ts,
+          status: "DONE",
+          kind: "ROUTINE",
+          createdAt: ts,
+          updatedAt: ts,
+        },
+      ],
+      encounterDocumentLinks: [
+        { encounterId: "en-1", targetId: "doc-1", createdAt: ts },
+      ],
+      encounterLabLinks: [
+        { encounterId: "en-1", targetId: "lab-1", createdAt: ts },
+      ],
+      encounterConditionLinks: [],
+      vaccinations: [
+        { id: "va-1", occurredAt: ts, createdAt: ts, updatedAt: ts },
+      ],
+      vaccinationDocumentLinks: [
+        { vaccinationId: "va-1", targetId: "doc-1", createdAt: ts },
+      ],
+    });
+    const summary = summarizeBackup(parsed);
+    expect(summary.practitioners).toBe(1);
+    expect(summary.encounters).toBe(1);
+    expect(summary.encounterLinks).toBe(2);
+    expect(summary.vaccinations).toBe(1);
+    expect(summary.vaccinationLinks).toBe(1);
+  });
 });
 
 describe("backupPayloadSchema — canonical v2 identity compatibility", () => {
