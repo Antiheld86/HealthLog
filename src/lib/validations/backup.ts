@@ -611,6 +611,9 @@ const customMetricEntryBackupSchema = z
     measuredAt: isoDateTime,
     note: z.string().nullable().default(null),
     createdAt: isoDateTime.optional(),
+    /// v1.37.20 (A3-11) — the entry tombstone rides DR payloads so a restore
+    /// brings the account back exactly as it stood, undo affordance included.
+    deletedAt: isoDateTime.nullable().optional(),
   })
   .passthrough();
 
