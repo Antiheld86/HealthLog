@@ -4841,8 +4841,6 @@
         }
       },
       "dashboard": {
-        "title": "Tableau de bord",
-        "description": "Disposition et ordre des tuiles.",
         "subtitle": "Organisez les tuiles de votre tableau de bord."
       },
       "thresholds": {
@@ -5152,33 +5150,21 @@
         "subtitle": "Partagez un accès en lecture seule à vos données."
       },
       "insights": {
-        "title": "Analyses",
-        "description": "Ordre de la vue d'ensemble et des onglets de navigation.",
         "subtitle": "Organisez les sections d'aperçu et l'ordre des onglets."
       },
       "medications": {
-        "title": "Médicaments",
-        "description": "Vue liste, ordre et sites d’injection de vos médicaments.",
         "subtitle": "Gérez l'affichage et l'ordre de votre liste de médicaments."
       },
       "mood": {
-        "title": "Étiquettes d’humeur",
-        "description": "Groupes, étiquettes et étiquettes archivées du sélecteur d’humeur.",
         "subtitle": "Organisez vos tags d'humeur, groupes et ordre du sélecteur."
       },
       "labs": {
-        "title": "Analyses",
-        "description": "Affichage, tri et biomarqueurs de vos analyses.",
         "subtitle": "Gérez l’affichage, le tri et les biomarqueurs."
       },
       "illness": {
-        "title": "Journal de maladie",
-        "description": "Affichage et ordre de vos épisodes de maladie.",
         "subtitle": "Gérez l’affichage et l’ordre des épisodes."
       },
       "vorsorge": {
-        "title": "Examens",
-        "description": "Affichage, ordre et rappels d’examen individuels.",
         "subtitle": "Gérez l’affichage, l’ordre et les rappels individuels."
       },
       "modules": {

@@ -92,7 +92,7 @@ describe("<RecentWorkoutsTile>", () => {
     expect(html).not.toContain('data-slot="recent-workouts-empty"');
   });
 
-  it("renders the empty-state with the Apple-Health onboarding cue", () => {
+  it("renders the empty-state with the source-neutral onboarding cue", () => {
     mockResult.data = {
       workouts: [],
       meta: { total: 0, limit: 3, offset: 0, droppedDuplicates: 0 },
@@ -100,7 +100,10 @@ describe("<RecentWorkoutsTile>", () => {
     const html = render();
     expect(html).toContain('data-slot="recent-workouts-empty"');
     expect(html).toContain("No workouts yet");
-    expect(html).toContain("Apple Health");
+    // v1.37.19 (A1-7) — the CTA no longer assumes an iPhone with Apple
+    // Health; WHOOP/Polar/Oura/Withings users get the same honest cue.
+    expect(html).toContain("Connect a data source in Settings");
+    expect(html).not.toContain("Apple Health");
   });
 
   it("renders the populated list with deep-links into each detail page", () => {

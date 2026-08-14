@@ -4841,8 +4841,6 @@
         }
       },
       "dashboard": {
-        "title": "Panel",
-        "description": "Diseño y orden de los mosaicos.",
         "subtitle": "Organiza los mosaicos de tu panel."
       },
       "thresholds": {
@@ -5152,33 +5150,21 @@
         "subtitle": "Comparte acceso de solo lectura a tus datos."
       },
       "insights": {
-        "title": "Análisis",
-        "description": "Orden de la vista general y de las pestañas de navegación.",
         "subtitle": "Organiza las secciones de tu resumen y el orden de las pestañas."
       },
       "medications": {
-        "title": "Medicamentos",
-        "description": "Vista de lista, orden y zonas de inyección de tus medicamentos.",
         "subtitle": "Gestiona la vista y el orden de tu lista de medicamentos."
       },
       "mood": {
-        "title": "Etiquetas de ánimo",
-        "description": "Grupos, etiquetas y etiquetas archivadas del selector de ánimo.",
         "subtitle": "Organiza tus etiquetas de ánimo, grupos y orden del selector."
       },
       "labs": {
-        "title": "Laboratorio",
-        "description": "Vista, orden y biomarcadores de tu laboratorio.",
         "subtitle": "Gestiona la vista, el orden y los biomarcadores."
       },
       "illness": {
-        "title": "Diario de enfermedad",
-        "description": "Vista y orden de tus episodios de enfermedad.",
         "subtitle": "Gestiona la vista y el orden de los episodios."
       },
       "vorsorge": {
-        "title": "Revisiones",
-        "description": "Vista, orden y recordatorios de revisión individuales.",
         "subtitle": "Gestiona la vista, el orden y los recordatorios individuales."
       },
       "modules": {

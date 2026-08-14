@@ -409,7 +409,10 @@ async function runRawChain(
     // candidate run; an exhausted cap skips the candidate exactly like a
     // failed hop (next entry, or AllProvidersFailedError at the end).
     if (isOperatorFundedProvider(candidate.providerType)) {
-      const spent = await readDailySpend(userId);
+      // Fail OPEN on a ledger read error: the reservation layer still
+      // meters every call against the same ledger, so a transient read
+      // failure here must not take the whole fallback chain down with it.
+      const spent = await readDailySpend(userId).catch(() => 0);
       if (spent >= OPERATOR_COST_CAP) {
         const hop: FallbackHop = {
           providerType: candidate.providerType,

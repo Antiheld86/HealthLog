@@ -4841,8 +4841,6 @@
         }
       },
       "dashboard": {
-        "title": "Cruscotto",
-        "description": "Layout e ordine dei riquadri.",
         "subtitle": "Disponi i riquadri della tua dashboard."
       },
       "thresholds": {
@@ -5152,33 +5150,21 @@
         "subtitle": "Condividi l'accesso in sola lettura ai tuoi dati."
       },
       "insights": {
-        "title": "Approfondimenti",
-        "description": "Ordine della panoramica e delle schede di navigazione.",
         "subtitle": "Disponi le sezioni della panoramica e l'ordine delle schede."
       },
       "medications": {
-        "title": "Farmaci",
-        "description": "Vista elenco, ordine e siti di iniezione dei tuoi farmaci.",
         "subtitle": "Gestisci vista e ordine del tuo elenco di farmaci."
       },
       "mood": {
-        "title": "Tag dell’umore",
-        "description": "Gruppi, tag e tag archiviati del selettore dell’umore.",
         "subtitle": "Organizza i tag dell'umore, i gruppi e l'ordine del selettore."
       },
       "labs": {
-        "title": "Esami",
-        "description": "Vista, ordinamento e biomarcatori dei tuoi esami.",
         "subtitle": "Gestisci la vista, l’ordinamento e i biomarcatori."
       },
       "illness": {
-        "title": "Diario delle malattie",
-        "description": "Vista e ordine dei tuoi episodi di malattia.",
         "subtitle": "Gestisci la vista e l’ordine degli episodi."
       },
       "vorsorge": {
-        "title": "Controlli",
-        "description": "Vista, ordine e singoli promemoria di controllo.",
         "subtitle": "Gestisci la vista, l’ordine e i singoli promemoria."
       },
       "modules": {

@@ -368,6 +368,11 @@ test.describe("account sharing", () => {
     // condition IS the flush, so a slow CI box waits exactly as long as it
     // needs to and a fast one moves on immediately.
     await page.goto("/");
+    // Gate on rendered content first (the dashboard must actually mount and
+    // populate the query cache before there is anything to persist).
+    await expect(page.locator('[data-slot="coach-fab"]')).toBeVisible({
+      timeout: 10_000,
+    });
     await expect
       .poll(
         () =>

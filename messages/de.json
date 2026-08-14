@@ -4841,8 +4841,6 @@
         }
       },
       "dashboard": {
-        "title": "Dashboard",
-        "description": "Kachel-Layout und Reihenfolge.",
         "subtitle": "Ordne die Kacheln auf deinem Dashboard an."
       },
       "thresholds": {
@@ -5152,33 +5150,21 @@
         "subtitle": "Teile schreibgeschützten Zugriff auf deine Daten."
       },
       "insights": {
-        "title": "Insights",
-        "description": "Reihenfolge der Übersicht und der Navigations-Chips.",
         "subtitle": "Ordne die Übersichts-Bereiche und die Reihenfolge der Chips an."
       },
       "medications": {
-        "title": "Medikamente",
-        "description": "Listenansicht, Reihenfolge und Injektionsstellen deiner Medikamente.",
         "subtitle": "Verwalte Ansicht und Reihenfolge deiner Medikamentenliste."
       },
       "mood": {
-        "title": "Stimmungs-Tags",
-        "description": "Gruppen, Tags und archivierte Tags der Stimmungs-Auswahl.",
         "subtitle": "Organisiere deine Stimmungs-Tags, Gruppen und Auswahlreihenfolge."
       },
       "labs": {
-        "title": "Laborwerte",
-        "description": "Ansicht, Sortierung und Biomarker deiner Laborwerte.",
         "subtitle": "Ansicht, Sortierung und Biomarker verwalten."
       },
       "illness": {
-        "title": "Krankheitstagebuch",
-        "description": "Ansicht und Reihenfolge deiner Krankheitsepisoden.",
         "subtitle": "Ansicht und Reihenfolge der Episoden verwalten."
       },
       "vorsorge": {
-        "title": "Vorsorge",
-        "description": "Ansicht, Reihenfolge und einzelne Vorsorge-Erinnerungen.",
         "subtitle": "Ansicht, Reihenfolge und einzelne Erinnerungen verwalten."
       },
       "modules": {

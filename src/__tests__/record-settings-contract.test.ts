@@ -67,7 +67,12 @@ describe("record settings contract", () => {
       guardianWritable: false,
     });
     expect(classifySettingsDestination("ai").kind).toBe("unavailable");
-    expect(classifySettingsDestination("dashboard").kind).toBe(
+    // v1.37.19 — "dashboard" left SETTINGS_SECTION_SLUGS (its URL is
+    // owned by a permanent redirect to /settings/layout/dashboard), so an
+    // unknown destination falls closed to plain unavailable; "layout" is
+    // the surviving adult-shared-unavailable representative.
+    expect(classifySettingsDestination("dashboard").kind).toBe("unavailable");
+    expect(classifySettingsDestination("layout").kind).toBe(
       "adult-shared-unavailable",
     );
     expect(isGuardianSettingsWriteAllowed("account")).toBe(true);

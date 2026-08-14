@@ -127,6 +127,8 @@ const subsystemSurface = {
   "mcp-token-cleanup": { audience: "system" },
   "med-notes-encryption-backfill": { audience: "system" },
   "document-tombstone-purge": { audience: "system" },
+  // v1.37.19 (A7-4) — hourly heal of summary rows stuck on PENDING.
+  "document-summary-reaper": { audience: "system" },
   "document-content-index-backfill": { audience: "account" },
   "document-index": { audience: "account" },
   "document-thumbnail": { audience: "account" },

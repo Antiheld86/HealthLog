@@ -4841,8 +4841,6 @@
         }
       },
       "dashboard": {
-        "title": "Pulpit",
-        "description": "Układ i kolejność kafelków.",
         "subtitle": "Rozmieść kafelki na pulpicie."
       },
       "thresholds": {
@@ -5152,33 +5150,21 @@
         "subtitle": "Udostępnij dostęp tylko do odczytu do swoich danych."
       },
       "insights": {
-        "title": "Analizy",
-        "description": "Kolejność przeglądu i chipów nawigacyjnych.",
         "subtitle": "Rozmieść sekcje przeglądu i kolejność chipów."
       },
       "medications": {
-        "title": "Leki",
-        "description": "Widok listy, kolejność i miejsca wstrzyknięć Twoich leków.",
         "subtitle": "Zarządzaj widokiem i kolejnością listy leków."
       },
       "mood": {
-        "title": "Tagi nastroju",
-        "description": "Grupy, tagi i zarchiwizowane tagi w wyborze nastroju.",
         "subtitle": "Uporządkuj tagi nastroju, grupy i kolejność wyboru."
       },
       "labs": {
-        "title": "Wyniki badań",
-        "description": "Widok, sortowanie i biomarkery Twoich wyników badań.",
         "subtitle": "Zarządzaj widokiem, sortowaniem i biomarkerami."
       },
       "illness": {
-        "title": "Dziennik chorób",
-        "description": "Widok i kolejność Twoich epizodów chorobowych.",
         "subtitle": "Zarządzaj widokiem i kolejnością epizodów."
       },
       "vorsorge": {
-        "title": "Badania",
-        "description": "Widok, kolejność i poszczególne przypomnienia o badaniach.",
         "subtitle": "Zarządzaj widokiem, kolejnością i poszczególnymi przypomnieniami."
       },
       "modules": {

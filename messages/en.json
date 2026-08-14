@@ -4841,8 +4841,6 @@
         }
       },
       "dashboard": {
-        "title": "Dashboard",
-        "description": "Tile layout and order.",
         "subtitle": "Arrange the tiles on your dashboard."
       },
       "thresholds": {
@@ -5152,33 +5150,21 @@
         "subtitle": "Share read-only access to your data."
       },
       "insights": {
-        "title": "Insights",
-        "description": "Overview and navigation-chip order.",
         "subtitle": "Arrange your overview sections and chip order."
       },
       "medications": {
-        "title": "Medications",
-        "description": "List view, order, and injection sites for your medications.",
         "subtitle": "Manage your medication list view and order."
       },
       "mood": {
-        "title": "Mood tags",
-        "description": "Groups, tags, and archived tags for the mood picker.",
         "subtitle": "Organize your mood tags, groups, and picker order."
       },
       "labs": {
-        "title": "Labs",
-        "description": "View, sort order, and biomarkers for your labs.",
         "subtitle": "Manage the view, sort order, and biomarkers."
       },
       "illness": {
-        "title": "Illness journal",
-        "description": "View and order of your illness episodes.",
         "subtitle": "Manage the view and order of episodes."
       },
       "vorsorge": {
-        "title": "Checkups",
-        "description": "View, order, and individual checkup reminders.",
         "subtitle": "Manage the view, order, and individual reminders."
       },
       "modules": {
