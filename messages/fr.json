@@ -560,7 +560,7 @@
       "viewAll": "Tout voir",
       "empty": {
         "title": "Aucun entraînement",
-        "cta": "Ouvre l'app Apple Santé sur ton iPhone pour synchroniser les entraînements."
+        "cta": "Connecte une source de données dans les réglages pour afficher les entraînements ici."
       }
     },
     "metric": {
@@ -729,9 +729,12 @@
     "sourceWhoop": "WHOOP",
     "sourceFitbit": "Fitbit",
     "bulkDeleteSuccess": "{count} mesures supprimées",
+    "bulkDeleteSuccessOne": "Mesure supprimée",
     "bulkDeleteError": "Erreur lors de la suppression des mesures sélectionnées",
     "bulkDeleteConfirmTitle": "Supprimer {count} mesures ?",
+    "bulkDeleteConfirmTitleOne": "Supprimer cette mesure ?",
     "bulkDeleteConfirmBody": "Les {count} mesures sélectionnées seront supprimées. Vous pourrez annuler cette action pendant un court instant juste après.",
+    "bulkDeleteConfirmBodyOne": "La mesure sélectionnée sera supprimée. Vous pourrez annuler cette action pendant un court instant juste après.",
     "typePhq9Score": "Score PHQ-9",
     "typeGad7Score": "Score GAD-7",
     "typeGripStrength": "Force de préhension",
@@ -879,9 +882,12 @@
     "sourceTelegram": "Telegram",
     "sourceDaylio": "Daylio",
     "bulkDeleteSuccess": "{count} entrées supprimées",
+    "bulkDeleteSuccessOne": "Entrée supprimée",
     "bulkDeleteError": "Erreur lors de la suppression des entrées sélectionnées",
     "bulkDeleteConfirmTitle": "Supprimer {count} entrées ?",
+    "bulkDeleteConfirmTitleOne": "Supprimer cette entrée ?",
     "bulkDeleteConfirmBody": "Les {count} entrées d'humeur sélectionnées seront supprimées. Vous pourrez annuler cette action pendant un court instant juste après.",
+    "bulkDeleteConfirmBodyOne": "L'entrée d'humeur sélectionnée sera supprimée. Vous pourrez annuler cette action pendant un court instant juste après.",
     "customize": "Personnaliser les étiquettes d’humeur",
     "addTagInline": "Ajouter une étiquette",
     "manage": {
@@ -1779,7 +1785,8 @@
         "enabledToast": "Rappels activés",
         "disabledToast": "Rappels désactivés",
         "toggleFailed": "Impossible de modifier le réglage des rappels.",
-        "clientManagedChip": "Votre iPhone gère les rappels de ce médicament."
+        "clientManagedChip": "Géré par l’iPhone",
+        "clientManagedHint": "Votre iPhone gère les rappels de ce médicament."
       },
       "settings": {
         "title": "Réglages",
@@ -1932,7 +1939,7 @@
         "addQuantityHelper": "1–1000 unités par boîte ou contenant.",
         "addExpiryLabel": "Date de péremption (facultatif)",
         "addSubmit": "Enregistrer",
-        "addSuccess": "Stock enregistré.",
+        "addSuccess": "Stock enregistré",
         "addFailed": "Le stock n'a pas pu être enregistré.",
         "adjustButton": "Ajuster",
         "adjustTitle": "Corriger le contenant",
@@ -1940,11 +1947,11 @@
         "adjustQuantityLabel": "Unités restantes",
         "adjustHelper": "Capacité : {total} unités.",
         "adjustSubmit": "Enregistrer",
-        "adjustSuccess": "Stock mis à jour.",
+        "adjustSuccess": "Stock mis à jour",
         "adjustFailed": "Le stock n'a pas pu être mis à jour.",
         "deleteTitle": "Supprimer le contenant ?",
         "deleteDescription": "Supprime définitivement cette boîte ou ce contenant du stock. Les prises enregistrées restent inchangées.",
-        "deleteSuccess": "Entrée de stock supprimée.",
+        "deleteSuccess": "Entrée de stock supprimée",
         "deleteFailed": "L'entrée de stock n'a pas pu être supprimée.",
         "containerTypeLabel": "Type de contenant",
         "containerType": {
@@ -2139,7 +2146,7 @@
       "scaleToggleLabel": "Échelle du graphique"
     },
     "import": {
-      "resultSuccess": "{imported} prises importées.",
+      "resultSuccess": "{imported} prises importées",
       "resultPartial": "{imported} importées, {skipped} ignorées.",
       "resultNothing": "Rien n’a été importé : les {skipped} entrées ont été ignorées.",
       "resultAlreadyRecorded": "{recorded} prises sont déjà enregistrées. Rien de nouveau n’a été ajouté.",
@@ -2787,7 +2794,7 @@
       "settingsDefaultWindowLabel": "Période d’analyse par défaut",
       "settingsDefaultWindowHint": "Le coach lit cette période par chat, sauf si tu en choisis une autre dans l’en-tête du panneau.",
       "settingsSave": "Enregistrer",
-      "settingsSaved": "Enregistré.",
+      "settingsSaved": "Enregistré",
       "settingsCancel": "Annuler",
       "feedbackHelpful": "Utile",
       "feedbackUnhelpful": "Peu utile",
@@ -4162,7 +4169,7 @@
       "title": "Trier les onglets de navigation",
       "description": "Faites glisser les onglets dans l'ordre souhaité et affichez-les ou masquez-les via l'icône en forme d'œil.",
       "dragHandle": "Réorganiser",
-      "saveSuccess": "Ordre des onglets enregistré.",
+      "saveSuccess": "Ordre des onglets enregistré",
       "saveError": "L'enregistrement de l'ordre des onglets a échoué.",
       "save": "Enregistrer",
       "empty": "Aucun onglet de navigation disponible pour le moment.",
@@ -4855,9 +4862,9 @@
         "resetDefaultsConfirm": "Réinitialiser l’ordre",
         "moveUp": "Monter",
         "moveDown": "Descendre",
-        "saveSuccess": "Priorité des sources enregistrée.",
+        "saveSuccess": "Priorité des sources enregistrée",
         "saveError": "Échec de l’enregistrement de la priorité des sources.",
-        "resetSuccess": "Priorité des sources rétablie aux valeurs par défaut.",
+        "resetSuccess": "Priorité des sources rétablie aux valeurs par défaut",
         "perMetricToggle": "Réglages par métrique ({count})",
         "perMetricHelp": "Métriques que vous avez personnalisées par rapport à l’ordre par défaut. Utilisez cette liste pour rétablir une métrique donnée à sa valeur par défaut sans toucher aux autres.",
         "perMetricEmpty": "Aucun réglage par métrique — chaque métrique utilise l’ordre global ci-dessus.",
@@ -5026,7 +5033,7 @@
             "failed": "L'import a échoué. Veuillez réessayer.",
             "readFailed": "Impossible de lire ce fichier.",
             "resultSummary": "{measurements} mesures et {moods} entrées d'humeur importées, {skipped} ignorées.",
-            "resultSuccess": "{measurements} mesures et {moods} entrées d'humeur importées.",
+            "resultSuccess": "{measurements} mesures et {moods} entrées d'humeur importées",
             "resultNothing": "Rien n'a été importé. Les {skipped} entrées ont toutes été ignorées.",
             "resultEmpty": "Ce fichier ne contenait ni mesures ni entrées d'humeur."
           },
@@ -5050,10 +5057,10 @@
             "previewSummary": "Aperçu : {inserted} seraient importées, {skipped} ignorées.",
             "resultSummary": "{inserted} nouvelles importées et {updated} mises à jour, {skipped} ignorées.",
             "rowError": "Ligne {line} : {reason}",
-            "resultSuccess": "{inserted} nouvelles importées et {updated} mises à jour.",
+            "resultSuccess": "{inserted} nouvelles importées et {updated} mises à jour",
             "resultNothing": "Rien n'a été importé. Les {skipped} lignes ont toutes été ignorées.",
             "resultEmpty": "Ce fichier a un en-tête mais aucune ligne de données.",
-            "previewSuccess": "Aperçu : {inserted} seraient importées.",
+            "previewSuccess": "Aperçu : {inserted} seraient importées",
             "previewNothing": "Aperçu : rien ne serait importé. Les {skipped} lignes seraient toutes ignorées.",
             "skipGroupOne": "{count} ligne ignorée : {reason}",
             "skipGroupFew": "{count} lignes ignorées : {reason}",
@@ -5146,7 +5153,7 @@
       "insights": {
         "title": "Analyses",
         "description": "Ordre de la vue d'ensemble et des onglets de navigation.",
-        "subtitle": "Organisez les sections d'aperçu et l'ordre des pastilles."
+        "subtitle": "Organisez les sections d'aperçu et l'ordre des onglets."
       },
       "medications": {
         "title": "Médicaments",
@@ -5175,7 +5182,7 @@
       },
       "modules": {
         "title": "Modules",
-        "saved": "Enregistré.",
+        "saved": "Enregistré",
         "error": "Échec de l'enregistrement. Veuillez réessayer.",
         "toggleable": {
           "title": "Ce que vous suivez",
@@ -5223,7 +5230,7 @@
         "use": "Utiliser",
         "select": "Sélectionner",
         "saveError": "Impossible d'enregistrer la modification.",
-        "homeSaved": "Lieu de référence enregistré.",
+        "homeSaved": "Lieu de référence enregistré",
         "travelAdded": "Période de localisation ajoutée.",
         "travelRemoved": "Période de localisation supprimée.",
         "backfillQueued": "Récupération planifiée.",
@@ -5280,7 +5287,7 @@
           "current": "Votre sélection enregistrée"
         },
         "save": "Enregistrer",
-        "saved": "Enregistré.",
+        "saved": "Enregistré",
         "error": "Enregistrement impossible. Veuillez réessayer.",
         "loadFailed": "Impossible de charger votre sélection.",
         "eligibilityFailed": "Impossible de vérifier quels piliers disposent de données. Les interrupteurs ci-dessous fonctionnent quand même.",
@@ -5318,7 +5325,7 @@
       "auto": "Automatique (langue)",
       "h24": "24 heures",
       "h12": "12 heures (AM/PM)",
-      "saved": "Format horaire enregistré.",
+      "saved": "Format horaire enregistré",
       "saveError": "Échec de l’enregistrement du format horaire."
     },
     "dateFormat": {
@@ -5328,7 +5335,7 @@
       "dmy": "JJ.MM.AAAA",
       "mdy": "MM/JJ/AAAA",
       "ymd": "AAAA-MM-JJ",
-      "saved": "Format de date enregistré.",
+      "saved": "Format de date enregistré",
       "saveError": "Échec de l’enregistrement du format de date."
     },
     "username": "Nom d'utilisateur",
@@ -5622,7 +5629,7 @@
         "clearBody": "Seul le texte libre est supprimé. Vos allergies et intolérances restent inchangées.",
         "clearConfirm": "Vider la note",
         "save": "Enregistrer",
-        "savedToast": "Note « À propos de moi » enregistrée.",
+        "savedToast": "Note « À propos de moi » enregistrée",
         "clearedToast": "Note « À propos de moi » supprimée.",
         "saveError": "Impossible d'enregistrer. Veuillez réessayer.",
         "loadError": "Impossible de charger la note.",
@@ -5644,14 +5651,14 @@
         "title": "Lire les documents automatiquement avec l'IA",
         "subLabel": "Les documents sont lus et indexés par votre fournisseur d'IA configuré, sans validation document par document.",
         "honesty": "Lorsque cette option est activée, chaque document que vous téléversez est envoyé à votre fournisseur d'IA configuré pour être lu, décrit et indexé pour la recherche, sans confirmation par document. L'activation agit aussi rétroactivement : les documents que vous avez déjà téléversés et qui n'ont pas encore de résumé sont envoyés eux aussi, jusqu'à 200 à chaque activation. Cela se produit sur le serveur et le contenu du document quitte cette machine vers ce fournisseur. Si votre fournisseur configuré est une connexion par abonnement (un compte d'IA connecté plutôt qu'une clé API), ses propres paramètres de données s'appliquent : les fournisseurs par abonnement peuvent utiliser le contenu pour améliorer leurs modèles, et aucun accord de traitement des données ne le couvre. Les documents lus par un modèle local auto-hébergé ne quittent jamais votre serveur. Désactivé par défaut ; activez-le uniquement si vous acceptez ce compromis pour vos documents.",
-        "confirm": "Je comprends — activer la lecture automatique par l'IA",
+        "confirm": "Compris — activer",
         "cancel": "Annuler"
       },
       "centralCodex": {
         "title": "Utiliser l'accès IA partagé du serveur",
         "subLabel": "Acheminez les requêtes IA via la connexion que l'opérateur a configurée pour ce serveur, en complément de vos propres fournisseurs comme solution de repli.",
         "honesty": "L'accès partagé est un unique compte IA connecté que l'opérateur a relié pour tout le monde sur ce serveur, et non votre propre clé. Les requêtes que vous y faites servent par défaut à entraîner les modèles du fournisseur et aucun accord de traitement des données ne les couvre, les limites horaires et hebdomadaires du compte sont partagées avec tous les autres qui ont accepté, et vos propres fournisseurs sont essayés en premier. Ne l'activez que si vous acceptez ce compromis.",
-        "confirm": "J'ai compris — utiliser la connexion partagée",
+        "confirm": "Compris — utiliser la connexion",
         "cancel": "Annuler"
       },
       "consent": {
@@ -5673,7 +5680,7 @@
         "description": "Choisissez l'affichage des distances et des vitesses dans les graphiques et les tuiles.",
         "metric": "Métrique",
         "imperial": "Impérial",
-        "saved": "Préférence d'unités enregistrée.",
+        "saved": "Préférence d'unités enregistrée",
         "saveError": "Impossible d'enregistrer votre préférence d'unités."
       }
     },
@@ -5861,7 +5868,7 @@
       "errorReconnect": "Erreur — reconnecter",
       "warningServerError": "Échec de synchronisation",
       "failureCount": "{count}/{threshold}",
-      "parkedReconnect": "En pause — reconnecter manuellement",
+      "parkedReconnect": "En pause — reconnecter",
       "notConnected": "Non connecté",
       "justNow": "à l’instant",
       "minutesAgo": "il y a {count} min",
@@ -6038,7 +6045,7 @@
       "expiryInvalid": "L'expiration doit être comprise entre 1 et {max} jours.",
       "create": "Créer le lien",
       "tokenCreated": "Lien de partage créé",
-      "copied": "Copié dans le presse-papiers.",
+      "copied": "Copié dans le presse-papiers",
       "activeTitle": "Liens actifs",
       "noActive": "Aucun lien de partage actif.",
       "created": "Créé",
@@ -6190,7 +6197,7 @@
       "revokeSession": "Déconnecter",
       "revokeError": "Impossible de traiter la demande. Veuillez réessayer.",
       "signOutEverywhere": "Se déconnecter partout ailleurs",
-      "signOutEverywhereDone": "{count} autre(s) session(s) déconnectée(s).",
+      "signOutEverywhereDone": "{count} autre(s) session(s) déconnectée(s)",
       "activityTitle": "Activité de sécurité",
       "activityDescription": "Connexions récentes, modifications de sécurité et exports de données de votre compte.",
       "activityEmpty": "Aucune activité de sécurité pour l'instant.",
@@ -6271,7 +6278,7 @@
         "revokeError": "Impossible de révoquer l'appareil. Veuillez réessayer.",
         "revoke": "Révoquer",
         "revokeAll": "Oublier tous les appareils",
-        "revokeAllDone": "{count} appareil(s) de confiance oublié(s).",
+        "revokeAllDone": "{count} appareil(s) de confiance oublié(s)",
         "unnamed": "Appareil inconnu",
         "current": "Cet appareil",
         "expires": "De confiance jusqu'au {date}",
@@ -6596,13 +6603,13 @@
       "maxUsesLabel": "Utilisations maximales",
       "maxUsesHint": "Nombre d'inscriptions que ce lien autorise (1–50).",
       "createConfirm": "Créer l'invitation",
-      "createdToast": "Invitation créée.",
+      "createdToast": "Invitation créée",
       "createError": "Impossible de créer l'invitation.",
       "tokenTitle": "Lien d'invitation",
       "tokenOnceHint": "Copiable uniquement maintenant — copiez le lien ou faites scanner le code QR.",
       "hashExplainer": "Seul un hachage du lien est stocké : il ne pourra plus être affiché. En cas de perte, révoquez l'invitation et créez-en une nouvelle.",
       "copyLink": "Copier le lien",
-      "copiedToast": "Lien copié.",
+      "copiedToast": "Lien copié",
       "copyError": "Échec de la copie.",
       "qrAlt": "Code QR du lien d'invitation",
       "loadError": "Impossible de charger les invitations.",
@@ -7345,7 +7352,7 @@
       "saveError": "Échec de l’enregistrement. Réessayez.",
       "hourLabel": "Heure du rappel",
       "hourAria": "Heure du rappel d’humeur",
-      "hourSavedToast": "Heure du rappel mise à jour.",
+      "hourSavedToast": "Heure du rappel mise à jour",
       "detail": "Utilise uniquement les canaux déjà configurés (Telegram, ntfy, Web Push, Apple Push) et reste silencieux dès que tu as noté ton humeur aujourd’hui."
     },
     "coachNudge": {
@@ -7386,8 +7393,8 @@
       "leadLabel": "Délai de réapprovisionnement (jours)",
       "leadAria": "Délai de réapprovisionnement en jours",
       "leadHelp": "L’alerte est envoyée ce nombre de jours plus un intervalle de dose plus tôt, pour qu’un réapprovisionnement arrive avant ta dernière dose. Un médicament donné peut remplacer cette valeur dans son onglet stock.",
-      "leadSavedToast": "Délai de réapprovisionnement enregistré.",
-      "savedToast": "Seuil de stock enregistré.",
+      "leadSavedToast": "Délai de réapprovisionnement enregistré",
+      "savedToast": "Seuil de stock enregistré",
       "enabledToast": "Alertes de stock faible activées.",
       "disabledToast": "Alertes de stock faible désactivées.",
       "saveError": "Échec de l’enregistrement. Réessayez.",
@@ -8047,10 +8054,10 @@
       "protected": "Si une contraception a été utilisée pendant le rapport.",
       "protectedLabel": "Que signifie protégé ?"
     },
-    "saveSuccess": "Entrée enregistrée.",
-    "deleteSuccess": "Entrée supprimée.",
-    "periodStartSaved": "Début des règles enregistré.",
-    "periodEndSaved": "Fin des règles enregistrée.",
+    "saveSuccess": "Entrée enregistrée",
+    "deleteSuccess": "Entrée supprimée",
+    "periodStartSaved": "Début des règles enregistré",
+    "periodEndSaved": "Fin des règles enregistrée",
     "startedPeriodOnDate": "Mes règles ont commencé ce jour-là",
     "endedPeriodOnDate": "Mes règles se sont terminées ce jour-là"
   },
@@ -9311,7 +9318,7 @@
       "freeText": {
         "label": "Note en texte libre (allergies et intolérances)",
         "hint": "Un complément en texte libre à la liste structurée ci-dessus, pour un contexte qu'une entrée seule ne peut pas refléter.",
-        "savedToast": "Note d'allergies enregistrée.",
+        "savedToast": "Note d'allergies enregistrée",
         "saveError": "Impossible d'enregistrer. Veuillez réessayer."
       }
     },
@@ -9370,7 +9377,7 @@
       "conditionsLabel": "Affections chroniques",
       "focusLabel": "Ce que le Coach surveille",
       "loadError": "Impossible de charger vos antécédents.",
-      "savedToast": "Affections enregistrées.",
+      "savedToast": "Affections enregistrées",
       "saveError": "Impossible d'enregistrer. Veuillez réessayer."
     },
     "emergency": {
@@ -9474,7 +9481,7 @@
     },
     "toast": {
       "duplicate": "Déjà enregistré — le document existant est mis en évidence.",
-      "deleted": "Document supprimé.",
+      "deleted": "Document supprimé",
       "restoreFailed": "Impossible de restaurer le document."
     },
     "timeline": {
@@ -9647,9 +9654,9 @@
       "unverifiedNoteOther": "{count} valeurs restent à vérifier et demeurent en attente.",
       "finish": "Terminer la vérification",
       "confirmFailed": "La vérification n’a pas pu être enregistrée. Réessayez.",
-      "savedToastOne": "1 valeur enregistrée.",
-      "savedToastFew": "{count} valeurs enregistrées.",
-      "savedToastOther": "{count} valeurs enregistrées.",
+      "savedToastOne": "1 valeur enregistrée",
+      "savedToastFew": "{count} valeurs enregistrées",
+      "savedToastOther": "{count} valeurs enregistrées",
       "nothingSavedToast": "Vérification enregistrée. Aucune valeur n’a été ajoutée.",
       "extract": "Extraire les valeurs de laboratoire",
       "extracting": "Extraction…",
@@ -10190,7 +10197,7 @@
       "errorRateLimit": "Trop de profils créés dans la dernière heure. Patientez un peu et réessayez."
     },
     "toast": {
-      "savedTo": "Enregistré dans le dossier de {name}."
+      "savedTo": "Enregistré dans le dossier de {name}"
     },
     "activityVerb": {
       "measurementCreate": "{name} a ajouté une mesure",

@@ -560,7 +560,7 @@
       "viewAll": "View all",
       "empty": {
         "title": "No workouts yet",
-        "cta": "Open Apple Health on your iPhone to sync workouts here."
+        "cta": "Connect a data source in Settings to see workouts here."
       }
     },
     "metric": {
@@ -729,9 +729,12 @@
     "sourceWhoop": "WHOOP",
     "sourceFitbit": "Fitbit",
     "bulkDeleteSuccess": "{count} measurements deleted",
+    "bulkDeleteSuccessOne": "Measurement deleted",
     "bulkDeleteError": "Error deleting the selected measurements",
     "bulkDeleteConfirmTitle": "Delete {count} measurements?",
+    "bulkDeleteConfirmTitleOne": "Delete this measurement?",
     "bulkDeleteConfirmBody": "The {count} selected measurements will be deleted. You can undo this for a short moment afterwards.",
+    "bulkDeleteConfirmBodyOne": "The selected measurement will be deleted. You can undo this for a short moment afterwards.",
     "typePhq9Score": "PHQ-9 score",
     "typeGad7Score": "GAD-7 score",
     "typeGripStrength": "Grip strength",
@@ -879,9 +882,12 @@
     "sourceTelegram": "Telegram",
     "sourceDaylio": "Daylio",
     "bulkDeleteSuccess": "{count} entries deleted",
+    "bulkDeleteSuccessOne": "Entry deleted",
     "bulkDeleteError": "Error deleting the selected entries",
     "bulkDeleteConfirmTitle": "Delete {count} entries?",
+    "bulkDeleteConfirmTitleOne": "Delete this entry?",
     "bulkDeleteConfirmBody": "The {count} selected mood entries will be deleted. You can undo this for a short moment afterwards.",
+    "bulkDeleteConfirmBodyOne": "The selected mood entry will be deleted. You can undo this for a short moment afterwards.",
     "customize": "Customize mood tags",
     "addTagInline": "Add tag",
     "manage": {
@@ -1779,7 +1785,8 @@
         "enabledToast": "Reminders on",
         "disabledToast": "Reminders off",
         "toggleFailed": "Could not change the reminder setting.",
-        "clientManagedChip": "Your iPhone manages reminders for this medication."
+        "clientManagedChip": "Managed by iPhone",
+        "clientManagedHint": "Your iPhone manages reminders for this medication."
       },
       "settings": {
         "title": "Settings",
@@ -1932,7 +1939,7 @@
         "addQuantityHelper": "1–1000 units per pack or container.",
         "addExpiryLabel": "Expiry date (optional)",
         "addSubmit": "Register",
-        "addSuccess": "Supply registered.",
+        "addSuccess": "Supply registered",
         "addFailed": "The supply could not be registered.",
         "adjustButton": "Adjust",
         "adjustTitle": "Correct container",
@@ -1940,11 +1947,11 @@
         "adjustQuantityLabel": "Remaining units",
         "adjustHelper": "Capacity: {total} units.",
         "adjustSubmit": "Save",
-        "adjustSuccess": "Stock updated.",
+        "adjustSuccess": "Stock updated",
         "adjustFailed": "The stock could not be updated.",
         "deleteTitle": "Delete container?",
         "deleteDescription": "Permanently removes this pack or container from the stock. Logged intakes stay unchanged.",
-        "deleteSuccess": "Stock entry deleted.",
+        "deleteSuccess": "Stock entry deleted",
         "deleteFailed": "The stock entry could not be deleted.",
         "containerTypeLabel": "Container type",
         "containerType": {
@@ -2139,7 +2146,7 @@
       "scaleToggleLabel": "Chart scale"
     },
     "import": {
-      "resultSuccess": "{imported} intakes imported.",
+      "resultSuccess": "{imported} intakes imported",
       "resultPartial": "{imported} imported, {skipped} skipped.",
       "resultNothing": "Nothing was imported: all {skipped} entries were skipped.",
       "resultAlreadyRecorded": "{recorded} intakes are already recorded. Nothing new was added.",
@@ -2402,7 +2409,7 @@
       "dragHandle": "Drag to reorder",
       "show": "Show",
       "hide": "Hide",
-      "manageInSettings": "Manage pills & detail pages in Settings",
+      "manageInSettings": "Manage chips & detail pages in Settings",
       "groupSleep": "Sleep",
       "groupMood": "Mood",
       "groupEvents": "Events",
@@ -2787,7 +2794,7 @@
       "settingsDefaultWindowLabel": "Default analysis window",
       "settingsDefaultWindowHint": "The Coach reads this much history per chat unless you override it from the drawer header.",
       "settingsSave": "Save",
-      "settingsSaved": "Saved.",
+      "settingsSaved": "Saved",
       "settingsCancel": "Cancel",
       "feedbackHelpful": "Helpful",
       "feedbackUnhelpful": "Not quite",
@@ -4159,13 +4166,13 @@
       "overviewDescription": "Show or hide sections and set their order on the Insights overview."
     },
     "pillOrder": {
-      "title": "Sort the navigation pills",
-      "description": "Drag the pills into the order you want and show or hide them via the eye icon.",
+      "title": "Sort the navigation chips",
+      "description": "Drag the chips into the order you want and show or hide them via the eye icon.",
       "dragHandle": "Reorder",
-      "saveSuccess": "Pill order saved.",
-      "saveError": "Saving the pill order failed.",
+      "saveSuccess": "Chip order saved",
+      "saveError": "Saving the chip order failed.",
       "save": "Save",
-      "empty": "No navigation pills available yet.",
+      "empty": "No navigation chips available yet.",
       "detail": "Hidden detail pages are also removed from the top navigation."
     },
     "customize": "Customize Insights",
@@ -4855,9 +4862,9 @@
         "resetDefaultsConfirm": "Reset order",
         "moveUp": "Move up",
         "moveDown": "Move down",
-        "saveSuccess": "Source priority saved.",
+        "saveSuccess": "Source priority saved",
         "saveError": "Saving the source priority failed.",
-        "resetSuccess": "Source priority reset to defaults.",
+        "resetSuccess": "Source priority reset to defaults",
         "perMetricToggle": "Per-metric overrides ({count})",
         "perMetricHelp": "Metrics you have customised away from the default ladder. Use this list to roll any single metric back to its constant default without touching the rest.",
         "perMetricEmpty": "No per-metric overrides set — every metric uses the global ladder above.",
@@ -5026,7 +5033,7 @@
             "failed": "The import failed. Please try again.",
             "readFailed": "Couldn't read that file.",
             "resultSummary": "Imported {measurements} measurements and {moods} mood entries, {skipped} skipped.",
-            "resultSuccess": "Imported {measurements} measurements and {moods} mood entries.",
+            "resultSuccess": "Imported {measurements} measurements and {moods} mood entries",
             "resultNothing": "Nothing was imported. All {skipped} entries were skipped.",
             "resultEmpty": "That file carried no measurements and no mood entries."
           },
@@ -5050,10 +5057,10 @@
             "previewSummary": "Preview: {inserted} would import, {skipped} skipped.",
             "resultSummary": "Imported {inserted} new and updated {updated}, {skipped} skipped.",
             "rowError": "Line {line}: {reason}",
-            "resultSuccess": "Imported {inserted} new and updated {updated}.",
+            "resultSuccess": "Imported {inserted} new and updated {updated}",
             "resultNothing": "Nothing was imported. All {skipped} rows were skipped.",
             "resultEmpty": "That file has a header but no data rows.",
-            "previewSuccess": "Preview: {inserted} would import.",
+            "previewSuccess": "Preview: {inserted} would import",
             "previewNothing": "Preview: nothing would import. All {skipped} rows would be skipped.",
             "skipGroupOne": "{count} row skipped: {reason}",
             "skipGroupFew": "{count} rows skipped: {reason}",
@@ -5145,8 +5152,8 @@
       },
       "insights": {
         "title": "Insights",
-        "description": "Overview and navigation-pill order.",
-        "subtitle": "Arrange your overview sections and pill order."
+        "description": "Overview and navigation-chip order.",
+        "subtitle": "Arrange your overview sections and chip order."
       },
       "medications": {
         "title": "Medications",
@@ -5175,7 +5182,7 @@
       },
       "modules": {
         "title": "Modules",
-        "saved": "Saved.",
+        "saved": "Saved",
         "error": "Couldn't save. Please try again.",
         "toggleable": {
           "title": "What you track",
@@ -5223,7 +5230,7 @@
         "use": "Use",
         "select": "Select",
         "saveError": "Could not save your change.",
-        "homeSaved": "Home location saved.",
+        "homeSaved": "Home location saved",
         "travelAdded": "Location period added.",
         "travelRemoved": "Location period removed.",
         "backfillQueued": "Backfill queued.",
@@ -5280,7 +5287,7 @@
           "current": "Your saved selection"
         },
         "save": "Save",
-        "saved": "Saved.",
+        "saved": "Saved",
         "error": "Couldn't save. Please try again.",
         "loadFailed": "Couldn't load your selection.",
         "eligibilityFailed": "Couldn't check which pillars currently have data. The switches below still work.",
@@ -5318,7 +5325,7 @@
       "auto": "Automatic (language)",
       "h24": "24-hour",
       "h12": "12-hour (AM/PM)",
-      "saved": "Hour format saved.",
+      "saved": "Hour format saved",
       "saveError": "Saving the hour format failed."
     },
     "dateFormat": {
@@ -5328,7 +5335,7 @@
       "dmy": "DD.MM.YYYY",
       "mdy": "MM/DD/YYYY",
       "ymd": "YYYY-MM-DD",
-      "saved": "Date format saved.",
+      "saved": "Date format saved",
       "saveError": "Saving the date format failed."
     },
     "username": "Username",
@@ -5622,7 +5629,7 @@
         "clearBody": "This removes the free-text note only. Your allergies and intolerances stay exactly as they are.",
         "clearConfirm": "Clear note",
         "save": "Save",
-        "savedToast": "About-me note saved.",
+        "savedToast": "About-me note saved",
         "clearedToast": "About-me note cleared.",
         "saveError": "Could not save. Please try again.",
         "loadError": "The note could not be loaded.",
@@ -5644,14 +5651,14 @@
         "title": "Read documents automatically with AI",
         "subLabel": "Documents are read and indexed by your configured AI provider without a per-document tap.",
         "honesty": "When on, each document you upload is sent to your configured AI provider to be read, described, and indexed for search — with no per-document confirmation. Turning it on also reaches backwards: documents you have already uploaded that carry no summary yet are sent too, up to 200 each time you switch it on. This happens on the server and the document's contents leave this machine to that provider. If your configured provider is a subscription connection (a signed-in AI account rather than an API key), that provider's own data settings apply — subscription providers may use the content to improve their models, and no data-processing agreement covers it. Documents read by a self-hosted local model never leave your server. Off by default; turn it on only if you accept this trade for your documents.",
-        "confirm": "I understand — turn on automatic AI reading",
+        "confirm": "I understand — turn on",
         "cancel": "Cancel"
       },
       "centralCodex": {
         "title": "Use the server's shared AI access",
         "subLabel": "Route AI requests through the connection the operator set up for this server, alongside your own providers as a fallback.",
         "honesty": "The shared access is a single signed-in AI account the operator connected for everyone on this server — not your own key. Requests you make on it are trained on by the provider by default and no data-processing agreement covers them, the account's hourly and weekly limits are shared with every other user who opted in, and your own configured providers are still tried first. Turn it on only if you accept this trade.",
-        "confirm": "I understand — use the shared connection",
+        "confirm": "I understand — use connection",
         "cancel": "Cancel"
       },
       "consent": {
@@ -5673,7 +5680,7 @@
         "description": "Choose how distances and speeds are shown across charts and tiles.",
         "metric": "Metric",
         "imperial": "Imperial",
-        "saved": "Unit preference saved.",
+        "saved": "Unit preference saved",
         "saveError": "Could not save your unit preference."
       }
     },
@@ -5861,7 +5868,7 @@
       "errorReconnect": "Error — reconnect",
       "warningServerError": "Sync failing",
       "failureCount": "{count}/{threshold}",
-      "parkedReconnect": "Paused — reconnect manually",
+      "parkedReconnect": "Paused — reconnect",
       "notConnected": "Not connected",
       "justNow": "just now",
       "minutesAgo": "{count} min ago",
@@ -6038,7 +6045,7 @@
       "expiryInvalid": "Expiry must be between 1 and {max} days.",
       "create": "Create link",
       "tokenCreated": "Share link created",
-      "copied": "Copied to clipboard.",
+      "copied": "Copied to clipboard",
       "activeTitle": "Active links",
       "noActive": "No active share links.",
       "created": "Created",
@@ -6190,7 +6197,7 @@
       "revokeSession": "Sign out",
       "revokeError": "Could not complete the request. Please try again.",
       "signOutEverywhere": "Sign out everywhere else",
-      "signOutEverywhereDone": "Signed out {count} other session(s).",
+      "signOutEverywhereDone": "Signed out {count} other session(s)",
       "activityTitle": "Security activity",
       "activityDescription": "Recent sign-ins, security changes, and data exports on your account.",
       "activityEmpty": "No security activity yet.",
@@ -6271,7 +6278,7 @@
         "revokeError": "Could not revoke the device. Please try again.",
         "revoke": "Revoke",
         "revokeAll": "Forget all devices",
-        "revokeAllDone": "Forgot {count} trusted device(s).",
+        "revokeAllDone": "Forgot {count} trusted device(s)",
         "unnamed": "Unknown device",
         "current": "This device",
         "expires": "Trusted until {date}",
@@ -6596,13 +6603,13 @@
       "maxUsesLabel": "Maximum uses",
       "maxUsesHint": "How many signups this link admits (1–50).",
       "createConfirm": "Create invite",
-      "createdToast": "Invite created.",
+      "createdToast": "Invite created",
       "createError": "Could not create the invite.",
       "tokenTitle": "Invite link",
       "tokenOnceHint": "Copyable only now — copy the link or have the QR code scanned.",
       "hashExplainer": "Only a hash of the link is stored, so it cannot be shown again later. If it gets lost, revoke the invite and create a new one.",
       "copyLink": "Copy link",
-      "copiedToast": "Link copied.",
+      "copiedToast": "Link copied",
       "copyError": "Copy failed.",
       "qrAlt": "QR code for the invite link",
       "loadError": "Could not load the invites.",
@@ -7345,7 +7352,7 @@
       "saveError": "Save failed. Please try again.",
       "hourLabel": "Reminder time",
       "hourAria": "Mood reminder hour",
-      "hourSavedToast": "Reminder time updated.",
+      "hourSavedToast": "Reminder time updated",
       "detail": "Routes only through channels you've already configured (Telegram, ntfy, Web Push, Apple Push) and stays silent once you've logged today."
     },
     "coachNudge": {
@@ -7386,8 +7393,8 @@
       "leadLabel": "Reorder lead time (days)",
       "leadAria": "Reorder lead time in days",
       "leadHelp": "The alert fires this many days plus one dose-interval earlier so a refill arrives before your last dose. A single medication can override this on its supply tab.",
-      "leadSavedToast": "Reorder lead time saved.",
-      "savedToast": "Low-stock threshold saved.",
+      "leadSavedToast": "Reorder lead time saved",
+      "savedToast": "Low-stock threshold saved",
       "enabledToast": "Low-stock alerts enabled.",
       "disabledToast": "Low-stock alerts disabled.",
       "saveError": "Could not save. Please try again.",
@@ -8047,10 +8054,10 @@
       "protected": "Whether contraception was used during intercourse.",
       "protectedLabel": "What does protected mean?"
     },
-    "saveSuccess": "Entry saved.",
-    "deleteSuccess": "Entry deleted.",
-    "periodStartSaved": "Period start saved.",
-    "periodEndSaved": "End of period saved.",
+    "saveSuccess": "Entry saved",
+    "deleteSuccess": "Entry deleted",
+    "periodStartSaved": "Period start saved",
+    "periodEndSaved": "End of period saved",
     "startedPeriodOnDate": "My period started this day",
     "endedPeriodOnDate": "My period ended this day"
   },
@@ -9311,7 +9318,7 @@
       "freeText": {
         "label": "Free-text note (allergies & intolerances)",
         "hint": "A free-text supplement to the structured list above, for context a single entry cannot carry.",
-        "savedToast": "Allergy note saved.",
+        "savedToast": "Allergy note saved",
         "saveError": "Could not save. Please try again."
       }
     },
@@ -9370,7 +9377,7 @@
       "conditionsLabel": "Chronic conditions",
       "focusLabel": "What the Coach watches",
       "loadError": "Couldn't load your conditions.",
-      "savedToast": "Conditions saved.",
+      "savedToast": "Conditions saved",
       "saveError": "Could not save. Please try again."
     },
     "emergency": {
@@ -9474,7 +9481,7 @@
     },
     "toast": {
       "duplicate": "Already stored — highlighting the existing document.",
-      "deleted": "Document deleted.",
+      "deleted": "Document deleted",
       "restoreFailed": "Couldn't restore the document."
     },
     "timeline": {
@@ -9647,9 +9654,9 @@
       "unverifiedNoteOther": "{count} values still need checking and stay pending.",
       "finish": "Finish review",
       "confirmFailed": "The review couldn't be saved. Try again.",
-      "savedToastOne": "1 value saved.",
-      "savedToastFew": "{count} values saved.",
-      "savedToastOther": "{count} values saved.",
+      "savedToastOne": "1 value saved",
+      "savedToastFew": "{count} values saved",
+      "savedToastOther": "{count} values saved",
       "nothingSavedToast": "Review saved. No values were added.",
       "extract": "Extract lab values",
       "extracting": "Extracting…",
@@ -10190,7 +10197,7 @@
       "errorRateLimit": "Too many profiles created in the last hour. Wait a while and try again."
     },
     "toast": {
-      "savedTo": "Saved to {name}'s record."
+      "savedTo": "Saved to {name}'s record"
     },
     "activityVerb": {
       "measurementCreate": "{name} added a reading",

@@ -394,12 +394,17 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
       await invalidateKeys(queryClient, moodDependentKeys);
       await refetchInactiveDailyReads(queryClient);
       clearSelection();
-      toast.success(t("mood.bulkDeleteSuccess", { count: String(deleted) }), {
-        action: {
-          label: t("common.undo"),
-          onClick: () => void restoreEntries(ids),
+      toast.success(
+        deleted === 1
+          ? t("mood.bulkDeleteSuccessOne")
+          : t("mood.bulkDeleteSuccess", { count: String(deleted) }),
+        {
+          action: {
+            label: t("common.undo"),
+            onClick: () => void restoreEntries(ids),
+          },
         },
-      });
+      );
     },
     onError: () => {
       toast.error(t("mood.bulkDeleteError"));
@@ -955,12 +960,20 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
           onClear={clearSelection}
           onConfirmDelete={onConfirmBulkDelete}
           isDeleting={bulkDeleteMutation.isPending}
-          confirmTitle={t("mood.bulkDeleteConfirmTitle", {
-            count: String(selectedOnPage),
-          })}
-          confirmBody={t("mood.bulkDeleteConfirmBody", {
-            count: String(selectedOnPage),
-          })}
+          confirmTitle={
+            selectedOnPage === 1
+              ? t("mood.bulkDeleteConfirmTitleOne")
+              : t("mood.bulkDeleteConfirmTitle", {
+                  count: String(selectedOnPage),
+                })
+          }
+          confirmBody={
+            selectedOnPage === 1
+              ? t("mood.bulkDeleteConfirmBodyOne")
+              : t("mood.bulkDeleteConfirmBody", {
+                  count: String(selectedOnPage),
+                })
+          }
         />
 
         {/* Pagination */}

@@ -560,7 +560,7 @@
       "viewAll": "Ver todos",
       "empty": {
         "title": "Aún no hay entrenamientos",
-        "cta": "Abre la app Apple Salud en el iPhone para sincronizar los entrenamientos."
+        "cta": "Conecta una fuente de datos en los ajustes para ver aquí los entrenamientos."
       }
     },
     "metric": {
@@ -729,9 +729,12 @@
     "sourceWhoop": "WHOOP",
     "sourceFitbit": "Fitbit",
     "bulkDeleteSuccess": "{count} mediciones eliminadas",
+    "bulkDeleteSuccessOne": "Medición eliminada",
     "bulkDeleteError": "Error al eliminar las mediciones seleccionadas",
     "bulkDeleteConfirmTitle": "¿Eliminar {count} mediciones?",
+    "bulkDeleteConfirmTitleOne": "¿Eliminar esta medición?",
     "bulkDeleteConfirmBody": "Las {count} mediciones seleccionadas se eliminarán. Justo después podrás deshacerlo durante un breve momento.",
+    "bulkDeleteConfirmBodyOne": "La medición seleccionada se eliminará. Justo después podrás deshacerlo durante un breve momento.",
     "typePhq9Score": "Puntuación PHQ-9",
     "typeGad7Score": "Puntuación GAD-7",
     "typeGripStrength": "Fuerza de agarre",
@@ -879,9 +882,12 @@
     "sourceTelegram": "Telegram",
     "sourceDaylio": "Daylio",
     "bulkDeleteSuccess": "{count} entradas eliminadas",
+    "bulkDeleteSuccessOne": "Entrada eliminada",
     "bulkDeleteError": "Error al eliminar las entradas seleccionadas",
     "bulkDeleteConfirmTitle": "¿Eliminar {count} entradas?",
+    "bulkDeleteConfirmTitleOne": "¿Eliminar esta entrada?",
     "bulkDeleteConfirmBody": "Las {count} entradas de estado de ánimo seleccionadas se eliminarán. Justo después podrás deshacerlo durante un breve momento.",
+    "bulkDeleteConfirmBodyOne": "La entrada de estado de ánimo seleccionada se eliminará. Justo después podrás deshacerlo durante un breve momento.",
     "customize": "Personalizar etiquetas de ánimo",
     "addTagInline": "Añadir etiqueta",
     "manage": {
@@ -1779,7 +1785,8 @@
         "enabledToast": "Recordatorios activados",
         "disabledToast": "Recordatorios desactivados",
         "toggleFailed": "No se pudo cambiar el ajuste de recordatorios.",
-        "clientManagedChip": "Tu iPhone gestiona los recordatorios de este medicamento."
+        "clientManagedChip": "Gestionado por el iPhone",
+        "clientManagedHint": "Tu iPhone gestiona los recordatorios de este medicamento."
       },
       "settings": {
         "title": "Ajustes",
@@ -1932,7 +1939,7 @@
         "addQuantityHelper": "1–1000 unidades por envase o recipiente.",
         "addExpiryLabel": "Fecha de caducidad (opcional)",
         "addSubmit": "Registrar",
-        "addSuccess": "Existencias registradas.",
+        "addSuccess": "Existencias registradas",
         "addFailed": "No se pudieron registrar las existencias.",
         "adjustButton": "Ajustar",
         "adjustTitle": "Corregir envase",
@@ -1940,11 +1947,11 @@
         "adjustQuantityLabel": "Unidades restantes",
         "adjustHelper": "Capacidad: {total} unidades.",
         "adjustSubmit": "Guardar",
-        "adjustSuccess": "Existencias actualizadas.",
+        "adjustSuccess": "Existencias actualizadas",
         "adjustFailed": "No se pudieron actualizar las existencias.",
         "deleteTitle": "¿Eliminar envase?",
         "deleteDescription": "Elimina permanentemente este envase o recipiente de las existencias. Las tomas registradas no cambian.",
-        "deleteSuccess": "Entrada de existencias eliminada.",
+        "deleteSuccess": "Entrada de existencias eliminada",
         "deleteFailed": "No se pudo eliminar la entrada de existencias.",
         "containerTypeLabel": "Tipo de envase",
         "containerType": {
@@ -2139,7 +2146,7 @@
       "scaleToggleLabel": "Escala del gráfico"
     },
     "import": {
-      "resultSuccess": "{imported} tomas importadas.",
+      "resultSuccess": "{imported} tomas importadas",
       "resultPartial": "{imported} importadas, {skipped} omitidas.",
       "resultNothing": "No se importó nada: se omitieron las {skipped} entradas.",
       "resultAlreadyRecorded": "{recorded} tomas ya están registradas. No se añadió nada nuevo.",
@@ -2787,7 +2794,7 @@
       "settingsDefaultWindowLabel": "Periodo de análisis por defecto",
       "settingsDefaultWindowHint": "El coach lee este periodo por chat, salvo que elijas otro en la cabecera del cajón.",
       "settingsSave": "Guardar",
-      "settingsSaved": "Guardado.",
+      "settingsSaved": "Guardado",
       "settingsCancel": "Cancelar",
       "feedbackHelpful": "Útil",
       "feedbackUnhelpful": "Poco útil",
@@ -4162,7 +4169,7 @@
       "title": "Ordenar las pestañas de navegación",
       "description": "Arrastra las pestañas al orden que quieras y muéstralas u ocúltalas con el icono del ojo.",
       "dragHandle": "Reordenar",
-      "saveSuccess": "Orden de las pestañas guardado.",
+      "saveSuccess": "Orden de las pestañas guardado",
       "saveError": "No se pudo guardar el orden de las pestañas.",
       "save": "Guardar",
       "empty": "Aún no hay pestañas de navegación disponibles.",
@@ -4855,9 +4862,9 @@
         "resetDefaultsConfirm": "Restablecer orden",
         "moveUp": "Subir",
         "moveDown": "Bajar",
-        "saveSuccess": "Prioridad de fuentes guardada.",
+        "saveSuccess": "Prioridad de fuentes guardada",
         "saveError": "No se pudo guardar la prioridad de fuentes.",
-        "resetSuccess": "Prioridad de fuentes restablecida a los valores predeterminados.",
+        "resetSuccess": "Prioridad de fuentes restablecida a los valores predeterminados",
         "perMetricToggle": "Ajustes por métrica ({count})",
         "perMetricHelp": "Métricas que has personalizado respecto al orden predeterminado. Usa esta lista para devolver cualquier métrica concreta a su valor predeterminado sin tocar las demás.",
         "perMetricEmpty": "No hay ajustes por métrica — todas las métricas usan el orden global de arriba.",
@@ -5026,7 +5033,7 @@
             "failed": "La importación falló. Inténtalo de nuevo.",
             "readFailed": "No se pudo leer ese archivo.",
             "resultSummary": "{measurements} mediciones y {moods} entradas de ánimo importadas, {skipped} omitidas.",
-            "resultSuccess": "{measurements} mediciones y {moods} entradas de ánimo importadas.",
+            "resultSuccess": "{measurements} mediciones y {moods} entradas de ánimo importadas",
             "resultNothing": "No se importó nada. Se omitieron las {skipped} entradas.",
             "resultEmpty": "Ese archivo no contenía mediciones ni entradas de ánimo."
           },
@@ -5050,10 +5057,10 @@
             "previewSummary": "Vista previa: {inserted} se importarían, {skipped} omitidas.",
             "resultSummary": "{inserted} nuevas importadas y {updated} actualizadas, {skipped} omitidas.",
             "rowError": "Línea {line}: {reason}",
-            "resultSuccess": "{inserted} nuevas importadas y {updated} actualizadas.",
+            "resultSuccess": "{inserted} nuevas importadas y {updated} actualizadas",
             "resultNothing": "No se importó nada. Se omitieron las {skipped} filas.",
             "resultEmpty": "Ese archivo tiene encabezado pero ninguna fila de datos.",
-            "previewSuccess": "Vista previa: {inserted} se importarían.",
+            "previewSuccess": "Vista previa: {inserted} se importarían",
             "previewNothing": "Vista previa: no se importaría nada. Se omitirían las {skipped} filas.",
             "skipGroupOne": "{count} fila omitida: {reason}",
             "skipGroupFew": "{count} filas omitidas: {reason}",
@@ -5146,7 +5153,7 @@
       "insights": {
         "title": "Análisis",
         "description": "Orden de la vista general y de las pestañas de navegación.",
-        "subtitle": "Organiza las secciones de tu resumen y el orden de las píldoras."
+        "subtitle": "Organiza las secciones de tu resumen y el orden de las pestañas."
       },
       "medications": {
         "title": "Medicamentos",
@@ -5175,7 +5182,7 @@
       },
       "modules": {
         "title": "Módulos",
-        "saved": "Guardado.",
+        "saved": "Guardado",
         "error": "No se pudo guardar. Inténtalo de nuevo.",
         "toggleable": {
           "title": "Qué registras",
@@ -5223,7 +5230,7 @@
         "use": "Usar",
         "select": "Seleccionar",
         "saveError": "No se pudo guardar el cambio.",
-        "homeSaved": "Ubicación principal guardada.",
+        "homeSaved": "Ubicación principal guardada",
         "travelAdded": "Periodo de ubicación añadido.",
         "travelRemoved": "Periodo de ubicación eliminado.",
         "backfillQueued": "Relleno programado.",
@@ -5280,7 +5287,7 @@
           "current": "Tu selección guardada"
         },
         "save": "Guardar",
-        "saved": "Guardado.",
+        "saved": "Guardado",
         "error": "No se pudo guardar. Inténtalo de nuevo.",
         "loadFailed": "No se pudo cargar tu selección.",
         "eligibilityFailed": "No se pudo comprobar qué pilares tienen datos ahora mismo. Los interruptores de abajo siguen funcionando.",
@@ -5318,7 +5325,7 @@
       "auto": "Automático (idioma)",
       "h24": "24 horas",
       "h12": "12 horas (AM/PM)",
-      "saved": "Formato horario guardado.",
+      "saved": "Formato horario guardado",
       "saveError": "No se pudo guardar el formato horario."
     },
     "dateFormat": {
@@ -5328,7 +5335,7 @@
       "dmy": "DD.MM.AAAA",
       "mdy": "MM/DD/AAAA",
       "ymd": "AAAA-MM-DD",
-      "saved": "Formato de fecha guardado.",
+      "saved": "Formato de fecha guardado",
       "saveError": "No se pudo guardar el formato de fecha."
     },
     "username": "Nombre de usuario",
@@ -5622,7 +5629,7 @@
         "clearBody": "Solo se elimina el texto libre. Tus alergias e intolerancias permanecen tal cual.",
         "clearConfirm": "Vaciar nota",
         "save": "Guardar",
-        "savedToast": "Nota «Sobre mí» guardada.",
+        "savedToast": "Nota «Sobre mí» guardada",
         "clearedToast": "Nota «Sobre mí» eliminada.",
         "saveError": "No se pudo guardar. Inténtalo de nuevo.",
         "loadError": "No se pudo cargar la nota.",
@@ -5644,14 +5651,14 @@
         "title": "Leer documentos automáticamente con IA",
         "subLabel": "Los documentos son leídos e indexados por tu proveedor de IA configurado, sin confirmar cada documento.",
         "honesty": "Cuando está activado, cada documento que subes se envía a tu proveedor de IA configurado para leerlo, describirlo e indexarlo para la búsqueda, sin confirmación por documento. Activarlo también actúa de forma retroactiva: los documentos que ya has subido y que aún no tienen resumen también se envían, hasta 200 cada vez que lo activas. Esto ocurre en el servidor y el contenido del documento sale de esta máquina hacia ese proveedor. Si tu proveedor configurado es una conexión de suscripción (una cuenta de IA con sesión iniciada en lugar de una clave de API), se aplican sus propios ajustes de datos: los proveedores de suscripción pueden usar el contenido para mejorar sus modelos, y ningún acuerdo de tratamiento de datos lo cubre. Los documentos leídos por un modelo local autoalojado nunca salen de tu servidor. Desactivado de forma predeterminada; actívalo solo si aceptas este compromiso para tus documentos.",
-        "confirm": "Lo entiendo: activar la lectura automática con IA",
+        "confirm": "Entendido: activar",
         "cancel": "Cancelar"
       },
       "centralCodex": {
         "title": "Usar el acceso de IA compartido del servidor",
         "subLabel": "Enruta las solicitudes de IA a través de la conexión que el operador configuró para este servidor, junto a tus propios proveedores como alternativa.",
         "honesty": "El acceso compartido es una única cuenta de IA con sesión iniciada que el operador conectó para todos en este servidor, no tu propia clave. Las solicitudes que hagas se usan de forma predeterminada para entrenar los modelos del proveedor y ningún acuerdo de tratamiento de datos las cubre, los límites por hora y semanales de la cuenta se comparten con todos los demás que se han unido, y tus propios proveedores se prueban primero. Actívalo solo si aceptas este compromiso.",
-        "confirm": "Entendido: usar la conexión compartida",
+        "confirm": "Entendido: usar la conexión",
         "cancel": "Cancelar"
       },
       "consent": {
@@ -5673,7 +5680,7 @@
         "description": "Elige cómo se muestran las distancias y velocidades en los gráficos y mosaicos.",
         "metric": "Métrico",
         "imperial": "Imperial",
-        "saved": "Preferencia de unidades guardada.",
+        "saved": "Preferencia de unidades guardada",
         "saveError": "No se pudo guardar tu preferencia de unidades."
       }
     },
@@ -5861,7 +5868,7 @@
       "errorReconnect": "Error — reconectar",
       "warningServerError": "Sincronización con errores",
       "failureCount": "{count}/{threshold}",
-      "parkedReconnect": "Pausado — reconectar manualmente",
+      "parkedReconnect": "Pausado — reconectar",
       "notConnected": "No conectado",
       "justNow": "ahora mismo",
       "minutesAgo": "hace {count} min",
@@ -6038,7 +6045,7 @@
       "expiryInvalid": "La caducidad debe estar entre 1 y {max} días.",
       "create": "Crear enlace",
       "tokenCreated": "Enlace para compartir creado",
-      "copied": "Copiado al portapapeles.",
+      "copied": "Copiado al portapapeles",
       "activeTitle": "Enlaces activos",
       "noActive": "No hay enlaces para compartir activos.",
       "created": "Creado",
@@ -6190,7 +6197,7 @@
       "revokeSession": "Cerrar sesión",
       "revokeError": "No se pudo completar la solicitud. Inténtalo de nuevo.",
       "signOutEverywhere": "Cerrar sesión en los demás dispositivos",
-      "signOutEverywhereDone": "Se cerraron {count} sesión(es).",
+      "signOutEverywhereDone": "Se cerraron {count} sesión(es)",
       "activityTitle": "Actividad de seguridad",
       "activityDescription": "Inicios de sesión, cambios de seguridad y exportaciones recientes de tu cuenta.",
       "activityEmpty": "Aún no hay actividad de seguridad.",
@@ -6271,7 +6278,7 @@
         "revokeError": "No se pudo revocar el dispositivo. Inténtalo de nuevo.",
         "revoke": "Revocar",
         "revokeAll": "Olvidar todos los dispositivos",
-        "revokeAllDone": "Se olvidaron {count} dispositivo(s) de confianza.",
+        "revokeAllDone": "Se olvidaron {count} dispositivo(s) de confianza",
         "unnamed": "Dispositivo desconocido",
         "current": "Este dispositivo",
         "expires": "De confianza hasta el {date}",
@@ -6596,13 +6603,13 @@
       "maxUsesLabel": "Usos máximos",
       "maxUsesHint": "Cuántos registros admite este enlace (1–50).",
       "createConfirm": "Crear invitación",
-      "createdToast": "Invitación creada.",
+      "createdToast": "Invitación creada",
       "createError": "No se pudo crear la invitación.",
       "tokenTitle": "Enlace de invitación",
       "tokenOnceHint": "Solo se puede copiar ahora: copia el enlace o deja que escaneen el código QR.",
       "hashExplainer": "Solo se guarda un hash del enlace, por lo que no se puede volver a mostrar. Si se pierde, revoca la invitación y crea una nueva.",
       "copyLink": "Copiar enlace",
-      "copiedToast": "Enlace copiado.",
+      "copiedToast": "Enlace copiado",
       "copyError": "No se pudo copiar.",
       "qrAlt": "Código QR del enlace de invitación",
       "loadError": "No se pudieron cargar las invitaciones.",
@@ -7345,7 +7352,7 @@
       "saveError": "No se pudo guardar. Inténtalo de nuevo.",
       "hourLabel": "Hora del recordatorio",
       "hourAria": "Hora del recordatorio de ánimo",
-      "hourSavedToast": "Hora del recordatorio actualizada.",
+      "hourSavedToast": "Hora del recordatorio actualizada",
       "detail": "Se envía solo por canales ya configurados (Telegram, ntfy, Web Push, Apple Push) y permanece en silencio una vez que has registrado el ánimo hoy."
     },
     "coachNudge": {
@@ -7386,8 +7393,8 @@
       "leadLabel": "Plazo de reposición (días)",
       "leadAria": "Plazo de reposición en días",
       "leadHelp": "El aviso se envía estos días más un intervalo de dosis antes, para que la reposición llegue antes de tu última dosis. Un medicamento concreto puede anular este valor en su pestaña de existencias.",
-      "leadSavedToast": "Plazo de reposición guardado.",
-      "savedToast": "Umbral de existencias guardado.",
+      "leadSavedToast": "Plazo de reposición guardado",
+      "savedToast": "Umbral de existencias guardado",
       "enabledToast": "Avisos de existencias bajas activados.",
       "disabledToast": "Avisos de existencias bajas desactivados.",
       "saveError": "No se pudo guardar. Inténtalo de nuevo.",
@@ -8047,10 +8054,10 @@
       "protected": "Si se usó anticoncepción durante las relaciones.",
       "protectedLabel": "¿Qué significa protegido?"
     },
-    "saveSuccess": "Entrada guardada.",
-    "deleteSuccess": "Entrada eliminada.",
-    "periodStartSaved": "Inicio del periodo guardado.",
-    "periodEndSaved": "Fin del periodo guardado.",
+    "saveSuccess": "Entrada guardada",
+    "deleteSuccess": "Entrada eliminada",
+    "periodStartSaved": "Inicio del periodo guardado",
+    "periodEndSaved": "Fin del periodo guardado",
     "startedPeriodOnDate": "Mi periodo empezó este día",
     "endedPeriodOnDate": "Mi periodo terminó este día"
   },
@@ -9311,7 +9318,7 @@
       "freeText": {
         "label": "Nota de texto libre (alergias e intolerancias)",
         "hint": "Un complemento de texto libre a la lista estructurada de arriba, para contexto que una entrada individual no puede reflejar.",
-        "savedToast": "Nota de alergias guardada.",
+        "savedToast": "Nota de alergias guardada",
         "saveError": "No se pudo guardar. Inténtalo de nuevo."
       }
     },
@@ -9370,7 +9377,7 @@
       "conditionsLabel": "Enfermedades crónicas",
       "focusLabel": "Qué vigila el Coach",
       "loadError": "No se pudieron cargar tus enfermedades.",
-      "savedToast": "Enfermedades guardadas.",
+      "savedToast": "Enfermedades guardadas",
       "saveError": "No se pudo guardar. Inténtalo de nuevo."
     },
     "emergency": {
@@ -9474,7 +9481,7 @@
     },
     "toast": {
       "duplicate": "Ya estaba guardado — se resalta el documento existente.",
-      "deleted": "Documento eliminado.",
+      "deleted": "Documento eliminado",
       "restoreFailed": "No se pudo restaurar el documento."
     },
     "timeline": {
@@ -9647,9 +9654,9 @@
       "unverifiedNoteOther": "{count} valores aún necesitan comprobación y quedan pendientes.",
       "finish": "Terminar revisión",
       "confirmFailed": "No se pudo guardar la revisión. Inténtalo de nuevo.",
-      "savedToastOne": "1 valor guardado.",
-      "savedToastFew": "{count} valores guardados.",
-      "savedToastOther": "{count} valores guardados.",
+      "savedToastOne": "1 valor guardado",
+      "savedToastFew": "{count} valores guardados",
+      "savedToastOther": "{count} valores guardados",
       "nothingSavedToast": "Revisión guardada. No se añadió ningún valor.",
       "extract": "Extraer valores de laboratorio",
       "extracting": "Extrayendo…",
@@ -10190,7 +10197,7 @@
       "errorRateLimit": "Demasiados perfiles creados en la última hora. Espera un poco y vuelve a intentarlo."
     },
     "toast": {
-      "savedTo": "Guardado en el historial de {name}."
+      "savedTo": "Guardado en el historial de {name}"
     },
     "activityVerb": {
       "measurementCreate": "{name} añadió una medición",
