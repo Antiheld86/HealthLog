@@ -6,6 +6,11 @@ import {
   type ProviderSkipHint,
 } from "./provider-health-ledger";
 import { annotate } from "@/lib/logging/context";
+import {
+  isOperatorFundedProvider,
+  OPERATOR_COST_CAP,
+  readDailySpend,
+} from "@/lib/ai/coach/budget";
 
 /**
  * The local model is the guaranteed floor (Epic B Pillar 4): a
@@ -394,6 +399,36 @@ async function runRawChain(
 
   for (let i = 0; i < ordered.length; i += 1) {
     const candidate = ordered[i];
+    // v1.37.19 (A7-2) — hop-time operator-cost guard. A request whose
+    // primary provider runs on the USER's own key reserves its budget
+    // under the generous user-plan ceiling; when the chain then falls
+    // back onto an operator-funded `admin-*` entry (or the health-ledger
+    // reorder promotes one), that hop would spend the OPERATOR's money
+    // under the wrong owner's cap. Check the day's recorded spend
+    // against OPERATOR_COST_CAP before letting an operator-funded
+    // candidate run; an exhausted cap skips the candidate exactly like a
+    // failed hop (next entry, or AllProvidersFailedError at the end).
+    if (isOperatorFundedProvider(candidate.providerType)) {
+      const spent = await readDailySpend(userId);
+      if (spent >= OPERATOR_COST_CAP) {
+        const hop: FallbackHop = {
+          providerType: candidate.providerType,
+          attempt: i + 1,
+          failureReason: "operator-cost-cap-exhausted",
+          httpStatus: null,
+        };
+        hops.push(hop);
+        annotate({
+          action: { name: "ai.chain.operator_cap_refused" },
+          meta: {
+            [`ai_chain_hop_${i + 1}_provider`]: candidate.providerType,
+            [`ai_chain_hop_${i + 1}_reason`]: "operator-cost-cap-exhausted",
+            operator_cap_spent: spent,
+          },
+        });
+        continue;
+      }
+    }
     try {
       const result = await invoke(candidate);
       rememberWorkingProvider(userId, candidate.providerType);

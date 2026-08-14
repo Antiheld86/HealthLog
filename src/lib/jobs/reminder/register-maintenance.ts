@@ -197,6 +197,12 @@ import {
   type DocumentPurgePayload,
 } from "@/lib/jobs/document-purge";
 import {
+  DOCUMENT_SUMMARY_REAPER_QUEUE,
+  DOCUMENT_SUMMARY_REAPER_CRON,
+  handleDocumentSummaryReaper,
+  type DocumentSummaryReaperPayload,
+} from "@/lib/jobs/document-summary-reaper";
+import {
   CYCLE_PREDICTION_REFRESH_QUEUE,
   CYCLE_PREDICTION_REFRESH_CRON,
   handleCyclePredictionRefresh,
@@ -423,6 +429,11 @@ const allQueues = [
   // the daily schedule silently no-ops and "deleted" documents hold backup
   // weight forever.
   DOCUMENT_PURGE_QUEUE,
+  // Document vault — hourly reaper for summary rows stuck on PENDING (a
+  // job dead past its retry budget). Without this entry the schedule
+  // silently no-ops and a dead "wird generiert" claim never converges to
+  // the honest UNAVAILABLE state.
+  DOCUMENT_SUMMARY_REAPER_QUEUE,
   // Document vault P2 — on-demand content-search index backfill. Fired by the
   // "index all documents" action (no cron): indexes a user's not-yet-indexed
   // documents via one provider transcription each, consent + budget gated.
@@ -569,6 +580,10 @@ const schedules: ScheduleEntry[] = [
   // Document vault — daily 04:10 Europe/Berlin purge for tombstoned
   // documents past the 30-day undo grace.
   [DOCUMENT_PURGE_QUEUE, DOCUMENT_PURGE_CRON, cronIsTheRetry],
+  // Document vault — hourly heal of summary rows stuck on PENDING. The next
+  // tick is the retry: the updateMany is idempotent and the TTL predicate
+  // re-selects anything a failed tick left behind.
+  [DOCUMENT_SUMMARY_REAPER_QUEUE, DOCUMENT_SUMMARY_REAPER_CRON, cronIsTheRetry],
   // v1.32.1 (issue #588) — every-15-minute orphan-ImportJob sweep. Re-runs
   // the same reconcile the boot path uses, so a stuck "unpacking" row
   // whose worker crashed/restarted without the boot-time pass catching it
@@ -833,6 +848,14 @@ export async function registerMaintenanceQueues(
     DOCUMENT_PURGE_QUEUE,
     { localConcurrency: 1 },
     handleDocumentPurge,
+  );
+  // Document vault — hourly stale-PENDING summary reaper. Single-flight;
+  // the underlying updateMany is idempotent so a duplicate tick is a no-op.
+  await createAndWork<DocumentSummaryReaperPayload>(
+    boss,
+    DOCUMENT_SUMMARY_REAPER_QUEUE,
+    { localConcurrency: 1 },
+    handleDocumentSummaryReaper,
   );
   await createAndWork<PrDetectionPayload>(
     boss,

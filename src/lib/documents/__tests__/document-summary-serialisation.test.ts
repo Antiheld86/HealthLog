@@ -68,7 +68,7 @@ describe("serialiseDocumentDetail — summary state", () => {
     expect(dto.summaryGeneratedAt).toBe("2026-02-15T09:00:00.000Z");
   });
 
-  it.each(["NONE", "PENDING", "WITHHELD", "UNAVAILABLE"] as const)(
+  it.each(["NONE", "WITHHELD", "UNAVAILABLE"] as const)(
     "passes %s through with no summary",
     (summaryState) => {
       const dto = serialiseDocumentDetail(row({ summaryState }), []);
@@ -77,6 +77,30 @@ describe("serialiseDocumentDetail — summary state", () => {
       expect(dto.summaryState).toBe(summaryState);
     },
   );
+
+  it("passes a FRESH PENDING through — the job is credibly in flight", () => {
+    const dto = serialiseDocumentDetail(
+      row({ summaryState: "PENDING", updatedAt: new Date() }),
+      [],
+    );
+    expect(dto.summaryState).toBe("PENDING");
+  });
+
+  // Watched red: with the stale-PENDING branch removed from
+  // `serialiseDocumentDetail` (the pre-v1.37.19 serialiser), this case fails —
+  // a summary job dead past its retry budget left the sheet saying
+  // "generating" forever, with no manual action offered.
+  it("degrades a PENDING older than the TTL to UNAVAILABLE", () => {
+    const dto = serialiseDocumentDetail(
+      row({
+        summaryState: "PENDING",
+        updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      }),
+      [],
+    );
+    expect(dto.summary).toBeNull();
+    expect(dto.summaryState).toBe("UNAVAILABLE");
+  });
 
   it("degrades an undecryptable READY row to UNAVAILABLE", () => {
     // A rotated-away key. There is no summary to show, so the DTO must not

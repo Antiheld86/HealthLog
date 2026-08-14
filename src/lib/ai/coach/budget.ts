@@ -64,11 +64,41 @@ export function resolveDailyCap(
   chain: ReadonlyArray<{ providerType: ProviderChainType }>,
 ): number {
   const primary = chain[0]?.providerType;
-  return primary === "admin-openai" ||
-    primary === "admin-codex" ||
-    primary === undefined
+  return primary === undefined || isOperatorFundedProvider(primary)
     ? OPERATOR_COST_CAP
     : USER_PLAN_CAP;
+}
+
+/**
+ * v1.37.19 (A7-2) — does this provider spend the OPERATOR's money?
+ * `admin-openai` (the server's own API key) and `admin-codex` (the
+ * server's shared ChatGPT account) do; everything else is the user's own
+ * egress. One predicate so `resolveDailyCap` and the chain walker's
+ * hop-time guard cannot drift on the classification.
+ */
+export function isOperatorFundedProvider(type: ProviderChainType): boolean {
+  return type === "admin-openai" || type === "admin-codex";
+}
+
+/**
+ * v1.37.19 (A7-2) — the day's recorded spend for one user (0 when no row).
+ *
+ * Read by the chain walker's hop-time operator-cap guard: a request whose
+ * PRIMARY provider runs on the user's own key reserves under the generous
+ * `USER_PLAN_CAP`, but the chain may still FALL BACK onto an operator-funded
+ * `admin-*` entry (or the health-ledger reorder may promote one) — and that
+ * hop must not spend past `OPERATOR_COST_CAP` just because the reservation
+ * was checked against the wrong owner's ceiling.
+ */
+export async function readDailySpend(
+  userId: string,
+  dateKey: string = buildDateKey(),
+): Promise<number> {
+  const row = await prisma.coachUsage.findUnique({
+    where: { userId_dateKey: { userId, dateKey } },
+    select: { totalTokens: true },
+  });
+  return row?.totalTokens ?? 0;
 }
 
 /**
