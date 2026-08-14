@@ -147,6 +147,7 @@ export function VorsorgeDashboardCard() {
           size="sm"
           icon={CalendarClock}
           title={t("measurementReminders.sectionTitle")}
+          titleAs="h2"
         />
       </CardHeader>
       <CardContent className="space-y-2">

@@ -1391,7 +1391,9 @@ export function MeasurementList({
                               )}
                             </p>
                             {m.notes && (
-                              <p className="text-muted-foreground truncate text-xs">
+                              // User data is never muted — the desktop table
+                              // renders the same note in the foreground colour.
+                              <p className="text-foreground truncate text-xs">
                                 {truncateComment(m.notes)}
                               </p>
                             )}
