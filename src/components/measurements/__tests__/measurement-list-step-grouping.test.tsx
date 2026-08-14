@@ -51,6 +51,7 @@ vi.mock("@tanstack/react-query", () => ({
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => "/measurements",
+  useSearchParams: () => new URLSearchParams(""),
 }));
 
 vi.mock("@/hooks/use-auth", () => ({

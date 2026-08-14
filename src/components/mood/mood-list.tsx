@@ -59,6 +59,11 @@ import {
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTableSort } from "@/hooks/use-table-sort";
+import { useUrlFilterSync } from "@/hooks/use-url-filter-sync";
+import {
+  moodListFiltersToSearch,
+  parseMoodListSearchParams,
+} from "./mood-list-filters";
 
 // Columns that open descending when first selected. The logged-at column
 // reads newest-first by default; every other column opens ascending.
@@ -174,11 +179,19 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
   // list stays readable and every control that would change it is absent.
   const { canManage } = useRecordCapabilities();
   const queryClient = useQueryClient();
-  const [moodFilter, setMoodFilterRaw] = useState<string>("ALL");
+  // URL-owned filter state (the documents-vault pattern): mood, source and
+  // date range parse from `?mood&source&from&to` and every change writes back
+  // through the router, so a filtered view survives navigation, reload and
+  // back/forward.
   // v1.15.13 — management-list source filter + optional date range.
-  const [sourceFilter, setSourceFilterRaw] = useState<string>("ALL");
-  const [fromDay, setFromDayRaw] = useState<string>("");
-  const [toDay, setToDayRaw] = useState<string>("");
+  const { filters, applyFilters } = useUrlFilterSync({
+    parse: parseMoodListSearchParams,
+    serialise: moodListFiltersToSearch,
+  });
+  const moodFilter = filters.mood ?? "ALL";
+  const sourceFilter = filters.source ?? "ALL";
+  const fromDay = filters.fromDay ?? "";
+  const toDay = filters.toDay ?? "";
   const [page, setPage] = useState(1);
   // Shared column-sort state (moodLoggedAt opens descending).
   const {
@@ -268,26 +281,29 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
   // clears the page-scoped selection.
   const clearSelection = () => setSelectedIds(new Set());
 
+  // Discrete facet changes push (Back steps through filter states, like the
+  // vault's chips); the committed date bounds replace — a from/to pair set in
+  // one sitting should not cost two Back presses.
   const setMoodFilter = (value: string) => {
-    setMoodFilterRaw(value);
+    applyFilters({ ...filters, mood: value === "ALL" ? undefined : value });
     setPage(1);
     clearSelection();
   };
 
   const setSourceFilter = (value: string) => {
-    setSourceFilterRaw(value);
+    applyFilters({ ...filters, source: value === "ALL" ? undefined : value });
     setPage(1);
     clearSelection();
   };
 
   const setFromDay = (value: string) => {
-    setFromDayRaw(value);
+    applyFilters({ ...filters, fromDay: value || undefined }, "replace");
     setPage(1);
     clearSelection();
   };
 
   const setToDay = (value: string) => {
-    setToDayRaw(value);
+    applyFilters({ ...filters, toDay: value || undefined }, "replace");
     setPage(1);
     clearSelection();
   };
@@ -624,10 +640,10 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
             toDay !== ""
           }
           onReset={() => {
-            setMoodFilter("ALL");
-            setSourceFilter("ALL");
-            setFromDay("");
-            setToDay("");
+            // One push clears every facet, so one Back restores them.
+            applyFilters({});
+            setPage(1);
+            clearSelection();
           }}
           count={
             data?.meta?.total !== undefined

@@ -40,6 +40,7 @@ import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
+import { useUrlFilterSync } from "@/hooks/use-url-filter-sync";
 import { PullToRefreshIndicator } from "@/components/ui/pull-to-refresh-indicator";
 import { apiGet, apiPost } from "@/lib/api/api-fetch";
 import { encounterKindText } from "@/components/encounters/encounter-labels";
@@ -51,7 +52,6 @@ import {
   useCoachLaunch,
 } from "@/lib/insights/coach-launch-context";
 import { invalidateKeys, queryKeys } from "@/lib/query-keys";
-import type { DocumentVaultFilters } from "@/lib/query-keys/documents";
 import {
   DOCUMENT_BULK_MAX_IDS,
   type DocumentBulkAction,
@@ -263,23 +263,13 @@ export function DocumentsView() {
   }, [authLoading, isAuthenticated, moduleEnabled, router]);
 
   // ── URL-owned filter state ────────────────────────────────────────────
-  const filters = useMemo(
-    () => parseVaultSearchParams(new URLSearchParams(searchParams.toString())),
-    [searchParams],
-  );
-
-  const applyFilters = useCallback(
-    (next: DocumentVaultFilters, mode: "push" | "replace") => {
-      const search = vaultFiltersToSearch(next);
-      const href = search ? `${pathname}?${search}` : pathname;
-      if (mode === "push") {
-        router.push(href, { scroll: false });
-      } else {
-        router.replace(href, { scroll: false });
-      }
-    },
-    [pathname, router],
-  );
+  // The parse/serialise round trip stays in `vault-utils.ts`; the router
+  // plumbing lives in the shared hook (which the measurements and mood
+  // lists reuse — this surface is the pattern's origin).
+  const { filters, applyFilters } = useUrlFilterSync({
+    parse: parseVaultSearchParams,
+    serialise: vaultFiltersToSearch,
+  });
 
   // Search draft debounces into the URL (200 ms); an external URL change
   // (back button, deep link) re-seeds the draft — render-phase derived-state
