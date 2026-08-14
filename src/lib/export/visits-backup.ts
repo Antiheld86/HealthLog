@@ -8,11 +8,11 @@
  *
  * Five models ride: the practitioners, the encounters, and the three link
  * tables between an encounter and a document, a lab result or a condition
- * episode. All five are carried rather than owed. Two neighbours on the debt
- * register already say what the alternative costs — reminders restore silent,
- * and the filing between documents and conditions is lost — and a restore that
- * returned visits and documents with nothing between them would be the same
- * loss one layer deeper.
+ * episode. All five are carried rather than owed. A neighbour on the debt
+ * register already says what the alternative costs — the filing between
+ * documents and conditions is lost — and a restore that returned visits and
+ * documents with nothing between them would be the same loss one layer
+ * deeper.
  *
  * Every read is scoped to the owner. Each model uses its own named select
  * constant and its own delegate call rather than riding a parent's `include`:
@@ -20,12 +20,15 @@
  * relation-shaped write here would be attributed to whichever of them a
  * matcher happened to find first. Delegate calls cannot be confused that way.
  *
- * Two references deliberately do not survive a restore, and both are reported
- * rather than dropped:
+ * Two references can fail to resolve on a restore, and both are reported
+ * rather than dropped in silence:
  *
- *   - `Encounter.reminderId` points at a `MeasurementReminder`, which is on the
- *     coverage-pending register and does not come back. The column resolves to
- *     NULL, never to a dangling id.
+ *   - `Encounter.reminderId` points at a `MeasurementReminder`, which restores
+ *     in the same run (v1.37.20, #223 / iOS #68 — it was on the
+ *     coverage-pending register before that and every reference was a known
+ *     drop). It remaps against the restored reminders and resolves to NULL,
+ *     never to a dangling id, only when the file genuinely lacks the reminder
+ *     — a portable export omits tombstoned ones.
  *   - A link whose far side was not restored. A portable export carries no lab
  *     result ids, so a lab link in one cannot resolve; a disaster-recovery
  *     payload carries every id and they all do.
@@ -72,9 +75,9 @@ export interface EncounterBackupEntry {
   reasonEncrypted: string | null;
   outcomeEncrypted: string | null;
   /**
-   * Carried so the loss is visible in the file rather than inferred from its
-   * absence. The restore resolves it to NULL and names the drop: the reminder
-   * it points at is not in the backup.
+   * The appointment's reminder row, which restores in the same run since
+   * v1.37.20. The restore remaps it against the restored reminders and drops
+   * it to NULL, with the drop named, only when the file lacks the reminder.
    */
   reminderId: string | null;
   createdAt: string;
@@ -351,10 +354,12 @@ function decodeCiphertext(encoded: string): Uint8Array<ArrayBuffer> {
  * section. Parents first — practitioners, then encounters, then the links —
  * because a link addresses both of its ends by id.
  *
- * MUST be called after the documents, lab results and condition episodes have
- * been restored: a link is written only when both of its ends exist, and the
- * existence check is what decides. Calling it earlier would report every link
- * as unresolvable and be counted as a successful restore of nothing.
+ * MUST be called after the documents, lab results, condition episodes AND the
+ * measurement reminders have been restored: a link is written only when both
+ * of its ends exist, the encounter's `reminderId` remaps against the restored
+ * reminders, and the existence check is what decides. Calling it earlier would
+ * report every one of those references as unresolvable and be counted as a
+ * successful restore of a thinner record.
  */
 export async function restoreVisitsData(
   tx: Prisma.TransactionClient,
@@ -406,8 +411,17 @@ export async function restoreVisitsData(
   );
   const droppedPractitioners: string[] = [];
 
-  // The reminder is on the coverage-pending register: it is not in the file at
-  // all, so every reference to one is a known, reportable drop.
+  // The reminders are restored by another branch of the same transaction
+  // (v1.37.20 — they used to be on the coverage-pending register, when every
+  // reference was a known drop), so the check is against the database rather
+  // than against the payload. A reference the file genuinely lacks — a
+  // portable export omits tombstoned reminders — still drops to NULL and is
+  // still reported.
+  const reminderRows = await tx.measurementReminder.findMany({
+    where: { userId: ownerId },
+    select: { id: true },
+  });
+  const restoredReminders = new Set(reminderRows.map((row) => row.id));
   const droppedReminders: string[] = [];
 
   if (payload.encounters.length > 0) {
@@ -421,7 +435,13 @@ export async function restoreVisitsData(
         if (entry.practitionerId && practitionerId === null) {
           droppedPractitioners.push(entry.practitionerId);
         }
-        if (entry.reminderId) droppedReminders.push(entry.reminderId);
+        const reminderId =
+          entry.reminderId && restoredReminders.has(entry.reminderId)
+            ? entry.reminderId
+            : null;
+        if (entry.reminderId && reminderId === null) {
+          droppedReminders.push(entry.reminderId);
+        }
         return {
           id: entry.id,
           userId: ownerId,
@@ -437,8 +457,7 @@ export async function restoreVisitsData(
             entry.outcomeEncrypted == null
               ? null
               : decodeCiphertext(entry.outcomeEncrypted),
-          // Never the id the file carried: the row it named is not restored.
-          reminderId: null,
+          reminderId,
           createdAt: new Date(entry.createdAt),
           updatedAt: new Date(entry.updatedAt),
           deletedAt: entry.deletedAt ? new Date(entry.deletedAt) : null,

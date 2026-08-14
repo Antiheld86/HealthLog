@@ -50,6 +50,7 @@ import { restoreIntradayProfileData } from "@/lib/export/intraday-profile-backup
 import { restoreHealthScoreData } from "@/lib/export/health-score-backup";
 import { restoreVisitsData } from "@/lib/export/visits-backup";
 import { restoreVaccinationsData } from "@/lib/export/vaccinations-backup";
+import { restoreRemindersData } from "@/lib/export/reminders-backup";
 import { invalidateUserData } from "@/lib/cache/invalidate";
 
 export const dynamic = "force-dynamic";
@@ -95,6 +96,8 @@ interface RestoreResponse {
     encounterLinks: number;
     vaccinations: number;
     vaccinationLinks: number;
+    measurementReminders: number;
+    measurementReminderEvents: number;
   };
 }
 
@@ -1329,12 +1332,28 @@ const handler = apiHandler(
             });
           }
 
-          // Visits, the address book and the three link tables. Last on
-          // purpose: a link is written only when both of its ends exist, and
-          // the documents above are the final far side to land. Both ends of
-          // this section live in `src/lib/export/visits-backup.ts`, so a grep
-          // of THIS file alone will not find them — the same delegation as the
-          // cycle, profile, intraday and score restores above.
+          // The Vorsorge reminders and their completion ledger (v1.37.20,
+          // #223 / iOS #68), BEFORE the visits and the vaccinations: both of
+          // those remap a `reminderId` against the reminders in the database,
+          // so the reminders have to be in the database first or every
+          // appointment and booster reference would read as unresolvable and
+          // drop. Both ends of this section live in
+          // `src/lib/export/reminders-backup.ts`.
+          const remindersCleared = await restoreRemindersData(
+            tx,
+            ownerId,
+            payload,
+            skips,
+          );
+
+          // Visits, the address book and the three link tables. After the
+          // documents and the reminders on purpose: a link is written only
+          // when both of its ends exist, and the encounter's reminder
+          // reference remaps against the rows the branch above has just
+          // written. Both ends of this section live in
+          // `src/lib/export/visits-backup.ts`, so a grep of THIS file alone
+          // will not find them — the same delegation as the cycle, profile,
+          // intraday and score restores above.
           const visitsCleared = await restoreVisitsData(
             tx,
             ownerId,
@@ -1343,10 +1362,10 @@ const handler = apiHandler(
           );
 
           // The immunization log, after the visits: a dose remaps its
-          // practitioner and its encounter against rows the branch above has
-          // just written, and its document link needs the documents that
-          // landed before that. Both ends of this section live in
-          // `src/lib/export/vaccinations-backup.ts`.
+          // practitioner, its encounter and its booster reminder against rows
+          // the branches above have just written, and its document link needs
+          // the documents that landed before that. Both ends of this section
+          // live in `src/lib/export/vaccinations-backup.ts`.
           const vaccinationsCleared = await restoreVaccinationsData(
             tx,
             ownerId,
@@ -1385,6 +1404,9 @@ const handler = apiHandler(
             encounterLinks: visitsCleared.encounterLinks,
             vaccinations: vaccinationsCleared.vaccinations,
             vaccinationLinks: vaccinationsCleared.vaccinationLinks,
+            measurementReminders: remindersCleared.measurementReminders,
+            measurementReminderEvents:
+              remindersCleared.measurementReminderEvents,
           };
           return { cleared, skipped: summarizeRestoreSkips(skips) };
         },
@@ -1537,6 +1559,8 @@ const handler = apiHandler(
           encounterLinks: summary.encounterLinks,
           vaccinations: summary.vaccinations,
           vaccinationLinks: summary.vaccinationLinks,
+          measurementReminders: summary.measurementReminders,
+          measurementReminderEvents: summary.measurementReminderEvents,
         },
       },
     });

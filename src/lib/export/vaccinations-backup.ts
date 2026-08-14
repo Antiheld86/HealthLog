@@ -23,9 +23,12 @@
  *   - `practitionerId` and `encounterId` point at models that restore in the
  *     same run. They remap to the restored rows, and drop to NULL when the
  *     file references a row it does not carry.
- *   - `reminderId` points at a `MeasurementReminder`, which is on the
- *     coverage-pending register and does not come back. It resolves to NULL,
- *     never to a dangling id, and the drop is reported.
+ *   - `reminderId` points at a `MeasurementReminder`, which also restores in
+ *     the same run (v1.37.20, #223 / iOS #68 — it was on the coverage-pending
+ *     register before that and every reference was a known drop). It remaps
+ *     the same way, and resolves to NULL, with the drop reported, only when
+ *     the file genuinely lacks the reminder — a portable export omits
+ *     tombstoned ones.
  *   - `antigenSlug` is restored verbatim with no validation against the
  *     current catalogue. A slug this release no longer resolves must still
  *     come back; the renderer degrades to the free-text arm, which is the
@@ -63,9 +66,10 @@ export interface VaccinationBackupEntry {
   practitionerId: string | null;
   encounterId: string | null;
   /**
-   * Carried so the loss is visible in the file rather than inferred from its
-   * absence. The restore resolves it to NULL and names the drop: the reminder
-   * it points at is not in the backup.
+   * The booster reminder this dose recorded satisfying, which restores in the
+   * same run since v1.37.20. The restore remaps it against the restored
+   * reminders and drops it to NULL, with the drop named, only when the file
+   * lacks the reminder.
    */
   reminderId: string | null;
   /** Base64 ciphertext, carried verbatim — never decrypted into the file. */
@@ -253,11 +257,11 @@ function decodeCiphertext(encoded: string): Uint8Array<ArrayBuffer> {
  * section. The dose first, then the link, because a link addresses both of its
  * ends by id.
  *
- * MUST be called after the practitioners, encounters and documents have been
- * restored: the dose remaps two of those references against the database and
- * the link is written only when the document actually came back. Calling it
- * earlier would drop every reference and be counted as a successful restore of
- * a thinner record.
+ * MUST be called after the practitioners, encounters, documents and
+ * measurement reminders have been restored: the dose remaps three of those
+ * references against the database and the link is written only when the
+ * document actually came back. Calling it earlier would drop every reference
+ * and be counted as a successful restore of a thinner record.
  */
 export async function restoreVaccinationsData(
   tx: Prisma.TransactionClient,
@@ -272,10 +276,10 @@ export async function restoreVaccinationsData(
     where: { userId: ownerId },
   });
 
-  // Both far sides are restored by other branches of the same transaction, so
-  // the check is against the database rather than against the payload — this
-  // is the only place that can see all three sections at once.
-  const [practitionerIds, encounterIds] = await Promise.all([
+  // All three far sides are restored by other branches of the same
+  // transaction, so the check is against the database rather than against the
+  // payload — this is the only place that can see every section at once.
+  const [practitionerIds, encounterIds, reminderIds] = await Promise.all([
     tx.practitioner.findMany({
       where: { userId: ownerId },
       select: { id: true },
@@ -284,18 +288,24 @@ export async function restoreVaccinationsData(
       where: { userId: ownerId },
       select: { id: true },
     }),
+    tx.measurementReminder.findMany({
+      where: { userId: ownerId },
+      select: { id: true },
+    }),
   ]);
   const restoredPractitioners = new Set(practitionerIds.map((row) => row.id));
   const restoredEncounters = new Set(encounterIds.map((row) => row.id));
+  const restoredReminders = new Set(reminderIds.map((row) => row.id));
 
   // A row the file references but the restore did not bring back cannot be
   // invented, and a dangling id would fail the foreign key and roll the whole
   // restore back over one dose. The reference drops to NULL instead — the
-  // dose, its date, its antigen and its batch code all survive.
+  // dose, its date, its antigen and its batch code all survive. That includes
+  // the reminder since v1.37.20: it restores in the same run, so a drop here
+  // now means the file genuinely lacked it (a portable export omits
+  // tombstoned reminders), not that reminders never travel.
   const droppedPractitioners: string[] = [];
   const droppedEncounters: string[] = [];
-  // The reminder is on the coverage-pending register: it is not in the file at
-  // all, so every reference to one is a known, reportable drop.
   const droppedReminders: string[] = [];
 
   if (payload.vaccinations.length > 0) {
@@ -316,7 +326,13 @@ export async function restoreVaccinationsData(
         if (entry.encounterId && encounterId === null) {
           droppedEncounters.push(entry.encounterId);
         }
-        if (entry.reminderId) droppedReminders.push(entry.reminderId);
+        const reminderId =
+          entry.reminderId && restoredReminders.has(entry.reminderId)
+            ? entry.reminderId
+            : null;
+        if (entry.reminderId && reminderId === null) {
+          droppedReminders.push(entry.reminderId);
+        }
         return {
           id: entry.id,
           userId: ownerId,
@@ -332,8 +348,7 @@ export async function restoreVaccinationsData(
           site: entry.site ?? null,
           practitionerId,
           encounterId,
-          // Never the id the file carried: the row it named is not restored.
-          reminderId: null,
+          reminderId,
           noteEncrypted:
             entry.noteEncrypted == null
               ? null

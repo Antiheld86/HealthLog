@@ -462,6 +462,20 @@ describe("every backed-up model travels both ways, or is named as debt", () => {
     ).toEqual([]);
   });
 
+  it("proves the reminder engine models are on the covered side", () => {
+    // v1.37.20 (#223 / iOS #68) — the reminder came off the debt register and
+    // the completion ledger landed carried from the release that introduced
+    // it. Pinned by name so a future edit cannot quietly move either back to
+    // COVERAGE_PENDING: the ledger is the only copy of every satisfy and skip
+    // before the latest one, so "pending" would be a silent history loss, not
+    // a deferral.
+    for (const model of ["MeasurementReminder", "MeasurementReminderEvent"]) {
+      expect(BACKED_UP_MODELS).toContain(model);
+      expect(TWO_ENDED_MODELS).toContain(model);
+      expect(COVERAGE_PENDING).not.toHaveProperty(model);
+    }
+  });
+
   it("proves the structured-profile models are on the covered side", () => {
     // These account-owned rows are exported and restored explicitly rather
     // than being treated as reconstructible data.

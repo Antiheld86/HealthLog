@@ -36,18 +36,26 @@
  * mechanism because the cost and the honest response are identical: an edge is
  * lost, the record it hangs off survives, and the operator is told which one.
  * What it names is a row the file pointed at that the restore did not put
- * back — a reminder, which is on the coverage-pending register and never
- * travels, or a document, lab result or condition episode whose id a portable
- * export does not carry.
+ * back — a reminder the file does not carry (a portable export omits
+ * tombstoned ones since v1.37.20; before that no reminder travelled at all),
+ * or a document, lab result or condition episode whose id a portable export
+ * does not carry.
  *
  * The sixth, `vaccinationReference`, is the same kind as `visitReference` and
  * is kept separate rather than folded into it so the report says which part of
  * the record lost an edge. It names a row an immunization entry pointed at
- * that the restore did not put back — a booster reminder, which never travels,
- * a practitioner or visit the file referenced without carrying, or a scanned
- * page whose id a portable export does not include.
+ * that the restore did not put back — a booster reminder the file does not
+ * carry, a practitioner or visit the file referenced without carrying, or a
+ * scanned page whose id a portable export does not include.
  *
- * The seventh, `checkupClosure`, is not about a restore at all, and it borrows
+ * The seventh, `reminderReference`, is the same kind as the two above, for
+ * the completion ledger (v1.37.20, #223 / iOS #68): a ledger row whose
+ * reminder the file does not carry. The builder filters the ledger to carried
+ * reminders at write time, so a file this release writes never trips it —
+ * it exists for the hand-edited or truncated file, where inventing the
+ * reminder and silently dropping the row are equally wrong.
+ *
+ * The eighth, `checkupClosure`, is not about a restore at all, and it borrows
  * this shape deliberately rather than growing a second reporting mechanism
  * beside it. The situation is the same one: something a write was asked to do
  * could not be done, the record itself survives, and the person is told which
@@ -62,6 +70,7 @@ export type SkippedCatalogue =
   | "moodTag"
   | "visitReference"
   | "vaccinationReference"
+  | "reminderReference"
   | "checkupClosure";
 
 /** One key this instance does not know, and the links it cost. */

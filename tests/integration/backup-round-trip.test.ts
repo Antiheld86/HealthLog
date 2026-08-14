@@ -153,6 +153,10 @@ const COUNT_BACK: Record<
     p.vaccinationRecord.count({ where: { userId } }),
   VaccinationDocumentLink: (p, userId) =>
     p.vaccinationDocumentLink.count({ where: { userId } }),
+  MeasurementReminder: (p, userId) =>
+    p.measurementReminder.count({ where: { userId } }),
+  MeasurementReminderEvent: (p, userId) =>
+    p.measurementReminderEvent.count({ where: { userId } }),
 };
 
 /**
@@ -438,6 +442,51 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       noteEncrypted: encryptToBytes("ring the upper bell"),
     },
   });
+
+  // One Vorsorge reminder with the v1.37.20 skip/snooze columns all set, and
+  // two completion-ledger rows — one honest satisfy, one honest skip. Fat like
+  // the vaccination fixture below and for the same reason: the count-back
+  // proves the rows returned, the column-by-column assertion after the restore
+  // proves they returned WHOLE. The encounter and the dose below point their
+  // `reminderId` here, because both references now remap against the restored
+  // reminders and this fixture is what proves they survive rather than drop.
+  const reminder = await prisma.measurementReminder.create({
+    data: {
+      userId: OWNER_ID,
+      label: "Blutdruck messen",
+      measurementType: "BLOOD_PRESSURE_SYS",
+      intervalDays: 7,
+      notifyHour: 8,
+      location: "Zuhause",
+      nextDueAt: AT("2026-07-08T06:00:00.000Z"),
+      lastSatisfiedAt: AT("2026-07-01T06:05:00.000Z"),
+      vaccinationAntigen: "tetanus",
+      snoozedUntil: AT("2026-07-08T06:00:00.000Z"),
+      lastSkippedAt: AT("2026-06-24T06:00:00.000Z"),
+      skipCount: 2,
+    },
+  });
+  await prisma.measurementReminderEvent.create({
+    data: {
+      userId: OWNER_ID,
+      reminderId: reminder.id,
+      kind: "SATISFIED",
+      occurredAt: AT("2026-07-01T06:05:00.000Z"),
+      onTime: true,
+      source: "manual",
+    },
+  });
+  await prisma.measurementReminderEvent.create({
+    data: {
+      userId: OWNER_ID,
+      reminderId: reminder.id,
+      kind: "SKIPPED",
+      occurredAt: AT("2026-06-24T06:00:00.000Z"),
+      onTime: false,
+      source: "skip",
+    },
+  });
+
   const encounter = await prisma.encounter.create({
     data: {
       userId: OWNER_ID,
@@ -449,6 +498,7 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       outcomeEncrypted: encryptToBytes(
         "ferritin back in range, recheck in a year",
       ),
+      reminderId: reminder.id,
     },
   });
   await prisma.encounterDocumentLink.create({
@@ -477,13 +527,12 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
   // transcribed from. Fat on purpose, against this file's own minimal-fixture
   // rule: a count-back proves the row returned, and the assertion after the
   // restore reads each column back so it also proves the row returned WHOLE.
-  // The practitioner and the encounter are the ones seeded above, because both
-  // are remapped on the way back and a reference to something the restore did
-  // not put back is a different case (covered by the skip test below).
-  //
-  // `reminderId` is deliberately NOT set here: it is the one reference that
-  // can never resolve, so setting it would make this test's "nothing was
-  // skipped" assertion false for a reason that is correct behaviour.
+  // The practitioner, the encounter and the reminder are the ones seeded
+  // above, because all three are remapped on the way back and a reference to
+  // something the restore did not put back is a different case (covered by
+  // the skip test below). `reminderId` used to be deliberately absent here —
+  // it was the one reference that could never resolve — and is deliberately
+  // present since v1.37.20, because resolving is now the behaviour under test.
   const vaccination = await prisma.vaccinationRecord.create({
     data: {
       userId: OWNER_ID,
@@ -496,6 +545,7 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       site: "LEFT_ARM",
       practitionerId: practitioner.id,
       encounterId: encounter.id,
+      reminderId: reminder.id,
       noteEncrypted: encryptToBytes("sore arm for a day, nothing else"),
     },
   });
@@ -646,6 +696,7 @@ describe("every model the plan claims two-ended survives a real restore", () => 
       include: {
         practitioner: { select: { name: true } },
         encounter: { select: { occurredAt: true } },
+        reminder: { select: { label: true } },
         documentLinks: { select: { documentId: true } },
       },
     });
@@ -659,6 +710,10 @@ describe("every model the plan claims two-ended survives a real restore", () => 
       site: dose.site,
       practitioner: dose.practitioner?.name ?? null,
       encounterAt: dose.encounter?.occurredAt.toISOString() ?? null,
+      // The booster reference, resolved through the relation: non-null proves
+      // the id survived the round trip instead of dropping to NULL the way it
+      // had to before the reminders travelled.
+      reminder: dose.reminder?.label ?? null,
       links: dose.documentLinks.length,
       note: dose.noteEncrypted ? decryptFromBytes(dose.noteEncrypted) : null,
     }).toEqual({
@@ -671,21 +726,119 @@ describe("every model the plan claims two-ended survives a real restore", () => 
       site: "LEFT_ARM",
       practitioner: "Round-trip practice",
       encounterAt: "2026-06-30T08:00:00.000Z",
+      reminder: "Blutdruck messen",
       links: 1,
       note: "sore arm for a day, nothing else",
     });
+
+    // The reminder, read back column by column — including the three
+    // v1.37.20 columns (snooze cursor, last skip, skip counter), because a
+    // restore that defaulted them would hand back a cadence that looks never
+    // snoozed and never skipped, which is a history the account does not have.
+    const restoredReminder = await prisma.measurementReminder.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+    });
+    expect({
+      label: restoredReminder.label,
+      measurementType: restoredReminder.measurementType,
+      intervalDays: restoredReminder.intervalDays,
+      rrule: restoredReminder.rrule,
+      anchorDate: restoredReminder.anchorDate,
+      endsOn: restoredReminder.endsOn,
+      origin: restoredReminder.origin,
+      notifyHour: restoredReminder.notifyHour,
+      location: restoredReminder.location,
+      nextDueAt: restoredReminder.nextDueAt?.toISOString() ?? null,
+      lastSatisfiedAt: restoredReminder.lastSatisfiedAt?.toISOString() ?? null,
+      enabled: restoredReminder.enabled,
+      vaccinationAntigen: restoredReminder.vaccinationAntigen,
+      snoozedUntil: restoredReminder.snoozedUntil?.toISOString() ?? null,
+      lastSkippedAt: restoredReminder.lastSkippedAt?.toISOString() ?? null,
+      skipCount: restoredReminder.skipCount,
+      deletedAt: restoredReminder.deletedAt,
+    }).toEqual({
+      label: "Blutdruck messen",
+      measurementType: "BLOOD_PRESSURE_SYS",
+      intervalDays: 7,
+      rrule: null,
+      anchorDate: null,
+      endsOn: null,
+      origin: "VORSORGE",
+      notifyHour: 8,
+      location: "Zuhause",
+      nextDueAt: "2026-07-08T06:00:00.000Z",
+      lastSatisfiedAt: "2026-07-01T06:05:00.000Z",
+      enabled: true,
+      vaccinationAntigen: "tetanus",
+      snoozedUntil: "2026-07-08T06:00:00.000Z",
+      lastSkippedAt: "2026-06-24T06:00:00.000Z",
+      skipCount: 2,
+      deletedAt: null,
+    });
+
+    // Both ledger rows, whole: the satisfy and the skip, with the resolved
+    // `onTime` verdicts. A restore cannot re-derive `onTime` — the pre-event
+    // `nextDueAt` is gone — so a defaulted value here would be an invented
+    // punctuality record.
+    const ledger = await prisma.measurementReminderEvent.findMany({
+      where: { userId: OWNER_ID },
+      orderBy: { occurredAt: "asc" },
+    });
+    expect(
+      ledger.map((event) => ({
+        reminderId: event.reminderId,
+        kind: event.kind,
+        occurredAt: event.occurredAt.toISOString(),
+        onTime: event.onTime,
+        source: event.source,
+      })),
+    ).toEqual([
+      {
+        reminderId: restoredReminder.id,
+        kind: "SKIPPED",
+        occurredAt: "2026-06-24T06:00:00.000Z",
+        onTime: false,
+        source: "skip",
+      },
+      {
+        reminderId: restoredReminder.id,
+        kind: "SATISFIED",
+        occurredAt: "2026-07-01T06:05:00.000Z",
+        onTime: true,
+        source: "manual",
+      },
+    ]);
+
+    // The appointment's reminder reference survives too — same remap, other
+    // referrer.
+    const restoredEncounter = await prisma.encounter.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+      select: { reminderId: true },
+    });
+    expect(
+      restoredEncounter.reminderId,
+      "the encounter's reminder reference must survive now that the reminder travels",
+    ).toBe(restoredReminder.id);
   });
 
   /**
-   * The two references a dose can carry that the restore cannot honour, and
-   * the slug it must not judge.
+   * The reference a portable file genuinely lacks, and the slug the restore
+   * must not judge.
    *
-   * Separated from the round trip above because both are correct behaviour
-   * that shows up as a reported skip, and that file asserts nothing was
+   * The reminders travel since v1.37.20, so a reference to one is no longer a
+   * guaranteed drop — the round trip above proves it surviving. What can still
+   * genuinely be missing is a TOMBSTONED reminder in a portable export: the
+   * builder omits it (a restore must not resurrect a deletion) and omits its
+   * completion ledger with it, while a live dose that recorded satisfying it
+   * keeps its reference in the database. That reference then points at a row
+   * the file does not carry, which is exactly the case the restore reports.
+   *
+   * Separated from the round trip above because this is correct behaviour
+   * that shows up as a reported skip, and that test asserts nothing was
    * skipped. Reported is the whole point: a reference dropped in silence is
    * the same defect as a row dropped in silence, one field smaller.
    */
-  it("reports the reminder it cannot restore and keeps a slug it cannot resolve", async () => {
+  it("reports the tombstoned reminder a portable file omits and keeps a slug it cannot resolve", async () => {
     const prisma = getPrismaClient();
     await seedAdminSession(prisma);
     await createOwner(prisma);
@@ -696,6 +849,20 @@ describe("every model the plan claims two-ended survives a real restore", () => 
         label: "Tetanus booster",
         intervalDays: 3650,
         vaccinationAntigen: "tetanus",
+        deletedAt: AT("2026-07-01T00:00:00.000Z"),
+      },
+    });
+    // A ledger row on the tombstoned reminder. The builder must drop it from
+    // the file along with its reminder — a ledger row whose reminder is not
+    // carried could only ever restore as a reported loss.
+    await prisma.measurementReminderEvent.create({
+      data: {
+        userId: OWNER_ID,
+        reminderId: reminder.id,
+        kind: "SATISFIED",
+        occurredAt: AT("2026-06-01T09:00:00.000Z"),
+        onTime: true,
+        source: "vaccination",
       },
     });
     await prisma.vaccinationRecord.create({
@@ -713,8 +880,14 @@ describe("every model the plan claims two-ended survives a real restore", () => 
     });
 
     const { payload } = await buildFullBackupPayload(prisma, OWNER_ID, {
-      purpose: "disaster-recovery",
+      purpose: "portable-export",
     });
+    // The file must be silent about the tombstoned reminder AND its ledger —
+    // carrying the events of a reminder it refuses to restore would make
+    // every portable file this release writes restore with a reported loss.
+    expect(payload.measurementReminders).toEqual([]);
+    expect(payload.measurementReminderEvents).toEqual([]);
+
     await prisma.user.delete({ where: { id: OWNER_ID } });
     await createOwner(prisma);
 

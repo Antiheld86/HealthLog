@@ -46,6 +46,7 @@ import {
   IntakeAttributionSource,
   IntakeSource,
   MeasurementAggregationProvenance,
+  MeasurementReminderEventKind,
   MeasurementSource,
   MeasurementType,
   MedicationCategory,
@@ -54,6 +55,7 @@ import {
   MedicationSideEffectCategory,
   MedicationSideEffectEntry,
   OvulationTest,
+  ReminderOrigin,
   RhythmClassification,
   SecondarySymptom,
   SleepStage,
@@ -70,6 +72,7 @@ import {
   emergencyBloodTypeSchema,
   organDonorStatusSchema,
 } from "@/lib/validations/emergency-profile";
+import { REMINDER_EVENT_SOURCES } from "@/lib/measurement-reminders/satisfy";
 
 export const BACKUP_SCHEMA_VERSION = "2" as const;
 const LEGACY_BACKUP_SCHEMA_VERSION = "1" as const;
@@ -890,8 +893,8 @@ const encounterBackupSchema = z
     practitionerId: z.string().nullable().optional(),
     reasonEncrypted: base64BytesSchema.nullable().optional(),
     outcomeEncrypted: base64BytesSchema.nullable().optional(),
-    // Carried so the loss is visible in the file. The restore resolves it to
-    // NULL and names the drop: the reminder it points at does not travel.
+    // Remapped against the restored reminders (they travel since v1.37.20);
+    // dropped to NULL, with the drop named, only when the file lacks the row.
     reminderId: z.string().nullable().optional(),
     createdAt: isoDateTime,
     updatedAt: isoDateTime,
@@ -927,8 +930,8 @@ const vaccinationBackupSchema = z
     site: z.enum(VaccinationSite).nullable().optional(),
     practitionerId: z.string().nullable().optional(),
     encounterId: z.string().nullable().optional(),
-    // Carried so the loss is visible in the file. The restore resolves it to
-    // NULL and names the drop: the reminder it points at does not travel.
+    // Remapped against the restored reminders (they travel since v1.37.20);
+    // dropped to NULL, with the drop named, only when the file lacks the row.
     reminderId: z.string().nullable().optional(),
     noteEncrypted: base64BytesSchema.nullable().optional(),
     createdAt: isoDateTime,
@@ -941,6 +944,56 @@ const vaccinationLinkBackupSchema = z
   .object({
     vaccinationId: z.string().min(1),
     targetId: z.string().min(1),
+    createdAt: isoDateTime,
+  })
+  .passthrough();
+
+/**
+ * One Vorsorge reminder, and one row of its completion ledger (v1.37.20,
+ * #223 / iOS #68).
+ *
+ * `id` is required on both: an encounter, a vaccination record and every
+ * ledger row address a reminder by it, and a ledger row is addressed by its
+ * own id on re-insert. The enums are exactly the API's own — `origin` and
+ * `kind` are the Prisma enums, and the ledger `source` is validated against
+ * the engine's closed call-site set rather than accepted as free text, so a
+ * file cannot smuggle a value the engine itself would never write.
+ */
+const measurementReminderBackupSchema = z
+  .object({
+    id: z.string().min(1),
+    label: z.string().min(1),
+    measurementType: z.enum(MeasurementType).nullable().optional(),
+    intervalDays: z.number().int().nullable().optional(),
+    rrule: z.string().nullable().optional(),
+    anchorDate: isoDateTime.nullable().optional(),
+    endsOn: isoDateTime.nullable().optional(),
+    origin: z.enum(ReminderOrigin).optional(),
+    notifyHour: z.number().int().min(0).max(23).optional(),
+    location: z.string().nullable().optional(),
+    // Server-computed and restored verbatim — recomputing on restore would
+    // move a due date the person had already been shown.
+    nextDueAt: isoDateTime.nullable().optional(),
+    lastSatisfiedAt: isoDateTime.nullable().optional(),
+    enabled: z.boolean().optional(),
+    vaccinationAntigen: z.string().nullable().optional(),
+    snoozedUntil: isoDateTime.nullable().optional(),
+    lastSkippedAt: isoDateTime.nullable().optional(),
+    skipCount: z.number().int().min(0).optional(),
+    createdAt: isoDateTime,
+    updatedAt: isoDateTime,
+    deletedAt: isoDateTime.nullable().optional(),
+  })
+  .passthrough();
+
+const measurementReminderEventBackupSchema = z
+  .object({
+    id: z.string().min(1),
+    reminderId: z.string().min(1),
+    kind: z.enum(MeasurementReminderEventKind),
+    occurredAt: isoDateTime,
+    onTime: z.boolean(),
+    source: z.enum(REMINDER_EVENT_SOURCES),
     createdAt: isoDateTime,
   })
   .passthrough();
@@ -1107,6 +1160,14 @@ export const backupPayloadSchema = z
     // writes [].
     vaccinations: z.array(vaccinationBackupSchema).default([]),
     vaccinationDocumentLinks: z.array(vaccinationLinkBackupSchema).default([]),
+    // The Vorsorge reminders and their completion ledger (v1.37.20, #223 /
+    // iOS #68). Defaulted for the same reason as the sections above: a file
+    // written before the reminders travelled carries no key, and an account
+    // with none writes [].
+    measurementReminders: z.array(measurementReminderBackupSchema).default([]),
+    measurementReminderEvents: z
+      .array(measurementReminderEventBackupSchema)
+      .default([]),
     manifest: backupManifestSchema.nullable().default(null),
     // v1.37.19 (A6-9) — field paths a PORTABLE export could not decrypt
     // (fail-soft nulls). Disclosed in the file so a nulled field is
@@ -1189,6 +1250,10 @@ export interface BackupSummary {
   vaccinations: number;
   /** v1.37.19 (A6-8) — vaccination↔document links. */
   vaccinationLinks: number;
+  /** v1.37.20 (#223 / iOS #68) — Vorsorge reminder cadences. */
+  measurementReminders: number;
+  /** v1.37.20 (#223 / iOS #68) — completion-ledger rows across every reminder. */
+  measurementReminderEvents: number;
 }
 
 export function summarizeBackup(payload: BackupPayload): BackupSummary {
@@ -1240,6 +1305,11 @@ export function summarizeBackup(payload: BackupPayload): BackupSummary {
       payload.encounterConditionLinks.length,
     vaccinations: payload.vaccinations.length,
     vaccinationLinks: payload.vaccinationDocumentLinks.length,
+    // v1.37.20 (#223 / iOS #68) — counted from the release that carries them,
+    // so the admin's "what did I just restore" answer never under-counts a
+    // file with reminders the way it once did for visits.
+    measurementReminders: payload.measurementReminders.length,
+    measurementReminderEvents: payload.measurementReminderEvents.length,
   };
 }
 

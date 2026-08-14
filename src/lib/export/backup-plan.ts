@@ -99,6 +99,12 @@ export const BACKED_UP_MODELS = [
   "UserHealthProfile",
   "HealthProfileFactRevision",
   "MeasurementReminder",
+  // The Vorsorge completion ledger (v1.37.20, #223 / iOS #68). Looks derived
+  // and is the opposite: the reminder engine is single-cursor, so each satisfy
+  // overwrites the previous one on the reminder row and this table is the only
+  // copy of everything before the latest. Nothing can rebuild it, which is the
+  // exact test for BACKED_UP.
+  "MeasurementReminderEvent",
 
   // ── Cycle ─────────────────────────────────────────────────────────────────
   "CycleProfile",
@@ -202,6 +208,9 @@ export const BACKUP_WRITER_FILES: readonly string[] = [
   // reason: `documentLinks` is a field name on three models now, so each of
   // these reads through its OWN delegate here.
   "src/lib/export/vaccinations-backup.ts",
+  // The Vorsorge reminders and their completion ledger, both ends beside each
+  // other like the visits and vaccinations above.
+  "src/lib/export/reminders-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 
@@ -212,6 +221,7 @@ export const BACKUP_RESTORE_FILES: readonly string[] = [
   "src/lib/export/health-score-backup.ts",
   "src/lib/export/visits-backup.ts",
   "src/lib/export/vaccinations-backup.ts",
+  "src/lib/export/reminders-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 
@@ -264,12 +274,11 @@ export const TWO_ENDED_MODELS = [
   "Workout",
   "NutrientIntakeDay",
   "InboundDocument",
-  // Visits travel both ways from the release that introduces them. Two
-  // COVERAGE_PENDING neighbours already say what the alternative costs:
-  // reminders restore silent, and the filing between documents and conditions
-  // is lost. Leaving the visit links pending would return visits and documents
-  // with nothing between them — the same loss, one layer deeper — so the links
-  // land carried rather than owed.
+  // Visits travel both ways from the release that introduces them. A
+  // COVERAGE_PENDING neighbour already says what the alternative costs — the
+  // filing between documents and conditions is lost. Leaving the visit links
+  // pending would return visits and documents with nothing between them — the
+  // same loss, one layer deeper — so the links land carried rather than owed.
   "Practitioner",
   "Encounter",
   "EncounterDocumentLink",
@@ -284,6 +293,17 @@ export const TWO_ENDED_MODELS = [
   // else.
   "VaccinationRecord",
   "VaccinationDocumentLink",
+  // The Vorsorge reminders, off the debt register at last (v1.37.20, #223 /
+  // iOS #68), and the completion ledger carried with them from the release
+  // that introduces it. The pairing is deliberate: the ledger arriving is
+  // what turned "a restore leaves the account silent" from an inconvenience
+  // into a history loss, because the single-cursor engine keeps no other copy
+  // of past satisfies and skips. Restoring the reminder without its ledger
+  // would hand back a cadence with no evidence it was ever followed; the two
+  // land together. The encounter and vaccination `reminderId` references stop
+  // dropping to NULL in the same release — the rows they name come back now.
+  "MeasurementReminder",
+  "MeasurementReminderEvent",
 ] as const;
 
 /** One model claimed to travel both ways. */
@@ -340,8 +360,6 @@ export const COVERAGE_PENDING: Readonly<Record<string, string>> = {
     "Completed WHO-5, PHQ and GAD instruments with their scores and dates. Clinically meaningful history that no integration can re-sync, and the single largest gap on this list.",
   EcgRecording:
     "ECG traces and their rhythm classification. The originating device may still hold them, but a self-hoster who exported and wiped has nothing to re-sync from.",
-  MeasurementReminder:
-    "Per-metric reminder cadences the person configured. A restore leaves the account silent until each one is set up again.",
   WorkoutRoute:
     "GPS traces. Deliberately absent from the payload today and DISCLOSED as absent in the file's own manifest, which is why this is a documented exclusion rather than a silent one — but it is still a loss for a self-hoster with no other copy.",
   WorkoutSamples:

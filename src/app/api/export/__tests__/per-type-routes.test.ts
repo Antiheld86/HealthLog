@@ -38,6 +38,10 @@ vi.mock("@/lib/db", () => ({
     encounterConditionLink: { findMany: vi.fn().mockResolvedValue([]) },
     vaccinationRecord: { findMany: vi.fn().mockResolvedValue([]) },
     vaccinationDocumentLink: { findMany: vi.fn().mockResolvedValue([]) },
+    // The reminder engine tables (v1.37.20, #223 / iOS #68). Empty for the
+    // same reason as the visit tables above.
+    measurementReminder: { findMany: vi.fn().mockResolvedValue([]) },
+    measurementReminderEvent: { findMany: vi.fn().mockResolvedValue([]) },
     // v1.15.0 — cycle tables read by the full-backup helper.
     cycleProfile: { findUnique: vi.fn() },
     menstrualCycle: { findMany: vi.fn() },
@@ -119,6 +123,10 @@ beforeEach(() => {
   );
   vi.mocked(prisma.vaccinationRecord.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.vaccinationDocumentLink.findMany).mockResolvedValue(
+    [] as never,
+  );
+  vi.mocked(prisma.measurementReminder.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.measurementReminderEvent.findMany).mockResolvedValue(
     [] as never,
   );
 });
