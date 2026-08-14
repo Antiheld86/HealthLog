@@ -14,6 +14,9 @@ describe("isAllowlistedApiRead — offline read boundary", () => {
   it("caches the curated safe GET read endpoints", () => {
     expect(isAllowlistedApiRead("/api/dashboard/snapshot")).toBe(true);
     expect(isAllowlistedApiRead("/api/dashboard/widgets")).toBe(true);
+    // v1.37.20 — the Today rail's offline read. Watched red before the
+    // allowlist entry landed.
+    expect(isAllowlistedApiRead("/api/daily/digest")).toBe(true);
     expect(isAllowlistedApiRead("/api/measurements")).toBe(true);
     expect(
       isAllowlistedApiRead("/api/measurements/series-batch?types=WEIGHT"),

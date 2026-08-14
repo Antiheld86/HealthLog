@@ -79,6 +79,9 @@ const MAX_DATA_ENTRIES = 60;
 // and the version probe are eligible.
 const API_READ_ALLOWLIST = [
   "/api/dashboard/snapshot",
+  // v1.37.20 — daily digest: the Today rail's offline read. Keep in
+  // lockstep with src/lib/pwa/sw-cache-policy.ts.
+  "/api/daily/digest",
   "/api/dashboard/widgets",
   "/api/measurements",
   "/api/medications",
