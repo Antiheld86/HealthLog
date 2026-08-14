@@ -33,7 +33,7 @@ import type {
   MeasurementType,
   RollupGranularity,
 } from "@/generated/prisma/client";
-import { userDayKey } from "@/lib/tz/format";
+import { isNearUtc, userDayKey } from "@/lib/tz/format";
 import {
   ensureUserRollupsFresh,
   readRollupBuckets,
@@ -278,6 +278,116 @@ async function readRecentDaily(
     }));
 }
 
+/**
+ * The `date_trunc` unit per band — a CLOSED map over the granularity enum,
+ * which is what makes splicing `unit` into the raw SQL below a
+ * whitelist-splice, not an injection surface.
+ */
+const BAND_TRUNC_UNIT: Record<
+  RollupGranularity,
+  "day" | "week" | "month" | "year"
+> = {
+  DAY: "day",
+  WEEK: "week",
+  MONTH: "month",
+  YEAR: "year",
+};
+
+/**
+ * v1.37.19 (A6-11) — LIVE aggregate for one band, the fallback the module
+ * doc has promised since v1.18.7 but `readBand` never had: a coverage
+ * miss (or a >5y account whose YEAR partition was never folded) used to
+ * hand the AI an empty MONTH/YEAR band as if the history did not exist.
+ *
+ * One grouped aggregate over raw rows, shaped like a rollup bucket. Two
+ * documented approximations against the folded tier: no source-priority
+ * collapse (a dual-source day counts both readings into the mean), and
+ * no slope/r² (left null, exactly like a pre-0190 bucket). Both are
+ * acceptable for prompt context — the alternative was silence.
+ *
+ * `tzKey` (the far-from-UTC day-grain guard) buckets on the user's LOCAL
+ * calendar via `AT TIME ZONE`; parameter-bound, never spliced.
+ */
+async function readBandLive(
+  userId: string,
+  type: MeasurementType,
+  granularity: RollupGranularity,
+  from: Date,
+  to: Date,
+  tzKey?: string,
+): Promise<RollupBucket[]> {
+  const unit = BAND_TRUNC_UNIT[granularity];
+  try {
+    const rows = tzKey
+      ? await prisma.$queryRaw<
+          Array<{
+            bucket_start: Date;
+            count: number;
+            mean: number;
+            min_value: number;
+            max_value: number;
+            sd: number | null;
+          }>
+        >`
+          SELECT
+            date_trunc(${unit}, m."measured_at" AT TIME ZONE ${tzKey}) AS bucket_start,
+            COUNT(*)::int                        AS count,
+            AVG(m."value")::double precision     AS mean,
+            MIN(m."value")::double precision     AS min_value,
+            MAX(m."value")::double precision     AS max_value,
+            STDDEV_POP(m."value")::double precision AS sd
+          FROM measurements m
+          WHERE m."user_id" = ${userId}
+            AND m."type" = ${type}::"measurement_type"
+            AND m."deleted_at" IS NULL
+            AND m."measured_at" >= ${from}
+            AND m."measured_at" < ${to}
+          GROUP BY 1
+          ORDER BY 1
+        `
+      : await prisma.$queryRaw<
+          Array<{
+            bucket_start: Date;
+            count: number;
+            mean: number;
+            min_value: number;
+            max_value: number;
+            sd: number | null;
+          }>
+        >`
+          SELECT
+            date_trunc(${unit}, m."measured_at") AS bucket_start,
+            COUNT(*)::int                        AS count,
+            AVG(m."value")::double precision     AS mean,
+            MIN(m."value")::double precision     AS min_value,
+            MAX(m."value")::double precision     AS max_value,
+            STDDEV_POP(m."value")::double precision AS sd
+          FROM measurements m
+          WHERE m."user_id" = ${userId}
+            AND m."type" = ${type}::"measurement_type"
+            AND m."deleted_at" IS NULL
+            AND m."measured_at" >= ${from}
+            AND m."measured_at" < ${to}
+          GROUP BY 1
+          ORDER BY 1
+        `;
+    return rows.map((r) => ({
+      bucketStart: new Date(r.bucket_start),
+      count: Number(r.count),
+      mean: Number(r.mean),
+      minValue: Number(r.min_value),
+      maxValue: Number(r.max_value),
+      sd: r.sd === null ? null : Number(r.sd),
+      slope: null,
+      r2: null,
+    }));
+  } catch {
+    // The band builder never throws — an unreadable band degrades to
+    // empty exactly like the rollup path always has.
+    return [];
+  }
+}
+
 async function readBand(
   userId: string,
   type: MeasurementType,
@@ -285,13 +395,28 @@ async function readBand(
   fromDaysAgo: number,
   toDaysAgo: number,
   now: number,
+  tz?: string,
 ): Promise<RollupBucket[]> {
   const from = new Date(now - fromDaysAgo * DAY_MS);
   const to = new Date(now - toDaysAgo * DAY_MS);
+  // v1.37.19 (A6-11) — the far-from-UTC guard the correlation readers
+  // carry (v1.4.38 W-A class): DAY rollup buckets group by UTC day, which
+  // diverges from the user's local calendar for most of the day outside
+  // the ±3 h near-UTC band. For those users the day-grain band goes
+  // straight to the live path keyed in their zone. The coarser bands stay
+  // on the UTC-anchored rollups — a few hours of offset moves bucket
+  // MEMBERSHIP at week/month/year grain by at most one edge reading.
+  if (granularity === "DAY" && tz && !isNearUtc(tz, new Date(now))) {
+    return readBandLive(userId, type, granularity, from, to, tz);
+  }
   // `readRollupBuckets` never throws — an empty / missing partition yields
-  // an empty array, which is the "fall back to nothing for this band"
-  // behaviour the coverage miss path relies on.
-  return readRollupBuckets(userId, type, granularity, from, to);
+  // an empty array. v1.37.19 — an empty band now falls back to the live
+  // aggregate instead of silently handing the AI nothing (the module doc
+  // promised replace-with-fallback from day one; only the "replace" half
+  // existed).
+  const buckets = await readRollupBuckets(userId, type, granularity, from, to);
+  if (buckets.length > 0) return buckets;
+  return readBandLive(userId, type, granularity, from, to);
 }
 
 /**
@@ -331,6 +456,7 @@ export async function buildTieredSeries(
             TIERED_BANDS.dayUntil,
             TIERED_BANDS.rawDays,
             now,
+            options.tz,
           ),
       coarseOnly
         ? emptyBand

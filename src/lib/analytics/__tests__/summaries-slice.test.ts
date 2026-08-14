@@ -99,6 +99,10 @@ beforeEach(() => {
   ROLLUP_FIND_MANY.mockResolvedValue([]);
   ROLLUP_FIND_FIRST.mockResolvedValue(null);
   MEASUREMENT_FIND_FIRST.mockResolvedValue(null);
+  // v1.37.19 (A6-10) — default the tagged-template RAW reads (the coverage
+  // probe + the pre-fold all-time remainder) to empty; individual tests
+  // queue their own `mockResolvedValueOnce` sequences on top.
+  RAW.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -404,8 +408,9 @@ describe("computeSummariesSlice", () => {
 
       // 1 RAW coverage probe + 3 UNSAFE data queries (narrow aggregate
       // + latests + rollup GROUP BY; v1.4.37.2 — the prior `findMany`
-      // is gone). No heavy aggregate.
-      expect(RAW).toHaveBeenCalledTimes(1);
+      // is gone). No heavy aggregate. v1.37.19 (A6-10) — the second RAW
+      // call is the pre-fold all-time remainder splice.
+      expect(RAW).toHaveBeenCalledTimes(2);
       expect(UNSAFE).toHaveBeenCalledTimes(3);
       // v1.4.40 W-WMY-WIRE — the year-ago baseline probe runs
       // `readBestGranularityRollups(userId, type, 395)` per
@@ -417,6 +422,63 @@ describe("computeSummariesSlice", () => {
       // v1.20.0 F6 — plus the 90-day accumulator findMany the warm path
       // now runs to compose slope / r² / sd: 1 accumulator + 3 WMY = 4.
       expect(ROLLUP_FIND_MANY).toHaveBeenCalledTimes(4);
+    });
+
+    // Watched red: with the pre-fold splice removed from the rollup path
+    // (the pre-v1.37.19 assembly used the GROUP BY figures verbatim), the
+    // count / min / max / mean assertions fail — an account with rows
+    // older than the 5-year fold window had its "all-time" figures
+    // silently truncated to the window while the live fallback reported
+    // the true numbers.
+    it("splices rows older than the fold window into the all-time figures (A6-10)", async () => {
+      RAW.mockResolvedValueOnce([{ type: "WEIGHT", has_buckets: true }]) // probe
+        .mockResolvedValueOnce([
+          // pre-fold remainder: 5 ancient readings, heavier and wider.
+          { type: "WEIGHT", count: 5, min: 70, max: 95, mean: 90 },
+        ]);
+      UNSAFE.mockResolvedValueOnce([
+        { type: "WEIGHT", avg7: 82, avg30: 82.5, median: 82.1 },
+      ])
+        .mockResolvedValueOnce([
+          { type: "WEIGHT", value: 82.7, measured_at: new Date() },
+        ])
+        .mockResolvedValueOnce([
+          { type: "WEIGHT", count: 20, min: 79.5, max: 84.0, mean: 82.0 },
+        ]);
+
+      const result = await computeSummariesSlice("user-prefold");
+      const weight = result.summaries.WEIGHT;
+
+      // 20 in-window + 5 pre-fold.
+      expect(weight.count).toBe(25);
+      // Envelope widens to the ancient extremes.
+      expect(weight.min).toBe(70);
+      expect(weight.max).toBe(95);
+      // Weighted mean: (82*20 + 90*5) / 25 = 83.6.
+      expect(weight.mean).toBe(83.6);
+      // Windowed figures stay window-scoped.
+      expect(weight.avg7).toBe(82);
+    });
+
+    it("surfaces a type whose only rows are pre-fold (no DAY bucket)", async () => {
+      RAW.mockResolvedValueOnce([
+        { type: "WEIGHT", has_buckets: true },
+      ]).mockResolvedValueOnce([
+        { type: "HEIGHT", count: 2, min: 180, max: 181, mean: 180.5 },
+      ]);
+      UNSAFE.mockResolvedValueOnce([]) // narrows
+        .mockResolvedValueOnce([]) // latests
+        .mockResolvedValueOnce([]); // rollup GROUP BY
+
+      const result = await computeSummariesSlice("user-prefold-only");
+      const height = result.summaries.HEIGHT;
+      expect(height.count).toBe(2);
+      expect(height.min).toBe(180);
+      expect(height.max).toBe(181);
+      expect(height.mean).toBe(180.5);
+      // No in-window rows: every windowed field stays null.
+      expect(height.avg7).toBeNull();
+      expect(height.slope30).toBeNull();
     });
   });
 

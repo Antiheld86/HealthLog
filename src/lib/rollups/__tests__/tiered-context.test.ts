@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   ensureUserRollupsFresh: vi.fn(),
   probeRollupCoverage: vi.fn(),
   measurementFindMany: vi.fn(),
+  queryRaw: vi.fn(),
 }));
 
 vi.mock("../measurement-rollups", () => ({
@@ -34,6 +35,8 @@ vi.mock("../measurement-coverage", () => ({
 vi.mock("@/lib/db", () => ({
   prisma: {
     measurement: { findMany: mocks.measurementFindMany },
+    // v1.37.19 (A6-11) — the live band fallback.
+    $queryRaw: mocks.queryRaw,
   },
 }));
 
@@ -70,6 +73,7 @@ describe("buildTieredSeries", () => {
     mocks.probeRollupCoverage.mockResolvedValue(new Map([["WEIGHT", true]]));
     mocks.measurementFindMany.mockResolvedValue([]);
     mocks.readRollupBuckets.mockResolvedValue([]);
+    mocks.queryRaw.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -241,5 +245,99 @@ describe("buildTieredSeries", () => {
       expect(series.recentDaily).toHaveLength(1);
       expect(series.recentDaily[0].date).toBe("2026-06-15");
     });
+  });
+});
+
+// v1.37.19 (A6-11) — the live fallback the module doc promised from day
+// one, and the far-from-UTC day-grain guard.
+//
+// Watched red: with the `readBandLive` fallback removed from `readBand`
+// (the pre-fix reader returned the empty rollup result as-is), the
+// coverage-miss case fails — a >5y account whose YEAR partition was never
+// folded handed the AI empty MONTH/YEAR bands as if the history did not
+// exist. With the `isNearUtc` guard removed, the far-tz case fails — the
+// DAY band read UTC-keyed rollup buckets for a user whose local calendar
+// disagrees with UTC for most of the day.
+describe("buildTieredSeries — live fallback + near-UTC guard (A6-11)", () => {
+  beforeEach(() => {
+    mocks.ensureUserRollupsFresh.mockResolvedValue({ recomputed: false });
+    mocks.probeRollupCoverage.mockResolvedValue(new Map([["WEIGHT", true]]));
+    mocks.measurementFindMany.mockResolvedValue([]);
+    mocks.readRollupBuckets.mockResolvedValue([]);
+    mocks.queryRaw.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("serves an empty rollup band from the live aggregate instead of silence", async () => {
+    mocks.readRollupBuckets.mockResolvedValue([]);
+    mocks.queryRaw.mockResolvedValue([
+      {
+        bucket_start: new Date("2025-01-01T00:00:00.000Z"),
+        count: 40,
+        mean: 82.1,
+        min_value: 78,
+        max_value: 90,
+        sd: 2.5,
+      },
+    ]);
+
+    const series = await buildTieredSeries("u1", "WEIGHT", {
+      now: NOW,
+      tz: "Europe/Berlin",
+    });
+
+    // Every band read fell through to the live aggregate (4 bands).
+    expect(mocks.queryRaw).toHaveBeenCalled();
+    expect(series.yearBand.length).toBeGreaterThan(0);
+    expect(series.yearBand[0]).toMatchObject({ mean: 82.1, min: 78, max: 90 });
+  });
+
+  it("keeps the rollup result when the band has buckets (no live read)", async () => {
+    mocks.readRollupBuckets.mockResolvedValue([
+      rollupRow("2026-05-01T00:00:00.000Z", 80, 79, 81, 10),
+    ]);
+
+    await buildTieredSeries("u1", "WEIGHT", {
+      now: NOW,
+      tz: "Europe/Berlin",
+    });
+    expect(mocks.queryRaw).not.toHaveBeenCalled();
+  });
+
+  it("routes the DAY band straight to the tz-keyed live path for far-from-UTC users", async () => {
+    await buildTieredSeries("u1", "WEIGHT", {
+      now: NOW,
+      tz: "Pacific/Auckland",
+    });
+
+    // The DAY grain never touched the UTC-keyed rollup tier …
+    const dayReads = mocks.readRollupBuckets.mock.calls.filter(
+      (c) => c[2] === "DAY",
+    );
+    expect(dayReads).toEqual([]);
+    // … while the coarser bands still did.
+    const coarseReads = mocks.readRollupBuckets.mock.calls.map(
+      (c) => c[2] as RollupGranularity,
+    );
+    expect(coarseReads).toEqual(
+      expect.arrayContaining(["WEEK", "MONTH", "YEAR"]),
+    );
+  });
+
+  it("still reads the DAY rollup inside the near-UTC band", async () => {
+    mocks.readRollupBuckets.mockResolvedValue([
+      rollupRow("2026-06-01T00:00:00.000Z", 80, 79, 81, 10),
+    ]);
+    await buildTieredSeries("u1", "WEIGHT", {
+      now: NOW,
+      tz: "Europe/Berlin",
+    });
+    const dayReads = mocks.readRollupBuckets.mock.calls.filter(
+      (c) => c[2] === "DAY",
+    );
+    expect(dayReads.length).toBe(1);
   });
 });
