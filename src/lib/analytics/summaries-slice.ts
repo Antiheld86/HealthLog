@@ -41,8 +41,9 @@
  * Fields the slim shape intentionally omits (the dashboard never
  * reads them on first paint):
  *   - `anomalyCount`: would require an extra per-type read for the
- *     z-score loop. The Coach / insights paths still get it via the
- *     default slice.
+ *     z-score loop. v1.37.19 removed it from the wire shape entirely —
+ *     the insights pipeline computes its own via `summarize()` /
+ *     the comprehensive aggregator, and no client component reads it.
  *   - `avg30LastMonth` / `avg30LastYear`: the dashboard tile delta
  *     callout uses them, but only when the comparison-baseline
  *     widget is enabled — that path already pre-fetches the default
@@ -172,8 +173,6 @@ interface WindowedAggregateRow extends NarrowAggregateRow {
   r2_7: number | null;
   slope30: number | null;
   r2_30: number | null;
-  slope90: number | null;
-  r2_90: number | null;
 }
 
 interface LatestRow {
@@ -222,8 +221,6 @@ function emptySummary(): DataSummary {
     avg30: null,
     slope7: null,
     slope30: null,
-    slope90: null,
-    anomalyCount: 0,
     avg30LastMonth: null,
     avg30LastYear: null,
   };
@@ -378,7 +375,7 @@ async function withSleepNightTotals(
   // Preserve the slope tuples the night summary doesn't compute (the
   // dashboard tile reads slope30); recompute them off the night series is
   // out of scope here — the per-night `summarize()` already fills slope7 /
-  // slope30 / slope90 from the night DataPoints, so use them directly.
+  // slope30 from the night DataPoints, so use them directly.
   slice.summaries.SLEEP_DURATION = summary;
   // Additive, observational: the latest night's main session saw two
   // writer buckets with clearly different asleep totals. Round to whole
@@ -656,7 +653,6 @@ async function computeFromRollups(userId: string): Promise<SummariesSlice> {
     }
     const reg7 = composeWindowedRegression(accBuckets, since7);
     const reg30 = composeWindowedRegression(accBuckets, since30);
-    const reg90 = composeWindowedRegression(accBuckets, since90);
     summaries[row.type] = {
       count: row.count,
       latest,
@@ -668,8 +664,6 @@ async function computeFromRollups(userId: string): Promise<SummariesSlice> {
       avg30: round2(narrow?.avg30 ?? null),
       slope7: buildSlope(reg7.slope, reg7.r2),
       slope30: buildSlope(reg30.slope, reg30.r2),
-      slope90: buildSlope(reg90.slope, reg90.r2),
-      anomalyCount: 0,
       avg30LastMonth: round2(narrow?.avg30_last_month ?? null),
       avg30LastYear: null,
     };
@@ -833,19 +827,7 @@ async function computeFromLiveAggregate(
           EXTRACT(EPOCH FROM m."measured_at") / 86400.0
         ) FILTER (
           WHERE m."measured_at" >= (date_trunc('day', NOW() AT TIME ZONE 'UTC') - INTERVAL '30 days') AT TIME ZONE 'UTC'
-        )::double precision                                           AS r2_30,
-        REGR_SLOPE(
-          m."value",
-          EXTRACT(EPOCH FROM m."measured_at") / 86400.0
-        ) FILTER (
-          WHERE m."measured_at" >= (date_trunc('day', NOW() AT TIME ZONE 'UTC') - INTERVAL '90 days') AT TIME ZONE 'UTC'
-        )::double precision                                           AS slope90,
-        REGR_R2(
-          m."value",
-          EXTRACT(EPOCH FROM m."measured_at") / 86400.0
-        ) FILTER (
-          WHERE m."measured_at" >= (date_trunc('day', NOW() AT TIME ZONE 'UTC') - INTERVAL '90 days') AT TIME ZONE 'UTC'
-        )::double precision                                           AS r2_90
+        )::double precision                                           AS r2_30
       FROM ${canonicalMeasurementsFrom(rankUnqualified, "90 days")}
       GROUP BY m."type"
     `,
@@ -925,8 +907,6 @@ async function computeFromLiveAggregate(
       avg30: round2(win?.avg30 ?? null),
       slope7: buildSlope(win?.slope7 ?? null, win?.r2_7 ?? null),
       slope30: buildSlope(win?.slope30 ?? null, win?.r2_30 ?? null),
-      slope90: buildSlope(win?.slope90 ?? null, win?.r2_90 ?? null),
-      anomalyCount: 0,
       avg30LastMonth: round2(win?.avg30_last_month ?? null),
       avg30LastYear: null,
     };
@@ -974,7 +954,7 @@ async function computeFromLiveAggregate(
  * Why this helper exists
  * ----------------------
  * The slim `computeSummariesSlice` caps its windowed columns at 90 d
- * (`slope7 / slope30 / slope90`). The v1.5 multi-year trend feature
+ * (`slope7 / slope30`). The v1.5 multi-year trend feature
  * + the Coach drawer's "history" tile need linearly composable stats
  * (count / min / max / mean / sum) over much larger windows — 1 y,
  * 2 y, 3 y. Hitting the live `measurements` table for a 3-year span

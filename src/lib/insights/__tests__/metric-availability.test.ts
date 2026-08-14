@@ -24,7 +24,6 @@ function fakeSummary(count: number): DataSummary {
     avg30: null,
     slope7: null,
     slope30: null,
-    slope90: null,
     anomalyCount: 0,
   };
 }

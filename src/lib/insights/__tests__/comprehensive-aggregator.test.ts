@@ -327,8 +327,6 @@ describe("buildComprehensiveAggregate", () => {
           r2_7: 0.65,
           slope30: -0.005,
           r2_30: 0.42,
-          slope90: 0.001,
-          r2_90: 0.12,
         },
       ])
         .mockResolvedValueOnce([
@@ -359,11 +357,6 @@ describe("buildComprehensiveAggregate", () => {
         slope: -0.005,
         direction: "stable",
         confidence: 0.42,
-      });
-      expect(weight.slope90).toEqual({
-        slope: 0.001,
-        direction: "stable",
-        confidence: 0.12,
       });
 
       expect(result.totalMeasurements).toBe(42);
@@ -400,8 +393,6 @@ describe("buildComprehensiveAggregate", () => {
         r2_7: null,
         slope30: null,
         r2_30: null,
-        slope90: null,
-        r2_90: null,
       },
     ])
       .mockResolvedValueOnce([

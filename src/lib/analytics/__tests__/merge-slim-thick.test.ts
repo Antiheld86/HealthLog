@@ -29,7 +29,6 @@ const stubSummary = (): DataSummary => ({
   avg30: 77.9,
   slope7: null,
   slope30: { slope: -0.05, direction: "down", confidence: 0.5 },
-  slope90: null,
   anomalyCount: 0,
 });
 

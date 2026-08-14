@@ -110,6 +110,10 @@ export const GET = apiHandler(async () => {
     // when never acknowledged; the onboarding welcome gate reads this to
     // decide whether to require the acknowledgment before "Get started".
     disclaimerAcknowledgedAt: user.disclaimerAcknowledgedAt,
+    // The version that acknowledgment was given for. The welcome gate
+    // compares it against the current DISCLAIMER_VERSION so a revised
+    // disclaimer re-prompts instead of riding an old acknowledgment.
+    disclaimerAcknowledgedVersion: user.disclaimerAcknowledgedVersion,
     // v1.18.6 — resumable module-tour progress. Null when the user has
     // not started the tour; otherwise the resume point the launcher
     // seeds its index from. Fail-soft parse: a corrupt blob degrades to

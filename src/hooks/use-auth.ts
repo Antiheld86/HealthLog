@@ -90,6 +90,13 @@ export interface AuthUser {
    */
   disclaimerAcknowledgedAt?: string | null;
   /**
+   * The disclaimer version that acknowledgment was given for. The welcome
+   * gate compares it against the current `DISCLAIMER_VERSION` so a revised
+   * disclaimer re-prompts instead of riding an old acknowledgment. Optional
+   * for the same stale-payload reason as the timestamp above.
+   */
+  disclaimerAcknowledgedVersion?: string | null;
+  /**
    * v1.5.5 — relative URL of the user's self-hosted avatar, served
    * from `/api/user/avatar/{id}?v={updatedAtMs}`. Replaces the
    * Gravatar leak; null when the user has not uploaded an avatar

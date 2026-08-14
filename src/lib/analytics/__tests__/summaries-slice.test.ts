@@ -132,8 +132,6 @@ describe("computeSummariesSlice", () => {
         avg30: null,
         slope7: null,
         slope30: null,
-        slope90: null,
-        anomalyCount: 0,
         avg30LastMonth: null,
         avg30LastYear: null,
       });
@@ -187,7 +185,10 @@ describe("computeSummariesSlice", () => {
       expect(weight.mean).toBe(82.05);
       expect(weight.avg7).toBe(81.9);
       expect(weight.avg30).toBe(82.1);
-      expect(weight.anomalyCount).toBe(0);
+      // anomalyCount / slope90 left the wire shape in v1.37.19 — computed
+      // by the insights pipeline's own reads, never serialised here.
+      expect("anomalyCount" in weight).toBe(false);
+      expect("slope90" in weight).toBe(false);
       expect(weight.avg30LastMonth).toBeNull();
       expect(weight.avg30LastYear).toBeNull();
       expect(weight.slope7).toEqual({
@@ -199,11 +200,6 @@ describe("computeSummariesSlice", () => {
         slope: -0.005,
         direction: "stable",
         confidence: 0.42,
-      });
-      expect(weight.slope90).toEqual({
-        slope: 0.001,
-        direction: "stable",
-        confidence: 0.12,
       });
     });
 
@@ -238,7 +234,6 @@ describe("computeSummariesSlice", () => {
       const result = await computeSummariesSlice("user-1");
       expect(result.summaries.PULSE.slope7).toBeNull();
       expect(result.summaries.PULSE.slope30).toBeNull();
-      expect(result.summaries.PULSE.slope90).toBeNull();
     });
 
     it("surfaces lastSeenByType from the DISTINCT ON pass's measured_at", async () => {
@@ -681,17 +676,18 @@ describe("computeSummariesSlice", () => {
       expect(windowedSql).toBeDefined();
       const sql = windowedSql as string;
 
-      // Every regression window (7/30/90 for slope + r²) anchors on the
-      // day-truncated UTC boundary. Six FILTERs total.
-      for (const days of ["7 days", "30 days", "90 days"]) {
+      // Every regression window (7/30 for slope + r²) anchors on the
+      // day-truncated UTC boundary. Four FILTERs total (the 90-day pair
+      // left with slope90 in v1.37.19).
+      for (const days of ["7 days", "30 days"]) {
         expect(sql).toContain(
           `(date_trunc('day', NOW() AT TIME ZONE 'UTC') - INTERVAL '${days}') AT TIME ZONE 'UTC'`,
         );
       }
       const anchored = sql.match(
-        /date_trunc\('day', NOW\(\) AT TIME ZONE 'UTC'\) - INTERVAL '(?:7|30|90) days'\) AT TIME ZONE 'UTC'/g,
+        /date_trunc\('day', NOW\(\) AT TIME ZONE 'UTC'\) - INTERVAL '(?:7|30) days'\) AT TIME ZONE 'UTC'/g,
       );
-      expect(anchored?.length).toBe(6);
+      expect(anchored?.length).toBe(4);
 
       // The regression windows must NOT fall back to the bare wall-clock
       // `NOW() - INTERVAL 'N days'` bound the warm path never uses for the

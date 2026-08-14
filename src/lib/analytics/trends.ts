@@ -143,8 +143,15 @@ export interface DataSummary {
   avg30: number | null;
   slope7: TrendSlope | null;
   slope30: TrendSlope | null;
-  slope90: TrendSlope | null;
-  anomalyCount: number;
+  /**
+   * In-process only — the insights feature builder reads it as the
+   * outlier/anomaly figure for its prompt blocks. The `/api/analytics`
+   * wire never serialises it (the slim SQL path cannot compute it and
+   * always reported 0), and no client component reads it. `slope90` was
+   * removed from this shape entirely in v1.37.19 for the same reason:
+   * computed on every request, read by nobody.
+   */
+  anomalyCount?: number;
   /**
    * v1.4.16 phase B8 — average value over the 30-day window starting
    * 30 days before today, i.e. the "last month" prior period the
@@ -176,7 +183,6 @@ export function summarize(data: DataPoint[]): DataSummary {
       avg30: null,
       slope7: null,
       slope30: null,
-      slope90: null,
       anomalyCount: 0,
       avg30LastMonth: null,
       avg30LastYear: null,
@@ -267,7 +273,6 @@ export function summarize(data: DataPoint[]): DataSummary {
         : null,
     slope7: trendSlope(data, 7),
     slope30: trendSlope(data, 30),
-    slope90: trendSlope(data, 90),
     anomalyCount: detectAnomalies(data).length,
     avg30LastMonth,
     avg30LastYear,
