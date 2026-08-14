@@ -214,7 +214,10 @@ describe("POST /api/medications/[id]/inventory", () => {
       state: "ACTIVE",
     } as never);
 
-    const printed = "2027-06-01T00:00:00Z";
+    // Now-anchored so the fixture can never age into a past expiry.
+    const printed = new Date(
+      Date.now() + 300 * 24 * 60 * 60 * 1000,
+    ).toISOString();
     const res = await POST(
       jsonReq("http://localhost/api/medications/med-1/inventory", {
         unitsTotal: 4,

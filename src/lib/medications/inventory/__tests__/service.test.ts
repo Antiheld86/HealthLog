@@ -72,7 +72,8 @@ describe("expireStaleInUseItems", () => {
 
 describe("buildCreateInventoryInput", () => {
   it("computes expiresAt = printedExpiry when firstUseAt is null", () => {
-    const printed = new Date("2027-06-01T00:00:00Z");
+    // Now-anchored so the fixture can never age into a past expiry.
+    const printed = new Date(Date.now() + 300 * 24 * 60 * 60 * 1000);
     const input = buildCreateInventoryInput({
       userId: "u",
       medicationId: "m",

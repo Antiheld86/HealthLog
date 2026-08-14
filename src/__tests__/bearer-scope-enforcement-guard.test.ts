@@ -87,8 +87,11 @@ describe("T1 — the Bearer resolution set is frozen", () => {
     // three releases without this guard ever seeing it. A matcher that misses
     // a real resolver is green because it matched nothing, not because
     // nothing was there.
+    // `tokenHash` may sit anywhere inside the `where` object — demanding it
+    // first would let a formatting change (another key ahead of it) walk a
+    // resolver out of the guard's sight.
     const resolvers = filesMatching(
-      /resolveBearerToken|apiToken\s*\.\s*findUnique\(\s*\{[\s\S]*?where:\s*\{\s*tokenHash/,
+      /resolveBearerToken|apiToken\s*\.\s*findUnique\(\s*\{[\s\S]*?where:\s*\{[^}]*?tokenHash/,
     );
 
     // Non-zero proof: an empty match set must fail rather than agree with an
@@ -149,10 +152,16 @@ describe("T3 — the mint sites are frozen", () => {
   };
 
   it("only the known files create ApiToken rows", () => {
-    const minters = filesMatching(/apiToken\.create\(|issueApiToken\(/).filter(
-      // `issue-token.ts` defines the helper; the others call it.
-      (rel) => rel !== "lib/auth/issue-token.ts" || true,
+    // Whitespace-tolerant like the T1 resolver matcher — the lesson this
+    // very file documents: a prettier-wrapped `apiToken\n  .create({` was
+    // invisible to the literal matcher, and a guard that matches nothing
+    // is green for the wrong reason.
+    const minters = filesMatching(
+      /apiToken\s*\.\s*create\s*\(|issueApiToken\s*\(/,
     );
+    // Non-zero proof: an empty match set must fail rather than agree with
+    // an emptied site table.
+    expect(minters.length).toBeGreaterThan(0);
     expect(minters).toEqual(Object.keys(MINT_SITES).sort());
   });
 

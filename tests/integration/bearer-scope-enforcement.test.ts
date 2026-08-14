@@ -160,9 +160,12 @@ describe("B1 — a narrow token cannot read the full-account export", () => {
     expect(json.error).toBe("Insufficient permissions");
 
     // The break is visible AND attributable: an operator can name the token.
-    // Audit writes are fire-and-forget; give the microtask a beat to land.
-    await new Promise((r) => setTimeout(r, 100));
-    expect(await lastBearerFailureReason()).toBe("undeclared_scope");
+    // The audit write is fire-and-forget — poll for the value instead of
+    // sleeping a fixed span and hoping the runner was fast enough; on
+    // timeout the poll asserts against what WAS written.
+    await expect
+      .poll(() => lastBearerFailureReason(), { timeout: 5_000, interval: 100 })
+      .toBe("undeclared_scope");
   });
 
   it("refuses the same token on GET /api/labs with 403", async () => {
