@@ -164,7 +164,10 @@ export function mapWithingsSleepSummary(
  * Matches every other Withings ingest path so a reconnect lights up
  * 30 days of stage data.
  */
-const SLEEP_BACKFILL_DAYS = 30;
+// Exported so the sleep-timeline backfill can bound its DELETE to exactly
+// the window this sync will re-import — deleting beyond it is raw data loss
+// the re-sync can never restore.
+export const SLEEP_BACKFILL_DAYS = 30;
 
 /**
  * One stage segment from the `action=get` series. Withings emits
