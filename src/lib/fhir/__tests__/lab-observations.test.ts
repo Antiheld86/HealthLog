@@ -181,7 +181,12 @@ describe("lab-result FHIR Observations", () => {
 });
 
 describe("lab-result LOINC + canonical UCUM coding (v1.18.8)", () => {
-  function labOf(type: string, unit: string, value = 5.4) {
+  function labOf(
+    type: string,
+    unit: string,
+    value = 5.4,
+    bounds?: { low: number; high: number },
+  ) {
     const bundle = buildFhirDocumentBundle(
       makeData({
         labResults: [
@@ -191,8 +196,8 @@ describe("lab-result LOINC + canonical UCUM coding (v1.18.8)", () => {
             value,
             valueText: null,
             unit,
-            referenceLow: null,
-            referenceHigh: null,
+            referenceLow: bounds?.low ?? null,
+            referenceHigh: bounds?.high ?? null,
             catalogReferenceLow: null,
             catalogReferenceHigh: null,
             sourceReferenceText: null,
@@ -250,13 +255,15 @@ describe("lab-result LOINC + canonical UCUM coding (v1.18.8)", () => {
     expect(tsh?.valueQuantity?.code).toBe("m[IU]/L");
   });
 
-  it("omits the UCUM code when the unit does not match the mapped canonical", () => {
+  it("omits the UCUM code AND its system when the unit does not match the mapped canonical", () => {
     // HbA1c mapped (LOINC present) but recorded in an mmol/mol unit we don't
     // canonicalise → keep the LOINC coding, drop the UCUM code, keep display.
+    // The system goes with the code: a valueQuantity naming UCUM without a
+    // code claims a coding the bundle does not carry.
     const o = labOf("HbA1c", "mmol/mol", 36);
     expect(o?.code.coding?.[0].code).toBe("4548-4");
-    expect(o?.valueQuantity?.system).toBe("http://unitsofmeasure.org");
     expect(o?.valueQuantity?.code).toBeUndefined();
+    expect(o?.valueQuantity?.system).toBeUndefined();
     expect(o?.valueQuantity?.unit).toBe("mmol/mol");
   });
 
@@ -264,10 +271,25 @@ describe("lab-result LOINC + canonical UCUM coding (v1.18.8)", () => {
     const o = labOf("Selenium", "ug/L", 95);
     expect(o?.code.text).toBe("Selenium");
     expect(o?.code.coding).toBeUndefined();
-    // Display unit stays; no coerced UCUM code is invented.
+    // Display unit stays; no coerced UCUM code is invented, and no code
+    // system is named for a code that is not there.
     expect(o?.valueQuantity?.unit).toBe("ug/L");
     expect(o?.valueQuantity?.code).toBeUndefined();
-    expect(o?.valueQuantity?.system).toBe("http://unitsofmeasure.org");
+    expect(o?.valueQuantity?.system).toBeUndefined();
+  });
+
+  it("keeps system and code together on the reference range bounds too", () => {
+    // The bounds are stated in the SAME unit as the value, so an uncoded
+    // unit must leave them uncoded as well, on both halves.
+    const uncoded = labOf("HbA1c", "mmol/mol", 36, { low: 20, high: 42 });
+    expect(uncoded?.referenceRange?.[0].low?.system).toBeUndefined();
+    expect(uncoded?.referenceRange?.[0].low?.code).toBeUndefined();
+    expect(uncoded?.referenceRange?.[0].high?.system).toBeUndefined();
+    const coded = labOf("HDL", "mg/dL", 55, { low: 40, high: 60 });
+    expect(coded?.referenceRange?.[0].low?.system).toBe(
+      "http://unitsofmeasure.org",
+    );
+    expect(coded?.referenceRange?.[0].low?.code).toBe("mg/dL");
   });
 });
 

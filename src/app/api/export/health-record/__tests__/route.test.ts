@@ -205,6 +205,18 @@ describe("POST /api/export/health-record — validation", () => {
     expect(res.status).toBe(422);
   });
 
+  it("rejects a selection that admits nothing with 422", async () => {
+    // The panel disables its own submit in that state, so only a hand-built
+    // request gets here. Rendering an empty report and spending a rate-limit
+    // slot on it would be the wrong answer; this route has no documents-only
+    // mode that would make an empty leaf list a legitimate scope.
+    const { POST } = await import("../route");
+    const res = await POST(mkReq({ format: "pdf", selection: sel() }));
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { meta?: { errorCode?: string } };
+    expect(body.meta?.errorCode).toBe("export.selection.empty");
+  });
+
   it("rejects a userId smuggled into the body with 422", async () => {
     const { POST } = await import("../route");
     const res = await POST(
@@ -540,15 +552,11 @@ describe("POST /api/export/health-record — the selection reaches every format"
     // leaves: the totals must stay in the database.
     expect(await observationCodes(sel("LAB_RESULTS"))).toEqual([]);
     // And an empty selection — the "I said nothing" case, which used to mean
-    // "give me everything".
+    // "give me everything" and is now refused outright, so the totals cannot
+    // ride out on a scope nobody chose.
     const { POST } = await import("../route");
     const res = await POST(mkReq({ format: "fhir", selection: sel() }));
-    const bundle = (await res.json()) as {
-      entry: { resource: { resourceType: string } }[];
-    };
-    expect(
-      bundle.entry.filter((e) => e.resource.resourceType === "Observation"),
-    ).toEqual([]);
+    expect(res.status).toBe(422);
 
     // Asked for by name, they are emitted — the data is withheld, not lost.
     const asked = await observationCodes(sel("PHQ9_SCORE", "GAD7_SCORE"));

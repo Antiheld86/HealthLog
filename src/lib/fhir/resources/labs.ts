@@ -80,11 +80,14 @@ export function labObservations(
     // A lab quantity: the recorded `unit` is always the display string, and
     // the canonical UCUM `code` is stamped only when the analyte map resolved
     // one for exactly that unit (no coerced symbol).
+    // The `system` rides along WITH the code and never alone: naming UCUM as
+    // the code system while withholding the code claims a coding the bundle
+    // does not carry, and leaves a receiver unable to machine-compare the
+    // value it is attached to.
     const quantity = (value: number) => ({
       value,
       unit: lab.unit,
-      system: UCUM_SYSTEM,
-      ...(coding?.ucum ? { code: coding.ucum } : {}),
+      ...(coding?.ucum ? { system: UCUM_SYSTEM, code: coding.ucum } : {}),
     });
     // The bounds are stated in the SAME unit as the value, so they carry the
     // SAME coding — a bare unit beside a coded value leaves a receiver unable
