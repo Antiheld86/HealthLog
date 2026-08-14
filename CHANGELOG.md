@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.37.21] — 2026-08-14
+
+### Fixed
+
+- A dose that reaches the server through the batch route, the path a phone's offline queue drains through, now quiets an active snooze the same way a directly logged dose always has. Before, a take synced in later kept counting as snoozed and the reminder kept ringing.
+- Marking a dose through the single-medication intake route now also closes the still-pending dose-due reminder in the web app and refreshes its badge. The other intake paths have done this since v1.18.4; this one, which is exactly the route a phone's offline replay uses, left the web reminder standing.
+
 ## [1.37.20] — 2026-08-14
 
 ### Added
