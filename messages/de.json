@@ -5972,7 +5972,7 @@
     },
     "notificationStatus": {
       "title": "Zustellstatus",
-      "description": "Zeigt den aktuellen Status je Kanal. „Automatisch deaktiviert“ bedeutet, dass der Versand nach dauerhaften Fehlern gestoppt wurde.",
+      "description": "Status je Kanal — „Automatisch deaktiviert“ heißt: nach dauerhaften Fehlern gestoppt.",
       "emptyDescription": "Richte unter Einstellungen › Integrationen › Zustellkanäle einen Kanal ein.",
       "stateActive": "Aktiv",
       "stateAutoDisabled": "Automatisch deaktiviert",

@@ -5972,7 +5972,7 @@
     },
     "notificationStatus": {
       "title": "Fiabilité des canaux",
-      "description": "Affiche l'état actuel de chaque canal. « Désactivé automatiquement » signifie que les tentatives se sont arrêtées après des erreurs permanentes.",
+      "description": "État de chaque canal — « Désactivé automatiquement » signifie arrêté après des erreurs permanentes.",
       "emptyDescription": "Ajoutez un canal dans Paramètres › Intégrations › Canaux de diffusion.",
       "stateActive": "Actif",
       "stateAutoDisabled": "Désactivé automatiquement",

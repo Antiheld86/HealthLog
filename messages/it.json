@@ -5972,7 +5972,7 @@
     },
     "notificationStatus": {
       "title": "Affidabilità dei canali",
-      "description": "Mostra lo stato attuale di ogni canale. «Disattivato automaticamente» significa che i tentativi si sono fermati dopo errori permanenti.",
+      "description": "Stato di ogni canale — «Disattivato automaticamente» significa fermato dopo errori permanenti.",
       "emptyDescription": "Aggiungi un canale in Impostazioni › Integrazioni › Canali di recapito.",
       "stateActive": "Attivo",
       "stateAutoDisabled": "Disattivato automaticamente",

@@ -5972,7 +5972,7 @@
     },
     "notificationStatus": {
       "title": "Delivery status",
-      "description": "Shows the current state of each channel. “Auto-disabled” means retries stopped after permanent errors.",
+      "description": "State of each channel — “Auto-disabled” means retries stopped after permanent errors.",
       "emptyDescription": "Set up a channel under Settings › Integrations › Delivery channels.",
       "stateActive": "Active",
       "stateAutoDisabled": "Auto-disabled",

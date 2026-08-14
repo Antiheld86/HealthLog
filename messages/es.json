@@ -5972,7 +5972,7 @@
     },
     "notificationStatus": {
       "title": "Fiabilidad de los canales",
-      "description": "Muestra el estado actual de cada canal. «Desactivado automáticamente» significa que los reintentos se detuvieron tras errores permanentes.",
+      "description": "Estado de cada canal — «Desactivado automáticamente» significa detenido tras errores permanentes.",
       "emptyDescription": "Configura un canal en Ajustes › Integraciones › Canales de entrega.",
       "stateActive": "Activo",
       "stateAutoDisabled": "Desactivado automáticamente",

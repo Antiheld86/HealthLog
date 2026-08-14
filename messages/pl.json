@@ -5972,7 +5972,7 @@
     },
     "notificationStatus": {
       "title": "Niezawodność kanałów",
-      "description": "Pokazuje aktualny stan każdego kanału. „Automatycznie wyłączone” oznacza, że ponawianie zatrzymało się po trwałych błędach.",
+      "description": "Stan każdego kanału — „Automatycznie wyłączone” oznacza zatrzymanie po trwałych błędach.",
       "emptyDescription": "Dodaj kanał w Ustawienia › Integracje › Kanały dostarczania.",
       "stateActive": "Aktywne",
       "stateAutoDisabled": "Automatycznie wyłączone",
