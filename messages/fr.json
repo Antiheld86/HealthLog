@@ -2783,6 +2783,7 @@
       "settingsVerbosityBrief": "Bref",
       "settingsVerbosityDefault": "Standard",
       "settingsVerbosityDetailed": "Détaillé",
+      "settingsVerbosityConciseHint": "Le ton concis garde déjà les réponses courtes — la longueur reste fixée sur « Bref » tant qu'il est actif.",
       "settingsSourcesPointer": "Les groupes de données que le coach peut utiliser et la fenêtre d'analyse par défaut se gèrent directement dans le chat du coach (volet « Ce sur quoi je m'appuie »).",
       "settingsSourcesPointerLink": "Ouvrir le coach",
       "settingsExcludeLabel": "Exclure des métriques",
@@ -5952,6 +5953,7 @@
       "repository": "Code source",
       "changelog": "Changelog",
       "docs": "Documentation",
+      "credits": "Crédits et attributions de données",
       "linksHeading": "Sources et documentation",
       "newerAvailable": "Nouvelle version : {tag}"
     },

@@ -2783,6 +2783,7 @@
       "settingsVerbosityBrief": "Breve",
       "settingsVerbosityDefault": "Estándar",
       "settingsVerbosityDetailed": "Detallado",
+      "settingsVerbosityConciseHint": "El tono conciso ya mantiene las respuestas cortas: la extensión queda fijada en «Breve» mientras esté activo.",
       "settingsSourcesPointer": "Los grupos de datos que el coach puede usar y la ventana de análisis predeterminada se gestionan directamente en el chat del coach (panel «En qué me baso»).",
       "settingsSourcesPointerLink": "Abrir el coach",
       "settingsExcludeLabel": "Excluir métricas",
@@ -5952,6 +5953,7 @@
       "repository": "Código fuente",
       "changelog": "Changelog",
       "docs": "Documentación",
+      "credits": "Créditos y atribuciones de datos",
       "linksHeading": "Fuentes y documentación",
       "newerAvailable": "Nueva versión: {tag}"
     },

@@ -136,6 +136,29 @@ function uploadViaXhr(
   });
 }
 
+/**
+ * The pure settle decision — what a finished upload does to the UI.
+ *
+ * Every success flashes the row (fresh upload → the new row, duplicate →
+ * the existing row); only the duplicate additionally toasts. Exported for
+ * the unit test: until v1.37.19 only the duplicate branch flashed, so a
+ * fresh upload gave no feedback beyond its queue row disappearing.
+ */
+export function settleDecision(result: UploadResult): {
+  removeFromQueue: boolean;
+  toastDuplicate: boolean;
+  flashId: string | null;
+} {
+  if (!result.ok) {
+    return { removeFromQueue: false, toastDuplicate: false, flashId: null };
+  }
+  return {
+    removeFromQueue: true,
+    toastDuplicate: result.duplicate,
+    flashId: result.document.id,
+  };
+}
+
 export interface DocumentUploadManager {
   /** Live queue — uploading entries first-in-first, then error entries. */
   items: UploadQueueItem[];
@@ -196,16 +219,17 @@ export function useDocumentUpload(
 
   const settle = useCallback(
     (localId: string, result: UploadResult) => {
-      if (result.ok) {
-        removeItem(localId);
-        void invalidateKeys(queryClient, [queryKeys.documents()]);
-        if (result.duplicate) {
-          toast.info(t("documents.toast.duplicate"));
-          flashHighlight(result.document.id);
-        }
+      if (!result.ok) {
+        patchItem(localId, { status: "error", failure: result, progress: 0 });
         return;
       }
-      patchItem(localId, { status: "error", failure: result, progress: 0 });
+      const decision = settleDecision(result);
+      removeItem(localId);
+      void invalidateKeys(queryClient, [queryKeys.documents()]);
+      if (decision.toastDuplicate) {
+        toast.info(t("documents.toast.duplicate"));
+      }
+      if (decision.flashId) flashHighlight(decision.flashId);
     },
     [flashHighlight, patchItem, queryClient, removeItem, t],
   );

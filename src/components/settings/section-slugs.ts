@@ -71,13 +71,15 @@ export const SETTINGS_SECTION_SLUGS = [
   // 301-redirects to `/settings/notifications#channels` (next.config.ts).
   "sources",
   "notifications",
+  // v1.37.19 — the per-module personalization slugs (`dashboard`,
+  // `insights`, `medications`, `mood`, `labs`, `illness`, `vorsorge`) and
+  // `sharing` left this list. Their URLs are owned by permanent redirects
+  // in `next.config.ts` (`/settings/<module>` → `/settings/layout/<module>`,
+  // `/settings/sharing` → `/settings/gesundheitsakte#sharing`), so the
+  // dynamic route could never serve them — prerendering eight unreachable
+  // pages and keeping eight dead component wirings. The redirects, the
+  // section components, and the layout-hub subpages are unchanged.
   "layout",
-  "dashboard",
-  "insights",
-  "medications",
-  "mood",
-  "labs",
-  "illness",
   // v1.25 (W-ENV) — "Umwelt" (environmental context): home location, travel
   // overrides, and the weather/daylight backfill. Module-gated on the opt-in
   // `environment` module (the nav entry only shows when it is on).
@@ -92,7 +94,6 @@ export const SETTINGS_SECTION_SLUGS = [
   // shown) and folding the two together is what kept the score's
   // composition invisible.
   "score",
-  "vorsorge",
   "thresholds",
   "ai",
   // v1.18.0 (S5) — `coach` gathers the Coach preference cards (disable
@@ -106,13 +107,6 @@ export const SETTINGS_SECTION_SLUGS = [
   // access surfaces). Not nav-gated — the card carries its own enable toggle.
   "mcp",
   "gesundheitsakte",
-  // v1.18.7 — `sharing` (clinician share links) sits directly after
-  // `gesundheitsakte`, before `export`: minting a time-boxed read-only link
-  // to the health record belongs next to the health-record export. Always
-  // available (no module gate), like account / export. The backing model,
-  // the `/api/share-links` routes, and the public `/c/[token]` view are
-  // unchanged — this restores only the owner Settings surface.
-  "sharing",
   "export",
   "advanced",
   // v1.23 — "Data & Privacy": a single surface that assembles the already-

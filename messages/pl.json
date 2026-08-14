@@ -2783,6 +2783,7 @@
       "settingsVerbosityBrief": "Krótka",
       "settingsVerbosityDefault": "Standardowa",
       "settingsVerbosityDetailed": "Szczegółowa",
+      "settingsVerbosityConciseHint": "Zwięzły ton i tak skraca odpowiedzi — szczegółowość pozostaje ustawiona na „Krótko”, dopóki jest aktywny.",
       "settingsSourcesPointer": "Tym, z jakich grup danych może korzystać coach, oraz domyślnym oknem analizy zarządzasz bezpośrednio w czacie coacha (panel „Z czego korzystam”).",
       "settingsSourcesPointerLink": "Otwórz coacha",
       "settingsExcludeLabel": "Wyklucz metryki",
@@ -5952,6 +5953,7 @@
       "repository": "Kod źródłowy",
       "changelog": "Changelog",
       "docs": "Dokumentacja",
+      "credits": "Autorzy i źródła danych",
       "linksHeading": "Źródła i dokumentacja",
       "newerAvailable": "Nowa wersja: {tag}"
     },

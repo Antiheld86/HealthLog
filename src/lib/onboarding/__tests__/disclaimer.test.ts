@@ -25,7 +25,10 @@ describe("isDisclaimerAcknowledgmentCurrent", () => {
 
   it("re-prompts when the stored acknowledgment is for an older version", () => {
     expect(
-      isDisclaimerAcknowledgmentCurrent("2026-06-20T08:00:00.000Z", "2025-01-01"),
+      isDisclaimerAcknowledgmentCurrent(
+        "2026-06-20T08:00:00.000Z",
+        "2025-01-01",
+      ),
     ).toBe(false);
   });
 

@@ -2783,6 +2783,7 @@
       "settingsVerbosityBrief": "Brief",
       "settingsVerbosityDefault": "Default",
       "settingsVerbosityDetailed": "Detailed",
+      "settingsVerbosityConciseHint": "The concise tone already keeps replies short — verbosity is pinned to Brief while it is active.",
       "settingsSourcesPointer": "Which data clusters the coach may draw on and the default analysis window are managed directly in the coach chat (\"What I draw on\" rail).",
       "settingsSourcesPointerLink": "Open the coach",
       "settingsExcludeLabel": "Exclude metrics",
@@ -5952,6 +5953,7 @@
       "repository": "Source code",
       "changelog": "Changelog",
       "docs": "Documentation",
+      "credits": "Credits & data attributions",
       "linksHeading": "Sources & docs",
       "newerAvailable": "Newer version: {tag}"
     },

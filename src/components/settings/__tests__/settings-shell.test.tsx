@@ -113,13 +113,12 @@ describe("SETTINGS_SECTION_SLUGS", () => {
       "integrations",
       "sources",
       "notifications",
+      // v1.37.19 — the per-module personalization slugs (dashboard /
+      // insights / medications / mood / labs / illness / vorsorge) and
+      // `sharing` left the list: their URLs are owned by the permanent
+      // redirects in next.config.ts, so the dynamic route could never
+      // serve them.
       "layout",
-      "dashboard",
-      "insights",
-      "medications",
-      "mood",
-      "labs",
-      "illness",
       // v1.25 (W-ENV) — Environment (home location, travel overrides, backfill),
       // module-gated on the opt-in `environment` module.
       "environment",
@@ -127,14 +126,12 @@ describe("SETTINGS_SECTION_SLUGS", () => {
       "anamnesis",
       // v1.35.0 — the Health Score composition surface.
       "score",
-      "vorsorge",
       "thresholds",
       "ai",
       "coach",
       "api",
       "mcp",
       "gesundheitsakte",
-      "sharing",
       "export",
       "advanced",
       // v1.23 — "Data & Privacy" assembles the export / deletion / retention /
@@ -149,6 +146,9 @@ describe("SETTINGS_SECTION_SLUGS", () => {
       expect(isSettingsSectionSlug(slug)).toBe(true);
     }
     expect(isSettingsSectionSlug("nope")).toBe(false);
+    // The redirect-shadowed module slugs are no longer sections.
+    expect(isSettingsSectionSlug("dashboard")).toBe(false);
+    expect(isSettingsSectionSlug("sharing")).toBe(false);
     expect(isSettingsSectionSlug("")).toBe(false);
     expect(isSettingsSectionSlug("Account")).toBe(false); // case-sensitive
   });
@@ -259,17 +259,9 @@ describe("<SettingsShell>", () => {
     }
   });
 
-  it("highlights the Layout hub when the active prop is a Layout child", () => {
-    // The page passes `active={section}` explicitly; a child slug must
-    // still resolve onto the Layout hub for nav highlighting.
-    const html = renderShell({
-      active: "dashboard",
-      pathname: "/settings/dashboard",
-    });
-    const layoutActive =
-      /<a\b[^>]*\baria-current="page"[^>]*\bhref="\/settings\/layout"|<a\b[^>]*\bhref="\/settings\/layout"[^>]*\baria-current="page"/g;
-    expect(html.match(layoutActive)?.length ?? 0).toBe(2);
-  });
+  // v1.37.19 — the Layout children left `SETTINGS_SECTION_SLUGS`, so no
+  // page can pass one as the `active` override anymore; the pathname-based
+  // case above is the remaining (defensive) mapping.
 
   it("no longer surfaces the per-module nav entries (folded into Darstellung, v1.25.7)", () => {
     // v1.25.7 — Medikamente / Stimmung / Labor / Krankheit / Vorsorge are no

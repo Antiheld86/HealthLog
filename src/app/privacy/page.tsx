@@ -2057,6 +2057,18 @@ export default function PrivacyPage() {
             </a>
             . Policy version {POLICY_VERSION}. Last updated {LAST_UPDATED}.
           </p>
+          {/* The GeoLite2 EULA wants the attribution page reachable from the
+              running app — this and the Settings→About row are the two
+              inbound links to /about. */}
+          <p className="mt-2">
+            <Link
+              href="/about"
+              className="hover:text-foreground hover:underline"
+              data-slot="privacy-about-link"
+            >
+              About HealthLog — credits &amp; data attributions
+            </Link>
+          </p>
         </footer>
       </main>
     </div>

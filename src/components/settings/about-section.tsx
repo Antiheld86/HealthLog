@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowUpCircle,
@@ -312,6 +313,21 @@ export function AboutSection() {
                 {t("settings.about.docs")}
                 <ExternalLink className="h-3.5 w-3.5" />
               </a>
+            </Button>
+            {/* /about carries the GeoLite2 attribution its EULA wants
+                reachable from the running app — this row and the /privacy
+                footer are its two inbound links. Same-app route, so no
+                external-link glyph. */}
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="min-h-11 sm:min-h-9"
+            >
+              <Link href="/about" data-slot="settings-about-credits-link">
+                <Info className="h-4 w-4" />
+                {t("settings.about.credits")}
+              </Link>
             </Button>
           </SettingsCardActions>
         </SettingsCard>

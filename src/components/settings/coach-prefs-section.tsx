@@ -170,7 +170,10 @@ export function CoachPrefsSection({ isAuthenticated }: CoachPrefsSectionProps) {
               </Select>
             </div>
 
-            {/* Verbosity */}
+            {/* Verbosity. The concise tone forces "brief" server-side
+                (system-prompt.ts, buildPrefsPrefix), so the picker is
+                disabled there — showing "brief" — with a hint instead of
+                a live control that silently does nothing. */}
             <div className="flex flex-col gap-2">
               <Label
                 htmlFor="coach-prefs-verbosity"
@@ -179,7 +182,8 @@ export function CoachPrefsSection({ isAuthenticated }: CoachPrefsSectionProps) {
                 {t("insights.coach.settingsVerbosityLabel")}
               </Label>
               <Select
-                value={draft.verbosity}
+                value={draft.tone === "concise" ? "brief" : draft.verbosity}
+                disabled={draft.tone === "concise"}
                 onValueChange={(value) =>
                   setDraft((prev) => ({
                     ...prev,
@@ -205,6 +209,14 @@ export function CoachPrefsSection({ isAuthenticated }: CoachPrefsSectionProps) {
                   </SelectItem>
                 </SelectContent>
               </Select>
+              {draft.tone === "concise" && (
+                <p
+                  className="text-muted-foreground text-xs"
+                  data-slot="coach-prefs-verbosity-concise-hint"
+                >
+                  {t("insights.coach.settingsVerbosityConciseHint")}
+                </p>
+              )}
             </div>
           </div>
 

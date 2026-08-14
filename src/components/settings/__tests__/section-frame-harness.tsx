@@ -15,13 +15,17 @@
 import * as React from "react";
 
 import { useTranslations } from "@/lib/i18n/context";
-import type { SettingsSectionSlug } from "../section-slugs";
 
 export function SettingsSectionFrame({
   slug,
   children,
 }: {
-  slug: SettingsSectionSlug;
+  /**
+   * A section slug OR a layout-hub child id (`dashboard`, `mood`, …) — the
+   * children left `SETTINGS_SECTION_SLUGS` in v1.37.19 but their heading
+   * keys and section bodies live on under `/settings/layout/<module>`.
+   */
+  slug: string;
   children: React.ReactNode;
 }) {
   const { t } = useTranslations();

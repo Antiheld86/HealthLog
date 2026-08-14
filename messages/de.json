@@ -2783,6 +2783,7 @@
       "settingsVerbosityBrief": "Kurz",
       "settingsVerbosityDefault": "Standard",
       "settingsVerbosityDetailed": "Ausführlich",
+      "settingsVerbosityConciseHint": "Der knappe Tonfall hält Antworten ohnehin kurz — die Ausführlichkeit ist dabei fest auf „Kurz“ gesetzt.",
       "settingsSourcesPointer": "Welche Datenquellen der Coach nutzen darf und das Standard-Analysefenster verwaltest du direkt im Coach-Chat (Leiste „Worauf ich zugreife\").",
       "settingsSourcesPointerLink": "Coach öffnen",
       "settingsExcludeLabel": "Metriken ausschließen",
@@ -5952,6 +5953,7 @@
       "repository": "Quellcode",
       "changelog": "Changelog",
       "docs": "Dokumentation",
+      "credits": "Credits & Datenquellen",
       "linksHeading": "Quellen & Dokumentation",
       "newerAvailable": "Neue Version: {tag}"
     },
