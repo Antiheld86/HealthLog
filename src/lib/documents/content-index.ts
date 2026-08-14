@@ -27,6 +27,7 @@ import { createHmac } from "node:crypto";
 import { decryptFromBytes, encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 import { deriveSubkey } from "@/lib/crypto";
 import { prisma } from "@/lib/db";
+import { expandQueryTokens } from "@/lib/documents/search-synonyms";
 
 /**
  * Tokeniser algorithm version. Bump when the normalisation / tokenisation rules
@@ -249,7 +250,12 @@ export function tokeniseAndHash(text: string): string[] {
  */
 export function hashQueryTokens(query: string): string[] {
   const subkey = indexSubkey();
-  const tokens = tokenise(query).slice(0, MAX_QUERY_TOKENS);
+  // v1.37.20 — expand through the curated German/English medical synonym
+  // groups (`search-synonyms.ts`) BEFORE hashing, so "Blutdruck" also
+  // matches a letter that says "blood pressure". Query-time only: the
+  // stored index and the tokenizer version are untouched, and the expansion
+  // happens before the one-way hash, so nothing readable moves anywhere new.
+  const tokens = expandQueryTokens(tokenise(query).slice(0, MAX_QUERY_TOKENS));
   const hashes = new Set<string>();
   for (const token of tokens) hashes.add(hashToken(token, subkey));
   return [...hashes];
