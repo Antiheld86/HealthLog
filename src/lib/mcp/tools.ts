@@ -1702,14 +1702,17 @@ export const MCP_TOOLS: McpToolDefinition[] = [
       const checkups = reminders.map((r) => {
         const dto = toMeasurementReminderDto(r);
         return {
-          label: dto.label,
+          // Label and location are the user's own free text — same fencing
+          // the sibling appointment `reason` carries, so a forged marker in
+          // a reminder cannot impersonate the fence around its neighbours.
+          label: fenceUserText(dto.label),
           measurementType: dto.measurementType,
           nextDueAt: dto.nextDueAt,
           overdue:
             dto.nextDueAt !== null
               ? calendarDaysUntil(new Date(dto.nextDueAt), now, timezone) < 0
               : false,
-          location: dto.location,
+          location: dto.location !== null ? fenceUserText(dto.location) : null,
           lastSatisfiedAt: dto.lastSatisfiedAt,
         };
       });

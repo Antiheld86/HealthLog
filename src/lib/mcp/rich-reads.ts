@@ -51,6 +51,7 @@ import { allSignals, getSignal } from "@/lib/signals/registry";
 import { classifyAgainstEffectiveRange } from "@/lib/labs/reference-range";
 import { resolveLabFields } from "@/lib/labs/serialise";
 import { sanitizeValueText } from "@/lib/ai/coach/labs-snapshot";
+import { scrubFenceMarkers } from "@/lib/ai/coach/data-fence";
 import { encodeOffsetCursor } from "@/lib/mcp/pagination";
 import type { CoachScopeWindow } from "@/lib/ai/coach/types";
 
@@ -1361,8 +1362,13 @@ export async function getLabHistory(
     };
   });
 
-  // Canonical analyte for the trajectory — take the first (newest) resolved row.
-  const canonical = resolveLabFields(page[0], page[0].biomarker).analyte;
+  // Canonical analyte for the trajectory — take the first (newest) resolved
+  // row. Document-derived free text: scrub fence markers (the forging class
+  // the sibling fields already defend against) and sanitize control chars,
+  // exactly like the default get_labs path treats the same name.
+  const canonical = scrubFenceMarkers(
+    sanitizeValueText(resolveLabFields(page[0], page[0].biomarker).analyte),
+  );
 
   annotate({
     action: { name: "mcp.tool.invoked" },
