@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.37.20] — 2026-08-14
+
+### Added
+
+- A checkup reminder can now be postponed or skipped. Postponing moves the next due date to a day you pick; skipping closes the current cycle and restarts the interval from today, without pretending the checkup happened. Every completion and every skip lands in a new history, kept per reminder, including whether it happened on time, so the checkups page and the API can show how a reminder has actually been handled over the years.
+- The dashboard hero can show the reminder rail instead of the health score. The choice lives in the dashboard settings and does nothing until you change it.
+- The restore dialog shows what a backup contains before you confirm: per-type counts read from the stored file, with an honest note when the preview cannot be computed.
+- A mental-health screening shows its per-item answers on the detail view, so you can see which questions carried the score, not only the total.
+- Document search understands German and English medical synonyms: searching for "Blutdruck" finds a report that says "blood pressure", and the other way round.
+- A deleted custom-metric entry can be brought back with one tap for a short while instead of being gone the moment you tap.
+
+### Changed
+
+- Onboarding says plainly that Apple Health data arrives through the iPhone app, and the Apple Health card reports the backfill progress the server actually sees: accepted counts, the oldest reading, and how recently data last arrived.
+- The measurements and mood pages keep their filters in the address bar, so a filtered view survives a reload and can be shared as a link, the way documents already worked.
+- The sleep-stage tooltip labels one night's figures as main sleep, naps and total sleep instead of an averaged label that fit none of them.
+- The daily digest is available offline like the rest of the app shell.
+- Backups carry the checkup reminders and their new completion history end to end, and an appointment or vaccination that references a reminder keeps that link across a restore.
+
+### Fixed
+
+- Apple Health ECG exports in the single-column layout import correctly. Apple writes two CSV shapes; the importer understood only the paired one and skipped every recording in the other, reporting each row as malformed. Both layouts parse now, and the declared unit is converted before validation.
+
 ## [1.37.19] — 2026-08-14
 
 ### Changed
@@ -19,6 +42,8 @@
 - A measurement reminder claims its notification slot before sending, so a crash mid-send can no longer deliver the same reminder twice.
 - A simultaneous double-submit of the same mood entry reports "duplicate" with the winning entry instead of a confusing error.
 - The intake-event API description now documents every field the server actually returns, and the workout list description matches the real nullability, so generated clients decode without surprises.
+
+## [1.37.18] — 2026-08-14
 
 ### Fixed
 
