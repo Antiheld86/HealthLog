@@ -6335,7 +6335,7 @@
       "endpointLabel": "URL du connecteur",
       "connectDescription": "Collez cette URL dans la configuration du connecteur personnalisé de votre assistant, puis autorisez avec le jeton ci-dessous ou connectez-vous lorsque vous y êtes invité.",
       "tokensTitle": "Jetons du connecteur",
-      "tokensDescription": "Générez un jeton pour connecter un assistant. Au moment de le créer, vous décidez s'il peut seulement lire ou aussi enregistrer des données.",
+      "tokensDescription": "Générez un jeton pour connecter un assistant — lecture seule, sauf si vous autorisez l'écriture ci-dessous.",
       "scopeNote": "Les nouveaux jetons ne peuvent que lire vos propres données. L'accès en écriture (health:write) s'accorde par jeton avec le commutateur ci-dessous. Un jeton ne peut jamais atteindre les fonctions d'administration.",
       "writeScopeToggleLabel": "Autoriser l'enregistrement (health:write)",
       "writeScopeNote": "Ajoute la portée health:write pour que l'assistant puisse enregistrer de nouvelles mesures et entrées d'humeur dans votre compte. Chaque écriture est d'abord confirmée. Le jeton ne peut toujours pas supprimer ni modifier des entrées existantes, changer les médicaments, ni atteindre les fonctions REST ou d'administration. Laissez désactivé pour un accès en lecture seule.",

@@ -6335,7 +6335,7 @@
       "endpointLabel": "Adres URL łącznika",
       "connectDescription": "Wklej ten adres URL w konfiguracji własnego łącznika asystenta, a następnie autoryzuj za pomocą poniższego tokenu lub zaloguj się po wyświetleniu monitu.",
       "tokensTitle": "Tokeny łącznika",
-      "tokensDescription": "Wygeneruj token, aby połączyć asystenta. Przy tworzeniu decydujesz, czy może tylko odczytywać, czy także zapisywać dane.",
+      "tokensDescription": "Wygeneruj token dla asystenta — tylko odczyt, chyba że pozwolisz poniżej na zapis.",
       "scopeNote": "Nowe tokeny mogą tylko odczytywać Twoje dane. Dostęp do zapisu (health:write) przyznajesz dla każdego tokena przełącznikiem poniżej. Token nigdy nie może uzyskać dostępu do funkcji administracyjnych.",
       "writeScopeToggleLabel": "Zezwól na zapis (health:write)",
       "writeScopeNote": "Dodaje zakres health:write, aby asystent mógł zapisywać nowe pomiary i wpisy nastroju na Twoim koncie. Każdy zapis jest najpierw potwierdzany. Token nadal nie może usuwać ani edytować istniejących wpisów, zmieniać leków ani uzyskiwać dostępu do funkcji REST lub administracyjnych. Pozostaw wyłączone, aby uzyskać dostęp tylko do odczytu.",

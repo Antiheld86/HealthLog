@@ -6335,7 +6335,7 @@
       "endpointLabel": "URL del conector",
       "connectDescription": "Pega esta URL en la configuración del conector personalizado de tu asistente y autoriza con el token de abajo o inicia sesión cuando se te solicite.",
       "tokensTitle": "Tokens del conector",
-      "tokensDescription": "Genera un token para conectar un asistente. Al generarlo decides si solo puede leer o también registrar datos.",
+      "tokensDescription": "Genera un token para conectar un asistente: solo lectura, salvo que permitas el registro abajo.",
       "scopeNote": "Los tokens nuevos solo pueden leer tus propios registros. El acceso de escritura (health:write) se concede por token con el interruptor de abajo. Un token nunca puede acceder a funciones de administración.",
       "writeScopeToggleLabel": "Permitir registro (health:write)",
       "writeScopeNote": "Añade el ámbito health:write para que el asistente pueda registrar nuevas mediciones y entradas de estado de ánimo en tu cuenta. Cada escritura se confirma antes. El token sigue sin poder eliminar ni editar entradas existentes, cambiar medicamentos ni acceder a funciones REST o de administración. Déjalo desactivado para acceso de solo lectura.",

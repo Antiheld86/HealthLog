@@ -6335,7 +6335,7 @@
       "endpointLabel": "Connector-URL",
       "connectDescription": "Füge diese URL in die Einrichtung des eigenen Connectors deines Assistenten ein und autorisiere dich mit dem Token unten oder melde dich bei Aufforderung an.",
       "tokensTitle": "Connector-Tokens",
-      "tokensDescription": "Erzeuge ein Token, um einen Assistenten zu verbinden. Ob es nur lesen oder auch eintragen darf, legst du beim Erzeugen fest.",
+      "tokensDescription": "Erzeuge ein Token für einen Assistenten — nur Lesezugriff, außer du erlaubst unten das Eintragen.",
       "scopeNote": "Neue Tokens können nur deine eigenen Daten lesen. Schreibzugriff (health:write) vergibst du pro Token über den Schalter unten. Admin-Funktionen erreicht ein Token nie.",
       "writeScopeToggleLabel": "Eintragen erlauben (health:write)",
       "writeScopeNote": "Fügt den Scope health:write hinzu, damit der Assistent neue Messwerte und Stimmungseinträge in dein Konto eintragen kann. Jeder Schreibvorgang wird zuvor bestätigt. Das Token kann weiterhin keine vorhandenen Einträge löschen oder ändern, keine Medikamente bearbeiten und keine REST- oder Admin-Funktionen erreichen. Für reinen Lesezugriff ausgeschaltet lassen.",
