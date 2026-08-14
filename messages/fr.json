@@ -3168,7 +3168,8 @@
     "sleep": {
       "title": "Sommeil",
       "description": "Répartition des phases et durée nocturne, issues d’Apple Health.",
-      "headlineTitle": "Moyenne par nuit",
+      "mainSleep": "Sommeil principal",
+      "totalSleep": "Sommeil total",
       "compositionTitle": "Répartition des phases",
       "compositionSubtitle": "{nights} dernières nuits",
       "compositionAriaLabel": "Répartition des phases de sommeil sur {nights} nuits",
@@ -8085,6 +8086,23 @@
     "delete": "Supprimer",
     "deleteConfirmTitle": "Supprimer le rappel ?",
     "deleteConfirmDescription": "Ce rappel d’examen sera définitivement supprimé.",
+    "postpone": {
+      "menuItem": "Reporter…",
+      "title": "Reporter l'échéance",
+      "description": "Ne déplace que l'échéance actuelle — le rythme régulier reste inchangé.",
+      "chip": "+{days} jours",
+      "dateLabel": "Nouvelle date",
+      "confirm": "Reporter"
+    },
+    "skip": {
+      "heading": "Passer cette échéance",
+      "explainer": "Enregistré honnêtement comme passé — pas comme fait. L'intervalle redémarre à partir d'aujourd'hui.",
+      "action": "Passer",
+      "confirmTitle": "Passer cette échéance ?"
+    },
+    "snoozedUntil": "Reporté au {date}",
+    "skippedOn": "Passé le {date}",
+    "skipCount": "passé {count} fois",
     "disabledBadge": "Désactivé",
     "nextDue": {
       "none": "Non planifié",
@@ -10208,6 +10226,8 @@
       "measurementReminderDelete": "{name} a supprimé un rappel de mesure",
       "measurementReminderComplete": "{name} a terminé un rappel de mesure",
       "measurementReminderSatisfy": "{name} a clôturé un rappel de mesure",
+      "measurementReminderSkip": "{name} a passé un rappel de mesure",
+      "measurementReminderSnooze": "{name} a reporté un rappel de mesure",
       "labResultUpdate": "{name} a modifié un résultat de laboratoire",
       "labResultDelete": "{name} a supprimé un résultat de laboratoire",
       "labResultRestore": "{name} a restauré un résultat de laboratoire",

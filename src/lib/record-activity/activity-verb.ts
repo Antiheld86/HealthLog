@@ -151,6 +151,17 @@ export function recordActivityVerbLine(
       return t("recordSharing.activityVerb.measurementReminderSatisfy", {
         name,
       });
+    // v1.37.20 (#223) — the honest skip and the snooze read differently in
+    // the feed on purpose: one says a cycle was let go, the other that a due
+    // date moved. Neither reads as "done".
+    case "measurementReminder.skip":
+      return t("recordSharing.activityVerb.measurementReminderSkip", {
+        name,
+      });
+    case "measurementReminder.snooze":
+      return t("recordSharing.activityVerb.measurementReminderSnooze", {
+        name,
+      });
 
     case "labResult.update":
       return t("recordSharing.activityVerb.labResultUpdate", { name });

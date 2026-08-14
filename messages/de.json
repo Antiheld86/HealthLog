@@ -3168,7 +3168,8 @@
     "sleep": {
       "title": "Schlaf",
       "description": "Phasen-Aufschlüsselung und nächtliche Dauer – gezogen aus Apple Health.",
-      "headlineTitle": "Durchschnitt pro Nacht",
+      "mainSleep": "Hauptschlaf",
+      "totalSleep": "Schlaf gesamt",
       "compositionTitle": "Phasen-Verteilung",
       "compositionSubtitle": "Letzte {nights} Nächte",
       "compositionAriaLabel": "Schlafphasen-Verteilung über {nights} Nächte",
@@ -8085,6 +8086,23 @@
     "delete": "Löschen",
     "deleteConfirmTitle": "Erinnerung löschen?",
     "deleteConfirmDescription": "Diese Vorsorge-Erinnerung wird dauerhaft gelöscht.",
+    "postpone": {
+      "menuItem": "Verschieben…",
+      "title": "Fälligkeit verschieben",
+      "description": "Verschiebt nur die aktuelle Fälligkeit — der reguläre Rhythmus bleibt unverändert.",
+      "chip": "+{days} Tage",
+      "dateLabel": "Neues Datum",
+      "confirm": "Verschieben"
+    },
+    "skip": {
+      "heading": "Diese Fälligkeit überspringen",
+      "explainer": "Wird ehrlich als übersprungen festgehalten — nicht als erledigt. Das Intervall startet ab heute neu.",
+      "action": "Überspringen",
+      "confirmTitle": "Fälligkeit überspringen?"
+    },
+    "snoozedUntil": "Verschoben bis {date}",
+    "skippedOn": "Übersprungen am {date}",
+    "skipCount": "{count}× übersprungen",
     "disabledBadge": "Aus",
     "nextDue": {
       "none": "Nicht geplant",
@@ -10208,6 +10226,8 @@
       "measurementReminderDelete": "{name} hat eine Messerinnerung gelöscht",
       "measurementReminderComplete": "{name} hat eine Messerinnerung erledigt",
       "measurementReminderSatisfy": "{name} hat eine Messerinnerung abgehakt",
+      "measurementReminderSkip": "{name} hat eine Messerinnerung übersprungen",
+      "measurementReminderSnooze": "{name} hat eine Messerinnerung verschoben",
       "labResultUpdate": "{name} hat einen Laborwert geändert",
       "labResultDelete": "{name} hat einen Laborwert gelöscht",
       "labResultRestore": "{name} hat einen Laborwert wiederhergestellt",

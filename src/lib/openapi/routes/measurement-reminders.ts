@@ -13,6 +13,10 @@ import {
   updateMeasurementReminderSchema,
   measurementReminderDto,
   measurementReminderCompletionDto,
+  measurementReminderSkipDto,
+  measurementReminderHistoryDto,
+  snoozeMeasurementReminderSchema,
+  listReminderHistorySchema,
 } from "@/lib/validations/measurement-reminders";
 import {
   dataEnvelope,
@@ -197,6 +201,91 @@ export const measurementReminderPaths: NonNullable<ZodOpenApiObject["paths"]> =
                 schema: dataEnvelope(
                   measurementReminderCompletionDto,
                   "MeasurementReminderCompleteEnvelope",
+                ),
+              },
+            },
+          },
+          ...reminderNotFound,
+          ...stdResponses,
+        },
+      },
+    },
+    "/api/measurement-reminders/{id}/skip": {
+      post: {
+        tags: ["MeasurementReminders"],
+        summary: "Skip the current due cycle (v1.37.20)",
+        description:
+          "Honestly skips the current due cycle — no body; the skip instant is the server clock. The interval restarts from the skip (rolling: skip + N days at the notify hour; rrule: next occurrence strictly after the skip), lastSkippedAt is stamped, skipCount incremented, any snooze cleared, and a SKIPPED row lands in the completion ledger. lastSatisfiedAt is never touched: a skip is not a completion. Screening reminders are skippable (the satisfy-side 409 guards claimed fulfilment; a skip claims the opposite). Owner-scoped; an appointment (encounter) reminder 404s.",
+        requestParams: { path: z.object({ id: z.string() }) },
+        responses: {
+          ...recordRefusal(),
+          "200": {
+            description:
+              "Skip applied (skipped=true) or forward-only no-op (skipped=false); reminder carries the canonical post-skip DTO.",
+            content: {
+              "application/json": {
+                schema: dataEnvelope(
+                  measurementReminderSkipDto,
+                  "MeasurementReminderSkipEnvelope",
+                ),
+              },
+            },
+          },
+          ...reminderNotFound,
+          ...stdResponses,
+        },
+      },
+    },
+    "/api/measurement-reminders/{id}/snooze": {
+      post: {
+        tags: ["MeasurementReminders"],
+        summary: "Snooze to a calendar day (v1.37.20)",
+        description:
+          "Pushes the current due date back to a named calendar day (YYYY-MM-DD), resolved server-side to the reminder's notifyHour in the profile timezone. snoozedUntil and nextDueAt are set to the same instant, so every due-state consumer moves together and the cursor self-expires. The regular cadence is untouched — lastSatisfiedAt, lastSkippedAt and the anchor stay put. Must be at least tomorrow and at most five years out (422 otherwise). Repeated snoozes: last one wins. Owner-scoped; an appointment reminder 404s.",
+        requestParams: { path: z.object({ id: z.string() }) },
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": { schema: snoozeMeasurementReminderSchema },
+          },
+        },
+        responses: {
+          ...recordRefusal(),
+          "200": {
+            description: "Snooze applied; reminder carries the resolved DTO.",
+            content: {
+              "application/json": {
+                schema: dataEnvelope(
+                  z.object({ reminder: measurementReminderDto }),
+                  "MeasurementReminderSnoozeEnvelope",
+                ),
+              },
+            },
+          },
+          ...reminderNotFound,
+          ...stdResponses,
+        },
+      },
+    },
+    "/api/measurement-reminders/{id}/history": {
+      get: {
+        tags: ["MeasurementReminders"],
+        summary: "Completion ledger, newest first (v1.37.20)",
+        description:
+          "Paginated completion ledger for one reminder (iOS #68): one row per satisfy (from any path) and per skip, newest first. onTime is derived server-side at write time against the due instant that was current when the event landed. History begins at the release that introduced the ledger — the single-cursor engine holds nothing to backfill from. Owner-scoped; an appointment reminder 404s.",
+        requestParams: {
+          path: z.object({ id: z.string() }),
+          query: listReminderHistorySchema,
+        },
+        responses: {
+          ...recordRefusal(),
+          "200": {
+            description: "The reminder's completion ledger page.",
+            content: {
+              "application/json": {
+                schema: dataEnvelope(
+                  measurementReminderHistoryDto,
+                  "MeasurementReminderHistoryEnvelope",
                 ),
               },
             },

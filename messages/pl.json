@@ -3168,7 +3168,8 @@
     "sleep": {
       "title": "Sen",
       "description": "Podział na fazy i nocna długość snu, dane z Apple Health.",
-      "headlineTitle": "Średnia na noc",
+      "mainSleep": "Sen główny",
+      "totalSleep": "Sen łączny",
       "compositionTitle": "Rozkład faz",
       "compositionSubtitle": "Ostatnie {nights} nocy",
       "compositionAriaLabel": "Rozkład faz snu w {nights} nocach",
@@ -8085,6 +8086,23 @@
     "delete": "Usuń",
     "deleteConfirmTitle": "Usunąć przypomnienie?",
     "deleteConfirmDescription": "To przypomnienie o badaniu zostanie trwale usunięte.",
+    "postpone": {
+      "menuItem": "Przełóż…",
+      "title": "Przełóż termin",
+      "description": "Przesuwa tylko bieżący termin — regularny rytm pozostaje bez zmian.",
+      "chip": "+{days} dni",
+      "dateLabel": "Nowa data",
+      "confirm": "Przełóż"
+    },
+    "skip": {
+      "heading": "Pomiń ten termin",
+      "explainer": "Zapisane uczciwie jako pominięte — nie jako wykonane. Odstęp zaczyna się od nowa od dzisiaj.",
+      "action": "Pomiń",
+      "confirmTitle": "Pominąć ten termin?"
+    },
+    "snoozedUntil": "Przełożono do {date}",
+    "skippedOn": "Pominięto {date}",
+    "skipCount": "pominięto {count} razy",
     "disabledBadge": "Wył.",
     "nextDue": {
       "none": "Niezaplanowane",
@@ -10208,6 +10226,8 @@
       "measurementReminderDelete": "{name} usunął przypomnienie o pomiarze",
       "measurementReminderComplete": "{name} zrealizował przypomnienie o pomiarze",
       "measurementReminderSatisfy": "{name} zamknął przypomnienie o pomiarze",
+      "measurementReminderSkip": "{name} pominął(-ęła) przypomnienie o pomiarze",
+      "measurementReminderSnooze": "{name} przełożył(-yła) przypomnienie o pomiarze",
       "labResultUpdate": "{name} zmienił wynik badania",
       "labResultDelete": "{name} usunął wynik badania",
       "labResultRestore": "{name} przywrócił wynik badania",

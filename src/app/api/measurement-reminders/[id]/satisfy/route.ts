@@ -64,7 +64,7 @@ export const POST = apiHandler(
     // auto-resolve and the eventful worker use. A manual "Erledigt" is
     // always strictly after any prior satisfy, so the forward-only guard
     // advances it.
-    await satisfyReminder(prisma, existing, timezone, now);
+    await satisfyReminder(prisma, existing, timezone, now, "manual");
 
     const updated = await prisma.measurementReminder.findUniqueOrThrow({
       where: { id },

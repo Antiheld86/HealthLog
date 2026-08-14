@@ -1140,6 +1140,18 @@ const DELEGABLE_ROUTES: Record<string, DelegableEntry> = {
     domain: "measurements",
     why: "The same primitive from the other caller. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
   },
+  "app/api/measurement-reminders/[id]/skip/route.ts": {
+    domain: "measurements",
+    why: "Honestly skipping the current due cycle (v1.37.20, #223) — the counterpart of complete/satisfy, restarting the interval without claiming fulfilment. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/measurement-reminders/[id]/snooze/route.ts": {
+    domain: "measurements",
+    why: "Pushing one due date back to a calendar day (v1.37.20, #223), the cadence untouched. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+  },
+  "app/api/measurement-reminders/[id]/history/route.ts": {
+    domain: "measurements",
+    why: "The completion ledger behind one reminder (v1.37.20, iOS #68), read-only and newest-first. The lookup binds the resolved user id and refuses an appointment row like every by-id sibling.",
+  },
   "app/api/labs/restore/route.ts": {
     domain: "labs",
     why: "Restoring tombstoned results, scoped so a foreign or live id is a no-op. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
@@ -1476,6 +1488,16 @@ const DELEGABLE_MANAGE_ROUTES: Record<string, ManageEntry> = {
     domain: "measurements",
     conditions: [],
     why: "The same primitive from the other caller.",
+  },
+  "app/api/measurement-reminders/[id]/skip/route.ts": {
+    domain: "measurements",
+    conditions: [],
+    why: "Honestly letting one due cycle go (v1.37.20, #223). Additive management of a schedule the level admits — the interval restarts, lastSatisfiedAt is never touched.",
+  },
+  "app/api/measurement-reminders/[id]/snooze/route.ts": {
+    domain: "measurements",
+    conditions: [],
+    why: "Pushing one due date back (v1.37.20, #223). Additive, self-expiring, the anchor untouched.",
   },
   "app/api/labs/[id]/route.ts": {
     domain: "labs",
@@ -1911,8 +1933,12 @@ const ACTOR_ROUTES: Record<string, string> = {
  * v1.38.0 -- the immunization log adds six: two reads and one restore on the
  * record list, one create on the write literal, and the edit/delete pair plus
  * the restore on the manage literal. 215 -> 221.
+ *
+ * v1.37.20 (#223 / iOS #68) -- Vorsorge skip/snooze adds five: skip, snooze
+ * and the completion-ledger history read on the record list, plus skip and
+ * snooze on the manage literal. 224 -> 229.
  */
-const FROZEN_ENTRY_COUNT = 224;
+const FROZEN_ENTRY_COUNT = 229;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —
@@ -2673,7 +2699,7 @@ describe("(g) the MANAGE route set is frozen", () => {
 
   it("keeps the admitted mutation inventory complete and discoverable", () => {
     expect(ADMITTED_MUTATING_HANDLERS.length).toBeGreaterThan(0);
-    expect(ADMITTED_MUTATING_HANDLERS.length).toBe(75);
+    expect(ADMITTED_MUTATING_HANDLERS.length).toBe(77);
 
     const expected = ADMITTED_MUTATING_HANDLERS.map(
       ({ handlerModule, action, level }) =>

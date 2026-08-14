@@ -37,6 +37,16 @@ export interface MeasurementReminderDtoShape {
   location: string | null;
   nextDueAt: string | null;
   lastSatisfiedAt: string | null;
+  /**
+   * v1.37.20 (#223) — the three skip/snooze fields are resolved timestamps
+   * plus a counter; clients only ever compare against the clock (snoozed =
+   * `snoozedUntil > now`; skipped cycle = `lastSkippedAt > lastSatisfiedAt`)
+   * and never recompute cadence. `lastSatisfiedAt` stays the ONLY completed
+   * signal — skip and snooze never move it.
+   */
+  snoozedUntil: string | null;
+  lastSkippedAt: string | null;
+  skipCount: number;
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -85,6 +95,9 @@ export function toMeasurementReminderDto(
     lastSatisfiedAt: row.lastSatisfiedAt
       ? row.lastSatisfiedAt.toISOString()
       : null,
+    snoozedUntil: row.snoozedUntil ? row.snoozedUntil.toISOString() : null,
+    lastSkippedAt: row.lastSkippedAt ? row.lastSkippedAt.toISOString() : null,
+    skipCount: row.skipCount,
     enabled: row.enabled,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

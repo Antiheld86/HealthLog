@@ -271,6 +271,9 @@ export async function runMeasurementReminderTick(
           reminder,
           timezone,
           satisfiedAt,
+          // Which arm of `findSatisfyingEvent` matched: a typed reminder
+          // resolves from a Measurement, a free-text one from a LabResult.
+          reminder.measurementType !== null ? "auto_measurement" : "auto_lab",
         );
         if (result.satisfied) {
           summary.autoResolved += 1;
@@ -491,6 +494,7 @@ export async function runReminderSatisfyForUser(
         reminder,
         timezone,
         satisfiedAt,
+        reminder.measurementType !== null ? "auto_measurement" : "auto_lab",
       );
       if (result.satisfied) {
         summary.satisfied += 1;

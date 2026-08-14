@@ -3168,7 +3168,8 @@
     "sleep": {
       "title": "Sueño",
       "description": "Desglose por fases y duración nocturna, tomados de Apple Health.",
-      "headlineTitle": "Media por noche",
+      "mainSleep": "Sueño principal",
+      "totalSleep": "Sueño total",
       "compositionTitle": "Distribución de fases",
       "compositionSubtitle": "Últimas {nights} noches",
       "compositionAriaLabel": "Distribución de fases del sueño en {nights} noches",
@@ -8085,6 +8086,23 @@
     "delete": "Eliminar",
     "deleteConfirmTitle": "¿Eliminar recordatorio?",
     "deleteConfirmDescription": "Este recordatorio de revisión se eliminará de forma permanente.",
+    "postpone": {
+      "menuItem": "Aplazar…",
+      "title": "Aplazar vencimiento",
+      "description": "Solo mueve el vencimiento actual — el ritmo regular no cambia.",
+      "chip": "+{days} días",
+      "dateLabel": "Nueva fecha",
+      "confirm": "Aplazar"
+    },
+    "skip": {
+      "heading": "Omitir este vencimiento",
+      "explainer": "Se registra honestamente como omitido — no como hecho. El intervalo se reinicia desde hoy.",
+      "action": "Omitir",
+      "confirmTitle": "¿Omitir este vencimiento?"
+    },
+    "snoozedUntil": "Aplazado hasta {date}",
+    "skippedOn": "Omitido el {date}",
+    "skipCount": "omitido {count} veces",
     "disabledBadge": "Apagado",
     "nextDue": {
       "none": "Sin programar",
@@ -10208,6 +10226,8 @@
       "measurementReminderDelete": "{name} eliminó un recordatorio de medición",
       "measurementReminderComplete": "{name} completó un recordatorio de medición",
       "measurementReminderSatisfy": "{name} cerró un recordatorio de medición",
+      "measurementReminderSkip": "{name} omitió un recordatorio de medición",
+      "measurementReminderSnooze": "{name} aplazó un recordatorio de medición",
       "labResultUpdate": "{name} cambió un resultado de laboratorio",
       "labResultDelete": "{name} eliminó un resultado de laboratorio",
       "labResultRestore": "{name} restauró un resultado de laboratorio",

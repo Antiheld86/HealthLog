@@ -3168,7 +3168,8 @@
     "sleep": {
       "title": "Sonno",
       "description": "Suddivisione per fasi e durata notturna, da Apple Health.",
-      "headlineTitle": "Media per notte",
+      "mainSleep": "Sonno principale",
+      "totalSleep": "Sonno totale",
       "compositionTitle": "Distribuzione delle fasi",
       "compositionSubtitle": "Ultime {nights} notti",
       "compositionAriaLabel": "Distribuzione delle fasi del sonno su {nights} notti",
@@ -8085,6 +8086,23 @@
     "delete": "Elimina",
     "deleteConfirmTitle": "Eliminare il promemoria?",
     "deleteConfirmDescription": "Questo promemoria di controllo verrà eliminato definitivamente.",
+    "postpone": {
+      "menuItem": "Rimanda…",
+      "title": "Rimanda la scadenza",
+      "description": "Sposta solo la scadenza attuale — il ritmo regolare resta invariato.",
+      "chip": "+{days} giorni",
+      "dateLabel": "Nuova data",
+      "confirm": "Rimanda"
+    },
+    "skip": {
+      "heading": "Salta questa scadenza",
+      "explainer": "Registrato onestamente come saltato — non come fatto. L'intervallo riparte da oggi.",
+      "action": "Salta",
+      "confirmTitle": "Saltare questa scadenza?"
+    },
+    "snoozedUntil": "Rimandato al {date}",
+    "skippedOn": "Saltato il {date}",
+    "skipCount": "saltato {count} volte",
     "disabledBadge": "Disattivato",
     "nextDue": {
       "none": "Non pianificato",
@@ -10208,6 +10226,8 @@
       "measurementReminderDelete": "{name} ha eliminato un promemoria di misurazione",
       "measurementReminderComplete": "{name} ha completato un promemoria di misurazione",
       "measurementReminderSatisfy": "{name} ha chiuso un promemoria di misurazione",
+      "measurementReminderSkip": "{name} ha saltato un promemoria di misurazione",
+      "measurementReminderSnooze": "{name} ha rimandato un promemoria di misurazione",
       "labResultUpdate": "{name} ha modificato un risultato di laboratorio",
       "labResultDelete": "{name} ha eliminato un risultato di laboratorio",
       "labResultRestore": "{name} ha ripristinato un risultato di laboratorio",

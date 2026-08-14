@@ -895,6 +895,13 @@ const getPreventiveCareOutput: z.ZodRawShape = {
         overdue: z.boolean(),
         location: z.string().nullable(),
         lastSatisfiedAt: z.string().nullable(),
+        // v1.37.20 (#223) — resolved skip/snooze state. Without these the
+        // model sees a due date jump with no cause and invents one.
+        // `lastSatisfiedAt` stays the ONLY completed signal: a skip is
+        // recorded as a skip, never as done.
+        snoozedUntil: z.string().nullable(),
+        lastSkippedAt: z.string().nullable(),
+        skipCount: z.number(),
       }),
     )
     .optional(),
@@ -1714,6 +1721,10 @@ export const MCP_TOOLS: McpToolDefinition[] = [
               : false,
           location: dto.location !== null ? fenceUserText(dto.location) : null,
           lastSatisfiedAt: dto.lastSatisfiedAt,
+          // Timestamps + a counter, no free text — nothing to fence here.
+          snoozedUntil: dto.snoozedUntil,
+          lastSkippedAt: dto.lastSkippedAt,
+          skipCount: dto.skipCount,
         };
       });
 

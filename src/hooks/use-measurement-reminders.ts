@@ -63,6 +63,15 @@ export interface MeasurementReminder {
   location: string | null;
   nextDueAt: string | null;
   lastSatisfiedAt: string | null;
+  /**
+   * v1.37.20 (#223) — resolved skip/snooze state. The client only compares
+   * against the clock: snoozed = `snoozedUntil > now`; a skipped cycle =
+   * `lastSkippedAt > lastSatisfiedAt` (or set with no satisfy yet). Cadence
+   * is never recomputed here; `lastSatisfiedAt` stays the only "done".
+   */
+  snoozedUntil: string | null;
+  lastSkippedAt: string | null;
+  skipCount: number;
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -129,5 +138,27 @@ export function useMeasurementReminderMutations() {
     onSuccess: invalidate,
   });
 
-  return { create, update, remove, satisfy };
+  // v1.37.20 (#223) — honest skip: the interval restarts from the skip
+  // instant server-side; lastSatisfiedAt is never touched.
+  const skip = useMutation({
+    mutationKey: queryKeys.measurementReminderSkip(),
+    mutationFn: (id: string) =>
+      apiPost<{ skipped: boolean; reminder: MeasurementReminder }>(
+        `${BASE}/${id}/skip`,
+      ),
+    onSuccess: invalidate,
+  });
+
+  // v1.37.20 (#223) — snooze to a calendar day; the server resolves it to
+  // the notifyHour in the profile timezone and moves nextDueAt with it.
+  const snooze = useMutation({
+    mutationKey: queryKeys.measurementReminderSnooze(),
+    mutationFn: ({ id, until }: { id: string; until: string }) =>
+      apiPost<{ reminder: MeasurementReminder }>(`${BASE}/${id}/snooze`, {
+        until,
+      }),
+    onSuccess: invalidate,
+  });
+
+  return { create, update, remove, satisfy, skip, snooze };
 }

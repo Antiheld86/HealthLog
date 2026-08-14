@@ -26,6 +26,13 @@ export interface ResolvableReminder {
   measurementType: import("@/generated/prisma/client").MeasurementType | null;
   anchorDate: Date | null;
   lastSatisfiedAt: Date | null;
+  /**
+   * v1.37.20 (#223) — the last honest skip. Part of the floor: a reading
+   * OLDER than a fresh skip must not auto-resolve the cycle the user just
+   * skipped. Required (not optional) so no call site can silently feed a
+   * pre-skip shape and reopen the gap.
+   */
+  lastSkippedAt: Date | null;
   createdAt: Date;
   /**
    * Optional so the many callers that construct this shape by hand keep
@@ -36,12 +43,26 @@ export interface ResolvableReminder {
 }
 
 /**
- * The floor a satisfying event must land strictly after: the last satisfy,
- * else the anchor, else the create instant. A reading inside the current
- * due cycle means the user already measured.
+ * The floor a satisfying event must land strictly after: the later of the
+ * last satisfy and the last skip, else the anchor, else the create instant.
+ * A reading inside the current due cycle means the user already measured.
+ *
+ * v1.37.20 (#223) — the skip arm: skipping restarts the cycle at the skip
+ * instant, so a reading that predates the skip belongs to the cycle the
+ * user deliberately let go and must not resolve the fresh one. Without it
+ * a backdated sync would silently undo the skip decision.
  */
 export function satisfactionFloor(reminder: ResolvableReminder): Date {
-  return reminder.lastSatisfiedAt ?? reminder.anchorDate ?? reminder.createdAt;
+  const cursor =
+    reminder.lastSatisfiedAt !== null || reminder.lastSkippedAt !== null
+      ? new Date(
+          Math.max(
+            reminder.lastSatisfiedAt?.getTime() ?? 0,
+            reminder.lastSkippedAt?.getTime() ?? 0,
+          ),
+        )
+      : null;
+  return cursor ?? reminder.anchorDate ?? reminder.createdAt;
 }
 
 /**

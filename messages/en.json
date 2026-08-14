@@ -3168,7 +3168,8 @@
     "sleep": {
       "title": "Sleep",
       "description": "Stage breakdown and nightly duration, drawn from Apple Health.",
-      "headlineTitle": "Average per night",
+      "mainSleep": "Main sleep",
+      "totalSleep": "Total sleep",
       "compositionTitle": "Stage composition",
       "compositionSubtitle": "Last {nights} nights",
       "compositionAriaLabel": "Sleep stage composition over {nights} nights",
@@ -8085,6 +8086,23 @@
     "delete": "Delete",
     "deleteConfirmTitle": "Delete reminder?",
     "deleteConfirmDescription": "This checkup reminder will be permanently deleted.",
+    "postpone": {
+      "menuItem": "Postpone…",
+      "title": "Postpone due date",
+      "description": "Only moves the current due date — the regular rhythm stays unchanged.",
+      "chip": "+{days} days",
+      "dateLabel": "New date",
+      "confirm": "Postpone"
+    },
+    "skip": {
+      "heading": "Skip this due date",
+      "explainer": "Recorded honestly as skipped — not as done. The interval restarts from today.",
+      "action": "Skip",
+      "confirmTitle": "Skip this due date?"
+    },
+    "snoozedUntil": "Postponed until {date}",
+    "skippedOn": "Skipped on {date}",
+    "skipCount": "skipped {count}×",
     "disabledBadge": "Off",
     "nextDue": {
       "none": "Not scheduled",
@@ -10208,6 +10226,8 @@
       "measurementReminderDelete": "{name} removed a measurement reminder",
       "measurementReminderComplete": "{name} completed a measurement reminder",
       "measurementReminderSatisfy": "{name} cleared a measurement reminder",
+      "measurementReminderSkip": "{name} skipped a measurement reminder",
+      "measurementReminderSnooze": "{name} postponed a measurement reminder",
       "labResultUpdate": "{name} changed a lab result",
       "labResultDelete": "{name} removed a lab result",
       "labResultRestore": "{name} restored a lab result",

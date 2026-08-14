@@ -241,6 +241,22 @@ export const ADMITTED_MUTATING_HANDLERS = [
     "update",
   ),
   handler(
+    "app/api/measurement-reminders/[id]/skip/route.ts",
+    "/api/measurement-reminders/[id]/skip",
+    "POST",
+    "measurements",
+    "manage",
+    "update",
+  ),
+  handler(
+    "app/api/measurement-reminders/[id]/snooze/route.ts",
+    "/api/measurement-reminders/[id]/snooze",
+    "POST",
+    "measurements",
+    "manage",
+    "update",
+  ),
+  handler(
     "app/api/labs/[id]/route.ts",
     "/api/labs/[id]",
     "PUT",
