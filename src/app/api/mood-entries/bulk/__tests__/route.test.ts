@@ -19,7 +19,12 @@ import { NextRequest } from "next/server";
 // assertion below is vacuous. It SHARES the model mocks so every existing
 // per-model assertion in this file keeps working unchanged.
 const { moodEntryMock, txClient } = vi.hoisted(() => {
-  const moodEntryMock = { findMany: vi.fn(), upsert: vi.fn() };
+  const moodEntryMock = {
+    findMany: vi.fn(),
+    upsert: vi.fn(),
+    // v1.37.19 (A6-18) — the P2002-race arm resolves the winning row.
+    findFirst: vi.fn(),
+  };
   return {
     moodEntryMock,
     txClient: { __brand: "transaction-client", moodEntry: moodEntryMock },
@@ -461,6 +466,49 @@ describe("POST /api/mood-entries/bulk — structured tagKeys (v1.12.0)", () => {
     // Entry 0 skipped (bad factor), entry 1 inserted clean.
     expect(json.data.entries[0].status).toBe("skipped");
     expect(json.data.entries[1].status).toBe("inserted");
+  });
+
+  // Watched red: with the P2002 arm removed from the loop catch (the
+  // pre-v1.37.19 route), this fails — a concurrent batch losing the
+  // `(userId, source, externalId)` race was reported as "skipped" with a
+  // raw Prisma message although the row IS stored (the racing twin wrote
+  // it). It is the plain duplicate the sequential probe would have found.
+  it("classifies a lost P2002 race as duplicate with the winning row id", async () => {
+    const p2002 = Object.assign(new Error("Unique constraint failed"), {
+      code: "P2002",
+    });
+    vi.mocked(moodEntryMock.upsert).mockRejectedValueOnce(p2002);
+    vi.mocked(moodEntryMock.findFirst).mockResolvedValueOnce({
+      id: "winner-1",
+    } as never);
+    vi.mocked(moodEntryMock.findMany).mockResolvedValueOnce([] as never);
+
+    const res = await POST(
+      postReq({
+        entries: [
+          {
+            mood: "GUT",
+            moodLoggedAt: "2026-05-16T08:00:00.000Z",
+            source: "MOODLOG",
+            externalId: "hk-race-1",
+          },
+        ],
+      }),
+    );
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as {
+      data: {
+        inserted: number;
+        duplicates: number;
+        skipped: unknown[];
+        entries: Array<{ status: string; id?: string; externalId?: string }>;
+      };
+    };
+    expect(json.data.entries[0].status).toBe("duplicate");
+    expect(json.data.entries[0].id).toBe("winner-1");
+    expect(json.data.duplicates).toBe(1);
+    expect(json.data.inserted).toBe(0);
+    expect(json.data.skipped).toEqual([]);
   });
 });
 
