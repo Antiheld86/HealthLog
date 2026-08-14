@@ -32,7 +32,6 @@ const MANAGED_RECORD_SETTINGS_FAMILY_BY_SECTION = {
   account: "profile",
   modules: "modules",
   notifications: "notifications",
-  insights: "insights",
   thresholds: "thresholds",
   coach: "coach",
 } as const;

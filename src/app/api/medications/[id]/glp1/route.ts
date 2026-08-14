@@ -110,7 +110,12 @@ export const GET = apiHandler(
       prefsRow?.notificationPrefs ?? null,
       medication.reorderLeadDays,
     );
-    const schedules: RunwaySchedule[] = medication.schedules;
+    const schedules: RunwaySchedule[] = medication.schedules.map((sched) => ({
+      ...sched,
+      // Decimal → number so the slot-aware runway math reads the wire shape.
+      unitsPerDose:
+        sched.unitsPerDose === null ? null : Number(sched.unitsPerDose),
+    }));
     /** runway ≤ effective trigger AND the alert is enabled. */
     const isLowStock = (dosesRemaining: number): boolean => {
       if (runwayFloor === null) return false;

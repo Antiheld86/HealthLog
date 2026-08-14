@@ -1532,6 +1532,11 @@ const handler = apiHandler(
           customMetrics: summary.customMetrics,
           customMetricEntries: summary.customMetricEntries,
           correlationPatterns: summary.correlationPatterns,
+          practitioners: summary.practitioners,
+          encounters: summary.encounters,
+          encounterLinks: summary.encounterLinks,
+          vaccinations: summary.vaccinations,
+          vaccinationLinks: summary.vaccinationLinks,
         },
       },
     });

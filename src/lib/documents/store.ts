@@ -46,6 +46,16 @@ export type DocumentContentCodec = (typeof DOCUMENT_CONTENT_CODECS)[number];
 /** The codec every NEW upload is written with. */
 export const ACTIVE_DOCUMENT_CODEC: DocumentContentCodec = "binary2";
 
+/**
+ * How long a `summaryState: "PENDING"` claim stays credible. The summary job
+ * retries twice within minutes; a PENDING whose row has not been touched for
+ * an hour is a dead promise (worker crash past the retry budget, or a
+ * delete-during-queue then restore). Shared by the read-time heal in
+ * `serialiseDocumentDetail` and the hourly persistence sweep
+ * (`jobs/document-summary-reaper.ts`) so the two ends cannot drift.
+ */
+export const SUMMARY_PENDING_TTL_MS = 60 * 60 * 1000;
+
 /** Encrypt the raw document bytes into the `Bytes` payload the schema stores. */
 export function encryptDocumentToBytes(bytes: Buffer): Uint8Array<ArrayBuffer> {
   const ciphertext = encrypt(bytes.toString("base64"));
@@ -290,6 +300,17 @@ export function serialiseDocumentDetail(
   } else if (summaryState === "READY") {
     // READY with no ciphertext should be unreachable; trust the bytes, not the
     // flag, rather than promising a summary that is not there.
+    summaryState = "UNAVAILABLE";
+  } else if (
+    summaryState === "PENDING" &&
+    Date.now() - doc.updatedAt.getTime() > SUMMARY_PENDING_TTL_MS
+  ) {
+    // A PENDING older than the TTL is a dead promise — the job died past its
+    // retry budget and nothing will resolve it. Degrade to UNAVAILABLE so the
+    // sheet stops saying "generating" forever and offers the manual generate
+    // action instead. The hourly reaper persists the same heal
+    // (`jobs/document-summary-reaper.ts`); this read-time arm just makes the
+    // very next open honest without waiting for the tick.
     summaryState = "UNAVAILABLE";
   }
   return {

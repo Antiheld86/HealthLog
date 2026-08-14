@@ -21,7 +21,7 @@ export interface RangeDisplayConfig {
  * mean / median / avg7 / avg30 / avg30LastMonth / avg30LastYear) divides
  * by 60; the slope tuples scale their `slope` (per-day rate) by the same
  * factor so the trend arrow stays consistent; count / direction /
- * confidence / anomalyCount are unit-free and pass through.
+ * confidence are unit-free and pass through.
  */
 export function toHoursSummary(s: DataSummary): DataSummary {
   const h = (v: number | null | undefined): number | null =>
@@ -43,7 +43,6 @@ export function toHoursSummary(s: DataSummary): DataSummary {
     avg30LastYear: h(s.avg30LastYear),
     slope7: scaleSlope(s.slope7),
     slope30: scaleSlope(s.slope30),
-    slope90: scaleSlope(s.slope90),
   };
 }
 

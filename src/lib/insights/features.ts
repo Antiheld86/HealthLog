@@ -1101,7 +1101,7 @@ export async function extractFeatures(
           ? summary.max
           : null,
       slope30: summary.slope30?.slope ?? null,
-      outlierCount: summary.anomalyCount,
+      outlierCount: summary.anomalyCount ?? 0,
       bmi,
       coverage: computeCoverage(weightData, now),
     };
@@ -1232,7 +1232,7 @@ export async function extractFeatures(
           ? summary.max
           : null,
       slope30: summary.slope30?.slope ?? null,
-      anomalyCount: summary.anomalyCount,
+      anomalyCount: summary.anomalyCount ?? 0,
       coverage: computeCoverage(pulseData, now),
     };
   }

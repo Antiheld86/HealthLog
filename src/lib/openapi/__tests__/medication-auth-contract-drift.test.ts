@@ -91,6 +91,8 @@ describe("medications — documented shapes match the handlers", () => {
   });
 
   it("admits APPLE_HEALTH as an intake source (IntakeSource enum, v1.28)", () => {
+    // v1.37.19 (A4-8) — the resource declares the FULL row both intake
+    // responses return, so the fixture carries every field.
     const event = {
       id: "cm000000000000000000000",
       userId: "cm111111111111111111111",
@@ -98,9 +100,18 @@ describe("medications — documented shapes match the handlers", () => {
       scheduledFor: "2026-07-19T08:00:00.000Z",
       takenAt: "2026-07-19T08:05:00.000Z",
       skipped: false,
+      autoMissed: false,
+      attributionSource: "AUTO",
       source: "APPLE_HEALTH",
       idempotencyKey: null,
       createdAt: "2026-07-19T08:05:00.000Z",
+      updatedAt: "2026-07-19T08:05:00.000Z",
+      injectionSite: null,
+      doseTaken: null,
+      inventoryConsumption: null,
+      externalId: "hk-intake-1",
+      syncVersion: 1,
+      deletedAt: null,
     };
     const parsed = medicationIntakeEventResource.safeParse(event);
     expect(parsed.success, JSON.stringify(parsed.error?.issues)).toBe(true);

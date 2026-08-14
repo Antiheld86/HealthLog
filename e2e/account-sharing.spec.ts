@@ -363,9 +363,49 @@ test.describe("account sharing", () => {
     // Let the offline persister flush the delegate's own dashboard to
     // IndexedDB (1 s debounce). That snapshot is the stale-paint source this
     // whole assertion is aimed at — without it the check would pass against a
-    // disk that was empty anyway.
+    // disk that was empty anyway. Poll the persister's own store for the
+    // written snapshot instead of sleeping past the debounce (C3): the
+    // condition IS the flush, so a slow CI box waits exactly as long as it
+    // needs to and a fast one moves on immediately.
     await page.goto("/");
-    await page.waitForTimeout(2000);
+    // Gate on rendered content first (the dashboard must actually mount and
+    // populate the query cache before there is anything to persist).
+    await expect(page.locator('[data-slot="coach-fab"]')).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            () =>
+              new Promise<boolean>((resolve) => {
+                const req = indexedDB.open("healthlog-query-cache", 1);
+                req.onerror = () => resolve(false);
+                req.onsuccess = () => {
+                  const db = req.result;
+                  try {
+                    const get = db
+                      .transaction("kv", "readonly")
+                      .objectStore("kv")
+                      .get("react-query");
+                    get.onsuccess = () => {
+                      db.close();
+                      resolve(get.result !== undefined);
+                    };
+                    get.onerror = () => {
+                      db.close();
+                      resolve(false);
+                    };
+                  } catch {
+                    db.close();
+                    resolve(false);
+                  }
+                };
+              }),
+          ),
+        { timeout: 10_000 },
+      )
+      .toBe(true);
 
     await openSwitcher(page);
     await page.locator('[data-slot="account-switcher-entry"]').click();

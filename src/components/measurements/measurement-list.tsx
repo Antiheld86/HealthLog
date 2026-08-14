@@ -625,7 +625,9 @@ export function MeasurementList({
       await refetchInactiveDailyReads(queryClient);
       clearSelection();
       toast.success(
-        t("measurements.bulkDeleteSuccess", { count: String(deleted) }),
+        deleted === 1
+          ? t("measurements.bulkDeleteSuccessOne")
+          : t("measurements.bulkDeleteSuccess", { count: String(deleted) }),
         {
           action: {
             label: t("common.undo"),
@@ -1389,7 +1391,9 @@ export function MeasurementList({
                               )}
                             </p>
                             {m.notes && (
-                              <p className="text-muted-foreground truncate text-xs">
+                              // User data is never muted — the desktop table
+                              // renders the same note in the foreground colour.
+                              <p className="text-foreground truncate text-xs">
                                 {truncateComment(m.notes)}
                               </p>
                             )}
@@ -1462,12 +1466,20 @@ export function MeasurementList({
           onClear={clearSelection}
           onConfirmDelete={onConfirmBulkDelete}
           isDeleting={bulkDeleteMutation.isPending}
-          confirmTitle={t("measurements.bulkDeleteConfirmTitle", {
-            count: String(selectedOnPage),
-          })}
-          confirmBody={t("measurements.bulkDeleteConfirmBody", {
-            count: String(selectedOnPage),
-          })}
+          confirmTitle={
+            selectedOnPage === 1
+              ? t("measurements.bulkDeleteConfirmTitleOne")
+              : t("measurements.bulkDeleteConfirmTitle", {
+                  count: String(selectedOnPage),
+                })
+          }
+          confirmBody={
+            selectedOnPage === 1
+              ? t("measurements.bulkDeleteConfirmBodyOne")
+              : t("measurements.bulkDeleteConfirmBody", {
+                  count: String(selectedOnPage),
+                })
+          }
         />
 
         {/* Pagination */}

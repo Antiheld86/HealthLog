@@ -64,12 +64,30 @@ const SURFACE_BATCH = 500;
 /** Bound the context-backstop fan-out per tick for the same reason. */
 const CONTEXT_BACKSTOP_BATCH = 500;
 
+/**
+ * How many surfacings an untouched reminder gets before it auto-dismisses —
+ * the cap the `surfaceCount` schema comment has promised since v1.22. A
+ * `surfaced` row keeps riding the prompt injection and the suggested-actions
+ * rail; every daily tick it is still sitting there counts as one more
+ * surfacing, and at the cap the row flips to `dismissed` so an ignored
+ * reminder cannot nag indefinitely.
+ */
+export const REMINDER_NAG_CAP = 3;
+/**
+ * A row surfaced within this window is not re-counted — the tick that wrote
+ * the surfacing message must not also charge the first "still ignored" day.
+ * 20 h (not 24) so the daily 05:20 cron never misses by clock drift.
+ */
+const NAG_STALE_MS = 20 * 60 * 60 * 1000;
+
 export interface CoachReminderSweepSummary {
   /** Reminders whose moment arrived AND that reached the conversation. */
   remindersDue: number;
   planReviewsMinted: number;
   /** Context-cue reminders the daily backstop surfaced. */
   contextSurfaced: number;
+  /** Ignored reminders auto-dismissed at the nag cap. */
+  nagDismissed: number;
   errored: number;
 }
 
@@ -97,6 +115,7 @@ export async function runCoachReminderSweep(
     remindersDue: 0,
     planReviewsMinted: 0,
     contextSurfaced: 0,
+    nagDismissed: 0,
     errored: 0,
   };
 
@@ -231,6 +250,31 @@ export async function runCoachReminderSweep(
       summary.errored += 1;
     }
   }
+
+  // ── 4. nag cap ────────────────────────────────────────────────
+  //
+  // A `surfaced` reminder stays in the prompt injection and the
+  // suggested-actions rail until the user acts on it. Charge every tick
+  // it has already sat there for a day as one more surfacing, then
+  // auto-dismiss the rows that reached the cap. Two bulk statements, no
+  // message: dismissal is silence, not another nag.
+  await prisma.coachReminder.updateMany({
+    where: {
+      deletedAt: null,
+      status: "surfaced",
+      lastSurfacedAt: { lte: new Date(now.getTime() - NAG_STALE_MS) },
+    },
+    data: { surfaceCount: { increment: 1 } },
+  });
+  const capped = await prisma.coachReminder.updateMany({
+    where: {
+      deletedAt: null,
+      status: "surfaced",
+      surfaceCount: { gte: REMINDER_NAG_CAP },
+    },
+    data: { status: "dismissed" },
+  });
+  summary.nagDismissed = capped.count;
 
   return summary;
 }

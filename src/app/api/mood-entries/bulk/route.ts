@@ -522,6 +522,39 @@ async function postBulk(request: NextRequest): Promise<Response> {
         });
       }
     } catch (err: unknown) {
+      // v1.37.19 (A6-18) — P2002 = a concurrent batch raced the same
+      // NULL-distinct `(userId, source, externalId)` key and won. That is
+      // the plain duplicate the sequential probe would have classified;
+      // reporting it as "skipped" with a raw Prisma message told the
+      // client its row was dropped when it is in fact stored. Resolve the
+      // winning row's id so the caller's cursor advances, exactly like
+      // the intake bulk route.
+      if (
+        typeof err === "object" &&
+        err !== null &&
+        "code" in err &&
+        (err as { code: string }).code === "P2002" &&
+        entry.externalId
+      ) {
+        const winner = await prisma.moodEntry.findFirst({
+          where: {
+            userId: user.id,
+            // Same resolution as the upsert key: the schema defaults
+            // `source` to "MANUAL" at parse time.
+            source: entry.source,
+            externalId: entry.externalId,
+          },
+          select: { id: true },
+        });
+        duplicates += 1;
+        results.push({
+          index: i,
+          status: "duplicate",
+          ...(winner ? { id: winner.id } : {}),
+          externalId: entry.externalId,
+        });
+        continue;
+      }
       const reason =
         err instanceof Error ? err.message.slice(0, 120) : "upsert_failed";
       skipped.push({ index: i, reason });

@@ -329,7 +329,6 @@ describe("GET /api/analytics", () => {
           r2_7: 0.4,
           slope30: -0.02,
           r2_30: 0.3,
-          slope90: -0.01,
           r2_90: 0.2,
         },
       ] as never)

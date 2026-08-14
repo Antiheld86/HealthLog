@@ -150,14 +150,20 @@ export function NotificationsBody({
       {clientManaged ? (
         // v1.5.5 §9.6 — iPhone-managed path. The switch is hidden;
         // the read-only chip tells the user where the toggle lives.
-        <p
-          className="text-foreground text-sm"
+        // The badge carries a short label only (a full sentence used to
+        // hard-clip mid-word in the nowrap badge); the sentence moved to
+        // the helper line below.
+        <div
+          className="space-y-1"
           data-slot="notifications-client-managed-chip"
         >
           <Badge variant="outline" className="font-normal">
             {t("medications.detail.notifications.clientManagedChip")}
           </Badge>
-        </p>
+          <p className="text-muted-foreground text-sm">
+            {t("medications.detail.notifications.clientManagedHint")}
+          </p>
+        </div>
       ) : (
         <label
           htmlFor={SWITCH_ID}

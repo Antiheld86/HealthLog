@@ -41,8 +41,9 @@
  * Fields the slim shape intentionally omits (the dashboard never
  * reads them on first paint):
  *   - `anomalyCount`: would require an extra per-type read for the
- *     z-score loop. The Coach / insights paths still get it via the
- *     default slice.
+ *     z-score loop. v1.37.19 removed it from the wire shape entirely —
+ *     the insights pipeline computes its own via `summarize()` /
+ *     the comprehensive aggregator, and no client component reads it.
  *   - `avg30LastMonth` / `avg30LastYear`: the dashboard tile delta
  *     callout uses them, but only when the comparison-baseline
  *     widget is enabled — that path already pre-fetches the default
@@ -61,7 +62,10 @@ import { prisma } from "@/lib/db";
 import type { DataSummary } from "@/lib/analytics/trends";
 import { measurementTypeEnum } from "@/lib/validations/measurement";
 import { annotate } from "@/lib/logging/context";
-import { ensureUserRollupsFresh } from "@/lib/rollups/measurement-rollups";
+import {
+  ensureUserRollupsFresh,
+  ROLLUP_FOLD_WINDOW_MS,
+} from "@/lib/rollups/measurement-rollups";
 import {
   collapseRollupRowsBySource,
   composeWindowedRegression,
@@ -172,8 +176,6 @@ interface WindowedAggregateRow extends NarrowAggregateRow {
   r2_7: number | null;
   slope30: number | null;
   r2_30: number | null;
-  slope90: number | null;
-  r2_90: number | null;
 }
 
 interface LatestRow {
@@ -222,8 +224,6 @@ function emptySummary(): DataSummary {
     avg30: null,
     slope7: null,
     slope30: null,
-    slope90: null,
-    anomalyCount: 0,
     avg30LastMonth: null,
     avg30LastYear: null,
   };
@@ -378,7 +378,7 @@ async function withSleepNightTotals(
   // Preserve the slope tuples the night summary doesn't compute (the
   // dashboard tile reads slope30); recompute them off the night series is
   // out of scope here — the per-night `summarize()` already fills slope7 /
-  // slope30 / slope90 from the night DataPoints, so use them directly.
+  // slope30 from the night DataPoints, so use them directly.
   slice.summaries.SLEEP_DURATION = summary;
   // Additive, observational: the latest night's main session saw two
   // writer buckets with clearly different asleep totals. Round to whole
@@ -424,13 +424,22 @@ async function computeFromRollups(userId: string): Promise<SummariesSlice> {
   );
   const rankM = buildSourceRankCase(priorityJson, 'm."type"', 'm."source"');
 
-  const [narrows, latests, dayBuckets, accumulatorRows] = await Promise.all([
-    // The FROM is restricted to the canonical-source rows per (type, day): the
-    // inner DISTINCT ON picks the ladder-winning source for each day, and the
-    // join keeps only that source's readings so the 90-day AVG / median / slope
-    // never blend two devices that both reported the same vital.
-    prisma.$queryRawUnsafe<NarrowAggregateRow[]>(
-      `
+  // v1.37.19 (A6-10) — where the fold window starts. DAY rollup buckets
+  // only exist inside the trailing `ROLLUP_FOLD_WINDOW_MS` (5 y), so the
+  // rollup-composed "all-time" figures silently truncated to that window
+  // for accounts with older history, while the cold live path reported
+  // the true unbounded numbers. The pre-fold remainder query below
+  // splices the older rows back in.
+  const foldWindowStart = new Date(Date.now() - ROLLUP_FOLD_WINDOW_MS);
+
+  const [narrows, latests, dayBuckets, accumulatorRows, preFoldRemainder] =
+    await Promise.all([
+      // The FROM is restricted to the canonical-source rows per (type, day): the
+      // inner DISTINCT ON picks the ladder-winning source for each day, and the
+      // join keeps only that source's readings so the 90-day AVG / median / slope
+      // never blend two devices that both reported the same vital.
+      prisma.$queryRawUnsafe<NarrowAggregateRow[]>(
+        `
       SELECT
         m."type"::text                                                AS type,
         AVG(m."value") FILTER (
@@ -451,13 +460,13 @@ async function computeFromRollups(userId: string): Promise<SummariesSlice> {
       FROM ${canonicalMeasurementsFrom(rankUnqualified, "90 days")}
       GROUP BY m."type"
     `,
-      userId,
-    ),
-    // v1.11.1 — the latest tile reflects the canonical source for the latest
-    // day, matching the chart: order by latest day first, then the ladder rank
-    // (canonical source wins), then the latest reading of that source.
-    prisma.$queryRawUnsafe<LatestRow[]>(
-      `
+        userId,
+      ),
+      // v1.11.1 — the latest tile reflects the canonical source for the latest
+      // day, matching the chart: order by latest day first, then the ladder rank
+      // (canonical source wins), then the latest reading of that source.
+      prisma.$queryRawUnsafe<LatestRow[]>(
+        `
       SELECT DISTINCT ON (m."type")
         m."type"::text AS type,
         m."value"::double precision AS value,
@@ -467,24 +476,24 @@ async function computeFromRollups(userId: string): Promise<SummariesSlice> {
         AND m."deleted_at" IS NULL
       ORDER BY m."type", date_trunc('day', m."measured_at") DESC, (${rankM}), m."measured_at" DESC
     `,
-      userId,
-    ),
-    // v1.4.37.2 hotfix — the v1.4.35 implementation read EVERY DAY
-    // rollup bucket for the user (`findMany` without a `bucketStart`
-    // window) and then composed `count / min / max / mean` in JS.
-    // On tenants with large measurement partitions that materialised
-    // as a six-figure row transfer + a JS loop = multi-second per
-    // cache miss, even with the rollup table hot. The slim slice's
-    // contract is the all-time count / min / max / mean per type —
-    // exactly what a SQL `GROUP BY type` returns in a single
-    // round-trip.
-    //
-    // v1.11.1 — rows are now per source. Collapse each (type, day) to the
-    // ladder-canonical source via DISTINCT ON before the all-time aggregate,
-    // so a dual-source vital is counted once. Still one server-side pass —
-    // the DISTINCT ON + GROUP BY runs in Postgres and returns one row/type.
-    prisma.$queryRawUnsafe<RollupAggregateRow[]>(
-      `
+        userId,
+      ),
+      // v1.4.37.2 hotfix — the v1.4.35 implementation read EVERY DAY
+      // rollup bucket for the user (`findMany` without a `bucketStart`
+      // window) and then composed `count / min / max / mean` in JS.
+      // On tenants with large measurement partitions that materialised
+      // as a six-figure row transfer + a JS loop = multi-second per
+      // cache miss, even with the rollup table hot. The slim slice's
+      // contract is the all-time count / min / max / mean per type —
+      // exactly what a SQL `GROUP BY type` returns in a single
+      // round-trip.
+      //
+      // v1.11.1 — rows are now per source. Collapse each (type, day) to the
+      // ladder-canonical source via DISTINCT ON before the all-time aggregate,
+      // so a dual-source vital is counted once. Still one server-side pass —
+      // the DISTINCT ON + GROUP BY runs in Postgres and returns one row/type.
+      prisma.$queryRawUnsafe<RollupAggregateRow[]>(
+        `
       WITH collapsed AS (
         SELECT DISTINCT ON ("type", "bucket_start")
           "type"      AS type,
@@ -509,37 +518,81 @@ async function computeFromRollups(userId: string): Promise<SummariesSlice> {
       FROM collapsed
       GROUP BY "type"
     `,
-      userId,
-    ),
-    // v1.20.0 F6 — trailing 90-day DAY rollup rows carrying the per-bucket
-    // regression accumulators. The windowed slope / r² / sd compose from
-    // these (composeWindowedRegression) instead of the live REGR_* scan the
-    // narrow query used to run. Rows are per source; collapsed per type
-    // below so a dual-source vital contributes only its canonical source's
-    // accumulators. Bounded to 90 days (≤ ~90 rows/type), the same window
-    // the dropped slope columns covered.
-    prisma.measurementRollup.findMany({
-      where: {
         userId,
-        granularity: "DAY",
-        bucketStart: {
-          gte: startOfUtcDay(new Date(Date.now() - 90 * DAY_MS)),
+      ),
+      // v1.20.0 F6 — trailing 90-day DAY rollup rows carrying the per-bucket
+      // regression accumulators. The windowed slope / r² / sd compose from
+      // these (composeWindowedRegression) instead of the live REGR_* scan the
+      // narrow query used to run. Rows are per source; collapsed per type
+      // below so a dual-source vital contributes only its canonical source's
+      // accumulators. Bounded to 90 days (≤ ~90 rows/type), the same window
+      // the dropped slope columns covered.
+      prisma.measurementRollup.findMany({
+        where: {
+          userId,
+          granularity: "DAY",
+          bucketStart: {
+            gte: startOfUtcDay(new Date(Date.now() - 90 * DAY_MS)),
+          },
         },
-      },
-      orderBy: [{ type: "asc" }, { bucketStart: "asc" }],
-      select: {
-        type: true,
-        source: true,
-        bucketStart: true,
-        count: true,
-        mean: true,
-        sumX: true,
-        sumXy: true,
-        sumXx: true,
-        sumYy: true,
-      },
-    }),
-  ]);
+        orderBy: [{ type: "asc" }, { bucketStart: "asc" }],
+        select: {
+          type: true,
+          source: true,
+          bucketStart: true,
+          count: true,
+          mean: true,
+          sumX: true,
+          sumXy: true,
+          sumXx: true,
+          sumYy: true,
+        },
+      }),
+      // v1.37.19 (A6-10) — all-time remainder OLDER than the fold window.
+      // One grouped aggregate over the pre-fold rows (index range scan on
+      // `(user_id, measured_at)`; empty for any account younger than the
+      // window). Spliced into the per-type figures below so "all-time"
+      // means all time on the rollup path too. Deliberately without the
+      // source-priority collapse: pre-fold history predates the rollup
+      // tier's per-day canonicalisation, and a per-day DISTINCT ON over a
+      // multi-year span is the cost this splice exists to avoid — for
+      // count/min/max/mean over years-old data the raw figures are the
+      // honest ones.
+      prisma.$queryRaw<
+        Array<{
+          type: string;
+          count: number;
+          min: number;
+          max: number;
+          mean: number;
+        }>
+      >`
+      SELECT
+        m."type"::text                     AS type,
+        COUNT(*)::int                      AS count,
+        MIN(m."value")::double precision   AS min,
+        MAX(m."value")::double precision   AS max,
+        AVG(m."value")::double precision   AS mean
+      FROM measurements m
+      WHERE m."user_id" = ${userId}
+        AND m."deleted_at" IS NULL
+        AND m."measured_at" < ${foldWindowStart}
+      GROUP BY m."type"
+    `,
+    ]);
+
+  const preFoldByType = new Map<
+    string,
+    { count: number; min: number; max: number; mean: number }
+  >();
+  for (const row of preFoldRemainder) {
+    preFoldByType.set(row.type, {
+      count: Number(row.count),
+      min: Number(row.min),
+      max: Number(row.max),
+      mean: Number(row.mean),
+    });
+  }
 
   // v1.20.0 F6 — collapse the 90-day accumulator rows to the canonical
   // source per (type, day), then build a per-type accumulator-bucket list so
@@ -656,21 +709,55 @@ async function computeFromRollups(userId: string): Promise<SummariesSlice> {
     }
     const reg7 = composeWindowedRegression(accBuckets, since7);
     const reg30 = composeWindowedRegression(accBuckets, since30);
-    const reg90 = composeWindowedRegression(accBuckets, since90);
+    // v1.37.19 (A6-10) — splice the pre-fold remainder into the all-time
+    // figures: the rollup tier only covers the trailing fold window, so
+    // count / min / max / mean composed from it alone truncated "all
+    // time" to 5 y. Windowed fields (avg7/30, median, slopes) are
+    // unaffected — their windows sit far inside the fold window.
+    const pre = preFoldByType.get(row.type);
+    const allCount = row.count + (pre?.count ?? 0);
+    const allMin = pre ? Math.min(row.min, pre.min) : row.min;
+    const allMax = pre ? Math.max(row.max, pre.max) : row.max;
+    const allMean = pre
+      ? (row.mean * row.count + pre.mean * pre.count) / allCount
+      : row.mean;
     summaries[row.type] = {
-      count: row.count,
+      count: allCount,
       latest,
-      min: round2(row.min),
-      max: round2(row.max),
-      mean: round2(row.mean),
+      min: round2(allMin),
+      max: round2(allMax),
+      mean: round2(allMean),
       median: round2(narrow?.median ?? null),
       avg7: round2(narrow?.avg7 ?? null),
       avg30: round2(narrow?.avg30 ?? null),
       slope7: buildSlope(reg7.slope, reg7.r2),
       slope30: buildSlope(reg30.slope, reg30.r2),
-      slope90: buildSlope(reg90.slope, reg90.r2),
-      anomalyCount: 0,
       avg30LastMonth: round2(narrow?.avg30_last_month ?? null),
+      avg30LastYear: null,
+    };
+    if (pre) totalRows += pre.count;
+  }
+
+  // v1.37.19 (A6-10) — a type whose ONLY rows are older than the fold
+  // window has no DAY bucket at all; without this arm it read as "never
+  // logged" on the rollup path while the live path reported its history.
+  for (const [type, pre] of preFoldByType) {
+    if (typesWithData.includes(type)) continue;
+    typeCount += 1;
+    totalRows += pre.count;
+    typesWithData.push(type);
+    summaries[type] = {
+      count: pre.count,
+      latest: latestByType.get(type) ?? null,
+      min: round2(pre.min),
+      max: round2(pre.max),
+      mean: round2(pre.mean),
+      median: null,
+      avg7: null,
+      avg30: null,
+      slope7: null,
+      slope30: null,
+      avg30LastMonth: null,
       avg30LastYear: null,
     };
   }
@@ -833,19 +920,7 @@ async function computeFromLiveAggregate(
           EXTRACT(EPOCH FROM m."measured_at") / 86400.0
         ) FILTER (
           WHERE m."measured_at" >= (date_trunc('day', NOW() AT TIME ZONE 'UTC') - INTERVAL '30 days') AT TIME ZONE 'UTC'
-        )::double precision                                           AS r2_30,
-        REGR_SLOPE(
-          m."value",
-          EXTRACT(EPOCH FROM m."measured_at") / 86400.0
-        ) FILTER (
-          WHERE m."measured_at" >= (date_trunc('day', NOW() AT TIME ZONE 'UTC') - INTERVAL '90 days') AT TIME ZONE 'UTC'
-        )::double precision                                           AS slope90,
-        REGR_R2(
-          m."value",
-          EXTRACT(EPOCH FROM m."measured_at") / 86400.0
-        ) FILTER (
-          WHERE m."measured_at" >= (date_trunc('day', NOW() AT TIME ZONE 'UTC') - INTERVAL '90 days') AT TIME ZONE 'UTC'
-        )::double precision                                           AS r2_90
+        )::double precision                                           AS r2_30
       FROM ${canonicalMeasurementsFrom(rankUnqualified, "90 days")}
       GROUP BY m."type"
     `,
@@ -925,8 +1000,6 @@ async function computeFromLiveAggregate(
       avg30: round2(win?.avg30 ?? null),
       slope7: buildSlope(win?.slope7 ?? null, win?.r2_7 ?? null),
       slope30: buildSlope(win?.slope30 ?? null, win?.r2_30 ?? null),
-      slope90: buildSlope(win?.slope90 ?? null, win?.r2_90 ?? null),
-      anomalyCount: 0,
       avg30LastMonth: round2(win?.avg30_last_month ?? null),
       avg30LastYear: null,
     };
@@ -974,7 +1047,7 @@ async function computeFromLiveAggregate(
  * Why this helper exists
  * ----------------------
  * The slim `computeSummariesSlice` caps its windowed columns at 90 d
- * (`slope7 / slope30 / slope90`). The v1.5 multi-year trend feature
+ * (`slope7 / slope30`). The v1.5 multi-year trend feature
  * + the Coach drawer's "history" tile need linearly composable stats
  * (count / min / max / mean / sum) over much larger windows — 1 y,
  * 2 y, 3 y. Hitting the live `measurements` table for a 3-year span

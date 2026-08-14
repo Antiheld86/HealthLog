@@ -15,28 +15,52 @@
 import * as React from "react";
 
 import { useTranslations } from "@/lib/i18n/context";
-import type { SettingsSectionSlug } from "../section-slugs";
+
+/**
+ * v1.37.19 — the layout-hub children left `SETTINGS_SECTION_SLUGS`; their
+ * live headings resolve from `settings.sections.layout.<module>.*` (the
+ * layout-groups registry), so the harness mirrors that mapping.
+ */
+const LAYOUT_CHILD_SLUGS = new Set([
+  "dashboard",
+  "insights",
+  "medications",
+  "mood",
+  "labs",
+  "illness",
+  "vorsorge",
+]);
 
 export function SettingsSectionFrame({
   slug,
   children,
 }: {
-  slug: SettingsSectionSlug;
+  /**
+   * A section slug OR a layout-hub child id (`dashboard`, `mood`, …) — the
+   * children left `SETTINGS_SECTION_SLUGS` in v1.37.19 but their heading
+   * keys and section bodies live on under `/settings/layout/<module>`.
+   */
+  slug: string;
   children: React.ReactNode;
 }) {
   const { t } = useTranslations();
   const titleId = `settings-section-${slug}-title`;
+  const isLayoutChild = LAYOUT_CHILD_SLUGS.has(slug);
+  const titleKey = isLayoutChild
+    ? `settings.sections.layout.${slug}.title`
+    : `settings.sections.${slug}.title`;
+  const subtitleKey = isLayoutChild
+    ? `settings.sections.layout.${slug}.description`
+    : `settings.sections.${slug}.subtitle`;
 
   return (
     <section aria-labelledby={titleId} className="space-y-6">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h1 id={titleId} className="text-2xl font-bold tracking-tight">
-            {t(`settings.sections.${slug}.title`)}
+            {t(titleKey)}
           </h1>
-          <p className="text-muted-foreground text-sm">
-            {t(`settings.sections.${slug}.subtitle`)}
-          </p>
+          <p className="text-muted-foreground text-sm">{t(subtitleKey)}</p>
         </div>
       </div>
       {children}

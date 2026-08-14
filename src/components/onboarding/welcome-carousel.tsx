@@ -24,7 +24,10 @@ import { cn } from "@/lib/utils";
 import { apiPost } from "@/lib/api/api-fetch";
 import { localizedApiError } from "@/lib/api/localized-error";
 import { queryKeys } from "@/lib/query-keys";
-import { DISCLAIMER_VERSION } from "@/lib/onboarding/disclaimer";
+import {
+  DISCLAIMER_VERSION,
+  isDisclaimerAcknowledgmentCurrent,
+} from "@/lib/onboarding/disclaimer";
 
 /**
  * v1.4.25 W14b-Content — onboarding welcome carousel.
@@ -87,11 +90,15 @@ export function WelcomeCarousel() {
   const [active, setActive] = useState(0);
   const [advancing, setAdvancing] = useState(false);
   // v1.18.6 (DISC-02) — the one-time medical-disclaimer acknowledgment gates
-  // "Get started". Pre-checked for an account that already acknowledged (a
-  // re-walk of step 0) so a returning user is not re-asked.
-  const [acknowledged, setAcknowledged] = useState(
-    () => user?.disclaimerAcknowledgedAt != null,
+  // "Get started". Pre-checked only when the account acknowledged the
+  // CURRENT disclaimer version (a re-walk of step 0), so a returning user is
+  // not re-asked — but a revised disclaimer re-prompts instead of riding an
+  // acknowledgment given for older text.
+  const disclaimerCurrent = isDisclaimerAcknowledgmentCurrent(
+    user?.disclaimerAcknowledgedAt,
+    user?.disclaimerAcknowledgedVersion,
   );
+  const [acknowledged, setAcknowledged] = useState(() => disclaimerCurrent);
 
   // Track which slide is centred in the rail. We observe each slide
   // with an IntersectionObserver — simpler and more reliable than
@@ -146,9 +153,10 @@ export function WelcomeCarousel() {
     if (advancing || !acknowledged) return;
     setAdvancing(true);
     try {
-      // v1.18.6 (DISC-02) — record the one-time acknowledgment before
-      // advancing. Skipped when the account already acknowledged (re-walk).
-      if (user?.disclaimerAcknowledgedAt == null) {
+      // v1.18.6 (DISC-02) — record the acknowledgment before advancing.
+      // Skipped only when the account already acknowledged the CURRENT
+      // version (re-walk); an older-version acknowledgment re-records.
+      if (!disclaimerCurrent) {
         await apiPost("/api/onboarding/disclaimer", {
           version: DISCLAIMER_VERSION,
         });

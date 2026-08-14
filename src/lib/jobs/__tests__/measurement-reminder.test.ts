@@ -16,7 +16,20 @@
  *
  * The Prisma surface is stubbed manually to avoid a testcontainer boot.
  */
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
+
+// v1.37.19 (A6-7) — the tick claims the slot BEFORE provider egress via
+// the shared record-event ledger. The manual Prisma double has no
+// notification_events surface, so the claim is mocked controllable:
+// default granted, individual cases flip it to prove the guard.
+const claimState = vi.hoisted(() => ({ granted: true }));
+const claimMock = vi.hoisted(() => vi.fn(async () => claimState.granted));
+vi.mock("@/lib/notifications/reminder-dedup", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/notifications/reminder-dedup")
+  >("@/lib/notifications/reminder-dedup");
+  return { ...actual, claimNotificationEvent: claimMock };
+});
 
 import {
   evaluateMeasurementReminderDue,
@@ -34,6 +47,11 @@ const OK: DispatchOutcome = {
 };
 
 const TZ = "Europe/Berlin";
+
+beforeEach(() => {
+  claimState.granted = true;
+  claimMock.mockClear();
+});
 
 // 09:00 Berlin in June = 07:00Z.
 const NINE_LOCAL = new Date("2026-06-15T07:00:00Z");
@@ -226,6 +244,51 @@ describe("runMeasurementReminderTick", () => {
     expect(updates).toHaveLength(1);
     expect(updates[0].data.lastSatisfiedAt).toEqual(matchAt);
     expect(updates[0].data.nextDueAt).toBeInstanceOf(Date);
+  });
+
+  // Watched red: with the claim-before-dispatch guard removed from the
+  // tick (the pre-v1.37.19 order: dispatch first, advance after), the
+  // denied-claim case below fails — the provider was contacted although
+  // another worker (or a crash-recovery replay) already owned the slot.
+  it("claims the slot BEFORE provider egress and skips when denied", async () => {
+    claimState.granted = false;
+    const { prisma, updates } = makePrisma({
+      reminders: [reminder({})],
+      measurementMatch: null,
+    });
+    const dispatch = vi.fn<DispatchFn>(async () => OK);
+
+    const summary = await runMeasurementReminderTick(
+      prisma as never,
+      NINE_LOCAL,
+      { dispatch },
+    );
+
+    expect(claimMock).toHaveBeenCalledTimes(1);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(summary.skippedAlreadyClaimed).toBe(1);
+    expect(summary.dispatched).toBe(0);
+    // No advance either — the claimant owns the slot's lifecycle.
+    expect(updates).toHaveLength(0);
+  });
+
+  it("keys the claim on the reminder + the user-local date", async () => {
+    const { prisma } = makePrisma({
+      reminders: [reminder({})],
+      measurementMatch: null,
+    });
+    const dispatch = vi.fn<DispatchFn>(async () => OK);
+
+    await runMeasurementReminderTick(prisma as never, NINE_LOCAL, { dispatch });
+
+    expect(claimMock).toHaveBeenCalledWith(
+      prisma,
+      expect.objectContaining({
+        eventType: "MEASUREMENT_REMINDER",
+        dedupKey: expect.stringMatching(/^measurement:.+:2026-06-15$/),
+      }),
+    );
+    expect(dispatch).toHaveBeenCalledTimes(1);
   });
 
   it("dispatches a due reminder and advances nextDueAt past now (ledger-free dedup)", async () => {

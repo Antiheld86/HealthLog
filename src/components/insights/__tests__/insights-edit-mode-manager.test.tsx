@@ -52,7 +52,7 @@ describe("<InsightsEditMode> — detail-page manager retired (v1.15.20)", () => 
     expect(html).toContain(
       'href="/settings/layout/insights#insights-pill-order"',
     );
-    expect(html).toContain("Manage pills &amp; detail pages in Settings");
+    expect(html).toContain("Manage chips &amp; detail pages in Settings");
   });
 
   it("still renders the section rows with their eye toggles", () => {

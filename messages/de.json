@@ -560,7 +560,7 @@
       "viewAll": "Alle anzeigen",
       "empty": {
         "title": "Noch keine Workouts",
-        "cta": "Öffne die Apple-Health-App auf dem iPhone, damit Workouts hier erscheinen."
+        "cta": "Verbinde eine Datenquelle in den Einstellungen, damit Workouts hier erscheinen."
       }
     },
     "metric": {
@@ -729,9 +729,12 @@
     "sourceWhoop": "WHOOP",
     "sourceFitbit": "Fitbit",
     "bulkDeleteSuccess": "{count} Messwerte gelöscht",
+    "bulkDeleteSuccessOne": "Messwert gelöscht",
     "bulkDeleteError": "Fehler beim Löschen der ausgewählten Messungen",
     "bulkDeleteConfirmTitle": "{count} Messwerte löschen?",
+    "bulkDeleteConfirmTitleOne": "Diesen Messwert löschen?",
     "bulkDeleteConfirmBody": "Die {count} ausgewählten Messungen werden gelöscht. Direkt danach kannst du das kurz rückgängig machen.",
+    "bulkDeleteConfirmBodyOne": "Die ausgewählte Messung wird gelöscht. Direkt danach kannst du das kurz rückgängig machen.",
     "typePhq9Score": "PHQ-9-Wert",
     "typeGad7Score": "GAD-7-Wert",
     "typeGripStrength": "Griffstärke",
@@ -879,9 +882,12 @@
     "sourceTelegram": "Telegram",
     "sourceDaylio": "Daylio",
     "bulkDeleteSuccess": "{count} Einträge gelöscht",
+    "bulkDeleteSuccessOne": "Eintrag gelöscht",
     "bulkDeleteError": "Fehler beim Löschen der ausgewählten Einträge",
     "bulkDeleteConfirmTitle": "{count} Einträge löschen?",
+    "bulkDeleteConfirmTitleOne": "Diesen Eintrag löschen?",
     "bulkDeleteConfirmBody": "Die {count} ausgewählten Stimmungseinträge werden gelöscht. Direkt danach kannst du das kurz rückgängig machen.",
+    "bulkDeleteConfirmBodyOne": "Der ausgewählte Stimmungseintrag wird gelöscht. Direkt danach kannst du das kurz rückgängig machen.",
     "customize": "Stimmungs-Tags anpassen",
     "addTagInline": "Tag hinzufügen",
     "manage": {
@@ -1599,7 +1605,7 @@
     "siteThighRight": "Rechter Oberschenkel",
     "siteUpperArmLeft": "Linker Oberarm",
     "siteUpperArmRight": "Rechter Oberarm",
-    "sideEffectTagsHelp": "Tippe einen Chip, um ihn zu den Mood-Tags hinzuzufügen.",
+    "sideEffectTagsHelp": "Tippe einen Chip, um ihn zu den Stimmungs-Tags hinzuzufügen.",
     "sideEffectTagNausea": "Übelkeit",
     "sideEffectTagConstipation": "Verstopfung",
     "sideEffectTagDiarrhea": "Durchfall",
@@ -1779,7 +1785,8 @@
         "enabledToast": "Erinnerungen aktiv",
         "disabledToast": "Erinnerungen aus",
         "toggleFailed": "Erinnerungs-Einstellung konnte nicht geändert werden.",
-        "clientManagedChip": "Dein iPhone steuert die Erinnerungen für dieses Medikament."
+        "clientManagedChip": "Vom iPhone verwaltet",
+        "clientManagedHint": "Dein iPhone steuert die Erinnerungen für dieses Medikament."
       },
       "settings": {
         "title": "Einstellungen",
@@ -1932,7 +1939,7 @@
         "addQuantityHelper": "1–1000 Einheiten pro Packung oder Behälter.",
         "addExpiryLabel": "Ablaufdatum (optional)",
         "addSubmit": "Erfassen",
-        "addSuccess": "Bestand erfasst.",
+        "addSuccess": "Bestand erfasst",
         "addFailed": "Bestand konnte nicht erfasst werden.",
         "adjustButton": "Anpassen",
         "adjustTitle": "Behälter korrigieren",
@@ -1940,11 +1947,11 @@
         "adjustQuantityLabel": "Verbleibende Einheiten",
         "adjustHelper": "Kapazität: {total} Einheiten.",
         "adjustSubmit": "Speichern",
-        "adjustSuccess": "Bestand aktualisiert.",
+        "adjustSuccess": "Bestand aktualisiert",
         "adjustFailed": "Bestand konnte nicht aktualisiert werden.",
         "deleteTitle": "Packung löschen?",
         "deleteDescription": "Entfernt diese Packung oder diesen Behälter dauerhaft aus dem Bestand. Protokollierte Einnahmen bleiben unverändert.",
-        "deleteSuccess": "Bestand gelöscht.",
+        "deleteSuccess": "Bestand gelöscht",
         "deleteFailed": "Bestand konnte nicht gelöscht werden.",
         "containerTypeLabel": "Behälterart",
         "containerType": {
@@ -2139,7 +2146,7 @@
       "scaleToggleLabel": "Diagrammskala"
     },
     "import": {
-      "resultSuccess": "{imported} Einnahmen importiert.",
+      "resultSuccess": "{imported} Einnahmen importiert",
       "resultPartial": "{imported} importiert, {skipped} übersprungen.",
       "resultNothing": "Nichts importiert: alle {skipped} Einträge wurden übersprungen.",
       "resultAlreadyRecorded": "{recorded} Einnahmen sind bereits erfasst. Es wurde nichts Neues hinzugefügt.",
@@ -2400,7 +2407,7 @@
       "dragHandle": "Zum Sortieren ziehen",
       "show": "Einblenden",
       "hide": "Ausblenden",
-      "manageInSettings": "Pills & Detailseiten in den Einstellungen verwalten",
+      "manageInSettings": "Chips & Detailseiten in den Einstellungen verwalten",
       "groupSleep": "Schlaf",
       "groupMood": "Stimmung",
       "groupEvents": "Ereignisse",
@@ -2461,7 +2468,7 @@
         "yellow": "Einige Bereiche brauchen Aufmerksamkeit",
         "red": "Mindestens ein Bereich liegt außerhalb des Referenzbereichs"
       },
-      "insufficient": "{count} von {required} Feldern der Gesundheit haben genug aktuelle Daten. Der Score braucht {required}, mindestens eines davon körperlich gemessen.",
+      "insufficient": "{count} von {required} Gesundheitsbereichen haben genug aktuelle Daten. Der Score braucht {required}, mindestens einen davon körperlich gemessen.",
       "anatomyToggle": "Wie dieser Score zustande kommt",
       "notScored": "Noch nicht bewertet ({count})",
       "method": "Der Score ist der gleich gewichtete Mittelwert der Säulen, die für ihn zählen, auf einer Skala von 0 bis 100. Jede Säule wird an einem veröffentlichten Referenzbereich gemessen, und die schwächste Säule kann den Gesamtbereich bestimmen. Eine Säule ohne ausreichend aktuelle Daten bleibt außen vor und zählt nicht als null. Die Referenzbereiche stammen aus veröffentlichten Quellen; welche Säulen zählen, entscheidest du selbst, deshalb ist die zusammengefasste Zahl selbst kein klinischer Standard.",
@@ -2776,6 +2783,7 @@
       "settingsVerbosityBrief": "Kurz",
       "settingsVerbosityDefault": "Standard",
       "settingsVerbosityDetailed": "Ausführlich",
+      "settingsVerbosityConciseHint": "Der knappe Tonfall hält Antworten ohnehin kurz — die Ausführlichkeit ist dabei fest auf „Kurz“ gesetzt.",
       "settingsSourcesPointer": "Welche Datenquellen der Coach nutzen darf und das Standard-Analysefenster verwaltest du direkt im Coach-Chat (Leiste „Worauf ich zugreife\").",
       "settingsSourcesPointerLink": "Coach öffnen",
       "settingsExcludeLabel": "Metriken ausschließen",
@@ -2787,7 +2795,7 @@
       "settingsDefaultWindowLabel": "Standard-Analysezeitraum",
       "settingsDefaultWindowHint": "Der Coach liest pro Chat diesen Zeitraum, sofern du im Drawer-Kopf nichts anderes auswählst.",
       "settingsSave": "Speichern",
-      "settingsSaved": "Gespeichert.",
+      "settingsSaved": "Gespeichert",
       "settingsCancel": "Abbrechen",
       "feedbackHelpful": "Hilfreich",
       "feedbackUnhelpful": "Nicht ganz",
@@ -4159,13 +4167,13 @@
       "overviewDescription": "Abschnitte ein- oder ausblenden und ihre Reihenfolge auf der Insights-Übersicht festlegen."
     },
     "pillOrder": {
-      "title": "Navigations-Pills sortieren",
-      "description": "Ziehe die Pills in die gewünschte Reihenfolge und blende sie über das Augensymbol ein oder aus.",
+      "title": "Navigations-Chips sortieren",
+      "description": "Ziehe die Chips in die gewünschte Reihenfolge und blende sie über das Augensymbol ein oder aus.",
       "dragHandle": "Verschieben",
-      "saveSuccess": "Reihenfolge der Pills gespeichert.",
-      "saveError": "Speichern der Pill-Reihenfolge fehlgeschlagen.",
+      "saveSuccess": "Reihenfolge der Chips gespeichert",
+      "saveError": "Speichern der Chip-Reihenfolge fehlgeschlagen.",
       "save": "Speichern",
-      "empty": "Noch keine Navigations-Pills verfügbar.",
+      "empty": "Noch keine Navigations-Chips verfügbar.",
       "detail": "Ausgeblendete Detailseiten verschwinden auch aus der oberen Navigation."
     },
     "customize": "Insights anpassen",
@@ -4833,8 +4841,6 @@
         }
       },
       "dashboard": {
-        "title": "Dashboard",
-        "description": "Kachel-Layout und Reihenfolge.",
         "subtitle": "Ordne die Kacheln auf deinem Dashboard an."
       },
       "thresholds": {
@@ -4855,9 +4861,9 @@
         "resetDefaultsConfirm": "Reihenfolge zurücksetzen",
         "moveUp": "Nach oben",
         "moveDown": "Nach unten",
-        "saveSuccess": "Quellen-Priorität gespeichert.",
+        "saveSuccess": "Quellen-Priorität gespeichert",
         "saveError": "Quellen-Priorität konnte nicht gespeichert werden.",
-        "resetSuccess": "Quellen-Priorität zurückgesetzt.",
+        "resetSuccess": "Quellen-Priorität zurückgesetzt",
         "perMetricToggle": "Pro Metrik anpassen ({count})",
         "perMetricHelp": "Metriken mit individueller Reihenfolge. Über diese Liste lässt sich eine einzelne Metrik mit einem Klick auf den Standard zurücksetzen, ohne die anderen anzufassen.",
         "perMetricEmpty": "Keine individuellen Anpassungen — jede Metrik nutzt die globale Reihenfolge oben.",
@@ -5026,7 +5032,7 @@
             "failed": "Der Import ist fehlgeschlagen. Bitte erneut versuchen.",
             "readFailed": "Diese Datei konnte nicht gelesen werden.",
             "resultSummary": "{measurements} Messwerte und {moods} Stimmungseinträge importiert, {skipped} übersprungen.",
-            "resultSuccess": "{measurements} Messwerte und {moods} Stimmungseinträge importiert.",
+            "resultSuccess": "{measurements} Messwerte und {moods} Stimmungseinträge importiert",
             "resultNothing": "Nichts importiert. Alle {skipped} Einträge wurden übersprungen.",
             "resultEmpty": "Diese Datei enthielt weder Messwerte noch Stimmungseinträge."
           },
@@ -5050,10 +5056,10 @@
             "previewSummary": "Vorschau: {inserted} würden importiert, {skipped} übersprungen.",
             "resultSummary": "{inserted} neu importiert und {updated} aktualisiert, {skipped} übersprungen.",
             "rowError": "Zeile {line}: {reason}",
-            "resultSuccess": "{inserted} neu importiert und {updated} aktualisiert.",
+            "resultSuccess": "{inserted} neu importiert und {updated} aktualisiert",
             "resultNothing": "Nichts importiert. Alle {skipped} Zeilen wurden übersprungen.",
             "resultEmpty": "Diese Datei hat eine Kopfzeile, aber keine Datenzeilen.",
-            "previewSuccess": "Vorschau: {inserted} würden importiert.",
+            "previewSuccess": "Vorschau: {inserted} würden importiert",
             "previewNothing": "Vorschau: nichts würde importiert. Alle {skipped} Zeilen würden übersprungen.",
             "skipGroupOne": "{count} Zeile übersprungen: {reason}",
             "skipGroupFew": "{count} Zeilen übersprungen: {reason}",
@@ -5144,38 +5150,26 @@
         "subtitle": "Teile schreibgeschützten Zugriff auf deine Daten."
       },
       "insights": {
-        "title": "Insights",
-        "description": "Reihenfolge der Übersicht und der Navigations-Pills.",
-        "subtitle": "Ordne die Übersichts-Bereiche und die Reihenfolge der Pills an."
+        "subtitle": "Ordne die Übersichts-Bereiche und die Reihenfolge der Chips an."
       },
       "medications": {
-        "title": "Medikamente",
-        "description": "Listenansicht, Reihenfolge und Injektionsstellen deiner Medikamente.",
         "subtitle": "Verwalte Ansicht und Reihenfolge deiner Medikamentenliste."
       },
       "mood": {
-        "title": "Stimmungs-Tags",
-        "description": "Gruppen, Tags und archivierte Tags der Stimmungs-Auswahl.",
         "subtitle": "Organisiere deine Stimmungs-Tags, Gruppen und Auswahlreihenfolge."
       },
       "labs": {
-        "title": "Laborwerte",
-        "description": "Ansicht, Sortierung und Biomarker deiner Laborwerte.",
         "subtitle": "Ansicht, Sortierung und Biomarker verwalten."
       },
       "illness": {
-        "title": "Krankheitstagebuch",
-        "description": "Ansicht und Reihenfolge deiner Krankheitsepisoden.",
         "subtitle": "Ansicht und Reihenfolge der Episoden verwalten."
       },
       "vorsorge": {
-        "title": "Vorsorge",
-        "description": "Ansicht, Reihenfolge und einzelne Vorsorge-Erinnerungen.",
         "subtitle": "Ansicht, Reihenfolge und einzelne Erinnerungen verwalten."
       },
       "modules": {
         "title": "Module",
-        "saved": "Gespeichert.",
+        "saved": "Gespeichert",
         "error": "Konnte nicht gespeichert werden. Bitte erneut versuchen.",
         "toggleable": {
           "title": "Was du trackst",
@@ -5223,7 +5217,7 @@
         "use": "Verwenden",
         "select": "Auswählen",
         "saveError": "Änderung konnte nicht gespeichert werden.",
-        "homeSaved": "Heimatort gespeichert.",
+        "homeSaved": "Heimatort gespeichert",
         "travelAdded": "Ortszeitraum hinzugefügt.",
         "travelRemoved": "Ortszeitraum entfernt.",
         "backfillQueued": "Nacherfassung eingeplant.",
@@ -5280,7 +5274,7 @@
           "current": "Deine gespeicherte Auswahl"
         },
         "save": "Speichern",
-        "saved": "Gespeichert.",
+        "saved": "Gespeichert",
         "error": "Konnte nicht gespeichert werden. Bitte versuche es erneut.",
         "loadFailed": "Deine Auswahl konnte nicht geladen werden.",
         "eligibilityFailed": "Es ließ sich nicht prüfen, für welche Bereiche gerade Daten vorliegen. Die Schalter unten funktionieren trotzdem.",
@@ -5318,7 +5312,7 @@
       "auto": "Automatisch (Sprache)",
       "h24": "24 Stunden",
       "h12": "12 Stunden (AM/PM)",
-      "saved": "Stundenformat gespeichert.",
+      "saved": "Stundenformat gespeichert",
       "saveError": "Speichern des Stundenformats fehlgeschlagen."
     },
     "dateFormat": {
@@ -5328,7 +5322,7 @@
       "dmy": "TT.MM.JJJJ",
       "mdy": "MM/TT/JJJJ",
       "ymd": "JJJJ-MM-TT",
-      "saved": "Datumsformat gespeichert.",
+      "saved": "Datumsformat gespeichert",
       "saveError": "Speichern des Datumsformats fehlgeschlagen."
     },
     "username": "Nutzername",
@@ -5622,7 +5616,7 @@
         "clearBody": "Entfernt nur den Freitext. Allergien und Unverträglichkeiten bleiben unverändert.",
         "clearConfirm": "Notiz leeren",
         "save": "Speichern",
-        "savedToast": "Über-mich-Notiz gespeichert.",
+        "savedToast": "Über-mich-Notiz gespeichert",
         "clearedToast": "Über-mich-Notiz gelöscht.",
         "saveError": "Speichern fehlgeschlagen. Bitte versuche es erneut.",
         "loadError": "Die Notiz konnte nicht geladen werden.",
@@ -5644,14 +5638,14 @@
         "title": "Dokumente automatisch mit KI lesen",
         "subLabel": "Dokumente werden von deinem konfigurierten KI-Anbieter gelesen und indiziert, ohne dass du jedes Dokument einzeln bestätigen musst.",
         "honesty": "Wenn aktiviert, wird jedes hochgeladene Dokument an deinen konfigurierten KI-Anbieter gesendet, um gelesen, beschrieben und für die Suche indiziert zu werden – ohne Bestätigung pro Dokument. Das Einschalten wirkt außerdem rückwirkend: Bereits hochgeladene Dokumente ohne Zusammenfassung werden ebenfalls gesendet, bis zu 200 pro Einschaltvorgang. Das geschieht auf dem Server, und der Inhalt des Dokuments verlässt dabei diese Maschine in Richtung dieses Anbieters. Wenn dein konfigurierter Anbieter eine Abo-Verbindung ist (ein angemeldetes KI-Konto statt eines API-Schlüssels), gelten dessen eigene Datenschutzeinstellungen – Abo-Anbieter dürfen den Inhalt zur Verbesserung ihrer Modelle verwenden, und kein Auftragsverarbeitungsvertrag deckt das ab. Dokumente, die von einem selbst gehosteten lokalen Modell gelesen werden, verlassen deinen Server nie. Standardmäßig aus; aktiviere es nur, wenn du diesen Kompromiss für deine Dokumente akzeptierst.",
-        "confirm": "Ich verstehe – automatisches KI-Lesen aktivieren",
+        "confirm": "Verstanden — aktivieren",
         "cancel": "Abbrechen"
       },
       "centralCodex": {
         "title": "Gemeinsamen KI-Zugang des Servers nutzen",
         "subLabel": "Leite KI-Anfragen über die vom Betreiber für diesen Server eingerichtete Verbindung — zusätzlich zu deinen eigenen Anbietern als Rückfallebene.",
         "honesty": "Der gemeinsame Zugang ist ein einzelnes angemeldetes KI-Konto, das der Betreiber für alle auf diesem Server verbunden hat — nicht dein eigener Schlüssel. Anfragen darüber werden vom Anbieter standardmäßig zum Training genutzt und von keiner Auftragsverarbeitungsvereinbarung gedeckt, die Stunden- und Wochenlimits des Kontos teilst du dir mit allen anderen, die zugestimmt haben, und deine eigenen Anbieter werden weiterhin zuerst versucht. Aktiviere es nur, wenn du diesen Kompromiss akzeptierst.",
-        "confirm": "Verstanden — gemeinsame Verbindung nutzen",
+        "confirm": "Verstanden — Verbindung nutzen",
         "cancel": "Abbrechen"
       },
       "consent": {
@@ -5673,7 +5667,7 @@
         "description": "Lege fest, wie Distanzen und Geschwindigkeiten in Diagrammen und Kacheln angezeigt werden.",
         "metric": "Metrisch",
         "imperial": "Imperial",
-        "saved": "Einheiten-Einstellung gespeichert.",
+        "saved": "Einheiten-Einstellung gespeichert",
         "saveError": "Einheiten-Einstellung konnte nicht gespeichert werden."
       }
     },
@@ -5861,7 +5855,7 @@
       "errorReconnect": "Fehler — neu verbinden",
       "warningServerError": "Sync fehlgeschlagen",
       "failureCount": "{count}/{threshold}",
-      "parkedReconnect": "Pausiert — manuell wieder verbinden",
+      "parkedReconnect": "Pausiert — neu verbinden",
       "notConnected": "Nicht verbunden",
       "justNow": "gerade eben",
       "minutesAgo": "vor {count} min",
@@ -5945,6 +5939,7 @@
       "repository": "Quellcode",
       "changelog": "Changelog",
       "docs": "Dokumentation",
+      "credits": "Credits & Datenquellen",
       "linksHeading": "Quellen & Dokumentation",
       "newerAvailable": "Neue Version: {tag}"
     },
@@ -6038,7 +6033,7 @@
       "expiryInvalid": "Die Gültigkeit muss zwischen 1 und {max} Tagen liegen.",
       "create": "Link erstellen",
       "tokenCreated": "Freigabe-Link erstellt",
-      "copied": "In die Zwischenablage kopiert.",
+      "copied": "In die Zwischenablage kopiert",
       "activeTitle": "Aktive Links",
       "noActive": "Keine aktiven Freigabe-Links.",
       "created": "Erstellt",
@@ -6190,7 +6185,7 @@
       "revokeSession": "Abmelden",
       "revokeError": "Anfrage konnte nicht abgeschlossen werden. Bitte erneut versuchen.",
       "signOutEverywhere": "Überall sonst abmelden",
-      "signOutEverywhereDone": "{count} andere Sitzung(en) abgemeldet.",
+      "signOutEverywhereDone": "{count} andere Sitzung(en) abgemeldet",
       "activityTitle": "Sicherheitsaktivität",
       "activityDescription": "Letzte Anmeldungen, Sicherheitsänderungen und Datenexporte deines Kontos.",
       "activityEmpty": "Noch keine Sicherheitsaktivität.",
@@ -6271,7 +6266,7 @@
         "revokeError": "Gerät konnte nicht entfernt werden. Bitte erneut versuchen.",
         "revoke": "Entfernen",
         "revokeAll": "Alle Geräte vergessen",
-        "revokeAllDone": "{count} vertrauenswürdige(s) Gerät(e) entfernt.",
+        "revokeAllDone": "{count} vertrauenswürdige(s) Gerät(e) entfernt",
         "unnamed": "Unbekanntes Gerät",
         "current": "Dieses Gerät",
         "expires": "Vertraut bis {date}",
@@ -6596,13 +6591,13 @@
       "maxUsesLabel": "Maximale Nutzungen",
       "maxUsesHint": "Wie viele Registrierungen dieser Link zulässt (1–50).",
       "createConfirm": "Einladung erstellen",
-      "createdToast": "Einladung erstellt.",
+      "createdToast": "Einladung erstellt",
       "createError": "Einladung konnte nicht erstellt werden.",
       "tokenTitle": "Einladungslink",
       "tokenOnceHint": "Nur jetzt kopierbar — kopiere den Link oder lass den QR-Code scannen.",
       "hashExplainer": "Gespeichert wird nur ein Hash des Links — er kann später nicht erneut angezeigt werden. Geht er verloren: Einladung widerrufen und neu erstellen.",
       "copyLink": "Link kopieren",
-      "copiedToast": "Link kopiert.",
+      "copiedToast": "Link kopiert",
       "copyError": "Kopieren fehlgeschlagen.",
       "qrAlt": "QR-Code des Einladungslinks",
       "loadError": "Einladungen konnten nicht geladen werden.",
@@ -7345,7 +7340,7 @@
       "saveError": "Speichern fehlgeschlagen. Bitte später erneut versuchen.",
       "hourLabel": "Erinnerungszeit",
       "hourAria": "Stunde der Stimmungs-Erinnerung",
-      "hourSavedToast": "Erinnerungszeit aktualisiert.",
+      "hourSavedToast": "Erinnerungszeit aktualisiert",
       "detail": "Greift nur auf bereits eingerichtete Kanäle (Telegram, ntfy, Web Push, Apple Push) zurück und schweigt, sobald du heute geloggt hast."
     },
     "coachNudge": {
@@ -7386,8 +7381,8 @@
       "leadLabel": "Vorlaufzeit zum Nachbestellen (Tage)",
       "leadAria": "Vorlaufzeit zum Nachbestellen in Tagen",
       "leadHelp": "Die Warnung kommt um so viele Tage plus ein Dosisintervall früher, damit der Nachschub vor deiner letzten Dosis eintrifft. Ein einzelnes Medikament kann diesen Wert auf seinem Bestand-Tab überschreiben.",
-      "leadSavedToast": "Vorlaufzeit gespeichert.",
-      "savedToast": "Vorratsschwelle gespeichert.",
+      "leadSavedToast": "Vorlaufzeit gespeichert",
+      "savedToast": "Vorratsschwelle gespeichert",
       "enabledToast": "Vorratswarnungen aktiviert.",
       "disabledToast": "Vorratswarnungen deaktiviert.",
       "saveError": "Speichern fehlgeschlagen. Bitte später erneut versuchen.",
@@ -8047,10 +8042,10 @@
       "protected": "Ob beim Verkehr verhütet wurde.",
       "protectedLabel": "Was bedeutet geschützt?"
     },
-    "saveSuccess": "Eintrag gespeichert.",
-    "deleteSuccess": "Eintrag gelöscht.",
-    "periodStartSaved": "Periodenbeginn gespeichert.",
-    "periodEndSaved": "Periodenende gespeichert.",
+    "saveSuccess": "Eintrag gespeichert",
+    "deleteSuccess": "Eintrag gelöscht",
+    "periodStartSaved": "Periodenbeginn gespeichert",
+    "periodEndSaved": "Periodenende gespeichert",
     "startedPeriodOnDate": "Periode hat an diesem Tag begonnen",
     "endedPeriodOnDate": "Periode an diesem Tag beendet"
   },
@@ -9311,7 +9306,7 @@
       "freeText": {
         "label": "Freitext-Ergänzung (Allergien & Unverträglichkeiten)",
         "hint": "Eine Freitext-Ergänzung zur strukturierten Liste oben, für Kontext, den ein einzelner Eintrag nicht abbilden kann.",
-        "savedToast": "Allergie-Notiz gespeichert.",
+        "savedToast": "Allergie-Notiz gespeichert",
         "saveError": "Speichern fehlgeschlagen. Bitte versuche es erneut."
       }
     },
@@ -9370,7 +9365,7 @@
       "conditionsLabel": "Chronische Erkrankungen",
       "focusLabel": "Worauf der Coach achtet",
       "loadError": "Vorerkrankungen konnten nicht geladen werden.",
-      "savedToast": "Erkrankungen gespeichert.",
+      "savedToast": "Erkrankungen gespeichert",
       "saveError": "Speichern fehlgeschlagen. Bitte versuche es erneut."
     },
     "emergency": {
@@ -9474,7 +9469,7 @@
     },
     "toast": {
       "duplicate": "Bereits gespeichert — das vorhandene Dokument wird hervorgehoben.",
-      "deleted": "Dokument gelöscht.",
+      "deleted": "Dokument gelöscht",
       "restoreFailed": "Das Dokument konnte nicht wiederhergestellt werden."
     },
     "timeline": {
@@ -9647,9 +9642,9 @@
       "unverifiedNoteOther": "{count} Werte müssen noch geprüft werden und bleiben offen.",
       "finish": "Prüfung abschließen",
       "confirmFailed": "Die Prüfung konnte nicht gespeichert werden. Versuche es erneut.",
-      "savedToastOne": "1 Wert gespeichert.",
-      "savedToastFew": "{count} Werte gespeichert.",
-      "savedToastOther": "{count} Werte gespeichert.",
+      "savedToastOne": "1 Wert gespeichert",
+      "savedToastFew": "{count} Werte gespeichert",
+      "savedToastOther": "{count} Werte gespeichert",
       "nothingSavedToast": "Prüfung gespeichert. Es wurden keine Werte übernommen.",
       "extract": "Laborwerte auslesen",
       "extracting": "Liest aus…",
@@ -10190,7 +10185,7 @@
       "errorRateLimit": "Zu viele Profile in der letzten Stunde angelegt. Warte etwas und versuche es erneut."
     },
     "toast": {
-      "savedTo": "In der Akte von {name} gespeichert."
+      "savedTo": "In der Akte von {name} gespeichert"
     },
     "activityVerb": {
       "measurementCreate": "{name} hat einen Messwert eingetragen",

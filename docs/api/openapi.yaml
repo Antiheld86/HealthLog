@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HealthLog API
-  version: 1.37.18
+  version: 1.37.19
   description: >-
     Self-hosted personal-health-tracking PWA — public API surface for the iOS native client and external ingest.
 
@@ -3924,6 +3924,79 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CreateMedicationIntakeResponse"
+        "401": *a1
+        "403": *a6
+        "404":
+          description: Medication not found (or owned by another user).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422": *a3
+        "429": *a4
+    get:
+      tags:
+        - Medications
+      summary: List a medication's intake events
+      description: "Paged intake history for one medication (tombstoned rows excluded). `status` filters by action state:
+        `all` (default, byte-stable pre-v1.4.37 contract), `taken`, `skipped`, or `completed` (taken OR skipped — hides
+        the ambiguous never-confirmed rows). Sorting by `takenAt` pins NULLs last so skipped/planned rows do not float
+        above real timestamps."
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+        - in: query
+          name: limit
+          schema:
+            default: 25
+            type: integer
+            minimum: 1
+            maximum: 500
+        - in: query
+          name: offset
+          schema:
+            default: 0
+            type: integer
+            minimum: 0
+            maximum: 9007199254740991
+        - in: query
+          name: sortBy
+          schema:
+            default: scheduledFor
+            type: string
+            enum:
+              - scheduledFor
+              - takenAt
+              - source
+              - createdAt
+        - in: query
+          name: sortDir
+          schema:
+            default: desc
+            type: string
+            enum:
+              - asc
+              - desc
+        - in: query
+          name: status
+          schema:
+            default: all
+            type: string
+            enum:
+              - all
+              - taken
+              - skipped
+              - completed
+      responses:
+        "200":
+          description: Intake event page.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListMedicationIntakeEventsResponse"
         "401": *a1
         "403": *a6
         "404":
@@ -17853,6 +17926,18 @@ components:
             - type: string
             - type: "null"
           description: Per-schedule dose override. NULL means the schedule inherits `Medication.dose`.
+        unitsPerDose:
+          anyOf:
+            - type: number
+            - type: "null"
+          description: v1.37.10 (#219) — per-slot inventory-units override (may be a split-pill fraction). NULL means the schedule
+            inherits the medication-level `unitsPerDose`. Kept raw so an edit surface can distinguish an explicit value
+            from inheritance; consumers wanting the effective figure read `resolvedUnitsPerDose`.
+        resolvedUnitsPerDose:
+          type: number
+          description: v1.37.19 — the EFFECTIVE units one dose of this slot consumes, resolved server-side (`schedule.unitsPerDose
+            ?? medication.unitsPerDose`, matching the intake consumption resolver). Always present; clients never
+            re-derive the inheritance rule.
         daysOfWeek:
           anyOf:
             - type: string
@@ -17917,6 +18002,8 @@ components:
         - windowEnd
         - label
         - dose
+        - unitsPerDose
+        - resolvedUnitsPerDose
         - daysOfWeek
         - timesOfDay
         - reminderGraceMinutes
@@ -22842,19 +22929,27 @@ components:
         id:
           type: string
         sportType:
-          type: string
+          anyOf:
+            - type: string
+            - type: "null"
         startedAt:
-          type: string
-          format: date-time
-          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
         endedAt:
-          type: string
-          format: date-time
-          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
         durationSec:
-          type: integer
-          minimum: 0
-          maximum: 9007199254740991
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 9007199254740991
+            - type: "null"
         distanceM:
           anyOf:
             - type: number
@@ -23639,9 +23734,20 @@ components:
               minimum: -9007199254740991
               maximum: 9007199254740991
             - type: "null"
-          description: "v1.16.10 — dose-derived stock: `floor(stockUnitsRemaining / unitsPerDose)`, where `unitsPerDose` may be a
-            fraction (½ tablet ⇒ twice the doses). Stays a whole-dose count. NULL when inventory tracking is off. Drives
+          description: "v1.16.10 — dose-derived stock as a whole-dose count. v1.37.19 — slot-aware: the divisor is the
+            schedule-weighted average units per dose (each slot's `resolvedUnitsPerDose` weighted by its cadence share),
+            falling back to the medication-level `unitsPerDose` when no schedule derives a consumption rate.
+            `unitsPerDose` may be a fraction (½ tablet ⇒ twice the doses). NULL when inventory tracking is off. Drives
             the table view's Bestand column. Read-only — aggregated, not stored."
+        runwayDays:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: v1.37.19 — projected whole days the usable stock covers under the slot-aware burn rate (the same math the
+            low-stock notification engine runs, so the wire and the push can never disagree). NULL = inventory tracking
+            off or no consuming cadence derivable; 0 = tracking on, supply ran out. Read-only — computed, not stored.
       required:
         - id
         - name
@@ -23673,6 +23779,7 @@ components:
         - todayEventCount
         - stockUnitsRemaining
         - stockDosesRemaining
+        - runwayDays
       additionalProperties: false
       description: List-row variant of the medication resource enriched with the joined `category`, the v1.32.25
         `externalSource` provenance echo, `lastTakenAt`, `todayEventCount`, and the v1.16.10 aggregated stock fields
@@ -23841,6 +23948,27 @@ components:
             $ref: "#/components/schemas/MedicationScheduleOutput"
         category:
           $ref: "#/components/schemas/MedicationCategory"
+        stockUnitsRemaining:
+          anyOf:
+            - type: number
+            - type: "null"
+          description: "v1.37.19 — usable inventory units left (same semantics as the list entry's field): NULL = inventory
+            tracking off; 0 = tracking on, supply ran out."
+        stockDosesRemaining:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: v1.37.19 — slot-aware dose-derived stock, mirroring the list entry's field.
+        runwayDays:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: v1.37.19 — projected whole days the usable stock covers under the slot-aware burn rate; NULL = tracking off
+            or no consuming cadence.
       required:
         - id
         - name
@@ -23865,6 +23993,9 @@ components:
         - updatedAt
         - schedules
         - category
+        - stockUnitsRemaining
+        - stockDosesRemaining
+        - runwayDays
       additionalProperties: false
       description: Detail variant of the medication resource enriched with the joined `category`. The base medication fields
         are inlined; see the `Medication` component for their semantics.
@@ -24048,6 +24179,17 @@ components:
             - type: "null"
         skipped:
           type: boolean
+        autoMissed:
+          type: boolean
+          description: True when the nightly cron closed the slot as missed (no user action). Auto-missed rows count against
+            adherence but never consume inventory.
+        attributionSource:
+          type: string
+          enum:
+            - AUTO
+            - USER_PIN
+          description: "How the row bound to its schedule slot: AUTO = the write path's nearest-slot resolution; USER_PIN = the
+            user explicitly pinned the slot (the dedup converge keeps the pinned row)."
         source:
           type: string
           enum:
@@ -24064,6 +24206,56 @@ components:
           type: string
           format: date-time
           pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        updatedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        injectionSite:
+          anyOf:
+            - type: string
+              enum:
+                - ABDOMEN_LEFT
+                - ABDOMEN_RIGHT
+                - ABDOMEN_UPPER_LEFT
+                - ABDOMEN_UPPER_RIGHT
+                - THIGH_LEFT
+                - THIGH_RIGHT
+                - UPPER_ARM_LEFT
+                - UPPER_ARM_RIGHT
+            - type: "null"
+          description: Recorded injection site for a site-tracked medication (GLP-1 rotation surface). NULL when the medication
+            does not track sites or none was recorded.
+        doseTaken:
+          anyOf:
+            - type: string
+            - type: "null"
+          description: Free-text dose actually taken when it differed from the scheduled dose (titration weeks, split doses). NULL
+            = the scheduled dose.
+        inventoryConsumption:
+          anyOf:
+            - {}
+            - type: "null"
+          description: JSON ledger of the container decrements this intake caused (`[{itemId, units}]`), written by the
+            consumption hook. NULL when nothing was consumed (skipped / no tracked inventory).
+        externalId:
+          anyOf:
+            - type: string
+            - type: "null"
+          description: v1.28 — client-supplied stable id for externally-mirrored intakes (Apple Health sync); the dedup key for
+            re-synced rows. NULL for native rows.
+        syncVersion:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: Monotonic per-row version for incremental sync readers; bumps on every mutation.
+        deletedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
+          description: Soft-delete tombstone. Non-null rows are excluded from every list/aggregate read; sync readers use it to
+            propagate deletions.
       required:
         - id
         - userId
@@ -24071,17 +24263,73 @@ components:
         - scheduledFor
         - takenAt
         - skipped
+        - autoMissed
+        - attributionSource
         - source
         - idempotencyKey
         - createdAt
+        - updatedAt
+        - injectionSite
+        - doseTaken
+        - inventoryConsumption
+        - externalId
+        - syncVersion
+        - deletedAt
       additionalProperties: false
-      description: Single dose log row. `takenAt` is non-null for confirmed intakes; `skipped:true` represents a
-        deliberately-missed dose (no inventory consumption).
+      description: Single dose log row — the FULL row shape both the intake POST (201/200) and the intake list GET return.
+        `takenAt` is non-null for confirmed intakes; `skipped:true` represents a deliberately-missed dose (no inventory
+        consumption).
     CreateMedicationIntakeResponse:
       type: object
       properties:
         data:
           $ref: "#/components/schemas/MedicationIntakeEvent"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    ListMedicationIntakeEventsResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            events:
+              type: array
+              items:
+                $ref: "#/components/schemas/MedicationIntakeEvent"
+            meta:
+              type: object
+              properties:
+                total:
+                  type: integer
+                  minimum: 0
+                  maximum: 9007199254740991
+                limit:
+                  type: integer
+                  exclusiveMinimum: 0
+                  maximum: 9007199254740991
+                offset:
+                  type: integer
+                  minimum: 0
+                  maximum: 9007199254740991
+              required:
+                - total
+                - limit
+                - offset
+              additionalProperties: false
+          required:
+            - events
+            - meta
+          additionalProperties: false
         error:
           type: "null"
         meta:
@@ -41545,6 +41793,18 @@ components:
             - type: string
             - type: "null"
           description: Per-schedule dose override. NULL means the schedule inherits `Medication.dose`.
+        unitsPerDose:
+          anyOf:
+            - type: number
+            - type: "null"
+          description: v1.37.10 (#219) — per-slot inventory-units override (may be a split-pill fraction). NULL means the schedule
+            inherits the medication-level `unitsPerDose`. Kept raw so an edit surface can distinguish an explicit value
+            from inheritance; consumers wanting the effective figure read `resolvedUnitsPerDose`.
+        resolvedUnitsPerDose:
+          type: number
+          description: v1.37.19 — the EFFECTIVE units one dose of this slot consumes, resolved server-side (`schedule.unitsPerDose
+            ?? medication.unitsPerDose`, matching the intake consumption resolver). Always present; clients never
+            re-derive the inheritance rule.
         daysOfWeek:
           anyOf:
             - type: string
@@ -41609,6 +41869,8 @@ components:
         - windowEnd
         - label
         - dose
+        - unitsPerDose
+        - resolvedUnitsPerDose
         - daysOfWeek
         - timesOfDay
         - reminderGraceMinutes

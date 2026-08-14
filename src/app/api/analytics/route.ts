@@ -233,19 +233,21 @@ async function buildAnalyticsResponse(user: AuthedUser, locale: Locale) {
   // identical to the previous fan-out output for every field the
   // dashboard actually consumes:
   //   - `count / latest / min / max / mean` from DAY buckets
-  //   - `avg7 / avg30 / slope7 / slope30 / slope90` from the narrow query
+  //   - `avg7 / avg30 / slope7 / slope30` from the narrow query
   //   - `avg30LastMonth` from the same narrow query (added in this
   //     release; previously only the live walk produced it)
   //   - `avg30LastYear` populated for any type whose WMY tier carries
   //     the year-ago window
   //   - `lastSeenByType` from the `DISTINCT ON (type)` latest read
   //
-  // The two fields the slim path leaves at default values are
-  // `anomalyCount` (always 0) — the insights pipeline consumes it from
-  // its own `comprehensive-aggregator` narrow query, never from this
-  // route — and `avg30LastYear` on types with no WMY coverage, which
-  // matches the pre-fix behaviour for tenants whose year-ago window
-  // happened to fall outside the 425-day floor.
+  // `anomalyCount` and `slope90` left this wire in v1.37.19: the slim
+  // path could never compute the former (it always reported 0) and no
+  // client component read the latter — the insights pipeline computes
+  // both from its own `summarize()` / comprehensive-aggregator reads.
+  // The one field the slim path leaves at a default value is
+  // `avg30LastYear` on types with no WMY coverage, which matches the
+  // pre-fix behaviour for tenants whose year-ago window happened to
+  // fall outside the 425-day floor.
   const slim = await computeSummariesSlice(user.id);
   const results = slim.summaries;
   const lastSeenByType = slim.lastSeenByType;

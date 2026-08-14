@@ -115,7 +115,8 @@ function render(node: React.ReactElement, locale: "en" | "de" = "en") {
 // section in. The heading-level smoke checks render the body THROUGH the frame
 // (mirroring production) so they assert what the user actually sees.
 function renderFramed(
-  slug: SettingsSectionSlug,
+  // A slug or a layout-hub child id — see the harness note.
+  slug: SettingsSectionSlug | "dashboard",
   node: React.ReactElement,
   locale: "en" | "de" = "en",
 ) {

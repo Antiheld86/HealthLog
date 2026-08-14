@@ -10,27 +10,16 @@ import { AdvancedSection } from "@/components/settings/advanced-section";
 import { AiSection } from "@/components/settings/ai-section";
 import { ApiSection } from "@/components/settings/api-section";
 import { CoachSection } from "@/components/settings/coach-section";
-import { DashboardSection } from "@/components/settings/dashboard-section";
 import { EnvironmentSection } from "@/components/settings/environment-section";
 import { ExportSection } from "@/components/settings/export-section";
 import { GesundheitsakteSection } from "@/components/settings/gesundheitsakte-section";
-import { IllnessSection } from "@/components/settings/illness-section";
-import { InsightsSection } from "@/components/settings/insights-section";
 import { IntegrationsSection } from "@/components/settings/integrations-section";
-import { LabsSection } from "@/components/settings/labs-section";
 import { LayoutSection } from "@/components/settings/layout-section";
-import { MedicationsSection } from "@/components/settings/medications-section";
 import { McpSection } from "@/components/settings/mcp-section";
 import { ModulesSection } from "@/components/settings/modules-section";
-import { MoodSection } from "@/components/settings/mood-section";
 import { NotificationsSection } from "@/components/settings/notifications-section";
 import { PrivacySection } from "@/components/settings/privacy-section";
 import { ScoreSection } from "@/components/settings/score-section";
-import { SectionPlaceholder } from "@/components/settings/section-placeholder";
-import { VorsorgeSection } from "@/components/settings/vorsorge-section";
-// v1.18.1 (D4) — `sources` is a standalone left-side entry (split out of the
-// Integrations sub-tabs). v1.25.3 — `channels` folded into Notifications.
-import { SharingSection } from "@/components/settings/sharing-section";
 import { SourcesSection } from "@/components/settings/sources-section";
 import { ThresholdsSection } from "@/components/settings/thresholds-section";
 import {
@@ -72,21 +61,13 @@ const SECTION_COMPONENTS: Record<
   sources: SourcesSection,
   notifications: NotificationsSection,
   layout: LayoutSection,
-  dashboard: DashboardSection,
-  insights: InsightsSection,
-  medications: MedicationsSection,
-  mood: MoodSection,
-  labs: LabsSection,
-  illness: IllnessSection,
   environment: EnvironmentSection,
   anamnesis: AnamnesisSection,
   score: ScoreSection,
-  vorsorge: VorsorgeSection,
   thresholds: ThresholdsSection,
   api: ApiSection,
   mcp: McpSection,
   gesundheitsakte: GesundheitsakteSection,
-  sharing: SharingSection,
   export: ExportSection,
   advanced: AdvancedSection,
   privacy: PrivacySection,
@@ -107,32 +88,25 @@ export default async function SettingsSectionPage({ params }: PageProps) {
     notFound();
   }
 
+  // `SECTION_COMPONENTS` is an exhaustive Record over the slug union, so a
+  // slug without a wired component is a compile error — the old runtime
+  // `<SectionPlaceholder>` fallback could never render and was removed.
   const SectionComponent = SECTION_COMPONENTS[section];
-  // Defensive fallback: in theory unreachable since `isSettingsSectionSlug`
-  // guards the slug, but a future slug added to `SETTINGS_SECTION_SLUGS`
-  // without a wired component would otherwise crash silently — placeholder
-  // surfaces the gap visually instead.
   // v1.18.6.1 — the heading + subtitle (and the Layout-hub "← back" link)
-  // now live in `<SettingsShell>`, which places them in their own grid row
+  // live in `<SettingsShell>`, which places them in their own grid row
   // spanning only the content column so the left nav's first item lines up
   // with the top of the first card. The page body is pure card content,
   // wrapped in the labelled `<section>` so the historic
   // `settings-section-<slug>-title` `aria-labelledby` linkage still resolves.
-  const body = SectionComponent ? (
-    <section
-      aria-labelledby={`settings-section-${section}-title`}
-      className="space-y-6"
-    >
-      <SectionComponent />
-    </section>
-  ) : (
-    <SectionPlaceholder slug={section} />
-  );
-
   return (
     <SettingsShell active={section}>
       <RecordSettingsSectionGate section={section}>
-        {body}
+        <section
+          aria-labelledby={`settings-section-${section}-title`}
+          className="space-y-6"
+        >
+          <SectionComponent />
+        </section>
       </RecordSettingsSectionGate>
     </SettingsShell>
   );

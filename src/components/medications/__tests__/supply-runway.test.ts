@@ -8,8 +8,11 @@ import { describe, it, expect } from "vitest";
 import {
   cadenceIntervalDays,
   classifyLowStockState,
+  effectiveUnitsPerDose,
   estimateDailyDoseCount,
+  estimateDailyUnitsCount,
   estimateRunwayDays,
+  estimateUnitsRunwayDays,
   lowStockTriggerDays,
   supplyRunwayDates,
   type RunwaySchedule,
@@ -288,5 +291,57 @@ describe("supplyRunwayDates — v1.17.0", () => {
       leadDays: 10,
     });
     expect(reorderBy.toISOString().slice(0, 10)).toBe("2026-06-01");
+  });
+});
+
+// v1.37.19 (iOS #25 parity) — slot-aware burn rate.
+//
+// Watched red: with `estimateDailyUnitsCount` ignoring per-slot
+// `unitsPerDose` (the pre-fix behaviour — dose rate × medication-level
+// units only), the mixed-dose case below computes 2 units/day instead of
+// 1.5 and both the effective-units and the runway assertions fail.
+describe("slot-aware units math (#219 parity)", () => {
+  const wholeMorning = schedule({ timesOfDay: ["08:00"], unitsPerDose: 1 });
+  const halfNoon = schedule({ timesOfDay: ["12:00"], unitsPerDose: 0.5 });
+
+  it("weights each slot's own unitsPerDose by its cadence share", () => {
+    // 1 unit + 0.5 unit per day = 1.5 units/day.
+    expect(estimateDailyUnitsCount([wholeMorning, halfNoon], 1)).toBeCloseTo(
+      1.5,
+    );
+  });
+
+  it("inherits the medication level for a NULL per-slot value", () => {
+    expect(
+      estimateDailyUnitsCount(
+        [schedule({ timesOfDay: ["08:00"], unitsPerDose: null }), halfNoon],
+        2,
+      ),
+    ).toBeCloseTo(2.5);
+  });
+
+  it("derives the schedule-weighted average units per dose", () => {
+    // 1.5 units over 2 doses per day → 0.75 units per dose.
+    expect(effectiveUnitsPerDose([wholeMorning, halfNoon], 1)).toBeCloseTo(
+      0.75,
+    );
+  });
+
+  it("falls back to the medication level with no consuming schedule", () => {
+    expect(effectiveUnitsPerDose([], 2)).toBe(2);
+    expect(effectiveUnitsPerDose([], 0)).toBe(1);
+  });
+
+  it("projects the units runway under the slot-aware rate", () => {
+    // 15 units at 1.5 units/day → 10 days.
+    expect(estimateUnitsRunwayDays(15, [wholeMorning, halfNoon], 1)).toBe(10);
+  });
+
+  it("is honest about an exhausted supply (0 days, not null)", () => {
+    expect(estimateUnitsRunwayDays(0, [wholeMorning], 1)).toBe(0);
+  });
+
+  it("returns null with no consuming cadence", () => {
+    expect(estimateUnitsRunwayDays(10, [], 1)).toBeNull();
   });
 });

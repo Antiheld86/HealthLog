@@ -95,7 +95,10 @@ async function respondWithExistingMirror(
     ...medication,
     unitsPerDose: Number(medication.unitsPerDose),
     // #219 — Decimal → number for the per-schedule column too.
-    schedules: serializeScheduleUnitsPerDose(medication.schedules),
+    schedules: serializeScheduleUnitsPerDose(
+      medication.schedules,
+      Number(medication.unitsPerDose),
+    ),
     category,
   });
 }
@@ -413,7 +416,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
       ...medication,
       unitsPerDose: Number(medication.unitsPerDose),
       // #219 — Decimal → number for the per-schedule column too.
-      schedules: serializeScheduleUnitsPerDose(medication.schedules),
+      schedules: serializeScheduleUnitsPerDose(
+        medication.schedules,
+        medication.unitsPerDose,
+      ),
       category: normalizedCategory,
     },
     201,

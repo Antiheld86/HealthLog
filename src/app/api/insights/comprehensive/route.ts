@@ -535,7 +535,7 @@ export async function buildComprehensiveResponse(user: AuthedUser) {
     bpPctInTarget,
     weightSlope30: summaries.WEIGHT?.slope30?.slope ?? null,
     pulseAvg30: summaries.PULSE?.avg30 ?? null,
-    pulseAnomalyCount: summaries.PULSE?.anomalyCount,
+    pulseAnomalyCount: summaries.PULSE?.anomalyCount ?? 0,
     medications: medCompliance.map((m) => ({
       name: m.name,
       compliance7: m.compliance7,

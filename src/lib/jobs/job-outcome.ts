@@ -128,6 +128,8 @@ export const JOB_FACT_ALLOWLIST: ReadonlySet<string> = new Set([
   "module_off",
   "mood_entries_migrated",
   "mood_pruned",
+  // v1.37.19 (A3-6) — ignored Coach reminders auto-dismissed at the nag cap.
+  "nag_dismissed",
   "notifications_dispatched",
   "notifications_failed",
   "notified",
@@ -195,6 +197,8 @@ export const JOB_FACT_ALLOWLIST: ReadonlySet<string> = new Set([
   "stored",
   "subscription_repair_failed",
   "summaries_enqueued",
+  // v1.37.19 (A7-4) — stale-PENDING summary rows the hourly reaper healed.
+  "summary_pending_healed",
   "suppressed_client_managed",
   "suppressed_discreet",
   "thumbnails_enqueued",

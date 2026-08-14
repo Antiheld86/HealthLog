@@ -25,6 +25,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, ShieldCheck, ShieldOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
 import { formatDateTime } from "@/lib/format";
 import { useTranslations } from "@/lib/i18n/context";
@@ -101,9 +102,24 @@ export function AiConsentCard({
     },
   });
 
+  if (!isAuthenticated) return null;
+
   // Say nothing until the state is known: a card that flashes "withdrawn"
   // before the receipt arrives would misreport the user's own decision.
-  if (!isAuthenticated || isLoading) return null;
+  // But hold the block's space with a skeleton mirroring the final shape —
+  // returning null here made the section pop in and shift everything
+  // below it once the receipt arrived.
+  if (isLoading) {
+    return (
+      <section className="space-y-3" data-slot="ai-consent">
+        <div className="space-y-1">
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-4 w-56" />
+        </div>
+        <Skeleton className="h-8 w-32" />
+      </section>
+    );
+  }
 
   // Narrow to the receipt itself rather than a boolean, so the branches
   // below can read its fields without an assertion.

@@ -116,7 +116,6 @@ function summary(partial: Partial<DataSummary>): DataSummary {
     avg30: null,
     slope7: null,
     slope30: null,
-    slope90: null,
     anomalyCount: 0,
     avg30LastMonth: null,
     avg30LastYear: null,

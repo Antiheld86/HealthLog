@@ -34,6 +34,10 @@ import type { Locale } from "@/lib/i18n/config";
 import { defaultLocale, locales } from "@/lib/i18n/config";
 import { wallClockInTz } from "@/lib/tz/wall-clock";
 import { dispatchNotification } from "@/lib/notifications/dispatcher";
+import {
+  claimNotificationEvent,
+  REMINDER_DEDUP_LOOKBACK_MS,
+} from "@/lib/notifications/reminder-dedup";
 import { getEvent } from "@/lib/logging/context";
 import { isModuleEnabled } from "@/lib/modules/gate";
 import type { ModuleKey } from "@/lib/modules/registry";
@@ -92,6 +96,8 @@ export interface MeasurementReminderSummary {
   skippedOutsideWindow: number;
   skippedModuleDisabled: number;
   skippedNoChannel: number;
+  /** v1.37.19 (A6-7) — slot already claimed for this local day (racing worker or crash-recovery replay). */
+  skippedAlreadyClaimed: number;
   /** v1.18.1 — expired COACH course-window reminders soft-deleted this tick. */
   expiredCleaned: number;
   failed: number;
@@ -204,6 +210,7 @@ export async function runMeasurementReminderTick(
     skippedOutsideWindow: 0,
     skippedModuleDisabled: 0,
     skippedNoChannel: 0,
+    skippedAlreadyClaimed: 0,
     expiredCleaned: 0,
     failed: 0,
   };
@@ -325,6 +332,28 @@ export async function runMeasurementReminderTick(
       // user was filed as handled and vanished from the card and the digest.
       // Now, when nothing delivers, the no-channel branch below leaves the
       // reminder overdue and visible.
+      // v1.37.19 (A6-7) — claim the slot BEFORE provider egress, the
+      // documented claim-first pattern from `reminder-dedup.ts`. The old
+      // order (dispatch, then advance `nextDueAt`) double-sent when the
+      // worker crashed between the two; the claim is the durable record
+      // that this reminder's due cycle went out today. The trade is the
+      // same one the medication tick accepts: a crash mid-dispatch burns
+      // the slot for this local day rather than risking a repeat, and the
+      // next local day starts clean.
+      const localDate = new Date(now).toLocaleDateString("sv-SE", {
+        timeZone: timezone,
+      });
+      const claimed = await claimNotificationEvent(prisma, {
+        recordUserId: reminder.user.id,
+        eventType: "MEASUREMENT_REMINDER",
+        dedupKey: `measurement:${reminder.id}:${localDate}`,
+        since: new Date(now.getTime() - REMINDER_DEDUP_LOOKBACK_MS),
+      });
+      if (!claimed) {
+        summary.skippedAlreadyClaimed += 1;
+        continue;
+      }
+
       const { title, body } = buildMeasurementReminderPayload(
         reminder.user.locale,
         reminder.label,
@@ -359,9 +388,11 @@ export async function runMeasurementReminderTick(
         },
       });
 
-      // No channel succeeded — leave `nextDueAt` where it is so the next
-      // tick (or the user's next channel) retries. The reminder simply
-      // stays overdue, which the surface already shows as "überfällig".
+      // No channel succeeded — leave `nextDueAt` where it is. The claim
+      // above holds for the rest of the local day (claim-first burns the
+      // slot rather than re-flooding a failing channel — see
+      // reminder-dedup.ts); the reminder stays overdue and visible on the
+      // surface, and the next local day retries with a fresh key.
       if (!outcome.dispatched) {
         summary.skippedNoChannel += 1;
         continue;

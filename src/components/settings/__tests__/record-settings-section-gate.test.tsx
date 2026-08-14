@@ -44,7 +44,7 @@ vi.mock("../record-anamnesis-section", () => ({
 
 import { RecordSettingsSectionGate } from "../record-settings-section-gate";
 
-function render(section: "modules" | "integrations" | "anamnesis" | "labs") {
+function render(section: "modules" | "integrations" | "anamnesis" | "score") {
   return renderToStaticMarkup(
     <I18nProvider initialLocale="en">
       <RecordSettingsSectionGate section={section}>
@@ -140,7 +140,7 @@ describe("RecordSettingsSectionGate", () => {
     });
 
     it("does not lend its page to another destination of the same kind", () => {
-      // `labs` is `adult-shared-unavailable` today, so this passes for the
+      // `score` is `adult-shared-unavailable` today, so this passes for the
       // right reason now; the claim it pins is that the branch asks WHICH
       // page, not which category. A second `manage-writable` slug added
       // without an arm falls through to the refusal panel.
@@ -153,7 +153,7 @@ describe("RecordSettingsSectionGate", () => {
         canWrite: true,
       };
 
-      const html = render("labs");
+      const html = render("score");
 
       expect(html).not.toContain("record-anamnesis");
       expect(html).toContain("shared-record-settings-unavailable-title");

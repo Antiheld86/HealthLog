@@ -68,6 +68,17 @@ export const medicationScheduleResource = z
       .describe(
         "Per-schedule dose override. NULL means the schedule inherits `Medication.dose`.",
       ),
+    unitsPerDose: z
+      .number()
+      .nullable()
+      .describe(
+        "v1.37.10 (#219) — per-slot inventory-units override (may be a split-pill fraction). NULL means the schedule inherits the medication-level `unitsPerDose`. Kept raw so an edit surface can distinguish an explicit value from inheritance; consumers wanting the effective figure read `resolvedUnitsPerDose`.",
+      ),
+    resolvedUnitsPerDose: z
+      .number()
+      .describe(
+        "v1.37.19 — the EFFECTIVE units one dose of this slot consumes, resolved server-side (`schedule.unitsPerDose ?? medication.unitsPerDose`, matching the intake consumption resolver). Always present; clients never re-derive the inheritance rule.",
+      ),
     daysOfWeek: z
       .string()
       .nullable()
@@ -260,7 +271,14 @@ export const medicationListEntry = medicationResource
       .int()
       .nullable()
       .describe(
-        "v1.16.10 — dose-derived stock: `floor(stockUnitsRemaining / unitsPerDose)`, where `unitsPerDose` may be a fraction (½ tablet ⇒ twice the doses). Stays a whole-dose count. NULL when inventory tracking is off. Drives the table view's Bestand column. Read-only — aggregated, not stored.",
+        "v1.16.10 — dose-derived stock as a whole-dose count. v1.37.19 — slot-aware: the divisor is the schedule-weighted average units per dose (each slot's `resolvedUnitsPerDose` weighted by its cadence share), falling back to the medication-level `unitsPerDose` when no schedule derives a consumption rate. `unitsPerDose` may be a fraction (½ tablet ⇒ twice the doses). NULL when inventory tracking is off. Drives the table view's Bestand column. Read-only — aggregated, not stored.",
+      ),
+    runwayDays: z
+      .number()
+      .int()
+      .nullable()
+      .describe(
+        "v1.37.19 — projected whole days the usable stock covers under the slot-aware burn rate (the same math the low-stock notification engine runs, so the wire and the push can never disagree). NULL = inventory tracking off or no consuming cadence derivable; 0 = tracking on, supply ran out. Read-only — computed, not stored.",
       ),
   })
   .meta({
@@ -272,6 +290,26 @@ export const medicationListEntry = medicationResource
 export const medicationDetailEntry = medicationResource
   .extend({
     category: medicationCategoryEnum,
+    stockUnitsRemaining: z
+      .number()
+      .nullable()
+      .describe(
+        "v1.37.19 — usable inventory units left (same semantics as the list entry's field): NULL = inventory tracking off; 0 = tracking on, supply ran out.",
+      ),
+    stockDosesRemaining: z
+      .number()
+      .int()
+      .nullable()
+      .describe(
+        "v1.37.19 — slot-aware dose-derived stock, mirroring the list entry's field.",
+      ),
+    runwayDays: z
+      .number()
+      .int()
+      .nullable()
+      .describe(
+        "v1.37.19 — projected whole days the usable stock covers under the slot-aware burn rate; NULL = tracking off or no consuming cadence.",
+      ),
   })
   .meta({
     id: "MedicationDetail",
@@ -389,14 +427,70 @@ export const medicationIntakeEventResource = z
     scheduledFor: z.iso.datetime({ offset: true }),
     takenAt: z.iso.datetime({ offset: true }).nullable(),
     skipped: z.boolean(),
+    autoMissed: z
+      .boolean()
+      .describe(
+        "True when the nightly cron closed the slot as missed (no user action). Auto-missed rows count against adherence but never consume inventory.",
+      ),
+    attributionSource: z
+      .enum(["AUTO", "USER_PIN"])
+      .describe(
+        "How the row bound to its schedule slot: AUTO = the write path's nearest-slot resolution; USER_PIN = the user explicitly pinned the slot (the dedup converge keeps the pinned row).",
+      ),
     source: z.enum(["WEB", "API", "REMINDER", "IMPORT", "APPLE_HEALTH"]),
     idempotencyKey: z.string().nullable(),
     createdAt: z.iso.datetime({ offset: true }),
+    updatedAt: z.iso.datetime({ offset: true }),
+    injectionSite: z
+      .enum([
+        "ABDOMEN_LEFT",
+        "ABDOMEN_RIGHT",
+        "ABDOMEN_UPPER_LEFT",
+        "ABDOMEN_UPPER_RIGHT",
+        "THIGH_LEFT",
+        "THIGH_RIGHT",
+        "UPPER_ARM_LEFT",
+        "UPPER_ARM_RIGHT",
+      ])
+      .nullable()
+      .describe(
+        "Recorded injection site for a site-tracked medication (GLP-1 rotation surface). NULL when the medication does not track sites or none was recorded.",
+      ),
+    doseTaken: z
+      .string()
+      .nullable()
+      .describe(
+        "Free-text dose actually taken when it differed from the scheduled dose (titration weeks, split doses). NULL = the scheduled dose.",
+      ),
+    inventoryConsumption: z
+      .unknown()
+      .nullable()
+      .describe(
+        "JSON ledger of the container decrements this intake caused (`[{itemId, units}]`), written by the consumption hook. NULL when nothing was consumed (skipped / no tracked inventory).",
+      ),
+    externalId: z
+      .string()
+      .nullable()
+      .describe(
+        "v1.28 — client-supplied stable id for externally-mirrored intakes (Apple Health sync); the dedup key for re-synced rows. NULL for native rows.",
+      ),
+    syncVersion: z
+      .number()
+      .int()
+      .describe(
+        "Monotonic per-row version for incremental sync readers; bumps on every mutation.",
+      ),
+    deletedAt: z.iso
+      .datetime({ offset: true })
+      .nullable()
+      .describe(
+        "Soft-delete tombstone. Non-null rows are excluded from every list/aggregate read; sync readers use it to propagate deletions.",
+      ),
   })
   .meta({
     id: "MedicationIntakeEvent",
     description:
-      "Single dose log row. `takenAt` is non-null for confirmed intakes; `skipped:true` represents a deliberately-missed dose (no inventory consumption).",
+      "Single dose log row — the FULL row shape both the intake POST (201/200) and the intake list GET return. `takenAt` is non-null for confirmed intakes; `skipped:true` represents a deliberately-missed dose (no inventory consumption).",
   });
 
 export const medicationCadenceTimelinePoint = z

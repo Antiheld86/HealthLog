@@ -1011,8 +1011,10 @@ function VorsorgeCard({
   if (view === "list") {
     return (
       <>
-        <Card>
-          <CardContent className="flex items-center justify-between gap-3 px-4 py-2.5">
+        {/* Density lives on the Card (py-3 vs the default py-4 md:py-6);
+            the content slot keeps its own px-4 md:px-6 contract. */}
+        <Card className="py-3 md:py-3">
+          <CardContent className="flex items-center justify-between gap-3">
             <div className="min-w-0 space-y-0.5">
               <div className="flex flex-wrap items-center gap-x-2 text-sm">
                 <span className="truncate font-medium">

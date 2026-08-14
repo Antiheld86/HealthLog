@@ -253,7 +253,7 @@ export const GET = apiHandler(async () => {
     bpPctInTarget,
     weightSlope30: summaries.WEIGHT?.slope30?.slope ?? null,
     pulseAvg30: summaries.PULSE?.avg30 ?? null,
-    pulseAnomalyCount: summaries.PULSE?.anomalyCount,
+    pulseAnomalyCount: summaries.PULSE?.anomalyCount ?? 0,
     medications: medicationCompliance,
   });
 

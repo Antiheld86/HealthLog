@@ -107,7 +107,7 @@ describe("<CsvImportResultView> — result states", () => {
     );
     expect(html).toContain('data-outcome="success"');
     expect(html).toContain("text-success");
-    expect(html).toContain("Imported 4 new and updated 1.");
+    expect(html).toContain("Imported 4 new and updated 1");
     expect(html).not.toContain("skipped");
   });
 

@@ -76,6 +76,9 @@ vi.mock("@/lib/rollups/measurement-rollups", () => ({
   recomputeBucketsForMeasurement: vi.fn().mockResolvedValue(undefined),
   collapseToTypeDayKeys: vi.fn(() => []),
 }));
+vi.mock("@/lib/rollups/after-measurement-mutation", () => ({
+  afterMeasurementMutation: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("@/lib/daily/morning-refresh-trigger", () => ({
   maybeEnqueueMorningRefresh: vi.fn().mockResolvedValue(undefined),

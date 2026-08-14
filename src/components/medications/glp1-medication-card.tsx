@@ -124,6 +124,8 @@ export interface Glp1Medication {
   nextDueOverdue?: boolean;
   /** v1.16.10 — dose-derived stock from the list payload; null = inventory tracking off. */
   stockDosesRemaining?: number | null;
+  /** v1.37.19 — server-resolved slot-aware runway (days); null = off/no cadence. */
+  runwayDays?: number | null;
   /** v1.17.0 — per-medication reorder lead override (days); null = inherit the user default. */
   reorderLeadDays?: number | null;
   schedules: ScheduleLite[];
@@ -370,17 +372,21 @@ export function Glp1MedicationCard({
     medication.reorderLeadDays != null
       ? medication.reorderLeadDays
       : (thresholds?.reorderLeadDays ?? 10);
+  // v1.37.19 — prefer the server's slot-aware `runwayDays`; client
+  // estimate only as the stale-payload fallback.
   const stockRunwayDays =
     medication.stockDosesRemaining == null
       ? null
-      : medication.stockDosesRemaining > 0
-        ? estimateRunwayDays(
-            medication.stockDosesRemaining,
-            medication.schedules,
-          )
-        : estimateDailyDoseCount(medication.schedules) > 0
-          ? 0
-          : null;
+      : medication.runwayDays !== undefined
+        ? medication.runwayDays
+        : medication.stockDosesRemaining > 0
+          ? estimateRunwayDays(
+              medication.stockDosesRemaining,
+              medication.schedules,
+            )
+          : estimateDailyDoseCount(medication.schedules) > 0
+            ? 0
+            : null;
   const lowStockTrigger =
     lowStockFloor === null
       ? null

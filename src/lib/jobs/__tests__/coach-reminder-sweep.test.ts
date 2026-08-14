@@ -237,6 +237,46 @@ describe("runCoachReminderSweep", () => {
     expect(where.contextCue).toEqual({ not: "NEXT_APP_OPEN" });
   });
 
+  // Watched red: with the nag-cap pass removed from the sweep this fails on
+  // the `nagDismissed` assertion and on the missing `dismissed` updateMany —
+  // the pre-fix sweep never enforced the cap the surfaceCount schema comment
+  // promised, so an ignored reminder nagged indefinitely.
+  it("charges every ignored day and auto-dismisses at the nag cap", async () => {
+    const prisma = makePrisma({});
+    prisma.coachReminder.updateMany
+      .mockResolvedValueOnce({ count: 2 }) // increment pass
+      .mockResolvedValueOnce({ count: 1 }); // dismiss pass
+
+    const summary = await runCoachReminderSweep(prisma as never, NOW);
+    expect(summary.nagDismissed).toBe(1);
+
+    const [incrementCall, dismissCall] = prisma.coachReminder.updateMany.mock
+      .calls as unknown as [
+      [
+        {
+          where: { status: string; lastSurfacedAt: { lte: Date } };
+          data: { surfaceCount: { increment: number } };
+        },
+      ],
+      [
+        {
+          where: { status: string; surfaceCount: { gte: number } };
+          data: { status: string };
+        },
+      ],
+    ];
+    // Only rows already stale for ~a day are charged — the tick that wrote
+    // the surfacing message must not also count the first ignored day.
+    expect(incrementCall[0].where.status).toBe("surfaced");
+    expect(incrementCall[0].where.lastSurfacedAt.lte.getTime()).toBeLessThan(
+      NOW.getTime(),
+    );
+    expect(incrementCall[0].data.surfaceCount).toEqual({ increment: 1 });
+    // At the cap the row flips to `dismissed` — silence, not another nag.
+    expect(dismissCall[0].where.surfaceCount).toEqual({ gte: 3 });
+    expect(dismissCall[0].data.status).toBe("dismissed");
+  });
+
   it("skips an undecryptable plan without sinking the tick", async () => {
     const prisma = makePrisma({
       plans: [

@@ -99,6 +99,10 @@ beforeEach(() => {
   ROLLUP_FIND_MANY.mockResolvedValue([]);
   ROLLUP_FIND_FIRST.mockResolvedValue(null);
   MEASUREMENT_FIND_FIRST.mockResolvedValue(null);
+  // v1.37.19 (A6-10) — default the tagged-template RAW reads (the coverage
+  // probe + the pre-fold all-time remainder) to empty; individual tests
+  // queue their own `mockResolvedValueOnce` sequences on top.
+  RAW.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -132,8 +136,6 @@ describe("computeSummariesSlice", () => {
         avg30: null,
         slope7: null,
         slope30: null,
-        slope90: null,
-        anomalyCount: 0,
         avg30LastMonth: null,
         avg30LastYear: null,
       });
@@ -187,7 +189,10 @@ describe("computeSummariesSlice", () => {
       expect(weight.mean).toBe(82.05);
       expect(weight.avg7).toBe(81.9);
       expect(weight.avg30).toBe(82.1);
-      expect(weight.anomalyCount).toBe(0);
+      // anomalyCount / slope90 left the wire shape in v1.37.19 — computed
+      // by the insights pipeline's own reads, never serialised here.
+      expect("anomalyCount" in weight).toBe(false);
+      expect("slope90" in weight).toBe(false);
       expect(weight.avg30LastMonth).toBeNull();
       expect(weight.avg30LastYear).toBeNull();
       expect(weight.slope7).toEqual({
@@ -199,11 +204,6 @@ describe("computeSummariesSlice", () => {
         slope: -0.005,
         direction: "stable",
         confidence: 0.42,
-      });
-      expect(weight.slope90).toEqual({
-        slope: 0.001,
-        direction: "stable",
-        confidence: 0.12,
       });
     });
 
@@ -238,7 +238,6 @@ describe("computeSummariesSlice", () => {
       const result = await computeSummariesSlice("user-1");
       expect(result.summaries.PULSE.slope7).toBeNull();
       expect(result.summaries.PULSE.slope30).toBeNull();
-      expect(result.summaries.PULSE.slope90).toBeNull();
     });
 
     it("surfaces lastSeenByType from the DISTINCT ON pass's measured_at", async () => {
@@ -409,8 +408,9 @@ describe("computeSummariesSlice", () => {
 
       // 1 RAW coverage probe + 3 UNSAFE data queries (narrow aggregate
       // + latests + rollup GROUP BY; v1.4.37.2 — the prior `findMany`
-      // is gone). No heavy aggregate.
-      expect(RAW).toHaveBeenCalledTimes(1);
+      // is gone). No heavy aggregate. v1.37.19 (A6-10) — the second RAW
+      // call is the pre-fold all-time remainder splice.
+      expect(RAW).toHaveBeenCalledTimes(2);
       expect(UNSAFE).toHaveBeenCalledTimes(3);
       // v1.4.40 W-WMY-WIRE — the year-ago baseline probe runs
       // `readBestGranularityRollups(userId, type, 395)` per
@@ -422,6 +422,63 @@ describe("computeSummariesSlice", () => {
       // v1.20.0 F6 — plus the 90-day accumulator findMany the warm path
       // now runs to compose slope / r² / sd: 1 accumulator + 3 WMY = 4.
       expect(ROLLUP_FIND_MANY).toHaveBeenCalledTimes(4);
+    });
+
+    // Watched red: with the pre-fold splice removed from the rollup path
+    // (the pre-v1.37.19 assembly used the GROUP BY figures verbatim), the
+    // count / min / max / mean assertions fail — an account with rows
+    // older than the 5-year fold window had its "all-time" figures
+    // silently truncated to the window while the live fallback reported
+    // the true numbers.
+    it("splices rows older than the fold window into the all-time figures (A6-10)", async () => {
+      RAW.mockResolvedValueOnce([{ type: "WEIGHT", has_buckets: true }]) // probe
+        .mockResolvedValueOnce([
+          // pre-fold remainder: 5 ancient readings, heavier and wider.
+          { type: "WEIGHT", count: 5, min: 70, max: 95, mean: 90 },
+        ]);
+      UNSAFE.mockResolvedValueOnce([
+        { type: "WEIGHT", avg7: 82, avg30: 82.5, median: 82.1 },
+      ])
+        .mockResolvedValueOnce([
+          { type: "WEIGHT", value: 82.7, measured_at: new Date() },
+        ])
+        .mockResolvedValueOnce([
+          { type: "WEIGHT", count: 20, min: 79.5, max: 84.0, mean: 82.0 },
+        ]);
+
+      const result = await computeSummariesSlice("user-prefold");
+      const weight = result.summaries.WEIGHT;
+
+      // 20 in-window + 5 pre-fold.
+      expect(weight.count).toBe(25);
+      // Envelope widens to the ancient extremes.
+      expect(weight.min).toBe(70);
+      expect(weight.max).toBe(95);
+      // Weighted mean: (82*20 + 90*5) / 25 = 83.6.
+      expect(weight.mean).toBe(83.6);
+      // Windowed figures stay window-scoped.
+      expect(weight.avg7).toBe(82);
+    });
+
+    it("surfaces a type whose only rows are pre-fold (no DAY bucket)", async () => {
+      RAW.mockResolvedValueOnce([
+        { type: "WEIGHT", has_buckets: true },
+      ]).mockResolvedValueOnce([
+        { type: "HEIGHT", count: 2, min: 180, max: 181, mean: 180.5 },
+      ]);
+      UNSAFE.mockResolvedValueOnce([]) // narrows
+        .mockResolvedValueOnce([]) // latests
+        .mockResolvedValueOnce([]); // rollup GROUP BY
+
+      const result = await computeSummariesSlice("user-prefold-only");
+      const height = result.summaries.HEIGHT;
+      expect(height.count).toBe(2);
+      expect(height.min).toBe(180);
+      expect(height.max).toBe(181);
+      expect(height.mean).toBe(180.5);
+      // No in-window rows: every windowed field stays null.
+      expect(height.avg7).toBeNull();
+      expect(height.slope30).toBeNull();
     });
   });
 
@@ -681,17 +738,18 @@ describe("computeSummariesSlice", () => {
       expect(windowedSql).toBeDefined();
       const sql = windowedSql as string;
 
-      // Every regression window (7/30/90 for slope + r²) anchors on the
-      // day-truncated UTC boundary. Six FILTERs total.
-      for (const days of ["7 days", "30 days", "90 days"]) {
+      // Every regression window (7/30 for slope + r²) anchors on the
+      // day-truncated UTC boundary. Four FILTERs total (the 90-day pair
+      // left with slope90 in v1.37.19).
+      for (const days of ["7 days", "30 days"]) {
         expect(sql).toContain(
           `(date_trunc('day', NOW() AT TIME ZONE 'UTC') - INTERVAL '${days}') AT TIME ZONE 'UTC'`,
         );
       }
       const anchored = sql.match(
-        /date_trunc\('day', NOW\(\) AT TIME ZONE 'UTC'\) - INTERVAL '(?:7|30|90) days'\) AT TIME ZONE 'UTC'/g,
+        /date_trunc\('day', NOW\(\) AT TIME ZONE 'UTC'\) - INTERVAL '(?:7|30) days'\) AT TIME ZONE 'UTC'/g,
       );
-      expect(anchored?.length).toBe(6);
+      expect(anchored?.length).toBe(4);
 
       // The regression windows must NOT fall back to the bare wall-clock
       // `NOW() - INTERVAL 'N days'` bound the warm path never uses for the

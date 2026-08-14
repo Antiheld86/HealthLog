@@ -631,40 +631,37 @@ export const GET = apiHandler(async (request: Request) => {
     }
   }
 
-  // Condition links for the page in ONE grouped query (no N+1).
-  const [linkMap, visitLinkMap] = await Promise.all([
-    loadConditionLinks(
-      user.id,
-      page.map((d) => d.id),
-    ),
-    loadDocumentEncounterLinks(
-      user.id,
-      page.map((d) => d.id),
-    ),
+  // Condition/visit links + the content-index and thumbnail probes for the
+  // page, all in ONE Promise.all — four independent grouped queries (no
+  // N+1, never a ciphertext/blob column), and the vault polls this list
+  // every few seconds so two serialized round-trips were pure added
+  // latency (A5-4).
+  const pageIds = page.map((d) => d.id);
+  const [linkMap, visitLinkMap, indexedRows, thumbRows] = await Promise.all([
+    loadConditionLinks(user.id, pageIds),
+    loadDocumentEncounterLinks(user.id, pageIds),
+    // Which of the page's documents have a content index (drives the
+    // searchable status + the provenance the UI reads to tell an AI-read
+    // document from a locally-indexed one).
+    page.length > 0
+      ? prisma.documentContentIndex.findMany({
+          where: { userId: user.id, documentId: { in: pageIds } },
+          select: { documentId: true, source: true },
+        })
+      : Promise.resolve([]),
+    // Which of the page's documents have a preview thumbnail (gates the
+    // card's <img>). Grouped on the 1:1 side table.
+    page.length > 0
+      ? prisma.documentThumbnail.findMany({
+          where: { userId: user.id, documentId: { in: pageIds } },
+          select: { documentId: true },
+        })
+      : Promise.resolve([]),
   ]);
-
-  // Which of the page's documents have a content index (drives the searchable
-  // status + the provenance the UI reads to tell an AI-read document from a
-  // locally-indexed one). One grouped query; never the ciphertext.
   const indexSources = new Map<string, string>();
-  if (page.length > 0) {
-    const indexed = await prisma.documentContentIndex.findMany({
-      where: { userId: user.id, documentId: { in: page.map((d) => d.id) } },
-      select: { documentId: true, source: true },
-    });
-    for (const row of indexed) indexSources.set(row.documentId, row.source);
-  }
-
-  // Which of the page's documents have a preview thumbnail (gates the card's
-  // <img>). One grouped query on the 1:1 side table; never the blob column.
+  for (const row of indexedRows) indexSources.set(row.documentId, row.source);
   const thumbnailIds = new Set<string>();
-  if (page.length > 0) {
-    const thumbs = await prisma.documentThumbnail.findMany({
-      where: { userId: user.id, documentId: { in: page.map((d) => d.id) } },
-      select: { documentId: true },
-    });
-    for (const row of thumbs) thumbnailIds.add(row.documentId);
-  }
+  for (const row of thumbRows) thumbnailIds.add(row.documentId);
 
   annotate({
     action: { name: "documents.inbound.list" },

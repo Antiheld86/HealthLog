@@ -36,7 +36,6 @@ const populated: DataSummary = {
   avg30: 70,
   slope7: null,
   slope30: null,
-  slope90: null,
   anomalyCount: 0,
   avg30LastMonth: null,
   avg30LastYear: null,

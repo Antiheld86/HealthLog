@@ -32,11 +32,7 @@ import {
 import { withIdempotency } from "@/lib/idempotency";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
-import { invalidateStatusInsightsForTypes } from "@/lib/insights/comprehensive-generate";
-import {
-  recomputeBucketsForMeasurement,
-  collapseToTypeDayKeys,
-} from "@/lib/rollups/measurement-rollups";
+import { afterMeasurementMutation } from "@/lib/rollups/after-measurement-mutation";
 import type { MeasurementType } from "@/generated/prisma/client";
 
 const MAX_IDS_PER_BATCH = 200;
@@ -116,35 +112,16 @@ async function postRestore(request: NextRequest): Promise<Response> {
     // hard-evict so the SWR readers don't serve the pre-restore body.
     invalidateUserMeasurements(user.id, { evict: true });
 
-    // Collapse the restored rows to the unique `(type, day)` set BEFORE
-    // recomputing — mirrors the bulk-delete path. Best-effort: a
-    // populator hiccup never fails the user's restore.
-    const keys = collapseToTypeDayKeys(
+    // v1.37.19 (C2-F1) — shared post-mutation tail; mirrors the
+    // bulk-delete path.
+    await afterMeasurementMutation(
+      user.id,
       affected.map((row) => ({
         type: row.type as MeasurementType,
         measuredAt: row.measuredAt,
       })),
+      "measurements restore",
     );
-    try {
-      for (const k of keys) {
-        await recomputeBucketsForMeasurement(user.id, k.type, k.measuredAt);
-      }
-    } catch (err) {
-      console.warn("[measurements] restore rollup recompute failed", err);
-    }
-
-    // Drop the cached per-metric assessment rows the restore dirties so
-    // the next mount / nightly warm pass regenerates against the
-    // restored history. Fire-and-forget: never blocks the restore.
-    const affectedTypes = Array.from(new Set(keys.map((k) => k.type)));
-    if (affectedTypes.length > 0) {
-      invalidateStatusInsightsForTypes(user.id, affectedTypes).catch((err) => {
-        console.warn(
-          "[measurements] restore status-insight invalidate failed",
-          err,
-        );
-      });
-    }
   }
 
   return apiSuccess({ restored: count });

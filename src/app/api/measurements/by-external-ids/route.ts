@@ -42,11 +42,7 @@ import {
   safeJson,
 } from "@/lib/api-response";
 import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
-import { invalidateStatusInsightsForTypes } from "@/lib/insights/comprehensive-generate";
-import {
-  recomputeBucketsForMeasurement,
-  collapseToTypeDayKeys,
-} from "@/lib/rollups/measurement-rollups";
+import { afterMeasurementMutation } from "@/lib/rollups/after-measurement-mutation";
 
 const MAX_BATCH_ENTRIES = 500;
 
@@ -163,29 +159,9 @@ async function deleteByExternalIds(request: NextRequest): Promise<Response> {
   if (result.count > 0) {
     invalidateUserMeasurements(user.id);
 
-    // v1.5.0 — refresh the rollup row for every distinct (type, day)
-    // tuple the deletion touched. Collapsed by day so the same
-    // morning's deletes fold into one recompute per type. Best-
-    // effort — a populator hiccup never fails the user's reconciliation.
-    try {
-      const keys = collapseToTypeDayKeys(affectedRows);
-      for (const k of keys) {
-        await recomputeBucketsForMeasurement(user.id, k.type, k.measuredAt);
-      }
-    } catch (err) {
-      console.warn("[measurements] rollup recompute failed", err);
-    }
-
-    // v1.8.0 — drop the cached per-metric assessment rows the deleted
-    // types dirty so the next mount / nightly warm pass regenerates
-    // against the reconciled history. Fire-and-forget: never blocks the
-    // iOS reconciliation.
-    invalidateStatusInsightsForTypes(
-      user.id,
-      affectedRows.map((row) => row.type),
-    ).catch((err) => {
-      console.warn("[measurements] status-insight invalidate failed", err);
-    });
+    // v1.37.19 (C2-F1) — shared post-mutation tail (identities collected
+    // BEFORE the destructive statement, while readable).
+    await afterMeasurementMutation(user.id, affectedRows);
   }
 
   return apiSuccess({ deletedCount: result.count });

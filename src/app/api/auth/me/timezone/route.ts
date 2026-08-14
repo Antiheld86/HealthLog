@@ -29,6 +29,7 @@ import {
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import { invalidateUserTimezone, isValidTimezone } from "@/lib/tz/resolver";
+import { enqueueUserMedicationComplianceBackfill } from "@/lib/rollups/medication-compliance-rollups";
 
 export const PUT = apiHandler(async (request: NextRequest) => {
   const { user } = await requireAuth();
@@ -59,6 +60,24 @@ export const PUT = apiHandler(async (request: NextRequest) => {
   });
 
   invalidateUserTimezone(user.id);
+
+  // v1.37.19 (A6-12) — the medication-compliance rollup keys its rows by
+  // the LOCAL day the dose fell on, minted under the timezone in force at
+  // write time. A zone change re-buckets those days, so the stored keys go
+  // stale (and the coverage probe compares counts, not keys — it cannot
+  // notice). Re-fold the trailing window through the ordinary backfill
+  // job; best-effort, the singleton key collapses rapid re-picks.
+  if ((before?.timezone ?? null) !== tz) {
+    const refold = await enqueueUserMedicationComplianceBackfill(user.id);
+    annotate({
+      meta: {
+        timezone_compliance_refold_enqueued: refold.enqueued,
+        ...(refold.error
+          ? { timezone_compliance_refold_error: refold.error }
+          : {}),
+      },
+    });
+  }
 
   await auditLog("user.timezone.update", {
     userId: user.id,

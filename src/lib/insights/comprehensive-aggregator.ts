@@ -44,7 +44,7 @@
  *
  *   - A **narrow** `$queryRaw` still fires for the non-composable
  *     fields: `stddev`, `anomalyCount`, `avg7 / avg30 / avg30LastMonth`,
- *     and the `slope7 / slope30 / slope90` tuples. These don't compose
+ *     and the `slope7 / slope30` tuples. These don't compose
  *     linearly across DAY buckets so live SQL stays canonical, but the
  *     query no longer carries the redundant `COUNT(*)` / `MIN` / `MAX`
  *     / `AVG` columns that duplicated the bucket-derived values.
@@ -145,8 +145,6 @@ interface HeavyAggregateRow {
   r2_7: number | null;
   slope30: number | null;
   r2_30: number | null;
-  slope90: number | null;
-  r2_90: number | null;
 }
 
 /**
@@ -569,7 +567,6 @@ async function buildFromRollups(
     }
     const reg7 = composeWindowedRegression(accBuckets, since7);
     const reg30 = composeWindowedRegression(accBuckets, since30);
-    const reg90 = composeWindowedRegression(accBuckets, since90);
     summaries[type] = {
       count: composed.count,
       latest: latest?.value ?? null,
@@ -585,7 +582,6 @@ async function buildFromRollups(
       avg30: round2(narrow?.avg30 ?? null),
       slope7: buildSlope(reg7.slope, reg7.r2),
       slope30: buildSlope(reg30.slope, reg30.r2),
-      slope90: buildSlope(reg90.slope, reg90.r2),
       anomalyCount: Number(narrow?.anomaly_count ?? 0),
       avg30LastMonth: round2(narrow?.avg30_last_month ?? null),
       // Legacy semantics: the 90-day window guarantees no rows from a
@@ -732,19 +728,7 @@ async function buildFromLiveAggregate(
           EXTRACT(EPOCH FROM m."measured_at") / 86400.0
         ) FILTER (
           WHERE m."measured_at" >= (date_trunc('day', NOW() AT TIME ZONE 'UTC') - INTERVAL '30 days') AT TIME ZONE 'UTC'
-        )::double precision                                           AS r2_30,
-        REGR_SLOPE(
-          m."value",
-          EXTRACT(EPOCH FROM m."measured_at") / 86400.0
-        ) FILTER (
-          WHERE m."measured_at" >= (date_trunc('day', NOW() AT TIME ZONE 'UTC') - INTERVAL '90 days') AT TIME ZONE 'UTC'
-        )::double precision                                           AS slope90,
-        REGR_R2(
-          m."value",
-          EXTRACT(EPOCH FROM m."measured_at") / 86400.0
-        ) FILTER (
-          WHERE m."measured_at" >= (date_trunc('day', NOW() AT TIME ZONE 'UTC') - INTERVAL '90 days') AT TIME ZONE 'UTC'
-        )::double precision                                           AS r2_90
+        )::double precision                                           AS r2_30
       FROM cm m
       JOIN window_stats ws ON ws."type" = m."type"
       GROUP BY m."type", ws.stddev_value
@@ -819,7 +803,6 @@ async function buildFromLiveAggregate(
       avg30: round2(row.avg30),
       slope7: buildSlope(row.slope7, row.r2_7),
       slope30: buildSlope(row.slope30, row.r2_30),
-      slope90: buildSlope(row.slope90, row.r2_90),
       anomalyCount: Number(row.anomaly_count),
       avg30LastMonth: round2(row.avg30_last_month),
       avg30LastYear: null,

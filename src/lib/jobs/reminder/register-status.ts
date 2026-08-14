@@ -845,6 +845,7 @@ export async function registerStatusQueues(
               reminders_due: summary.remindersDue,
               plan_reviews_minted: summary.planReviewsMinted,
               context_surfaced: summary.contextSurfaced,
+              nag_dismissed: summary.nagDismissed,
               errored: summary.errored,
             },
           });
@@ -852,6 +853,7 @@ export async function registerStatusQueues(
             reminders_due: summary.remindersDue,
             plan_reviews_minted: summary.planReviewsMinted,
             context_surfaced: summary.contextSurfaced,
+            nag_dismissed: summary.nagDismissed,
             errored: summary.errored,
           });
         } catch (err) {

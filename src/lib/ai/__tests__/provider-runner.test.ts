@@ -10,6 +10,19 @@ import {
 // provider-health ledger. These pure chain tests do not stand up a DB,
 // so swap the default for a no-op; the dedicated ledger-aware cases
 // below inject an in-memory ledger explicitly.
+// v1.37.19 (A7-2) — the runner consults the day's recorded spend before an
+// operator-funded hop. These pure chain tests do not stand up a DB, so the
+// ledger read is swapped for a controllable in-memory figure.
+const budgetState = vi.hoisted(() => ({ spent: 0 }));
+vi.mock("../coach/budget", async () => {
+  const actual =
+    await vi.importActual<typeof import("../coach/budget")>("../coach/budget");
+  return {
+    ...actual,
+    readDailySpend: vi.fn(async () => budgetState.spent),
+  };
+});
+
 vi.mock("../provider-health-ledger", async () => {
   const actual = await vi.importActual<
     typeof import("../provider-health-ledger")
@@ -97,6 +110,7 @@ function err(status: number, msg = "boom"): Error & { httpStatus: number } {
 
 beforeEach(() => {
   clearLastWorkingProviderCache();
+  budgetState.spent = 0;
 });
 
 afterEach(() => {
@@ -669,5 +683,78 @@ describe("runStreamingRawCompletionWithFallback", () => {
     });
     expect(result.workingProvider.providerType).toBe("local");
     expect(result.fallbackHops.map((h) => h.providerType)).toEqual(["openai"]);
+  });
+});
+
+// v1.37.19 (A7-2) — hop-time operator-cost guard.
+//
+// Watched red: with the `isOperatorFundedProvider` check removed from
+// `runRawChain` (the pre-fix walker), the exhausted-cap case below fails —
+// the admin-openai fallback was invoked and spent operator money although
+// the request had only been reserved under the user-plan ceiling.
+describe("runRawCompletionWithFallback — operator-cost cap at hop time", () => {
+  const params: CompletionParams = singleUserTurn({ system: "s", user: "u" });
+
+  it("refuses the admin-* fallback hop once the operator cap is exhausted", async () => {
+    budgetState.spent = 200_000; // OPERATOR_COST_CAP
+    const codex = new ScriptedProvider({
+      type: "codex",
+      script: [{ ok: false, error: err(500) }],
+    });
+    const adminOpenai = new ScriptedProvider({ script: [{ ok: true }] });
+
+    await expect(
+      runRawCompletionWithFallback({
+        userId: "u-cap",
+        providers: [
+          { providerType: "codex", instance: codex },
+          { providerType: "admin-openai", instance: adminOpenai },
+        ],
+        params,
+      }),
+    ).rejects.toMatchObject({
+      attempts: [
+        expect.objectContaining({ providerType: "codex" }),
+        expect.objectContaining({
+          providerType: "admin-openai",
+          failureReason: "operator-cost-cap-exhausted",
+        }),
+      ],
+    });
+    // The operator-funded provider was never invoked.
+    expect(adminOpenai.callCount).toBe(0);
+  });
+
+  it("lets the admin-* fallback run while the operator cap has headroom", async () => {
+    budgetState.spent = 100;
+    const codex = new ScriptedProvider({
+      type: "codex",
+      script: [{ ok: false, error: err(500) }],
+    });
+    const adminOpenai = new ScriptedProvider({ script: [{ ok: true }] });
+
+    const outcome = await runRawCompletionWithFallback({
+      userId: "u-headroom",
+      providers: [
+        { providerType: "codex", instance: codex },
+        { providerType: "admin-openai", instance: adminOpenai },
+      ],
+      params,
+    });
+    expect(outcome.workingProvider.providerType).toBe("admin-openai");
+    expect(adminOpenai.callCount).toBe(1);
+  });
+
+  it("never consults the ledger for a user-funded chain", async () => {
+    budgetState.spent = 999_999_999;
+    const openai = new ScriptedProvider({ script: [{ ok: true }] });
+    const outcome = await runRawCompletionWithFallback({
+      userId: "u-own-key",
+      providers: [{ providerType: "openai", instance: openai }],
+      params,
+    });
+    // The user's own key is not the operator's money — the cap does not
+    // apply and the call proceeds regardless of the recorded spend.
+    expect(outcome.workingProvider.providerType).toBe("openai");
   });
 });
