@@ -27,6 +27,7 @@ import {
   sanitiseZodIssues,
 } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
+import { afterMeasurementMutation } from "@/lib/rollups/after-measurement-mutation";
 import { auditLog } from "@/lib/auth/audit";
 import { withIdempotency } from "@/lib/idempotency";
 import { enqueueReminderSatisfy } from "@/lib/jobs/reminder-satisfy";
@@ -354,6 +355,17 @@ async function postAssessment(request: NextRequest): Promise<Response> {
     },
   });
   invalidateUserHealthScore(user.id);
+
+  // v1.37.19 (A6-13) — the projection row is a Measurement like any other:
+  // route it through the shared post-mutation tail so the (type, day)
+  // rollup bucket and the cached status assessment converge without
+  // waiting for a nightly discovery pass.
+  await afterMeasurementMutation(user.id, [
+    {
+      type: INSTRUMENT_MEASUREMENT_TYPE[id] as MeasurementType,
+      measuredAt: when,
+    },
+  ]);
 
   // v1.27.6 — a screening can be planned as a Vorsorge reminder keyed on
   // PHQ9_SCORE / GAD7_SCORE. Kick the eventful satisfy worker so completing

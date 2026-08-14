@@ -28,6 +28,9 @@ vi.mock("@/lib/cache/invalidate", () => ({
 vi.mock("@/lib/rollups/measurement-rollups", () => ({
   recomputeBucketsForMeasurement: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("@/lib/rollups/after-measurement-mutation", () => ({
+  afterMeasurementMutation: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@/lib/insights/comprehensive-generate", () => ({
   invalidateStatusInsightsForTypes: vi.fn().mockResolvedValue(undefined),
 }));

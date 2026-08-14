@@ -23,6 +23,7 @@
  */
 import type { MeasurementType, PrismaClient } from "@/generated/prisma/client";
 import { annotate } from "@/lib/logging/context";
+import { afterMeasurementMutation } from "@/lib/rollups/after-measurement-mutation";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -98,6 +99,14 @@ export async function upsertScoreRow(
       measuredAt,
     },
   });
+
+  // v1.37.19 (A6-13) — a score row is a Measurement like any other: route
+  // it through the shared post-mutation tail so the (type, day) rollup
+  // bucket and the cached status assessment converge on the same tick that
+  // wrote the score, instead of waiting for a discovery pass.
+  await afterMeasurementMutation(args.userId, [
+    { type: args.type, measuredAt },
+  ]);
 }
 
 /** The tally every score pass returns. */

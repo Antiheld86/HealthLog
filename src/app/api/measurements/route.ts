@@ -35,13 +35,9 @@ import { encryptNote, shapeMeasurementNotes } from "@/lib/crypto/note-cipher";
 import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
 import { emitInsertedMeasurementArrivals } from "@/lib/arrivals/measurement-emit";
 import { maybeEnqueueMorningRefresh } from "@/lib/daily/morning-refresh-trigger";
-import { invalidateStatusInsightsForTypes } from "@/lib/insights/comprehensive-generate";
 import { enqueueReminderSatisfy } from "@/lib/jobs/reminder-satisfy";
 import { runSafetyFloorCheck } from "@/lib/illness/safety-floor-check";
-import {
-  recomputeBucketsForMeasurement,
-  collapseToTypeDayKeys,
-} from "@/lib/rollups/measurement-rollups";
+import { afterMeasurementMutation } from "@/lib/rollups/after-measurement-mutation";
 import { loadUserSourcePriority } from "@/lib/rollups/measurement-read";
 import { readDailySeries } from "@/lib/measurements/daily-series-read";
 import {
@@ -908,32 +904,14 @@ async function postMeasurement(request: NextRequest) {
       { action: "measurement.safety_floor.check" },
     );
 
-    // v1.5.0 — refresh the persistent rollup table for every distinct
-    // (type, day) the batch touched so the next analytics / coach read
-    // hits the cache rather than falling through to live aggregation.
-    // Collapsed by day so a multi-entry batch on the same morning fires
-    // one DAY recompute per type instead of one per row. Best-effort
-    // — a populator hiccup never fails the user's write.
-    try {
-      const keys = collapseToTypeDayKeys(
-        results.map((r) => ({ type: r.type, measuredAt: r.measuredAt })),
-      );
-      for (const k of keys) {
-        await recomputeBucketsForMeasurement(user.id, k.type, k.measuredAt);
-      }
-
-      // v1.8.0 — drop the cached per-metric assessment rows the ingested
-      // types dirty so the next mount / nightly warm pass regenerates
-      // them against the new data. Fire-and-forget: never blocks ingest.
-      invalidateStatusInsightsForTypes(
-        user.id,
-        keys.map((k) => k.type),
-      ).catch((err) => {
-        console.warn("[measurements] status-insight invalidate failed", err);
-      });
-    } catch (err) {
-      console.warn("[measurements] rollup recompute failed", err);
-    }
+    // v1.37.19 (C2-F1) — the shared post-mutation tail: rollup recompute
+    // (collapsed per (type, day)) + status-insight re-warm, both
+    // best-effort. One helper so a future write surface cannot remember
+    // one leg and forget the other.
+    await afterMeasurementMutation(
+      user.id,
+      results.map((r) => ({ type: r.type, measuredAt: r.measuredAt })),
+    );
 
     return apiSuccess(shapedResults, 201);
   }
@@ -1080,22 +1058,9 @@ async function postMeasurement(request: NextRequest) {
   // pg-boss; WEEK / MONTH / YEAR recomputes are enqueued under the
   // hood. Best-effort — a populator hiccup never fails the user's
   // write.
-  try {
-    await recomputeBucketsForMeasurement(
-      user.id,
-      measurement.type,
-      measurement.measuredAt,
-    );
-  } catch (err) {
-    console.warn("[measurements] rollup recompute failed", err);
-  }
-
-  // v1.8.0 — drop the cached per-metric assessment rows this type
-  // dirties so the next mount / nightly warm pass regenerates against
-  // the new row. Fire-and-forget: never blocks the user's write.
-  invalidateStatusInsightsForTypes(user.id, [measurement.type]).catch((err) => {
-    console.warn("[measurements] status-insight invalidate failed", err);
-  });
+  await afterMeasurementMutation(user.id, [
+    { type: measurement.type, measuredAt: measurement.measuredAt },
+  ]);
 
   return apiSuccess(shapeMeasurementNotes(measurement), 201);
 }

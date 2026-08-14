@@ -77,11 +77,7 @@ import { maybeEnqueueMorningRefresh } from "@/lib/daily/morning-refresh-trigger"
 import { emitDataArrival } from "@/lib/arrivals/emit-shared";
 import { groupRowsByArrivalKind } from "@/lib/arrivals/measurement-kind";
 import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
-import { invalidateStatusInsightsForTypes } from "@/lib/insights/comprehensive-generate";
-import {
-  recomputeBucketsForMeasurement,
-  collapseToTypeDayKeys,
-} from "@/lib/rollups/measurement-rollups";
+import { afterMeasurementMutation } from "@/lib/rollups/after-measurement-mutation";
 import { Prisma, type MeasurementType } from "@/generated/prisma/client";
 
 // v1.4.25 W16c — historical-backfill threshold for PR push
@@ -894,30 +890,10 @@ async function postBatch(request: NextRequest): Promise<Response> {
     // measurement routes already pass `{ evict: true }` for the same reason.
     invalidateUserMeasurements(user.id, { evict: true });
 
-    // v1.5.0 — refresh the persistent rollup table for every distinct
-    // (type, day) the batch touched. Updates must participate as well as
-    // inserts, so this deliberately retains the prepared-row scope. Collapsed
-    // by day so a 500-row Apple Health batch fires only one recompute per
-    // type/day pair. Best-effort — a populator hiccup never fails ingest.
-    try {
-      const insertedKeys = collapseToTypeDayKeys(writtenIdentities);
-      for (const k of insertedKeys) {
-        await recomputeBucketsForMeasurement(user.id, k.type, k.measuredAt);
-      }
-
-      // v1.8.0 — drop the cached per-metric assessment rows the ingested
-      // types dirty so the next mount / nightly warm pass regenerates
-      // them against the new data instead of serving stale text.
-      // Fire-and-forget: never a blocker on the user's ingest.
-      invalidateStatusInsightsForTypes(
-        user.id,
-        insertedKeys.map((k) => k.type),
-      ).catch((err) => {
-        console.warn("[measurements] status-insight invalidate failed", err);
-      });
-    } catch (err) {
-      console.warn("[measurements] rollup recompute failed", err);
-    }
+    // v1.37.19 (C2-F1) — shared post-mutation tail for every distinct
+    // (type, day) the batch touched. Updates participate as well as
+    // inserts, so this deliberately retains the prepared-row scope.
+    await afterMeasurementMutation(user.id, writtenIdentities);
 
     // S4 — Apple-Health sleep is the third sleep transport. If any SLEEP_DURATION
     // row for last night just landed, kick the debounced morning refresh so the

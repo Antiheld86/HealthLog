@@ -30,11 +30,7 @@ import {
 import { withIdempotency } from "@/lib/idempotency";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
-import { invalidateStatusInsightsForTypes } from "@/lib/insights/comprehensive-generate";
-import {
-  recomputeBucketsForMeasurement,
-  collapseToTypeDayKeys,
-} from "@/lib/rollups/measurement-rollups";
+import { afterMeasurementMutation } from "@/lib/rollups/after-measurement-mutation";
 import type { MeasurementType } from "@/generated/prisma/client";
 
 const MAX_IDS_PER_BATCH = 200;
@@ -117,36 +113,16 @@ async function postBulkDelete(request: NextRequest): Promise<Response> {
     // SWR readers don't serve the pre-delete body.
     invalidateUserMeasurements(user.id, { evict: true });
 
-    // Collapse the deleted rows to the unique `(type, day)` set BEFORE
-    // recomputing so a 200-row delete spanning one day fires ~1 recompute
-    // per type, not 200 (mirrors the batch-insert path). Best-effort — a
-    // populator hiccup never fails the user's delete.
-    const keys = collapseToTypeDayKeys(
+    // v1.37.19 (C2-F1) — shared post-mutation tail (identities were
+    // collected BEFORE the destructive statement, while readable).
+    await afterMeasurementMutation(
+      user.id,
       affected.map((row) => ({
         type: row.type as MeasurementType,
         measuredAt: row.measuredAt,
       })),
+      "measurements bulk-delete",
     );
-    try {
-      for (const k of keys) {
-        await recomputeBucketsForMeasurement(user.id, k.type, k.measuredAt);
-      }
-    } catch (err) {
-      console.warn("[measurements] bulk-delete rollup recompute failed", err);
-    }
-
-    // v1.8.0 — drop the cached per-metric assessment rows the deletion
-    // dirties so the next mount / nightly warm pass regenerates against
-    // the reduced history. Fire-and-forget: never blocks the delete.
-    const affectedTypes = Array.from(new Set(keys.map((k) => k.type)));
-    if (affectedTypes.length > 0) {
-      invalidateStatusInsightsForTypes(user.id, affectedTypes).catch((err) => {
-        console.warn(
-          "[measurements] bulk-delete status-insight invalidate failed",
-          err,
-        );
-      });
-    }
   }
 
   return apiSuccess({ deleted: count });

@@ -117,6 +117,9 @@ vi.mock("@/lib/rollups/measurement-rollups", () => ({
   recomputeBucketsForMeasurement: vi.fn().mockResolvedValue(undefined),
   collapseToTypeDayKeys: vi.fn(() => []),
 }));
+vi.mock("@/lib/rollups/after-measurement-mutation", () => ({
+  afterMeasurementMutation: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("next/headers", () => ({
   headers: vi.fn(async () => ({ get: () => null })),

@@ -18,8 +18,7 @@ import {
 } from "@/lib/validations/measurement";
 import { encryptNote, shapeMeasurementNotes } from "@/lib/crypto/note-cipher";
 import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
-import { invalidateStatusInsightsForTypes } from "@/lib/insights/comprehensive-generate";
-import { recomputeBucketsForMeasurement } from "@/lib/rollups/measurement-rollups";
+import { afterMeasurementMutation } from "@/lib/rollups/after-measurement-mutation";
 import { Prisma } from "@/generated/prisma/client";
 import { NextRequest } from "next/server";
 import { z } from "zod";
@@ -235,41 +234,14 @@ export const PUT = apiHandler(
     // edit — hard-evict so the SWR readers don't serve the pre-edit body.
     invalidateUserMeasurements(user.id, { evict: true });
 
-    // v1.5.0 — refresh the rollup row for the affected day. When the
-    // measuredAt moved across day boundaries (or the row was re-typed)
-    // both the old and the new bucket need a recompute. Best-effort
-    // — a populator hiccup never fails the user's edit.
-    try {
-      await recomputeBucketsForMeasurement(
-        user.id,
-        measurement.type,
-        measurement.measuredAt,
-      );
-      if (
-        existing.measuredAt.getTime() !== measurement.measuredAt.getTime() ||
-        existing.type !== measurement.type
-      ) {
-        await recomputeBucketsForMeasurement(
-          user.id,
-          existing.type,
-          existing.measuredAt,
-        );
-      }
-    } catch (err) {
-      console.warn("[measurements] rollup recompute failed", err);
-    }
-
-    // v1.8.0 — drop the cached per-metric assessment rows this edit
-    // dirties so the next mount / nightly warm pass regenerates against
-    // the new value. An edit can re-type a row, so invalidate both the
-    // old and the new type's scopes. Fire-and-forget: never blocks the
-    // user's edit.
-    invalidateStatusInsightsForTypes(user.id, [
-      existing.type,
-      measurement.type,
-    ]).catch((err) => {
-      console.warn("[measurements] status-insight invalidate failed", err);
-    });
+    // v1.37.19 (C2-F1) — shared post-mutation tail. Both the OLD and the
+    // NEW identity ride the list: an edit can move the row across day
+    // boundaries or re-type it, and the helper collapses identical
+    // (type, day) pairs so the common in-place edit fires once.
+    await afterMeasurementMutation(user.id, [
+      { type: measurement.type, measuredAt: measurement.measuredAt },
+      { type: existing.type, measuredAt: existing.measuredAt },
+    ]);
 
     return apiSuccess(shapeMeasurementNotes(measurement));
   },
@@ -328,26 +300,11 @@ export const DELETE = apiHandler(
     // body.
     invalidateUserMeasurements(user.id, { evict: true });
 
-    // v1.5.0 — refresh the rollup row for the affected day (the
-    // recompute drops the row when the day's measurement count goes
-    // to zero). Best-effort — a populator hiccup never fails the
-    // user's delete.
-    try {
-      await recomputeBucketsForMeasurement(
-        user.id,
-        existing.type,
-        existing.measuredAt,
-      );
-    } catch (err) {
-      console.warn("[measurements] rollup recompute failed", err);
-    }
-
-    // v1.8.0 — drop the cached per-metric assessment rows this deletion
-    // dirties so the next mount / nightly warm pass regenerates against
-    // the reduced history. Fire-and-forget: never blocks the user's delete.
-    invalidateStatusInsightsForTypes(user.id, [existing.type]).catch((err) => {
-      console.warn("[measurements] status-insight invalidate failed", err);
-    });
+    // v1.37.19 (C2-F1) — shared post-mutation tail (the recompute drops
+    // the rollup row when the day's measurement count goes to zero).
+    await afterMeasurementMutation(user.id, [
+      { type: existing.type, measuredAt: existing.measuredAt },
+    ]);
 
     return apiSuccess({ deleted: true });
   },
