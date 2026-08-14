@@ -18,59 +18,126 @@ export interface RunwaySchedule {
   timesOfDay?: string[];
   rrule?: string | null;
   rollingIntervalDays?: number | null;
+  /**
+   * v1.37.19 (#219 parity) — per-slot units override as a plain number
+   * (the wire shape). `null`/`undefined` inherits the medication-level
+   * `unitsPerDose`, exactly like the consumption path's resolver.
+   */
+  unitsPerDose?: number | null;
 }
 
 /**
- * Approximate doses per day across every schedule: times-of-day count,
- * scaled down by the cadence (rolling interval, weekly day picks +
- * interval weeks, monthly/yearly RRULEs).
+ * Approximate doses per day for ONE schedule: times-of-day count, scaled
+ * down by the cadence (rolling interval, weekly day picks + interval
+ * weeks, monthly/yearly RRULEs).
+ */
+function scheduleDailyDoseCount(s: RunwaySchedule): number {
+  const times =
+    s.timesOfDay && s.timesOfDay.length > 0 ? s.timesOfDay.length : 1;
+  if (typeof s.rollingIntervalDays === "number" && s.rollingIntervalDays >= 1) {
+    return times / s.rollingIntervalDays;
+  }
+  const rrule = s.rrule ?? "";
+  if (/FREQ=MONTHLY/.test(rrule)) {
+    return times / 30;
+  }
+  if (/FREQ=YEARLY/.test(rrule)) {
+    return times / 365;
+  }
+  // FREQ=WEEKLY;BYDAY=…;INTERVAL=… is the modern weekly encoding (the
+  // create path stores the cadence on the rrule and leaves daysOfWeek
+  // empty). Honour the BYDAY pick count and the week INTERVAL: a
+  // once-weekly injection is one dose per 7 days, a bi-weekly one per
+  // 14. Without this branch a weekly rrule fell through to the legacy
+  // daysOfWeek fallback below with daysPerWeek=7, over-estimating the
+  // rate ~7× (≈14× bi-weekly) and firing low-stock alerts far too early.
+  if (/FREQ=WEEKLY/.test(rrule)) {
+    const byday = /BYDAY=([^;]+)/.exec(rrule);
+    const bydayCount =
+      byday && byday[1].length > 0 ? byday[1].split(",").length : 1;
+    const intervalMatch = /INTERVAL=(\d+)/.exec(rrule);
+    const interval =
+      intervalMatch && Number(intervalMatch[1]) >= 1
+        ? Number(intervalMatch[1])
+        : 1;
+    return (times * bydayCount) / (7 * interval);
+  }
+  const { daysOfWeek, intervalWeeks } = parseScheduleRecurrence(s.daysOfWeek);
+  const daysPerWeek = daysOfWeek.length > 0 ? daysOfWeek.length : 7;
+  const weeks = intervalWeeks >= 1 ? intervalWeeks : 1;
+  return (times * daysPerWeek) / (7 * weeks);
+}
+
+/**
+ * Approximate doses per day across every schedule.
  */
 export function estimateDailyDoseCount(schedules: RunwaySchedule[]): number {
   let perDay = 0;
   for (const s of schedules) {
-    const times =
-      s.timesOfDay && s.timesOfDay.length > 0 ? s.timesOfDay.length : 1;
-    if (
-      typeof s.rollingIntervalDays === "number" &&
-      s.rollingIntervalDays >= 1
-    ) {
-      perDay += times / s.rollingIntervalDays;
-      continue;
-    }
-    const rrule = s.rrule ?? "";
-    if (/FREQ=MONTHLY/.test(rrule)) {
-      perDay += times / 30;
-      continue;
-    }
-    if (/FREQ=YEARLY/.test(rrule)) {
-      perDay += times / 365;
-      continue;
-    }
-    // FREQ=WEEKLY;BYDAY=…;INTERVAL=… is the modern weekly encoding (the
-    // create path stores the cadence on the rrule and leaves daysOfWeek
-    // empty). Honour the BYDAY pick count and the week INTERVAL: a
-    // once-weekly injection is one dose per 7 days, a bi-weekly one per
-    // 14. Without this branch a weekly rrule fell through to the legacy
-    // daysOfWeek fallback below with daysPerWeek=7, over-estimating the
-    // rate ~7× (≈14× bi-weekly) and firing low-stock alerts far too early.
-    if (/FREQ=WEEKLY/.test(rrule)) {
-      const byday = /BYDAY=([^;]+)/.exec(rrule);
-      const bydayCount =
-        byday && byday[1].length > 0 ? byday[1].split(",").length : 1;
-      const intervalMatch = /INTERVAL=(\d+)/.exec(rrule);
-      const interval =
-        intervalMatch && Number(intervalMatch[1]) >= 1
-          ? Number(intervalMatch[1])
-          : 1;
-      perDay += (times * bydayCount) / (7 * interval);
-      continue;
-    }
-    const { daysOfWeek, intervalWeeks } = parseScheduleRecurrence(s.daysOfWeek);
-    const daysPerWeek = daysOfWeek.length > 0 ? daysOfWeek.length : 7;
-    const weeks = intervalWeeks >= 1 ? intervalWeeks : 1;
-    perDay += (times * daysPerWeek) / (7 * weeks);
+    perDay += scheduleDailyDoseCount(s);
   }
   return perDay;
+}
+
+/**
+ * v1.37.19 (#219 parity) — approximate inventory UNITS consumed per day,
+ * honouring each slot's own `unitsPerDose` where set. The pre-fix figure
+ * multiplied the dose rate by the medication-level units alone, which
+ * over- or under-stated the burn rate for any medication whose slots
+ * carry different doses (a whole tablet in the morning, a half at noon).
+ */
+export function estimateDailyUnitsCount(
+  schedules: RunwaySchedule[],
+  medicationUnitsPerDose: number,
+): number {
+  const fallback = medicationUnitsPerDose > 0 ? medicationUnitsPerDose : 1;
+  let perDayUnits = 0;
+  for (const s of schedules) {
+    const perSlot =
+      typeof s.unitsPerDose === "number" && s.unitsPerDose > 0
+        ? s.unitsPerDose
+        : fallback;
+    perDayUnits += scheduleDailyDoseCount(s) * perSlot;
+  }
+  return perDayUnits;
+}
+
+/**
+ * The schedule-weighted average units one dose consumes — the divisor that
+ * turns a units pool into an honest doses-remaining figure for a
+ * medication with per-slot doses. Falls back to the medication level when
+ * no schedule derives a consumption rate.
+ */
+export function effectiveUnitsPerDose(
+  schedules: RunwaySchedule[],
+  medicationUnitsPerDose: number,
+): number {
+  const fallback = medicationUnitsPerDose > 0 ? medicationUnitsPerDose : 1;
+  const perDay = estimateDailyDoseCount(schedules);
+  if (perDay <= 0) return fallback;
+  const perDayUnits = estimateDailyUnitsCount(
+    schedules,
+    medicationUnitsPerDose,
+  );
+  return perDayUnits > 0 ? perDayUnits / perDay : fallback;
+}
+
+/**
+ * v1.37.19 (#219 parity) — whole days a UNITS pool covers under the
+ * slot-aware burn rate, or `null` when no consuming schedule exists.
+ * Zero units with a consuming schedule is honestly 0 days.
+ */
+export function estimateUnitsRunwayDays(
+  unitsRemaining: number,
+  schedules: RunwaySchedule[],
+  medicationUnitsPerDose: number,
+): number | null {
+  const perDayUnits = estimateDailyUnitsCount(
+    schedules,
+    medicationUnitsPerDose,
+  );
+  if (perDayUnits <= 0) return null;
+  return Math.floor(Math.max(0, unitsRemaining) / perDayUnits);
 }
 
 /**

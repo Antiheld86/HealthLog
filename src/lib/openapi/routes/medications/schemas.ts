@@ -68,6 +68,17 @@ export const medicationScheduleResource = z
       .describe(
         "Per-schedule dose override. NULL means the schedule inherits `Medication.dose`.",
       ),
+    unitsPerDose: z
+      .number()
+      .nullable()
+      .describe(
+        "v1.37.10 (#219) — per-slot inventory-units override (may be a split-pill fraction). NULL means the schedule inherits the medication-level `unitsPerDose`. Kept raw so an edit surface can distinguish an explicit value from inheritance; consumers wanting the effective figure read `resolvedUnitsPerDose`.",
+      ),
+    resolvedUnitsPerDose: z
+      .number()
+      .describe(
+        "v1.37.19 — the EFFECTIVE units one dose of this slot consumes, resolved server-side (`schedule.unitsPerDose ?? medication.unitsPerDose`, matching the intake consumption resolver). Always present; clients never re-derive the inheritance rule.",
+      ),
     daysOfWeek: z
       .string()
       .nullable()
@@ -260,7 +271,14 @@ export const medicationListEntry = medicationResource
       .int()
       .nullable()
       .describe(
-        "v1.16.10 — dose-derived stock: `floor(stockUnitsRemaining / unitsPerDose)`, where `unitsPerDose` may be a fraction (½ tablet ⇒ twice the doses). Stays a whole-dose count. NULL when inventory tracking is off. Drives the table view's Bestand column. Read-only — aggregated, not stored.",
+        "v1.16.10 — dose-derived stock as a whole-dose count. v1.37.19 — slot-aware: the divisor is the schedule-weighted average units per dose (each slot's `resolvedUnitsPerDose` weighted by its cadence share), falling back to the medication-level `unitsPerDose` when no schedule derives a consumption rate. `unitsPerDose` may be a fraction (½ tablet ⇒ twice the doses). NULL when inventory tracking is off. Drives the table view's Bestand column. Read-only — aggregated, not stored.",
+      ),
+    runwayDays: z
+      .number()
+      .int()
+      .nullable()
+      .describe(
+        "v1.37.19 — projected whole days the usable stock covers under the slot-aware burn rate (the same math the low-stock notification engine runs, so the wire and the push can never disagree). NULL = inventory tracking off or no consuming cadence derivable; 0 = tracking on, supply ran out. Read-only — computed, not stored.",
       ),
   })
   .meta({
@@ -272,6 +290,26 @@ export const medicationListEntry = medicationResource
 export const medicationDetailEntry = medicationResource
   .extend({
     category: medicationCategoryEnum,
+    stockUnitsRemaining: z
+      .number()
+      .nullable()
+      .describe(
+        "v1.37.19 — usable inventory units left (same semantics as the list entry's field): NULL = inventory tracking off; 0 = tracking on, supply ran out.",
+      ),
+    stockDosesRemaining: z
+      .number()
+      .int()
+      .nullable()
+      .describe(
+        "v1.37.19 — slot-aware dose-derived stock, mirroring the list entry's field.",
+      ),
+    runwayDays: z
+      .number()
+      .int()
+      .nullable()
+      .describe(
+        "v1.37.19 — projected whole days the usable stock covers under the slot-aware burn rate; NULL = tracking off or no consuming cadence.",
+      ),
   })
   .meta({
     id: "MedicationDetail",

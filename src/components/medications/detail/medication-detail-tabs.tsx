@@ -154,6 +154,12 @@ export interface MedicationDetailSnapshot {
    * directly; no client-side recurrence walking.
    */
   nextDueAt?: string | null;
+  /**
+   * v1.37.19 — server-resolved slot-aware runway (days); null = inventory
+   * tracking off or no consuming cadence. Preferred over the client
+   * estimate; the estimate remains only as the stale-payload fallback.
+   */
+  runwayDays?: number | null;
   schedules: ScheduleSnapshot[];
 }
 
@@ -424,7 +430,11 @@ export function MedicationDetailTabs({
     medication.unitsPerDose && medication.unitsPerDose > 0
       ? medication.unitsPerDose
       : 1;
-  const runwayDays = estimateRunwayDays(dosesRemaining, medication.schedules);
+  // v1.37.19 — prefer the server's slot-aware runway from the detail GET.
+  const runwayDays =
+    medication.runwayDays !== undefined
+      ? medication.runwayDays
+      : estimateRunwayDays(dosesRemaining, medication.schedules);
 
   return (
     <div className="space-y-6" data-slot="medication-detail-page">

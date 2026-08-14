@@ -17853,6 +17853,18 @@ components:
             - type: string
             - type: "null"
           description: Per-schedule dose override. NULL means the schedule inherits `Medication.dose`.
+        unitsPerDose:
+          anyOf:
+            - type: number
+            - type: "null"
+          description: v1.37.10 (#219) — per-slot inventory-units override (may be a split-pill fraction). NULL means the schedule
+            inherits the medication-level `unitsPerDose`. Kept raw so an edit surface can distinguish an explicit value
+            from inheritance; consumers wanting the effective figure read `resolvedUnitsPerDose`.
+        resolvedUnitsPerDose:
+          type: number
+          description: v1.37.19 — the EFFECTIVE units one dose of this slot consumes, resolved server-side (`schedule.unitsPerDose
+            ?? medication.unitsPerDose`, matching the intake consumption resolver). Always present; clients never
+            re-derive the inheritance rule.
         daysOfWeek:
           anyOf:
             - type: string
@@ -17917,6 +17929,8 @@ components:
         - windowEnd
         - label
         - dose
+        - unitsPerDose
+        - resolvedUnitsPerDose
         - daysOfWeek
         - timesOfDay
         - reminderGraceMinutes
@@ -23639,9 +23653,20 @@ components:
               minimum: -9007199254740991
               maximum: 9007199254740991
             - type: "null"
-          description: "v1.16.10 — dose-derived stock: `floor(stockUnitsRemaining / unitsPerDose)`, where `unitsPerDose` may be a
-            fraction (½ tablet ⇒ twice the doses). Stays a whole-dose count. NULL when inventory tracking is off. Drives
+          description: "v1.16.10 — dose-derived stock as a whole-dose count. v1.37.19 — slot-aware: the divisor is the
+            schedule-weighted average units per dose (each slot's `resolvedUnitsPerDose` weighted by its cadence share),
+            falling back to the medication-level `unitsPerDose` when no schedule derives a consumption rate.
+            `unitsPerDose` may be a fraction (½ tablet ⇒ twice the doses). NULL when inventory tracking is off. Drives
             the table view's Bestand column. Read-only — aggregated, not stored."
+        runwayDays:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: v1.37.19 — projected whole days the usable stock covers under the slot-aware burn rate (the same math the
+            low-stock notification engine runs, so the wire and the push can never disagree). NULL = inventory tracking
+            off or no consuming cadence derivable; 0 = tracking on, supply ran out. Read-only — computed, not stored.
       required:
         - id
         - name
@@ -23673,6 +23698,7 @@ components:
         - todayEventCount
         - stockUnitsRemaining
         - stockDosesRemaining
+        - runwayDays
       additionalProperties: false
       description: List-row variant of the medication resource enriched with the joined `category`, the v1.32.25
         `externalSource` provenance echo, `lastTakenAt`, `todayEventCount`, and the v1.16.10 aggregated stock fields
@@ -23841,6 +23867,27 @@ components:
             $ref: "#/components/schemas/MedicationScheduleOutput"
         category:
           $ref: "#/components/schemas/MedicationCategory"
+        stockUnitsRemaining:
+          anyOf:
+            - type: number
+            - type: "null"
+          description: "v1.37.19 — usable inventory units left (same semantics as the list entry's field): NULL = inventory
+            tracking off; 0 = tracking on, supply ran out."
+        stockDosesRemaining:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: v1.37.19 — slot-aware dose-derived stock, mirroring the list entry's field.
+        runwayDays:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: v1.37.19 — projected whole days the usable stock covers under the slot-aware burn rate; NULL = tracking off
+            or no consuming cadence.
       required:
         - id
         - name
@@ -23865,6 +23912,9 @@ components:
         - updatedAt
         - schedules
         - category
+        - stockUnitsRemaining
+        - stockDosesRemaining
+        - runwayDays
       additionalProperties: false
       description: Detail variant of the medication resource enriched with the joined `category`. The base medication fields
         are inlined; see the `Medication` component for their semantics.
@@ -41545,6 +41595,18 @@ components:
             - type: string
             - type: "null"
           description: Per-schedule dose override. NULL means the schedule inherits `Medication.dose`.
+        unitsPerDose:
+          anyOf:
+            - type: number
+            - type: "null"
+          description: v1.37.10 (#219) — per-slot inventory-units override (may be a split-pill fraction). NULL means the schedule
+            inherits the medication-level `unitsPerDose`. Kept raw so an edit surface can distinguish an explicit value
+            from inheritance; consumers wanting the effective figure read `resolvedUnitsPerDose`.
+        resolvedUnitsPerDose:
+          type: number
+          description: v1.37.19 — the EFFECTIVE units one dose of this slot consumes, resolved server-side (`schedule.unitsPerDose
+            ?? medication.unitsPerDose`, matching the intake consumption resolver). Always present; clients never
+            re-derive the inheritance rule.
         daysOfWeek:
           anyOf:
             - type: string
@@ -41609,6 +41671,8 @@ components:
         - windowEnd
         - label
         - dose
+        - unitsPerDose
+        - resolvedUnitsPerDose
         - daysOfWeek
         - timesOfDay
         - reminderGraceMinutes

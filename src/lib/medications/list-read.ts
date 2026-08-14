@@ -15,6 +15,10 @@
 import { prisma } from "@/lib/db";
 import { annotate, getEvent } from "@/lib/logging/context";
 import { getMedicationCategories } from "@/lib/medication-category";
+import {
+  effectiveUnitsPerDose,
+  estimateUnitsRunwayDays,
+} from "@/components/medications/detail/supply-runway";
 import { serializeScheduleUnitsPerDose } from "@/lib/medications/schedule-units-dto";
 import {
   computeDisplayDue,
@@ -247,17 +251,42 @@ export async function buildMedicationsList(
     const stockUnitsRemaining = tracksInventory
       ? (usableUnitsByMedId.get(m.id) ?? 0)
       : null;
+    // #219 / iOS #25 — schedules on the wire carry both the raw nullable
+    // per-slot units AND the server-resolved effective value.
+    const schedulesDto = serializeScheduleUnitsPerDose(
+      m.schedules,
+      m.unitsPerDose,
+    );
+    // v1.37.19 — slot-aware doses figure: divide the units pool by the
+    // schedule-weighted average units per dose, not the medication-level
+    // column alone (wrong for any per-slot medication). Falls back to the
+    // medication level when no schedule derives a consumption rate.
     const stockDosesRemaining =
       stockUnitsRemaining === null
         ? null
-        : Math.floor(stockUnitsRemaining / (Number(m.unitsPerDose) || 1));
+        : Math.floor(
+            stockUnitsRemaining /
+              effectiveUnitsPerDose(schedulesDto, Number(m.unitsPerDose)),
+          );
+    // v1.37.19 — projected runway in whole days on the wire (the low-stock
+    // engine's burn-rate math, slot-aware). NULL when inventory tracking is
+    // off or no schedule derives a consumption rate; 0 when the supply ran
+    // out. Published resolved so no client re-derives the cadence math.
+    const runwayDays =
+      stockUnitsRemaining === null
+        ? null
+        : estimateUnitsRunwayDays(
+            stockUnitsRemaining,
+            schedulesDto,
+            Number(m.unitsPerDose),
+          );
     return {
       ...m,
       // v1.16.12 — Decimal → number so the wire stays a JSON number, not
       // the string Prisma would otherwise serialise a Decimal to.
       unitsPerDose: Number(m.unitsPerDose),
       // #219 — same Decimal → number unwrap for the per-schedule column.
-      schedules: serializeScheduleUnitsPerDose(m.schedules),
+      schedules: schedulesDto,
       category: categoryMap[m.id] ?? "OTHER",
       // v1.32.25 — provenance echo. Surfacing the mirror source lets the
       // web UI and an operator tell an externally-mirrored row (today only
@@ -273,6 +302,7 @@ export async function buildMedicationsList(
       nextDueScheduleId: display?.scheduleId ?? null,
       stockUnitsRemaining,
       stockDosesRemaining,
+      runwayDays,
     };
   });
 }

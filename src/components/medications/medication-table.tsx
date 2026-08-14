@@ -94,6 +94,8 @@ export interface TableMedication {
   asNeeded?: boolean;
   /** v1.16.10 — dose-derived stock from the list payload; null = inventory tracking off. */
   stockDosesRemaining?: number | null;
+  /** v1.37.19 — server-resolved slot-aware runway (days); null = off/no cadence. */
+  runwayDays?: number | null;
   schedules: TableSchedule[];
 }
 
@@ -599,10 +601,14 @@ function MedicationTableRowItem({
   // Projected days the stock covers — the same coarse estimate the
   // detail Übersicht renders, so the column answers "do I need a
   // refill" without opening the medication.
+  // v1.37.19 — prefer the server's slot-aware `runwayDays`; client
+  // estimate only as the stale-payload fallback.
   const runwayDays =
-    stock === null || stock === undefined
-      ? null
-      : estimateRunwayDays(stock, medication.schedules);
+    medication.runwayDays !== undefined
+      ? medication.runwayDays
+      : stock === null || stock === undefined
+        ? null
+        : estimateRunwayDays(stock, medication.schedules);
   // Warn tier (amber) on the SAME predicate as the low-stock
   // notification: projected runway days strictly below the user's
   // threshold. Threshold OFF (null) → no amber tier; an exhausted stock

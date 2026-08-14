@@ -105,6 +105,8 @@ interface Medication {
   asNeeded?: boolean;
   /** v1.16.10 — dose-derived stock from the list payload; null = inventory tracking off. */
   stockDosesRemaining?: number | null;
+  /** v1.37.19 — server-resolved slot-aware runway (days); null = off/no cadence. */
+  runwayDays?: number | null;
   /**
    * v1.17.0 — optional per-medication reorder lead override (days); null /
    * absent = inherit the user-level reorderLeadDays default. Widens the
@@ -313,17 +315,22 @@ export function MedicationCard({
     medication.reorderLeadDays != null
       ? medication.reorderLeadDays
       : (thresholds?.reorderLeadDays ?? 10);
+  // v1.37.19 — prefer the server's slot-aware `runwayDays` (published on
+  // the list wire); the client estimate stays only as the stale-payload
+  // fallback.
   const stockRunwayDays =
     medication.asNeeded || medication.stockDosesRemaining == null
       ? null
-      : medication.stockDosesRemaining > 0
-        ? estimateRunwayDays(
-            medication.stockDosesRemaining,
-            medication.schedules,
-          )
-        : estimateDailyDoseCount(medication.schedules) > 0
-          ? 0
-          : null;
+      : medication.runwayDays !== undefined
+        ? medication.runwayDays
+        : medication.stockDosesRemaining > 0
+          ? estimateRunwayDays(
+              medication.stockDosesRemaining,
+              medication.schedules,
+            )
+          : estimateDailyDoseCount(medication.schedules) > 0
+            ? 0
+            : null;
   const lowStockTrigger =
     lowStockFloor === null
       ? null

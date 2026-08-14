@@ -57,6 +57,7 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import {
   classifyLowStockState,
+  effectiveUnitsPerDose,
   estimateDailyDoseCount,
   estimateRunwayDays,
   lowStockTriggerDays,
@@ -125,7 +126,12 @@ export function evaluateMedicationRunway(
   unitsPerDose: number,
   schedules: RunwaySchedule[],
 ): LowStockEvaluation {
-  const supply = summariseSupply(items, unitsPerDose);
+  // v1.37.19 — divide the pool by the schedule-weighted average units per
+  // dose, so a per-slot medication's doses/runway match the wire figures.
+  const supply = summariseSupply(
+    items,
+    effectiveUnitsPerDose(schedules, unitsPerDose),
+  );
   // v1.18.11 (#31) — server-side observability for the central stock clamp.
   // `summariseSupply` floors a corrupt/legacy negative pool to zero; this is
   // the request-scoped seam that records the underflow so the data defect
@@ -411,6 +417,8 @@ export async function runMedicationLowStockTick(
               timesOfDay: true,
               rrule: true,
               rollingIntervalDays: true,
+              // v1.37.19 — per-slot units feed the slot-aware burn rate.
+              unitsPerDose: true,
             },
           },
         },
@@ -418,6 +426,16 @@ export async function runMedicationLowStockTick(
 
       for (const med of medications) {
         summary.medicationsEvaluated += 1;
+
+        // Decimal → number for the per-slot units so the runway math and
+        // the wire's `runwayDays` read the identical shape.
+        const runwaySchedules: RunwaySchedule[] = med.schedules.map(
+          (sched) => ({
+            ...sched,
+            unitsPerDose:
+              sched.unitsPerDose === null ? null : Number(sched.unitsPerDose),
+          }),
+        );
 
         const evaluation = evaluateMedicationRunway(
           // v1.16.12 — Decimal columns → JS numbers for the runway math.
@@ -427,7 +445,7 @@ export async function runMedicationLowStockTick(
             unitsRemaining: Number(it.unitsRemaining),
           })),
           Number(med.unitsPerDose),
-          med.schedules,
+          runwaySchedules,
         );
 
         // v1.17.0 — effective reorder lead (per-med override beats the
@@ -441,7 +459,7 @@ export async function runMedicationLowStockTick(
         const triggerDays = lowStockTriggerDays({
           lowStockRunwayDays: thresholdDays,
           leadDays,
-          schedules: med.schedules,
+          schedules: runwaySchedules,
         });
 
         const decision = decideLowStockAction({
@@ -494,7 +512,7 @@ export async function runMedicationLowStockTick(
               expiredUnits: evaluation.expiredUnits,
               leadDays,
               triggerDays,
-              schedules: med.schedules,
+              schedules: runwaySchedules,
               today: now,
             });
             const renderForRecipient = (locale: Locale) => {
@@ -506,7 +524,7 @@ export async function runMedicationLowStockTick(
                 expiredUnits: evaluation.expiredUnits,
                 leadDays,
                 triggerDays,
-                schedules: med.schedules,
+                schedules: runwaySchedules,
                 today: now,
               });
               return { title: rendered.title, message: rendered.body };

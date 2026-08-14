@@ -33,6 +33,10 @@ import {
   recomputeMedicationComplianceForDay,
 } from "@/lib/rollups/medication-compliance-rollups";
 import { assertMedicationOwnership } from "@/lib/medications/route-guards";
+import {
+  effectiveUnitsPerDose,
+  estimateUnitsRunwayDays,
+} from "@/components/medications/detail/supply-runway";
 import { serializeScheduleUnitsPerDose } from "@/lib/medications/schedule-units-dto";
 import { hhmmToMinutesOrNull } from "@/lib/medications/scheduling/hhmm";
 import { getUserTodayBounds } from "@/lib/tz/local-day";
@@ -177,13 +181,59 @@ export const GET = apiHandler(
       },
     });
 
+    // v1.37.19 — stock + runway on the detail wire, mirroring the list
+    // payload's semantics: NULL stock = inventory tracking off, 0 = the
+    // supply ran out; runwayDays via the slot-aware burn rate. Published
+    // resolved so no client re-derives the inheritance / cadence math.
+    const [usableStock, anyItemCount] = await Promise.all([
+      prisma.medicationInventoryItem.aggregate({
+        where: {
+          userId: user.id,
+          medicationId: id,
+          state: { in: ["ACTIVE", "IN_USE"] },
+          unitsRemaining: { gt: 0 },
+        },
+        _sum: { unitsRemaining: true },
+      }),
+      prisma.medicationInventoryItem.count({
+        where: { userId: user.id, medicationId: id },
+      }),
+    ]);
+    const schedulesDto = serializeScheduleUnitsPerDose(
+      medication.schedules,
+      medication.unitsPerDose,
+    );
+    const stockUnitsRemaining =
+      anyItemCount > 0 ? Number(usableStock._sum.unitsRemaining ?? 0) : null;
+    const stockDosesRemaining =
+      stockUnitsRemaining === null
+        ? null
+        : Math.floor(
+            stockUnitsRemaining /
+              effectiveUnitsPerDose(
+                schedulesDto,
+                Number(medication.unitsPerDose),
+              ),
+          );
+    const runwayDays =
+      stockUnitsRemaining === null
+        ? null
+        : estimateUnitsRunwayDays(
+            stockUnitsRemaining,
+            schedulesDto,
+            Number(medication.unitsPerDose),
+          );
+
     return apiSuccess({
       ...medication,
       unitsPerDose: Number(medication.unitsPerDose),
-      schedules: serializeScheduleUnitsPerDose(medication.schedules),
+      schedules: schedulesDto,
       category,
       nextDueAt: display ? display.at.toISOString() : null,
       nextDueOverdue: display?.overdue ?? false,
+      stockUnitsRemaining,
+      stockDosesRemaining,
+      runwayDays,
     });
   },
 );
@@ -836,7 +886,10 @@ export const PUT = apiHandler(
     return apiSuccess({
       ...medication,
       unitsPerDose: Number(medication.unitsPerDose),
-      schedules: serializeScheduleUnitsPerDose(medication.schedules),
+      schedules: serializeScheduleUnitsPerDose(
+        medication.schedules,
+        medication.unitsPerDose,
+      ),
       category: normalizedCategory,
     });
   },
