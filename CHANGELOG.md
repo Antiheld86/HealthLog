@@ -1,6 +1,24 @@
 # Changelog
 
-## [1.37.18] — 2026-08-14
+## [1.37.19] — 2026-08-14
+
+### Changed
+
+- Medication stock understands per-slot doses everywhere now. The remaining-doses figure weighs each scheduled slot by its own dose, the API carries the resolved dose per slot plus a runway in days, and the low-stock notification runs on the same arithmetic, so the app, the API and the push can no longer disagree about how long a supply lasts.
+- A document whose summary job died no longer says "being generated" forever. After an hour the detail view says honestly that no summary is available and offers the manual action, and an hourly sweep repairs stuck documents in the background.
+- The daily coach reminder sweep counts how often it has surfaced an ignored reminder and quietly dismisses it after three mornings instead of nagging indefinitely.
+- Accepting an updated disclaimer is now tracked by version, so a future revision can actually ask again.
+- The restore report lists practitioners, appointments, vaccinations and their links, and states what was written, not only what was cleared. The portable export names any field that could not be decrypted instead of exporting it as if it were never set.
+- Changing your timezone re-folds the medication compliance statistics so the day boundaries match your new zone.
+- Long health histories are honest again in two places: the all-time summary includes readings older than five years instead of silently truncating, and the AI context falls back to live data when a pre-computed band is missing.
+- A cleaner copy voice across all six languages: shorter consent buttons, a source-neutral workouts empty state, consistent toast punctuation, "Navigations-Chips" instead of "Pills" in German, and a medication reminder chip that no longer clips mid-sentence.
+- Settings pages that had been permanently redirected are no longer built, the retired placeholder is gone, and the about page is reachable from the privacy page and the settings.
+
+### Fixed
+
+- A measurement reminder claims its notification slot before sending, so a crash mid-send can no longer deliver the same reminder twice.
+- A simultaneous double-submit of the same mood entry reports "duplicate" with the winning entry instead of a confusing error.
+- The intake-event API description now documents every field the server actually returns, and the workout list description matches the real nullability, so generated clients decode without surprises.
 
 ### Fixed
 
