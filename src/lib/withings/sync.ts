@@ -32,7 +32,10 @@ import {
   recomputeBucketsForMeasurement,
 } from "@/lib/rollups/measurement-rollups";
 import { invalidateStatusInsightsForTypes } from "@/lib/insights/comprehensive-generate";
-import { invalidateUserDashboardSnapshot } from "@/lib/cache/invalidate";
+import {
+  invalidateUserDashboardSnapshot,
+  invalidateUserMeasurements,
+} from "@/lib/cache/invalidate";
 import type { SyncWriteResult } from "@/lib/outcome/written-outcome";
 import {
   acquireProviderTokenRefreshLock,
@@ -380,6 +383,11 @@ export async function syncUserMeasurements(
     // pre-sync body until its ~180 s TTL lapsed.
     if (keys.length > 0) {
       invalidateUserDashboardSnapshot(userId);
+      // Background-sync posture (mirrors the Fitbit tail): mark the
+      // per-user analytics / correlations / targets / achievements cells
+      // stale so the imported rows reach the cached readers before their
+      // TTL lapses — the correlations route documents this invariant.
+      invalidateUserMeasurements(userId);
     }
   } catch (err) {
     getEvent()?.addWarning(

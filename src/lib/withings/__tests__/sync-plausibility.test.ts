@@ -76,6 +76,7 @@ vi.mock("@/lib/insights/comprehensive-generate", () => ({
 
 vi.mock("@/lib/cache/invalidate", () => ({
   invalidateUserDashboardSnapshot: vi.fn(),
+  invalidateUserMeasurements: vi.fn(),
 }));
 
 import { prisma } from "@/lib/db";
