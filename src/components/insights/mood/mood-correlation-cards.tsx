@@ -116,7 +116,7 @@ function MoodCorrelationCard({
               // below the title on <sm (see the sm:hidden twin under the
               // header); only the compact badge stays pinned right.
               <div className="flex min-w-0 items-center gap-1.5">
-                <Badge variant="outline" className="text-[10px]">
+                <Badge variant="outline" className="text-2xs">
                   {t(STRENGTH_KEY[data.result.strength])}
                 </Badge>
                 {/* v1.12.4 (C4) — the "{n} paired days · r" line sat under the

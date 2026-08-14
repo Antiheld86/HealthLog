@@ -4521,7 +4521,7 @@
         "title": "Withings",
         "body": "Wagi, ciśnieniomierze i trackery Withings synchronizują się automatycznie po połączeniu.",
         "cta": "Połącz Withings",
-        "setupCta": "Skonfiguruj w Ustawieniach",
+        "setupCta": "Skonfiguruj",
         "setupHint": "Najpierw wymaga własnej, darmowej aplikacji deweloperskiej Withings — około 5 minut, jednorazowo."
       },
       "more": {
@@ -5972,7 +5972,7 @@
     },
     "notificationStatus": {
       "title": "Niezawodność kanałów",
-      "description": "Stan każdego kanału; „Automatycznie wyłączone” przerywa ponawianie po trwałych błędach.",
+      "description": "Pokazuje aktualny stan każdego kanału. „Automatycznie wyłączone” oznacza, że ponawianie zatrzymało się po trwałych błędach.",
       "emptyDescription": "Dodaj kanał w Ustawienia › Integracje › Kanały dostarczania.",
       "stateActive": "Aktywne",
       "stateAutoDisabled": "Automatycznie wyłączone",

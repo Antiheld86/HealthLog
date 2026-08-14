@@ -174,7 +174,7 @@ export function CoverageMeter({
               data-slot="coverage-meter-label"
               className={cn(
                 "text-muted-foreground tabular-nums",
-                size === "md" ? "text-xs" : "text-[11px]",
+                size === "md" ? "text-xs" : "text-2xs",
               )}
             >
               {axisLabel ??

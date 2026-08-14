@@ -231,7 +231,7 @@ function ContributorRow({ contributor }: { contributor: AnatomyContributor }) {
         </span>
         <span
           data-slot="anatomy-contributor-value"
-          className="text-muted-foreground text-[11px] tabular-nums"
+          className="text-muted-foreground text-xs tabular-nums"
         >
           {present
             ? t("insights.derived.anatomy.contributorValue", {

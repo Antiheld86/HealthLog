@@ -4521,7 +4521,7 @@
         "title": "Withings",
         "body": "Bilance, misuratori di pressione e tracker Withings si sincronizzano automaticamente una volta collegati.",
         "cta": "Connetti Withings",
-        "setupCta": "Configura nelle Impostazioni",
+        "setupCta": "Configura",
         "setupHint": "Richiede prima la tua app sviluppatore Withings gratuita — circa 5 minuti, una tantum."
       },
       "more": {
@@ -5972,7 +5972,7 @@
     },
     "notificationStatus": {
       "title": "Affidabilità dei canali",
-      "description": "Stato per canale; «Disattivato automaticamente» interrompe i tentativi dopo errori permanenti.",
+      "description": "Mostra lo stato attuale di ogni canale. «Disattivato automaticamente» significa che i tentativi si sono fermati dopo errori permanenti.",
       "emptyDescription": "Aggiungi un canale in Impostazioni › Integrazioni › Canali di recapito.",
       "stateActive": "Attivo",
       "stateAutoDisabled": "Disattivato automaticamente",

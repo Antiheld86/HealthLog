@@ -384,7 +384,7 @@ export function MoodForm({ onSuccess, onCancel, footerSlot }: MoodFormProps) {
                   className="h-7 w-7 sm:h-8 sm:w-8"
                   aria-hidden="true"
                 />
-                <span className="text-[10px] leading-tight sm:text-xs">
+                <span className="text-2xs leading-tight sm:text-xs">
                   {t(level.labelKey)}
                 </span>
               </button>

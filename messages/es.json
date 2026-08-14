@@ -4521,7 +4521,7 @@
         "title": "Withings",
         "body": "Las básculas, los tensiómetros y los trackers de Withings se sincronizan automáticamente una vez conectados.",
         "cta": "Conectar Withings",
-        "setupCta": "Configurar en Ajustes",
+        "setupCta": "Configurar",
         "setupHint": "Necesita primero tu propia app de desarrollador de Withings, gratuita — unos 5 minutos, una sola vez."
       },
       "more": {
@@ -5972,7 +5972,7 @@
     },
     "notificationStatus": {
       "title": "Fiabilidad de los canales",
-      "description": "Estado por canal; «Desactivado automáticamente» detiene los reintentos tras errores permanentes.",
+      "description": "Muestra el estado actual de cada canal. «Desactivado automáticamente» significa que los reintentos se detuvieron tras errores permanentes.",
       "emptyDescription": "Configura un canal en Ajustes › Integraciones › Canales de entrega.",
       "stateActive": "Activo",
       "stateAutoDisabled": "Desactivado automáticamente",

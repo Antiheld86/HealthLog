@@ -72,7 +72,7 @@ describe("<SourceCardGrid> Withings card", () => {
     expect(html).toContain('data-testid="source-card-withings-setup"');
     expect(html).toContain('href="/settings/integrations#withings"');
     expect(html).not.toContain('href="/api/withings/connect"');
-    expect(html).toContain("Set up in Settings");
+    expect(html).toContain("Set up</a>");
   });
 
   it("also redirects to Settings when the status envelope hasn't loaded yet", () => {

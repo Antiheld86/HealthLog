@@ -29,7 +29,7 @@ export function MessageTokenFooter({ tokens, model }: MessageTokenFooterProps) {
   return (
     <p
       data-slot="coach-token-footer"
-      className="text-muted-foreground text-[11px] tabular-nums"
+      className="text-muted-foreground text-xs tabular-nums"
     >
       {label}
     </p>

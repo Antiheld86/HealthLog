@@ -1064,7 +1064,7 @@ export function MoodList({ onAddFirst }: MoodListProps = {}) {
                       <span className="text-lg font-semibold tabular-nums">
                         {MOOD_SCORES[level]}
                       </span>
-                      <span className="text-[10px] leading-tight sm:text-xs">
+                      <span className="text-2xs leading-tight sm:text-xs">
                         {t(MOOD_LABEL_KEYS[level])}
                       </span>
                     </button>
