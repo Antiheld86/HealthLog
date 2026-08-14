@@ -129,6 +129,17 @@ export const POST = apiHandler(async (request: NextRequest) => {
     );
   }
   const selection = minted.selection;
+  // A selection that admits nothing would render an empty report and still
+  // spend a rate-limit slot on it. The panel disables its own submit button
+  // in that state; a hand-built request has to be refused here, because this
+  // route has no documents-only mode that would make an empty leaf list a
+  // legitimate scope (the share-link route, which does, mints EMPTY itself).
+  if (selection.leaves.length === 0) {
+    annotate({ meta: { empty_selection: true } });
+    return apiError("Select at least one section to export", 422, {
+      errorCode: "export.selection.empty",
+    });
+  }
 
   const range = normaliseDateRange(input.range ?? undefined);
   const practiceName = sanitisePracticeName(input.practiceName);
