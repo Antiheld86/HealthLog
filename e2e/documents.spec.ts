@@ -392,7 +392,9 @@ test.describe("document vault", () => {
     await sheet.getByRole("button", { name: "Delete" }).click();
 
     // Undo toast → restore → the card returns.
-    await expect(page.getByText("Document deleted", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("Document deleted", { exact: true }),
+    ).toBeVisible();
     await expect(openButton(page, `${title}.pdf`)).not.toBeVisible();
     await page.getByRole("button", { name: "Undo" }).click();
     await expect(openButton(page, `${title}.pdf`)).toBeVisible();
