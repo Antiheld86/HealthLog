@@ -281,7 +281,7 @@ const ROUTE_IMPORTS = import.meta.glob<Record<string, unknown>>(
 
 describe("the complete MANAGE handler matrix", () => {
   it("starts with a non-empty, exact handler inventory", () => {
-    expect(ADMITTED_MUTATING_HANDLERS.length).toBe(75);
+    expect(ADMITTED_MUTATING_HANDLERS.length).toBe(77);
   });
 });
 
@@ -734,6 +734,71 @@ manageContract("DELETE /api/measurement-reminders/[id]", {
       where: { id: row.id },
     });
     return after === null;
+  },
+});
+
+manageContract("POST /api/measurement-reminders/[id]/skip", {
+  contract: ADMITTED_MUTATING_HANDLERS.find(
+    (entry) =>
+      entry.route === "/api/measurement-reminders/[id]/skip" &&
+      entry.action === "POST",
+  )!,
+  prepare: (ownerId) => makeReminder(ownerId),
+  act: async (row) => {
+    const { POST } =
+      await import("@/app/api/measurement-reminders/[id]/skip/route");
+    return call(
+      POST as Handler,
+      "POST",
+      `/api/measurement-reminders/${row.id}/skip`,
+      undefined,
+      { id: row.id },
+    );
+  },
+  ok: 200,
+  auditAction: "measurementReminder.skip",
+  applied: async (row) => {
+    const after = await getPrismaClient().measurementReminder.findUnique({
+      where: { id: row.id },
+    });
+    const ledger = await getPrismaClient().measurementReminderEvent.count({
+      where: { reminderId: row.id, kind: "SKIPPED" },
+    });
+    // A skip stamps its own column and ledger row and never completes the
+    // reminder: lastSatisfiedAt must stay exactly as prepared (null).
+    return (
+      after?.lastSkippedAt !== null &&
+      after?.lastSatisfiedAt === null &&
+      ledger === 1
+    );
+  },
+});
+
+manageContract("POST /api/measurement-reminders/[id]/snooze", {
+  contract: ADMITTED_MUTATING_HANDLERS.find(
+    (entry) =>
+      entry.route === "/api/measurement-reminders/[id]/snooze" &&
+      entry.action === "POST",
+  )!,
+  prepare: (ownerId) => makeReminder(ownerId),
+  act: async (row) => {
+    const { POST } =
+      await import("@/app/api/measurement-reminders/[id]/snooze/route");
+    return call(
+      POST as Handler,
+      "POST",
+      `/api/measurement-reminders/${row.id}/snooze`,
+      { until: "2027-01-15" },
+      { id: row.id },
+    );
+  },
+  ok: 200,
+  auditAction: "measurementReminder.snooze",
+  applied: async (row) => {
+    const after = await getPrismaClient().measurementReminder.findUnique({
+      where: { id: row.id },
+    });
+    return after?.snoozedUntil !== null && after?.lastSatisfiedAt === null;
   },
 });
 
@@ -2515,13 +2580,13 @@ describe("the conditions the admissions were granted on", () => {
 describe("the complete MANAGE handler matrix", () => {
   it("registers one strict actor-and-effect driver for every admission", () => {
     const expected = ADMITTED_MUTATING_HANDLERS.map(matrixKey).sort();
-    expect(STRICT_DRIVER_KEYS.size).toBe(75);
+    expect(STRICT_DRIVER_KEYS.size).toBe(77);
     expect([...STRICT_DRIVER_KEYS].sort()).toEqual(expected);
   });
 
   it("executes every registered driver through its owned effect and actor audit", () => {
     const expected = ADMITTED_MUTATING_HANDLERS.map(matrixKey).sort();
-    expect(REAL_EFFECT_KEYS.size).toBe(75);
+    expect(REAL_EFFECT_KEYS.size).toBe(77);
     expect([...REAL_EFFECT_KEYS].sort()).toEqual(expected);
   });
 });
