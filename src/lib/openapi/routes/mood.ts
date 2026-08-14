@@ -1,16 +1,23 @@
 /**
- * OpenAPI route table — mood-tag taxonomy management (catalog read, custom
- * tags, custom groups, per-user layout, catalogue hide).
+ * OpenAPI route table — the mood surface: entry CRUD (list, create, single
+ * read/edit/delete, restore, bulk delete), the bulk backfill, the linked-day
+ * read, and mood-tag taxonomy management (catalog read, custom tags, custom
+ * groups, per-user layout, catalogue hide).
  *
  * Part of the OpenAPI route table; aggregated in `./index.ts`.
- * Request schemas come from `src/lib/mood/{custom-tags,tag-layout}.ts`
- * where they are shared with the runtime request parsing, so the wire
- * contract stays single-source. Response DTOs are declared here mirroring
- * the route handlers under `src/app/api/mood/tags/`.
+ * Request schemas come from `src/lib/validations/mood.ts` and
+ * `src/lib/mood/{custom-tags,tag-layout}.ts` where they are shared with the
+ * runtime request parsing, so the wire contract stays single-source. Response
+ * DTOs are declared here mirroring the route handlers under
+ * `src/app/api/mood-entries/` and `src/app/api/mood/`.
  *
  * v1.13.0 shipped the custom-tag CRUD + hide surface outside the YAML;
- * v1.17.0 adds groups + layout and registers the WHOLE surface so the iOS
- * client gets a locked contract.
+ * v1.17.0 adds groups + layout and registers the WHOLE taxonomy surface so
+ * the iOS client gets a locked contract. The entry CRUD family itself and
+ * the linked-day read joined the published document later — they predated
+ * the contract surface and had been served unpublished while their bulk
+ * twin was in the YAML, which left grant-scope reviewers unable to see the
+ * cross-section read at all.
  */
 import { z } from "zod/v4";
 import type { ZodOpenApiObject } from "zod-openapi";
@@ -23,7 +30,13 @@ import {
   hideCatalogueTagSchema,
 } from "@/lib/mood/custom-tags";
 import { moodTagLayoutSchema } from "@/lib/mood/tag-layout";
-import { moodLevelEnum, moodSourceEnum } from "@/lib/validations/mood";
+import {
+  createMoodEntrySchema,
+  listMoodEntriesSchema,
+  moodLevelEnum,
+  moodSourceEnum,
+  updateMoodEntrySchema,
+} from "@/lib/validations/mood";
 import {
   CONTACT_CIRCLE_KEYS,
   CONTACT_EXTENT_KEYS,
@@ -74,6 +87,27 @@ hideCatalogueTagSchema.meta({
   id: "HideMoodTagRequest",
   description:
     "Hide / show a CATALOGUE tag for the calling user. Custom tags are hidden via their own `isActive` flag on the custom PATCH instead (this route 400s a `custom:` key).",
+});
+
+// Assigned rather than annotated in place: Zod 4's `.meta()` returns a NEW
+// instance carrying the id, so the route table below must reference these
+// consts for the names to reach `components.schemas`.
+const createMoodEntryRequest = createMoodEntrySchema.meta({
+  id: "CreateMoodEntryRequest",
+  description:
+    "Single mood-entry create. `mood` is the five-point label; the server derives `score` (1-5) and pleasantness `a1` from it, so a one-tap check-in writes a complete entry. `a1`-`a5` are the level-A self-state values (0-10): absent says nothing, a number is the answer, an explicit null takes an answer back (`a1` falls back to the derivation instead of clearing). With `externalId` the create UPSERTS on `(userId, source, externalId)` — the idempotent re-post iOS drives over Bearer; without it a same-`(date, moodLoggedAt)` re-post 409s. `moodLoggedAt` is bounded: no future instants beyond a 5-min clock-skew tolerance, nothing before 1900.",
+});
+
+const updateMoodEntryRequest = updateMoodEntrySchema.meta({
+  id: "UpdateMoodEntryRequest",
+  description:
+    "Per-field mood-entry edit. Omitted fields keep the stored value. `tagKeys`, `ratedFactors` and `context` replace their whole set when present (`null` clears). `a2`-`a5`: explicit null clears; `a1` null re-derives from the label. Editing `mood` without `a1` re-derives pleasantness the same way it re-derives `score`. Editing `moodLoggedAt` re-anchors the row's `date` (and `tz`) to the account's display timezone.",
+});
+
+const listMoodEntriesQuery = listMoodEntriesSchema.meta({
+  id: "ListMoodEntriesQuery",
+  description:
+    "Filters + paging for the mood-entry list. `from` / `to` bound the local-day `date` label (YYYY-MM-DD, inclusive). `limit` capped at 500.",
 });
 
 moodTagLayoutSchema.meta({
@@ -387,6 +421,213 @@ const bulkMoodResponse = z
     entries: z.array(bulkMoodEntryResult),
   })
   .meta({ id: "BulkMoodResponse" });
+
+// ── Entry CRUD — mirrors the route handlers under
+// `src/app/api/mood-entries/` and the shared list read
+// (`src/lib/mood/list-read.ts`). One DTO for the list rows, the single GET,
+// the create and the edit response, because the handlers deliberately answer
+// one shape: the edit form reads back exactly what the write path takes.
+
+const moodEntryRatedFactor = z
+  .object({
+    key: z.string(),
+    rating: z.number().int(),
+  })
+  .meta({
+    id: "MoodEntryRatedFactor",
+    description: "One rated factor on an entry, with its per-entry score.",
+  });
+
+const moodEntryDto = z
+  .object({
+    id: z.string(),
+    userId: z.string(),
+    date: z
+      .string()
+      .describe(
+        "YYYY-MM-DD, anchored to the row's `tz` (legacy rows with `tz: null` read as Europe/Berlin).",
+      ),
+    mood: moodLevelEnum,
+    score: z
+      .number()
+      .int()
+      .describe("The legacy 1-5 axis, server-derived from `mood`."),
+    a1: z
+      .number()
+      .int()
+      .nullable()
+      .describe(
+        "Pleasantness, 0-10. Server-derived from `mood` on every write when the request carried none, so it is populated even for rows a client posted without it. Consume the value; do not re-derive it.",
+      ),
+    a2: z
+      .number()
+      .int()
+      .nullable()
+      .describe(
+        "Stress, 0-10, INVERSE-oriented: a higher value is more stress. NULL when nobody answered it.",
+      ),
+    a3: z.number().int().nullable().describe("Energy, 0-10, or null."),
+    a4: z.number().int().nullable().describe("Connectedness, 0-10, or null."),
+    a5: z.number().int().nullable().describe("Stability, 0-10, or null."),
+    tags: z
+      .array(z.string())
+      .describe("Free-text tag list, decoded from storage; `[]` when none."),
+    note: z
+      .string()
+      .nullable()
+      .describe(
+        "Free-text note, decrypted for the response. AES-256-GCM at rest; the ciphertext never rides the wire.",
+      ),
+    source: moodSourceEnum,
+    externalId: z
+      .string()
+      .nullable()
+      .describe("The sync client's source-stable dedup id, or null."),
+    moodLoggedAt: z.iso.datetime({ offset: true }),
+    tz: z
+      .string()
+      .nullable()
+      .describe(
+        "IANA zone the `date` label is anchored to. Null on legacy rows (read as Europe/Berlin).",
+      ),
+    syncedAt: z.iso.datetime({ offset: true }),
+    createdAt: z.iso.datetime({ offset: true }),
+    updatedAt: z.iso.datetime({ offset: true }),
+    syncVersion: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe("LWW reconciliation counter; mood is last-writer-wins by it."),
+    deletedAt: z
+      .null()
+      .describe(
+        "Always null on this surface: tombstoned rows are hidden from the list and 404 on a direct GET. Tombstones surface on the `/api/sync/changes` feed instead.",
+      ),
+    tagKeys: z
+      .array(z.string())
+      .describe("Binary structured-tag keys linked to the entry."),
+    ratedFactors: z.array(moodEntryRatedFactor),
+    context: moodContextWire
+      .nullable()
+      .describe(
+        "The day's context, or null when the entry carries none. Null and an object of nulls are different answers.",
+      ),
+  })
+  .meta({
+    id: "MoodEntryDTO",
+    description:
+      "One mood entry as every entry surface answers it — list rows, single GET, create and edit responses share this shape, so a client hydrating from a write response renders without a refetch.",
+  });
+
+const moodEntryEnvelope = dataEnvelope(moodEntryDto, "MoodEntryEnvelope");
+
+const moodEntryListResponse = z.object({
+  entries: z.array(moodEntryDto),
+  meta: z.object({
+    total: z.number().int().nonnegative(),
+    limit: z.number().int(),
+    offset: z.number().int(),
+  }),
+});
+
+// Mirrors the route-local `restoreSchema` / `bulkDeleteSchema`
+// (`src/app/api/mood-entries/{restore,bulk-delete}/route.ts`) — the two
+// declare the identical shape on purpose, so one published schema serves both.
+const moodEntryIdsPayload = z
+  .object({
+    ids: z.array(z.string().min(1)).min(1).max(200),
+  })
+  .meta({
+    id: "MoodEntryIdsRequest",
+    description:
+      "1-200 mood-entry ids, scoped to the resolved record. A forged / foreign / non-matching id is a silent no-op, never a 404 existence leak: the mutation `where` pins the record owner's id.",
+  });
+
+// The `(userId, date, moodLoggedAt)` unique — only the legacy no-`externalId`
+// create path and a `moodLoggedAt` edit can trip it; a create carrying
+// `externalId` upserts instead of 409-ing.
+const duplicateTimestampResponse = {
+  "409": {
+    description:
+      "A mood entry with the same `(date, moodLoggedAt)` instant already exists. `meta.errorCode` = `mood.duplicate_timestamp`. Only a request without `externalId` can answer this — with one, the write upserts in place.",
+    content: { "application/json": { schema: errorEnvelope } },
+  },
+} as const;
+
+// ── The linked day — mirrors `src/lib/mood/linked-context.ts` ────────
+
+const linkedFigure = z
+  .union([
+    z.object({ present: z.literal(false) }),
+    z.object({
+      present: z.literal(true),
+      value: z.number(),
+      unit: z.string(),
+    }),
+  ])
+  .meta({
+    id: "MoodLinkedFigure",
+    description:
+      "A figure that either exists or honestly does not. `{ present: false }` means the data is not recorded — never zero, never an error.",
+  });
+
+/**
+ * A block that can also be absent because its owning module is switched off.
+ * A disabled module blanks its block rather than answering zero or a filtered
+ * version of itself.
+ */
+function linkedBlock<T extends z.ZodRawShape>(shape: T) {
+  return z.union([
+    z.object({
+      available: z.literal(false),
+      reason: z.literal("module-disabled"),
+    }),
+    z.object({ available: z.literal(true), ...shape }),
+  ]);
+}
+
+const moodLinkedContextResponse = z
+  .object({
+    day: z
+      .string()
+      .describe("The local day the figures are about, YYYY-MM-DD."),
+    sleep: linkedBlock({
+      asleep: linkedFigure.describe(
+        "Time asleep (minutes) for the night the day woke up on.",
+      ),
+      inBed: linkedFigure.describe(
+        "Time in bed (minutes), when any writer recorded a bed window.",
+      ),
+    }),
+    activity: linkedBlock({
+      steps: linkedFigure,
+      activeEnergy: linkedFigure,
+    }),
+    vitals: linkedBlock({
+      restingHeartRate: linkedFigure,
+      heartRateVariability: linkedFigure,
+    }),
+    body: linkedBlock({
+      logged: z
+        .boolean()
+        .describe("Whether an illness day-log exists for this day at all."),
+      functionalImpact: linkedFigure.describe(
+        "How much the day was limited, 0-3, as the illness module records it.",
+      ),
+      symptoms: z
+        .array(z.string())
+        .describe("Symptoms linked to the day-log, by catalogue key."),
+      episodeId: z
+        .string()
+        .nullable()
+        .describe("The episode to open in the illness module, when any."),
+    }),
+  })
+  .meta({
+    id: "MoodLinkedContext",
+    description:
+      "What the modules that own sleep, activity, vitals and body symptoms already know about one local day. Nothing here is stored on the mood row — every figure is resolved from its owning module at read time, cross-source de-duplicated to one canonical source per metric. A switched-off module blanks its whole block (`available: false`).",
+  });
 
 // ── The day's two readings ───────────────────────────────────────────
 //
@@ -811,6 +1052,208 @@ export const moodPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         ...conflictResponse409("Mood-tag layout", "mood_tag_layout_conflict"),
         ...stdResponses,
         ...invalidBaseTokenResponse,
+      },
+    },
+  },
+  // ── Entry CRUD (published later than its bulk twin; see file header) ─
+  "/api/mood-entries": {
+    get: {
+      tags: ["Mood"],
+      summary: "List mood entries",
+      description:
+        "The record's mood entries, filtered and paged. Soft-deleted (tombstoned) rows are hidden; the `/api/sync/changes` feed is where tombstones surface. Every row carries the same `MoodEntryDTO` shape the write paths answer, structured-tag keys and rated factors included, so the edit form pre-populates without per-row requests. A malformed query 422s with every issue listed (`meta.errorCode` = `mood.list.invalid`).",
+      requestParams: { query: listMoodEntriesQuery },
+      responses: {
+        "200": {
+          description: "One page of entries plus paging meta.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                moodEntryListResponse,
+                "MoodEntryListEnvelope",
+              ),
+            },
+          },
+        },
+        ...recordRefusal(),
+        ...stdResponses,
+      },
+    },
+    post: {
+      tags: ["Mood"],
+      summary: "Create a mood entry",
+      description:
+        "Writes the entry, its structured-tag links and its day context in one transaction — a link or context failure rolls the entry back rather than letting a retry mint a duplicate. Idempotent via the `Idempotency-Key` header. With `externalId` the write UPSERTS on `(userId, source, externalId)` (a re-post updates the row in place and restates pleasantness from the label, while A2-A5 and a stored context are only touched when the request carries them); without it, a same-`(date, moodLoggedAt)` re-post 409s. A delegated manager cannot supply `externalId` (422, `meta.errorCode` = `mood.create.external_id_not_delegable`) — it is a device's contract with its own rows. A rated factor outside its catalog scale 422s (`mood.ratedFactor.out_of_range`); a malformed body 422s (`mood.create.invalid`). An unstable `externalId` (an object description or memory address that rotates per launch) is refused at validation.",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: createMoodEntryRequest } },
+      },
+      responses: {
+        "201": {
+          description:
+            "Entry created (or upserted in place via `externalId`), with its persisted tag keys, rated factors and context.",
+          content: { "application/json": { schema: moodEntryEnvelope } },
+        },
+        ...duplicateTimestampResponse,
+        ...recordRefusal(),
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/mood-entries/{id}": {
+    get: {
+      tags: ["Mood"],
+      summary: "Read one mood entry",
+      description:
+        "The full entry with its day context, so the edit surface loads both in one request. A soft-deleted row 404s, matching the list read's invariant.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      responses: {
+        "200": {
+          description: "The entry.",
+          content: { "application/json": { schema: moodEntryEnvelope } },
+        },
+        ...notFoundResponse,
+        ...recordRefusal(),
+        ...stdResponses,
+      },
+    },
+    put: {
+      tags: ["Mood"],
+      summary: "Edit a mood entry",
+      description:
+        "Per-field edit: omitted fields keep their stored value; `tagKeys`, `ratedFactors` and `context` replace their whole set when present (`null` clears). Editing `mood` re-derives `score` and — when the label actually moved — pleasantness `a1`; editing `moodLoggedAt` re-anchors the row's `date` and `tz` to the account's display timezone. Bumps `syncVersion` so paired clients reconcile last-writer-wins. A soft-deleted row 404s (`meta.errorCode` = `mood.not_found`); an edit landing on another row's `(date, moodLoggedAt)` 409s (`mood.duplicate_timestamp`); a rated factor outside its catalog scale 422s (`mood.ratedFactor.out_of_range`); a malformed body 422s (`mood.update.invalid`).",
+      requestParams: { path: z.object({ id: z.string() }) },
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: updateMoodEntryRequest } },
+      },
+      responses: {
+        "200": {
+          description:
+            "The entry after the edit, with its persisted tag keys, rated factors and context.",
+          content: { "application/json": { schema: moodEntryEnvelope } },
+        },
+        ...notFoundResponse,
+        ...duplicateTimestampResponse,
+        ...recordRefusal(),
+        ...stdResponses,
+      },
+    },
+    delete: {
+      tags: ["Mood"],
+      summary: "Delete a mood entry (soft)",
+      description:
+        "Tombstones the row (`deletedAt` set, `syncVersion` bumped) rather than hard-deleting, so the `/api/sync/changes` feed carries the tombstone to paired clients that were offline. Invisible to every normal read from here on; `POST /api/mood-entries/restore` puts it back. Re-deleting an already-tombstoned row is a harmless idempotent no-op.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      responses: {
+        "200": {
+          description: "Entry tombstoned.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ deleted: z.literal(true) }),
+                "MoodEntryDeleteEnvelope",
+              ),
+            },
+          },
+        },
+        ...notFoundResponse,
+        ...recordRefusal(),
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/mood-entries/restore": {
+    post: {
+      tags: ["Mood"],
+      summary: "Restore soft-deleted mood entries",
+      description:
+        "Un-tombstones every owned, currently-deleted id in one statement — the delete-Undo affordance. Clears `deletedAt` and bumps `syncVersion` so the row re-surfaces in normal reads and rides the `/api/sync/changes` feed as an upsert. A forged / foreign / not-deleted id is a silent no-op, never a 404 existence leak. Idempotent via the `Idempotency-Key` header. Rate-limited 60/min (keyed on the ACTING user, so a manager burns their own allowance). A malformed body 422s (`meta.errorCode` = `mood.restore.invalid`).",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: moodEntryIdsPayload } },
+      },
+      responses: {
+        "200": {
+          description: "`restored` counts the rows actually un-tombstoned.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ restored: z.number().int().nonnegative() }),
+                "MoodEntriesRestoreEnvelope",
+              ),
+            },
+          },
+        },
+        ...recordRefusal(),
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/mood-entries/bulk-delete": {
+    post: {
+      tags: ["Mood"],
+      summary: "Soft-delete mood entries in bulk",
+      description:
+        "Tombstones every owned, not-already-deleted id in one statement — the management list's multi-select delete, matching the single-DELETE tombstone contract. A forged / foreign id is a silent no-op, never a 404 existence leak. Idempotent via the `Idempotency-Key` header. Rate-limited 60/min (keyed on the ACTING user). A malformed body 422s (`meta.errorCode` = `mood.bulk-delete.invalid`).",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: moodEntryIdsPayload } },
+      },
+      responses: {
+        "200": {
+          description: "`deleted` counts the rows actually tombstoned.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ deleted: z.number().int().nonnegative() }),
+                "MoodEntriesBulkDeleteEnvelope",
+              ),
+            },
+          },
+        },
+        ...recordRefusal(),
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/mood/linked-context": {
+    get: {
+      tags: ["Mood"],
+      summary: "The linked figures of one local day",
+      description:
+        "What the modules that own sleep, activity, vitals and body symptoms already know about one day, resolved at read time and never stored on the mood row — a corrected sleep session shows up here with nothing to re-sync. Keyed by local day rather than entry id, deliberately: the capture sheet needs the figures BEFORE an entry exists. `tz` anchors the day's boundaries — the capture sheet sends the browser's zone, the edit dialog the entry's stored `tz`; absent falls back to the account's display timezone. Whole-record read: the payload crosses into the measurements and illness sections from a mood surface, so a section-scoped grant is refused outright rather than served a filtered day that would read as empty. Gated: 403 `module.disabled` when the mood module is off. A malformed query 422s (`meta.errorCode` = `mood.linkedContext.invalid`).",
+      requestParams: {
+        query: z.object({
+          date: z
+            .string()
+            .regex(/^\d{4}-\d{2}-\d{2}$/)
+            .describe("The local day to resolve, YYYY-MM-DD."),
+          tz: z
+            .string()
+            .min(1)
+            .max(64)
+            .optional()
+            .describe(
+              "IANA zone the day is anchored to. Send the entry's stored `tz` when editing; omit to use the account's display timezone.",
+            ),
+        }),
+      },
+      responses: {
+        "200": {
+          description:
+            "The day's linked blocks; absence is explicit per figure and per module.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                moodLinkedContextResponse,
+                "MoodLinkedContextEnvelope",
+              ),
+            },
+          },
+        },
+        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
+        ...stdResponses,
       },
     },
   },
