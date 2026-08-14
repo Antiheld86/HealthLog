@@ -51,11 +51,15 @@ import {
   recordSessionFenceVerdict,
   type AssertedRecordContext,
 } from "@/lib/sharing/record-session-fence-contract";
+// Runtime error classes come from the LEAF module — importing them from
+// api-handler recreated the import cycle this split removed. The
+// `AuthContext` type import stays on api-handler: type-only, erased at
+// runtime, no cycle.
 import {
   RecordSessionChangedError,
   SharingAccessDeniedError,
-  type AuthContext,
-} from "@/lib/api-handler";
+} from "@/lib/api-errors";
+import type { AuthContext } from "@/lib/api-handler";
 import { annotate, getEvent } from "@/lib/logging/context";
 
 /**
