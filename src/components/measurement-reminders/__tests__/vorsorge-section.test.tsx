@@ -28,6 +28,8 @@ vi.mock("@/hooks/use-measurement-reminders", () => ({
     update: { mutate: vi.fn(), isPending: false },
     remove: { mutate: vi.fn(), isPending: false },
     satisfy: { mutate: vi.fn(), isPending: false },
+    skip: { mutate: vi.fn(), isPending: false },
+    snooze: { mutate: vi.fn(), isPending: false },
   }),
 }));
 

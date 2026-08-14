@@ -516,6 +516,9 @@
     "heroItemsTitle": "Dzisiejsze wyróżnienia",
     "heroItemsDescription": "Wybierz typy elementów, które mogą pojawiać się w dzisiejszych wyróżnieniach.",
     "heroItemsNotificationNote": "Ustawieniami powiadomień zarządzasz osobno.",
+    "heroContentTitle": "Górna karta pokazuje",
+    "heroContentScore": "Wynik zdrowia i podsumowanie dnia",
+    "heroContentReminders": "Dzisiejsze wyróżnienia",
     "heroItems": {
       "coach_checkin": "Podsumowania z Coachem",
       "dose_window": "Dawki leków",
@@ -4529,7 +4532,8 @@
         "oura": "Oura",
         "polar": "Polar",
         "nightscout": "Nightscout",
-        "fitbit": "Fitbit"
+        "fitbit": "Fitbit",
+        "appleHealthHint": "Apple Health nie ma połączenia przez przeglądarkę — dokończ tu wstępną konfigurację, a następnie otwórz aplikację HealthLog na iPhonie, aby dokończyć konfigurację Apple Health."
       },
       "import": "Importuj istniejącą historię"
     },
@@ -6388,6 +6392,13 @@
       "importNote": "Potrzebujesz starszej historii lub nie możesz użyć aplikacji iOS? Przesłanie pliku XML/ZIP z Apple Health jest jednorazową alternatywą i nie włącza synchronizacji na żywo.",
       "importAction": "Otwórz jednorazowy import",
       "staleNote": "Od ponad tygodnia nie napłynęły żadne dane z Apple Health. Otwórz aplikację HealthLog na iPhonie i sprawdź uprawnienia Apple Health.",
+      "progress": {
+        "title": "Postęp synchronizacji",
+        "receivedLabel": "Odebrane rekordy",
+        "oldestLabel": "Najstarszy osiągnięty pomiar",
+        "flowing": "W ciągu ostatniej godziny dotarły dane — aplikacja na iPhonie nadal je przesyła.",
+        "waiting": "Oczekiwanie na kolejne dane z aplikacji na iPhonie. Przesyłanie trwa dalej, gdy aplikacja jest otwarta lub gdy iOS przydzieli jej czas w tle — cisza podczas pierwszego dużego uzupełniania historii jest normalna, to nie błąd."
+      },
       "delivery": {
         "title": "Dostarczanie",
         "lastTriggerLabel": "Ostatnia synchronizacja dotarła",
@@ -9710,8 +9721,6 @@
     "deleteConfirmTitle": "Usunąć tę metrykę własną?",
     "deleteConfirmDescription": "Metryka zostanie usunięta z listy. Zapisane wartości pozostaną.",
     "deletedToast": "Usunięto metrykę własną",
-    "restoredToast": "Przywrócono wartość",
-    "restoreError": "Nie udało się przywrócić",
     "deleteError": "Nie udało się usunąć metryki własnej",
     "showAllValues": "Pokaż wszystkie wartości",
     "emptyDescription": "Zdefiniuj własne pomiary, aby je śledzić i przedstawiać na wykresie.",
@@ -9761,6 +9770,8 @@
       "editedToast": "Zaktualizowano wartość",
       "editError": "Nie udało się zaktualizować wartości",
       "deletedToast": "Usunięto wartość",
+      "restoredToast": "Przywrócono wartość",
+      "restoreError": "Nie udało się przywrócić",
       "deleteError": "Nie udało się usunąć wartości"
     },
     "chart": {

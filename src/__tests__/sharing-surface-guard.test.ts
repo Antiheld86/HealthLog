@@ -875,6 +875,10 @@ const DELEGABLE_ROUTES: Record<string, DelegableEntry> = {
     domain: "mind",
     why: "The record's screener history. The module gate resolves against the record, so a delegate sees the surface only where the owner switched it on; the rate limit on the POST arm is untouched and that arm still refuses under a switch.",
   },
+  "app/api/mental-health/assessments/[id]/route.ts": {
+    domain: "mind",
+    why: "One administration of the record, fetch-then-guard against the resolved user, WITH its decrypted per-item answers. Admitted at the same level as the list beside it deliberately: the mind read grant already serves the mood diary's decrypted prose and the list already publishes the item-9 flag, so the per-item values sit inside what the domain shows, not beyond it. The route comment carries the argument; the module gate resolves against the record like the sibling.",
+  },
   "app/api/anamnesis/facts/route.ts": {
     domain: "profile",
     why: "The record's health-profile facts, read through `readHealthProfileFacts(user.id)`. The module holds write helpers, and the GET calls none of them.",
@@ -1937,8 +1941,12 @@ const ACTOR_ROUTES: Record<string, string> = {
  * v1.37.20 (#223 / iOS #68) -- Vorsorge skip/snooze adds five: skip, snooze
  * and the completion-ledger history read on the record list, plus skip and
  * snooze on the manage literal. 224 -> 229.
+ *
+ * The screener detail read adds one: the per-administration read that
+ * decrypts the stored item answers, on the record list at the same level as
+ * the screener history beside it. 229 -> 230.
  */
-const FROZEN_ENTRY_COUNT = 229;
+const FROZEN_ENTRY_COUNT = 230;
 
 /**
  * The two surfaces that authenticate a Bearer token outside `requireAuth` —

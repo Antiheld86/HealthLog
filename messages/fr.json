@@ -516,6 +516,9 @@
     "heroItemsTitle": "Temps forts du jour",
     "heroItemsDescription": "Choisis les types d’éléments qui peuvent apparaître dans les temps forts du jour.",
     "heroItemsNotificationNote": "Les réglages des notifications sont gérés séparément.",
+    "heroContentTitle": "La carte du haut affiche",
+    "heroContentScore": "Score de santé et résumé du jour",
+    "heroContentReminders": "Temps forts du jour",
     "heroItems": {
       "coach_checkin": "Bilan avec Coach",
       "dose_window": "Doses de médicaments",
@@ -4529,7 +4532,8 @@
         "oura": "Oura",
         "polar": "Polar",
         "nightscout": "Nightscout",
-        "fitbit": "Fitbit"
+        "fitbit": "Fitbit",
+        "appleHealthHint": "Apple Health n'a pas de connexion web — terminez d'abord la configuration ici, puis ouvrez l'app HealthLog sur votre iPhone pour finaliser la configuration d'Apple Health."
       },
       "import": "Importer un historique existant"
     },
@@ -6388,6 +6392,13 @@
       "importNote": "Besoin d’un ancien historique ou impossible d’utiliser l’app iOS ? L’envoi XML/ZIP Apple Health est une solution ponctuelle et n’active pas la synchronisation en direct.",
       "importAction": "Ouvrir l’import ponctuel",
       "staleNote": "Aucune donnée Apple Health n'est arrivée depuis plus d'une semaine. Ouvrez l'app HealthLog sur votre iPhone et vérifiez les autorisations Apple Health.",
+      "progress": {
+        "title": "Progression de la synchronisation",
+        "receivedLabel": "Enregistrements reçus",
+        "oldestLabel": "Mesure la plus ancienne atteinte",
+        "flowing": "Des données sont arrivées au cours de la dernière heure — l'app iPhone continue d'envoyer.",
+        "waiting": "En attente de nouvelles données de l'app iPhone. Le transfert reprend quand l'app est ouverte ou quand iOS lui accorde du temps en arrière-plan — une accalmie pendant le premier grand rattrapage est normale, pas une erreur."
+      },
       "delivery": {
         "title": "Livraison",
         "lastTriggerLabel": "La dernière synchronisation est arrivée",
@@ -9710,8 +9721,6 @@
     "deleteConfirmTitle": "Supprimer cette mesure personnalisée ?",
     "deleteConfirmDescription": "La mesure est retirée de votre liste. Les valeurs enregistrées sont conservées.",
     "deletedToast": "Mesure personnalisée supprimée",
-    "restoredToast": "Valeur restaurée",
-    "restoreError": "Échec de la restauration",
     "deleteError": "Impossible de supprimer la mesure personnalisée",
     "showAllValues": "Afficher toutes les valeurs",
     "emptyDescription": "Définissez vos propres mesures pour les suivre et les représenter.",
@@ -9761,6 +9770,8 @@
       "editedToast": "Valeur mise à jour",
       "editError": "Impossible de mettre à jour la valeur",
       "deletedToast": "Valeur supprimée",
+      "restoredToast": "Valeur restaurée",
+      "restoreError": "Échec de la restauration",
       "deleteError": "Impossible de supprimer la valeur"
     },
     "chart": {

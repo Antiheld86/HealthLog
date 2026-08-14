@@ -516,6 +516,9 @@
     "heroItemsTitle": "Highlights für heute",
     "heroItemsDescription": "Wähle aus, welche Eintragstypen in den Highlights für heute erscheinen.",
     "heroItemsNotificationNote": "Benachrichtigungseinstellungen werden separat verwaltet.",
+    "heroContentTitle": "Obere Karte zeigt",
+    "heroContentScore": "Gesundheitsscore und Tagesüberblick",
+    "heroContentReminders": "Highlights für heute",
     "heroItems": {
       "coach_checkin": "Coach-Check-ins",
       "dose_window": "Medikamentendosen",
@@ -4529,7 +4532,8 @@
         "oura": "Oura",
         "polar": "Polar",
         "nightscout": "Nightscout",
-        "fitbit": "Fitbit"
+        "fitbit": "Fitbit",
+        "appleHealthHint": "Apple Health hat keine Web-Verbindung — schließe das Onboarding hier ab und richte Apple Health danach in der HealthLog-App auf deinem iPhone ein."
       },
       "import": "Bestehende Daten importieren"
     },
@@ -6388,6 +6392,13 @@
       "importNote": "Du brauchst ältere Daten oder kannst die iOS-App nicht nutzen? Der Apple-Health-XML/ZIP-Upload ist ein einmaliger Ersatzweg und aktiviert keine Live-Synchronisierung.",
       "importAction": "Einmaligen Import öffnen",
       "staleNote": "Seit über einer Woche sind keine Apple-Health-Daten angekommen. Öffne die HealthLog-App auf deinem iPhone und prüfe die Apple-Health-Berechtigungen.",
+      "progress": {
+        "title": "Sync-Fortschritt",
+        "receivedLabel": "Empfangene Datensätze",
+        "oldestLabel": "Älteste erreichte Messung",
+        "flowing": "In der letzten Stunde sind Daten angekommen — die iPhone-App liefert weiter.",
+        "waiting": "Warten auf weitere Daten von der iPhone-App. Die Übertragung läuft weiter, wenn die App geöffnet ist oder iOS ihr Hintergrundzeit gewährt — eine ruhige Phase während des ersten großen Abgleichs ist normal, kein Fehler."
+      },
       "delivery": {
         "title": "Übermittlung",
         "lastTriggerLabel": "Letzte Synchronisierung kam",
@@ -9710,8 +9721,6 @@
     "deleteConfirmTitle": "Diese eigene Metrik löschen?",
     "deleteConfirmDescription": "Die Metrik wird aus deiner Liste entfernt. Erfasste Werte bleiben erhalten.",
     "deletedToast": "Eigene Metrik gelöscht",
-    "restoredToast": "Wert wiederhergestellt",
-    "restoreError": "Wiederherstellen fehlgeschlagen",
     "deleteError": "Eigene Metrik konnte nicht gelöscht werden",
     "showAllValues": "Alle Werte anzeigen",
     "emptyDescription": "Definiere eigene Messwerte, um sie zu verfolgen und darzustellen.",
@@ -9761,6 +9770,8 @@
       "editedToast": "Wert aktualisiert",
       "editError": "Wert konnte nicht aktualisiert werden",
       "deletedToast": "Wert gelöscht",
+      "restoredToast": "Messwert wiederhergestellt",
+      "restoreError": "Wiederherstellen fehlgeschlagen",
       "deleteError": "Wert konnte nicht gelöscht werden"
     },
     "chart": {

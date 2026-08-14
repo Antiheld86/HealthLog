@@ -4,11 +4,12 @@
  *
  * Part of the OpenAPI route table; aggregated in `./index.ts`. The request body
  * reuses the runtime Zod schema from `@/lib/validations/mental-health` so the
- * wire contract stays single-source. The response deliberately excludes the
- * raw item answers — only the server-authoritative total / band / safety flag
- * are exposed. The iOS client mirrors this DTO and MUST surface its own
- * crisis-resource card on a positive item-9 flag (never rely on server text
- * alone).
+ * wire contract stays single-source. The list / create responses deliberately
+ * exclude the raw item answers — only the server-authoritative total / band /
+ * safety flag are exposed there; the per-administration detail read is the one
+ * surface that returns the decrypted answers. The iOS client mirrors these
+ * DTOs and MUST surface its own crisis-resource card on a positive item-9
+ * flag (never rely on server text alone).
  */
 import type { ZodOpenApiObject } from "zod-openapi";
 import { z } from "zod/v4";
@@ -48,7 +49,19 @@ const assessmentRow = z
   .meta({
     id: "MentalHealthAssessment",
     description:
-      "One completed screener administration. `severityBand` is a descriptive label for the screen (never a diagnosis). `item9Flagged` is true when the PHQ-9 self-harm item was answered > 0 — the client MUST show crisis resources when it is. Raw per-item answers are intentionally absent.",
+      "One completed screener administration. `severityBand` is a descriptive label for the screen (never a diagnosis). `item9Flagged` is true when the PHQ-9 self-harm item was answered > 0 — the client MUST show crisis resources when it is. Raw per-item answers are intentionally absent from list rows; the by-id detail read returns them decrypted.",
+  });
+
+const assessmentDetail = assessmentRow
+  .extend({
+    items: z.array(z.number().int()).nullable(),
+    functionalDifficulty: z.number().int().nullable(),
+    itemsUnavailable: z.boolean(),
+  })
+  .meta({
+    id: "MentalHealthAssessmentDetail",
+    description:
+      "One administration with its decrypted per-item answers, in the order the instrument presents its items (PHQ-9/GAD-7 answers 0–3, SCI 0–4, WHO-5 0–5). `functionalDifficulty` is the PHQ-9's unscored functional follow-up when it was answered. When the stored blob cannot be decrypted the read degrades honestly: `items` is null, `itemsUnavailable` is true, and the denormalised score fields still answer.",
   });
 
 const crisisResource = z
@@ -80,6 +93,10 @@ const createResponse = z
 const listResponse = z
   .object({ assessments: z.array(assessmentRow) })
   .meta({ id: "ListMentalHealthAssessmentsResponse" });
+
+const detailResponse = z
+  .object({ assessment: assessmentDetail })
+  .meta({ id: "GetMentalHealthAssessmentResponse" });
 
 export const mentalHealthPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   "/api/mental-health/assessments": {
@@ -124,6 +141,30 @@ export const mentalHealthPaths: NonNullable<ZodOpenApiObject["paths"]> = {
               schema: dataEnvelope(
                 createResponse,
                 "CreateMentalHealthAssessmentEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/mental-health/assessments/{id}": {
+    get: {
+      tags: ["Mental health"],
+      summary: "Read one administration with its decrypted answers",
+      description:
+        "Returns a single screener administration including the decrypted per-item answers (and the PHQ-9's unscored functional follow-up when answered) — the one surface that reads them back. When the stored blob cannot be decrypted the read degrades to `items: null` + `itemsUnavailable: true` instead of failing; the total / band / flag still answer. A soft-deleted or foreign row answers 404.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      responses: {
+        ...recordRefusal(),
+        "200": {
+          description: "The administration with its answer breakdown.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                detailResponse,
+                "GetMentalHealthAssessmentEnvelope",
               ),
             },
           },

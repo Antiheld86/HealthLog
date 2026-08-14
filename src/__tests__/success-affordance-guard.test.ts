@@ -140,7 +140,9 @@ const PINNED_AFFORDANCES: Record<
     "toast.success": 1,
   },
   "src/components/custom-metrics/custom-metric-history-list.tsx": {
-    "toast.success": 2,
+    // v1.37.20 (A3-11) — the third success is the restore confirmation
+    // behind the delete toast's Undo action.
+    "toast.success": 3,
   },
   "src/components/cycle/cycle-phase-crosstab.tsx": { "text-success": 1 },
   // v1.36.x — two call sites, one decision: the intake toast routes through

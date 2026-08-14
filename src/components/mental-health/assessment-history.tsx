@@ -15,6 +15,11 @@
  * the row's stored locale (`crisisResourcesForLocale`) — it NEVER decrypts or
  * reveals the item-9 answer, and surfacing it triggers no third-party alert.
  * No new data leaves the safety boundary.
+ *
+ * Each row also carries an opt-in answer breakdown: expanding it fetches the
+ * per-administration detail read, where the server decrypts the stored
+ * per-item answers (`AssessmentItemBreakdown`). Item 9 renders there like any
+ * other item — the flagged marker above stays the one crisis affordance.
  */
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
@@ -28,8 +33,10 @@ import { ChartSkeleton } from "@/components/charts/chart-skeleton";
 import { importWithRetry } from "@/lib/retry-import";
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
 import { crisisResourcesForLocale } from "@/lib/mental-health/crisis-resources";
-import { Activity } from "lucide-react";
+import { Activity, ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
+import { AssessmentItemBreakdown } from "./assessment-item-breakdown";
 import { CrisisCard } from "./crisis-card";
 import type { AssessmentRow, CrisisSet, InstrumentId } from "./types";
 
@@ -80,6 +87,11 @@ export function AssessmentHistory({
   const { date: formatDate } = useFormatters();
   // Which flagged row's crisis card is currently expanded (re-surfaced).
   const [openCrisisRowId, setOpenCrisisRowId] = useState<string | null>(null);
+  // Which row's per-item answer breakdown is expanded (single-open, like the
+  // crisis card — the detail fetch runs only when someone asks).
+  const [openBreakdownRowId, setOpenBreakdownRowId] = useState<string | null>(
+    null,
+  );
 
   const forInstrument = useMemo(
     () =>
@@ -116,6 +128,7 @@ export function AssessmentHistory({
         {forInstrument.map((row) => {
           const flagged = row.item9Flagged;
           const open = openCrisisRowId === row.id;
+          const breakdownOpen = openBreakdownRowId === row.id;
           return (
             <li key={row.id} className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between gap-3 text-sm">
@@ -146,9 +159,37 @@ export function AssessmentHistory({
                   <span className="font-medium tabular-nums">
                     {row.totalScore}
                   </span>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto p-0.5"
+                    aria-expanded={breakdownOpen}
+                    aria-label={t("mentalHealth.history.answersToggle")}
+                    onClick={() =>
+                      setOpenBreakdownRowId(breakdownOpen ? null : row.id)
+                    }
+                    data-slot="history-answers-toggle"
+                  >
+                    <ChevronDown
+                      aria-hidden="true"
+                      className={cn(
+                        "text-muted-foreground size-4 transition-transform",
+                        breakdownOpen && "rotate-180",
+                      )}
+                    />
+                  </Button>
                 </div>
               </div>
               {flagged && open && <CrisisCard crisis={crisisFromRow(row)} />}
+              {breakdownOpen && (
+                <div className="border-border/70 border-l pl-3">
+                  <AssessmentItemBreakdown
+                    assessmentId={row.id}
+                    instrument={instrument}
+                  />
+                </div>
+              )}
             </li>
           );
         })}

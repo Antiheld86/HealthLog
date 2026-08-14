@@ -12114,6 +12114,32 @@ paths:
         "403": *a6
         "422": *a3
         "429": *a4
+  /api/mental-health/assessments/{id}:
+    get:
+      tags:
+        - Mental health
+      summary: Read one administration with its decrypted answers
+      description: "Returns a single screener administration including the decrypted per-item answers (and the PHQ-9's
+        unscored functional follow-up when answered) — the one surface that reads them back. When the stored blob cannot
+        be decrypted the read degrades to `items: null` + `itemsUnavailable: true` instead of failing; the total / band
+        / flag still answer. A soft-deleted or foreign row answers 404."
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: The administration with its answer breakdown.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetMentalHealthAssessmentEnvelope"
+        "401": *a1
+        "403": *a6
+        "422": *a3
+        "429": *a4
   /api/allergies:
     get:
       tags:
@@ -14558,7 +14584,7 @@ paths:
         - Dashboard
       summary: Reset the calling user's dashboard widget layout
       description: Resets the tile layout and Today-highlight visibility. It preserves the stored comparison baseline, chart
-        overlays, selected score rings, and hero ring order. Idempotent.
+        overlays, selected score rings, hero ring order, and hero primary content. Idempotent.
       responses:
         "200":
           description: Web-controlled layout settings reset; preserved dashboard preferences are returned with the defaults.
@@ -18917,6 +18943,14 @@ components:
               - tension_window
               - same_time_baseline
               - upcoming_visit
+        hero:
+          description: 'Primary hero-card content on the dashboard: "score" (the health-score read, default) or "reminders" (the
+            Today-highlight rail promoted into the hero slot). Missing resolves to "score"; the stored default is
+            omitted from responses.'
+          type: string
+          enum:
+            - score
+            - reminders
         baseUpdatedAt:
           description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
             legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
@@ -39796,6 +39830,96 @@ components:
         - id
         - contacts
       additionalProperties: false
+    GetMentalHealthAssessmentEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/GetMentalHealthAssessmentResponse"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    GetMentalHealthAssessmentResponse:
+      type: object
+      properties:
+        assessment:
+          $ref: "#/components/schemas/MentalHealthAssessmentDetail"
+      required:
+        - assessment
+      additionalProperties: false
+    MentalHealthAssessmentDetail:
+      type: object
+      properties:
+        id:
+          type: string
+        instrument:
+          type: string
+          enum:
+            - PHQ9
+            - GAD7
+            - WHO5
+            - SCI
+        locale:
+          type: string
+        version:
+          type: string
+        totalScore:
+          type: number
+        severityBand:
+          type: string
+        item9Flagged:
+          type: boolean
+        crisisShownAt:
+          anyOf:
+            - type: string
+            - type: "null"
+        takenAt:
+          type: string
+        createdAt:
+          type: string
+        items:
+          anyOf:
+            - type: array
+              items:
+                type: integer
+                minimum: -9007199254740991
+                maximum: 9007199254740991
+            - type: "null"
+        functionalDifficulty:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+        itemsUnavailable:
+          type: boolean
+      required:
+        - id
+        - instrument
+        - locale
+        - version
+        - totalScore
+        - severityBand
+        - item9Flagged
+        - crisisShownAt
+        - takenAt
+        - createdAt
+        - items
+        - functionalDifficulty
+        - itemsUnavailable
+      additionalProperties: false
+      description: "One administration with its decrypted per-item answers, in the order the instrument presents its items
+        (PHQ-9/GAD-7 answers 0–3, SCI 0–4, WHO-5 0–5). `functionalDifficulty` is the PHQ-9's unscored functional
+        follow-up when it was answered. When the stored blob cannot be decrypted the read degrades honestly: `items` is
+        null, `itemsUnavailable` is true, and the denormalised score fields still answer."
     ListAllergiesEnvelope:
       type: object
       properties:
@@ -42696,6 +42820,14 @@ components:
               - tension_window
               - same_time_baseline
               - upcoming_visit
+        hero:
+          description: 'Primary hero-card content on the dashboard: "score" (the health-score read, default) or "reminders" (the
+            Today-highlight rail promoted into the hero slot). Missing resolves to "score"; the stored default is
+            omitted from responses.'
+          type: string
+          enum:
+            - score
+            - reminders
         updatedAt:
           description: "Optimistic-concurrency token: the stored row's `updatedAt` at read/write time. Echo it back as
             `baseUpdatedAt` on the next write. Opaque."

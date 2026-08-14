@@ -107,8 +107,8 @@ describe("DELETE /api/custom-metrics/[id]/entries/[entryId]", () => {
     );
 
     expect(res.status).toBe(404);
-    const where = vi.mocked(prisma.customMetricEntry.findFirst).mock.calls[0][0]
-      .where;
+    const where = vi.mocked(prisma.customMetricEntry.findFirst).mock
+      .calls[0]![0]!.where!;
     expect(where.deletedAt).toBeNull();
     expect(prisma.customMetricEntry.update).not.toHaveBeenCalled();
   });

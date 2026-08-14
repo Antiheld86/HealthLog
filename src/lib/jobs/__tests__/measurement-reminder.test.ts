@@ -124,9 +124,11 @@ describe("evaluateMeasurementReminderDue — window boundary", () => {
 
 interface FakeReminder {
   id: string;
+  userId: string;
   /** Absent on a checkup fixture; `"ENCOUNTER"` on an appointment's row. */
   origin?: string;
   measurementType: string | null;
+  lastSkippedAt: Date | null;
   intervalDays: number | null;
   rrule: string | null;
   anchorDate: Date | null;
@@ -195,6 +197,14 @@ function makePrisma(opts: {
     labResult: {
       findFirst: vi.fn(async () => opts.labMatch ?? null),
     },
+    // v1.37.20 (#223 / iOS #68) — the satisfy primitive appends a ledger
+    // row per applied satisfy.
+    measurementReminderEvent: {
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+        id: "evt",
+        ...data,
+      })),
+    },
   };
   return { prisma, updates };
 }
@@ -202,6 +212,7 @@ function makePrisma(opts: {
 function reminder(overrides: Partial<FakeReminder>): FakeReminder {
   return {
     id: "r1",
+    userId: "u1",
     measurementType: "BLOOD_PRESSURE_SYS",
     intervalDays: 7,
     rrule: null,
@@ -210,6 +221,7 @@ function reminder(overrides: Partial<FakeReminder>): FakeReminder {
     location: null,
     nextDueAt: new Date("2026-06-14T07:00:00Z"), // past at NINE_LOCAL
     lastSatisfiedAt: null,
+    lastSkippedAt: null,
     enabled: true,
     createdAt: new Date("2026-06-01T00:00:00Z"),
     user: {

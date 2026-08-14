@@ -4,8 +4,9 @@
  * The 387-line monolith split into a folder of focused components; these are
  * the seams they plug into. The wire shapes mirror the assessment route's
  * `shapeRow` / create response (`src/app/api/mental-health/assessments/route.ts`)
- * — totals + bands + flags only, NEVER item content (the item answers stay
- * encrypted at rest and never ride this surface).
+ * — totals + bands + flags only on the list. The per-item answers ride ONLY
+ * the per-administration detail read (`…/assessments/[id]`), which decrypts
+ * them for the history's expandable answer breakdown.
  */
 import type { InstrumentId } from "@/lib/mental-health/instruments";
 
@@ -23,6 +24,18 @@ export interface AssessmentRow {
   item9Flagged: boolean;
   crisisShownAt: string | null;
   takenAt: string;
+}
+
+/**
+ * One administration with its decrypted answers (`GET …/assessments/[id]`).
+ * `items: null` + `itemsUnavailable` is the server's honest degrade for a row
+ * whose blob cannot be decrypted — the score fields still answer.
+ */
+export interface AssessmentDetail extends AssessmentRow {
+  items: number[] | null;
+  /** The unscored PHQ-9 functional follow-up, when it was answered. */
+  functionalDifficulty: number | null;
+  itemsUnavailable: boolean;
 }
 
 export interface CrisisSet {

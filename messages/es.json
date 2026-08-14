@@ -516,6 +516,9 @@
     "heroItemsTitle": "Destacados de hoy",
     "heroItemsDescription": "Elige qué tipos de elementos pueden aparecer en los destacados de hoy.",
     "heroItemsNotificationNote": "Los ajustes de notificaciones se gestionan por separado.",
+    "heroContentTitle": "La tarjeta superior muestra",
+    "heroContentScore": "Puntuación de salud y resumen del día",
+    "heroContentReminders": "Destacados de hoy",
     "heroItems": {
       "coach_checkin": "Revisión con Coach",
       "dose_window": "Dosis de medicamentos",
@@ -4529,7 +4532,8 @@
         "oura": "Oura",
         "polar": "Polar",
         "nightscout": "Nightscout",
-        "fitbit": "Fitbit"
+        "fitbit": "Fitbit",
+        "appleHealthHint": "Apple Health no tiene conexión web — termina aquí la puesta en marcha y luego abre la app HealthLog en tu iPhone para completar la configuración de Apple Health."
       },
       "import": "Importar historial existente"
     },
@@ -6388,6 +6392,13 @@
       "importNote": "¿Necesitas un historial anterior o no puedes usar la app de iOS? La carga XML/ZIP de Apple Health es una alternativa puntual y no activa la sincronización en vivo.",
       "importAction": "Abrir importación puntual",
       "staleNote": "Hace más de una semana que no llegan datos de Apple Health. Abre la app HealthLog en tu iPhone y revisa los permisos de Apple Health.",
+      "progress": {
+        "title": "Progreso de sincronización",
+        "receivedLabel": "Registros recibidos",
+        "oldestLabel": "Lectura más antigua alcanzada",
+        "flowing": "Han llegado datos en la última hora — la app del iPhone sigue enviando.",
+        "waiting": "Esperando a que la app del iPhone envíe más datos. La transferencia continúa cuando la app está abierta o cuando iOS le concede tiempo en segundo plano — una pausa durante la primera sincronización grande es normal, no un error."
+      },
       "delivery": {
         "title": "Entrega",
         "lastTriggerLabel": "La última sincronización llegó",
@@ -9710,8 +9721,6 @@
     "deleteConfirmTitle": "¿Eliminar esta métrica personalizada?",
     "deleteConfirmDescription": "La métrica se quita de tu lista. Los valores registrados se conservan.",
     "deletedToast": "Métrica personalizada eliminada",
-    "restoredToast": "Valor restaurado",
-    "restoreError": "No se pudo restaurar",
     "deleteError": "No se pudo eliminar la métrica personalizada",
     "showAllValues": "Ver todos los valores",
     "emptyDescription": "Define tus propias mediciones para registrarlas y representarlas.",
@@ -9761,6 +9770,8 @@
       "editedToast": "Valor actualizado",
       "editError": "No se pudo actualizar el valor",
       "deletedToast": "Valor eliminado",
+      "restoredToast": "Valor restaurado",
+      "restoreError": "No se pudo restaurar",
       "deleteError": "No se pudo eliminar el valor"
     },
     "chart": {
