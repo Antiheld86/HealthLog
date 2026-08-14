@@ -88,7 +88,7 @@ export const COACH_OUTBOUND_DOSE_BLOCK_DE =
 export const COACH_OUTBOUND_RISK_BLOCK_EN =
   "I can't put a number on a clinical risk like that — it isn't something your tracked data lets me compute, and an invented figure would be misleading. I can walk you through what your own measurements are doing instead; ask me about a specific metric.";
 
-export const COACH_OUTBOUND_RISK_BLOCK_DE =
+const COACH_OUTBOUND_RISK_BLOCK_DE =
   "Eine solche klinische Risikozahl kann ich nicht angeben — deine erfassten Daten lassen das nicht berechnen, und ein erfundener Wert wäre irreführend. Stattdessen kann ich dir zeigen, was deine eigenen Messwerte machen; frag mich nach einer konkreten Metrik.";
 
 /** Resolve the localised fallback copy for a tripped outbound screen. */

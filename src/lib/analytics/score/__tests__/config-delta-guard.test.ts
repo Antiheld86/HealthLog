@@ -1,11 +1,11 @@
 /**
- * The per-user recipe boundary, at the three places it exists.
+ * The per-user recipe boundary, at the two places it exists.
  *
  * The end-to-end proof that a settings change is never narrated as a
  * health event lives in `config-change-is-not-a-health-event.test.ts`,
  * over the real snapshot and digest. This file covers what that one
  * cannot reach without a fixture per case: the boundary arithmetic's
- * edges, the notice key's two dimensions, and the seam's shape.
+ * edges and the notice key's two dimensions.
  *
  * Each guard here has a counter-case beside it. A boundary that
  * suppressed everything would pass every "no false drop" assertion ever
@@ -27,12 +27,6 @@ import {
   scoreConfigBoundary,
   UNCONFIGURED_SCORE_BOUNDARY,
 } from "../config";
-import {
-  scoreCompositeSegments,
-  scorePillarSeries,
-  scoreSeriesSeams,
-  type ScoreSeriesRecord,
-} from "../series";
 import type {
   CompositeValue,
   PillarValue,
@@ -335,142 +329,5 @@ describe("the notice key", () => {
     expect(dismissPriorityItemSchema.safeParse({ itemKey: key }).success).toBe(
       true,
     );
-  });
-});
-
-describe("the seam", () => {
-  function day(
-    dayKey: string,
-    configVersion: number | null,
-  ): ScoreSeriesRecord {
-    return {
-      dayKey,
-      composite: 70,
-      band: "yellow",
-      composition: ["ACTIVITY", "SLEEP", "ADIPOSITY"],
-      pillarScores: { ACTIVITY: 70, SLEEP: 70, ADIPOSITY: 70 },
-      configVersion,
-    };
-  }
-
-  it("marks the first day after a change and nothing else", () => {
-    const points = scoreSeriesSeams([
-      day("2026-08-17", 1),
-      day("2026-08-18", 1),
-      day("2026-08-19", 2),
-      day("2026-08-20", 2),
-    ]);
-
-    expect(points.map((point) => point.seamBreak)).toEqual([
-      false,
-      false,
-      true,
-      false,
-    ]);
-  });
-
-  it("never marks the first day of the series", () => {
-    // A beginning is not a break. Flagging it would put a "you changed
-    // what counts here" marker on the day someone started.
-    expect(scoreSeriesSeams([day("2026-08-20", 3)])[0].seamBreak).toBe(false);
-    expect(scoreSeriesSeams([])).toEqual([]);
-  });
-
-  it("stays quiet across days that share a recipe", () => {
-    const points = scoreSeriesSeams([
-      day("2026-08-18", 0),
-      day("2026-08-19", 0),
-      day("2026-08-20", 0),
-    ]);
-    expect(points.some((point) => point.seamBreak)).toBe(false);
-    expect(scoreCompositeSegments(points)).toHaveLength(1);
-  });
-
-  it("orders by day before comparing, so an unordered read cannot invent a seam", () => {
-    const points = scoreSeriesSeams([
-      day("2026-08-20", 2),
-      day("2026-08-18", 1),
-      day("2026-08-19", 2),
-    ]);
-    expect(points.map((point) => point.dayKey)).toEqual([
-      "2026-08-18",
-      "2026-08-19",
-      "2026-08-20",
-    ]);
-    expect(points.map((point) => point.seamBreak)).toEqual([
-      false,
-      true,
-      false,
-    ]);
-  });
-
-  it("treats a day that names no recipe as a break rather than a link", () => {
-    // Both directions, including two unknowns in a row. Without the
-    // second case the arm would be doing nothing that plain inequality
-    // does not already do: `null !== 1` breaks on its own, while
-    // `null !== null` would quietly claim two rows share a basis that
-    // neither of them names.
-    expect(
-      scoreSeriesSeams([day("2026-08-19", null), day("2026-08-20", 1)])[1]
-        .seamBreak,
-    ).toBe(true);
-    expect(
-      scoreSeriesSeams([day("2026-08-19", 1), day("2026-08-20", null)])[1]
-        .seamBreak,
-    ).toBe(true);
-    expect(
-      scoreSeriesSeams([day("2026-08-19", null), day("2026-08-20", null)])[1]
-        .seamBreak,
-    ).toBe(true);
-  });
-
-  it("breaks the composite line and never rejoins it", () => {
-    const points = scoreSeriesSeams([
-      day("2026-08-17", 1),
-      day("2026-08-18", 1),
-      day("2026-08-19", 2),
-      day("2026-08-20", 2),
-    ]);
-    const segments = scoreCompositeSegments(points);
-
-    expect(segments).toHaveLength(2);
-    expect(segments[0].map((point) => point.dayKey)).toEqual([
-      "2026-08-17",
-      "2026-08-18",
-    ]);
-    expect(segments[1].map((point) => point.dayKey)).toEqual([
-      "2026-08-19",
-      "2026-08-20",
-    ]);
-    // Every day is in exactly one segment: no day is repeated to make
-    // the ends meet, and none is dropped to hide the gap.
-    expect(segments.flat().map((point) => point.dayKey)).toEqual(
-      points.map((point) => point.dayKey),
-    );
-  });
-
-  it("keeps a pillar's own row running straight through the seam", () => {
-    const points = scoreSeriesSeams([
-      { ...day("2026-08-18", 1), pillarScores: { SLEEP: 61 } },
-      { ...day("2026-08-19", 2), pillarScores: { SLEEP: 62 } },
-      { ...day("2026-08-20", 2), pillarScores: { SLEEP: 63 } },
-    ]);
-
-    expect(points[1].seamBreak).toBe(true);
-    expect(scorePillarSeries(points, "SLEEP")).toEqual([
-      { dayKey: "2026-08-18", score: 61 },
-      { dayKey: "2026-08-19", score: 62 },
-      { dayKey: "2026-08-20", score: 63 },
-    ]);
-  });
-
-  it("leaves out a day the pillar did not count on, rather than scoring it zero", () => {
-    const points = scoreSeriesSeams([
-      { ...day("2026-08-19", 1), pillarScores: { SLEEP: 61 } },
-      { ...day("2026-08-20", 1), pillarScores: { ACTIVITY: 70 } },
-    ]);
-    expect(scorePillarSeries(points, "SLEEP")).toEqual([
-      { dayKey: "2026-08-19", score: 61 },
-    ]);
   });
 });

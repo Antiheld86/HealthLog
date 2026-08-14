@@ -88,7 +88,7 @@ export const scorePillarIdSchema = z.enum(SCORE_PILLAR_IDS);
  * REQUEST body is the strict end: an unknown id there is a 422, because
  * a person's client has no business sending one.
  */
-export const healthScoreConfigSchema = z.object({
+const healthScoreConfigSchema = z.object({
   excludedPillars: z.array(z.string().max(64)).max(64).optional(),
   /** Per-user recipe version. Increments on every accepted write. */
   version: z.number().int().min(1).optional(),

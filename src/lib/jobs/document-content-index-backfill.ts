@@ -3,7 +3,11 @@
  *
  * Indexes a user's EXISTING stored documents for content search: for each live
  * document that has no `DocumentContentIndex` yet, run one provider vision
- * transcription and upsert the encrypted-text + blind-token index. On-demand
+ * transcription and upsert the encrypted-text + blind-token index. The run
+ * also sweeps rows whose stored `tokenizerVersion` trails
+ * `CONTENT_TOKENIZER_VERSION` and re-tokenises them locally from the
+ * decrypted text (see `retokeniseStaleRows`) — the consumer that makes a
+ * tokeniser bump actually re-index the corpus. On-demand
  * only (fired by the "index all documents" action) — NOT a boot/cron pass:
  * indexing egresses to a provider under the user's key + budget, so it must be
  * a deliberate, consented act, exactly like the per-document index route.
@@ -41,7 +45,12 @@ import {
   loadOwnedDocument,
   prepareVisionInput,
 } from "@/lib/documents/ai-route-support";
-import { upsertContentIndex } from "@/lib/documents/content-index";
+import {
+  CONTENT_TOKENIZER_VERSION,
+  decryptIndexText,
+  tokeniseAndHash,
+  upsertContentIndex,
+} from "@/lib/documents/content-index";
 import { transcribeDocument } from "@/lib/documents/describe";
 import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { resolveDocumentVisionProvider } from "@/lib/documents/provider-order";
@@ -69,14 +78,76 @@ export interface ContentIndexBackfillPayload {
 export interface ContentIndexBackfillSummary {
   indexed: number;
   /**
+   * Rows whose stored `tokenizerVersion` trailed `CONTENT_TOKENIZER_VERSION`
+   * and were re-tokenised locally from the decrypted `textEncrypted` — no
+   * provider call, no consent, no budget involved.
+   */
+  retokenised: number;
+  /**
    * Documents visited but not indexable this run (gone by load time,
    * undecryptable, or a PDF no rasteriser could render). Refunded, never
    * billed, and left un-indexed for a later run.
    */
   skipped: number;
-  /** Documents whose provider call failed. Refunded; a later run retries. */
+  /**
+   * Documents whose provider call failed, plus stale-tokenizer rows whose
+   * local re-tokenise failed (undecryptable text). Refunded where a
+   * reservation existed; a later run retries.
+   */
   failed: number;
   reason: "ok" | "no-provider" | "no-consent" | "budget-reached";
+}
+
+/**
+ * The consumer of `DocumentContentIndex.tokenizerVersion`: sweep this user's
+ * rows written under an older tokeniser and re-tokenise them from the
+ * decrypted `textEncrypted` — the same local path the key-rotation script
+ * takes (`scripts/rotate-encryption-key.ts`), so bumping
+ * `CONTENT_TOKENIZER_VERSION` actually re-indexes the corpus instead of
+ * stranding every stored row on the old rules. Purely local (decrypt + HMAC),
+ * so it runs before — and regardless of — the provider/consent/budget gates.
+ * Keyset pagination on `id` because a re-tokenised row drops out of the
+ * filtered set mid-walk, which would break cursor-based paging.
+ */
+async function retokeniseStaleRows(
+  userId: string,
+): Promise<{ retokenised: number; failed: number }> {
+  let retokenised = 0;
+  let failed = 0;
+  let afterId: string | null = null;
+  for (;;) {
+    const rows: { id: string; textEncrypted: Uint8Array }[] =
+      await prisma.documentContentIndex.findMany({
+        where: {
+          userId,
+          tokenizerVersion: { not: CONTENT_TOKENIZER_VERSION },
+          ...(afterId ? { id: { gt: afterId } } : {}),
+        },
+        select: { id: true, textEncrypted: true },
+        orderBy: { id: "asc" },
+        take: PAGE_SIZE,
+      });
+    if (rows.length === 0) break;
+    for (const row of rows) {
+      try {
+        const plaintext = decryptIndexText(row.textEncrypted);
+        const searchTokens = tokeniseAndHash(plaintext);
+        await prisma.documentContentIndex.update({
+          where: { id: row.id },
+          data: { searchTokens, tokenizerVersion: CONTENT_TOKENIZER_VERSION },
+        });
+        retokenised += 1;
+      } catch {
+        // Fail-closed decrypt or a write miss — leave the row on its old
+        // version (it stays in the candidate set for the next run) and
+        // keep walking; one bad row must not abort the sweep.
+        failed += 1;
+      }
+    }
+    afterId = rows[rows.length - 1]!.id;
+    if (rows.length < PAGE_SIZE) break;
+  }
+  return { retokenised, failed };
 }
 
 /**
@@ -87,9 +158,20 @@ export interface ContentIndexBackfillSummary {
 export async function runContentIndexBackfillForUser(
   userId: string,
 ): Promise<ContentIndexBackfillSummary> {
+  // Stale-tokeniser rows first: local work that owes nothing to the
+  // provider, consent, or budget gates below, so a user without a usable
+  // provider still gets their existing index moved to the current rules.
+  const stale = await retokeniseStaleRows(userId);
+
   const { pick } = await resolveDocumentVisionProvider(userId);
   if (!pick)
-    return { indexed: 0, skipped: 0, failed: 0, reason: "no-provider" };
+    return {
+      indexed: 0,
+      retokenised: stale.retokenised,
+      skipped: 0,
+      failed: stale.failed,
+      reason: "no-provider",
+    };
   try {
     await assertDocumentEgressConsent({
       userId,
@@ -98,7 +180,13 @@ export async function runContentIndexBackfillForUser(
     });
   } catch (err) {
     if (err instanceof ConsentRequiredError) {
-      return { indexed: 0, skipped: 0, failed: 0, reason: "no-consent" };
+      return {
+        indexed: 0,
+        retokenised: stale.retokenised,
+        skipped: 0,
+        failed: stale.failed,
+        reason: "no-consent",
+      };
     }
     throw err;
   }
@@ -114,7 +202,7 @@ export async function runContentIndexBackfillForUser(
   const dailyCap = resolveDailyCap([{ providerType: pick.entry.providerType }]);
   let indexed = 0;
   let skipped = 0;
-  let failed = 0;
+  let failed = stale.failed;
   let reason: ContentIndexBackfillSummary["reason"] = "ok";
   let cursor: string | null = null;
 
@@ -201,9 +289,9 @@ export async function runContentIndexBackfillForUser(
 
   annotate({
     action: { name: "documents.contentIndex.backfill" },
-    meta: { indexed, skipped, failed, reason },
+    meta: { indexed, retokenised: stale.retokenised, skipped, failed, reason },
   });
-  return { indexed, skipped, failed, reason };
+  return { indexed, retokenised: stale.retokenised, skipped, failed, reason };
 }
 
 /**

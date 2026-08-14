@@ -102,6 +102,10 @@ model User {
   // Codex OAuth (ChatGPT subscription)
   codexAccessTokenEncrypted  String?   @map("codex_access_token_encrypted")
   codexRefreshTokenEncrypted String?   @map("codex_refresh_token_encrypted")
+  /// @internal: dead mirror of the expiry inside the encrypted Codex creds —
+  /// the refresh path reads the decrypted blob's own `expiresAt`
+  /// (`src/lib/ai/provider.ts`), never this column. Kept (and kept written)
+  /// for wire/backup compatibility rather than dropped.
   codexTokenExpiresAt        DateTime? @map("codex_token_expires_at")
   codexConnectedAt           DateTime? @map("codex_connected_at")
   codexConnectionStatus      String    @default("disconnected") @map("codex_connection_status")
@@ -1048,6 +1052,9 @@ model EnvironmentContext {
   /// that won precedence).
   lat           Float
   lon           Float
+  /// @internal: human-readable label of the resolved location, stored as
+  /// operator/debug provenance beside the coordinates; readers select the
+  /// numeric and weather columns only, never this label.
   locationLabel String                    @map("location_label")
   source        EnvironmentLocationSource
 
@@ -2419,6 +2426,9 @@ model PersonalRecord {
   /// FK to the Measurement row that achieved the record. SET NULL
   /// on delete so the historical fact survives even if the
   /// underlying measurement is later removed.
+  /// @internal: audit-trail provenance written by the PR detection worker;
+  /// no read path selects it — the record row itself carries the surfaced
+  /// value/unit/achievedAt.
   sourceMeasurementId String?                 @map("source_measurement_id")
   source              MeasurementSource       @default(MANUAL)
   externalId          String?                 @map("external_id")
@@ -3584,10 +3594,16 @@ model McpOAuthConnection {
 model InviteToken {
   id        String    @id @default(cuid())
   tokenHash String    @unique @map("token_hash")
+  /// Consumed through the `creator` relation: the admin invites list
+  /// (`src/app/api/admin/invites/route.ts`) selects the creating admin's
+  /// id + username via it.
   createdBy String    @map("created_by")
   createdAt DateTime  @default(now()) @map("created_at")
   expiresAt DateTime  @map("expires_at")
   usedAt    DateTime? @map("used_at")
+  /// LAST consumer only (overwritten on multi-use invites; the full history
+  /// lives in `InviteRedemption`). Consumed through the `consumer` relation
+  /// by the admin invites list (`src/app/api/admin/invites/route.ts`).
   usedBy    String?   @map("used_by")
   maxUses   Int       @default(1) @map("max_uses")
   uses      Int       @default(0)
@@ -3644,8 +3660,11 @@ model RefreshToken {
   /// When this token was used (one-time-use). Set during rotation; a second
   /// use of the same token is a hard fail and triggers reuse-detection.
   usedAt          DateTime? @map("used_at")
-  /// Pointer to the row that replaced this one during rotation. Helps audit
-  /// trail and reuse-detection ("this token was already exchanged into X").
+  /// Pointer to the row that replaced this one during rotation ("this token
+  /// was already exchanged into X").
+  /// @internal: audit-trail bookkeeping written by the rotation path
+  /// (`src/lib/auth/refresh-token.ts`); reuse-detection keys on
+  /// `usedAt`/`tokenHash`, so no code path reads this pointer.
   replacedById    String?   @map("replaced_by_id")
   userAgent       String?   @map("user_agent")
   ipAddress       String?   @map("ip_address")
@@ -4923,12 +4942,18 @@ model ImportJob {
   failureReason      String?   @map("failure_reason")
   /// Bytes uploaded — surfaced to the operator audit trail.
   uploadBytes        Int       @map("upload_bytes")
-  /// SHA-256 hex digest of the uploaded `export.zip`. Lets the
-  /// kick-off endpoint short-circuit a re-upload of the exact same
-  /// file back to the existing job id without re-queueing.
+  /// SHA-256 hex digest of the uploaded `export.zip`. Consumer: both kick-off
+  /// endpoints (`src/app/api/import/apple-health-export/route.ts` and the
+  /// admin variant) dedupe on (userId, uploadSha256, parserRevision) and
+  /// short-circuit a re-upload of the exact same file back to the existing
+  /// job id without re-queueing. A prior `failed` job is excluded from the
+  /// match (issue #486), so the same bytes can always be retried.
   uploadSha256       String?   @map("upload_sha256")
   /// Parser semantics revision. Existing archives migrated at revision 1 can
-  /// be deliberately reprocessed when the current parser revision advances.
+  /// be deliberately reprocessed when the current parser revision advances:
+  /// the kick-off dedupe lookup (see `uploadSha256`) pins the CURRENT
+  /// `APPLE_HEALTH_IMPORT_PARSER_REVISION`, so a job parsed under an older
+  /// revision never short-circuits a fresh upload of the same bytes.
   parserRevision     Int       @default(1) @map("parser_revision")
   /// Apple's `ExportDate` attribute string-formatted, parsed during
   /// the unpack phase. NULL until the parser sees it.
@@ -5769,6 +5794,8 @@ model CoachConversation {
   // conversation keeps memory of what came before without re-sending every
   // turn to the provider. AES-256-GCM (same codec as CoachMessage.encrypted).
   summaryEncrypted Bytes?    @map("summary_encrypted")
+  /// @internal: diagnostic timestamp of the last summary rewrite — the elision
+  /// logic keys on `summaryTurnCount`, not on this instant; nothing reads it.
   summaryUpdatedAt DateTime? @map("summary_updated_at")
   summaryTurnCount Int       @default(0) @map("summary_turn_count")
 
@@ -7787,7 +7814,12 @@ model DocumentContentIndex {
   /// Provider type that produced the text (diagnostic only), or null on the
   /// text-ocr path.
   providerType          String?  @map("provider_type")
-  /// Tokeniser algorithm version — bump to force a re-index on a scheme change.
+  /// Tokeniser algorithm version — bump `CONTENT_TOKENIZER_VERSION`
+  /// (`src/lib/documents/content-index.ts`) to force a re-index on a scheme
+  /// change. Consumer: the content-index backfill job re-tokenises any row
+  /// whose stored version trails the current one from the decrypted
+  /// `textEncrypted` (`retokeniseStaleRows` in
+  /// `src/lib/jobs/document-content-index-backfill.ts`).
   tokenizerVersion      String   @map("tokenizer_version")
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -7824,7 +7856,8 @@ model DocumentThumbnail {
   height             Int
   /// Plaintext byte length of the JPEG (pre-encryption), for `Content-Length`.
   byteSize           Int    @map("byte_size")
-  /// Source MIME the preview was rendered from (diagnostic only).
+  /// @internal: source MIME the preview was rendered from — operator-side
+  /// diagnostic provenance only; no query selects it and no client surfaces it.
   sourceMime         String @map("source_mime")
 
   createdAt DateTime @default(now()) @map("created_at")
