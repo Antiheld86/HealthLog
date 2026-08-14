@@ -879,6 +879,9 @@ model User {
   // Server computes the canonical `nextDueAt`; the cron fires through the
   // existing notification dispatcher. Soft-deleted.
   measurementReminders                      MeasurementReminder[]
+  // v1.37.20 — completion ledger behind the reminders (iOS #68): one
+  // append-only row per satisfy / skip. Cascade-deleted with the account.
+  measurementReminderEvents                 MeasurementReminderEvent[]
   // v1.17.1 — minimal structured lab store (LDL, HbA1c, ferritin, TSH, …)
   // that pairs with the Vorsorge "annual blood panel" reminder so a result
   // has somewhere to land. Soft-deleted.
@@ -5187,6 +5190,20 @@ model MeasurementReminder {
   /// excluded everywhere), whereas a booster is the engine's native case —
   /// recurring, satisfiable, cadence-bearing.
   vaccinationAntigen String?          @map("vaccination_antigen")
+  /// v1.37.20 — snooze cursor. Non-NULL and in the future = "pushed back until
+  /// this instant". The snooze write sets `nextDueAt` to the SAME instant, so
+  /// every due-state consumer (digest, dashboard, cron, AI block) moves with
+  /// it without knowing snooze exists. Self-expiring: once the instant passes,
+  /// the clock comparison stops being true and no cleanup is needed. Any
+  /// recompute of `nextDueAt` (satisfy, skip, cadence PATCH) nulls it.
+  snoozedUntil       DateTime?        @map("snoozed_until")
+  /// v1.37.20 — last honest skip. A skip re-anchors `nextDueAt` at the skip
+  /// instant but NEVER moves `lastSatisfiedAt` — done and skipped stay
+  /// distinguishable forever. "Skipped cycle" derives as
+  /// `lastSkippedAt > lastSatisfiedAt` (or non-NULL with no satisfy yet).
+  lastSkippedAt      DateTime?        @map("last_skipped_at")
+  /// v1.37.20 — lifetime skip counter ("skipped N times").
+  skipCount          Int              @default(0) @map("skip_count")
   createdAt          DateTime         @default(now()) @map("created_at")
   updatedAt          DateTime         @updatedAt @map("updated_at")
   /// Soft-delete tombstone. NULL = live; non-NULL = deleted at the instant.
@@ -5201,6 +5218,10 @@ model MeasurementReminder {
   /// this reminder. SetNull on the far side — deleting the reminder leaves
   /// the vaccination record intact.
   vaccinations VaccinationRecord[]
+  /// v1.37.20 — the completion ledger (iOS #68): every satisfy and every
+  /// skip appends one row. Cascade: the ledger has no meaning without its
+  /// reminder.
+  events       MeasurementReminderEvent[]
 
   @@index([userId, deletedAt])
   @@index([userId, nextDueAt])
@@ -5232,6 +5253,55 @@ enum ReminderOrigin {
   ENCOUNTER
 
   @@map("reminder_origin")
+}
+
+/// v1.37.20 — what a completion-ledger row records: an honest fulfilment
+/// (`SATISFIED` — a matching reading landed or the user marked it done) or an
+/// honest skip (`SKIPPED` — the user deliberately let this cycle go, which is
+/// NOT a completion and never touches `lastSatisfiedAt`).
+enum MeasurementReminderEventKind {
+  SATISFIED
+  SKIPPED
+
+  @@map("measurement_reminder_event_kind")
+}
+
+/// v1.37.20 — the Vorsorge completion ledger (iOS #68). The reminder engine is
+/// single-cursor (`nextDueAt` + `lastSatisfiedAt`), so before this table each
+/// satisfy overwrote the previous one and history was unrecoverable. Every
+/// path through the ONE satisfy primitive (`satisfyReminder`) and the skip
+/// route appends one row here; nothing ever updates or deletes a row short of
+/// deleting the reminder itself. History starts at the release that ships
+/// this — the single cursor holds nothing to backfill from, which the iOS #68
+/// thread records as agreed.
+model MeasurementReminderEvent {
+  id         String                       @id @default(cuid())
+  userId     String                       @map("user_id")
+  reminderId String                       @map("reminder_id")
+  kind       MeasurementReminderEventKind
+  /// The event instant: the satisfy instant (which may be the backdated
+  /// reading's own timestamp) or the skip instant (always the server clock).
+  occurredAt DateTime                     @map("occurred_at")
+  /// Derived AT WRITE TIME against the reminder's `nextDueAt` as it stood
+  /// before the event re-anchored it: `true` when the event landed at or
+  /// before the due instant (or the cadence had no computable due). Clients
+  /// (web + iOS) consume this resolved value and never re-derive it — the
+  /// pre-event `nextDueAt` is gone after the write, so write time is the only
+  /// honest moment to answer the question.
+  onTime     Boolean                      @map("on_time")
+  /// Which path produced the event — a closed set of engine call sites
+  /// (`manual`, `auto_measurement`, `auto_lab`, `telegram`, `vaccination`,
+  /// `encounter`, `skip`), asserted in code, not free text.
+  source     String
+  createdAt  DateTime                     @default(now()) @map("created_at")
+
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reminder MeasurementReminder @relation(fields: [reminderId], references: [id], onDelete: Cascade)
+
+  /// The history endpoint reads newest-first per reminder.
+  @@index([reminderId, occurredAt])
+  @@index([userId])
+  @@map("measurement_reminder_events")
 }
 
 // ─── Lab results ─────────────────────────────────────────────
@@ -5432,6 +5502,10 @@ model CustomMetricEntry {
   measuredAt     DateTime @map("measured_at")
   note           String?
   createdAt      DateTime @default(now()) @map("created_at")
+  /// v1.37.20 — soft-delete tombstone, peer parity with Measurement /
+  /// MoodEntry (every other entry surface deletes recoverably with an undo
+  /// toast; custom-metric entries were the one hard delete). NULL = live.
+  deletedAt      DateTime? @map("deleted_at")
 
   user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   metric CustomMetric @relation(fields: [customMetricId], references: [id], onDelete: Cascade)
