@@ -5001,7 +5001,14 @@
               "unpacking": "Archiv wird entpackt…",
               "parsing": "Export wird gelesen…",
               "upserting": "Datensätze werden importiert…"
-            }
+            },
+            "skipUnsupported": "{count} Samples übersprungen — Datentypen, die HealthLog nicht importiert.",
+            "skipRefused": "{count} Samples konnten nicht geschrieben werden (unlesbar, außerhalb des Wertebereichs oder Speichern fehlgeschlagen).",
+            "skipBreakdown": "Aufschlüsselung anzeigen ({count} Typen)",
+            "skipBreakdownMore": "+ {count} weitere Typen",
+            "cycleSummary": "{samples} Zyklus-Samples zu {days} Tagesprotokollen zusammengeführt.",
+            "cycleModuleOff": "{count} Zyklus-Samples übersprungen — Zyklus-Tracking ist für dieses Konto deaktiviert.",
+            "cycleDaysFailed": "{count} Zyklustage konnten nicht geschrieben werden: {reason}"
           },
           "json": {
             "title": "JSON-Datei",

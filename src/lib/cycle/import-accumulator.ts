@@ -37,8 +37,11 @@ export const HK_CYCLE_DAY_EXTERNAL_PREFIX = "hkcycle:";
 /** A zeroed cycle-import result — the no-cycle / aborted-flush fallback. */
 export const EMPTY_CYCLE_IMPORT_STATS: CycleImportStats = {
   samplesConsumed: 0,
+  samplesSkippedModuleDisabled: 0,
   daysUpserted: 0,
   daysInserted: 0,
+  daysFailed: 0,
+  firstFailureReason: null,
   goalNudged: false,
 };
 
@@ -54,10 +57,24 @@ interface DayBucket {
 export interface CycleImportStats {
   /** Reproductive samples consumed into a day-bucket. */
   samplesConsumed: number;
+  /**
+   * Reproductive samples the export carried but the fold dropped because
+   * cycle tracking is disabled for the account. Named so the "read 900k /
+   * imported 880k" gap stops being unexplained.
+   */
+  samplesSkippedModuleDisabled: number;
   /** Day-logs upserted at flush. */
   daysUpserted: number;
   /** Day-logs that the write created (vs refreshed). */
   daysInserted: number;
+  /**
+   * Day-logs whose write FAILED at flush. The flush is fault-isolated per
+   * day, so `daysUpserted` counts what actually landed rather than being
+   * zeroed by one colliding day.
+   */
+  daysFailed: number;
+  /** The first per-day failure's message, for the operator-facing line. */
+  firstFailureReason: string | null;
   /** Whether a CycleProfile goal nudge fired. */
   goalNudged: boolean;
 }
@@ -85,6 +102,16 @@ export class CycleImportAccumulator {
   /** True once at least one reproductive sample folded into a day-bucket. */
   hasSamples(): boolean {
     return this.byDay.size > 0;
+  }
+
+  /** Samples consumed so far — for the module-disabled skip accounting. */
+  sampleCount(): number {
+    return this.samplesConsumed;
+  }
+
+  /** Accumulated day-buckets — for the whole-flush-failed accounting. */
+  dayCount(): number {
+    return this.byDay.size;
   }
 
   /**
@@ -177,8 +204,11 @@ export class CycleImportAccumulator {
   async flush(): Promise<CycleImportStats> {
     const stats: CycleImportStats = {
       samplesConsumed: this.samplesConsumed,
+      samplesSkippedModuleDisabled: 0,
       daysUpserted: 0,
       daysInserted: 0,
+      daysFailed: 0,
+      firstFailureReason: null,
       goalNudged: false,
     };
     if (this.byDay.size === 0) return stats;
@@ -230,15 +260,26 @@ export class CycleImportAccumulator {
       };
 
       const cycleId = owningCycleId(dayKey);
-      const result = await upsertCycleDayLog(
-        this.userId,
-        entry,
-        this.userTimezone,
-        cycleId,
-        encryptSensitive,
-      );
-      stats.daysUpserted += 1;
-      if (!result.existed) stats.daysInserted += 1;
+      // Fault-isolated per day: one colliding day must not zero the stats
+      // for the days that DID land (the pre-fix shape reported
+      // `samplesConsumed: 0` after partial writes — a false "nothing
+      // happened" over rows already in the table).
+      try {
+        const result = await upsertCycleDayLog(
+          this.userId,
+          entry,
+          this.userTimezone,
+          cycleId,
+          encryptSensitive,
+        );
+        stats.daysUpserted += 1;
+        if (!result.existed) stats.daysInserted += 1;
+      } catch (err: unknown) {
+        stats.daysFailed += 1;
+        stats.firstFailureReason ??=
+          err instanceof Error ? err.message : String(err);
+        continue;
+      }
 
       // The most-recent contraceptive method across the import drives the
       // single goal nudge (applied once after the day loop).

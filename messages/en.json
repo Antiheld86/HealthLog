@@ -5001,7 +5001,14 @@
               "unpacking": "Unpacking the archive…",
               "parsing": "Reading the export…",
               "upserting": "Importing records…"
-            }
+            },
+            "skipUnsupported": "{count} samples skipped — data types HealthLog doesn't import.",
+            "skipRefused": "{count} samples couldn't be written (unreadable, out of range, or the save failed).",
+            "skipBreakdown": "Show breakdown ({count} types)",
+            "skipBreakdownMore": "+ {count} more types",
+            "cycleSummary": "{samples} cycle samples merged into {days} day logs.",
+            "cycleModuleOff": "{count} cycle samples skipped — cycle tracking is off for this account.",
+            "cycleDaysFailed": "{count} cycle days couldn't be written: {reason}"
           },
           "json": {
             "title": "JSON file",

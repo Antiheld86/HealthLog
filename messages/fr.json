@@ -5001,7 +5001,14 @@
               "unpacking": "Décompression de l'archive…",
               "parsing": "Lecture de l'export…",
               "upserting": "Import des enregistrements…"
-            }
+            },
+            "skipUnsupported": "{count} échantillons ignorés — des types de données que HealthLog n'importe pas.",
+            "skipRefused": "{count} échantillons n'ont pas pu être écrits (illisibles, hors plage ou échec de l'enregistrement).",
+            "skipBreakdown": "Afficher le détail ({count} types)",
+            "skipBreakdownMore": "+ {count} autres types",
+            "cycleSummary": "{samples} échantillons de cycle fusionnés en {days} journaux quotidiens.",
+            "cycleModuleOff": "{count} échantillons de cycle ignorés — le suivi du cycle est désactivé pour ce compte.",
+            "cycleDaysFailed": "{count} jours de cycle n'ont pas pu être écrits : {reason}"
           },
           "json": {
             "title": "Fichier JSON",

@@ -5001,7 +5001,14 @@
               "unpacking": "Estrazione dell'archivio…",
               "parsing": "Lettura dell'esportazione…",
               "upserting": "Importazione dei record…"
-            }
+            },
+            "skipUnsupported": "{count} campioni saltati — tipi di dati che HealthLog non importa.",
+            "skipRefused": "{count} campioni non sono stati scritti (illeggibili, fuori intervallo o salvataggio non riuscito).",
+            "skipBreakdown": "Mostra dettaglio ({count} tipi)",
+            "skipBreakdownMore": "+ {count} altri tipi",
+            "cycleSummary": "{samples} campioni del ciclo uniti in {days} registri giornalieri.",
+            "cycleModuleOff": "{count} campioni del ciclo saltati — il monitoraggio del ciclo è disattivato per questo account.",
+            "cycleDaysFailed": "{count} giorni del ciclo non sono stati scritti: {reason}"
           },
           "json": {
             "title": "File JSON",

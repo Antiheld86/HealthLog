@@ -5001,7 +5001,14 @@
               "unpacking": "Descomprimiendo el archivo…",
               "parsing": "Leyendo la exportación…",
               "upserting": "Importando registros…"
-            }
+            },
+            "skipUnsupported": "{count} muestras omitidas: tipos de datos que HealthLog no importa.",
+            "skipRefused": "{count} muestras no se pudieron escribir (ilegibles, fuera de rango o falló el guardado).",
+            "skipBreakdown": "Mostrar desglose ({count} tipos)",
+            "skipBreakdownMore": "+ {count} tipos más",
+            "cycleSummary": "{samples} muestras de ciclo combinadas en {days} registros diarios.",
+            "cycleModuleOff": "{count} muestras de ciclo omitidas: el seguimiento del ciclo está desactivado en esta cuenta.",
+            "cycleDaysFailed": "{count} días de ciclo no se pudieron escribir: {reason}"
           },
           "json": {
             "title": "Archivo JSON",

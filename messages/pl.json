@@ -5001,7 +5001,14 @@
               "unpacking": "Rozpakowywanie archiwum…",
               "parsing": "Odczytywanie eksportu…",
               "upserting": "Importowanie rekordów…"
-            }
+            },
+            "skipUnsupported": "{count} próbek pominięto — typy danych, których HealthLog nie importuje.",
+            "skipRefused": "{count} próbek nie udało się zapisać (nieczytelne, poza zakresem lub zapis się nie powiódł).",
+            "skipBreakdown": "Pokaż zestawienie ({count} typów)",
+            "skipBreakdownMore": "+ {count} kolejnych typów",
+            "cycleSummary": "{samples} próbek cyklu połączono w {days} dzienników dziennych.",
+            "cycleModuleOff": "{count} próbek cyklu pominięto — śledzenie cyklu jest wyłączone dla tego konta.",
+            "cycleDaysFailed": "{count} dni cyklu nie udało się zapisać: {reason}"
           },
           "json": {
             "title": "Plik JSON",
