@@ -29,6 +29,8 @@ import { reconcileOneShotState } from "@/lib/medications/lifecycle";
 import { assertMedicationOwnership } from "@/lib/medications/route-guards";
 import { invalidateUserMedications } from "@/lib/cache/invalidate";
 import { queueMedicationIntakeSync } from "@/lib/notifications/medication-intake-sync";
+import { dispatchMedicationIntakeWebClear } from "@/lib/notifications/web-push-clear";
+import { countOutstandingDosesToday } from "@/lib/medications/outstanding-doses";
 import { notifyDelegatedIntake } from "@/lib/notifications/delegated-intake";
 import { recomputeMedicationComplianceForEvent } from "@/lib/rollups/medication-compliance-rollups";
 import {
@@ -615,6 +617,22 @@ async function postIntake(request: NextRequest, { params }: RouteParams) {
     userId: user.id,
     originDeviceToken: request.headers.get("x-device-id"),
   });
+
+  // PWA counterpart of the sync wake above: a dose resolved here (taken or
+  // skipped) closes the still-pending dose-due Web Push reminder for the
+  // slot and refreshes the app badge. The other intake routes have carried
+  // this since v1.18.4; this route is the replay target of the iOS offline
+  // queue, so a drained dose must clear the web reminder the same way.
+  // Best-effort, fire-and-forget — the canonical row is already persisted.
+  void (async () => {
+    const badgeCount = await countOutstandingDosesToday(user.id, user.timezone);
+    await dispatchMedicationIntakeWebClear({
+      userId: user.id,
+      medicationId: id,
+      scheduledFor: event.scheduledFor.toISOString(),
+      badgeCount,
+    });
+  })();
 
   // v1.36.x — "somebody else marked your dose". This route has no snooze arm,
   // so the state is whichever of the two markings the payload carried. The
