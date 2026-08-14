@@ -137,9 +137,11 @@ describe("evaluateCoachContextReminders — measurement cues", () => {
       "measurement",
       NOW,
     );
-    const where = prisma.coachReminder.findMany.mock.calls[0]![0]!.where as {
-      contextCue: { in: string[] };
-    };
+    const where = (
+      prisma.coachReminder.findMany.mock.calls[0] as unknown as [
+        { where: { contextCue: { in: string[] } } },
+      ]
+    )[0].where;
     expect(where.contextCue.in).not.toContain("NEXT_APP_OPEN");
   });
 });

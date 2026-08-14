@@ -21,10 +21,12 @@ vi.mock("@/lib/ai/coach/bytes-codec", () => ({
 
 // The context-cue backstop delegates to the shared evaluator; its own
 // behaviour is pinned in `ai/coach/__tests__/context-reminders.test.ts`.
-const contextEvaluateMock = vi.fn(async () => ({ surfaced: 0, errored: 0 }));
+const contextEvaluateMock = vi.fn(async (..._args: unknown[]) => ({
+  surfaced: 0,
+  errored: 0,
+}));
 vi.mock("@/lib/ai/coach/context-reminders", () => ({
-  evaluateCoachContextReminders: (...args: unknown[]) =>
-    contextEvaluateMock(...args),
+  evaluateCoachContextReminders: contextEvaluateMock,
 }));
 
 import { runCoachReminderSweep } from "../coach-reminder-sweep";

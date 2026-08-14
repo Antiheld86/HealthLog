@@ -21,10 +21,12 @@ vi.mock("@/lib/jobs/boss-instance", () => ({
 // the Vorsorge assertions stay isolated; one test below pins that the hook
 // actually fires (watched red: removing the call site in
 // `runReminderSatisfyForUser` fails it).
-const evaluateContextMock = vi.fn(async () => ({ surfaced: 0, errored: 0 }));
+const evaluateContextMock = vi.fn(async (..._args: unknown[]) => ({
+  surfaced: 0,
+  errored: 0,
+}));
 vi.mock("@/lib/ai/coach/context-reminders", () => ({
-  evaluateCoachContextReminders: (...args: unknown[]) =>
-    evaluateContextMock(...args),
+  evaluateCoachContextReminders: evaluateContextMock,
 }));
 
 import {

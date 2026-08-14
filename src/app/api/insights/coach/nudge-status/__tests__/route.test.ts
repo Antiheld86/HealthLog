@@ -52,8 +52,9 @@ describe("nudge-status — NEXT_APP_OPEN hook", () => {
     await (GET as unknown as () => Promise<unknown>)();
 
     expect(evaluateContext).toHaveBeenCalledTimes(1);
-    const [prismaArg, userId, trigger] = evaluateContext.mock.calls[0]!;
-    expect((prismaArg as { __tag: string }).__tag).toBe("prisma");
+    const [prismaArg, userId, trigger] = evaluateContext.mock
+      .calls[0] as unknown as [{ __tag: string }, string, string];
+    expect(prismaArg.__tag).toBe("prisma");
     expect(userId).toBe("u1");
     expect(trigger).toBe("app-open");
     // Ordering: the surfaced message must be visible to this very read.
