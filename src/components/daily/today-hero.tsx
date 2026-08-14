@@ -33,6 +33,14 @@
  * sync.reconnect → /settings/integrations, checkup.view → /checkups), so
  * `PriorityCard` wires each tap as a `<Link>` to its existing destination
  * by construction; S2 invents no new backend action.
+ *
+ * Configurable primary content: the `hero` field on the dashboard layout
+ * blob (server-persisted, Settings → Dashboard) chooses what this card
+ * leads with. `"score"` keeps the composition above verbatim;
+ * `"reminders"` promotes the worth-a-look rail into the hero slot — the
+ * rail (or the calm all-clear line) becomes the card's content and the
+ * score composition yields entirely. The empty-account degrade and the
+ * freshness note are shared by both modes.
  */
 import Link from "next/link";
 import { Moon } from "lucide-react";
@@ -47,6 +55,7 @@ import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useTranslations } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 import type { DailyDigest } from "@/lib/daily/digest";
+import type { HeroPrimaryContent } from "@/lib/dashboard-layout";
 import {
   COACH_CHECKIN_KEEP_INTENT,
   COACH_CHECKIN_LETGO_INTENT,
@@ -88,9 +97,12 @@ function withoutRepeatedScore(
 export function TodayHero({
   digest,
   renderFilteredAllClear = false,
+  primaryContent = "score",
 }: {
   digest: DailyDigest;
   renderFilteredAllClear?: boolean;
+  /** Server-persisted hero choice from the dashboard layout blob. */
+  primaryContent?: HeroPrimaryContent;
 }) {
   const { t } = useTranslations();
   // The hero is deliberately NOT mount-gated (v1.30.9: it is the LCP element
@@ -182,20 +194,88 @@ export function TodayHero({
     return null;
   }
 
+  // Shared fragments — identical markup in every composition, so the
+  // "score" and "reminders" modes cannot drift apart on either surface.
+  const sleepPendingNote = digest.sleepPending ? (
+    <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+      <p
+        data-slot="today-hero-sleep-pending"
+        className="flex items-center gap-1.5"
+      >
+        <Moon className="size-3.5 shrink-0" aria-hidden="true" />
+        {t("daily.today.sleepPending")}
+      </p>
+    </div>
+  ) : null;
+
+  /* Worth-a-look rail — S1's `PriorityCard`s, bounded 0–3. */
+  const rail = hasItems ? (
+    <div className="space-y-2" data-slot="today-hero-rail">
+      <h2 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+        {t("daily.today.worthALook")}
+      </h2>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {digest.worthALook.map((item, i) => (
+          <PriorityCard
+            key={`${item.kind}-${i}`}
+            item={item}
+            onAction={canManage ? handleAction : undefined}
+            onDismiss={
+              canManage ? (itemKey) => dismissItem.mutate(itemKey) : undefined
+            }
+            actionsPending={
+              item.kind === "coach_checkin" &&
+              (keep.isPending || letGo.isPending)
+            }
+          />
+        ))}
+      </div>
+    </div>
+  ) : null;
+
+  const heroShellClassName = cn(
+    // The tile strip's surface plus the ONE sanctioned Today atmosphere:
+    // `.today-hero-wash` leans a faint `--primary` mix over the theme
+    // `--card` toward the ring corner (the `.wellness-tile` color-mix
+    // pattern, softer than the insights hero) so the promoted day's read
+    // carries a quiet identity without a banner gradient or glow.
+    "bg-card today-hero-wash border-border relative isolate overflow-hidden rounded-xl border",
+    "p-4 md:p-6",
+  );
+
+  // Reminders-first composition — the rail IS the hero. The score
+  // composition yields the slot entirely (the ring keeps its home on
+  // /insights); an empty rail degrades to the same calm all-clear line
+  // the score mode uses, never an empty card.
+  if (primaryContent === "reminders") {
+    return (
+      <section
+        data-slot="today-hero"
+        data-phase={digest.phase}
+        data-layout="reminders"
+        className={heroShellClassName}
+      >
+        <div className="flex flex-col gap-3 md:gap-4">
+          {rail ?? (
+            <p
+              data-slot="today-hero-all-clear"
+              className="text-muted-foreground text-sm"
+            >
+              {t("daily.today.allClear")}
+            </p>
+          )}
+          {sleepPendingNote}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section
       data-slot="today-hero"
       data-phase={digest.phase}
       data-layout={compactAllClear ? "compact-all-clear" : "narrative"}
-      className={cn(
-        // The tile strip's surface plus the ONE sanctioned Today atmosphere:
-        // `.today-hero-wash` leans a faint `--primary` mix over the theme
-        // `--card` toward the ring corner (the `.wellness-tile` color-mix
-        // pattern, softer than the insights hero) so the promoted day's read
-        // carries a quiet identity without a banner gradient or glow.
-        "bg-card today-hero-wash border-border relative isolate overflow-hidden rounded-xl border",
-        "p-4 md:p-6",
-      )}
+      className={heroShellClassName}
     >
       {/* v1.29.1 — tightened after the v1.29.0 ring cluster was removed: the
           hero read as half-empty (short lead → gap → rail). Compact section
@@ -252,17 +332,7 @@ export function TodayHero({
             {/* In the compact fallback the quiet freshness tier belongs next
                 to the smaller ring. That uses the otherwise-empty leading
                 space and avoids adding a second row below the dial. */}
-            {compactAllClear && digest.sleepPending ? (
-              <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                <p
-                  data-slot="today-hero-sleep-pending"
-                  className="flex items-center gap-1.5"
-                >
-                  <Moon className="size-3.5 shrink-0" aria-hidden="true" />
-                  {t("daily.today.sleepPending")}
-                </p>
-              </div>
-            ) : null}
+            {compactAllClear ? sleepPendingNote : null}
           </div>
 
           {/* Health score ring — `flat` (no sweep/bloom), server-computed
@@ -309,53 +379,20 @@ export function TodayHero({
             opacity modifier). Freshness note (plan §2.4) — provisional day,
             last night's sleep not yet folded in. Muted, non-blocking,
             refreshes in place when the morning job lands. */}
-        {!compactAllClear && digest.sleepPending ? (
-          <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-            <p
-              data-slot="today-hero-sleep-pending"
-              className="flex items-center gap-1.5"
-            >
-              <Moon className="size-3.5 shrink-0" aria-hidden="true" />
-              {t("daily.today.sleepPending")}
-            </p>
-          </div>
-        ) : null}
+        {!compactAllClear ? sleepPendingNote : null}
 
         {/* Worth-a-look rail — S1's `PriorityCard`s, bounded 0–3. When the
             digest is all-clear, a first-class muted line stands in for the
             rail (calm inversion of an alarm), never an empty card. */}
-        {hasItems ? (
-          <div className="space-y-2" data-slot="today-hero-rail">
-            <h2 className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-              {t("daily.today.worthALook")}
-            </h2>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {digest.worthALook.map((item, i) => (
-                <PriorityCard
-                  key={`${item.kind}-${i}`}
-                  item={item}
-                  onAction={canManage ? handleAction : undefined}
-                  onDismiss={
-                    canManage
-                      ? (itemKey) => dismissItem.mutate(itemKey)
-                      : undefined
-                  }
-                  actionsPending={
-                    item.kind === "coach_checkin" &&
-                    (keep.isPending || letGo.isPending)
-                  }
-                />
-              ))}
-            </div>
-          </div>
-        ) : !compactAllClear ? (
-          <p
-            data-slot="today-hero-all-clear"
-            className="text-muted-foreground text-sm"
-          >
-            {t("daily.today.allClear")}
-          </p>
-        ) : null}
+        {rail ??
+          (!compactAllClear ? (
+            <p
+              data-slot="today-hero-all-clear"
+              className="text-muted-foreground text-sm"
+            >
+              {t("daily.today.allClear")}
+            </p>
+          ) : null)}
       </div>
     </section>
   );

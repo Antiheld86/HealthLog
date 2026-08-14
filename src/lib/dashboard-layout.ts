@@ -555,6 +555,29 @@ function coerceSelectedScoreRings(value: unknown): ScoreRingId[] {
 }
 
 /**
+ * Configurable hero primary content — what the dashboard hero card leads
+ * with. `"score"` is the long-standing composition (health-score ring +
+ * the day's read); `"reminders"` promotes the worth-a-look rail into the
+ * hero slot. Closed two-value set, deliberately no further options.
+ *
+ * The preference piggy-backs on the layout blob like `comparisonBaseline`
+ * (a UI affordance, no Prisma migration). The resolver drops unknown
+ * values back to the default `"score"`; the serializer omits the default
+ * so an untouched account's stored blob is unchanged.
+ */
+export const HERO_PRIMARY_CONTENTS = ["score", "reminders"] as const;
+export type HeroPrimaryContent = (typeof HERO_PRIMARY_CONTENTS)[number];
+
+export const DEFAULT_HERO_PRIMARY_CONTENT: HeroPrimaryContent = "score";
+
+function coerceHeroPrimaryContent(value: unknown): HeroPrimaryContent {
+  return typeof value === "string" &&
+    (HERO_PRIMARY_CONTENTS as readonly string[]).includes(value)
+    ? (value as HeroPrimaryContent)
+    : DEFAULT_HERO_PRIMARY_CONTENT;
+}
+
+/**
  * Resolve the Today hero's item-kind visibility against the current closed
  * catalogue. Legacy or malformed values enable every current kind. Arrays are
  * explicit choices, including an empty array, and resolve in catalogue order.
@@ -594,6 +617,14 @@ export interface DashboardLayout {
    * every current kind; an explicit empty array keeps the rail off.
    */
   enabledHeroItemKinds?: PriorityItemKind[];
+  /**
+   * Primary hero-card content: `"score"` (default — health-score ring plus
+   * the day's read) or `"reminders"` (the worth-a-look rail promoted into
+   * the hero slot). Optional and additive so clients that predate the
+   * field round-trip the blob untouched; unknown values resolve to
+   * `"score"`.
+   */
+  hero?: HeroPrimaryContent;
 }
 
 /**
@@ -627,6 +658,7 @@ export const LAYOUT_FIELD_MERGE_DISPOSITION = {
   selectedScoreRings: "preserve",
   heroRingOrder: "preserve",
   enabledHeroItemKinds: "preserve",
+  hero: "preserve",
 } as const satisfies Record<keyof DashboardLayout, "replace" | "preserve">;
 
 /**
@@ -693,6 +725,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
   selectedScoreRings: [...DEFAULT_SELECTED_SCORE_RINGS],
   heroRingOrder: [...DEFAULT_HERO_RING_ORDER],
   enabledHeroItemKinds: [...PRIORITY_ITEM_KINDS],
+  hero: DEFAULT_HERO_PRIMARY_CONTENT,
   widgets: [
     { id: "weight", visible: true, tileVisible: true, order: 0 },
     { id: "bp", visible: true, tileVisible: true, order: 1 },
@@ -863,6 +896,10 @@ export function resolveDashboardLayout(raw: unknown): DashboardLayout {
     enabledHeroItemKinds: coerceEnabledHeroItemKinds(
       candidate.enabledHeroItemKinds,
     ),
+    // Hero primary content: unknown / missing values resolve to the
+    // default "score" so a stale client cannot swap the hero to a
+    // composition the renderer doesn't know how to draw.
+    hero: coerceHeroPrimaryContent(candidate.hero),
   };
 }
 
@@ -875,6 +912,7 @@ export function serializeDashboardLayout(
   const enabledHeroItemKinds = coerceEnabledHeroItemKinds(
     layout.enabledHeroItemKinds,
   );
+  const hero = coerceHeroPrimaryContent(layout.hero);
   return {
     version: DASHBOARD_LAYOUT_VERSION,
     widgets: layout.widgets
@@ -911,5 +949,9 @@ export function serializeDashboardLayout(
     ...(enabledHeroItemKinds.length === PRIORITY_ITEM_KINDS.length
       ? {}
       : { enabledHeroItemKinds }),
+    // The default "score" is omitted from storage (same forward-compatible
+    // contract as `enabledHeroItemKinds`), so an untouched account's blob
+    // is byte-identical to the pre-field shape.
+    ...(hero === DEFAULT_HERO_PRIMARY_CONTENT ? {} : { hero }),
   };
 }

@@ -967,3 +967,93 @@ describe("DELETE /api/dashboard/widgets — web-owned reset scope", () => {
     expect(body.data.updatedAt).toBe(advanced.toISOString());
   });
 });
+
+describe("dashboard widgets — hero primary content", () => {
+  const weightOnly = [
+    { id: "weight" as const, visible: true, tileVisible: true, order: 0 },
+  ];
+
+  it("accepts and persists hero: 'reminders'", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      dashboardWidgetsJson: null,
+    } as never);
+    vi.mocked(prisma.user.update).mockResolvedValue({} as never);
+
+    const res = await callPut(
+      makeReq({ version: 1, widgets: weightOnly, hero: "reminders" }),
+    );
+    expect(res.status).toBe(200);
+
+    const updateArg = vi.mocked(prisma.user.update).mock
+      .calls[0]?.[0] as unknown as {
+      data: { dashboardWidgetsJson: { hero?: string } };
+    };
+    expect(updateArg.data.dashboardWidgetsJson.hero).toBe("reminders");
+
+    const body = (await res.json()) as { data: { hero?: string } };
+    expect(body.data.hero).toBe("reminders");
+  });
+
+  it("rejects a hero value outside the closed enum with 422", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      dashboardWidgetsJson: null,
+    } as never);
+    vi.mocked(prisma.user.update).mockResolvedValue({} as never);
+
+    const res = await callPut(
+      makeReq({ version: 1, widgets: weightOnly, hero: "banner" }),
+    );
+    expect(res.status).toBe(422);
+    expect(vi.mocked(prisma.user.update)).not.toHaveBeenCalled();
+  });
+
+  it("keeps the stored hero choice when the client omits the field", async () => {
+    // A layout save from a client that predates the field (the native
+    // client, or a stale web tab) must not silently reset the choice.
+    const stored: DashboardLayout = serializeDashboardLayout({
+      version: 1,
+      widgets: weightOnly,
+      hero: "reminders",
+    });
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      dashboardWidgetsJson: stored,
+    } as never);
+    vi.mocked(prisma.user.update).mockResolvedValue({} as never);
+
+    const res = await callPut(makeReq({ version: 1, widgets: weightOnly }));
+    expect(res.status).toBe(200);
+
+    const updateArg = vi.mocked(prisma.user.update).mock
+      .calls[0]?.[0] as unknown as {
+      data: { dashboardWidgetsJson: { hero?: string } };
+    };
+    expect(updateArg.data.dashboardWidgetsJson.hero).toBe("reminders");
+  });
+
+  it("honours an explicitly sent 'score' over the stored 'reminders'", async () => {
+    const stored: DashboardLayout = serializeDashboardLayout({
+      version: 1,
+      widgets: weightOnly,
+      hero: "reminders",
+    });
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      dashboardWidgetsJson: stored,
+    } as never);
+    vi.mocked(prisma.user.update).mockResolvedValue({} as never);
+
+    const res = await callPut(
+      makeReq({ version: 1, widgets: weightOnly, hero: "score" }),
+    );
+    expect(res.status).toBe(200);
+
+    const updateArg = vi.mocked(prisma.user.update).mock
+      .calls[0]?.[0] as unknown as {
+      data: { dashboardWidgetsJson: { hero?: string } };
+    };
+    // "score" is the default and serializes as an omitted field.
+    expect(updateArg.data.dashboardWidgetsJson.hero).toBeUndefined();
+
+    const body = (await res.json()) as { data: { hero?: string } };
+    expect(body.data.hero).toBeUndefined();
+  });
+});

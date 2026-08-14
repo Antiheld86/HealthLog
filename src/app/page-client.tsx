@@ -967,6 +967,9 @@ export default function DashboardPageClient({
           <TodayHero
             digest={digestQuery.data}
             renderFilteredAllClear={renderFilteredHeroAllClear}
+            // Server-persisted hero choice — rides the same resolved layout
+            // as the widget visibility below, so SSR and hydration agree.
+            primaryContent={layout.hero ?? "score"}
           />
         ) : !mounted || digestQuery.isLoading ? (
           <TodayHeroSkeleton />
