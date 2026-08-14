@@ -51,6 +51,7 @@ import {
 import { returnTimeoutFallback } from "@/lib/insights/timeout-fallback";
 import { annotate } from "@/lib/logging/context";
 import { resolveUserTimezone, userDayKey } from "@/lib/tz/resolver";
+import { sanitizeForPrompt } from "@/lib/insights/sanitize";
 
 export interface BiomarkerStatusResult {
   hasProvider: boolean;
@@ -275,13 +276,22 @@ export async function generateBiomarkerStatus(args: {
   const summary = summarizeSeries(ascending.map((r) => ({ value: r.value })));
   const latestStatus = classifyAgainstEffectiveRange(latest.value, latestRange);
 
+  // The marker name/unit originate from `labResult.analyte` — model-
+  // transcribed free text from an uploaded document (lab-biomarker-
+  // backfill mints the catalog row from it). A hostile PDF could smuggle
+  // instructions through them, and the name lands in SYSTEM-prompt
+  // position below, so both are scrubbed exactly like the coach
+  // labs-snapshot scrubs the same fields.
+  const safeMarkerName = sanitizeForPrompt(marker.name, 120);
+  const safeMarkerUnit = sanitizeForPrompt(marker.unit, 40);
+
   const snapshot = {
     locale,
     promptVersion: PROMPT_VERSION,
     generatedForDay: todayKey,
     marker: {
-      name: marker.name,
-      unit: marker.unit,
+      name: safeMarkerName,
+      unit: safeMarkerUnit,
       referenceRange:
         latestRange.low != null || latestRange.high != null
           ? { lower: latestRange.low, upper: latestRange.high }
@@ -315,7 +325,7 @@ export async function generateBiomarkerStatus(args: {
     userId: args.userId,
     cacheAction,
     consentSurface: "insights",
-    systemPrompt: getBiomarkerSystemPrompt(marker.name, locale as Locale),
+    systemPrompt: getBiomarkerSystemPrompt(safeMarkerName, locale as Locale),
     userPrompt: getBiomarkerUserPrompt(
       snapshotJson,
       todayKey,

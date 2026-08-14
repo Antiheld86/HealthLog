@@ -117,9 +117,33 @@ async function rowsFor(action: string) {
   });
 }
 
-/** The resolver's access row is fire-and-forget; give it a tick to land. */
-async function settle() {
-  await new Promise((resolve) => setTimeout(resolve, 80));
+/**
+ * Poll the trail until `action` carries exactly `count` rows, then return
+ * them. The access rows are fire-and-forget, and the old fixed 80 ms grace
+ * was a race the assertion lost whenever the runner was busy — which is
+ * exactly when CI is slowest and least willing to explain itself. On
+ * timeout the poll asserts against the real count, so a genuine regression
+ * reports what WAS written rather than a bare timeout.
+ */
+async function rowsSettled(action: string, count: number) {
+  await expect
+    .poll(async () => (await rowsFor(action)).length, {
+      timeout: 5_000,
+      interval: 100,
+    })
+    .toBe(count);
+  return rowsFor(action);
+}
+
+/**
+ * The ONE remaining fixed grace, for the absence assertion below —
+ * "writes nothing when nobody delegates" cannot be polled into existence
+ * (there is no value to wait for), so it waits a bounded span and then
+ * proves the silence. Widened from the old 80 ms so a busy runner cannot
+ * turn a late write into a false pass.
+ */
+async function settleForAbsence() {
+  await new Promise((resolve) => setTimeout(resolve, 250));
 }
 
 beforeEach(async () => {
@@ -188,10 +212,8 @@ describe("who the trail says did it", () => {
     await switchSessionTo(session.id, stranger.id);
 
     expect((await act()).status).toBe(403);
-    await settle();
 
-    const rows = await rowsFor("sharing.access.denied");
-    expect(rows).toHaveLength(1);
+    const rows = await rowsSettled("sharing.access.denied", 1);
     expect(rows[0].userId).toBe(delegate.id);
     expect(rows[0].actorUserId).toBeNull();
   });
@@ -204,13 +226,27 @@ describe("delegated reads coalesce to one row a day", () => {
     await act();
     await act();
     await act();
-    await settle();
+
+    // Poll on the COUNTED value: the coalesced row exists after the first
+    // read, so a length poll would pass while increments are still in
+    // flight.
+    await expect
+      .poll(
+        async () => {
+          const rows = await rowsFor(DELEGATED_ACCESS_ACTION);
+          return rows.length === 1
+            ? (JSON.parse(rows[0].details ?? "{}") as { accesses?: number })
+                .accesses
+            : null;
+        },
+        { timeout: 5_000, interval: 100 },
+      )
+      .toBe(3);
 
     const rows = await rowsFor(DELEGATED_ACCESS_ACTION);
     expect(rows).toHaveLength(1);
     expect(rows[0].userId).toBe(owner.id);
     expect(rows[0].actorUserId).toBe(delegate.id);
-    expect(JSON.parse(rows[0].details!)).toEqual({ accesses: 3 });
   });
 
   it("keeps a second delegate's reads on their own row", async () => {
@@ -231,10 +267,8 @@ describe("delegated reads coalesce to one row a day", () => {
     const secondSession = await signIn(second.id);
     await switchSessionTo(secondSession.id, owner.id);
     await act();
-    await settle();
 
-    const rows = await rowsFor(DELEGATED_ACCESS_ACTION);
-    expect(rows).toHaveLength(2);
+    const rows = await rowsSettled(DELEGATED_ACCESS_ACTION, 2);
     expect(rows.map((r) => r.actorUserId).sort()).toEqual(
       [delegate.id, second.id].sort(),
     );
@@ -245,7 +279,7 @@ describe("delegated reads coalesce to one row a day", () => {
     const { owner, delegate } = await household();
 
     await act();
-    await settle();
+    await rowsSettled(DELEGATED_ACCESS_ACTION, 1);
 
     // Age today's row by a day. The coalescing key is the row's own date, so
     // this is exactly what tomorrow looks like to the next read — and if the
@@ -258,10 +292,8 @@ describe("delegated reads coalesce to one row a day", () => {
     `;
 
     await act();
-    await settle();
 
-    const rows = await rowsFor(DELEGATED_ACCESS_ACTION);
-    expect(rows).toHaveLength(2);
+    const rows = await rowsSettled(DELEGATED_ACCESS_ACTION, 2);
     expect(rows.every((r) => r.userId === owner.id)).toBe(true);
     expect(rows.every((r) => r.actorUserId === delegate.id)).toBe(true);
   });
@@ -271,7 +303,7 @@ describe("delegated reads coalesce to one row a day", () => {
     await signIn(solo.id);
 
     await act();
-    await settle();
+    await settleForAbsence();
 
     expect(await rowsFor(DELEGATED_ACCESS_ACTION)).toHaveLength(0);
   });
@@ -365,9 +397,7 @@ describe("a refused read is reported as a refused read", () => {
 
     // The breadcrumb is fire-and-forget, which is the property that made it
     // invisible to a guard reading only awaited calls.
-    await settle();
-    const rows = await rowsFor("mood-entries.list.validation-failed");
-    expect(rows, "no breadcrumb row was written").toHaveLength(1);
+    const rows = await rowsSettled("mood-entries.list.validation-failed", 1);
     expect(rows[0]?.userId).toBe(owner.id);
     expect(rows[0]?.actorUserId).toBe(delegate.id);
 

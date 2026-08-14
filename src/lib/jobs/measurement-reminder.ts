@@ -43,6 +43,7 @@ import {
 } from "@/lib/measurement-reminders/scheduling";
 import { findSatisfyingEvent } from "@/lib/measurement-reminders/resolve";
 import { satisfyReminder } from "@/lib/measurement-reminders/satisfy";
+import { evaluateCoachContextReminders } from "@/lib/ai/coach/context-reminders";
 
 /**
  * v1.18.0 — map a reminder's `measurementType` to the toggleable module
@@ -387,6 +388,8 @@ export interface ReminderSatisfySummary {
   satisfied: number;
   skippedModuleDisabled: number;
   skippedNoEvent: number;
+  /** Coach context-cue reminders the same ingest event surfaced. */
+  coachContextSurfaced: number;
   failed: number;
 }
 
@@ -413,7 +416,6 @@ export async function runReminderSatisfyForUser(
   now: Date,
   options: { isModuleEnabled?: typeof isModuleEnabled } = {},
 ): Promise<ReminderSatisfySummary> {
-  void now;
   const moduleGate = options.isModuleEnabled ?? isModuleEnabled;
 
   const summary: ReminderSatisfySummary = {
@@ -421,6 +423,7 @@ export async function runReminderSatisfyForUser(
     satisfied: 0,
     skippedModuleDisabled: 0,
     skippedNoEvent: 0,
+    coachContextSurfaced: 0,
     failed: 0,
   };
 
@@ -476,6 +479,27 @@ export async function runReminderSatisfyForUser(
         `reminder-satisfy per-reminder resolve failed for ${reminder.id}: ${message}`,
       );
     }
+  }
+
+  // Coach context-cue reminders ("next time you log X") ride the same
+  // eventful hook: the measurement that satisfies a Vorsorge cadence is
+  // the same evidence a NEXT_*_LOGGED cue waits for. Fault-isolated — a
+  // context failure never costs the Vorsorge resolution above.
+  try {
+    const outcome = await evaluateCoachContextReminders(
+      prisma,
+      userId,
+      "measurement",
+      now,
+    );
+    summary.coachContextSurfaced = outcome.surfaced;
+    summary.failed += outcome.errored;
+  } catch (err: unknown) {
+    summary.failed += 1;
+    const message = err instanceof Error ? err.message : String(err);
+    getEvent()?.addWarning(
+      `reminder-satisfy coach context evaluation failed for ${userId}: ${message}`,
+    );
   }
 
   return summary;

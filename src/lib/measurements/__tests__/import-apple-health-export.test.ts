@@ -15,6 +15,14 @@ vi.mock("@/lib/arrivals/emit-shared", () => ({
   emitDataArrival: vi.fn().mockResolvedValue(undefined),
 }));
 
+// The cycle-fold gate — mutable so the module-off drop accounting can be
+// exercised without a DB. Default OFF, matching every pre-existing fixture
+// (none carries reproductive records, so the value was never read before).
+const cycleGate = vi.hoisted(() => ({ enabled: false }));
+vi.mock("@/lib/cycle/gate", () => ({
+  isCycleAvailableForUser: vi.fn(async () => cycleGate.enabled),
+}));
+
 import { Prisma, type PrismaClient } from "@/generated/prisma/client";
 import {
   hashSampleKey,
@@ -1170,5 +1178,51 @@ describe("streamParseExportXml — memory ceiling", () => {
     // GC-related spike doesn't flake the test, but a regression that
     // buffers per-record would push us above this ceiling fast.
     expect(heapDelta).toBeLessThan(100 * 1024 * 1024);
+  });
+});
+
+/**
+ * A6 — reproductive samples with cycle tracking OFF must be counted, not
+ * silently discarded. The pre-fix importer read them into `recordsRead`,
+ * dropped the accumulator, and returned zeroed cycle stats — the
+ * "read 900k / imported 880k" unexplained gap.
+ *
+ * Watched red: with the module-off branch removed from the importer
+ * (cycle reset to EMPTY_CYCLE_IMPORT_STATS when the gate is off) the
+ * first assertion fails with `samplesSkippedModuleDisabled: 0`.
+ */
+describe("streamParseExportXml — cycle module off", () => {
+  function cycleExportXml(): string {
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<HealthData locale="en_US">
+  <ExportDate value="2026-05-15 14:32:01 +0200"/>
+  <Record type="HKCategoryTypeIdentifierMenstrualFlow" value="HKCategoryValueMenstrualFlowMedium" startDate="2026-05-10 08:00:00 +0200" endDate="2026-05-10 08:00:00 +0200"/>
+  <Record type="HKQuantityTypeIdentifierBodyMass" value="81.5" unit="kg" startDate="2026-05-10 07:00:00 +0200" endDate="2026-05-10 07:00:00 +0200"/>
+</HealthData>`;
+  }
+
+  it("names the dropped reproductive samples in the cycle stats", async () => {
+    cycleGate.enabled = false;
+    const tmp = mkdtempSync(join(tmpdir(), "healthlog-parser-test-"));
+    const xmlPath = join(tmp, "export.xml");
+    writeFileSync(xmlPath, cycleExportXml());
+    const prisma = makeFakePrisma();
+
+    const result = await streamParseExportXml({
+      xmlPath,
+      userId: "user-1",
+      userTimezone: "Europe/Berlin",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      prisma: prisma as any,
+    });
+
+    // The dropped sample is named, so recordsRead minus the per-type
+    // reads stays explained.
+    expect(result.cycle.samplesSkippedModuleDisabled).toBe(1);
+    expect(result.cycle.samplesConsumed).toBe(0);
+    expect(result.cycle.daysUpserted).toBe(0);
+    // The sibling weight record is unaffected.
+    expect(result.perType.WEIGHT?.inserted).toBe(1);
+    expect(result.totals.recordsRead).toBe(2);
   });
 });

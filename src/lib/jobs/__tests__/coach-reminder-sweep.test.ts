@@ -19,6 +19,18 @@ vi.mock("@/lib/ai/coach/bytes-codec", () => ({
   encryptToBytes: (s: string) => new Uint8Array(Buffer.from(`enc:${s}`)),
 }));
 
+// The context-cue backstop delegates to the shared evaluator; its own
+// behaviour is pinned in `ai/coach/__tests__/context-reminders.test.ts`.
+const { contextEvaluateMock } = vi.hoisted(() => ({
+  contextEvaluateMock: vi.fn(async (..._args: unknown[]) => ({
+    surfaced: 0,
+    errored: 0,
+  })),
+}));
+vi.mock("@/lib/ai/coach/context-reminders", () => ({
+  evaluateCoachContextReminders: contextEvaluateMock,
+}));
+
 import { runCoachReminderSweep } from "../coach-reminder-sweep";
 
 const NOW = new Date("2026-06-27T05:20:00.000Z");
@@ -186,6 +198,43 @@ describe("runCoachReminderSweep", () => {
     const flip = prisma.tx.coachReminder.updateMany.mock
       .calls[0] as unknown as [{ where: { id: { in: string[] } } }];
     expect(flip[0].where.id.in).toEqual(["r-ok"]);
+  });
+
+  // Watched red: with the context-backstop pass removed from the sweep this
+  // fails on the evaluator assertion — the pre-fix sweep skipped context
+  // reminders entirely ("follow-on (F4)").
+  it("re-evaluates the measurement context cues as the daily backstop", async () => {
+    const prisma = makePrisma({});
+    contextEvaluateMock.mockClear();
+    contextEvaluateMock.mockResolvedValue({ surfaced: 1, errored: 0 });
+    prisma.coachReminder.findMany
+      .mockResolvedValueOnce([]) // step 2: overdue date reminders
+      .mockResolvedValueOnce([
+        { userId: "u1" },
+        { userId: "u1" },
+        { userId: "u2" },
+      ] as never); // step 3: pending context rows
+
+    const summary = await runCoachReminderSweep(prisma as never, NOW);
+
+    // One evaluation per distinct user, measurement trigger only.
+    expect(contextEvaluateMock).toHaveBeenCalledTimes(2);
+    expect(contextEvaluateMock).toHaveBeenCalledWith(
+      prisma,
+      "u1",
+      "measurement",
+      NOW,
+    );
+    expect(summary.contextSurfaced).toBe(2);
+
+    // NEXT_APP_OPEN is deliberately outside the backstop: only a real
+    // app-open signal may satisfy it.
+    const where = (
+      prisma.coachReminder.findMany.mock.calls[1] as unknown as [
+        { where: { contextCue: { not: string } } },
+      ]
+    )[0].where;
+    expect(where.contextCue).toEqual({ not: "NEXT_APP_OPEN" });
   });
 
   it("skips an undecryptable plan without sinking the tick", async () => {

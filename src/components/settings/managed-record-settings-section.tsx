@@ -734,7 +734,6 @@ function CoachSettingsForm({
         excludeMetrics: COACH_EXCLUDE_METRICS.filter(
           (metric) => form.get(`exclude-${metric}`) === "on",
         ),
-        showEvidenceByDefault: form.get("showEvidenceByDefault") === "on",
         defaultWindow: asString(form.get("defaultWindow"), "allTime"),
         ...(form.get("useCustomClusters") === "on"
           ? {
@@ -817,12 +816,6 @@ function CoachSettingsForm({
           </NativeSelect>
         </label>
       </div>
-      <ManagedSwitchRow
-        name="showEvidenceByDefault"
-        label={t("settings.sharedRecord.managedSettings.coach.showEvidence")}
-        defaultChecked={preferences.showEvidenceByDefault === true}
-        disabled={disabled}
-      />
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium">
           {t("settings.sharedRecord.managedSettings.coach.excludedMetrics")}

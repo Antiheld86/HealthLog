@@ -18,6 +18,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const {
   recordSyncFailureMock,
   recordSyncSuccessMock,
+  invalidateUserMeasurementsMock,
   prismaMock,
   getUserGoogleHealthCredentialsMock,
   refreshAccessTokenMock,
@@ -25,10 +26,12 @@ const {
 } = vi.hoisted(() => ({
   recordSyncFailureMock: vi.fn(async () => {}),
   recordSyncSuccessMock: vi.fn(async () => {}),
+  invalidateUserMeasurementsMock: vi.fn(),
   prismaMock: {
     googleHealthConnection: {
       findUnique: vi.fn(),
       update: vi.fn(async () => ({})),
+      updateMany: vi.fn(async () => ({ count: 1 })),
     },
   },
   getUserGoogleHealthCredentialsMock: vi.fn(async (): Promise<unknown> => null),
@@ -57,6 +60,9 @@ vi.mock("@/lib/rollups/measurement-rollups", () => ({
 }));
 vi.mock("@/lib/insights/comprehensive-generate", () => ({
   invalidateStatusInsightsForTypes: vi.fn(async () => {}),
+}));
+vi.mock("@/lib/cache/invalidate", () => ({
+  invalidateUserMeasurements: invalidateUserMeasurementsMock,
 }));
 vi.mock("../credentials", () => ({
   getUserGoogleHealthCredentials: getUserGoogleHealthCredentialsMock,
@@ -246,5 +252,33 @@ describe("getValidToken — dead-token cycle verdict", () => {
       const arg = (call as unknown[])[0] as { data: Record<string, unknown> };
       expect(arg.data).not.toHaveProperty("lastSyncedAt");
     }
+  });
+});
+
+// Watched red: with the `invalidateUserMeasurements(userId)` call removed
+// from the sync tail this fails — the pre-fix tail dropped only the
+// per-type status insights, so correlations / analytics / targets served
+// pre-sync bodies until TTL after every hourly sync.
+describe("syncUserGoogleHealth — measurement-cache invalidation", () => {
+  it("marks the per-user measurement caches stale when rows landed", async () => {
+    invalidateUserMeasurementsMock.mockClear();
+    prismaMock.googleHealthConnection.findUnique.mockResolvedValue({
+      id: "conn-1",
+      userId: "user-1",
+      googleUserId: "g-user-1",
+      accessToken: "enc-access",
+      refreshToken: "enc-refresh",
+      // Comfortably outside the refresh buffer so getValidToken answers
+      // from the stored token without a refresh round-trip.
+      tokenExpiresAt: new Date(Date.now() + 60 * 60_000),
+      lastSyncedAt: new Date("2026-07-01T00:00:00.000Z"),
+    } as never);
+    const { decrypt } = await import("@/lib/crypto");
+    vi.mocked(decrypt).mockReturnValue("tok" as never);
+
+    const res = await syncUserGoogleHealth("user-1");
+
+    expect(res.imported).toBeGreaterThan(0);
+    expect(invalidateUserMeasurementsMock).toHaveBeenCalledWith("user-1");
   });
 });

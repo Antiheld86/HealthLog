@@ -4719,7 +4719,6 @@
           "last30days": "Últimos 30 días",
           "last90days": "Últimos 90 días",
           "allTime": "Todo el tiempo",
-          "showEvidence": "Mostrar evidencia de forma predeterminada",
           "excludedMetrics": "Métricas excluidas",
           "dataClusters": "Grupos de datos",
           "customClusters": "Usar una selección personalizada de grupos",
@@ -5002,7 +5001,14 @@
               "unpacking": "Descomprimiendo el archivo…",
               "parsing": "Leyendo la exportación…",
               "upserting": "Importando registros…"
-            }
+            },
+            "skipUnsupported": "{count} muestras omitidas: tipos de datos que HealthLog no importa.",
+            "skipRefused": "{count} muestras no se pudieron escribir (ilegibles, fuera de rango o falló el guardado).",
+            "skipBreakdown": "Mostrar desglose ({count} tipos)",
+            "skipBreakdownMore": "+ {count} tipos más",
+            "cycleSummary": "{samples} muestras de ciclo combinadas en {days} registros diarios.",
+            "cycleModuleOff": "{count} muestras de ciclo omitidas: el seguimiento del ciclo está desactivado en esta cuenta.",
+            "cycleDaysFailed": "{count} días de ciclo no se pudieron escribir: {reason}"
           },
           "json": {
             "title": "Archivo JSON",
@@ -6329,8 +6335,8 @@
       "endpointLabel": "URL del conector",
       "connectDescription": "Pega esta URL en la configuración del conector personalizado de tu asistente y autoriza con el token de abajo o inicia sesión cuando se te solicite.",
       "tokensTitle": "Tokens del conector",
-      "tokensDescription": "Genera un token de solo lectura para conectar un asistente.",
-      "scopeNote": "De forma predeterminada, los tokens solo tienen acceso de lectura a tus propios registros. El acceso de escritura es opcional y se activa por token con el interruptor de abajo. Los tokens nunca pueden acceder a funciones de administración.",
+      "tokensDescription": "Genera un token para conectar un asistente: solo lectura, salvo que permitas el registro abajo.",
+      "scopeNote": "Los tokens nuevos solo pueden leer tus propios registros. El acceso de escritura (health:write) se concede por token con el interruptor de abajo. Un token nunca puede acceder a funciones de administración.",
       "writeScopeToggleLabel": "Permitir registro (health:write)",
       "writeScopeNote": "Añade el ámbito health:write para que el asistente pueda registrar nuevas mediciones y entradas de estado de ánimo en tu cuenta. Cada escritura se confirma antes. El token sigue sin poder eliminar ni editar entradas existentes, cambiar medicamentos ni acceder a funciones REST o de administración. Déjalo desactivado para acceso de solo lectura.",
       "connectionsTitle": "Asistentes conectados",

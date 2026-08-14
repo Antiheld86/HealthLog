@@ -82,7 +82,6 @@ describe("managed record settings configuration contract", () => {
           tone: "warm",
           verbosity: "default",
           excludeMetrics: [],
-          showEvidenceByDefault: false,
           defaultWindow: "allTime",
         },
       },
@@ -98,6 +97,24 @@ describe("managed record settings configuration contract", () => {
     ],
   ] as const)("accepts a typed %s patch", (family, patch) => {
     expect(() => parseManagedRecordSettingsPatch(family, patch)).not.toThrow();
+  });
+
+  // Watched red: re-adding `showEvidenceByDefault: true` to the managed
+  // coach pick makes the strict schema accept the key again and this
+  // fails. The evidence disclosure stopped honouring the flag in v1.4.27
+  // (F14); a guardian toggle over a pref nothing reads is a dead control.
+  it("refuses the retired showEvidenceByDefault pref", () => {
+    expect(() =>
+      parseManagedRecordSettingsPatch("coach", {
+        preferences: {
+          tone: "warm",
+          verbosity: "default",
+          excludeMetrics: [],
+          defaultWindow: "allTime",
+          showEvidenceByDefault: true,
+        },
+      }),
+    ).toThrow();
   });
 
   it("uses the complete canonical module inventory for a fresh record", () => {

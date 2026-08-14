@@ -9,19 +9,35 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { findUnique, bossSend, updateMany, deleteMany } = vi.hoisted(() => ({
+const {
+  findUnique,
+  bossSend,
+  updateMany,
+  deleteMany,
+  findMany,
+  afterMutation,
+} = vi.hoisted(() => ({
   findUnique: vi.fn(),
   bossSend: vi.fn(),
   updateMany: vi.fn(),
   deleteMany: vi.fn(),
+  findMany: vi.fn(),
+  afterMutation: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({
   prisma: {
     whoopConnection: { findUnique: (...a: unknown[]) => findUnique(...a) },
-    measurement: { updateMany: (...a: unknown[]) => updateMany(...a) },
+    measurement: {
+      updateMany: (...a: unknown[]) => updateMany(...a),
+      findMany: (...a: unknown[]) => findMany(...a),
+    },
     workout: { deleteMany: (...a: unknown[]) => deleteMany(...a) },
   },
+}));
+
+vi.mock("@/lib/rollups/after-measurement-mutation", () => ({
+  afterMeasurementMutation: (...a: unknown[]) => afterMutation(...a),
 }));
 
 vi.mock("@/lib/jobs/boss-instance", () => ({
@@ -44,6 +60,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   findUnique.mockResolvedValue({ userId: "user-1" });
   bossSend.mockResolvedValue("job-id");
+  findMany.mockResolvedValue([]);
+  afterMutation.mockResolvedValue(undefined);
 });
 
 describe("processWhoopNotification — fetch-by-id enqueue", () => {
@@ -100,5 +118,33 @@ describe("processWhoopNotification — fetch-by-id enqueue", () => {
     expect(res.status).toBe(200);
     expect(bossSend).not.toHaveBeenCalled();
     expect(deleteMany).toHaveBeenCalled();
+  });
+
+  // Watched red: with the `afterMeasurementMutation` call removed from
+  // the delete branch this test fails on the hook assertion — the
+  // pre-fix behaviour (soft-delete with no rollup recompute) is exactly
+  // the ghost-aggregate bug.
+  it("collects the affected (type, measuredAt) pairs before the soft-delete and fires the rollup hook", async () => {
+    const measuredAt = new Date("2026-05-10T08:00:00.000Z");
+    findMany.mockResolvedValue([{ type: "SLEEP_DURATION", measuredAt }]);
+    updateMany.mockResolvedValue({ count: 1 });
+
+    const res = await processWhoopNotification({
+      user_id: 42,
+      id: "s-9",
+      type: "sleep.deleted",
+    });
+
+    expect(res.status).toBe(200);
+    // The pre-image read happens BEFORE the destructive updateMany —
+    // afterwards the (type, measuredAt) pairs are unreadable.
+    expect(findMany.mock.invocationCallOrder[0]).toBeLessThan(
+      updateMany.mock.invocationCallOrder[0],
+    );
+    expect(afterMutation).toHaveBeenCalledWith(
+      "user-1",
+      [{ type: "SLEEP_DURATION", measuredAt }],
+      "whoop.webhook",
+    );
   });
 });

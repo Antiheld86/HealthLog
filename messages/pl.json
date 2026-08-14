@@ -4719,7 +4719,6 @@
           "last30days": "Ostatnie 30 dni",
           "last90days": "Ostatnie 90 dni",
           "allTime": "Cały okres",
-          "showEvidence": "Domyślnie pokazuj źródła",
           "excludedMetrics": "Wykluczone metryki",
           "dataClusters": "Grupy danych",
           "customClusters": "Użyj własnego wyboru grup",
@@ -5002,7 +5001,14 @@
               "unpacking": "Rozpakowywanie archiwum…",
               "parsing": "Odczytywanie eksportu…",
               "upserting": "Importowanie rekordów…"
-            }
+            },
+            "skipUnsupported": "{count} próbek pominięto — typy danych, których HealthLog nie importuje.",
+            "skipRefused": "{count} próbek nie udało się zapisać (nieczytelne, poza zakresem lub zapis się nie powiódł).",
+            "skipBreakdown": "Pokaż zestawienie ({count} typów)",
+            "skipBreakdownMore": "+ {count} kolejnych typów",
+            "cycleSummary": "{samples} próbek cyklu połączono w {days} dzienników dziennych.",
+            "cycleModuleOff": "{count} próbek cyklu pominięto — śledzenie cyklu jest wyłączone dla tego konta.",
+            "cycleDaysFailed": "{count} dni cyklu nie udało się zapisać: {reason}"
           },
           "json": {
             "title": "Plik JSON",
@@ -6329,8 +6335,8 @@
       "endpointLabel": "Adres URL łącznika",
       "connectDescription": "Wklej ten adres URL w konfiguracji własnego łącznika asystenta, a następnie autoryzuj za pomocą poniższego tokenu lub zaloguj się po wyświetleniu monitu.",
       "tokensTitle": "Tokeny łącznika",
-      "tokensDescription": "Wygeneruj token tylko do odczytu, aby połączyć asystenta.",
-      "scopeNote": "Domyślnie tokeny mają dostęp tylko do odczytu własnych danych. Dostęp do zapisu jest opcjonalny i włączany dla każdego tokena przełącznikiem poniżej. Tokeny nigdy nie mogą uzyskać dostępu do funkcji administracyjnych.",
+      "tokensDescription": "Wygeneruj token dla asystenta — tylko odczyt, chyba że pozwolisz poniżej na zapis.",
+      "scopeNote": "Nowe tokeny mogą tylko odczytywać Twoje dane. Dostęp do zapisu (health:write) przyznajesz dla każdego tokena przełącznikiem poniżej. Token nigdy nie może uzyskać dostępu do funkcji administracyjnych.",
       "writeScopeToggleLabel": "Zezwól na zapis (health:write)",
       "writeScopeNote": "Dodaje zakres health:write, aby asystent mógł zapisywać nowe pomiary i wpisy nastroju na Twoim koncie. Każdy zapis jest najpierw potwierdzany. Token nadal nie może usuwać ani edytować istniejących wpisów, zmieniać leków ani uzyskiwać dostępu do funkcji REST lub administracyjnych. Pozostaw wyłączone, aby uzyskać dostęp tylko do odczytu.",
       "connectionsTitle": "Połączeni asystenci",

@@ -312,6 +312,51 @@ describe("verb helpers", () => {
     expect(new Headers(bodylessInit.headers).get("Content-Type")).toBeNull();
   });
 
+  // Watched red: with the `withDefaultIdempotencyKey` wrap removed from
+  // apiPost/apiPatch the first two tests fail with a null header — the
+  // pre-fix client sent no key, so a transport-level replay of a create
+  // could land a duplicate row on every unwrapped write surface.
+  describe("default Idempotency-Key", () => {
+    const UUID_RE =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+    it.each([
+      ["apiPost", apiPost],
+      ["apiPatch", apiPatch],
+    ] as const)("%s mints a per-call UUID key", async (_name, helper) => {
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({ data: null, error: null }),
+      );
+      await helper("/api/foo", { a: 1 });
+      const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(new Headers(init.headers).get("Idempotency-Key")).toMatch(UUID_RE);
+    });
+
+    it("a caller-supplied key wins", async () => {
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({ data: null, error: null }),
+      );
+      await apiPost(
+        "/api/foo",
+        { a: 1 },
+        { headers: { "Idempotency-Key": "natural-key-1" } },
+      );
+      const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(new Headers(init.headers).get("Idempotency-Key")).toBe(
+        "natural-key-1",
+      );
+    });
+
+    it("reads mint no key", async () => {
+      fetchMock.mockResolvedValueOnce(
+        jsonResponse({ data: null, error: null }),
+      );
+      await apiGet("/api/foo");
+      const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(new Headers(init.headers).get("Idempotency-Key")).toBeNull();
+    });
+  });
+
   it("merges caller headers with the JSON Content-Type", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ data: null, error: null }));
 

@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.37.18] — 2026-08-14
+
+### Fixed
+
+- Coach reminders tied to a moment ("remind me when I next log blood pressure", "next time I open the app") now actually fire. The app has offered these since v1.22 and confirmed them, but nothing ever evaluated them; a matching measurement or the next app open now surfaces the reminder, and the daily sweep backs it up.
+- The Apple Health import tells you what it skipped and why. Every dropped sample class is now listed on the import card: unknown types, out-of-range values, deferred records, and cycle samples that were read while cycle tracking is switched off, which previously vanished without a trace. A cycle write that fails halfway also reports the failure instead of claiming zero samples.
+- Deleting a measurement now reaches the pre-computed aggregates. Before, a deleted reading stayed inside day, week, month and year statistics forever; the freshness probe can now see tombstones, and the WHOOP deletion webhook recomputes the affected days.
+- The sleep history repair job only deletes what it can restore. It used to clear a provider's entire sleep history and re-import just 30 days; the delete is now bounded to the same window.
+- The connector token settings said tokens are read-only while offering a write toggle on the same card. The copy now tells the truth in all six languages.
+- A lab report cannot smuggle instructions into the AI layer through a biomarker name anymore; document-derived names are cleaned before they reach any prompt, and the assistant tools fence checkup labels and lab analyte names the same way.
+- Google Health and Withings syncs now refresh the server-side caches like every other integration, so analytics pick up synced data on the next read instead of waiting out the cache lifetime.
+- The vaccination booster and suggestion endpoints are published in the API description, as the contract notes already claimed.
+- On phones, the Medications tab no longer appears in the bottom bar when the medications module is switched off; tapping it used to open an empty page.
+- The import guide links point at the documentation site instead of a page that does not exist.
+- A caregiver settings toggle that has had no effect since its feature was retired is gone.
+- Every create and update request from the app now carries an idempotency key, so a network retry cannot write a vaccination or an appointment twice.
+- The service worker's offline fallback version is anchored to the release version again; it had silently stayed behind for two releases.
+
 ## [1.37.17] — 2026-08-13
 
 ### Changed

@@ -374,3 +374,41 @@ describe("the mood prognosis never states a cause", () => {
     expect(de.toLowerCase()).toContain("zu erwarten gewesen");
   });
 });
+
+describe("the MCP token copy never claims the mint is read-only", () => {
+  /**
+   * 5. MCP TOKEN SCOPE. The mint card sits directly above the
+   *    health:write toggle (`mcp-section.tsx`), and `requireAuth` in
+   *    api-handler.ts honours that scope — a minted token writes when the
+   *    toggle was on. The card's own description and scope note therefore
+   *    must not describe the mint as read-only; "read-only by default /
+   *    unless enabled" is the honest shape.
+   *
+   * Watched red: restoring the pre-fix strings ("Mint a read-only token
+   * to connect an assistant." et al.) makes the matching locale fail.
+   */
+  const READONLY_CLAIMS: Record<string, readonly string[]> = {
+    en: ["read-only token"],
+    de: ["schreibgeschütztes token", "schreibgeschütztes-token"],
+    es: ["token de solo lectura"],
+    fr: ["jeton en lecture seule"],
+    it: ["token in sola lettura"],
+    pl: ["token tylko do odczytu"],
+  };
+
+  for (const locale of LOCALES) {
+    it(`${locale} mint copy does not promise a read-only token`, () => {
+      const b = bundle(locale);
+      const description = resolve(b, "settings.mcp.tokensDescription");
+      const scopeNote = resolve(b, "settings.mcp.scopeNote");
+      for (const claim of READONLY_CLAIMS[locale]) {
+        for (const copy of [description, scopeNote]) {
+          expect(
+            copy.toLowerCase(),
+            `${locale} settings.mcp copy claims the minted token is read-only while the write toggle sits beneath it`,
+          ).not.toContain(claim);
+        }
+      }
+    });
+  }
+});

@@ -31,6 +31,18 @@ interface JobStatus {
     totals?: { recordsRead?: number; rowsUpserted?: number };
     clinical?: { skipped?: number };
     cumulativeEstimates?: { days?: number; rows?: number };
+    /** HK types deferred by design — read but not (yet) imported. */
+    deferred?: Record<string, number>;
+    /** Per-key drop counters — plain HK types are unsupported-by-design,
+     *  `key::reason`-tagged entries are genuine refusals. */
+    unknown?: Record<string, number>;
+    cycle?: {
+      samplesConsumed?: number;
+      samplesSkippedModuleDisabled?: number;
+      daysUpserted?: number;
+      daysFailed?: number;
+      firstFailureReason?: string | null;
+    };
     ecg?: {
       discovered?: number;
       imported?: number;
@@ -40,6 +52,56 @@ interface JobStatus {
     };
   } | null;
   failureReason: string | null;
+}
+
+/** One skip line for the result breakdown. */
+export interface AppleHealthSkipEntry {
+  key: string;
+  count: number;
+}
+
+export interface AppleHealthSkipSummary {
+  /** Samples of data types HealthLog does not import (deliberate). */
+  unsupported: number;
+  /** Samples that SHOULD have landed but were refused (unreadable value,
+   *  out-of-range, upsert failure, unmapped cycle value, …). */
+  refused: number;
+  /** Per-key counts behind both totals, largest first. */
+  breakdown: AppleHealthSkipEntry[];
+}
+
+/**
+ * Fold the worker's drop counters into the three numbers the card renders.
+ *
+ * The split is deliberate: an Apple export always carries types HealthLog
+ * does not import, so "unsupported" is information, not a warning — while a
+ * tagged refusal (`::unparseable`, `::out_of_range`, `::upsert_failed`, …)
+ * means a sample that SHOULD have landed did not, and that is what tips the
+ * outcome tone. `element::` counters are structural XML elements, not
+ * samples, and are excluded entirely. Exported for the unit contract.
+ */
+export function summarizeAppleHealthSkips(
+  result: JobStatus["result"],
+): AppleHealthSkipSummary {
+  const unknown = result?.unknown ?? {};
+  const deferred = result?.deferred ?? {};
+  let unsupported = 0;
+  let refused = 0;
+  const breakdown: AppleHealthSkipEntry[] = [];
+  for (const [key, count] of Object.entries(unknown)) {
+    if (typeof count !== "number" || count <= 0) continue;
+    if (key.startsWith("element::")) continue;
+    if (key.includes("::")) refused += count;
+    else unsupported += count;
+    breakdown.push({ key, count });
+  }
+  for (const [key, count] of Object.entries(deferred)) {
+    if (typeof count !== "number" || count <= 0) continue;
+    unsupported += count;
+    breakdown.push({ key, count });
+  }
+  breakdown.sort((a, b) => b.count - a.count);
+  return { unsupported, refused, breakdown };
 }
 
 /**
@@ -77,6 +139,111 @@ export function AppleHealthEstimateWarning({ days }: { days: number }) {
         })}
       </span>
     </p>
+  );
+}
+
+/** How many per-type lines the breakdown shows before folding the rest. */
+const SKIP_BREAKDOWN_MAX_LINES = 15;
+
+/**
+ * The grouped skip lines under the outcome sentence — modeled on the
+ * medication intake import's result: every drop class the worker counts
+ * is rendered, none is silently swallowed into an unexplained
+ * read-vs-imported gap.
+ */
+export function AppleHealthSkipLines({
+  skips,
+  cycle,
+}: {
+  skips: AppleHealthSkipSummary;
+  cycle: NonNullable<JobStatus["result"]>["cycle"] | undefined;
+}) {
+  const { t } = useTranslations();
+  const cycleDays = cycle?.daysUpserted ?? 0;
+  const cycleSamples = cycle?.samplesConsumed ?? 0;
+  const cycleModuleOff = cycle?.samplesSkippedModuleDisabled ?? 0;
+  const cycleFailed = cycle?.daysFailed ?? 0;
+  const hasAnything =
+    skips.unsupported > 0 ||
+    skips.refused > 0 ||
+    cycleDays > 0 ||
+    cycleModuleOff > 0 ||
+    cycleFailed > 0;
+  if (!hasAnything) return null;
+
+  const shown = skips.breakdown.slice(0, SKIP_BREAKDOWN_MAX_LINES);
+  const omitted = skips.breakdown.length - shown.length;
+
+  return (
+    <div
+      data-testid="apple-health-skip-lines"
+      className="text-muted-foreground space-y-0.5 text-xs"
+    >
+      {cycleDays > 0 && (
+        <p data-testid="apple-health-cycle-summary">
+          {t("settings.sections.export.import.appleHealth.cycleSummary", {
+            samples: cycleSamples,
+            days: cycleDays,
+          })}
+        </p>
+      )}
+      {cycleModuleOff > 0 && (
+        <p data-testid="apple-health-cycle-module-off">
+          {t("settings.sections.export.import.appleHealth.cycleModuleOff", {
+            count: cycleModuleOff,
+          })}
+        </p>
+      )}
+      {cycleFailed > 0 && (
+        <p
+          data-testid="apple-health-cycle-days-failed"
+          className="text-destructive"
+        >
+          {t("settings.sections.export.import.appleHealth.cycleDaysFailed", {
+            count: cycleFailed,
+            reason: cycle?.firstFailureReason ?? "—",
+          })}
+        </p>
+      )}
+      {skips.unsupported > 0 && (
+        <p data-testid="apple-health-skip-unsupported">
+          {t("settings.sections.export.import.appleHealth.skipUnsupported", {
+            count: skips.unsupported,
+          })}
+        </p>
+      )}
+      {skips.refused > 0 && (
+        <p data-testid="apple-health-skip-refused">
+          {t("settings.sections.export.import.appleHealth.skipRefused", {
+            count: skips.refused,
+          })}
+        </p>
+      )}
+      {skips.breakdown.length > 0 && (
+        <details data-testid="apple-health-skip-breakdown">
+          <summary className="cursor-pointer">
+            {t("settings.sections.export.import.appleHealth.skipBreakdown", {
+              count: skips.breakdown.length,
+            })}
+          </summary>
+          <ul className="mt-1 max-h-48 space-y-0.5 overflow-y-auto pl-4">
+            {shown.map((entry) => (
+              <li key={entry.key}>
+                {entry.key}: {entry.count}
+              </li>
+            ))}
+          </ul>
+          {omitted > 0 && (
+            <p className="mt-1">
+              {t(
+                "settings.sections.export.import.appleHealth.skipBreakdownMore",
+                { count: omitted },
+              )}
+            </p>
+          )}
+        </details>
+      )}
+    </div>
   );
 }
 
@@ -197,6 +364,8 @@ export function AppleHealthImportCard() {
   })();
   const ecg = status?.result?.ecg;
   const ecgWritten = (ecg?.imported ?? 0) + (ecg?.updated ?? 0);
+  const skips = summarizeAppleHealthSkips(status?.result ?? null);
+  const cycleStats = status?.result?.cycle;
 
   return (
     <ImportCardShell
@@ -287,11 +456,12 @@ export function AppleHealthImportCard() {
           <WrittenOutcomeLine
             outcome={classifyWrittenOutcome({
               written: (status?.result?.totals?.rowsUpserted ?? 0) + ecgWritten,
-              // The clinical count is a documented, deliberate exclusion
-              // (electrocardiograms, lab documents), not a refused row — it
-              // must not tip the archive into a warning. Only "nothing
-              // landed" changes the tone here.
-              skipped: 0,
+              // Deliberate exclusions (clinical records, unsupported /
+              // deferred types, a disabled cycle module) are information
+              // and must not tip the archive into a warning. Genuine
+              // refusals — samples that SHOULD have landed (unparseable,
+              // out of range, upsert failure) plus failed cycle days — do.
+              skipped: skips.refused + (cycleStats?.daysFailed ?? 0),
             })}
             message={
               (status?.result?.totals?.rowsUpserted ?? 0) > 0
@@ -307,6 +477,7 @@ export function AppleHealthImportCard() {
             testId="import-apple-health-result"
           />
         )}
+        {isDone && <AppleHealthSkipLines skips={skips} cycle={cycleStats} />}
         {isDone && (ecg?.discovered ?? 0) > 0 && (
           <p
             data-testid="import-apple-health-ecg-result"

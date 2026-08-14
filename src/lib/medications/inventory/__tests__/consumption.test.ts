@@ -395,7 +395,9 @@ describe("consumeForIntake", () => {
         }),
         item({
           id: "later-expiry",
-          printedExpiry: new Date("2027-06-01T00:00:00.000Z"),
+          // Now-anchored so the fixture can never age into an expired
+          // container and flip the state assertions.
+          printedExpiry: new Date(Date.now() + 300 * 24 * 60 * 60 * 1000),
         }),
         item({
           id: "sooner-expiry",

@@ -1105,17 +1105,33 @@ export async function streamParseExportXml(
   // reproductive samples AND the account has cycle tracking enabled. The
   // empty-accumulator short-circuit also keeps the no-cycle import path
   // (and its unit tests) free of any cycle DB round-trip. A flush failure
-  // (e.g. a single colliding day) must never abort the whole import — fold
-  // the error into zeroed cycle stats and continue.
-  if (cycleAccumulator.hasSamples() && (await cycleAccumulator.isEnabled())) {
-    try {
-      cycle = await cycleAccumulator.flush();
-      rowsUpserted += cycle.daysUpserted;
-    } catch (err: unknown) {
-      cycle = { ...EMPTY_CYCLE_IMPORT_STATS };
-      console.warn(
-        `cycle import flush failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
+  // must never abort the whole import — per-day failures are isolated
+  // inside `flush()` (its stats stay honest); a whole-flush failure (the
+  // hoisted lookups) is folded into stats that still name the consumed
+  // samples and the reason instead of reading as "nothing happened".
+  if (cycleAccumulator.hasSamples()) {
+    if (await cycleAccumulator.isEnabled()) {
+      try {
+        cycle = await cycleAccumulator.flush();
+        rowsUpserted += cycle.daysUpserted;
+      } catch (err: unknown) {
+        const reason = err instanceof Error ? err.message : String(err);
+        cycle = {
+          ...EMPTY_CYCLE_IMPORT_STATS,
+          samplesConsumed: cycleAccumulator.sampleCount(),
+          daysFailed: cycleAccumulator.dayCount(),
+          firstFailureReason: reason,
+        };
+        console.warn(`cycle import flush failed: ${reason}`);
+      }
+    } else {
+      // Cycle tracking is off for the account: the reproductive samples
+      // are DROPPED, and the drop is named so the recordsRead-vs-imported
+      // gap stays explained in the result the user sees.
+      cycle = {
+        ...EMPTY_CYCLE_IMPORT_STATS,
+        samplesSkippedModuleDisabled: cycleAccumulator.sampleCount(),
+      };
     }
   }
 

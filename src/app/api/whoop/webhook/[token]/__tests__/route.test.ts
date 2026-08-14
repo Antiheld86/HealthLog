@@ -11,7 +11,10 @@ vi.mock("@/lib/api-handler", () => ({
 vi.mock("@/lib/db", () => ({
   prisma: {
     whoopConnection: { findUnique: vi.fn() },
-    measurement: { updateMany: vi.fn() },
+    measurement: {
+      updateMany: vi.fn(),
+      findMany: vi.fn(async () => []),
+    },
     workout: { deleteMany: vi.fn() },
   },
 }));

@@ -215,7 +215,9 @@ describe("get_preventive_care — real DB", () => {
     expect(result.present).toBe(true);
     expect(result.checkups).toHaveLength(1);
     expect(result.checkups[0]).toMatchObject({
-      label: "Blood pressure check",
+      // The label is the user's own free text and rides the USER_TEXT fence
+      // like the appointment reason beside it.
+      label: "<<<USER_TEXT_START>>>Blood pressure check<<<USER_TEXT_END>>>",
       overdue: true,
     });
   });

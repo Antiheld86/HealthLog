@@ -70,6 +70,7 @@ vi.mock("@/lib/insights/comprehensive-generate", () => ({
 
 vi.mock("@/lib/cache/invalidate", () => ({
   invalidateUserDashboardSnapshot: vi.fn(),
+  invalidateUserMeasurements: vi.fn(),
 }));
 
 vi.mock("@/lib/logging/context", () => ({

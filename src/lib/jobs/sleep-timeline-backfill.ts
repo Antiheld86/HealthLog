@@ -35,7 +35,11 @@ import { annotate } from "@/lib/logging/context";
 import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { integrationBackfillSourceOptions } from "@/lib/jobs/integration-backfill-admission";
 import { syncUserWhoop } from "@/lib/whoop/sync";
-import { syncUserSleep as syncWithingsSleep } from "@/lib/withings/sync-sleep";
+import {
+  SLEEP_BACKFILL_DAYS,
+  syncUserSleep as syncWithingsSleep,
+} from "@/lib/withings/sync-sleep";
+import { recomputeUserRollups } from "@/lib/rollups/measurement-rollups";
 
 export const SLEEP_TIMELINE_BACKFILL_QUEUE = "sleep-timeline-backfill";
 
@@ -65,12 +69,15 @@ export async function runSleepTimelineBackfillForUser(
   userId: string,
   provider: SleepTimelineProvider,
 ): Promise<{ deleted: number; imported: number }> {
-  const { count: deleted } = await prisma.measurement.deleteMany({
-    where: { userId, type: "SLEEP_DURATION", source: provider },
-  });
-
+  let deleted = 0;
   let imported = 0;
   if (provider === "WHOOP") {
+    // WHOOP's `fullSync` walks the whole collection from the far-past
+    // anchor, so the delete may cover the whole history — every night is
+    // re-imported with the corrected segment timeline.
+    ({ count: deleted } = await prisma.measurement.deleteMany({
+      where: { userId, type: "SLEEP_DURATION", source: provider },
+    }));
     // `syncUserWhoop` now returns a verdict; gate the completion marker on a
     // clean run so a partial re-sync (dead token, write failure) throws for a
     // pg-boss retry instead of freezing the timeline gap under a stamped
@@ -87,7 +94,32 @@ export async function runSleepTimelineBackfillForUser(
       data: { sleepTimelineBackfillAt: new Date() },
     });
   } else {
+    // Withings re-syncs ONLY the trailing `SLEEP_BACKFILL_DAYS` window
+    // (`sync-sleep.ts` fetches that span regardless of `fullSync`), so the
+    // delete is bounded to the same window. The unbounded delete this
+    // replaces threw away every older night's raw rows — data the re-sync
+    // could never restore — and left their rollup buckets orphaned.
+    const windowStart = new Date(
+      Date.now() - SLEEP_BACKFILL_DAYS * 24 * 60 * 60 * 1000,
+    );
+    ({ count: deleted } = await prisma.measurement.deleteMany({
+      where: {
+        userId,
+        type: "SLEEP_DURATION",
+        source: provider,
+        measuredAt: { gte: windowStart },
+      },
+    }));
     imported = await syncWithingsSleep(userId, { fullSync: true });
+    // Recompute the rollup span the delete touched. The re-sync tail
+    // re-folds only the days it re-imported; a day inside the window whose
+    // segments Withings no longer returns would otherwise keep a bucket
+    // over rows that are gone.
+    await recomputeUserRollups(userId, {
+      types: ["SLEEP_DURATION"],
+      from: windowStart,
+      to: new Date(),
+    });
     await prisma.withingsConnection.update({
       where: { userId },
       data: { sleepTimelineBackfillAt: new Date() },

@@ -7,6 +7,7 @@ import {
   recomputeUserRollups,
 } from "@/lib/rollups/measurement-rollups";
 import { invalidateStatusInsightsForTypes } from "@/lib/insights/comprehensive-generate";
+import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
 import {
   runWithGoogleHealthClientOutcome,
   type GoogleHealthClientOutcome,
@@ -278,6 +279,15 @@ export async function syncUserGoogleHealth(
   if (!failed) {
     await markSynced(userId);
     await recordSyncSuccess(userId, GOOGLE_HEALTH_INTEGRATION_KEY);
+  }
+
+  // Background-sync posture (mirrors the Fitbit tail): mark the per-user
+  // analytics / correlations / targets / achievements cells stale so the
+  // imported rows reach the cached readers before their TTL lapses — the
+  // correlations route documents exactly this invariant. Fires on a
+  // partial failure too: rows that DID land must not stay invisible.
+  if (total > 0) {
+    invalidateUserMeasurements(userId);
   }
 
   annotate({

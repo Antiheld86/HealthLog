@@ -4719,7 +4719,6 @@
           "last30days": "Letzte 30 Tage",
           "last90days": "Letzte 90 Tage",
           "allTime": "Gesamter Zeitraum",
-          "showEvidence": "Evidenz standardmäßig anzeigen",
           "excludedMetrics": "Ausgeschlossene Messwerte",
           "dataClusters": "Datenbereiche",
           "customClusters": "Eigene Auswahl von Datenbereichen verwenden",
@@ -5002,7 +5001,14 @@
               "unpacking": "Archiv wird entpackt…",
               "parsing": "Export wird gelesen…",
               "upserting": "Datensätze werden importiert…"
-            }
+            },
+            "skipUnsupported": "{count} Samples übersprungen — Datentypen, die HealthLog nicht importiert.",
+            "skipRefused": "{count} Samples konnten nicht geschrieben werden (unlesbar, außerhalb des Wertebereichs oder Speichern fehlgeschlagen).",
+            "skipBreakdown": "Aufschlüsselung anzeigen ({count} Typen)",
+            "skipBreakdownMore": "+ {count} weitere Typen",
+            "cycleSummary": "{samples} Zyklus-Samples zu {days} Tagesprotokollen zusammengeführt.",
+            "cycleModuleOff": "{count} Zyklus-Samples übersprungen — Zyklus-Tracking ist für dieses Konto deaktiviert.",
+            "cycleDaysFailed": "{count} Zyklustage konnten nicht geschrieben werden: {reason}"
           },
           "json": {
             "title": "JSON-Datei",
@@ -6329,8 +6335,8 @@
       "endpointLabel": "Connector-URL",
       "connectDescription": "Füge diese URL in die Einrichtung des eigenen Connectors deines Assistenten ein und autorisiere dich mit dem Token unten oder melde dich bei Aufforderung an.",
       "tokensTitle": "Connector-Tokens",
-      "tokensDescription": "Erzeuge ein schreibgeschütztes Token, um einen Assistenten zu verbinden.",
-      "scopeNote": "Tokens haben standardmäßig nur Lesezugriff auf deine eigenen Daten. Schreibzugriff ist optional und wird pro Token über den Schalter unten aktiviert. Die Tokens erreichen niemals Admin-Funktionen.",
+      "tokensDescription": "Erzeuge ein Token für einen Assistenten — nur Lesezugriff, außer du erlaubst unten das Eintragen.",
+      "scopeNote": "Neue Tokens können nur deine eigenen Daten lesen. Schreibzugriff (health:write) vergibst du pro Token über den Schalter unten. Admin-Funktionen erreicht ein Token nie.",
       "writeScopeToggleLabel": "Eintragen erlauben (health:write)",
       "writeScopeNote": "Fügt den Scope health:write hinzu, damit der Assistent neue Messwerte und Stimmungseinträge in dein Konto eintragen kann. Jeder Schreibvorgang wird zuvor bestätigt. Das Token kann weiterhin keine vorhandenen Einträge löschen oder ändern, keine Medikamente bearbeiten und keine REST- oder Admin-Funktionen erreichen. Für reinen Lesezugriff ausgeschaltet lassen.",
       "connectionsTitle": "Verbundene Assistenten",

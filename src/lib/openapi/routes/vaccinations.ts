@@ -27,7 +27,10 @@ import {
   vaccinationListQuerySchema,
   vaccinationLinkSchema,
   vaccinationSiteEnum,
+  vaccinationBoosterSchema,
+  vaccinationSuggestQuerySchema,
 } from "@/lib/validations/vaccinations";
+import { measurementReminderDto } from "@/lib/validations/measurement-reminders";
 
 import {
   dataEnvelope,
@@ -52,6 +55,18 @@ vaccinationListQuerySchema.meta({
   id: "ListVaccinationsQuery",
   description:
     "Filters for the immunization list: `antigenSlug`, `from` / `to` (ISO-8601 instants) and `limit` (1–500, default 300). The list is full and bounded rather than paged — a vaccination record is a lifetime document but a short one.",
+});
+
+vaccinationBoosterSchema.meta({
+  id: "VaccinationBoosterRequest",
+  description:
+    "The confirm body for a booster reminder — the person's own values, accepted or edited from the catalogue's prefill. `intervalMonths` is bounded at 600 (a decade booster is 120); `label` is composed client-side so its locale is the person's own. There is no antigen field: the server reads the antigen from the dose's catalogue entry, never from the request, so a client cannot key a reminder onto an antigen the dose does not contain.",
+});
+
+vaccinationSuggestQuerySchema.meta({
+  id: "VaccinationSuggestQuery",
+  description:
+    "The single input to the upload suggestion: the document's anchor date (ISO-8601 with offset). No ids — the candidate doses come from the caller's own record, narrowed from the session.",
 });
 
 vaccinationLinkSchema.meta({
@@ -159,6 +174,37 @@ const vaccinationList = z.object({ vaccinations: z.array(vaccination) }).meta({
   description:
     "The caller's immunization history, newest dose first, with every entry's series already resolved over the whole live set — never over the filtered page, which would report the oldest dose in a window as the first ever given.",
 });
+
+const vaccinationSuggestion = z
+  .object({
+    id: z.string(),
+    occurredAt: z.string(),
+    antigenSlug: z.string().nullable(),
+    vaccineName: z.string().nullable(),
+  })
+  .meta({
+    id: "VaccinationSuggestion",
+    description:
+      "One candidate dose, resolved enough to render without a second round trip: `antigenSlug` when the dose carries a catalogue slug (name it from the catalogue), `vaccineName` when the person's own wording is all the dose has.",
+  });
+
+const vaccinationSuggestResult = z
+  .union([
+    z.object({
+      kind: z.literal("one"),
+      vaccination: vaccinationSuggestion,
+    }),
+    z.object({
+      kind: z.literal("many"),
+      vaccinations: z.array(vaccinationSuggestion),
+    }),
+    z.object({ kind: z.literal("none") }),
+  ])
+  .meta({
+    id: "VaccinationSuggestResult",
+    description:
+      "The SHAPE of the answer, decided server-side: `one` pre-selects that dose, `many` offers a picker over `vaccinations` (bounded at 20 candidates), `none` offers nothing. A client renders the verdict and must not collapse `many` into a silent auto-pick — the rule lives on the server so every client agrees.",
+  });
 
 const vaccinationNotFound = {
   "404": {
@@ -300,6 +346,76 @@ export const vaccinationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           },
         },
         ...vaccinationNotFound,
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/vaccinations/{id}/booster": {
+    post: {
+      tags: ["Records"],
+      summary: "Plan a booster reminder from a dose",
+      description:
+        "Mints (or re-anchors) the booster reminder a logged dose suggests. The minted row is an ordinary `origin: VORSORGE` measurement reminder carrying the dose's primary antigen as a server-side match key; it lists on the preventive-care surface and rings through the same engine as every other checkup. Re-confirming re-anchors the existing reminder instead of minting a second one: 201 carries a fresh mint (`minted: true`), 200 a re-anchor. A free-text-only dose has no antigen to remind on and is refused with 422. Audits as `vaccination.booster.planned`.",
+      requestParams: idPath,
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: vaccinationBoosterSchema } },
+      },
+      responses: {
+        ...recordRefusal(),
+        "200": {
+          description: "Existing booster reminder re-anchored.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({
+                  reminder: measurementReminderDto,
+                  minted: z.boolean(),
+                }),
+                "ReanchorVaccinationBoosterEnvelope",
+              ),
+            },
+          },
+        },
+        "201": {
+          description: "Booster reminder minted.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({
+                  reminder: measurementReminderDto,
+                  minted: z.boolean(),
+                }),
+                "MintVaccinationBoosterEnvelope",
+              ),
+            },
+          },
+        },
+        ...vaccinationNotFound,
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/vaccinations/suggest": {
+    get: {
+      tags: ["Records"],
+      summary: "Suggest the dose a document belongs to",
+      description:
+        "Which dose does a document dated `anchor` most plausibly belong to? The document upload review asks this when a scan is classified `VACCINATION`. The window (±7 days, shared with the visit moment) and the one-pre-selects / many-offer-a-picker verdict are decided server-side so the browser never re-derives them. Owner-scoped; the anchor is the only input and it is a date, not an id.",
+      requestParams: { query: vaccinationSuggestQuerySchema },
+      responses: {
+        ...recordRefusal(),
+        "200": {
+          description: "The suggestion verdict.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                vaccinationSuggestResult,
+                "VaccinationSuggestEnvelope",
+              ),
+            },
+          },
+        },
         ...stdResponses,
       },
     },

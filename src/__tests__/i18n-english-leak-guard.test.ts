@@ -204,6 +204,15 @@ describe("i18n English-leak guard", () => {
   flattenValues(en, "", enFlat);
   const enMap = new Map(enFlat);
 
+  it("actually reads the bundles (non-zero floor)", () => {
+    // The walker is the guard's eyes. If `flattenValues` rots — a shape
+    // change, a broken recursion — every leak test above it goes green over
+    // locales it never read. The bundle carries ~7800 keys; a floor well
+    // below that but far above zero fails on rot without failing on
+    // ordinary key churn.
+    expect(enFlat.length).toBeGreaterThan(3000);
+  });
+
   it.each(LEAK_LOCALES.map((locale) => ({ locale })))(
     "$locale does not echo English for multi-word strings",
     ({ locale }) => {
@@ -212,6 +221,9 @@ describe("i18n English-leak guard", () => {
       ) as Record<string, unknown>;
       const flat: [string, string][] = [];
       flattenValues(data, "", flat);
+      // Same non-zero proof per locale — an unreadable or empty bundle must
+      // fail loudly, never pass as "no leaks found".
+      expect(flat.length).toBeGreaterThan(3000);
 
       const leaks = flat
         .filter(([key, value]) => {

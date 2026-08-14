@@ -29,7 +29,9 @@ vi.mock("next/navigation", () => ({
 import type { Locale } from "@/lib/i18n/config";
 import {
   AppleHealthEstimateWarning,
+  AppleHealthSkipLines,
   appleHealthFailureKind,
+  summarizeAppleHealthSkips,
 } from "../import-panel/apple-health-import-card";
 import { I18nProvider } from "@/lib/i18n/context";
 import {
@@ -124,6 +126,94 @@ describe("<AppleHealthEstimateWarning>", () => {
 // preflight's `insufficient_memory` prefix). The card must translate
 // them instead of echoing a raw code at the user; honest free-text
 // reasons keep passing through verbatim.
+/**
+ * A6 — the worker has computed, persisted and served per-class skip
+ * counters since v1.15; the card hardcoded `skipped: 0` and rendered
+ * none of them. These pin the fold and the render.
+ *
+ * Watched red: with `summarizeAppleHealthSkips` gutted to return zeros
+ * (the pre-fix card behaviour) the fold tests fail; with the
+ * `<AppleHealthSkipLines>` mount removed the render test fails on the
+ * missing test ids.
+ */
+describe("summarizeAppleHealthSkips", () => {
+  it("splits deliberate exclusions from genuine refusals", () => {
+    const summary = summarizeAppleHealthSkips({
+      unknown: {
+        HKQuantityTypeIdentifierFutureTypeXYZ: 40, // unsupported type
+        "HKQuantityTypeIdentifierBodyMass::unparseable": 3, // refusal
+        "WEIGHT::upsert_failed": 2, // refusal
+        "element::UnknownElement": 99, // structural, not a sample
+      },
+      deferred: { HKQuantityTypeIdentifierDietaryWater: 10 },
+    });
+    expect(summary.unsupported).toBe(50);
+    expect(summary.refused).toBe(5);
+    // Largest first; the structural element never appears.
+    expect(summary.breakdown.map((entry) => entry.key)).toEqual([
+      "HKQuantityTypeIdentifierFutureTypeXYZ",
+      "HKQuantityTypeIdentifierDietaryWater",
+      "HKQuantityTypeIdentifierBodyMass::unparseable",
+      "WEIGHT::upsert_failed",
+    ]);
+  });
+
+  it("returns zeros for an empty / missing result", () => {
+    expect(summarizeAppleHealthSkips(null)).toEqual({
+      unsupported: 0,
+      refused: 0,
+      breakdown: [],
+    });
+  });
+});
+
+describe("<AppleHealthSkipLines>", () => {
+  it("renders every populated skip class", () => {
+    const html = render(
+      <AppleHealthSkipLines
+        skips={summarizeAppleHealthSkips({
+          unknown: { "HKQuantityTypeIdentifierBodyMass::out_of_range": 2 },
+          deferred: { HKQuantityTypeIdentifierDietaryWater: 7 },
+        })}
+        cycle={{
+          samplesConsumed: 12,
+          samplesSkippedModuleDisabled: 0,
+          daysUpserted: 4,
+          daysFailed: 1,
+          firstFailureReason: "colliding day",
+        }}
+      />,
+    );
+    expect(html).toContain('data-testid="apple-health-skip-unsupported"');
+    expect(html).toContain('data-testid="apple-health-skip-refused"');
+    expect(html).toContain('data-testid="apple-health-cycle-summary"');
+    expect(html).toContain('data-testid="apple-health-cycle-days-failed"');
+    expect(html).toContain("colliding day");
+    expect(html).toContain('data-testid="apple-health-skip-breakdown"');
+  });
+
+  it("names the module-disabled cycle drop", () => {
+    const html = render(
+      <AppleHealthSkipLines
+        skips={summarizeAppleHealthSkips(null)}
+        cycle={{ samplesSkippedModuleDisabled: 21 }}
+      />,
+    );
+    expect(html).toContain('data-testid="apple-health-cycle-module-off"');
+    expect(html).toContain("21");
+  });
+
+  it("renders nothing when there is nothing to explain", () => {
+    const html = render(
+      <AppleHealthSkipLines
+        skips={summarizeAppleHealthSkips(null)}
+        cycle={undefined}
+      />,
+    );
+    expect(html).toBe("");
+  });
+});
+
 describe("appleHealthFailureKind", () => {
   it("maps the reconcile code onto translated copy", () => {
     expect(appleHealthFailureKind("interrupted_by_restart")).toBe(

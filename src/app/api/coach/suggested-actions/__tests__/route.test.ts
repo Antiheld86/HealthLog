@@ -37,7 +37,12 @@ vi.mock("@/lib/ai/coach/bytes-codec", () => ({
   encryptToBytes: (s: string) => new Uint8Array(Buffer.from(`enc:${s}`)),
 }));
 vi.mock("@/lib/measurement-reminders/scheduling", () => ({
-  computeReminderNextDueAt: vi.fn(() => new Date("2027-06-27T09:00:00Z")),
+  // Now-anchored: the fixed 2027 date was a fuse — on that day the mocked
+  // next-due flipped from future to past and every due/overdue assertion
+  // downstream inverted.
+  computeReminderNextDueAt: vi.fn(
+    () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+  ),
 }));
 vi.mock("@/lib/measurement-reminders/dto", () => ({
   toMeasurementReminderDto: vi.fn((r: { id: string }) => ({ id: r.id })),
