@@ -36,11 +36,12 @@ export const GET = apiHandler(async () => {
     orderBy: { name: "asc" },
     include: {
       entries: {
+        where: { deletedAt: null },
         orderBy: { measuredAt: "desc" },
         take: 1,
         select: { value: true, unit: true, measuredAt: true },
       },
-      _count: { select: { entries: true } },
+      _count: { select: { entries: { where: { deletedAt: null } } } },
     },
   });
 
@@ -164,12 +165,12 @@ async function postCustomMetric(request: NextRequest) {
   if (existing) {
     const [latestEntry, count] = await Promise.all([
       prisma.customMetricEntry.findFirst({
-        where: { userId: user.id, customMetricId: created.id },
+        where: { userId: user.id, customMetricId: created.id, deletedAt: null },
         orderBy: { measuredAt: "desc" },
         select: { value: true, unit: true, measuredAt: true },
       }),
       prisma.customMetricEntry.count({
-        where: { userId: user.id, customMetricId: created.id },
+        where: { userId: user.id, customMetricId: created.id, deletedAt: null },
       }),
     ]);
     latest = latestEntry ?? null;

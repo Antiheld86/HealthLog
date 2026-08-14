@@ -9053,7 +9053,9 @@
       "flaggedBadge": "Support shown",
       "chartTitle": "Score trend",
       "totalLabel": "Score",
-      "bandLabel": "Category"
+      "bandLabel": "Category",
+      "answersToggle": "Answers",
+      "answersUnavailable": "The stored answers for this check-in cannot be decrypted."
     },
     "crisis": {
       "title": "You don't have to face this alone",
@@ -9708,6 +9710,8 @@
     "deleteConfirmTitle": "Delete this custom metric?",
     "deleteConfirmDescription": "The metric is removed from your list. Its logged values are kept.",
     "deletedToast": "Custom metric deleted",
+    "restoredToast": "Value restored",
+    "restoreError": "Restore failed",
     "deleteError": "Could not delete the custom metric",
     "showAllValues": "Show all values",
     "emptyDescription": "Define your own measurements to track and chart them.",

@@ -9053,7 +9053,9 @@
       "flaggedBadge": "Apoyo mostrado",
       "chartTitle": "Evolución de la puntuación",
       "totalLabel": "Puntuación",
-      "bandLabel": "Categoría"
+      "bandLabel": "Categoría",
+      "answersToggle": "Respuestas",
+      "answersUnavailable": "Las respuestas guardadas de esta revisión no se pueden descifrar."
     },
     "crisis": {
       "title": "No tienes que afrontar esto a solas",
@@ -9708,6 +9710,8 @@
     "deleteConfirmTitle": "¿Eliminar esta métrica personalizada?",
     "deleteConfirmDescription": "La métrica se quita de tu lista. Los valores registrados se conservan.",
     "deletedToast": "Métrica personalizada eliminada",
+    "restoredToast": "Valor restaurado",
+    "restoreError": "No se pudo restaurar",
     "deleteError": "No se pudo eliminar la métrica personalizada",
     "showAllValues": "Ver todos los valores",
     "emptyDescription": "Define tus propias mediciones para registrarlas y representarlas.",

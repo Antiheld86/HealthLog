@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useTableSort } from "@/hooks/use-table-sort";
-import { ApiError, apiDelete, apiPatch } from "@/lib/api/api-fetch";
+import { ApiError, apiDelete, apiPatch, apiPost } from "@/lib/api/api-fetch";
 import { formatDateShort } from "@/lib/format";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
@@ -48,8 +48,8 @@ function parseDecimal(raw: string): number | null {
 
 /**
  * v1.25.5 — reverse-chronological value history for one custom metric, with
- * full edit + delete. An edit overwrites in place; delete hard-deletes (the
- * value store has no soft-delete tier).
+ * full edit + delete. An edit overwrites in place; delete tombstones with an
+ * Undo toast (v1.37.20, A3-11 — parity with every other entry surface).
  */
 export function CustomMetricHistoryList({
   customMetricId,
@@ -87,12 +87,31 @@ export function CustomMetricHistoryList({
     });
   }
 
+  // v1.37.20 (A3-11) — undo parity with every peer entry surface: the
+  // delete tombstones server-side and the toast offers the restore.
+  async function restoreEntry(id: string) {
+    try {
+      await apiPost(`/api/custom-metrics/${customMetricId}/entries/restore`, {
+        ids: [id],
+      });
+      invalidate();
+      toast.success(t("customMetrics.entry.restoredToast"));
+    } catch {
+      toast.error(t("customMetrics.entry.restoreError"));
+    }
+  }
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) =>
       apiDelete(`/api/custom-metrics/${customMetricId}/entries/${id}`),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       invalidate();
-      toast.success(t("customMetrics.entry.deletedToast"));
+      toast.success(t("customMetrics.entry.deletedToast"), {
+        action: {
+          label: t("common.undo"),
+          onClick: () => void restoreEntry(id),
+        },
+      });
     },
     onError: () => toast.error(t("customMetrics.entry.deleteError")),
   });

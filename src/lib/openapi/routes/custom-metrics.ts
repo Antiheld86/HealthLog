@@ -340,7 +340,7 @@ export const customMetricPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Custom metrics"],
       summary: "Delete a logged value",
       description:
-        "Hard-deletes the value. Audits as `customMetricEntry.delete`.",
+        "Tombstones the value (soft delete, v1.37.20); the sibling entries/restore endpoint clears the tombstone. Audits as `customMetricEntry.delete`.",
       requestParams: {
         path: z.object({ id: z.string(), entryId: z.string() }),
       },
@@ -357,6 +357,39 @@ export const customMetricPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           },
         },
         ...entryNotFound,
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/custom-metrics/{id}/entries/restore": {
+    post: {
+      tags: ["Custom metrics"],
+      summary: "Restore tombstoned values (v1.37.20)",
+      description:
+        "Clears deletedAt on every owned, currently-tombstoned entry of this metric named in ids (1..200). A foreign, live or mismatched-parent id is a silent no-op, never an existence leak. Backs the delete toast's Undo. Audits as `customMetricEntry.restore`.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: z
+              .object({ ids: z.array(z.string().min(1)).min(1).max(200) })
+              .meta({ id: "RestoreCustomMetricEntriesRequest" }),
+          },
+        },
+      },
+      responses: {
+        "200": {
+          description: "Count of entries restored.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ restored: z.number().int() }),
+                "RestoreCustomMetricEntriesResponse",
+              ),
+            },
+          },
+        },
         ...stdResponses,
       },
     },

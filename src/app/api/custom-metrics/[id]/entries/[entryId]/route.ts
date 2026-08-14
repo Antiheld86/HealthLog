@@ -22,8 +22,11 @@ import { updateCustomMetricEntrySchema } from "@/lib/validations/custom-metrics"
  *
  * PATCH applies a partial edit (`data` built field-by-field; an explicit `null`
  * on `note` clears it, an omitted key leaves the column untouched). DELETE
- * hard-deletes the value. Every read/write is narrowed by both `userId` and the
- * parent `customMetricId`; a cross-user or mismatched-parent id surfaces as 404.
+ * tombstones the value (v1.37.20, A3-11 — undo parity with every peer entry
+ * surface; the sibling `restore` route clears the tombstone for the toast's
+ * Undo). Every read/write is narrowed by both `userId` and the parent
+ * `customMetricId`; a cross-user, tombstoned or mismatched-parent id surfaces
+ * as 404.
  */
 
 type RouteParams = { params: Promise<{ id: string; entryId: string }> };
@@ -34,7 +37,12 @@ export const PATCH = apiHandler(
     const { id, entryId } = await params;
 
     const existing = await prisma.customMetricEntry.findFirst({
-      where: { id: entryId, userId: user.id, customMetricId: id },
+      where: {
+        id: entryId,
+        userId: user.id,
+        customMetricId: id,
+        deletedAt: null,
+      },
     });
     if (!existing) {
       return apiError("Custom metric entry not found", 404);
@@ -104,13 +112,22 @@ export const DELETE = apiHandler(
     const { id, entryId } = await params;
 
     const existing = await prisma.customMetricEntry.findFirst({
-      where: { id: entryId, userId: user.id, customMetricId: id },
+      where: {
+        id: entryId,
+        userId: user.id,
+        customMetricId: id,
+        deletedAt: null,
+      },
     });
     if (!existing) {
       return apiError("Custom metric entry not found", 404);
     }
 
-    await prisma.customMetricEntry.delete({ where: { id: entryId } });
+    // Tombstone, not a hard delete: the Undo toast's restore clears it.
+    await prisma.customMetricEntry.update({
+      where: { id: entryId },
+      data: { deletedAt: new Date() },
+    });
 
     await auditLog("customMetricEntry.delete", {
       userId: user.id,

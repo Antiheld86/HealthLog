@@ -9053,7 +9053,9 @@
       "flaggedBadge": "Hilfe angezeigt",
       "chartTitle": "Punkteverlauf",
       "totalLabel": "Punkte",
-      "bandLabel": "Einstufung"
+      "bandLabel": "Einstufung",
+      "answersToggle": "Antworten",
+      "answersUnavailable": "Die gespeicherten Antworten dieses Check-ins können nicht entschlüsselt werden."
     },
     "crisis": {
       "title": "Du musst das nicht allein durchstehen",
@@ -9708,6 +9710,8 @@
     "deleteConfirmTitle": "Diese eigene Metrik löschen?",
     "deleteConfirmDescription": "Die Metrik wird aus deiner Liste entfernt. Erfasste Werte bleiben erhalten.",
     "deletedToast": "Eigene Metrik gelöscht",
+    "restoredToast": "Wert wiederhergestellt",
+    "restoreError": "Wiederherstellen fehlgeschlagen",
     "deleteError": "Eigene Metrik konnte nicht gelöscht werden",
     "showAllValues": "Alle Werte anzeigen",
     "emptyDescription": "Definiere eigene Messwerte, um sie zu verfolgen und darzustellen.",

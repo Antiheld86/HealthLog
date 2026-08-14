@@ -13972,7 +13972,8 @@ paths:
       tags:
         - Custom metrics
       summary: Delete a logged value
-      description: Hard-deletes the value. Audits as `customMetricEntry.delete`.
+      description: Tombstones the value (soft delete, v1.37.20); the sibling entries/restore endpoint clears the tombstone.
+        Audits as `customMetricEntry.delete`.
       parameters:
         - in: path
           name: id
@@ -13993,6 +13994,36 @@ paths:
                 $ref: "#/components/schemas/DeleteCustomMetricEntryResponse"
         "401": *a1
         "404": *a25
+        "422": *a3
+        "429": *a4
+  /api/custom-metrics/{id}/entries/restore:
+    post:
+      tags:
+        - Custom metrics
+      summary: Restore tombstoned values (v1.37.20)
+      description: Clears deletedAt on every owned, currently-tombstoned entry of this metric named in ids (1..200). A
+        foreign, live or mismatched-parent id is a silent no-op, never an existence leak. Backs the delete toast's Undo.
+        Audits as `customMetricEntry.restore`.
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RestoreCustomMetricEntriesRequest"
+      responses:
+        "200":
+          description: Count of entries restored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RestoreCustomMetricEntriesResponse"
+        "401": *a1
         "422": *a3
         "429": *a4
   /api/onboarding/disclaimer:
@@ -18483,6 +18514,18 @@ components:
             - de
       required:
         - message
+    RestoreCustomMetricEntriesRequest:
+      type: object
+      properties:
+        ids:
+          minItems: 1
+          maxItems: 200
+          type: array
+          items:
+            type: string
+            minLength: 1
+      required:
+        - ids
     DisclaimerAckRequest:
       type: object
       properties:
@@ -39690,7 +39733,8 @@ components:
       additionalProperties: false
       description: One completed screener administration. `severityBand` is a descriptive label for the screen (never a
         diagnosis). `item9Flagged` is true when the PHQ-9 self-harm item was answered > 0 — the client MUST show crisis
-        resources when it is. Raw per-item answers are intentionally absent.
+        resources when it is. Raw per-item answers are intentionally absent from list rows; the by-id detail read
+        returns them decrypted.
     CreateMentalHealthAssessmentEnvelope:
       type: object
       properties:
@@ -41414,6 +41458,31 @@ components:
         - data
         - error
       additionalProperties: false
+    RestoreCustomMetricEntriesResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            restored:
+              type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+          required:
+            - restored
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
     DisclaimerAckEnvelope:
       type: object
       properties:
@@ -41803,6 +41872,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MetricFreshnessEntry"
+        syncProgress:
+          description: Backfill/sync progress summary. Present on the GET read (null when the progress read failed); omitted from
+            the PATCH echo.
+          anyOf:
+            - $ref: "#/components/schemas/AppleHealthSyncProgress"
+            - type: "null"
       required:
         - entries
         - lastSyncedAt
@@ -41886,6 +41961,29 @@ components:
       additionalProperties: false
       description: Per-metric-type last-seen timestamp with the server-computed staleness flag. Only types that have actually
         delivered appear — absence is absence, never an invented row.
+    AppleHealthSyncProgress:
+      type: object
+      properties:
+        recordsAccepted:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: Measurement + workout rows carrying the `APPLE_HEALTH` source (live batch ingest and the one-shot export
+            import both write it). Soft-deleted measurement rows are excluded.
+        oldestMeasuredAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
+          description: Earliest instant reached across those rows (`measuredAt` for measurements, `startedAt` for workouts); null
+            when nothing has arrived. During a first-run backfill this walks backwards as history lands.
+      required:
+        - recordsAccepted
+        - oldestMeasuredAt
+      additionalProperties: false
+      description: "Server-side Apple Health backfill progress: how many rows have been accepted and how far back in time they
+        reach. Only what the server actually knows — no ETA, no device-side queue state."
     HealthKitConfigPatchEnvelope:
       type: object
       properties:

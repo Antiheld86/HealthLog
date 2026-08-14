@@ -9053,7 +9053,9 @@
       "flaggedBadge": "Pokazano wsparcie",
       "chartTitle": "Przebieg wyniku",
       "totalLabel": "Wynik",
-      "bandLabel": "Kategoria"
+      "bandLabel": "Kategoria",
+      "answersToggle": "Odpowiedzi",
+      "answersUnavailable": "Nie można odszyfrować zapisanych odpowiedzi tego sprawdzenia."
     },
     "crisis": {
       "title": "Nie musisz mierzyć się z tym sam(a)",
@@ -9708,6 +9710,8 @@
     "deleteConfirmTitle": "Usunąć tę metrykę własną?",
     "deleteConfirmDescription": "Metryka zostanie usunięta z listy. Zapisane wartości pozostaną.",
     "deletedToast": "Usunięto metrykę własną",
+    "restoredToast": "Przywrócono wartość",
+    "restoreError": "Nie udało się przywrócić",
     "deleteError": "Nie udało się usunąć metryki własnej",
     "showAllValues": "Pokaż wszystkie wartości",
     "emptyDescription": "Zdefiniuj własne pomiary, aby je śledzić i przedstawiać na wykresie.",

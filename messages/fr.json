@@ -9053,7 +9053,9 @@
       "flaggedBadge": "Aide affichée",
       "chartTitle": "Évolution du score",
       "totalLabel": "Score",
-      "bandLabel": "Catégorie"
+      "bandLabel": "Catégorie",
+      "answersToggle": "Réponses",
+      "answersUnavailable": "Les réponses enregistrées de ce bilan ne peuvent pas être déchiffrées."
     },
     "crisis": {
       "title": "Tu n'as pas à affronter cela seul(e)",
@@ -9708,6 +9710,8 @@
     "deleteConfirmTitle": "Supprimer cette mesure personnalisée ?",
     "deleteConfirmDescription": "La mesure est retirée de votre liste. Les valeurs enregistrées sont conservées.",
     "deletedToast": "Mesure personnalisée supprimée",
+    "restoredToast": "Valeur restaurée",
+    "restoreError": "Échec de la restauration",
     "deleteError": "Impossible de supprimer la mesure personnalisée",
     "showAllValues": "Afficher toutes les valeurs",
     "emptyDescription": "Définissez vos propres mesures pour les suivre et les représenter.",
