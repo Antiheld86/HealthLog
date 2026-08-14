@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.37.22] — 2026-08-15
+
+### Fixed
+
+- The doctor-report export refuses a selection that includes nothing instead of rendering an empty document. The selection panel already disabled its own button in that state, so this only ever reached the server through a hand-built request, and it spent an export slot on a file with no content in it.
+- A lab value in the FHIR export no longer names UCUM as its unit system when it carries no UCUM code. That combination told a receiving system the unit was coded when it was not, which is worse than saying nothing: the unit still travels as a display string, and the coded form appears only when the analyte and unit actually resolve to one.
+
 ## [1.37.21] — 2026-08-14
 
 ### Fixed
