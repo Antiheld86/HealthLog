@@ -48,7 +48,7 @@ describe("api-errors leaf module", () => {
       join(SRC, "lib/sharing/record-session-fence.ts"),
       "utf8",
     );
-    const imports = source.match(/^import[^;]+from "@\/lib\/api-handler";/gms);
+    const imports = source.match(/^import[^;]+from "@\/lib\/api-handler";/gm);
     for (const statement of imports ?? []) {
       expect(
         statement.startsWith("import type"),
@@ -59,7 +59,7 @@ describe("api-errors leaf module", () => {
 
   it("the leaf imports nothing but the fence contract", () => {
     const source = readFileSync(join(SRC, "lib/api-errors.ts"), "utf8");
-    const imports = source.match(/^import[^;]+;/gms) ?? [];
+    const imports = source.match(/^import[^;]+;/gm) ?? [];
     // Self-check: the walker found the one expected import.
     expect(imports.length).toBeGreaterThan(0);
     for (const statement of imports) {
