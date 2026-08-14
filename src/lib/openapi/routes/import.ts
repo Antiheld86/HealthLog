@@ -1,17 +1,23 @@
 /**
- * OpenAPI route table — CSV measurement import (v1.17.1).
+ * OpenAPI route table — data import (CSV since v1.17.1, JSON since the
+ * publication sweep that closed the create/poll gap).
  *
  * The CSV importer is the cold-start escape hatch for self-hosters migrating
- * from a spreadsheet or another tracker. The JSON (`/api/import`) and Apple-
- * Health (`/api/import/apple-health-export`) routes predate the contract
- * surface and are intentionally not documented here; this module documents
- * the one new endpoint so the wire contract stays drift-free (CI gate). iOS
- * does not call it — its canonical ingest is `POST /api/measurements/batch`.
+ * from a spreadsheet or another tracker. The JSON importer (`/api/import`)
+ * restores the structure `GET /api/export/json` emits. The Apple-Health
+ * route (`/api/import/apple-health-export`) predates the contract surface
+ * and remains undocumented here. iOS calls neither — its canonical ingest is
+ * `POST /api/measurements/batch`.
  */
 import type { ZodOpenApiObject } from "zod-openapi";
 import { z } from "zod/v4";
 
-import { dataEnvelope, stdResponses } from "./shared";
+import {
+  glucoseContextEnum,
+  measurementTypeEnum,
+} from "@/lib/validations/measurement";
+import { moodLevelEnum } from "@/lib/validations/mood";
+import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
 
 const csvImportRowResult = z
   .object({
@@ -45,6 +51,126 @@ const csvImportResponse = z
     id: "CsvImportResponse",
     description:
       "Per-row import outcome. Mirrors the batch-route per-entry envelope. In `dryRun` mode no write runs and every valid row reports its projected `inserted` status.",
+  });
+
+// ── JSON import — mirrors the route-local `importSchema`
+// (`src/app/api/import/route.ts`), which is deliberately not exported: the
+// runtime side carries transforms + plausibility refinements the document
+// restates in prose.
+
+const jsonImportMeasurement = z
+  .object({
+    type: measurementTypeEnum,
+    value: z
+      .number()
+      .describe(
+        "Checked against the type's server-side plausibility range; an out-of-range value fails the whole request with 422.",
+      ),
+    unit: z.string(),
+    measuredAt: z.iso
+      .datetime({ offset: true })
+      .describe(
+        "Bounded: no future instants beyond a 5-min clock-skew tolerance, nothing before 1900.",
+      ),
+    glucoseContext: glucoseContextEnum
+      .optional()
+      .describe(
+        "Optional even on a BLOOD_GLUCOSE row — a sensor export classifies nothing per sample.",
+      ),
+    source: z
+      .string()
+      .optional()
+      .describe(
+        "Accepted for export-format compatibility and ignored: every imported row stores `source = IMPORT`.",
+      ),
+    notes: z.string().optional().describe("Encrypted at rest."),
+    externalId: z
+      .string()
+      .min(1)
+      .max(120)
+      .optional()
+      .describe(
+        "Source-stable id making re-import idempotent (upsert on `(userId, type, source=IMPORT, externalId)`; a re-import updates the row in place). Absent → first-write-wins create with a NULL key, which DOES duplicate on re-import. An unstable id (an object description or memory address that rotates per launch) skips THIS row, never the file.",
+      ),
+  })
+  .meta({
+    id: "JsonImportMeasurement",
+    description: "One measurement row of a JSON import file.",
+  });
+
+const jsonImportMoodEntry = z
+  .object({
+    date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .describe("Local-day label, YYYY-MM-DD."),
+    mood: moodLevelEnum,
+    score: z
+      .number()
+      .int()
+      .min(1)
+      .max(5)
+      .describe(
+        "Stored as sent — the export format's own field. Pleasantness (`a1`) is re-derived from `mood` on every imported row, never taken from this.",
+      ),
+    tags: z
+      .string()
+      .optional()
+      .describe("JSON-encoded array of tag strings, stored verbatim."),
+    loggedAt: z.iso
+      .datetime({ offset: true })
+      .optional()
+      .describe(
+        "Bounded like `measuredAt`. Absent → the server derives a stable per-row instant within the `date` day, so a re-import of the same file dedups instead of duplicating.",
+      ),
+    externalId: z
+      .string()
+      .min(1)
+      .max(120)
+      .optional()
+      .describe(
+        "Source-stable id (e.g. a Daylio row id) making re-import idempotent (upsert on `(userId, source=IMPORT, externalId)`). Same stability rule as the measurement `externalId`: an unstable id skips the row.",
+      ),
+  })
+  .meta({
+    id: "JsonImportMoodEntry",
+    description: "One mood-entry row of a JSON import file.",
+  });
+
+const jsonImportRequest = z
+  .object({
+    measurements: z.array(jsonImportMeasurement).max(10000).optional(),
+    moodEntries: z.array(jsonImportMoodEntry).max(10000).optional(),
+  })
+  .meta({
+    id: "JsonImportRequest",
+    description:
+      "JSON import payload, matching the structure `GET /api/export/json` emits. Both sections optional; up to 10 000 rows each.",
+  });
+
+const jsonImportStats = z
+  .object({
+    measurements: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe("Measurement rows written (inserted or updated in place)."),
+    moodEntries: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe("Mood-entry rows written (inserted or updated in place)."),
+    skipped: z
+      .number()
+      .int()
+      .nonnegative()
+      .describe(
+        "Rows not written: duplicates of existing rows, and rows carrying an unstable `externalId`.",
+      ),
+  })
+  .meta({
+    id: "JsonImportStats",
+    description: "Per-section outcome counts of a JSON import.",
   });
 
 export const importPaths: NonNullable<ZodOpenApiObject["paths"]> = {
@@ -96,6 +222,38 @@ export const importPaths: NonNullable<ZodOpenApiObject["paths"]> = {
               schema: dataEnvelope(z.null(), "CsvImportTooLargeEnvelope"),
             },
           },
+        },
+      },
+    },
+  },
+  "/api/import": {
+    post: {
+      tags: ["Import"],
+      summary: "Import measurements and mood entries from JSON",
+      description:
+        "Restores a JSON export (the structure `GET /api/export/json` emits): up to 10 000 measurements plus 10 000 mood entries per call, body ≤ 16 MB. Rows carrying an `externalId` upsert idempotently (re-import updates in place); rows without one are first-write-wins and dedup against the existing unique keys, so an exact duplicate is `skipped` rather than doubled. A row with an unstable `externalId` is skipped while the rest of the file still lands. Every imported measurement stores `source = IMPORT`; every imported mood entry re-derives pleasantness from its label. Writes are per-row, not transactional: on a mid-file write failure the response is 503 (`meta.errorCode` = `import.write_failed`, `meta.retryable` = true) with `meta.stats` carrying what landed — rows already written stay written, and a retry is only safe against duplication for rows that carry an `externalId`. Validation is fail-fast (the 422 carries the first issue's message, not the multi-issue envelope). Rate-limited 5/hour per user (shared `import:` bucket with the CSV importer).",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: jsonImportRequest } },
+      },
+      responses: {
+        "200": {
+          description: "Import completed; per-section outcome counts.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(jsonImportStats, "JsonImportStatsEnvelope"),
+            },
+          },
+        },
+        ...stdResponses,
+        "413": {
+          description: "Body exceeds the 16 MB limit.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "503": {
+          description:
+            "A write failed partway through the file. `meta.errorCode` = `import.write_failed`, `meta.retryable` = true, `meta.stats` carries the counts that landed before the failure. Rows already written stay written; retry the same file — rows with `externalId` re-import idempotently, rows without one may duplicate.",
+          content: { "application/json": { schema: errorEnvelope } },
         },
       },
     },

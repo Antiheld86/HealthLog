@@ -102,6 +102,10 @@ model User {
   // Codex OAuth (ChatGPT subscription)
   codexAccessTokenEncrypted  String?   @map("codex_access_token_encrypted")
   codexRefreshTokenEncrypted String?   @map("codex_refresh_token_encrypted")
+  /// @internal: dead mirror of the expiry inside the encrypted Codex creds —
+  /// the refresh path reads the decrypted blob's own `expiresAt`
+  /// (`src/lib/ai/provider.ts`), never this column. Kept (and kept written)
+  /// for wire/backup compatibility rather than dropped.
   codexTokenExpiresAt        DateTime? @map("codex_token_expires_at")
   codexConnectedAt           DateTime? @map("codex_connected_at")
   codexConnectionStatus      String    @default("disconnected") @map("codex_connection_status")
@@ -879,6 +883,9 @@ model User {
   // Server computes the canonical `nextDueAt`; the cron fires through the
   // existing notification dispatcher. Soft-deleted.
   measurementReminders                      MeasurementReminder[]
+  // v1.37.20 — completion ledger behind the reminders (iOS #68): one
+  // append-only row per satisfy / skip. Cascade-deleted with the account.
+  measurementReminderEvents                 MeasurementReminderEvent[]
   // v1.17.1 — minimal structured lab store (LDL, HbA1c, ferritin, TSH, …)
   // that pairs with the Vorsorge "annual blood panel" reminder so a result
   // has somewhere to land. Soft-deleted.
@@ -1045,6 +1052,9 @@ model EnvironmentContext {
   /// that won precedence).
   lat           Float
   lon           Float
+  /// @internal: human-readable label of the resolved location, stored as
+  /// operator/debug provenance beside the coordinates; readers select the
+  /// numeric and weather columns only, never this label.
   locationLabel String                    @map("location_label")
   source        EnvironmentLocationSource
 
@@ -2416,6 +2426,9 @@ model PersonalRecord {
   /// FK to the Measurement row that achieved the record. SET NULL
   /// on delete so the historical fact survives even if the
   /// underlying measurement is later removed.
+  /// @internal: audit-trail provenance written by the PR detection worker;
+  /// no read path selects it — the record row itself carries the surfaced
+  /// value/unit/achievedAt.
   sourceMeasurementId String?                 @map("source_measurement_id")
   source              MeasurementSource       @default(MANUAL)
   externalId          String?                 @map("external_id")
@@ -3581,10 +3594,16 @@ model McpOAuthConnection {
 model InviteToken {
   id        String    @id @default(cuid())
   tokenHash String    @unique @map("token_hash")
+  /// Consumed through the `creator` relation: the admin invites list
+  /// (`src/app/api/admin/invites/route.ts`) selects the creating admin's
+  /// id + username via it.
   createdBy String    @map("created_by")
   createdAt DateTime  @default(now()) @map("created_at")
   expiresAt DateTime  @map("expires_at")
   usedAt    DateTime? @map("used_at")
+  /// LAST consumer only (overwritten on multi-use invites; the full history
+  /// lives in `InviteRedemption`). Consumed through the `consumer` relation
+  /// by the admin invites list (`src/app/api/admin/invites/route.ts`).
   usedBy    String?   @map("used_by")
   maxUses   Int       @default(1) @map("max_uses")
   uses      Int       @default(0)
@@ -3641,8 +3660,11 @@ model RefreshToken {
   /// When this token was used (one-time-use). Set during rotation; a second
   /// use of the same token is a hard fail and triggers reuse-detection.
   usedAt          DateTime? @map("used_at")
-  /// Pointer to the row that replaced this one during rotation. Helps audit
-  /// trail and reuse-detection ("this token was already exchanged into X").
+  /// Pointer to the row that replaced this one during rotation ("this token
+  /// was already exchanged into X").
+  /// @internal: audit-trail bookkeeping written by the rotation path
+  /// (`src/lib/auth/refresh-token.ts`); reuse-detection keys on
+  /// `usedAt`/`tokenHash`, so no code path reads this pointer.
   replacedById    String?   @map("replaced_by_id")
   userAgent       String?   @map("user_agent")
   ipAddress       String?   @map("ip_address")
@@ -4920,12 +4942,18 @@ model ImportJob {
   failureReason      String?   @map("failure_reason")
   /// Bytes uploaded — surfaced to the operator audit trail.
   uploadBytes        Int       @map("upload_bytes")
-  /// SHA-256 hex digest of the uploaded `export.zip`. Lets the
-  /// kick-off endpoint short-circuit a re-upload of the exact same
-  /// file back to the existing job id without re-queueing.
+  /// SHA-256 hex digest of the uploaded `export.zip`. Consumer: both kick-off
+  /// endpoints (`src/app/api/import/apple-health-export/route.ts` and the
+  /// admin variant) dedupe on (userId, uploadSha256, parserRevision) and
+  /// short-circuit a re-upload of the exact same file back to the existing
+  /// job id without re-queueing. A prior `failed` job is excluded from the
+  /// match (issue #486), so the same bytes can always be retried.
   uploadSha256       String?   @map("upload_sha256")
   /// Parser semantics revision. Existing archives migrated at revision 1 can
-  /// be deliberately reprocessed when the current parser revision advances.
+  /// be deliberately reprocessed when the current parser revision advances:
+  /// the kick-off dedupe lookup (see `uploadSha256`) pins the CURRENT
+  /// `APPLE_HEALTH_IMPORT_PARSER_REVISION`, so a job parsed under an older
+  /// revision never short-circuits a fresh upload of the same bytes.
   parserRevision     Int       @default(1) @map("parser_revision")
   /// Apple's `ExportDate` attribute string-formatted, parsed during
   /// the unpack phase. NULL until the parser sees it.
@@ -5187,6 +5215,20 @@ model MeasurementReminder {
   /// excluded everywhere), whereas a booster is the engine's native case —
   /// recurring, satisfiable, cadence-bearing.
   vaccinationAntigen String?          @map("vaccination_antigen")
+  /// v1.37.20 — snooze cursor. Non-NULL and in the future = "pushed back until
+  /// this instant". The snooze write sets `nextDueAt` to the SAME instant, so
+  /// every due-state consumer (digest, dashboard, cron, AI block) moves with
+  /// it without knowing snooze exists. Self-expiring: once the instant passes,
+  /// the clock comparison stops being true and no cleanup is needed. Any
+  /// recompute of `nextDueAt` (satisfy, skip, cadence PATCH) nulls it.
+  snoozedUntil       DateTime?        @map("snoozed_until")
+  /// v1.37.20 — last honest skip. A skip re-anchors `nextDueAt` at the skip
+  /// instant but NEVER moves `lastSatisfiedAt` — done and skipped stay
+  /// distinguishable forever. "Skipped cycle" derives as
+  /// `lastSkippedAt > lastSatisfiedAt` (or non-NULL with no satisfy yet).
+  lastSkippedAt      DateTime?        @map("last_skipped_at")
+  /// v1.37.20 — lifetime skip counter ("skipped N times").
+  skipCount          Int              @default(0) @map("skip_count")
   createdAt          DateTime         @default(now()) @map("created_at")
   updatedAt          DateTime         @updatedAt @map("updated_at")
   /// Soft-delete tombstone. NULL = live; non-NULL = deleted at the instant.
@@ -5201,6 +5243,10 @@ model MeasurementReminder {
   /// this reminder. SetNull on the far side — deleting the reminder leaves
   /// the vaccination record intact.
   vaccinations VaccinationRecord[]
+  /// v1.37.20 — the completion ledger (iOS #68): every satisfy and every
+  /// skip appends one row. Cascade: the ledger has no meaning without its
+  /// reminder.
+  events       MeasurementReminderEvent[]
 
   @@index([userId, deletedAt])
   @@index([userId, nextDueAt])
@@ -5232,6 +5278,55 @@ enum ReminderOrigin {
   ENCOUNTER
 
   @@map("reminder_origin")
+}
+
+/// v1.37.20 — what a completion-ledger row records: an honest fulfilment
+/// (`SATISFIED` — a matching reading landed or the user marked it done) or an
+/// honest skip (`SKIPPED` — the user deliberately let this cycle go, which is
+/// NOT a completion and never touches `lastSatisfiedAt`).
+enum MeasurementReminderEventKind {
+  SATISFIED
+  SKIPPED
+
+  @@map("measurement_reminder_event_kind")
+}
+
+/// v1.37.20 — the Vorsorge completion ledger (iOS #68). The reminder engine is
+/// single-cursor (`nextDueAt` + `lastSatisfiedAt`), so before this table each
+/// satisfy overwrote the previous one and history was unrecoverable. Every
+/// path through the ONE satisfy primitive (`satisfyReminder`) and the skip
+/// route appends one row here; nothing ever updates or deletes a row short of
+/// deleting the reminder itself. History starts at the release that ships
+/// this — the single cursor holds nothing to backfill from, which the iOS #68
+/// thread records as agreed.
+model MeasurementReminderEvent {
+  id         String                       @id @default(cuid())
+  userId     String                       @map("user_id")
+  reminderId String                       @map("reminder_id")
+  kind       MeasurementReminderEventKind
+  /// The event instant: the satisfy instant (which may be the backdated
+  /// reading's own timestamp) or the skip instant (always the server clock).
+  occurredAt DateTime                     @map("occurred_at")
+  /// Derived AT WRITE TIME against the reminder's `nextDueAt` as it stood
+  /// before the event re-anchored it: `true` when the event landed at or
+  /// before the due instant (or the cadence had no computable due). Clients
+  /// (web + iOS) consume this resolved value and never re-derive it — the
+  /// pre-event `nextDueAt` is gone after the write, so write time is the only
+  /// honest moment to answer the question.
+  onTime     Boolean                      @map("on_time")
+  /// Which path produced the event — a closed set of engine call sites
+  /// (`manual`, `auto_measurement`, `auto_lab`, `telegram`, `vaccination`,
+  /// `encounter`, `skip`), asserted in code, not free text.
+  source     String
+  createdAt  DateTime                     @default(now()) @map("created_at")
+
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reminder MeasurementReminder @relation(fields: [reminderId], references: [id], onDelete: Cascade)
+
+  /// The history endpoint reads newest-first per reminder.
+  @@index([reminderId, occurredAt])
+  @@index([userId])
+  @@map("measurement_reminder_events")
 }
 
 // ─── Lab results ─────────────────────────────────────────────
@@ -5432,6 +5527,10 @@ model CustomMetricEntry {
   measuredAt     DateTime @map("measured_at")
   note           String?
   createdAt      DateTime @default(now()) @map("created_at")
+  /// v1.37.20 — soft-delete tombstone, peer parity with Measurement /
+  /// MoodEntry (every other entry surface deletes recoverably with an undo
+  /// toast; custom-metric entries were the one hard delete). NULL = live.
+  deletedAt      DateTime? @map("deleted_at")
 
   user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   metric CustomMetric @relation(fields: [customMetricId], references: [id], onDelete: Cascade)
@@ -5695,6 +5794,8 @@ model CoachConversation {
   // conversation keeps memory of what came before without re-sending every
   // turn to the provider. AES-256-GCM (same codec as CoachMessage.encrypted).
   summaryEncrypted Bytes?    @map("summary_encrypted")
+  /// @internal: diagnostic timestamp of the last summary rewrite — the elision
+  /// logic keys on `summaryTurnCount`, not on this instant; nothing reads it.
   summaryUpdatedAt DateTime? @map("summary_updated_at")
   summaryTurnCount Int       @default(0) @map("summary_turn_count")
 
@@ -7713,7 +7814,12 @@ model DocumentContentIndex {
   /// Provider type that produced the text (diagnostic only), or null on the
   /// text-ocr path.
   providerType          String?  @map("provider_type")
-  /// Tokeniser algorithm version — bump to force a re-index on a scheme change.
+  /// Tokeniser algorithm version — bump `CONTENT_TOKENIZER_VERSION`
+  /// (`src/lib/documents/content-index.ts`) to force a re-index on a scheme
+  /// change. Consumer: the content-index backfill job re-tokenises any row
+  /// whose stored version trails the current one from the decrypted
+  /// `textEncrypted` (`retokeniseStaleRows` in
+  /// `src/lib/jobs/document-content-index-backfill.ts`).
   tokenizerVersion      String   @map("tokenizer_version")
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -7750,7 +7856,8 @@ model DocumentThumbnail {
   height             Int
   /// Plaintext byte length of the JPEG (pre-encryption), for `Content-Length`.
   byteSize           Int    @map("byte_size")
-  /// Source MIME the preview was rendered from (diagnostic only).
+  /// @internal: source MIME the preview was rendered from — operator-side
+  /// diagnostic provenance only; no query selects it and no client surfaces it.
   sourceMime         String @map("source_mime")
 
   createdAt DateTime @default(now()) @map("created_at")

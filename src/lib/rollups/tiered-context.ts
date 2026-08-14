@@ -43,7 +43,7 @@ import { probeRollupCoverage } from "./measurement-coverage";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Band cut points in days-ago. */
-export const TIERED_BANDS = {
+const TIERED_BANDS = {
   rawDays: 14,
   dayUntil: 30,
   weekUntil: 90,

@@ -516,6 +516,9 @@
     "heroItemsTitle": "Temps forts du jour",
     "heroItemsDescription": "Choisis les types d’éléments qui peuvent apparaître dans les temps forts du jour.",
     "heroItemsNotificationNote": "Les réglages des notifications sont gérés séparément.",
+    "heroContentTitle": "La carte du haut affiche",
+    "heroContentScore": "Score de santé et résumé du jour",
+    "heroContentReminders": "Temps forts du jour",
     "heroItems": {
       "coach_checkin": "Bilan avec Coach",
       "dose_window": "Doses de médicaments",
@@ -3168,7 +3171,8 @@
     "sleep": {
       "title": "Sommeil",
       "description": "Répartition des phases et durée nocturne, issues d’Apple Health.",
-      "headlineTitle": "Moyenne par nuit",
+      "mainSleep": "Sommeil principal",
+      "totalSleep": "Sommeil total",
       "compositionTitle": "Répartition des phases",
       "compositionSubtitle": "{nights} dernières nuits",
       "compositionAriaLabel": "Répartition des phases de sommeil sur {nights} nuits",
@@ -4517,7 +4521,7 @@
         "title": "Withings",
         "body": "Balances, tensiomètres et trackers Withings se synchronisent automatiquement une fois connectés.",
         "cta": "Connecter Withings",
-        "setupCta": "Configurer dans les Réglages",
+        "setupCta": "Configurer",
         "setupHint": "Nécessite d'abord votre propre application développeur Withings, gratuite — environ 5 minutes, une seule fois."
       },
       "more": {
@@ -4528,7 +4532,8 @@
         "oura": "Oura",
         "polar": "Polar",
         "nightscout": "Nightscout",
-        "fitbit": "Fitbit"
+        "fitbit": "Fitbit",
+        "appleHealthHint": "Apple Health n'a pas de connexion web — terminez d'abord la configuration ici, puis ouvrez l'app HealthLog sur votre iPhone pour finaliser la configuration d'Apple Health."
       },
       "import": "Importer un historique existant"
     },
@@ -5967,7 +5972,7 @@
     },
     "notificationStatus": {
       "title": "Fiabilité des canaux",
-      "description": "État par canal ; « Désactivé automatiquement » arrête les nouvelles tentatives après des erreurs permanentes.",
+      "description": "État de chaque canal — « Désactivé automatiquement » signifie arrêté après des erreurs permanentes.",
       "emptyDescription": "Ajoutez un canal dans Paramètres › Intégrations › Canaux de diffusion.",
       "stateActive": "Actif",
       "stateAutoDisabled": "Désactivé automatiquement",
@@ -6387,6 +6392,13 @@
       "importNote": "Besoin d’un ancien historique ou impossible d’utiliser l’app iOS ? L’envoi XML/ZIP Apple Health est une solution ponctuelle et n’active pas la synchronisation en direct.",
       "importAction": "Ouvrir l’import ponctuel",
       "staleNote": "Aucune donnée Apple Health n'est arrivée depuis plus d'une semaine. Ouvrez l'app HealthLog sur votre iPhone et vérifiez les autorisations Apple Health.",
+      "progress": {
+        "title": "Progression de la synchronisation",
+        "receivedLabel": "Enregistrements reçus",
+        "oldestLabel": "Mesure la plus ancienne atteinte",
+        "flowing": "Des données sont arrivées au cours de la dernière heure — l'app iPhone continue d'envoyer.",
+        "waiting": "En attente de nouvelles données de l'app iPhone. Le transfert reprend quand l'app est ouverte ou quand iOS lui accorde du temps en arrière-plan — une accalmie pendant le premier grand rattrapage est normale, pas une erreur."
+      },
       "delivery": {
         "title": "Livraison",
         "lastTriggerLabel": "La dernière synchronisation est arrivée",
@@ -6891,6 +6903,23 @@
         "restoreTitle": "Restaurer à partir d'une sauvegarde",
         "restoreDescription": "Cette action remplacera TOUTES les données actuelles de {username} par l'instantané du {when}. Les mesures, médicaments, événements de prise, entrées d'humeur, canaux de notification, abonnements push et suppressions Telegram en file d'attente existants seront supprimés.",
         "restorePromptLabel": "Tapez RESTORE pour continuer",
+        "previewTitle": "Contenu de la sauvegarde",
+        "previewLoading": "Lecture du contenu…",
+        "previewUnavailable": "Le contenu n'a pas pu être lu — la restauration reste possible.",
+        "previewEmpty": "Le fichier ne contient aucun enregistrement.",
+        "previewOther": "Autres enregistrements",
+        "previewMeasurements": "Mesures",
+        "previewMedications": "Médicaments et prises",
+        "previewMood": "Entrées d'humeur",
+        "previewLabs": "Résultats de laboratoire",
+        "previewDocuments": "Documents",
+        "previewWorkouts": "Entraînements",
+        "previewCycles": "Données de cycle",
+        "previewVisits": "Visites médicales",
+        "previewVaccinations": "Vaccinations",
+        "previewReminders": "Rappels de prévention",
+        "previewCustomMetrics": "Mesures personnalisées",
+        "previewHealthScores": "Historique du score",
         "restoreConfirm": "Restaurer maintenant",
         "restoreInProgress": "Restauration en cours...",
         "restoreSuccess": "Restauration terminée",
@@ -8085,6 +8114,23 @@
     "delete": "Supprimer",
     "deleteConfirmTitle": "Supprimer le rappel ?",
     "deleteConfirmDescription": "Ce rappel d’examen sera définitivement supprimé.",
+    "postpone": {
+      "menuItem": "Reporter…",
+      "title": "Reporter l'échéance",
+      "description": "Ne déplace que l'échéance actuelle — le rythme régulier reste inchangé.",
+      "chip": "+{days} jours",
+      "dateLabel": "Nouvelle date",
+      "confirm": "Reporter"
+    },
+    "skip": {
+      "heading": "Passer cette échéance",
+      "explainer": "Enregistré honnêtement comme passé — pas comme fait. L'intervalle redémarre à partir d'aujourd'hui.",
+      "action": "Passer",
+      "confirmTitle": "Passer cette échéance ?"
+    },
+    "snoozedUntil": "Reporté au {date}",
+    "skippedOn": "Passé le {date}",
+    "skipCount": "passé {count} fois",
     "disabledBadge": "Désactivé",
     "nextDue": {
       "none": "Non planifié",
@@ -9035,7 +9081,9 @@
       "flaggedBadge": "Aide affichée",
       "chartTitle": "Évolution du score",
       "totalLabel": "Score",
-      "bandLabel": "Catégorie"
+      "bandLabel": "Catégorie",
+      "answersToggle": "Réponses",
+      "answersUnavailable": "Les réponses enregistrées de ce bilan ne peuvent pas être déchiffrées."
     },
     "crisis": {
       "title": "Tu n'as pas à affronter cela seul(e)",
@@ -9739,6 +9787,8 @@
       "editedToast": "Valeur mise à jour",
       "editError": "Impossible de mettre à jour la valeur",
       "deletedToast": "Valeur supprimée",
+      "restoredToast": "Valeur restaurée",
+      "restoreError": "Échec de la restauration",
       "deleteError": "Impossible de supprimer la valeur"
     },
     "chart": {
@@ -10208,6 +10258,8 @@
       "measurementReminderDelete": "{name} a supprimé un rappel de mesure",
       "measurementReminderComplete": "{name} a terminé un rappel de mesure",
       "measurementReminderSatisfy": "{name} a clôturé un rappel de mesure",
+      "measurementReminderSkip": "{name} a passé un rappel de mesure",
+      "measurementReminderSnooze": "{name} a reporté un rappel de mesure",
       "labResultUpdate": "{name} a modifié un résultat de laboratoire",
       "labResultDelete": "{name} a supprimé un résultat de laboratoire",
       "labResultRestore": "{name} a restauré un résultat de laboratoire",

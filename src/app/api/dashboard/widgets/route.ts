@@ -31,6 +31,7 @@ import {
   MAX_SELECTED_SCORE_RINGS,
   HERO_RING_IDS,
   MAX_HERO_RING_ORDER,
+  HERO_PRIMARY_CONTENTS,
   layoutNeedsPreserveRead,
   mergePreservedLayoutFields,
   type DashboardLayout,
@@ -158,6 +159,15 @@ const layoutSchema = z.object({
     .array(z.enum(PRIORITY_ITEM_KINDS))
     .max(PRIORITY_ITEM_KINDS.length)
     .optional(),
+  // Hero primary content — what the dashboard hero card leads with:
+  // "score" (default) or "reminders" (the worth-a-look rail promoted into
+  // the hero slot). This widens the stored `dashboardWidgetsJson` shape
+  // ADDITIVELY: the field is optional on the wire and omitted from storage
+  // at the default, so the native client (which mirrors this blob) can
+  // keep round-tripping layouts untouched until it learns the field.
+  // Same preserve-when-absent contract as `comparisonBaseline`; the
+  // resolver drops unknown stored values back to "score" on read.
+  hero: z.enum(HERO_PRIMARY_CONTENTS).optional(),
   // v1.32.16 (issue #581) — the optimistic-concurrency base token used to
   // live here. v1.32.21 (R5a) moved it to the shared `takeBaseToken` helper,
   // which strips it BEFORE this parse: the token is transport, not a layout

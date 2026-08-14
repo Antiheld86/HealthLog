@@ -243,6 +243,9 @@ test.describe("Apple Health guidance", () => {
             lastSyncedAt: null,
             syncHealth: { verdict: "pending_first_sync", since: null },
             metricFreshness: [],
+            // #778 — nothing accepted yet, so the card must show no
+            // progress section for this pending-first-sync account.
+            syncProgress: { recordsAccepted: 0, oldestMeasuredAt: null },
           },
           error: null,
         }),

@@ -135,6 +135,28 @@ function validCsv(overrides: Partial<Record<string, string>> = {}): string {
   ].join("\n");
 }
 
+function singleColumnCsv(
+  overrides: Partial<Record<string, string>> = {},
+): string {
+  const metadata = {
+    "Recorded Date": "2026-07-18 08:14:03 +0200",
+    Classification: "Sinus Rhythm",
+    "Average Heart Rate": "64 bpm",
+    "Sample Rate": "512 Hz",
+    Lead: "Lead I",
+    Unit: "µV",
+    ...overrides,
+  };
+  return [
+    "Name,Private Patient Name",
+    ...Object.entries(metadata).map(([key, value]) => `${key},${value}`),
+    "",
+    "1.5",
+    "-2.4",
+    "3",
+  ].join("\n");
+}
+
 async function collectMembers(path: string, limits = LIMITS) {
   const subject = await loadArchiveSubject();
   const members: ArchiveMember[] = [];
@@ -345,6 +367,40 @@ describe("Apple Health HKElectrocardiogram CSV parser", () => {
 
   it("stops reading once the sample cap is exceeded", async () => {
     await expect(parse(validCsv(), 2)).rejects.toThrow(/sample|limit/i);
+  });
+
+  it("normalizes Apple's single-column waveform layout", async () => {
+    const parsed = await parse(singleColumnCsv());
+    expect(parsed).toMatchObject({
+      recordedAt: new Date("2026-07-18T06:14:03.000Z"),
+      samplingFrequency: 512,
+      samples: [2, -2, 3],
+      lead: "Lead I",
+      averageHeartRate: 64,
+      rhythmClassification: "NOT_DETECTED",
+    });
+    expect(JSON.stringify(parsed)).not.toMatch(/Private Patient/i);
+  });
+
+  it("converts millivolt single-column samples to microvolts", async () => {
+    await expect(parse(singleColumnCsv({ Unit: "mV" }))).resolves.toMatchObject(
+      { samples: [1500, -2400, 3000] },
+    );
+  });
+
+  it.each([
+    ["unsupported unit", singleColumnCsv({ Unit: "V" })],
+    ["paired row after the blank separator", `${singleColumnCsv()}\nI,0.001`],
+    ["out-of-bounds amplitude", singleColumnCsv().replace("-2.4", "999999")],
+    ["non-numeric sample", singleColumnCsv().replace("-2.4", "waveform")],
+  ])("rejects a single-column recording with %s", async (_label, csv) => {
+    await expect(parse(csv)).rejects.toThrow(
+      /invalid|malformed|unsupported|sample/i,
+    );
+  });
+
+  it("stops single-column reading once the sample cap is exceeded", async () => {
+    await expect(parse(singleColumnCsv(), 2)).rejects.toThrow(/sample|limit/i);
   });
 
   it("never logs or returns plaintext health values on failure", async () => {

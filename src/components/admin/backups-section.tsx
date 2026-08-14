@@ -68,6 +68,46 @@ import { apiFetch, apiFetchRaw, apiGet, apiPost } from "@/lib/api/api-fetch";
  * Mirrors the wipe dialog's pattern but adds the typed gate because the
  * blast radius is bigger (re-creates rows, not just deletes).
  */
+/**
+ * v1.37.20 — the sections a restore preview names, in render order. Each
+ * entry sums one or more `BackupSummary` counters under one human label;
+ * every counter NOT named here still reaches the operator through the
+ * trailing "other records" line, so a future summary key can be forgotten
+ * here without silently vanishing from the preview.
+ */
+const RESTORE_PREVIEW_SECTIONS: ReadonlyArray<{
+  labelKey: string;
+  keys: readonly string[];
+}> = [
+  { labelKey: "previewMeasurements", keys: ["measurements"] },
+  {
+    labelKey: "previewMedications",
+    keys: ["medications", "intakeEvents", "medicationSideEffects"],
+  },
+  { labelKey: "previewMood", keys: ["moodEntries"] },
+  { labelKey: "previewLabs", keys: ["labResults", "biomarkers"] },
+  { labelKey: "previewDocuments", keys: ["documents"] },
+  { labelKey: "previewWorkouts", keys: ["workouts"] },
+  { labelKey: "previewCycles", keys: ["cycles", "cycleDayLogs"] },
+  {
+    labelKey: "previewVisits",
+    keys: ["encounters", "practitioners", "encounterLinks"],
+  },
+  {
+    labelKey: "previewVaccinations",
+    keys: ["vaccinations", "vaccinationLinks"],
+  },
+  {
+    labelKey: "previewReminders",
+    keys: ["measurementReminders", "measurementReminderEvents"],
+  },
+  {
+    labelKey: "previewCustomMetrics",
+    keys: ["customMetrics", "customMetricEntries"],
+  },
+  { labelKey: "previewHealthScores", keys: ["healthScoreRecords"] },
+];
+
 function RestoreRowDialog({
   row,
   pending,
@@ -82,6 +122,39 @@ function RestoreRowDialog({
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
   const matched = typed.trim() === "RESTORE";
+
+  // v1.37.20 — restore preview: fetch what the file contains the moment the
+  // dialog opens, so the typed confirmation is an informed one. Derived from
+  // the same decrypt + schema path the restore itself runs. A failed preview
+  // never blocks the restore — it states its own absence instead.
+  const preview = useQuery({
+    queryKey: queryKeys.adminBackupSummary(row.id),
+    queryFn: () =>
+      apiGet<{ summary: Record<string, unknown> }>(
+        `/api/admin/backups/${row.id}/summary`,
+      ),
+    enabled: open,
+    staleTime: 60_000,
+  });
+  const numericSummary: Record<string, number> = {};
+  if (preview.data?.summary) {
+    for (const [key, value] of Object.entries(preview.data.summary)) {
+      if (typeof value === "number") numericSummary[key] = value;
+    }
+  }
+  const namedKeys = new Set(
+    RESTORE_PREVIEW_SECTIONS.flatMap((section) => section.keys),
+  );
+  const previewRows = RESTORE_PREVIEW_SECTIONS.map((section) => ({
+    labelKey: section.labelKey,
+    count: section.keys.reduce(
+      (sum, key) => sum + (numericSummary[key] ?? 0),
+      0,
+    ),
+  })).filter((entry) => entry.count > 0);
+  const otherCount = Object.entries(numericSummary)
+    .filter(([key]) => !namedKeys.has(key))
+    .reduce((sum, [, value]) => sum + value, 0);
 
   return (
     <AlertDialog
@@ -121,6 +194,57 @@ function RestoreRowDialog({
             })}
           </AlertDialogDescription>
         </AlertDialogHeader>
+        {/* v1.37.20 — what the file contains, before the typed gate. */}
+        <div
+          className="rounded-md border p-3 text-sm"
+          data-slot="restore-preview"
+        >
+          <p className="text-muted-foreground mb-1.5 font-medium">
+            {t("admin.section.backups.previewTitle")}
+          </p>
+          {preview.isLoading && (
+            <p className="text-muted-foreground">
+              {t("admin.section.backups.previewLoading")}
+            </p>
+          )}
+          {preview.isError && (
+            <p className="text-muted-foreground">
+              {t("admin.section.backups.previewUnavailable")}
+            </p>
+          )}
+          {preview.isSuccess && (
+            <ul className="grid list-none grid-cols-1 gap-x-4 gap-y-0.5 p-0 sm:grid-cols-2">
+              {previewRows.map((entry) => (
+                <li
+                  key={entry.labelKey}
+                  className="flex items-baseline justify-between gap-2"
+                >
+                  <span className="text-muted-foreground">
+                    {t(`admin.section.backups.${entry.labelKey}`)}
+                  </span>
+                  <span className="tabular-nums">
+                    {fmt.integer(entry.count)}
+                  </span>
+                </li>
+              ))}
+              {otherCount > 0 && (
+                <li className="flex items-baseline justify-between gap-2">
+                  <span className="text-muted-foreground">
+                    {t("admin.section.backups.previewOther")}
+                  </span>
+                  <span className="tabular-nums">
+                    {fmt.integer(otherCount)}
+                  </span>
+                </li>
+              )}
+              {previewRows.length === 0 && otherCount === 0 && (
+                <li className="text-muted-foreground">
+                  {t("admin.section.backups.previewEmpty")}
+                </li>
+              )}
+            </ul>
+          )}
+        </div>
         <div className="space-y-2">
           <Label htmlFor={`restore-prompt-${row.id}`}>
             {t("admin.section.backups.restorePromptLabel")}

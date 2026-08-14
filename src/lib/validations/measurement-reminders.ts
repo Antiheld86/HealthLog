@@ -210,6 +210,9 @@ export const measurementReminderDto = z
     location: z.string().nullable(),
     nextDueAt: z.iso.datetime({ offset: true }).nullable(),
     lastSatisfiedAt: z.iso.datetime({ offset: true }).nullable(),
+    snoozedUntil: z.iso.datetime({ offset: true }).nullable(),
+    lastSkippedAt: z.iso.datetime({ offset: true }).nullable(),
+    skipCount: z.number().int(),
     enabled: z.boolean(),
     createdAt: z.iso.datetime({ offset: true }),
     updatedAt: z.iso.datetime({ offset: true }),
@@ -217,7 +220,7 @@ export const measurementReminderDto = z
   .meta({
     id: "MeasurementReminderDTO",
     description:
-      "A Vorsorge reminder. nextDueAt is server-computed (server-authoritative). A free-text reminder carries measurementType=null and resolves only on a manual satisfy. origin distinguishes a user-created (VORSORGE) reminder from one minted by a Coach cadence suggestion (COACH); endsOn bounds a finite course window (null = open-ended).",
+      "A Vorsorge reminder. nextDueAt is server-computed (server-authoritative). A free-text reminder carries measurementType=null and resolves only on a manual satisfy. origin distinguishes a user-created (VORSORGE) reminder from one minted by a Coach cadence suggestion (COACH); endsOn bounds a finite course window (null = open-ended). snoozedUntil/lastSkippedAt/skipCount are resolved values: snoozed means snoozedUntil > now, a skipped cycle means lastSkippedAt > lastSatisfiedAt; clients compare against the clock and never recompute cadence. lastSatisfiedAt stays the only completed signal — skip and snooze never move it.",
   });
 
 /**
@@ -240,5 +243,93 @@ export const measurementReminderCompletionDto = z
   .meta({
     id: "MeasurementReminderCompletion",
     description:
-      "Result of an explicit reminder completion. completed=true when this call advanced lastSatisfiedAt; completed=false when an earlier satisfy or a matching reading had already fulfilled the current cycle (idempotent no-op). reminder is the canonical post-completion DTO.",
+      "Result of an explicit reminder completion. completed=true when this call advanced lastSatisfiedAt; completed=false when an earlier satisfy or a matching reading already fulfilled the current cycle (idempotent no-op). reminder is the canonical post-completion DTO.",
+  });
+
+/**
+ * v1.37.20 (#223) — snooze body. Day precision on purpose: the client names
+ * a local calendar day, the server resolves it to that day's notifyHour in
+ * the profile timezone. No client-supplied instant ever anchors the cadence.
+ * The range gate (tomorrow .. +5 years) lives in the route, where the
+ * profile timezone is known.
+ */
+export const snoozeMeasurementReminderSchema = z
+  .object({
+    until: z.iso.date(),
+  })
+  .meta({
+    id: "MeasurementReminderSnooze",
+    description:
+      "Push a reminder's current due date back to a calendar day (YYYY-MM-DD). The server resolves the day to the reminder's notifyHour in the profile timezone. Must be at least tomorrow and at most five years out. The regular cadence is untouched: lastSatisfiedAt and the anchor stay where they are, and the reminder resumes its normal interval after the snoozed cycle.",
+  });
+
+export type SnoozeMeasurementReminderInput = z.infer<
+  typeof snoozeMeasurementReminderSchema
+>;
+
+/**
+ * v1.37.20 (#223) — skip result. `skipped=false` is the forward-only no-op
+ * (a concurrent skip or satisfy already advanced the row).
+ */
+export const measurementReminderSkipDto = z
+  .object({
+    skipped: z.boolean(),
+    reminder: measurementReminderDto,
+  })
+  .meta({
+    id: "MeasurementReminderSkip",
+    description:
+      "Result of skipping the current due cycle. skipped=true when this call recorded the skip and restarted the interval from the skip instant; skipped=false when a concurrent skip or satisfy already advanced the row (idempotent no-op). A skip never touches lastSatisfiedAt — it is recorded honestly as a skip, not a completion.",
+  });
+
+/**
+ * v1.37.20 (iOS #68) — completion-ledger query + row. History starts with
+ * the release that ships the ledger; the single-cursor engine holds nothing
+ * to backfill from.
+ */
+export const listReminderHistorySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+    offset: z.coerce.number().int().min(0).default(0),
+  })
+  .meta({
+    id: "MeasurementReminderHistoryQuery",
+    description: "Pagination for the reminder completion ledger.",
+  });
+
+export const measurementReminderEventDto = z
+  .object({
+    id: z.string(),
+    kind: z.enum(["SATISFIED", "SKIPPED"]),
+    occurredAt: z.iso.datetime({ offset: true }),
+    onTime: z.boolean(),
+    source: z.enum([
+      "manual",
+      "auto_measurement",
+      "auto_lab",
+      "telegram",
+      "vaccination",
+      "encounter",
+      "skip",
+    ]),
+    createdAt: z.iso.datetime({ offset: true }),
+  })
+  .meta({
+    id: "MeasurementReminderEvent",
+    description:
+      "One completion-ledger row: an honest fulfilment (SATISFIED) or an honest skip (SKIPPED). onTime is derived server-side at write time against the due instant that was current when the event landed — clients never re-derive it. History begins at the release that introduced the ledger.",
+  });
+
+export const measurementReminderHistoryDto = z
+  .object({
+    events: z.array(measurementReminderEventDto),
+    meta: z.object({
+      total: z.number().int(),
+      limit: z.number().int(),
+      offset: z.number().int(),
+    }),
+  })
+  .meta({
+    id: "MeasurementReminderHistory",
+    description: "Paginated completion ledger for one reminder, newest first.",
   });

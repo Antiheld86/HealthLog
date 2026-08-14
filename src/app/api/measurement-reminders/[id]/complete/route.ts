@@ -77,7 +77,13 @@ export const POST = apiHandler(
     // Forward-only: a completion strictly after any prior satisfy advances
     // the row; a completion at/behind the last satisfy is a no-op. Either
     // way no notification is emitted — the primitive only stamps + reschedules.
-    const result = await satisfyReminder(prisma, existing, timezone, now);
+    const result = await satisfyReminder(
+      prisma,
+      existing,
+      timezone,
+      now,
+      "manual",
+    );
 
     const updated = await prisma.measurementReminder.findUniqueOrThrow({
       where: { id },

@@ -231,7 +231,8 @@ export function VorsorgeSection({
     isError,
     refetch,
   } = useMeasurementReminders(enabled);
-  const { create, update, remove, satisfy } = useMeasurementReminderMutations();
+  const { create, update, remove, satisfy, skip, snooze } =
+    useMeasurementReminderMutations();
   // v1.18.6 (MOD-03) — page view (cards/list) + manual order persist
   // client-side; the settings page writes them, the page reads them.
   const { prefs } = useModuleListPrefs("vorsorge");
@@ -743,8 +744,16 @@ export function VorsorgeSection({
                   onFileVisit={() => openVisitFor(reminder)}
                   onRemove={() => remove.mutate(reminder.id)}
                   onEdit={() => openEdit(reminder)}
+                  onSkip={() => skip.mutate(reminder.id)}
+                  onSnooze={(until) =>
+                    snooze.mutate({ id: reminder.id, until })
+                  }
                   busy={
-                    satisfy.isPending || remove.isPending || update.isPending
+                    satisfy.isPending ||
+                    remove.isPending ||
+                    update.isPending ||
+                    skip.isPending ||
+                    snooze.isPending
                   }
                 />
               </li>
@@ -776,6 +785,18 @@ export function VorsorgeSection({
  * means due/overdue now, lower means time still remains in the window.
  * Returns null when there is no interval to measure against (RRULE / unset).
  */
+/** v1.37.20 (#223) — the postpone sheet's quick-chip offsets, in days. */
+const SNOOZE_CHIP_DAYS = [7, 30, 90] as const;
+
+/**
+ * The local calendar day (ISO `yyyy-MM-dd`) an instant falls on in `tz`.
+ * Snooze is day-precision by contract: the server resolves the day to the
+ * reminder's notifyHour in the profile timezone.
+ */
+function isoDayInTz(atMs: number, tz: string): string {
+  return new Date(atMs).toLocaleDateString("sv-SE", { timeZone: tz });
+}
+
 function intervalProgress(
   reminder: MeasurementReminder,
   now: number,
@@ -797,6 +818,8 @@ function VorsorgeCard({
   onFileVisit,
   onRemove,
   onEdit,
+  onSkip,
+  onSnooze,
   busy,
 }: {
   reminder: MeasurementReminder;
@@ -807,6 +830,10 @@ function VorsorgeCard({
   onFileVisit: () => void;
   onRemove: () => void;
   onEdit: () => void;
+  /** v1.37.20 (#223) — honest skip; the server restarts the interval. */
+  onSkip: () => void;
+  /** v1.37.20 (#223) — snooze to a calendar day (ISO YYYY-MM-DD). */
+  onSnooze: (until: string) => void;
   busy: boolean;
 }) {
   const { t } = useTranslations();
@@ -819,6 +846,11 @@ function VorsorgeCard({
   // zone from their profile.
   const displayTz = useDisplayTimezone();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // v1.37.20 (#223) — the postpone sheet (snooze quick-chips + date field,
+  // with the honest-skip zone below) and the skip confirm inside it.
+  const [postponeOpen, setPostponeOpen] = useState(false);
+  const [snoozeDate, setSnoozeDate] = useState("");
+  const [confirmSkip, setConfirmSkip] = useState(false);
   const due = relativeDueKey(reminder.nextDueAt, now, displayTz);
   const cadence =
     reminder.intervalDays != null
@@ -896,6 +928,16 @@ function VorsorgeCard({
         <DropdownMenuItem onClick={onEdit} disabled={busy}>
           <Pencil className="mr-2 h-4 w-4" />
           {t("measurementReminders.edit")}
+        </DropdownMenuItem>
+        {/* v1.37.20 (#223) — postpone lives in the kebab, never in the
+            primary-action bar (v1.27.5 rule: the action button keeps one
+            constant look in every state). */}
+        <DropdownMenuItem
+          disabled={busy}
+          onSelect={() => setPostponeOpen(true)}
+        >
+          <CalendarClock className="mr-2 h-4 w-4" />
+          {t("measurementReminders.postpone.menuItem")}
         </DropdownMenuItem>
         {/* v1.18.7 (Wave E) — jump to the measurements list pre-filtered to
             this reminder's type. Only for measurement-linked reminders; a
@@ -1007,6 +1049,162 @@ function VorsorgeCard({
     </AlertDialog>
   );
 
+  // v1.37.20 (#223) — resolved skip/snooze state, clock comparisons only
+  // (the DTO comment states the contract: the server resolves, the client
+  // compares). Meta lines are muted text — never a card colour change.
+  const isSnoozed =
+    reminder.snoozedUntil != null &&
+    new Date(reminder.snoozedUntil).getTime() > now;
+  const isSkippedCycle =
+    reminder.lastSkippedAt != null &&
+    (reminder.lastSatisfiedAt == null ||
+      new Date(reminder.lastSkippedAt).getTime() >
+        new Date(reminder.lastSatisfiedAt).getTime());
+
+  const closePostpone = () => {
+    setPostponeOpen(false);
+    setSnoozeDate("");
+    setConfirmSkip(false);
+  };
+  const minSnoozeDate = isoDayInTz(now + DAY_MS, displayTz);
+
+  const postponeSheet = (
+    <ResponsiveSheet
+      open={postponeOpen}
+      onOpenChange={(open) => {
+        if (!open) closePostpone();
+      }}
+      title={t("measurementReminders.postpone.title")}
+      description={t("measurementReminders.postpone.description")}
+      footer={
+        <>
+          <Button type="button" variant="outline" onClick={closePostpone}>
+            {t("common.cancel")}
+          </Button>
+          <Button
+            type="button"
+            disabled={!snoozeDate || busy}
+            onClick={() => {
+              onSnooze(snoozeDate);
+              closePostpone();
+            }}
+          >
+            {t("measurementReminders.postpone.confirm")}
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {/* Quick chips write the date field rather than firing directly, so
+            the person always sees (and can adjust) what will be sent. */}
+        <div className="flex flex-wrap gap-2">
+          {SNOOZE_CHIP_DAYS.map((days) => {
+            const chipDate = isoDayInTz(now + days * DAY_MS, displayTz);
+            return (
+              <Button
+                key={days}
+                type="button"
+                size="sm"
+                variant={snoozeDate === chipDate ? "secondary" : "outline"}
+                onClick={() => setSnoozeDate(chipDate)}
+              >
+                {t("measurementReminders.postpone.chip", { days })}
+              </Button>
+            );
+          })}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`snooze-date-${reminder.id}`}>
+            {t("measurementReminders.postpone.dateLabel")}
+          </Label>
+          <DateField
+            id={`snooze-date-${reminder.id}`}
+            value={snoozeDate}
+            onChange={setSnoozeDate}
+            min={minSnoozeDate}
+          />
+        </div>
+        {/* The honest-skip zone sits set apart below the snooze controls:
+            a different decision (let this cycle go, restart the rhythm)
+            with its own confirm step. */}
+        <div className="space-y-2 border-t pt-4">
+          <p className="text-sm font-medium">
+            {t("measurementReminders.skip.heading")}
+          </p>
+          <p className="text-muted-foreground text-sm">
+            {t("measurementReminders.skip.explainer")}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={() => setConfirmSkip(true)}
+            data-slot="vorsorge-skip"
+          >
+            {t("measurementReminders.skip.action")}
+          </Button>
+        </div>
+      </div>
+    </ResponsiveSheet>
+  );
+
+  const skipConfirmDialog = (
+    <AlertDialog open={confirmSkip} onOpenChange={setConfirmSkip}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            {t("measurementReminders.skip.confirmTitle")}
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {t("measurementReminders.skip.explainer")}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              onSkip();
+              closePostpone();
+            }}
+          >
+            {t("measurementReminders.skip.action")}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+
+  // Muted meta lines shared by both branches: "pushed back until {date}" /
+  // "skipped on {date}" (+ lifetime count once it says something). "Last
+  // done" stays lastSatisfiedAt — a skip never reads as done.
+  const skipSnoozeMeta =
+    isSnoozed || isSkippedCycle ? (
+      <div
+        className="text-muted-foreground space-y-0.5 text-xs"
+        data-slot="vorsorge-skip-snooze-meta"
+      >
+        {isSnoozed && reminder.snoozedUntil && (
+          <p>
+            {t("measurementReminders.snoozedUntil", {
+              date: fmt.date(new Date(reminder.snoozedUntil)),
+            })}
+          </p>
+        )}
+        {isSkippedCycle && reminder.lastSkippedAt && (
+          <p>
+            {t("measurementReminders.skippedOn", {
+              date: fmt.date(new Date(reminder.lastSkippedAt)),
+            })}
+            {reminder.skipCount > 1
+              ? ` · ${t("measurementReminders.skipCount", {
+                  count: reminder.skipCount,
+                })}`
+              : null}
+          </p>
+        )}
+      </div>
+    ) : null;
+
   // v1.18.6 (MOD-03) — compact list row variant.
   if (view === "list") {
     return (
@@ -1030,6 +1228,7 @@ function VorsorgeCard({
                 <span>{categoryLabel}</span>
                 {cadenceText ? <span>{cadenceText}</span> : null}
               </div>
+              {skipSnoozeMeta}
             </div>
             <div className="flex shrink-0 items-center gap-1">
               {/* The same gate the cards branch applies through
@@ -1078,6 +1277,8 @@ function VorsorgeCard({
           </CardContent>
         </Card>
         {deleteDialog}
+        {postponeSheet}
+        {skipConfirmDialog}
       </>
     );
   }
@@ -1156,6 +1357,7 @@ function VorsorgeCard({
         />
         <CardContent className="flex h-full flex-col space-y-3.5">
           {nextLastSlot}
+          {skipSnoozeMeta}
 
           {/* v1.18.6 (MOD-06) — light gamification: progress through the
               current interval toward next-due, reusing the medication card's
@@ -1208,6 +1410,8 @@ function VorsorgeCard({
       </Card>
 
       {deleteDialog}
+      {postponeSheet}
+      {skipConfirmDialog}
     </>
   );
 }

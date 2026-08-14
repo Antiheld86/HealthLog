@@ -341,7 +341,9 @@ export async function resolveClosableReminder(
       rrule: true,
       anchorDate: true,
       notifyHour: true,
+      nextDueAt: true,
       lastSatisfiedAt: true,
+      lastSkippedAt: true,
       createdAt: true,
     },
   });
@@ -349,11 +351,14 @@ export async function resolveClosableReminder(
   if (row.origin === "ENCOUNTER") return undefined;
   return {
     id: row.id,
+    userId: row.userId,
     intervalDays: row.intervalDays,
     rrule: row.rrule,
     anchorDate: row.anchorDate,
     notifyHour: row.notifyHour,
+    nextDueAt: row.nextDueAt,
     lastSatisfiedAt: row.lastSatisfiedAt,
+    lastSkippedAt: row.lastSkippedAt,
     createdAt: row.createdAt,
   };
 }
@@ -399,6 +404,7 @@ export async function closeCheckupForVisit(
     reminder,
     timezone,
     satisfiedAt,
+    "encounter",
   );
 }
 

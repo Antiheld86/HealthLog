@@ -23,7 +23,7 @@ export const SCORE_MIN_ELIGIBLE_DOMAINS = 3;
  * `WELLBEING` are the only two that do not, which is why a selection of
  * those two alone yields no score however many domains it spans.
  */
-export const PHYSIOLOGICAL_PILLARS: ReadonlySet<ScorePillarId> = new Set([
+const PHYSIOLOGICAL_PILLARS: ReadonlySet<ScorePillarId> = new Set([
   "BLOOD_PRESSURE",
   "GLYCAEMIA",
   "SLEEP",

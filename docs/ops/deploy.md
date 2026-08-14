@@ -131,6 +131,34 @@ without touching the file:
 - `HEALTHLOG_IMAGE_REF=:v1.16.5` — pin to a release tag (still mutable).
 - `HEALTHLOG_IMAGE_REF=@sha256:<digest>` — pin to the immutable digest.
 
+#### Bumping a digest pin by hand
+
+A digest-pinned instance never follows a release on its own — an image
+promote does not touch the pin, so moving it is part of shipping. The
+mechanic, end to end:
+
+1. Resolve the new release's digest from the registry (the manifest-list
+   digest, which covers both architectures):
+
+   ```sh
+   docker buildx imagetools inspect ghcr.io/mbombeck/healthlog:v1.37.20 \
+     | grep -m1 Digest
+   ```
+
+2. Set `HEALTHLOG_IMAGE_REF=@sha256:<that digest>` where the compose
+   environment lives — the `.env` next to the compose file, or the
+   deployment platform's env vars for the app service.
+
+3. Deploy as usual.
+
+4. Verify `/api/version` on the target — and verify it **three times a
+   few seconds apart**, not once: during the container swap a single
+   probe can be answered by the outgoing container (or a cache) and read
+   as success while the old release keeps running. Three stable answers
+   reporting the shipped `version` + `buildSha` are the signal; a deploy
+   that finishes suspiciously fast (under ~30 s) is a warning that
+   nothing was actually pulled.
+
 > **A pin is sticky, and a stale pin is silent.** Once set, every later deploy
 > ships that reference until someone changes it. The deploy still reports
 > success, the tag still builds, the image still publishes, and the running

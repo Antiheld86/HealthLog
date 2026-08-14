@@ -231,6 +231,33 @@ export function windowHasNap(rows: readonly CompositionRow[]): boolean {
   );
 }
 
+/**
+ * Totals for one hovered column, split the way the tooltip reports them.
+ *
+ * `nightMinutes` is the sum of the stacked stage bands — the main session
+ * only, the same figure the column draws and the per-stage percentages
+ * divide by. `napMinutes` is the day's inferred naps. `dayMinutes` is the
+ * whole drawn column, night plus naps; it equals `nightMinutes` on a day
+ * without one, and the tooltip renders its line only when it differs.
+ *
+ * Pulled out of the tooltip body because Recharts renders no tooltip under
+ * SSR — this is the only place the footer split can be pinned by a test.
+ */
+export function compositionTotals(row: CompositionRow | undefined): {
+  nightMinutes: number;
+  napMinutes: number;
+  dayMinutes: number;
+} {
+  let nightMinutes = 0;
+  for (const stage of STAGE_ORDER) {
+    const minutes = row?.[stage];
+    if (typeof minutes === "number") nightMinutes += minutes;
+  }
+  const nap = row?.[NAP_KEY];
+  const napMinutes = typeof nap === "number" ? nap : 0;
+  return { nightMinutes, napMinutes, dayMinutes: nightMinutes + napMinutes };
+}
+
 export function SleepStageStackedBar({ breakdown }: SleepStageStackedBarProps) {
   const { t, locale } = useTranslations();
 
@@ -379,17 +406,13 @@ export function SleepStageStackedBar({ breakdown }: SleepStageStackedBarProps) {
                       Record<string, number | string> | undefined;
                     const napCount =
                       typeof row?.napCount === "number" ? row.napCount : 0;
-                    // The footer total is the NIGHT. The nap is listed above
-                    // it as its own line and stays out of the sum, so the
-                    // per-stage percentages keep meaning "of this night".
-                    const totalNight = payload.reduce(
-                      (sum, entry) =>
-                        entry.dataKey === NAP_KEY
-                          ? sum
-                          : sum +
-                            (typeof entry.value === "number" ? entry.value : 0),
-                      0,
-                    );
+                    // The footer's first line is the NIGHT. The nap is listed
+                    // above it as its own line and stays out of that sum, so
+                    // the per-stage percentages keep meaning "of this night".
+                    // On a day with a nap a second line carries the whole
+                    // column — main sleep plus naps — the Main sleep / Naps /
+                    // Total split issue #611 asked for.
+                    const totals = compositionTotals(row);
                     return (
                       <div className="bg-popover text-popover-foreground rounded-md border p-2 text-xs shadow-md">
                         <div className="border-border mb-1 border-b pb-1 font-medium">
@@ -409,8 +432,10 @@ export function SleepStageStackedBar({ breakdown }: SleepStageStackedBarProps) {
                               : stageLabels[NAP_KEY]
                             : (stageLabels[stage] ?? stage);
                           const pct =
-                            totalNight > 0
-                              ? Math.round((minutes / totalNight) * 100)
+                            totals.nightMinutes > 0
+                              ? Math.round(
+                                  (minutes / totals.nightMinutes) * 100,
+                                )
                               : 0;
                           return (
                             <div
@@ -435,10 +460,22 @@ export function SleepStageStackedBar({ breakdown }: SleepStageStackedBarProps) {
                             </div>
                           );
                         })}
-                        {totalNight > 0 && (
-                          <div className="border-border mt-1 flex items-center justify-between gap-3 border-t pt-1 font-medium">
-                            <span>{t("insights.sleep.headlineTitle")}</span>
-                            <span>{formatDurationMinutes(totalNight, t)}</span>
+                        {totals.nightMinutes > 0 && (
+                          <div className="border-border mt-1 border-t pt-1 font-medium">
+                            <div className="flex items-center justify-between gap-3">
+                              <span>{t("insights.sleep.mainSleep")}</span>
+                              <span>
+                                {formatDurationMinutes(totals.nightMinutes, t)}
+                              </span>
+                            </div>
+                            {totals.napMinutes > 0 && (
+                              <div className="flex items-center justify-between gap-3">
+                                <span>{t("insights.sleep.totalSleep")}</span>
+                                <span>
+                                  {formatDurationMinutes(totals.dayMinutes, t)}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

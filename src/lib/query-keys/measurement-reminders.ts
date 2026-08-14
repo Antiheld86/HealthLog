@@ -15,4 +15,7 @@ export const measurementReminderKeys = {
   measurementReminderDelete: () => ["measurement-reminders", "delete"] as const,
   measurementReminderSatisfy: () =>
     ["measurement-reminders", "satisfy"] as const,
+  /** v1.37.20 (#223) — honest skip + snooze mutations. */
+  measurementReminderSkip: () => ["measurement-reminders", "skip"] as const,
+  measurementReminderSnooze: () => ["measurement-reminders", "snooze"] as const,
 };

@@ -292,6 +292,10 @@ function sourceClient() {
     encounterConditionLink: { findMany: vi.fn().mockResolvedValue([]) },
     vaccinationRecord: { findMany: vi.fn().mockResolvedValue([]) },
     vaccinationDocumentLink: { findMany: vi.fn().mockResolvedValue([]) },
+    // The reminder engine tables (v1.37.20, #223 / iOS #68). Empty for the
+    // same reason as the visit tables above.
+    measurementReminder: { findMany: vi.fn().mockResolvedValue([]) },
+    measurementReminderEvent: { findMany: vi.fn().mockResolvedValue([]) },
     customMetric: {
       findMany: vi.fn().mockResolvedValue([
         {

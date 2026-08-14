@@ -4,7 +4,7 @@ import type { DayBand, TargetConsistency } from "./types";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const EMPTY_STRIP = [null, null, null, null, null, null, null] as const;
 
-export const EMPTY_CONSISTENCY: TargetConsistency = {
+const EMPTY_CONSISTENCY: TargetConsistency = {
   daysInRange7d: 0,
   daysLogged7d: 0,
   daysInRange30d: 0,

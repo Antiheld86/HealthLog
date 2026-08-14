@@ -57,7 +57,7 @@ export const GET = apiHandler(
     }
 
     const { limit, offset, sortDir } = parsed.data;
-    const where = { userId: user.id, customMetricId: id };
+    const where = { userId: user.id, customMetricId: id, deletedAt: null };
 
     const [rows, total] = await Promise.all([
       prisma.customMetricEntry.findMany({

@@ -97,6 +97,9 @@ function reminderRow(
     location: null,
     nextDueAt: at,
     lastSatisfiedAt: null,
+    snoozedUntil: null,
+    lastSkippedAt: null,
+    skipCount: 0,
     enabled: true,
     vaccinationAntigen: null,
     createdAt: at,
@@ -153,6 +156,27 @@ const BY_ID_SITES: ReadonlyArray<{
     surface: "the manual satisfy action",
   },
   {
+    // v1.37.20 (#223) — skipping an appointment would move a date the visit
+    // record still believes it owns; snoozing one likewise. Both refuse in
+    // the lookup, before any write. This entry went in RED (the routes did
+    // not exist yet) and turned green when they landed with the exclusion.
+    file: "src/app/api/measurement-reminders/[id]/skip/route.ts",
+    sites: 1,
+    surface: "the honest skip action",
+  },
+  {
+    file: "src/app/api/measurement-reminders/[id]/snooze/route.ts",
+    sites: 1,
+    surface: "the snooze action",
+  },
+  {
+    // v1.37.20 (iOS #68) — the ledger read answers 404 for an appointment
+    // row like every by-id sibling.
+    file: "src/app/api/measurement-reminders/[id]/history/route.ts",
+    sites: 1,
+    surface: "the completion-ledger history read",
+  },
+  {
     file: "src/lib/telegram-webhook-handlers.ts",
     sites: 2,
     surface: "the chat buttons that mark a reminder done or postpone it",
@@ -161,9 +185,9 @@ const BY_ID_SITES: ReadonlyArray<{
 
 describe("an appointment reminder is not addressable by id", () => {
   it("names a by-id set that is not empty (no vacuous pass)", () => {
-    expect(BY_ID_SITES.length).toBe(4);
+    expect(BY_ID_SITES.length).toBe(7);
     expect(BY_ID_SITES.reduce((total, entry) => total + entry.sites, 0)).toBe(
-      7,
+      10,
     );
   });
 

@@ -173,7 +173,7 @@ describe("<InjectionSitePicker>", () => {
     );
 
     expect(html).toContain(
-      'aria-label="Bauch, unten links – empfohlene nächste Stelle"',
+      'aria-label="Bauch, unten links — empfohlene nächste Stelle"',
     );
     expect(html).toContain('aria-label="Bauch, unten rechts"');
     expect(html).toContain('aria-label="Bauch, oben links"');

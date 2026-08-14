@@ -269,6 +269,14 @@ export function buildFhirDocumentBundle(
   // no route module lies. The PDF carries the visits; the Bundle does not, and
   // a reader who notices the gap should find this comment rather than a bug.
   //
+  // No vaccinations either, on the same terms (v1.37.20, A6-21). FHIR has
+  // `Immunization` and the model would map cleanly, but a resource type in
+  // the Bundle without its REST route module and capability entry is the
+  // exact half-shipped state the visits paragraph refuses; emitting it is a
+  // deliberate follow-up, not an oversight. The Impfpass PDF and the backup
+  // both carry the doses; the Bundle does not, and this comment is where a
+  // reader who notices should land.
+  //
   // held an episode (the aggregator gates `data.illnessEpisodes`). Each
   // episode emits a patient-reported Condition (generic SNOMED root, label on
   // `code.text`) plus a bounding Encounter that references it.

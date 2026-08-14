@@ -1060,6 +1060,7 @@ describe("layout field merge disposition", () => {
     selectedScoreRings: ["MED_COMPLIANCE"],
     heroRingOrder: ["HEALTH_SCORE", "MED_COMPLIANCE"],
     enabledHeroItemKinds: [...PRIORITY_ITEM_KINDS],
+    hero: "reminders",
   };
 
   it("assigns a disposition to every top-level layout field", () => {
@@ -1083,6 +1084,7 @@ describe("layout field merge disposition", () => {
       "chartOverlayPrefs",
       "comparisonBaseline",
       "enabledHeroItemKinds",
+      "hero",
       "heroRingOrder",
       "selectedScoreRings",
       "widgets",
@@ -1160,5 +1162,67 @@ describe("layout field merge disposition", () => {
     };
     const merged = mergePreservedLayoutFields(incoming, stored);
     expect(merged.widgets).toEqual(fullyPopulatedLayout.widgets);
+  });
+});
+
+/**
+ * Configurable hero primary content. The `hero` field chooses what the
+ * dashboard hero card leads with: the health-score read ("score", the
+ * long-standing default) or the Today-highlight rail promoted into the
+ * hero slot ("reminders"). Closed two-value enum, preserve-when-absent
+ * like the other layout preferences, unknown values dropped on read.
+ */
+describe("resolveDashboardLayout() — hero primary content", () => {
+  const baseWidgets: DashboardLayout["widgets"] = [
+    { id: "weight", visible: true, tileVisible: true, order: 0 },
+  ];
+
+  it("defaults to 'score' for legacy layouts (no field saved)", () => {
+    const layout = resolveDashboardLayout({ version: 1, widgets: baseWidgets });
+    expect(layout.hero).toBe("score");
+  });
+
+  it("defaults to 'score' on the default layout", () => {
+    expect(DEFAULT_DASHBOARD_LAYOUT.hero).toBe("score");
+    expect(resolveDashboardLayout(null).hero).toBe("score");
+  });
+
+  it("respects an explicit 'reminders' choice", () => {
+    const layout = resolveDashboardLayout({
+      version: 1,
+      widgets: baseWidgets,
+      hero: "reminders",
+    });
+    expect(layout.hero).toBe("reminders");
+  });
+
+  it("drops unknown hero values back to 'score'", () => {
+    for (const garbage of ["banner", 7, null, {}, ["reminders"]]) {
+      const layout = resolveDashboardLayout({
+        version: 1,
+        widgets: baseWidgets,
+        hero: garbage,
+      });
+      expect(layout.hero).toBe("score");
+    }
+  });
+
+  it("omits the default 'score' from serialization", () => {
+    const serialized = serializeDashboardLayout({
+      version: 1,
+      widgets: baseWidgets,
+      hero: "score",
+    });
+    expect("hero" in serialized).toBe(false);
+  });
+
+  it("persists 'reminders' through serialize → resolve round-trip", () => {
+    const serialized = serializeDashboardLayout({
+      version: 1,
+      widgets: baseWidgets,
+      hero: "reminders",
+    });
+    expect(serialized.hero).toBe("reminders");
+    expect(resolveDashboardLayout(serialized).hero).toBe("reminders");
   });
 });

@@ -40,10 +40,7 @@ import { getServerTranslator } from "@/lib/i18n/server-translator";
  * exact wording without a translator round-trip and cannot drift from what the
  * user is actually shown.
  */
-export function coachRefusalCopy(
-  reason: CoachRefusalReason,
-  locale: Locale,
-): string {
+function coachRefusalCopy(reason: CoachRefusalReason, locale: Locale): string {
   return getServerTranslator(locale).t(
     reason === "prompt_injection"
       ? "coach.refusal.promptInjection"

@@ -71,6 +71,23 @@ function mapClassification(
   }
 }
 
+function resolveUnitScale(value: string | undefined): number | null {
+  switch (value?.trim().toLowerCase()) {
+    case "µv":
+    case "μv":
+    case "uv":
+    case "microvolt":
+    case "microvolts":
+      return 1;
+    case "mv":
+    case "millivolt":
+    case "millivolts":
+      return 1_000;
+    default:
+      return null;
+  }
+}
+
 function splitPair(line: string): [string, string] | null {
   const comma = line.indexOf(",");
   if (comma < 0) return null;
@@ -90,6 +107,8 @@ export async function parseAppleHealthEcgCsv(input: {
   const metadata = new Map<string, string>();
   const samples: number[] = [];
   let inSamples = false;
+  let singleColumn = false;
+  let unitScale = 1;
   let lead: string | null = null;
   const lines = createInterface({
     input: input.stream,
@@ -99,7 +118,46 @@ export async function parseAppleHealthEcgCsv(input: {
   try {
     for await (const rawLine of lines) {
       const line = rawLine.replace(/^\uFEFF/, "").trim();
-      if (line === "") continue;
+      if (line === "") {
+        // Apple's single-column layout declares the lead and unit as
+        // metadata rows and separates them from the waveform with a blank
+        // line; one bare number per row follows.
+        if (!inSamples && metadata.has("Lead") && metadata.has("Unit")) {
+          const scale = resolveUnitScale(metadata.get("Unit"));
+          if (scale === null) {
+            throw parserError("sample unit is unsupported");
+          }
+          unitScale = scale;
+          const declaredLead = metadata.get("Lead") ?? "";
+          if (declaredLead.length > 0 && declaredLead.length <= 32) {
+            lead = declaredLead;
+          }
+          inSamples = true;
+          singleColumn = true;
+        }
+        continue;
+      }
+      if (singleColumn) {
+        if (line.includes(",")) {
+          throw parserError("row is malformed");
+        }
+        if (samples.length >= input.maxSamples) {
+          throw parserError("sample limit exceeded");
+        }
+        const value = Number(line);
+        if (!Number.isFinite(value)) {
+          throw parserError("sample value is invalid");
+        }
+        const microvolts = Math.round(value * unitScale);
+        if (
+          !Number.isSafeInteger(microvolts) ||
+          Math.abs(microvolts) > 100_000
+        ) {
+          throw parserError("sample value is invalid");
+        }
+        samples.push(microvolts);
+        continue;
+      }
       const pair = splitPair(line);
       if (!pair) {
         throw parserError("row is malformed");

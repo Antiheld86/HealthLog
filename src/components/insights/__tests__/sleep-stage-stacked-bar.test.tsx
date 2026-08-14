@@ -6,6 +6,7 @@ import {
   SleepStageStackedBar,
   STAGE_ORDER,
   buildCompositionRows,
+  compositionTotals,
   windowHasNap,
   type SleepStageBreakdown,
   type SleepStageNight,
@@ -268,6 +269,46 @@ describe("nap band", () => {
     ];
     const { rows } = buildCompositionRows(perNight, 7, label);
     expect(windowHasNap(rows)).toBe(false);
+  });
+
+  /**
+   * The tooltip footer used to label a single night's total "Average per
+   * night" — the orphaned title of a headline card dropped in v1.22.0. The
+   * footer now says what the figure is: the main sleep session, with a
+   * second "total" line on days a nap rides on top (issue #611's
+   * Main sleep / Naps / Total sleep shape). Recharts renders no tooltip
+   * under SSR, so the split is pinned through the pure totals helper the
+   * tooltip reads.
+   */
+  it("totals the main session and the whole day separately when a nap rides on the column", () => {
+    const perNight: SleepStageNight[] = [
+      {
+        dayKey: "2026-06-04",
+        stages: { CORE: 250, DEEP: 50, AWAKE: 20 },
+        napMinutes: 80,
+        napCount: 1,
+      },
+    ];
+    const { rows } = buildCompositionRows(perNight, 7, label);
+    const totals = compositionTotals(rows[0]);
+    // The main figure is the night column alone — the nap never leaks in,
+    // so the per-stage percentages keep meaning "of this night".
+    expect(totals.nightMinutes).toBe(320);
+    expect(totals.napMinutes).toBe(80);
+    // The day line is the whole drawn column: night plus nap.
+    expect(totals.dayMinutes).toBe(400);
+  });
+
+  it("collapses the totals to the night alone on a day without a nap", () => {
+    const perNight: SleepStageNight[] = [
+      { dayKey: "2026-06-03", stages: { CORE: 250, DEEP: 50 } },
+    ];
+    const { rows } = buildCompositionRows(perNight, 7, label);
+    const totals = compositionTotals(rows[0]);
+    expect(totals.nightMinutes).toBe(300);
+    expect(totals.napMinutes).toBe(0);
+    // No second line to render — the day IS the night.
+    expect(totals.dayMinutes).toBe(300);
   });
 
   it("drops the band when the nap falls outside the visible window", () => {

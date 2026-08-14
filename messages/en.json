@@ -516,6 +516,9 @@
     "heroItemsTitle": "Today highlights",
     "heroItemsDescription": "Choose which item types can appear in Today highlights.",
     "heroItemsNotificationNote": "Notification settings are managed separately.",
+    "heroContentTitle": "Top card shows",
+    "heroContentScore": "Health score and daily summary",
+    "heroContentReminders": "Today highlights",
     "heroItems": {
       "coach_checkin": "Coach check-ins",
       "dose_window": "Medication doses",
@@ -3168,7 +3171,8 @@
     "sleep": {
       "title": "Sleep",
       "description": "Stage breakdown and nightly duration, drawn from Apple Health.",
-      "headlineTitle": "Average per night",
+      "mainSleep": "Main sleep",
+      "totalSleep": "Total sleep",
       "compositionTitle": "Stage composition",
       "compositionSubtitle": "Last {nights} nights",
       "compositionAriaLabel": "Sleep stage composition over {nights} nights",
@@ -4517,7 +4521,7 @@
         "title": "Withings",
         "body": "Scales, blood-pressure cuffs and trackers from Withings sync automatically once connected.",
         "cta": "Connect Withings",
-        "setupCta": "Set up in Settings",
+        "setupCta": "Set up",
         "setupHint": "Needs your own free Withings developer app first — about 5 minutes, one time."
       },
       "more": {
@@ -4528,7 +4532,8 @@
         "oura": "Oura",
         "polar": "Polar",
         "nightscout": "Nightscout",
-        "fitbit": "Fitbit"
+        "fitbit": "Fitbit",
+        "appleHealthHint": "Apple Health has no web connection — finish onboarding here, then open the HealthLog app on your iPhone to complete Apple Health setup."
       },
       "import": "Import existing history"
     },
@@ -5967,7 +5972,7 @@
     },
     "notificationStatus": {
       "title": "Delivery status",
-      "description": "Per-channel state; \"Auto-disabled\" stops retries after permanent errors.",
+      "description": "State of each channel — “Auto-disabled” means retries stopped after permanent errors.",
       "emptyDescription": "Set up a channel under Settings › Integrations › Delivery channels.",
       "stateActive": "Active",
       "stateAutoDisabled": "Auto-disabled",
@@ -6387,6 +6392,13 @@
       "importNote": "Need older history or cannot use the iOS app? The Apple Health XML/ZIP upload is a one-shot fallback and does not enable live sync.",
       "importAction": "Open one-shot import",
       "staleNote": "No Apple Health data has arrived for over a week. Open the HealthLog app on your iPhone and check the Apple Health permissions.",
+      "progress": {
+        "title": "Sync progress",
+        "receivedLabel": "Records received",
+        "oldestLabel": "Oldest reading reached",
+        "flowing": "Data arrived within the last hour — the iPhone app is still delivering.",
+        "waiting": "Waiting for the iPhone app to send more data. Delivery continues when the app is open or when iOS grants it background time — a quiet stretch during the first big backfill is normal, not an error."
+      },
       "delivery": {
         "title": "Delivery",
         "lastTriggerLabel": "Latest sync arrived",
@@ -6891,6 +6903,23 @@
         "restoreTitle": "Restore from backup",
         "restoreDescription": "This will replace ALL current data for {username} with the snapshot from {when}. Existing measurements, medications, intake events, mood entries, notification channels, push subscriptions and queued Telegram deletions will be deleted. If included in the snapshot, instance-wide settings overwrite the configuration for the entire installation.",
         "restorePromptLabel": "Type RESTORE to continue",
+        "previewTitle": "What this backup contains",
+        "previewLoading": "Reading contents…",
+        "previewUnavailable": "Contents could not be read — restoring is still possible.",
+        "previewEmpty": "The file contains no records.",
+        "previewOther": "Other records",
+        "previewMeasurements": "Measurements",
+        "previewMedications": "Medications and intakes",
+        "previewMood": "Mood entries",
+        "previewLabs": "Lab results",
+        "previewDocuments": "Documents",
+        "previewWorkouts": "Workouts",
+        "previewCycles": "Cycle data",
+        "previewVisits": "Doctor visits",
+        "previewVaccinations": "Vaccinations",
+        "previewReminders": "Preventive-care reminders",
+        "previewCustomMetrics": "Custom metrics",
+        "previewHealthScores": "Score history",
         "restoreConfirm": "Restore now",
         "restoreInProgress": "Restoring…",
         "restoreSuccess": "Restore complete",
@@ -8085,6 +8114,23 @@
     "delete": "Delete",
     "deleteConfirmTitle": "Delete reminder?",
     "deleteConfirmDescription": "This checkup reminder will be permanently deleted.",
+    "postpone": {
+      "menuItem": "Postpone…",
+      "title": "Postpone due date",
+      "description": "Only moves the current due date — the regular rhythm stays unchanged.",
+      "chip": "+{days} days",
+      "dateLabel": "New date",
+      "confirm": "Postpone"
+    },
+    "skip": {
+      "heading": "Skip this due date",
+      "explainer": "Recorded honestly as skipped — not as done. The interval restarts from today.",
+      "action": "Skip",
+      "confirmTitle": "Skip this due date?"
+    },
+    "snoozedUntil": "Postponed until {date}",
+    "skippedOn": "Skipped on {date}",
+    "skipCount": "skipped {count}×",
     "disabledBadge": "Off",
     "nextDue": {
       "none": "Not scheduled",
@@ -9035,7 +9081,9 @@
       "flaggedBadge": "Support shown",
       "chartTitle": "Score trend",
       "totalLabel": "Score",
-      "bandLabel": "Category"
+      "bandLabel": "Category",
+      "answersToggle": "Answers",
+      "answersUnavailable": "The stored answers for this check-in cannot be decrypted."
     },
     "crisis": {
       "title": "You don't have to face this alone",
@@ -9739,6 +9787,8 @@
       "editedToast": "Value updated",
       "editError": "Could not update the value",
       "deletedToast": "Value deleted",
+      "restoredToast": "Value restored",
+      "restoreError": "Restore failed",
       "deleteError": "Could not delete the value"
     },
     "chart": {
@@ -10208,6 +10258,8 @@
       "measurementReminderDelete": "{name} removed a measurement reminder",
       "measurementReminderComplete": "{name} completed a measurement reminder",
       "measurementReminderSatisfy": "{name} cleared a measurement reminder",
+      "measurementReminderSkip": "{name} skipped a measurement reminder",
+      "measurementReminderSnooze": "{name} postponed a measurement reminder",
       "labResultUpdate": "{name} changed a lab result",
       "labResultDelete": "{name} removed a lab result",
       "labResultRestore": "{name} restored a lab result",

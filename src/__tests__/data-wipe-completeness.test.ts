@@ -280,4 +280,36 @@ describe("data-wipe completeness", () => {
       OR: [{ recordUserId: "u1" }, { recipientUserId: "u1" }],
     });
   });
+
+  it("freezes the set of user-linked tables that carry no foreign key", () => {
+    // v1.37.20 (A6-19) — NO_FK_BY_DESIGN, as an assertion instead of a pair
+    // of FK migrations. The two Telegram plumbing tables link to an account
+    // by a bare `userId` string on purpose: both hold a bounded, short-lived
+    // window of chat state (scheduled message deletions, prompt contexts)
+    // that a cron already reaps, and a cascade would buy nothing the wipe
+    // plan does not already do — rule 1 catches them because the column NAME
+    // matches the convention. That is the exact fragility this test freezes:
+    // a THIRD such table would also pass rule 1 silently, without anyone
+    // deciding it should. So the set is closed here; growing it is a
+    // decision made in this file, with a reason, or by adding the FK.
+    const NO_FK_BY_DESIGN = new Set([
+      "TelegramScheduledDeletion",
+      "TelegramPromptContext",
+    ]);
+    const bareUserIdModels = [...models.entries()]
+      .filter(
+        ([name, shape]) =>
+          name !== "User" &&
+          shape.scalars.includes("userId") &&
+          !shape.relations.some((rel) => rel.target === "User"),
+      )
+      .map(([name]) => name)
+      .sort();
+    expect(bareUserIdModels).toEqual([...NO_FK_BY_DESIGN].sort());
+    // And both stay in the wipe plan — the assertion above is about schema
+    // shape, this one about the plan actually reaching them.
+    for (const model of NO_FK_BY_DESIGN) {
+      expect(WIPE_MODELS).toContain(model);
+    }
+  });
 });

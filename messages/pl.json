@@ -516,6 +516,9 @@
     "heroItemsTitle": "Dzisiejsze wyróżnienia",
     "heroItemsDescription": "Wybierz typy elementów, które mogą pojawiać się w dzisiejszych wyróżnieniach.",
     "heroItemsNotificationNote": "Ustawieniami powiadomień zarządzasz osobno.",
+    "heroContentTitle": "Górna karta pokazuje",
+    "heroContentScore": "Wynik zdrowia i podsumowanie dnia",
+    "heroContentReminders": "Dzisiejsze wyróżnienia",
     "heroItems": {
       "coach_checkin": "Podsumowania z Coachem",
       "dose_window": "Dawki leków",
@@ -3168,7 +3171,8 @@
     "sleep": {
       "title": "Sen",
       "description": "Podział na fazy i nocna długość snu, dane z Apple Health.",
-      "headlineTitle": "Średnia na noc",
+      "mainSleep": "Sen główny",
+      "totalSleep": "Sen łączny",
       "compositionTitle": "Rozkład faz",
       "compositionSubtitle": "Ostatnie {nights} nocy",
       "compositionAriaLabel": "Rozkład faz snu w {nights} nocach",
@@ -4517,7 +4521,7 @@
         "title": "Withings",
         "body": "Wagi, ciśnieniomierze i trackery Withings synchronizują się automatycznie po połączeniu.",
         "cta": "Połącz Withings",
-        "setupCta": "Skonfiguruj w Ustawieniach",
+        "setupCta": "Skonfiguruj",
         "setupHint": "Najpierw wymaga własnej, darmowej aplikacji deweloperskiej Withings — około 5 minut, jednorazowo."
       },
       "more": {
@@ -4528,7 +4532,8 @@
         "oura": "Oura",
         "polar": "Polar",
         "nightscout": "Nightscout",
-        "fitbit": "Fitbit"
+        "fitbit": "Fitbit",
+        "appleHealthHint": "Apple Health nie ma połączenia przez przeglądarkę — dokończ tu wstępną konfigurację, a następnie otwórz aplikację HealthLog na iPhonie, aby dokończyć konfigurację Apple Health."
       },
       "import": "Importuj istniejącą historię"
     },
@@ -5967,7 +5972,7 @@
     },
     "notificationStatus": {
       "title": "Niezawodność kanałów",
-      "description": "Stan każdego kanału; „Automatycznie wyłączone” przerywa ponawianie po trwałych błędach.",
+      "description": "Stan każdego kanału — „Automatycznie wyłączone” oznacza zatrzymanie po trwałych błędach.",
       "emptyDescription": "Dodaj kanał w Ustawienia › Integracje › Kanały dostarczania.",
       "stateActive": "Aktywne",
       "stateAutoDisabled": "Automatycznie wyłączone",
@@ -6387,6 +6392,13 @@
       "importNote": "Potrzebujesz starszej historii lub nie możesz użyć aplikacji iOS? Przesłanie pliku XML/ZIP z Apple Health jest jednorazową alternatywą i nie włącza synchronizacji na żywo.",
       "importAction": "Otwórz jednorazowy import",
       "staleNote": "Od ponad tygodnia nie napłynęły żadne dane z Apple Health. Otwórz aplikację HealthLog na iPhonie i sprawdź uprawnienia Apple Health.",
+      "progress": {
+        "title": "Postęp synchronizacji",
+        "receivedLabel": "Odebrane rekordy",
+        "oldestLabel": "Najstarszy osiągnięty pomiar",
+        "flowing": "W ciągu ostatniej godziny dotarły dane — aplikacja na iPhonie nadal je przesyła.",
+        "waiting": "Oczekiwanie na kolejne dane z aplikacji na iPhonie. Przesyłanie trwa dalej, gdy aplikacja jest otwarta lub gdy iOS przydzieli jej czas w tle — cisza podczas pierwszego dużego uzupełniania historii jest normalna, to nie błąd."
+      },
       "delivery": {
         "title": "Dostarczanie",
         "lastTriggerLabel": "Ostatnia synchronizacja dotarła",
@@ -6891,6 +6903,23 @@
         "restoreTitle": "Przywróć z kopii zapasowej",
         "restoreDescription": "Spowoduje to zastąpienie WSZYSTKICH bieżących danych {username} migawką z {when}. Istniejące pomiary, leki, zdarzenia przyjęcia, wpisy nastroju, kanały powiadomień, subskrypcje push i zakolejkowane usunięcia Telegram zostaną usunięte.",
         "restorePromptLabel": "Wpisz RESTORE, aby kontynuować",
+        "previewTitle": "Zawartość kopii",
+        "previewLoading": "Odczytywanie zawartości…",
+        "previewUnavailable": "Nie udało się odczytać zawartości — przywracanie jest nadal możliwe.",
+        "previewEmpty": "Plik nie zawiera rekordów.",
+        "previewOther": "Inne rekordy",
+        "previewMeasurements": "Pomiary",
+        "previewMedications": "Leki i dawki",
+        "previewMood": "Wpisy nastroju",
+        "previewLabs": "Wyniki badań",
+        "previewDocuments": "Dokumenty",
+        "previewWorkouts": "Treningi",
+        "previewCycles": "Dane cyklu",
+        "previewVisits": "Wizyty lekarskie",
+        "previewVaccinations": "Szczepienia",
+        "previewReminders": "Przypomnienia profilaktyczne",
+        "previewCustomMetrics": "Własne metryki",
+        "previewHealthScores": "Historia wyniku",
         "restoreConfirm": "Przywróć teraz",
         "restoreInProgress": "Przywracanie...",
         "restoreSuccess": "Przywracanie zakończone",
@@ -8085,6 +8114,23 @@
     "delete": "Usuń",
     "deleteConfirmTitle": "Usunąć przypomnienie?",
     "deleteConfirmDescription": "To przypomnienie o badaniu zostanie trwale usunięte.",
+    "postpone": {
+      "menuItem": "Przełóż…",
+      "title": "Przełóż termin",
+      "description": "Przesuwa tylko bieżący termin — regularny rytm pozostaje bez zmian.",
+      "chip": "+{days} dni",
+      "dateLabel": "Nowa data",
+      "confirm": "Przełóż"
+    },
+    "skip": {
+      "heading": "Pomiń ten termin",
+      "explainer": "Zapisane uczciwie jako pominięte — nie jako wykonane. Odstęp zaczyna się od nowa od dzisiaj.",
+      "action": "Pomiń",
+      "confirmTitle": "Pominąć ten termin?"
+    },
+    "snoozedUntil": "Przełożono do {date}",
+    "skippedOn": "Pominięto {date}",
+    "skipCount": "pominięto {count} razy",
     "disabledBadge": "Wył.",
     "nextDue": {
       "none": "Niezaplanowane",
@@ -9035,7 +9081,9 @@
       "flaggedBadge": "Pokazano wsparcie",
       "chartTitle": "Przebieg wyniku",
       "totalLabel": "Wynik",
-      "bandLabel": "Kategoria"
+      "bandLabel": "Kategoria",
+      "answersToggle": "Odpowiedzi",
+      "answersUnavailable": "Nie można odszyfrować zapisanych odpowiedzi tego sprawdzenia."
     },
     "crisis": {
       "title": "Nie musisz mierzyć się z tym sam(a)",
@@ -9739,6 +9787,8 @@
       "editedToast": "Zaktualizowano wartość",
       "editError": "Nie udało się zaktualizować wartości",
       "deletedToast": "Usunięto wartość",
+      "restoredToast": "Przywrócono wartość",
+      "restoreError": "Nie udało się przywrócić",
       "deleteError": "Nie udało się usunąć wartości"
     },
     "chart": {
@@ -10208,6 +10258,8 @@
       "measurementReminderDelete": "{name} usunął przypomnienie o pomiarze",
       "measurementReminderComplete": "{name} zrealizował przypomnienie o pomiarze",
       "measurementReminderSatisfy": "{name} zamknął przypomnienie o pomiarze",
+      "measurementReminderSkip": "{name} pominął(-ęła) przypomnienie o pomiarze",
+      "measurementReminderSnooze": "{name} przełożył(-yła) przypomnienie o pomiarze",
       "labResultUpdate": "{name} zmienił wynik badania",
       "labResultDelete": "{name} usunął wynik badania",
       "labResultRestore": "{name} przywrócił wynik badania",

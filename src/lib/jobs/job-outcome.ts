@@ -78,6 +78,9 @@ export const JOB_FACT_ALLOWLIST: ReadonlySet<string> = new Set([
   "documents",
   "documents_failed",
   "documents_indexed",
+  // v1.37.20 — rows re-tokenised because their stored tokenizerVersion
+  // trailed the current one (the content-index migration sweep).
+  "documents_retokenised",
   "documents_skipped",
   "dose_changes_migrated",
   "downstream_failed",

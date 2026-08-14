@@ -32,6 +32,7 @@ import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { prefersReducedMotion } from "@/lib/charts/reduced-motion";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
@@ -207,6 +208,7 @@ export function DashboardLayoutSection({ id }: { id: string }) {
   const dragHintId = useId();
   const heroDescriptionId = useId();
   const heroNotificationNoteId = useId();
+  const heroContentSelectId = useId();
   // v1.34 — the "Today highlights" fieldset below is gated on `layout`,
   // which can be truthy on the very first client render whenever a
   // returning visitor's browser already has a warm, offline-persisted
@@ -394,6 +396,19 @@ export function DashboardLayoutSection({ id }: { id: string }) {
   }
 
   /**
+   * Hero primary content — the server-persisted `hero` field on the layout
+   * blob. The value set is closed ("score" | "reminders"); anything else a
+   * DOM event could carry collapses to the default rather than a cast.
+   */
+  function setHeroContent(value: string) {
+    if (!layout) return;
+    setDraft({
+      ...layout,
+      hero: value === "reminders" ? "reminders" : "score",
+    });
+  }
+
+  /**
    * v1.4.48 M6a — the arrow buttons now delegate to `reorderWidgets()`
    * so the swap-and-renumber logic lives in exactly one place. The
    * neighbour id is derived from the sorted layout index + delta;
@@ -459,6 +474,30 @@ export function DashboardLayoutSection({ id }: { id: string }) {
           <p id={heroDescriptionId} className="text-muted-foreground text-xs">
             {t("dashboard.heroItemsDescription")}
           </p>
+          {/* Hero primary content — a single labelled select beside the
+              highlight toggles. "score" keeps the health-score read;
+              "reminders" promotes the highlight rail into the hero slot. */}
+          <div className="space-y-1.5">
+            <Label
+              htmlFor={heroContentSelectId}
+              className="text-sm font-medium"
+            >
+              {t("dashboard.heroContentTitle")}
+            </Label>
+            <NativeSelect
+              id={heroContentSelectId}
+              value={layout.hero ?? "score"}
+              onChange={(event) => setHeroContent(event.target.value)}
+              disabled={saveMutation.isPending}
+              data-slot="hero-content-select"
+              className="sm:max-w-xs"
+            >
+              <option value="score">{t("dashboard.heroContentScore")}</option>
+              <option value="reminders">
+                {t("dashboard.heroContentReminders")}
+              </option>
+            </NativeSelect>
+          </div>
           <div className="divide-border divide-y">
             {PRIORITY_ITEM_KINDS.map((kind) => {
               const inputId = `hero-item-${kind}`;
@@ -733,7 +772,8 @@ export function DashboardLayoutSection({ id }: { id: string }) {
           JSON.stringify(layout.widgets) ===
             JSON.stringify(DEFAULT_DASHBOARD_LAYOUT.widgets) &&
           JSON.stringify(layout.enabledHeroItemKinds ?? PRIORITY_ITEM_KINDS) ===
-            JSON.stringify(DEFAULT_DASHBOARD_LAYOUT.enabledHeroItemKinds)
+            JSON.stringify(DEFAULT_DASHBOARD_LAYOUT.enabledHeroItemKinds) &&
+          (layout.hero ?? "score") === DEFAULT_DASHBOARD_LAYOUT.hero
             ? t("dashboard.layoutUsingDefaults")
             : t("dashboard.layoutCustomized")}
         </p>

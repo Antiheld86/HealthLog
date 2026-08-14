@@ -17,7 +17,7 @@ import {
 export const HBA1C_WINDOW_DAYS = 180;
 export const FASTING_GLUCOSE_WINDOW_DAYS = 90;
 export const FASTING_GLUCOSE_MIN_READINGS = 8;
-export const HBA1C_REFERENCE = { low: 5, high: 5.6 } as const;
+const HBA1C_REFERENCE = { low: 5, high: 5.6 } as const;
 export const FASTING_GLUCOSE_REFERENCE = { low: 70, high: 99 } as const;
 
 export function computeGlycaemiaPillar(

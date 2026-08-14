@@ -118,6 +118,8 @@ export interface CustomMetricEntryBackupEntry {
   measuredAt: string;
   note: string | null;
   createdAt?: string;
+  /** v1.37.20 (A3-11) — soft-delete tombstone; DR payloads only. */
+  deletedAt?: string | null;
 }
 
 /**
@@ -260,7 +262,13 @@ export async function buildProfileBackupSection(
       where: disasterRecovery ? { userId } : { userId, deletedAt: null },
       orderBy: { name: "asc" },
       include: {
-        entries: { orderBy: { measuredAt: "asc" } },
+        // v1.37.20 (A3-11) — entries soft-delete now: a portable export
+        // omits tombstoned readings (a restore must not resurrect them); a
+        // DR payload carries them, tombstone included, like the parent.
+        entries: {
+          where: disasterRecovery ? {} : { deletedAt: null },
+          orderBy: { measuredAt: "asc" },
+        },
       },
     }),
     prisma.healthProfileFactRevision.findMany({
@@ -438,6 +446,7 @@ export async function buildProfileBackupSection(
         ? {
             id: entry.id,
             createdAt: entry.createdAt.toISOString(),
+            deletedAt: entry.deletedAt?.toISOString() ?? null,
           }
         : {}),
       value: entry.value,
@@ -840,6 +849,7 @@ export async function restoreProfileData(
             unit: entry.unit,
             measuredAt: new Date(entry.measuredAt),
             note: entry.note,
+            deletedAt: entry.deletedAt ? new Date(entry.deletedAt) : null,
             ...(entry.createdAt
               ? { createdAt: new Date(entry.createdAt) }
               : {}),

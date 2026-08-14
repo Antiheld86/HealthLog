@@ -416,7 +416,7 @@ export function MedicationComplianceChart({
           {showTrendChip && trend && TrendIcon ? (
             <span
               className={cn(
-                "bg-muted/40 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium tracking-wide uppercase",
+                "bg-muted/40 text-2xs inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-medium tracking-wide uppercase",
                 trendColor,
               )}
               data-slot="medication-trend-chip"

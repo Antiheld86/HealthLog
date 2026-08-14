@@ -60,8 +60,9 @@ import {
   ChevronDown,
   MoreHorizontal,
 } from "lucide-react";
-import { Fragment, useCallback, useId, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useState } from "react";
 import { useTableSort } from "@/hooks/use-table-sort";
+import { useUrlFilterSync } from "@/hooks/use-url-filter-sync";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { formatDateOrRelative, formatDateTime } from "@/lib/format";
@@ -97,6 +98,11 @@ import {
   MEASUREMENT_TYPE_ICONS as TYPE_ICONS,
   MEASUREMENT_TYPE_COLORS as TYPE_COLORS,
 } from "./measurement-list-meta";
+import {
+  measurementListFiltersToSearch,
+  numericInputOrUndefined,
+  parseMeasurementListSearchParams,
+} from "./measurement-list-filters";
 import {
   ApiError,
   apiDelete,
@@ -190,13 +196,6 @@ interface MeasurementListProps {
    * scoped to this type; the count caption still shows.
    */
   lockedType?: string;
-  /**
-   * v1.18.7 (Wave E) — seed the (still user-editable) type filter from a
-   * `?type=<MEASUREMENT_TYPE>` deep link, e.g. the Vorsorge card's "Show
-   * measurements" action. Unlike `lockedType` the full filter rail stays
-   * visible so the user can widen or change the filter afterwards.
-   */
-  initialType?: string;
 }
 
 const PAGE_SIZE = 25;
@@ -281,7 +280,6 @@ export function MeasurementList({
   onEdit,
   onAddFirst,
   lockedType,
-  initialType,
 }: MeasurementListProps) {
   const { t } = useTranslations();
   const fmt = useFormatters();
@@ -342,22 +340,45 @@ export function MeasurementList({
         : `/measurements?type=${encodeURIComponent(type)}`,
     );
   };
-  // v1.8.5 — when `lockedType` is set the list is pinned to that metric
-  // and the type selector is hidden; the filter state seeds from it.
-  // v1.18.7 (Wave E) — `initialType` (from a `?type=` deep link) seeds the
-  // same filter but keeps the rail interactive so the user can change it.
-  const [typeFilter, setTypeFilterRaw] = useState<string>(
-    lockedType ?? initialType ?? "ALL",
-  );
+  // URL-owned filter state (the documents-vault pattern): type, source, date
+  // range and value range parse from `?type&source&from&to&min&max` and every
+  // change writes back through the router, so a filtered view survives
+  // navigation, reload and back/forward. The `?type=` deep links (Vorsorge
+  // card, type-badge drill-down) now simply ARE the filter state.
+  // v1.8.5 — when `lockedType` is set the list is pinned to that metric, the
+  // type selector is hidden, and the URL belongs to the insights subpage —
+  // the remaining filters stay in component memory (`syncToUrl: false`).
+  const { filters, applyFilters } = useUrlFilterSync({
+    parse: parseMeasurementListSearchParams,
+    serialise: measurementListFiltersToSearch,
+    syncToUrl: lockedType === undefined,
+  });
+  const typeFilter = lockedType ?? filters.type ?? "ALL";
   // v1.15.13 — management-list source filter + optional date range.
   // `ALL` clears the source filter; empty date strings clear the bound.
-  const [sourceFilter, setSourceFilterRaw] = useState<string>("ALL");
-  const [fromDay, setFromDayRaw] = useState<string>("");
-  const [toDay, setToDayRaw] = useState<string>("");
-  // v1.18.5 — value-range filter (backlog G). Raw input strings; empty
-  // means the bound is unset (open-ended on that side).
-  const [valueMinInput, setValueMinInputRaw] = useState<string>("");
-  const [valueMaxInput, setValueMaxInputRaw] = useState<string>("");
+  const sourceFilter = filters.source ?? "ALL";
+  const fromDay = filters.fromDay ?? "";
+  const toDay = filters.toDay ?? "";
+  // v1.18.5 — value-range filter (backlog G). The inputs fire per keystroke,
+  // so they edit a local draft that debounces into the URL (200 ms, replace —
+  // never a history entry per keystroke); an external URL change (back
+  // button, deep link) re-seeds the draft via the render-phase derived-state
+  // adjustment below, exactly like the vault's search field.
+  const urlValueRange = `${filters.valueMin ?? ""} ${filters.valueMax ?? ""}`;
+  const [valueDraft, setValueDraft] = useState(() => ({
+    min: filters.valueMin ?? "",
+    max: filters.valueMax ?? "",
+  }));
+  const [lastUrlValueRange, setLastUrlValueRange] = useState(urlValueRange);
+  if (urlValueRange !== lastUrlValueRange) {
+    setLastUrlValueRange(urlValueRange);
+    setValueDraft({
+      min: filters.valueMin ?? "",
+      max: filters.valueMax ?? "",
+    });
+  }
+  const valueMinInput = valueDraft.min;
+  const valueMaxInput = valueDraft.max;
   const [page, setPage] = useState(1);
   // Shared column-sort state (measuredAt opens descending).
   const {
@@ -417,41 +438,62 @@ export function MeasurementList({
   // are about to unmount).
   const clearSelection = () => setSelectedIds(new Set());
 
+  // Discrete facet changes push (Back steps through filter states, like the
+  // vault's chips); the committed date bounds replace — a from/to pair set in
+  // one sitting should not cost two Back presses.
   const setTypeFilter = (value: string) => {
-    setTypeFilterRaw(value);
+    applyFilters({ ...filters, type: value === "ALL" ? undefined : value });
     setPage(1);
     clearSelection();
   };
 
   const setSourceFilter = (value: string) => {
-    setSourceFilterRaw(value);
+    applyFilters({ ...filters, source: value === "ALL" ? undefined : value });
     setPage(1);
     clearSelection();
   };
 
   const setFromDay = (value: string) => {
-    setFromDayRaw(value);
+    applyFilters({ ...filters, fromDay: value || undefined }, "replace");
     setPage(1);
     clearSelection();
   };
 
   const setToDay = (value: string) => {
-    setToDayRaw(value);
+    applyFilters({ ...filters, toDay: value || undefined }, "replace");
     setPage(1);
     clearSelection();
   };
 
   const setValueMinInput = (value: string) => {
-    setValueMinInputRaw(value);
+    setValueDraft((prev) => ({ ...prev, min: value }));
     setPage(1);
     clearSelection();
   };
 
   const setValueMaxInput = (value: string) => {
-    setValueMaxInputRaw(value);
+    setValueDraft((prev) => ({ ...prev, max: value }));
     setPage(1);
     clearSelection();
   };
+
+  // The value-range draft debounces into the URL; a bound that does not
+  // normalise to a finite number never reaches it (matching the previous
+  // in-memory behaviour, where non-numeric input meant "unset").
+  useEffect(() => {
+    const handle = setTimeout(() => {
+      const min = numericInputOrUndefined(valueDraft.min);
+      const max = numericInputOrUndefined(valueDraft.max);
+      if (
+        (min ?? "") === (filters.valueMin ?? "") &&
+        (max ?? "") === (filters.valueMax ?? "")
+      ) {
+        return;
+      }
+      applyFilters({ ...filters, valueMin: min, valueMax: max }, "replace");
+    }, 200);
+    return () => clearTimeout(handle);
+  }, [valueDraft, filters, applyFilters]);
 
   const goToPage = (updater: (p: number) => number) => {
     setPage(updater);
@@ -494,13 +536,9 @@ export function MeasurementList({
   // TIME-ASLEEP), where filtering on a raw `value` column carries no
   // meaning, so the range pill is hidden for those types.
   const valueMin =
-    valueMinInput.trim() !== "" && Number.isFinite(Number(valueMinInput))
-      ? Number(valueMinInput)
-      : undefined;
+    filters.valueMin !== undefined ? Number(filters.valueMin) : undefined;
   const valueMax =
-    valueMaxInput.trim() !== "" && Number.isFinite(Number(valueMaxInput))
-      ? Number(valueMaxInput)
-      : undefined;
+    filters.valueMax !== undefined ? Number(filters.valueMax) : undefined;
   const listMode: "raw" | "groupBy=day" | "sleep-night" = isSleepFilter
     ? "sleep-night"
     : isCumulativeFilter
@@ -874,12 +912,14 @@ export function MeasurementList({
                 (valueMinInput !== "" || valueMaxInput !== ""))
             }
             onReset={() => {
-              setTypeFilter("ALL");
-              setSourceFilter("ALL");
-              setFromDay("");
-              setToDay("");
-              setValueMinInput("");
-              setValueMaxInput("");
+              // One push clears every facet (and so one Back restores them);
+              // the value-range draft is cleared directly because a bound
+              // that never committed to the URL has no change to re-seed
+              // from.
+              applyFilters({});
+              setValueDraft({ min: "", max: "" });
+              setPage(1);
+              clearSelection();
             }}
             count={
               data?.meta?.total !== undefined

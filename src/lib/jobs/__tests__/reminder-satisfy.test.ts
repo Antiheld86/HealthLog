@@ -96,6 +96,14 @@ function makePrisma(opts: {
         },
       ),
     },
+    // v1.37.20 (#223 / iOS #68) — the primitive appends a ledger row per
+    // applied satisfy; the harness records them so tests can assert one.
+    measurementReminderEvent: {
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+        id: "evt",
+        ...data,
+      })),
+    },
     measurement: { findFirst: vi.fn(async () => opts.measurement ?? null) },
     labResult: { findFirst: vi.fn(async () => opts.lab ?? null) },
   };
@@ -105,12 +113,15 @@ function makePrisma(opts: {
 function reminderRow(overrides: Record<string, unknown> = {}) {
   return {
     id: "r1",
+    userId: "u1",
     measurementType: "WEIGHT",
     intervalDays: 7,
     rrule: null,
     anchorDate: null,
     notifyHour: 9,
+    nextDueAt: null,
     lastSatisfiedAt: null,
+    lastSkippedAt: null,
     createdAt: new Date("2026-06-01T00:00:00Z"),
     ...overrides,
   };

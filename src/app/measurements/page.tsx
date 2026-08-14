@@ -12,7 +12,6 @@ import {
 } from "@/components/measurements/measurement-form";
 import { MeasurementList } from "@/components/measurements/measurement-list";
 import { CustomMetricList } from "@/components/custom-metrics/custom-metric-list";
-import { MEASUREMENT_TYPE_LABEL_KEYS } from "@/components/measurements/measurement-list-meta";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageAuthGate } from "@/components/ui/page-auth-gate";
@@ -64,18 +63,6 @@ export default function MeasurementsPage() {
   const addRequestParam = addParam
     ? `${addParam}\u0000${returnToParam ?? ""}`
     : null;
-  // v1.18.7 (Wave E) — a `?type=<MEASUREMENT_TYPE>` deep link (e.g. the
-  // Vorsorge card's "Show measurements") seeds the list's type filter on
-  // first paint. Captured once via a lazy initializer so the value is
-  // stable even after the effect below strips the query string; an unknown
-  // token is dropped (validated against the canonical type-label map), so a
-  // stale link never traps the user on a broken filter.
-  const typeParam = searchParams.get("type");
-  const [initialType] = useState<string | undefined>(() =>
-    typeParam && typeParam in MEASUREMENT_TYPE_LABEL_KEYS
-      ? typeParam
-      : undefined,
-  );
   const [dialogOpen, setDialogOpen] = useState(() => initialAdd != null);
   const [defaultType, setDefaultType] = useState<string | undefined>(
     () => initialAdd ?? undefined,
@@ -118,15 +105,21 @@ export default function MeasurementsPage() {
     }
   }
 
-  // Drop the query string so the back-button leaves the user on
-  // `/measurements` rather than re-opening the dialog (or re-seeding the
-  // type filter). The type filter is already seeded into the list's own
-  // state via `initialType`, so stripping the param doesn't lose it.
+  // Drop the one-shot `?add=` / `?returnTo=` params so the back-button
+  // leaves the user on `/measurements` rather than re-opening the dialog.
+  // Every OTHER param is preserved: the list's filter state (`?type=`,
+  // `?source=`, …) now lives in the URL (see `measurement-list-filters.ts`)
+  // and stripping it would lose the filters this page is meant to keep.
   // Effect-driven (client-only) because `router.replace` is not callable
   // during SSR.
   useEffect(() => {
-    if (addParam || typeParam || returnToParam) router.replace("/measurements");
-  }, [addParam, typeParam, returnToParam, router]);
+    if (!addParam && !returnToParam) return;
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("add");
+    next.delete("returnTo");
+    const search = next.toString();
+    router.replace(search ? `/measurements?${search}` : "/measurements");
+  }, [addParam, returnToParam, searchParams, router]);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -214,7 +207,6 @@ export default function MeasurementsPage() {
           setReturnTo(null);
           setDialogOpen(true);
         }}
-        initialType={initialType}
       />
 
       <CustomMetricList />

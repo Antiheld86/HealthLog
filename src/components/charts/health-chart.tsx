@@ -1732,7 +1732,7 @@ export function HealthChart({
               <h2 className="text-sm font-semibold">{title}</h2>
             )}
             {activeBucket !== "day" && (
-              <span className="bg-muted/40 text-muted-foreground hidden rounded-md px-1.5 py-0.5 text-[10px] font-medium tracking-wide uppercase sm:inline-flex">
+              <span className="bg-muted/40 text-muted-foreground text-2xs hidden rounded-md px-1.5 py-0.5 font-medium tracking-wide uppercase sm:inline-flex">
                 {t(
                   activeBucket === "week"
                     ? "charts.bucketWeekly"
@@ -1749,7 +1749,7 @@ export function HealthChart({
                 v1.4.19 A2 — hidden on mobile to free up the title row. */}
             {effectiveCompareBaseline !== "none" && hasComparisonData && (
               <span
-                className="text-dose-accent bg-dose-accent/10 hidden rounded-md border border-current/30 px-1.5 py-0.5 text-[10px] font-medium tracking-wide uppercase sm:inline-flex"
+                className="text-dose-accent bg-dose-accent/10 text-2xs hidden rounded-md border border-current/30 px-1.5 py-0.5 font-medium tracking-wide uppercase sm:inline-flex"
                 data-slot="chart-compare-caption"
               >
                 {t(
@@ -1761,7 +1761,7 @@ export function HealthChart({
             )}
             {effectiveCompareBaseline !== "none" && !hasComparisonData && (
               <span
-                className="text-muted-foreground bg-muted/40 hidden rounded-md px-1.5 py-0.5 text-[10px] font-medium tracking-wide sm:inline-flex"
+                className="text-muted-foreground bg-muted/40 text-2xs hidden rounded-md px-1.5 py-0.5 font-medium tracking-wide sm:inline-flex"
                 data-slot="chart-compare-unavailable"
               >
                 {t(
@@ -1825,7 +1825,7 @@ export function HealthChart({
       )}
 
       {mini && (
-        <div className="text-muted-foreground mb-1 text-[10px] font-medium tracking-wider uppercase">
+        <div className="text-muted-foreground text-2xs mb-1 font-medium tracking-wider uppercase">
           {title}
         </div>
       )}

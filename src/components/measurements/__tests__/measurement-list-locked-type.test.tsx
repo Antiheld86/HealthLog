@@ -11,6 +11,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => "/insights/values/WEIGHT",
+  useSearchParams: () => new URLSearchParams(""),
 }));
 
 vi.mock("@tanstack/react-query", () => ({

@@ -33,6 +33,7 @@ const base = {
   measurementType: null,
   anchorDate: null,
   lastSatisfiedAt: null,
+  lastSkippedAt: null,
   createdAt: new Date("2026-06-01T00:00:00Z"),
 } as const;
 
@@ -45,6 +46,63 @@ describe("satisfactionFloor", () => {
     ).toEqual(last);
     expect(satisfactionFloor({ ...base, anchorDate: anchor })).toEqual(anchor);
     expect(satisfactionFloor(base)).toEqual(base.createdAt);
+  });
+
+  // v1.37.20 (#223) — the skip arm of the floor. Watched red: with the old
+  // `lastSatisfiedAt ?? anchorDate ?? createdAt` floor both assertions below
+  // failed (the fresh skip was invisible and a backdated reading resolved
+  // the cycle the user had just skipped).
+  it("takes the LATER of lastSatisfiedAt and lastSkippedAt", () => {
+    const satisfied = new Date("2026-06-10T00:00:00Z");
+    const skipped = new Date("2026-06-20T00:00:00Z");
+    expect(
+      satisfactionFloor({
+        ...base,
+        lastSatisfiedAt: satisfied,
+        lastSkippedAt: skipped,
+      }),
+    ).toEqual(skipped);
+    // And symmetric — a satisfy after the skip wins again.
+    expect(
+      satisfactionFloor({
+        ...base,
+        lastSatisfiedAt: skipped,
+        lastSkippedAt: satisfied,
+      }),
+    ).toEqual(skipped);
+  });
+
+  it("uses a lone lastSkippedAt as the floor before anchor/created fall backs", () => {
+    const skipped = new Date("2026-06-20T00:00:00Z");
+    const anchor = new Date("2026-06-05T00:00:00Z");
+    expect(
+      satisfactionFloor({
+        ...base,
+        lastSkippedAt: skipped,
+        anchorDate: anchor,
+      }),
+    ).toEqual(skipped);
+  });
+});
+
+describe("findSatisfyingEvent after a skip", () => {
+  it("does not resolve the fresh skip cycle from a reading older than the skip", async () => {
+    // A backdated sync (an old reading arriving late) predates the skip the
+    // user just made. The floor must sit AT the skip, so the query asks for
+    // events strictly after it — the stale reading cannot match.
+    const skipped = new Date("2026-06-20T00:00:00Z");
+    const prisma = makePrisma({ measurement: null });
+
+    await findSatisfyingEvent(prisma as never, "u1", {
+      ...base,
+      measurementType: "WEIGHT",
+      lastSkippedAt: skipped,
+    });
+
+    const where = prisma.measurement.findFirst.mock.calls[0]![0].where as {
+      measuredAt: { gt: Date };
+    };
+    expect(where.measuredAt.gt).toEqual(skipped);
   });
 });
 

@@ -22,6 +22,7 @@ import {
   CHART_OVERLAY_KEYS,
   SCORE_RING_IDS,
   HERO_RING_IDS,
+  HERO_PRIMARY_CONTENTS,
 } from "@/lib/dashboard-layout";
 import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
 import {
@@ -69,11 +70,17 @@ const dashboardLayoutSchema = z
       .describe(
         "Today-highlight item kinds in catalogue order. Missing means every current kind is enabled; an empty array disables all kinds.",
       ),
+    hero: z
+      .enum(HERO_PRIMARY_CONTENTS)
+      .optional()
+      .describe(
+        'Primary hero-card content on the dashboard: "score" (the health-score read, default) or "reminders" (the Today-highlight rail promoted into the hero slot). Missing resolves to "score"; the stored default is omitted from responses.',
+      ),
   })
   .meta({
     id: "DashboardLayoutBody",
     description:
-      "Per-user dashboard widget layout. `widgets` is the ordered tile and chart list. `comparisonBaseline`, `chartOverlayPrefs`, `selectedScoreRings`, `heroRingOrder`, and `enabledHeroItemKinds` are additive dashboard preferences. Every field except `version` is optional on input and preserved when absent from PUT. Missing `enabledHeroItemKinds` resolves to every current kind, while an empty array hides every Today highlight. Widget ids use the closed dashboard catalogue; unknown ids are dropped before validation.",
+      "Per-user dashboard widget layout. `widgets` is the ordered tile and chart list. `comparisonBaseline`, `chartOverlayPrefs`, `selectedScoreRings`, `heroRingOrder`, `enabledHeroItemKinds`, and `hero` are additive dashboard preferences. Every field except `version` is optional on input and preserved when absent from PUT. Missing `enabledHeroItemKinds` resolves to every current kind, while an empty array hides every Today highlight. Widget ids use the closed dashboard catalogue; unknown ids are dropped before validation.",
   });
 
 const dashboardLayoutPutBody = dashboardLayoutSchema
@@ -153,7 +160,7 @@ export const dashboardWidgetPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Dashboard"],
       summary: "Reset the calling user's dashboard widget layout",
       description:
-        "Resets the tile layout and Today-highlight visibility. It preserves the stored comparison baseline, chart overlays, selected score rings, and hero ring order. Idempotent.",
+        "Resets the tile layout and Today-highlight visibility. It preserves the stored comparison baseline, chart overlays, selected score rings, hero ring order, and hero primary content. Idempotent.",
       responses: {
         "200": {
           description:

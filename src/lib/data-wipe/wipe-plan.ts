@@ -60,6 +60,10 @@ export const WIPE_MODELS = [
   // the account was doing, day by day, after a confirmation that said
   // otherwise.
   "HealthScoreRecord",
+  // The completion ledger before the reminder it hangs off: it cascades either
+  // way, but the child deleted first is what keeps its own count truthful on
+  // the audit row (v1.37.20, #223 / iOS #68).
+  "MeasurementReminderEvent",
   "MeasurementReminder",
 
   // ── Medication ──────────────────────────────────────────────────────────

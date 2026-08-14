@@ -222,6 +222,18 @@ export function SourceCardGrid() {
             </li>
           ))}
         </ul>
+        {/* #778 — Apple Health looked like one more web connector here, but
+            there is nothing to connect on the web: the sync is set up in the
+            iOS app after onboarding. Say so, so nobody hunts Settings for an
+            OAuth flow that does not exist. The chip stays tappable (it lands
+            on the Integrations page, whose Apple Health card walks through
+            the iPhone-app setup) and Next / Skip advance as always. */}
+        <p
+          className="text-muted-foreground text-xs leading-relaxed"
+          data-testid="source-more-apple-health-note"
+        >
+          {t("onboarding.source.more.appleHealthHint")}
+        </p>
       </div>
 
       <Link

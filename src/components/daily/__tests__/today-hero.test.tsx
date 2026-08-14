@@ -321,4 +321,67 @@ describe("<TodayHero>", () => {
     expect(html).toContain('style="width:168px;height:168px"');
     expect(html).not.toContain('data-layout="compact-all-clear"');
   });
+
+  // The hero primary-content preference (`hero` on the dashboard layout
+  // blob): "reminders" promotes the worth-a-look rail into the hero slot;
+  // the score composition stays the default.
+  it("promotes the rail into the hero slot when the preference is reminders", () => {
+    const html = render(
+      <TodayHero digest={digest()} primaryContent="reminders" />,
+    );
+    expect(html).toContain('data-slot="today-hero"');
+    expect(html).toContain('data-layout="reminders"');
+    expect(html).toContain('data-slot="today-hero-rail"');
+    expect(html).toContain('data-kind="dose_window"');
+    expect(html).toContain('data-kind="sync_issue"');
+    // The score composition yields the slot entirely.
+    expect(html).not.toContain('data-slot="today-hero-score"');
+    expect(html).not.toContain('data-slot="today-hero-lead"');
+    expect(html).not.toContain('data-slot="today-hero-signal"');
+  });
+
+  it("keeps the score composition when the preference is the default score", () => {
+    const html = render(<TodayHero digest={digest()} primaryContent="score" />);
+    expect(html).toContain('data-slot="today-hero-score"');
+    expect(html).toContain('data-slot="today-hero-rail"');
+    expect(html).not.toContain('data-layout="reminders"');
+  });
+
+  it("shows the calm all-clear line when reminders mode has nothing to surface", () => {
+    const html = render(
+      <TodayHero
+        digest={digest({ worthALook: [] })}
+        primaryContent="reminders"
+      />,
+    );
+    expect(html).toContain('data-layout="reminders"');
+    expect(html).toContain('data-slot="today-hero-all-clear"');
+    expect(html).not.toContain('data-slot="today-hero-rail"');
+    expect(html).not.toContain('data-slot="today-hero-score"');
+  });
+
+  it("keeps the honest sleep-pending note in reminders mode", () => {
+    const html = render(
+      <TodayHero
+        digest={digest({ phase: "provisional", sleepPending: true })}
+        primaryContent="reminders"
+      />,
+    );
+    expect(html).toContain('data-slot="today-hero-sleep-pending"');
+  });
+
+  it("still degrades to nothing on a genuinely empty account in reminders mode", () => {
+    const html = render(
+      <TodayHero
+        digest={digest({
+          score: null,
+          topSignal: null,
+          briefingLead: null,
+          worthALook: [],
+        })}
+        primaryContent="reminders"
+      />,
+    );
+    expect(html).toBe("");
+  });
 });

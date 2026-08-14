@@ -27,6 +27,11 @@
 export const API_READ_ALLOWLIST = [
   "/api/dashboard/snapshot",
   "/api/dashboard/widgets",
+  // v1.37.20 — the daily digest read: the Today rail is the first thing an
+  // offline reopen renders, and the digest is an idempotent GET with no
+  // secret in the body. The deny guard and the body-level refusal still
+  // apply on top, like every entry here.
+  "/api/daily/digest",
   "/api/measurements",
   "/api/medications",
   "/api/version",

@@ -100,12 +100,15 @@ export async function satisfyBoostersForDose(
     },
     select: {
       id: true,
+      userId: true,
       vaccinationAntigen: true,
       intervalDays: true,
       rrule: true,
       anchorDate: true,
       notifyHour: true,
+      nextDueAt: true,
       lastSatisfiedAt: true,
+      lastSkippedAt: true,
       createdAt: true,
     },
   });
@@ -125,11 +128,14 @@ export async function satisfyBoostersForDose(
   for (const reminder of ordered) {
     const row: SatisfiableReminder = {
       id: reminder.id,
+      userId: reminder.userId,
       intervalDays: reminder.intervalDays,
       rrule: reminder.rrule,
       anchorDate: reminder.anchorDate,
       notifyHour: reminder.notifyHour,
+      nextDueAt: reminder.nextDueAt,
       lastSatisfiedAt: reminder.lastSatisfiedAt,
+      lastSkippedAt: reminder.lastSkippedAt,
       createdAt: reminder.createdAt,
     };
     // `satisfyReminder` types its client as the full `PrismaClient` because
@@ -142,6 +148,7 @@ export async function satisfyBoostersForDose(
       row,
       timezone,
       occurredAt,
+      "vaccination",
     );
     if (result.satisfied) satisfiedReminderIds.push(reminder.id);
   }

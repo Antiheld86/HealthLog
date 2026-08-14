@@ -189,6 +189,9 @@ export const PATCH = apiHandler(
         ? existing.lastSatisfiedAt
         : now;
     updateData.nextDueAt = computeReminderNextDueAt(merged, timezone, after);
+    // v1.37.20 (#223) — a cadence edit recomputes `nextDueAt`, so it clears
+    // the snooze cursor: the cycle the snooze pushed back no longer exists.
+    updateData.snoozedUntil = null;
 
     const updated = await prisma.measurementReminder.update({
       where: { id },

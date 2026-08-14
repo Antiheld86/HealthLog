@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HealthLog API
-  version: 1.37.19
+  version: 1.37.20
   description: >-
     Self-hosted personal-health-tracking PWA — public API surface for the iOS native client and external ingest.
 
@@ -8906,6 +8906,312 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "422": *a8
         "429": *a4
+  /api/mood-entries:
+    get:
+      tags:
+        - Mood
+      summary: List mood entries
+      description: The record's mood entries, filtered and paged. Soft-deleted (tombstoned) rows are hidden; the
+        `/api/sync/changes` feed is where tombstones surface. Every row carries the same `MoodEntryDTO` shape the write
+        paths answer, structured-tag keys and rated factors included, so the edit form pre-populates without per-row
+        requests. A malformed query 422s with every issue listed (`meta.errorCode` = `mood.list.invalid`).
+      parameters:
+        - in: query
+          name: mood
+          schema:
+            type: string
+            enum:
+              - SUPER_GUT
+              - GUT
+              - OKAY
+              - SCHLECHT
+              - LAUSIG
+        - in: query
+          name: source
+          schema:
+            type: string
+            enum:
+              - MANUAL
+              - MOODLOG
+              - WEB
+              - TELEGRAM
+              - DAYLIO
+        - in: query
+          name: from
+          schema:
+            type: string
+            pattern: ^\d{4}-\d{2}-\d{2}$
+        - in: query
+          name: to
+          schema:
+            type: string
+            pattern: ^\d{4}-\d{2}-\d{2}$
+        - in: query
+          name: limit
+          schema:
+            default: 100
+            type: integer
+            minimum: 1
+            maximum: 500
+        - in: query
+          name: offset
+          schema:
+            default: 0
+            type: integer
+            minimum: 0
+            maximum: 9007199254740991
+        - in: query
+          name: sortBy
+          schema:
+            default: moodLoggedAt
+            type: string
+            enum:
+              - date
+              - mood
+              - score
+              - moodLoggedAt
+              - source
+        - in: query
+          name: sortDir
+          schema:
+            default: desc
+            type: string
+            enum:
+              - asc
+              - desc
+      responses:
+        "200":
+          description: One page of entries plus paging meta.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodEntryListEnvelope"
+        "401": *a1
+        "403": *a6
+        "422": *a3
+        "429": *a4
+    post:
+      tags:
+        - Mood
+      summary: Create a mood entry
+      description: Writes the entry, its structured-tag links and its day context in one transaction — a link or context
+        failure rolls the entry back rather than letting a retry mint a duplicate. Idempotent via the `Idempotency-Key`
+        header. With `externalId` the write UPSERTS on `(userId, source, externalId)` (a re-post updates the row in
+        place and restates pleasantness from the label, while A2-A5 and a stored context are only touched when the
+        request carries them); without it, a same-`(date, moodLoggedAt)` re-post 409s. A delegated manager cannot supply
+        `externalId` (422, `meta.errorCode` = `mood.create.external_id_not_delegable`) — it is a device's contract with
+        its own rows. A rated factor outside its catalog scale 422s (`mood.ratedFactor.out_of_range`); a malformed body
+        422s (`mood.create.invalid`). An unstable `externalId` (an object description or memory address that rotates per
+        launch) is refused at validation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMoodEntryRequest"
+      responses:
+        "201":
+          description: Entry created (or upserted in place via `externalId`), with its persisted tag keys, rated factors and
+            context.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodEntryEnvelope"
+        "401": *a1
+        "403": *a6
+        "409": &a12
+          description: A mood entry with the same `(date, moodLoggedAt)` instant already exists. `meta.errorCode` =
+            `mood.duplicate_timestamp`. Only a request without `externalId` can answer this — with one, the write
+            upserts in place.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422": *a3
+        "429": *a4
+  /api/mood-entries/{id}:
+    get:
+      tags:
+        - Mood
+      summary: Read one mood entry
+      description: The full entry with its day context, so the edit surface loads both in one request. A soft-deleted row
+        404s, matching the list read's invariant.
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: The entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodEntryEnvelope"
+        "401": *a1
+        "403": *a6
+        "404": *a11
+        "422": *a3
+        "429": *a4
+    put:
+      tags:
+        - Mood
+      summary: Edit a mood entry
+      description: "Per-field edit: omitted fields keep their stored value; `tagKeys`, `ratedFactors` and `context` replace
+        their whole set when present (`null` clears). Editing `mood` re-derives `score` and — when the label actually
+        moved — pleasantness `a1`; editing `moodLoggedAt` re-anchors the row's `date` and `tz` to the account's display
+        timezone. Bumps `syncVersion` so paired clients reconcile last-writer-wins. A soft-deleted row 404s
+        (`meta.errorCode` = `mood.not_found`); an edit landing on another row's `(date, moodLoggedAt)` 409s
+        (`mood.duplicate_timestamp`); a rated factor outside its catalog scale 422s (`mood.ratedFactor.out_of_range`); a
+        malformed body 422s (`mood.update.invalid`)."
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMoodEntryRequest"
+      responses:
+        "200":
+          description: The entry after the edit, with its persisted tag keys, rated factors and context.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodEntryEnvelope"
+        "401": *a1
+        "403": *a6
+        "404": *a11
+        "409": *a12
+        "422": *a3
+        "429": *a4
+    delete:
+      tags:
+        - Mood
+      summary: Delete a mood entry (soft)
+      description: Tombstones the row (`deletedAt` set, `syncVersion` bumped) rather than hard-deleting, so the
+        `/api/sync/changes` feed carries the tombstone to paired clients that were offline. Invisible to every normal
+        read from here on; `POST /api/mood-entries/restore` puts it back. Re-deleting an already-tombstoned row is a
+        harmless idempotent no-op.
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Entry tombstoned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodEntryDeleteEnvelope"
+        "401": *a1
+        "403": *a6
+        "404": *a11
+        "422": *a3
+        "429": *a4
+  /api/mood-entries/restore:
+    post:
+      tags:
+        - Mood
+      summary: Restore soft-deleted mood entries
+      description: Un-tombstones every owned, currently-deleted id in one statement — the delete-Undo affordance. Clears
+        `deletedAt` and bumps `syncVersion` so the row re-surfaces in normal reads and rides the `/api/sync/changes`
+        feed as an upsert. A forged / foreign / not-deleted id is a silent no-op, never a 404 existence leak. Idempotent
+        via the `Idempotency-Key` header. Rate-limited 60/min (keyed on the ACTING user, so a manager burns their own
+        allowance). A malformed body 422s (`meta.errorCode` = `mood.restore.invalid`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MoodEntryIdsRequest"
+      responses:
+        "200":
+          description: "`restored` counts the rows actually un-tombstoned."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodEntriesRestoreEnvelope"
+        "401": *a1
+        "403": *a6
+        "422": *a3
+        "429": *a4
+  /api/mood-entries/bulk-delete:
+    post:
+      tags:
+        - Mood
+      summary: Soft-delete mood entries in bulk
+      description: Tombstones every owned, not-already-deleted id in one statement — the management list's multi-select
+        delete, matching the single-DELETE tombstone contract. A forged / foreign id is a silent no-op, never a 404
+        existence leak. Idempotent via the `Idempotency-Key` header. Rate-limited 60/min (keyed on the ACTING user). A
+        malformed body 422s (`meta.errorCode` = `mood.bulk-delete.invalid`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MoodEntryIdsRequest"
+      responses:
+        "200":
+          description: "`deleted` counts the rows actually tombstoned."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodEntriesBulkDeleteEnvelope"
+        "401": *a1
+        "403": *a6
+        "422": *a3
+        "429": *a4
+  /api/mood/linked-context:
+    get:
+      tags:
+        - Mood
+      summary: The linked figures of one local day
+      description: "What the modules that own sleep, activity, vitals and body symptoms already know about one day, resolved
+        at read time and never stored on the mood row — a corrected sleep session shows up here with nothing to re-sync.
+        Keyed by local day rather than entry id, deliberately: the capture sheet needs the figures BEFORE an entry
+        exists. `tz` anchors the day's boundaries — the capture sheet sends the browser's zone, the edit dialog the
+        entry's stored `tz`; absent falls back to the account's display timezone. Whole-record read: the payload crosses
+        into the measurements and illness sections from a mood surface, so a section-scoped grant is refused outright
+        rather than served a filtered day that would read as empty. Gated: 403 `module.disabled` when the mood module is
+        off. A malformed query 422s (`meta.errorCode` = `mood.linkedContext.invalid`)."
+      parameters:
+        - in: query
+          name: date
+          schema:
+            type: string
+            pattern: ^\d{4}-\d{2}-\d{2}$
+            description: The local day to resolve, YYYY-MM-DD.
+          required: true
+          description: The local day to resolve, YYYY-MM-DD.
+        - in: query
+          name: tz
+          schema:
+            description: IANA zone the day is anchored to. Send the entry's stored `tz` when editing; omit to use the account's
+              display timezone.
+            type: string
+            minLength: 1
+            maxLength: 64
+          description: IANA zone the day is anchored to. Send the entry's stored `tz` when editing; omit to use the account's
+            display timezone.
+      responses:
+        "200":
+          description: The day's linked blocks; absence is explicit per figure and per module.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MoodLinkedContextEnvelope"
+        "401": *a1
+        "403": *a7
+        "422": *a3
+        "429": *a4
   /api/settings/reminder-thresholds:
     get:
       tags:
@@ -9056,6 +9362,51 @@ paths:
                 $ref: "#/components/schemas/CsvImportTooLargeEnvelope"
         "422": *a3
         "429": *a4
+  /api/import:
+    post:
+      tags:
+        - Import
+      summary: Import measurements and mood entries from JSON
+      description: "Restores a JSON export (the structure `GET /api/export/json` emits): up to 10 000 measurements plus 10 000
+        mood entries per call, body ≤ 16 MB. Rows carrying an `externalId` upsert idempotently (re-import updates in
+        place); rows without one are first-write-wins and dedup against the existing unique keys, so an exact duplicate
+        is `skipped` rather than doubled. A row with an unstable `externalId` is skipped while the rest of the file
+        still lands. Every imported measurement stores `source = IMPORT`; every imported mood entry re-derives
+        pleasantness from its label. Writes are per-row, not transactional: on a mid-file write failure the response is
+        503 (`meta.errorCode` = `import.write_failed`, `meta.retryable` = true) with `meta.stats` carrying what landed —
+        rows already written stay written, and a retry is only safe against duplication for rows that carry an
+        `externalId`. Validation is fail-fast (the 422 carries the first issue's message, not the multi-issue envelope).
+        Rate-limited 5/hour per user (shared `import:` bucket with the CSV importer)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JsonImportRequest"
+      responses:
+        "200":
+          description: Import completed; per-section outcome counts.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JsonImportStatsEnvelope"
+        "401": *a1
+        "413":
+          description: Body exceeds the 16 MB limit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422": *a3
+        "429": *a4
+        "503":
+          description: A write failed partway through the file. `meta.errorCode` = `import.write_failed`, `meta.retryable` = true,
+            `meta.stats` carries the counts that landed before the failure. Rows already written stay written; retry the
+            same file — rows with `externalId` re-import idempotently, rows without one may duplicate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
   /api/measurement-reminders:
     get:
       tags:
@@ -9118,7 +9469,7 @@ paths:
                 $ref: "#/components/schemas/MeasurementReminderEnvelope"
         "401": *a1
         "403": *a6
-        "404": &a12
+        "404": &a13
           description: Measurement reminder not found / not owned.
           content:
             application/json:
@@ -9153,7 +9504,7 @@ paths:
                 $ref: "#/components/schemas/MeasurementReminderPatchEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a12
+        "404": *a13
         "422": *a3
         "429": *a4
     delete:
@@ -9176,7 +9527,7 @@ paths:
                 $ref: "#/components/schemas/MeasurementReminderDeleteEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a12
+        "404": *a13
         "422": *a3
         "429": *a4
   /api/measurement-reminders/{id}/satisfy:
@@ -9201,7 +9552,7 @@ paths:
                 $ref: "#/components/schemas/MeasurementReminderSatisfyEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a12
+        "404": *a13
         "422": *a3
         "429": *a4
   /api/measurement-reminders/{id}/complete:
@@ -9229,7 +9580,112 @@ paths:
                 $ref: "#/components/schemas/MeasurementReminderCompleteEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a12
+        "404": *a13
+        "422": *a3
+        "429": *a4
+  /api/measurement-reminders/{id}/skip:
+    post:
+      tags:
+        - MeasurementReminders
+      summary: Skip the current due cycle (v1.37.20)
+      description: "Honestly skips the current due cycle — no body; the skip instant is the server clock. The interval
+        restarts from the skip (rolling: skip + N days at the notify hour; rrule: next occurrence strictly after the
+        skip), lastSkippedAt is stamped, skipCount incremented, any snooze cleared, and a SKIPPED row lands in the
+        completion ledger. lastSatisfiedAt is never touched: a skip is not a completion. Screening reminders are
+        skippable (the satisfy-side 409 guards claimed fulfilment; a skip claims the opposite). Owner-scoped; an
+        appointment (encounter) reminder 404s."
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: Skip applied (skipped=true) or forward-only no-op (skipped=false); reminder carries the canonical post-skip
+            DTO.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeasurementReminderSkipEnvelope"
+        "401": *a1
+        "403": *a6
+        "404": *a13
+        "422": *a3
+        "429": *a4
+  /api/measurement-reminders/{id}/snooze:
+    post:
+      tags:
+        - MeasurementReminders
+      summary: Snooze to a calendar day (v1.37.20)
+      description: "Pushes the current due date back to a named calendar day (YYYY-MM-DD), resolved server-side to the
+        reminder's notifyHour in the profile timezone. snoozedUntil and nextDueAt are set to the same instant, so every
+        due-state consumer moves together and the cursor self-expires. The regular cadence is untouched —
+        lastSatisfiedAt, lastSkippedAt and the anchor stay put. Must be at least tomorrow and at most five years out
+        (422 otherwise). Repeated snoozes: last one wins. Owner-scoped; an appointment reminder 404s."
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MeasurementReminderSnooze"
+      responses:
+        "200":
+          description: Snooze applied; reminder carries the resolved DTO.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeasurementReminderSnoozeEnvelope"
+        "401": *a1
+        "403": *a6
+        "404": *a13
+        "422": *a3
+        "429": *a4
+  /api/measurement-reminders/{id}/history:
+    get:
+      tags:
+        - MeasurementReminders
+      summary: Completion ledger, newest first (v1.37.20)
+      description: "Paginated completion ledger for one reminder (iOS #68): one row per satisfy (from any path) and per skip,
+        newest first. onTime is derived server-side at write time against the due instant that was current when the
+        event landed. History begins at the release that introduced the ledger — the single-cursor engine holds nothing
+        to backfill from. Owner-scoped; an appointment reminder 404s."
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+        - in: query
+          name: limit
+          schema:
+            default: 50
+            type: integer
+            minimum: 1
+            maximum: 100
+        - in: query
+          name: offset
+          schema:
+            default: 0
+            type: integer
+            minimum: 0
+            maximum: 9007199254740991
+      responses:
+        "200":
+          description: The reminder's completion ledger page.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeasurementReminderHistoryEnvelope"
+        "401": *a1
+        "403": *a6
+        "404": *a13
         "422": *a3
         "429": *a4
   /api/labs:
@@ -9411,7 +9867,7 @@ paths:
                 $ref: "#/components/schemas/GetLabResultResponse"
         "401": *a1
         "403": *a6
-        "404": &a13
+        "404": &a14
           description: Lab result not found (or owned by another user).
           content:
             application/json:
@@ -9506,7 +9962,7 @@ paths:
                 $ref: "#/components/schemas/UpdateLabResultResponse"
         "401": *a1
         "403": *a6
-        "404": *a13
+        "404": *a14
         "422": *a3
         "429": *a4
     delete:
@@ -9529,7 +9985,7 @@ paths:
                 $ref: "#/components/schemas/DeleteLabResultResponse"
         "401": *a1
         "403": *a6
-        "404": *a13
+        "404": *a14
         "422": *a3
         "429": *a4
   /api/labs/restore:
@@ -9759,7 +10215,7 @@ paths:
                 $ref: "#/components/schemas/CreateBiomarkerResponse"
         "401": *a1
         "403": *a6
-        "409": &a15
+        "409": &a16
           description: A biomarker with this name already exists for the caller.
           content:
             application/json:
@@ -9788,7 +10244,7 @@ paths:
                 $ref: "#/components/schemas/GetBiomarkerResponse"
         "401": *a1
         "403": *a6
-        "404": &a14
+        "404": &a15
           description: Biomarker not found (or owned by another user).
           content:
             application/json:
@@ -9856,8 +10312,8 @@ paths:
                 $ref: "#/components/schemas/UpdateBiomarkerResponse"
         "401": *a1
         "403": *a6
-        "404": *a14
-        "409": *a15
+        "404": *a15
+        "409": *a16
         "422": *a3
         "429": *a4
     delete:
@@ -9880,7 +10336,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteBiomarkerResponse"
         "401": *a1
-        "404": *a14
+        "404": *a15
         "422": *a3
         "429": *a4
   /api/encounters:
@@ -10087,7 +10543,7 @@ paths:
                 $ref: "#/components/schemas/GetEncounterEnvelope"
         "401": *a1
         "403": *a6
-        "404": &a16
+        "404": &a17
           description: Visit not found (or owned by another user).
           content:
             application/json:
@@ -10188,7 +10644,7 @@ paths:
                 $ref: "#/components/schemas/UpdateEncounterEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a16
+        "404": *a17
         "422": *a3
         "429": *a4
     delete:
@@ -10213,7 +10669,7 @@ paths:
                 $ref: "#/components/schemas/DeleteEncounterEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a16
+        "404": *a17
         "422": *a3
         "429": *a4
   /api/encounters/{id}/restore:
@@ -10239,7 +10695,7 @@ paths:
                 $ref: "#/components/schemas/RestoreEncounterEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a16
+        "404": *a17
         "422": *a3
         "429": *a4
   /api/encounters/{id}/links:
@@ -10288,7 +10744,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/LinkEncounterEnvelope"
         "401": *a1
-        "404": *a16
+        "404": *a17
         "422": *a3
         "429": *a4
     delete:
@@ -10336,7 +10792,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UnlinkEncounterEnvelope"
         "401": *a1
-        "404": *a16
+        "404": *a17
         "422": *a3
         "429": *a4
   /api/practitioners:
@@ -10445,7 +10901,7 @@ paths:
                 $ref: "#/components/schemas/GetPractitionerEnvelope"
         "401": *a1
         "403": *a6
-        "404": &a17
+        "404": &a18
           description: Practitioner not found (or owned by another user).
           content:
             application/json:
@@ -10510,7 +10966,7 @@ paths:
                 $ref: "#/components/schemas/UpdatePractitionerEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a17
+        "404": *a18
         "422": *a3
         "429": *a4
     delete:
@@ -10534,7 +10990,7 @@ paths:
                 $ref: "#/components/schemas/DeletePractitionerEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a17
+        "404": *a18
         "422": *a3
         "429": *a4
   /api/practitioners/{id}/restore:
@@ -10560,7 +11016,7 @@ paths:
                 $ref: "#/components/schemas/RestorePractitionerEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a17
+        "404": *a18
         "422": *a3
         "429": *a4
   /api/vaccinations:
@@ -10726,7 +11182,7 @@ paths:
                 $ref: "#/components/schemas/GetVaccinationEnvelope"
         "401": *a1
         "403": *a6
-        "404": &a18
+        "404": &a19
           description: Vaccination not found (or owned by another user).
           content:
             application/json:
@@ -10833,7 +11289,7 @@ paths:
                 $ref: "#/components/schemas/UpdateVaccinationEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a18
+        "404": *a19
         "422": *a3
         "429": *a4
     delete:
@@ -10858,7 +11314,7 @@ paths:
                 $ref: "#/components/schemas/DeleteVaccinationEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a18
+        "404": *a19
         "422": *a3
         "429": *a4
   /api/vaccinations/{id}/restore:
@@ -10883,7 +11339,7 @@ paths:
                 $ref: "#/components/schemas/RestoreVaccinationEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a18
+        "404": *a19
         "422": *a3
         "429": *a4
   /api/vaccinations/{id}/booster:
@@ -10941,7 +11397,7 @@ paths:
                 $ref: "#/components/schemas/MintVaccinationBoosterEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a18
+        "404": *a19
         "422": *a3
         "429": *a4
   /api/vaccinations/suggest:
@@ -11016,7 +11472,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/LinkVaccinationEnvelope"
         "401": *a1
-        "404": *a18
+        "404": *a19
         "422": *a3
         "429": *a4
     delete:
@@ -11062,7 +11518,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UnlinkVaccinationEnvelope"
         "401": *a1
-        "404": *a18
+        "404": *a19
         "422": *a3
         "429": *a4
   /api/illness/episodes:
@@ -11190,7 +11646,7 @@ paths:
                 $ref: "#/components/schemas/GetIllnessEpisodeEnvelope"
         "401": *a1
         "403": *a6
-        "404": &a19
+        "404": &a20
           description: Illness episode not found (or owned by another user).
           content:
             application/json:
@@ -11269,7 +11725,7 @@ paths:
                 $ref: "#/components/schemas/UpdateIllnessEpisodeEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a19
+        "404": *a20
         "422": *a3
         "429": *a4
     delete:
@@ -11293,7 +11749,7 @@ paths:
                 $ref: "#/components/schemas/DeleteIllnessEpisodeEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a19
+        "404": *a20
         "422": *a3
         "429": *a4
   /api/illness/episodes/{id}/restore:
@@ -11320,7 +11776,7 @@ paths:
                 $ref: "#/components/schemas/RestoreIllnessEpisodeEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a19
+        "404": *a20
         "422": *a3
         "429": *a4
   /api/illness/episodes/{id}/resolve:
@@ -11357,7 +11813,7 @@ paths:
                 $ref: "#/components/schemas/ResolveIllnessEpisodeEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a19
+        "404": *a20
         "422": *a3
         "429": *a4
   /api/illness/episodes/{id}/day-logs:
@@ -11408,7 +11864,7 @@ paths:
                 $ref: "#/components/schemas/GetIllnessDayLogEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a19
+        "404": *a20
         "422": *a3
         "429": *a4
     post:
@@ -11488,7 +11944,7 @@ paths:
                 $ref: "#/components/schemas/UpsertIllnessDayLogCreatedEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a19
+        "404": *a20
         "422": *a3
         "429": *a4
   /api/illness/episodes/{id}/correlation:
@@ -11515,7 +11971,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/IllnessCorrelationEnvelope"
         "401": *a1
-        "404": *a19
+        "404": *a20
         "422": *a3
         "429": *a4
   /api/illness/insights:
@@ -11658,6 +12114,32 @@ paths:
         "403": *a6
         "422": *a3
         "429": *a4
+  /api/mental-health/assessments/{id}:
+    get:
+      tags:
+        - Mental health
+      summary: Read one administration with its decrypted answers
+      description: "Returns a single screener administration including the decrypted per-item answers (and the PHQ-9's
+        unscored functional follow-up when answered) — the one surface that reads them back. When the stored blob cannot
+        be decrypted the read degrades to `items: null` + `itemsUnavailable: true` instead of failing; the total / band
+        / flag still answer. A soft-deleted or foreign row answers 404."
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      responses:
+        "200":
+          description: The administration with its answer breakdown.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetMentalHealthAssessmentEnvelope"
+        "401": *a1
+        "403": *a6
+        "422": *a3
+        "429": *a4
   /api/allergies:
     get:
       tags:
@@ -11788,7 +12270,7 @@ paths:
                 $ref: "#/components/schemas/GetAllergyEnvelope"
         "401": *a1
         "403": *a6
-        "404": &a20
+        "404": &a21
           description: Allergy not found (or owned by another user).
           content:
             application/json:
@@ -11871,7 +12353,7 @@ paths:
                 $ref: "#/components/schemas/UpdateAllergyEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a20
+        "404": *a21
         "422": *a3
         "429": *a4
     delete:
@@ -11895,7 +12377,7 @@ paths:
                 $ref: "#/components/schemas/DeleteAllergyEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a20
+        "404": *a21
         "422": *a3
         "429": *a4
   /api/family-history:
@@ -12003,7 +12485,7 @@ paths:
                 $ref: "#/components/schemas/GetFamilyHistoryEnvelope"
         "401": *a1
         "403": *a6
-        "404": &a21
+        "404": &a22
           description: Family history entry not found (or owned by another user).
           content:
             application/json:
@@ -12072,7 +12554,7 @@ paths:
                 $ref: "#/components/schemas/UpdateFamilyHistoryEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a21
+        "404": *a22
         "422": *a3
         "429": *a4
     delete:
@@ -12096,7 +12578,7 @@ paths:
                 $ref: "#/components/schemas/DeleteFamilyHistoryEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a21
+        "404": *a22
         "422": *a3
         "429": *a4
   /api/documents/inbound:
@@ -13249,7 +13731,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreateCustomMetricResponse"
         "401": *a1
-        "409": &a23
+        "409": &a24
           description: A custom metric with this name already exists for the caller.
           content:
             application/json:
@@ -13278,7 +13760,7 @@ paths:
                 $ref: "#/components/schemas/GetCustomMetricResponse"
         "401": *a1
         "403": *a6
-        "404": &a22
+        "404": &a23
           description: Custom metric not found (or owned by another user).
           content:
             application/json:
@@ -13342,8 +13824,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateCustomMetricResponse"
         "401": *a1
-        "404": *a22
-        "409": *a23
+        "404": *a23
+        "409": *a24
         "422": *a3
         "429": *a4
     delete:
@@ -13366,7 +13848,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteCustomMetricResponse"
         "401": *a1
-        "404": *a22
+        "404": *a23
         "422": *a3
         "429": *a4
   /api/custom-metrics/{id}/entries:
@@ -13410,7 +13892,7 @@ paths:
                 $ref: "#/components/schemas/ListCustomMetricEntriesEnvelope"
         "401": *a1
         "403": *a6
-        "404": *a22
+        "404": *a23
         "422": *a3
         "429": *a4
     post:
@@ -13454,7 +13936,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreateCustomMetricEntryResponse"
         "401": *a1
-        "404": *a22
+        "404": *a23
         "422": *a3
         "429": *a4
   /api/custom-metrics/{id}/entries/{entryId}:
@@ -13504,7 +13986,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateCustomMetricEntryResponse"
         "401": *a1
-        "404": &a24
+        "404": &a25
           description: Custom metric entry not found (or owned by another user).
           content:
             application/json:
@@ -13516,7 +13998,8 @@ paths:
       tags:
         - Custom metrics
       summary: Delete a logged value
-      description: Hard-deletes the value. Audits as `customMetricEntry.delete`.
+      description: Tombstones the value (soft delete, v1.37.20); the sibling entries/restore endpoint clears the tombstone.
+        Audits as `customMetricEntry.delete`.
       parameters:
         - in: path
           name: id
@@ -13536,7 +14019,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteCustomMetricEntryResponse"
         "401": *a1
-        "404": *a24
+        "404": *a25
+        "422": *a3
+        "429": *a4
+  /api/custom-metrics/{id}/entries/restore:
+    post:
+      tags:
+        - Custom metrics
+      summary: Restore tombstoned values (v1.37.20)
+      description: Clears deletedAt on every owned, currently-tombstoned entry of this metric named in ids (1..200). A
+        foreign, live or mismatched-parent id is a silent no-op, never an existence leak. Backs the delete toast's Undo.
+        Audits as `customMetricEntry.restore`.
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RestoreCustomMetricEntriesRequest"
+      responses:
+        "200":
+          description: Count of entries restored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RestoreCustomMetricEntriesResponse"
+        "401": *a1
         "422": *a3
         "429": *a4
   /api/onboarding/disclaimer:
@@ -13706,7 +14219,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientOverviewEnvelope"
         "401": *a1
-        "403": &a25
+        "403": &a26
           description: >-
             The opt-in `nutrients` module is off for this account (errorCode `module.disabled`). Stop syncing and do not
             retry; offer the enable-in-settings hint. Only run the HealthKit read-authorization flow while the module is
@@ -13761,7 +14274,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientDailySeriesEnvelope"
         "401": *a1
-        "403": *a25
+        "403": *a26
         "422": *a3
         "429": *a4
   /api/nutrients/water:
@@ -13788,7 +14301,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientWaterWriteEnvelope"
         "401": *a1
-        "403": *a25
+        "403": *a26
         "422": *a3
         "429": *a4
   /api/integrations/healthkit:
@@ -14071,7 +14584,7 @@ paths:
         - Dashboard
       summary: Reset the calling user's dashboard widget layout
       description: Resets the tile layout and Today-highlight visibility. It preserves the stored comparison baseline, chart
-        overlays, selected score rings, and hero ring order. Idempotent.
+        overlays, selected score rings, hero ring order, and hero primary content. Idempotent.
       responses:
         "200":
           description: Web-controlled layout settings reset; preserved dashboard preferences are returned with the defaults.
@@ -14126,7 +14639,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RecordActivityEnvelope"
         "401": *a1
-        "403": &a26
+        "403": &a27
           description: Refused. `meta.errorCode` is `sharing.not_permitted` when the request was made while acting on another
             account (grant management is never delegable), or `sharing.access.denied` when the caller may not act as the
             account they named. The latter is byte-identical for an account that does not exist and one that granted
@@ -14151,7 +14664,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AccountGrantListEnvelope"
         "401": *a1
-        "403": *a26
+        "403": *a27
         "422": *a3
         "429": *a4
     post:
@@ -14246,7 +14759,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AcceptedAccountGrantEnvelope"
         "401": *a1
-        "403": *a26
+        "403": *a27
         "404":
           description: No such invitation for this account.
           content:
@@ -14290,7 +14803,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RevokedAccountGrantEnvelope"
         "401": *a1
-        "403": *a26
+        "403": *a27
         "404":
           description: No such grant on this account's record.
           content:
@@ -14331,7 +14844,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RenouncedAccountGrantEnvelope"
         "401": *a1
-        "403": *a26
+        "403": *a27
         "404":
           description: No such grant held by this account.
           content:
@@ -14630,7 +15143,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "401": *a1
-        "403": *a26
+        "403": *a27
         "409":
           description: "The record this browser session is on is not the record the request asserted. `meta.errorCode` is
             `sharing.session.changed`. It is not a refusal of access — the caller may well be entitled to both records —
@@ -17146,6 +17659,686 @@ components:
         token. The two manage cards write different fields of the same blob; echo the token to have a stale write
         refused with 409 instead of resurrecting the other card's overwritten field. Omit it for the legacy
         unconditional write.
+    CreateMoodEntryRequest:
+      type: object
+      properties:
+        mood:
+          type: string
+          enum:
+            - SUPER_GUT
+            - GUT
+            - OKAY
+            - SCHLECHT
+            - LAUSIG
+        tags:
+          maxItems: 20
+          type: array
+          items:
+            type: string
+            maxLength: 50
+        tagKeys:
+          maxItems: 30
+          type: array
+          items:
+            type: string
+            maxLength: 60
+        ratedFactors:
+          maxItems: 30
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+                maxLength: 60
+              rating:
+                type: integer
+                minimum: 1
+                maximum: 5
+            required:
+              - key
+              - rating
+        a1:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        a2:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        a3:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        a4:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        a5:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        note:
+          type: string
+          maxLength: 500
+        context:
+          anyOf:
+            - type: object
+              properties:
+                workStatus:
+                  anyOf:
+                    - type: string
+                      enum:
+                        - off
+                        - partial
+                        - regular
+                        - overtime
+                    - type: "null"
+                workMinutes:
+                  anyOf:
+                    - type: integer
+                      minimum: 0
+                      maximum: 1440
+                    - type: "null"
+                overtimeMinutes:
+                  anyOf:
+                    - type: integer
+                      minimum: 0
+                      maximum: 1440
+                    - type: "null"
+                workLoad:
+                  anyOf:
+                    - type: integer
+                      minimum: 0
+                      maximum: 10
+                    - type: "null"
+                workSatisfaction:
+                  anyOf:
+                    - type: integer
+                      minimum: 0
+                      maximum: 10
+                    - type: "null"
+                contactCircles:
+                  anyOf:
+                    - maxItems: 8
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                          - partner
+                          - child
+                          - family
+                          - friends
+                          - colleagues
+                          - acquaintances
+                          - professional
+                          - other
+                    - type: "null"
+                contactForm:
+                  anyOf:
+                    - type: string
+                      enum:
+                        - inPerson
+                        - phone
+                        - video
+                        - written
+                    - type: "null"
+                contactExtent:
+                  anyOf:
+                    - type: string
+                      enum:
+                        - brief
+                        - medium
+                        - extended
+                    - type: "null"
+                contactQuality:
+                  anyOf:
+                    - type: integer
+                      minimum: 0
+                      maximum: 10
+                    - type: "null"
+                contactSupport:
+                  anyOf:
+                    - type: integer
+                      minimum: 0
+                      maximum: 10
+                    - type: "null"
+                leisureCategories:
+                  anyOf:
+                    - maxItems: 11
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                          - film
+                          - reading
+                          - gaming
+                          - music
+                          - creative
+                          - outing
+                          - garden
+                          - cooking
+                          - timeWithChild
+                          - relaxation
+                          - other
+                    - type: "null"
+                leisureMinutes:
+                  anyOf:
+                    - type: integer
+                      minimum: 0
+                      maximum: 1440
+                    - type: "null"
+                leisureJoy:
+                  anyOf:
+                    - type: integer
+                      minimum: 0
+                      maximum: 10
+                    - type: "null"
+                leisureRecovery:
+                  anyOf:
+                    - type: integer
+                      minimum: 0
+                      maximum: 10
+                    - type: "null"
+                eventType:
+                  anyOf:
+                    - type: string
+                      enum:
+                        - goodNews
+                        - badNews
+                        - success
+                        - disappointment
+                        - conflict
+                        - appointment
+                        - familyEvent
+                        - change
+                        - unexpected
+                    - type: "null"
+                eventValence:
+                  anyOf:
+                    - type: integer
+                      minimum: -5
+                      maximum: 5
+                    - type: "null"
+                eventAt:
+                  anyOf:
+                    - type: string
+                      format: date-time
+                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                    - type: "null"
+                note:
+                  anyOf:
+                    - type: string
+                      maxLength: 500
+                    - type: "null"
+            - type: "null"
+        moodLoggedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        source:
+          default: MANUAL
+          type: string
+          enum:
+            - MANUAL
+            - MOODLOG
+            - WEB
+            - TELEGRAM
+            - DAYLIO
+        externalId:
+          type: string
+          minLength: 1
+          maxLength: 120
+      required:
+        - mood
+        - moodLoggedAt
+      description: "Single mood-entry create. `mood` is the five-point label; the server derives `score` (1-5) and
+        pleasantness `a1` from it, so a one-tap check-in writes a complete entry. `a1`-`a5` are the level-A self-state
+        values (0-10): absent says nothing, a number is the answer, an explicit null takes an answer back (`a1` falls
+        back to the derivation instead of clearing). With `externalId` the create UPSERTS on `(userId, source,
+        externalId)` — the idempotent re-post iOS drives over Bearer; without it a same-`(date, moodLoggedAt)` re-post
+        409s. `moodLoggedAt` is bounded: no future instants beyond a 5-min clock-skew tolerance, nothing before 1900."
+    UpdateMoodEntryRequest:
+      type: object
+      properties:
+        mood:
+          type: string
+          enum:
+            - SUPER_GUT
+            - GUT
+            - OKAY
+            - SCHLECHT
+            - LAUSIG
+        tags:
+          anyOf:
+            - maxItems: 20
+              type: array
+              items:
+                type: string
+                maxLength: 50
+            - type: "null"
+        tagKeys:
+          anyOf:
+            - maxItems: 30
+              type: array
+              items:
+                type: string
+                maxLength: 60
+            - type: "null"
+        ratedFactors:
+          anyOf:
+            - maxItems: 30
+              type: array
+              items:
+                type: object
+                properties:
+                  key:
+                    type: string
+                    maxLength: 60
+                  rating:
+                    type: integer
+                    minimum: 1
+                    maximum: 5
+                required:
+                  - key
+                  - rating
+            - type: "null"
+        a1:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        a2:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        a3:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        a4:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        a5:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 10
+            - type: "null"
+        note:
+          anyOf:
+            - type: string
+              maxLength: 500
+            - type: "null"
+        context:
+          anyOf:
+            - type: object
+              properties:
+                workStatus:
+                  anyOf:
+                    - type: string
+                      enum:
+                        - off
+                        - partial
+                        - regular
+                        - overtime
+                    - type: "null"
+                workMinutes:
+                  anyOf:
+                    - type: integer
+                      minimum: 0
+                      maximum: 1440
+                    - type: "null"
+                overtimeMinutes:
+                  anyOf:
+                    - type: integer
+                      minimum: 0
+                      maximum: 1440
+                    - type: "null"
+                workLoad:
+                  anyOf:
+                    - type: integer
+                      minimum: 0
+                      maximum: 10
+                    - type: "null"
+                workSatisfaction:
+                  anyOf:
+                    - type: integer
+                      minimum: 0
+                      maximum: 10
+                    - type: "null"
+                contactCircles:
+                  anyOf:
+                    - maxItems: 8
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                          - partner
+                          - child
+                          - family
+                          - friends
+                          - colleagues
+                          - acquaintances
+                          - professional
+                          - other
+                    - type: "null"
+                contactForm:
+                  anyOf:
+                    - type: string
+                      enum:
+                        - inPerson
+                        - phone
+                        - video
+                        - written
+                    - type: "null"
+                contactExtent:
+                  anyOf:
+                    - type: string
+                      enum:
+                        - brief
+                        - medium
+                        - extended
+                    - type: "null"
+                contactQuality:
+                  anyOf:
+                    - type: integer
+                      minimum: 0
+                      maximum: 10
+                    - type: "null"
+                contactSupport:
+                  anyOf:
+                    - type: integer
+                      minimum: 0
+                      maximum: 10
+                    - type: "null"
+                leisureCategories:
+                  anyOf:
+                    - maxItems: 11
+                      type: array
+                      items:
+                        type: string
+                        enum:
+                          - film
+                          - reading
+                          - gaming
+                          - music
+                          - creative
+                          - outing
+                          - garden
+                          - cooking
+                          - timeWithChild
+                          - relaxation
+                          - other
+                    - type: "null"
+                leisureMinutes:
+                  anyOf:
+                    - type: integer
+                      minimum: 0
+                      maximum: 1440
+                    - type: "null"
+                leisureJoy:
+                  anyOf:
+                    - type: integer
+                      minimum: 0
+                      maximum: 10
+                    - type: "null"
+                leisureRecovery:
+                  anyOf:
+                    - type: integer
+                      minimum: 0
+                      maximum: 10
+                    - type: "null"
+                eventType:
+                  anyOf:
+                    - type: string
+                      enum:
+                        - goodNews
+                        - badNews
+                        - success
+                        - disappointment
+                        - conflict
+                        - appointment
+                        - familyEvent
+                        - change
+                        - unexpected
+                    - type: "null"
+                eventValence:
+                  anyOf:
+                    - type: integer
+                      minimum: -5
+                      maximum: 5
+                    - type: "null"
+                eventAt:
+                  anyOf:
+                    - type: string
+                      format: date-time
+                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                    - type: "null"
+                note:
+                  anyOf:
+                    - type: string
+                      maxLength: 500
+                    - type: "null"
+            - type: "null"
+        moodLoggedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+      description: "Per-field mood-entry edit. Omitted fields keep the stored value. `tagKeys`, `ratedFactors` and `context`
+        replace their whole set when present (`null` clears). `a2`-`a5`: explicit null clears; `a1` null re-derives from
+        the label. Editing `mood` without `a1` re-derives pleasantness the same way it re-derives `score`. Editing
+        `moodLoggedAt` re-anchors the row's `date` (and `tz`) to the account's display timezone."
+    MoodEntryIdsRequest:
+      type: object
+      properties:
+        ids:
+          minItems: 1
+          maxItems: 200
+          type: array
+          items:
+            type: string
+            minLength: 1
+      required:
+        - ids
+      description: "1-200 mood-entry ids, scoped to the resolved record. A forged / foreign / non-matching id is a silent
+        no-op, never a 404 existence leak: the mutation `where` pins the record owner's id."
+    JsonImportRequest:
+      type: object
+      properties:
+        measurements:
+          maxItems: 10000
+          type: array
+          items:
+            $ref: "#/components/schemas/JsonImportMeasurement"
+        moodEntries:
+          maxItems: 10000
+          type: array
+          items:
+            $ref: "#/components/schemas/JsonImportMoodEntry"
+      description: JSON import payload, matching the structure `GET /api/export/json` emits. Both sections optional; up to 10
+        000 rows each.
+    JsonImportMeasurement:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - WEIGHT
+            - BLOOD_PRESSURE_SYS
+            - BLOOD_PRESSURE_DIA
+            - PULSE
+            - BODY_FAT
+            - SLEEP_DURATION
+            - ACTIVITY_STEPS
+            - BLOOD_GLUCOSE
+            - TOTAL_BODY_WATER
+            - BONE_MASS
+            - OXYGEN_SATURATION
+            - HEART_RATE_VARIABILITY
+            - RESTING_HEART_RATE
+            - ACTIVE_ENERGY_BURNED
+            - FLIGHTS_CLIMBED
+            - WALKING_RUNNING_DISTANCE
+            - VO2_MAX
+            - BODY_TEMPERATURE
+            - FAT_FREE_MASS
+            - FAT_MASS
+            - MUSCLE_MASS
+            - SKIN_TEMPERATURE
+            - PULSE_WAVE_VELOCITY
+            - VASCULAR_AGE
+            - VISCERAL_FAT
+            - AUDIO_EXPOSURE_ENV
+            - AUDIO_EXPOSURE_HEADPHONE
+            - TIME_IN_DAYLIGHT
+            - WALKING_STEADINESS
+            - AUDIO_EXPOSURE_EVENT
+            - RESPIRATORY_RATE
+            - BODY_MASS_INDEX
+            - LEAN_BODY_MASS
+            - WALKING_HEART_RATE_AVERAGE
+            - WALKING_ASYMMETRY
+            - WALKING_DOUBLE_SUPPORT
+            - WALKING_STEP_LENGTH
+            - WALKING_SPEED
+            - CARDIO_RECOVERY
+            - WRIST_TEMPERATURE
+            - FALL_COUNT
+            - SIX_MINUTE_WALK_DISTANCE
+            - STAIR_ASCENT_SPEED
+            - STAIR_DESCENT_SPEED
+            - BREATHING_DISTURBANCES
+            - IRREGULAR_RHYTHM_NOTIFICATION
+            - HIGH_HEART_RATE_EVENT
+            - LOW_HEART_RATE_EVENT
+            - WALKING_STEADINESS_EVENT
+            - BREATHING_DISTURBANCE_EVENT
+            - RECOVERY_SCORE
+            - STRESS_SCORE
+            - STRAIN_SCORE
+            - HRV_RMSSD
+            - DAY_STRAIN
+            - WORKOUT_STRAIN
+            - SLEEP_PERFORMANCE
+            - SLEEP_EFFICIENCY
+            - SLEEP_CONSISTENCY
+            - SLEEP_NEED
+            - ENERGY_EXPENDITURE_KJ
+            - AVERAGE_HEART_RATE
+            - MAX_HEART_RATE
+            - SLEEP_DISTURBANCE_COUNT
+            - ANS_CHARGE
+            - CARDIO_LOAD
+            - SLEEP_SCORE
+            - BODY_TEMPERATURE_DEVIATION
+            - RESILIENCE
+            - PHQ9_SCORE
+            - GAD7_SCORE
+            - GRIP_STRENGTH
+            - PAIN_NRS
+            - WAIST_CIRCUMFERENCE
+            - WAIST_TO_HEIGHT
+            - WHO5_SCORE
+            - SCI_SCORE
+        value:
+          type: number
+          description: Checked against the type's server-side plausibility range; an out-of-range value fails the whole request
+            with 422.
+        unit:
+          type: string
+        measuredAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: "Bounded: no future instants beyond a 5-min clock-skew tolerance, nothing before 1900."
+        glucoseContext:
+          description: Optional even on a BLOOD_GLUCOSE row — a sensor export classifies nothing per sample.
+          type: string
+          enum:
+            - FASTING
+            - POSTPRANDIAL
+            - RANDOM
+            - BEDTIME
+        source:
+          description: "Accepted for export-format compatibility and ignored: every imported row stores `source = IMPORT`."
+          type: string
+        notes:
+          description: Encrypted at rest.
+          type: string
+        externalId:
+          description: Source-stable id making re-import idempotent (upsert on `(userId, type, source=IMPORT, externalId)`; a
+            re-import updates the row in place). Absent → first-write-wins create with a NULL key, which DOES duplicate
+            on re-import. An unstable id (an object description or memory address that rotates per launch) skips THIS
+            row, never the file.
+          type: string
+          minLength: 1
+          maxLength: 120
+      required:
+        - type
+        - value
+        - unit
+        - measuredAt
+      description: One measurement row of a JSON import file.
+    JsonImportMoodEntry:
+      type: object
+      properties:
+        date:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          description: Local-day label, YYYY-MM-DD.
+        mood:
+          type: string
+          enum:
+            - SUPER_GUT
+            - GUT
+            - OKAY
+            - SCHLECHT
+            - LAUSIG
+        score:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: Stored as sent — the export format's own field. Pleasantness (`a1`) is re-derived from `mood` on every
+            imported row, never taken from this.
+        tags:
+          description: JSON-encoded array of tag strings, stored verbatim.
+          type: string
+        loggedAt:
+          description: Bounded like `measuredAt`. Absent → the server derives a stable per-row instant within the `date` day, so a
+            re-import of the same file dedups instead of duplicating.
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        externalId:
+          description: "Source-stable id (e.g. a Daylio row id) making re-import idempotent (upsert on `(userId, source=IMPORT,
+            externalId)`). Same stability rule as the measurement `externalId`: an unstable id skips the row."
+          type: string
+          minLength: 1
+          maxLength: 120
+      required:
+        - date
+        - mood
+        - score
+      description: One mood-entry row of a JSON import file.
     MeasurementReminderCreate:
       type: object
       properties:
@@ -17262,6 +18455,19 @@ components:
           type: boolean
       description: Partial edit of a Vorsorge reminder. Omitted fields are left untouched; nextDueAt is recomputed server-side
         after the patch applies.
+    MeasurementReminderSnooze:
+      type: object
+      properties:
+        until:
+          type: string
+          format: date
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+      required:
+        - until
+      description: "Push a reminder's current due date back to a calendar day (YYYY-MM-DD). The server resolves the day to the
+        reminder's notifyHour in the profile timezone. Must be at least tomorrow and at most five years out. The regular
+        cadence is untouched: lastSatisfiedAt and the anchor stay where they are, and the reminder resumes its normal
+        interval after the snoozed cycle."
     RestoreLabResultsRequest:
       type: object
       properties:
@@ -17334,6 +18540,18 @@ components:
             - de
       required:
         - message
+    RestoreCustomMetricEntriesRequest:
+      type: object
+      properties:
+        ids:
+          minItems: 1
+          maxItems: 200
+          type: array
+          items:
+            type: string
+            minLength: 1
+      required:
+        - ids
     DisclaimerAckRequest:
       type: object
       properties:
@@ -17725,6 +18943,14 @@ components:
               - tension_window
               - same_time_baseline
               - upcoming_visit
+        hero:
+          description: 'Primary hero-card content on the dashboard: "score" (the health-score read, default) or "reminders" (the
+            Today-highlight rail promoted into the hero slot). Missing resolves to "score"; the stored default is
+            omitted from responses.'
+          type: string
+          enum:
+            - score
+            - reminders
         baseUpdatedAt:
           description: "Optimistic-concurrency base token: the `updatedAt` the client last read for this resource. Omit it for the
             legacy unconditional write (older clients are unaffected). When present, the write is guarded on the stored
@@ -34670,6 +35896,499 @@ components:
         - data
         - error
       additionalProperties: false
+    MoodEntryListEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            entries:
+              type: array
+              items:
+                $ref: "#/components/schemas/MoodEntryDTO"
+            meta:
+              type: object
+              properties:
+                total:
+                  type: integer
+                  minimum: 0
+                  maximum: 9007199254740991
+                limit:
+                  type: integer
+                  minimum: -9007199254740991
+                  maximum: 9007199254740991
+                offset:
+                  type: integer
+                  minimum: -9007199254740991
+                  maximum: 9007199254740991
+              required:
+                - total
+                - limit
+                - offset
+              additionalProperties: false
+          required:
+            - entries
+            - meta
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    MoodEntryDTO:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        date:
+          type: string
+          description: "YYYY-MM-DD, anchored to the row's `tz` (legacy rows with `tz: null` read as Europe/Berlin)."
+        mood:
+          type: string
+          enum:
+            - SUPER_GUT
+            - GUT
+            - OKAY
+            - SCHLECHT
+            - LAUSIG
+        score:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: The legacy 1-5 axis, server-derived from `mood`.
+        a1:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: Pleasantness, 0-10. Server-derived from `mood` on every write when the request carried none, so it is
+            populated even for rows a client posted without it. Consume the value; do not re-derive it.
+        a2:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: "Stress, 0-10, INVERSE-oriented: a higher value is more stress. NULL when nobody answered it."
+        a3:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: Energy, 0-10, or null.
+        a4:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: Connectedness, 0-10, or null.
+        a5:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: Stability, 0-10, or null.
+        tags:
+          type: array
+          items:
+            type: string
+          description: Free-text tag list, decoded from storage; `[]` when none.
+        note:
+          anyOf:
+            - type: string
+            - type: "null"
+          description: Free-text note, decrypted for the response. AES-256-GCM at rest; the ciphertext never rides the wire.
+        source:
+          type: string
+          enum:
+            - MANUAL
+            - MOODLOG
+            - WEB
+            - TELEGRAM
+            - DAYLIO
+        externalId:
+          anyOf:
+            - type: string
+            - type: "null"
+          description: The sync client's source-stable dedup id, or null.
+        moodLoggedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        tz:
+          anyOf:
+            - type: string
+            - type: "null"
+          description: IANA zone the `date` label is anchored to. Null on legacy rows (read as Europe/Berlin).
+        syncedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        createdAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        updatedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        syncVersion:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: LWW reconciliation counter; mood is last-writer-wins by it.
+        deletedAt:
+          type: "null"
+          description: "Always null on this surface: tombstoned rows are hidden from the list and 404 on a direct GET. Tombstones
+            surface on the `/api/sync/changes` feed instead."
+        tagKeys:
+          type: array
+          items:
+            type: string
+          description: Binary structured-tag keys linked to the entry.
+        ratedFactors:
+          type: array
+          items:
+            $ref: "#/components/schemas/MoodEntryRatedFactor"
+        context:
+          anyOf:
+            - $ref: "#/components/schemas/MoodContextOutput"
+            - type: "null"
+          description: The day's context, or null when the entry carries none. Null and an object of nulls are different answers.
+      required:
+        - id
+        - userId
+        - date
+        - mood
+        - score
+        - a1
+        - a2
+        - a3
+        - a4
+        - a5
+        - tags
+        - note
+        - source
+        - externalId
+        - moodLoggedAt
+        - tz
+        - syncedAt
+        - createdAt
+        - updatedAt
+        - syncVersion
+        - deletedAt
+        - tagKeys
+        - ratedFactors
+        - context
+      additionalProperties: false
+      description: One mood entry as every entry surface answers it — list rows, single GET, create and edit responses share
+        this shape, so a client hydrating from a write response renders without a refetch.
+    MoodEntryRatedFactor:
+      type: object
+      properties:
+        key:
+          type: string
+        rating:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+      required:
+        - key
+        - rating
+      additionalProperties: false
+      description: One rated factor on an entry, with its per-entry score.
+    MoodEntryEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/MoodEntryDTO"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    MoodEntryDeleteEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            deleted:
+              type: boolean
+              const: true
+          required:
+            - deleted
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    MoodEntriesRestoreEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            restored:
+              type: integer
+              minimum: 0
+              maximum: 9007199254740991
+          required:
+            - restored
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    MoodEntriesBulkDeleteEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            deleted:
+              type: integer
+              minimum: 0
+              maximum: 9007199254740991
+          required:
+            - deleted
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    MoodLinkedContextEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/MoodLinkedContext"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    MoodLinkedContext:
+      type: object
+      properties:
+        day:
+          type: string
+          description: The local day the figures are about, YYYY-MM-DD.
+        sleep:
+          anyOf:
+            - type: object
+              properties:
+                available:
+                  type: boolean
+                  const: false
+                reason:
+                  type: string
+                  const: module-disabled
+              required:
+                - available
+                - reason
+              additionalProperties: false
+            - type: object
+              properties:
+                available:
+                  type: boolean
+                  const: true
+                asleep:
+                  description: Time asleep (minutes) for the night the day woke up on.
+                  $ref: "#/components/schemas/MoodLinkedFigure"
+                inBed:
+                  description: Time in bed (minutes), when any writer recorded a bed window.
+                  $ref: "#/components/schemas/MoodLinkedFigure"
+              required:
+                - available
+                - asleep
+                - inBed
+              additionalProperties: false
+        activity:
+          anyOf:
+            - type: object
+              properties:
+                available:
+                  type: boolean
+                  const: false
+                reason:
+                  type: string
+                  const: module-disabled
+              required:
+                - available
+                - reason
+              additionalProperties: false
+            - type: object
+              properties:
+                available:
+                  type: boolean
+                  const: true
+                steps:
+                  $ref: "#/components/schemas/MoodLinkedFigure"
+                activeEnergy:
+                  $ref: "#/components/schemas/MoodLinkedFigure"
+              required:
+                - available
+                - steps
+                - activeEnergy
+              additionalProperties: false
+        vitals:
+          anyOf:
+            - type: object
+              properties:
+                available:
+                  type: boolean
+                  const: false
+                reason:
+                  type: string
+                  const: module-disabled
+              required:
+                - available
+                - reason
+              additionalProperties: false
+            - type: object
+              properties:
+                available:
+                  type: boolean
+                  const: true
+                restingHeartRate:
+                  $ref: "#/components/schemas/MoodLinkedFigure"
+                heartRateVariability:
+                  $ref: "#/components/schemas/MoodLinkedFigure"
+              required:
+                - available
+                - restingHeartRate
+                - heartRateVariability
+              additionalProperties: false
+        body:
+          anyOf:
+            - type: object
+              properties:
+                available:
+                  type: boolean
+                  const: false
+                reason:
+                  type: string
+                  const: module-disabled
+              required:
+                - available
+                - reason
+              additionalProperties: false
+            - type: object
+              properties:
+                available:
+                  type: boolean
+                  const: true
+                logged:
+                  type: boolean
+                  description: Whether an illness day-log exists for this day at all.
+                functionalImpact:
+                  description: How much the day was limited, 0-3, as the illness module records it.
+                  $ref: "#/components/schemas/MoodLinkedFigure"
+                symptoms:
+                  type: array
+                  items:
+                    type: string
+                  description: Symptoms linked to the day-log, by catalogue key.
+                episodeId:
+                  anyOf:
+                    - type: string
+                    - type: "null"
+                  description: The episode to open in the illness module, when any.
+              required:
+                - available
+                - logged
+                - functionalImpact
+                - symptoms
+                - episodeId
+              additionalProperties: false
+      required:
+        - day
+        - sleep
+        - activity
+        - vitals
+        - body
+      additionalProperties: false
+      description: "What the modules that own sleep, activity, vitals and body symptoms already know about one local day.
+        Nothing here is stored on the mood row — every figure is resolved from its owning module at read time,
+        cross-source de-duplicated to one canonical source per metric. A switched-off module blanks its whole block
+        (`available: false`)."
+    MoodLinkedFigure:
+      anyOf:
+        - type: object
+          properties:
+            present:
+              type: boolean
+              const: false
+          required:
+            - present
+          additionalProperties: false
+        - type: object
+          properties:
+            present:
+              type: boolean
+              const: true
+            value:
+              type: number
+            unit:
+              type: string
+          required:
+            - present
+            - value
+            - unit
+          additionalProperties: false
+      description: "A figure that either exists or honestly does not. `{ present: false }` means the data is not recorded —
+        never zero, never an error."
     GetReminderThresholdsResponse:
       type: object
       properties:
@@ -34920,6 +36639,47 @@ components:
         - data
         - error
       additionalProperties: false
+    JsonImportStatsEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/JsonImportStats"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    JsonImportStats:
+      type: object
+      properties:
+        measurements:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: Measurement rows written (inserted or updated in place).
+        moodEntries:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: Mood-entry rows written (inserted or updated in place).
+        skipped:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: "Rows not written: duplicates of existing rows, and rows carrying an unstable `externalId`."
+      required:
+        - measurements
+        - moodEntries
+        - skipped
+      additionalProperties: false
+      description: Per-section outcome counts of a JSON import.
     MeasurementReminderListEnvelope:
       type: object
       properties:
@@ -34997,6 +36757,22 @@ components:
               format: date-time
               pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
             - type: "null"
+        snoozedUntil:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
+        lastSkippedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
+        skipCount:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
         enabled:
           type: boolean
         createdAt:
@@ -35020,14 +36796,19 @@ components:
         - location
         - nextDueAt
         - lastSatisfiedAt
+        - snoozedUntil
+        - lastSkippedAt
+        - skipCount
         - enabled
         - createdAt
         - updatedAt
       additionalProperties: false
-      description: A Vorsorge reminder. nextDueAt is server-computed (server-authoritative). A free-text reminder carries
+      description: "A Vorsorge reminder. nextDueAt is server-computed (server-authoritative). A free-text reminder carries
         measurementType=null and resolves only on a manual satisfy. origin distinguishes a user-created (VORSORGE)
         reminder from one minted by a Coach cadence suggestion (COACH); endsOn bounds a finite course window (null =
-        open-ended).
+        open-ended). snoozedUntil/lastSkippedAt/skipCount are resolved values: snoozed means snoozedUntil > now, a
+        skipped cycle means lastSkippedAt > lastSatisfiedAt; clients compare against the clock and never recompute
+        cadence. lastSatisfiedAt stays the only completed signal — skip and snooze never move it."
     MeasurementReminderCreatedEnvelope:
       type: object
       properties:
@@ -35148,8 +36929,152 @@ components:
         - reminder
       additionalProperties: false
       description: Result of an explicit reminder completion. completed=true when this call advanced lastSatisfiedAt;
-        completed=false when an earlier satisfy or a matching reading had already fulfilled the current cycle
-        (idempotent no-op). reminder is the canonical post-completion DTO.
+        completed=false when an earlier satisfy or a matching reading already fulfilled the current cycle (idempotent
+        no-op). reminder is the canonical post-completion DTO.
+    MeasurementReminderSkipEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/MeasurementReminderSkip"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    MeasurementReminderSkip:
+      type: object
+      properties:
+        skipped:
+          type: boolean
+        reminder:
+          $ref: "#/components/schemas/MeasurementReminderDTO"
+      required:
+        - skipped
+        - reminder
+      additionalProperties: false
+      description: Result of skipping the current due cycle. skipped=true when this call recorded the skip and restarted the
+        interval from the skip instant; skipped=false when a concurrent skip or satisfy already advanced the row
+        (idempotent no-op). A skip never touches lastSatisfiedAt — it is recorded honestly as a skip, not a completion.
+    MeasurementReminderSnoozeEnvelope:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            reminder:
+              $ref: "#/components/schemas/MeasurementReminderDTO"
+          required:
+            - reminder
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    MeasurementReminderHistoryEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/MeasurementReminderHistory"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    MeasurementReminderHistory:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/MeasurementReminderEvent"
+        meta:
+          type: object
+          properties:
+            total:
+              type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            limit:
+              type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            offset:
+              type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+          required:
+            - total
+            - limit
+            - offset
+          additionalProperties: false
+      required:
+        - events
+        - meta
+      additionalProperties: false
+      description: Paginated completion ledger for one reminder, newest first.
+    MeasurementReminderEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum:
+            - SATISFIED
+            - SKIPPED
+        occurredAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        onTime:
+          type: boolean
+        source:
+          type: string
+          enum:
+            - manual
+            - auto_measurement
+            - auto_lab
+            - telegram
+            - vaccination
+            - encounter
+            - skip
+        createdAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+      required:
+        - id
+        - kind
+        - occurredAt
+        - onTime
+        - source
+        - createdAt
+      additionalProperties: false
+      description: "One completion-ledger row: an honest fulfilment (SATISFIED) or an honest skip (SKIPPED). onTime is derived
+        server-side at write time against the due instant that was current when the event landed — clients never
+        re-derive it. History begins at the release that introduced the ledger."
     ListLabResultsEnvelope:
       type: object
       properties:
@@ -37842,7 +39767,8 @@ components:
       additionalProperties: false
       description: One completed screener administration. `severityBand` is a descriptive label for the screen (never a
         diagnosis). `item9Flagged` is true when the PHQ-9 self-harm item was answered > 0 — the client MUST show crisis
-        resources when it is. Raw per-item answers are intentionally absent.
+        resources when it is. Raw per-item answers are intentionally absent from list rows; the by-id detail read
+        returns them decrypted.
     CreateMentalHealthAssessmentEnvelope:
       type: object
       properties:
@@ -37904,6 +39830,96 @@ components:
         - id
         - contacts
       additionalProperties: false
+    GetMentalHealthAssessmentEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/GetMentalHealthAssessmentResponse"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    GetMentalHealthAssessmentResponse:
+      type: object
+      properties:
+        assessment:
+          $ref: "#/components/schemas/MentalHealthAssessmentDetail"
+      required:
+        - assessment
+      additionalProperties: false
+    MentalHealthAssessmentDetail:
+      type: object
+      properties:
+        id:
+          type: string
+        instrument:
+          type: string
+          enum:
+            - PHQ9
+            - GAD7
+            - WHO5
+            - SCI
+        locale:
+          type: string
+        version:
+          type: string
+        totalScore:
+          type: number
+        severityBand:
+          type: string
+        item9Flagged:
+          type: boolean
+        crisisShownAt:
+          anyOf:
+            - type: string
+            - type: "null"
+        takenAt:
+          type: string
+        createdAt:
+          type: string
+        items:
+          anyOf:
+            - type: array
+              items:
+                type: integer
+                minimum: -9007199254740991
+                maximum: 9007199254740991
+            - type: "null"
+        functionalDifficulty:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+        itemsUnavailable:
+          type: boolean
+      required:
+        - id
+        - instrument
+        - locale
+        - version
+        - totalScore
+        - severityBand
+        - item9Flagged
+        - crisisShownAt
+        - takenAt
+        - createdAt
+        - items
+        - functionalDifficulty
+        - itemsUnavailable
+      additionalProperties: false
+      description: "One administration with its decrypted per-item answers, in the order the instrument presents its items
+        (PHQ-9/GAD-7 answers 0–3, SCI 0–4, WHO-5 0–5). `functionalDifficulty` is the PHQ-9's unscored functional
+        follow-up when it was answered. When the stored blob cannot be decrypted the read degrades honestly: `items` is
+        null, `itemsUnavailable` is true, and the denormalised score fields still answer."
     ListAllergiesEnvelope:
       type: object
       properties:
@@ -39566,6 +41582,31 @@ components:
         - data
         - error
       additionalProperties: false
+    RestoreCustomMetricEntriesResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            restored:
+              type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+          required:
+            - restored
+          additionalProperties: false
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
     DisclaimerAckEnvelope:
       type: object
       properties:
@@ -39955,6 +41996,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MetricFreshnessEntry"
+        syncProgress:
+          description: Backfill/sync progress summary. Present on the GET read (null when the progress read failed); omitted from
+            the PATCH echo.
+          anyOf:
+            - $ref: "#/components/schemas/AppleHealthSyncProgress"
+            - type: "null"
       required:
         - entries
         - lastSyncedAt
@@ -40038,6 +42085,29 @@ components:
       additionalProperties: false
       description: Per-metric-type last-seen timestamp with the server-computed staleness flag. Only types that have actually
         delivered appear — absence is absence, never an invented row.
+    AppleHealthSyncProgress:
+      type: object
+      properties:
+        recordsAccepted:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: Measurement + workout rows carrying the `APPLE_HEALTH` source (live batch ingest and the one-shot export
+            import both write it). Soft-deleted measurement rows are excluded.
+        oldestMeasuredAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
+          description: Earliest instant reached across those rows (`measuredAt` for measurements, `startedAt` for workouts); null
+            when nothing has arrived. During a first-run backfill this walks backwards as history lands.
+      required:
+        - recordsAccepted
+        - oldestMeasuredAt
+      additionalProperties: false
+      description: "Server-side Apple Health backfill progress: how many rows have been accepted and how far back in time they
+        reach. Only what the server actually knows — no ETA, no device-side queue state."
     HealthKitConfigPatchEnvelope:
       type: object
       properties:
@@ -40750,6 +42820,14 @@ components:
               - tension_window
               - same_time_baseline
               - upcoming_visit
+        hero:
+          description: 'Primary hero-card content on the dashboard: "score" (the health-score read, default) or "reminders" (the
+            Today-highlight rail promoted into the hero slot). Missing resolves to "score"; the stored default is
+            omitted from responses.'
+          type: string
+          enum:
+            - score
+            - reminders
         updatedAt:
           description: "Optimistic-concurrency token: the stored row's `updatedAt` at read/write time. Echo it back as
             `baseUpdatedAt` on the next write. Opaque."

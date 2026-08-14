@@ -20,6 +20,10 @@ type Payload = {
     lastSeenAt: string;
     stale: boolean;
   }>;
+  syncProgress?: {
+    recordsAccepted: number;
+    oldestMeasuredAt: string | null;
+  } | null;
 };
 
 let statusPayload: Payload | undefined;
@@ -293,5 +297,110 @@ describe("<AppleHealthCard> — delivery diagnostic (#586)", () => {
 
     expect(html).toContain("No sync has arrived yet");
     expect(html).not.toContain("Last background sync");
+  });
+});
+
+// #778 — the first-run backfill used to be invisible: a user watching the web
+// app had no way to tell "still flowing" from "looks dead but is working".
+describe("<AppleHealthCard> — sync progress (#778)", () => {
+  beforeEach(() => {
+    statusPayload = undefined;
+    statusLoading = false;
+    statusError = false;
+  });
+
+  it("shows the accepted-row count and the oldest reading reached", () => {
+    statusPayload = {
+      lastSyncedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+      syncHealth: { verdict: "fresh", since: null },
+      syncProgress: {
+        recordsAccepted: 12345,
+        oldestMeasuredAt: "2019-05-04T06:00:00.000Z",
+      },
+    };
+
+    const html = render();
+
+    expect(html).toContain('data-testid="apple-health-progress"');
+    expect(html).toContain('data-testid="apple-health-progress-received"');
+    // Locale-grouped integer, so the count reads as a number, not a code.
+    expect(html).toContain("12,345");
+    expect(html).toContain('data-testid="apple-health-progress-oldest"');
+    // The 2019 date renders with its year — the whole point is showing how
+    // far back the backfill has reached.
+    expect(html).toContain("2019");
+  });
+
+  it("reads as flowing while batches keep arriving", () => {
+    statusPayload = {
+      lastSyncedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+      syncHealth: { verdict: "fresh", since: null },
+      syncProgress: { recordsAccepted: 100, oldestMeasuredAt: null },
+    };
+
+    const html = render();
+
+    expect(html).toContain('data-testid="apple-health-progress-state"');
+    expect(html).toContain('data-state="flowing"');
+    expect(html).toContain("still delivering");
+  });
+
+  it("waits honestly instead of inventing throttle state when batches pause", () => {
+    statusPayload = {
+      lastSyncedAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+      syncHealth: { verdict: "fresh", since: null },
+      syncProgress: { recordsAccepted: 100, oldestMeasuredAt: null },
+    };
+
+    const html = render();
+
+    expect(html).toContain('data-state="waiting"');
+    // The server does not track the phone's throttle/queue state, so the copy
+    // says "waiting for the iPhone app", never a fabricated percentage or ETA.
+    expect(html).toContain("Waiting for the iPhone app to send more data");
+    expect(html).not.toContain("%");
+  });
+
+  it("renders no progress section before anything has arrived", () => {
+    statusPayload = {
+      lastSyncedAt: null,
+      syncHealth: { verdict: "pending_first_sync", since: null },
+      syncProgress: { recordsAccepted: 0, oldestMeasuredAt: null },
+    };
+
+    const html = render();
+
+    // The delivery section's "no sync yet" line already owns the blank state.
+    expect(html).not.toContain('data-testid="apple-health-progress"');
+  });
+
+  it("renders no progress section when the server read failed", () => {
+    statusPayload = {
+      lastSyncedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+      syncHealth: { verdict: "fresh", since: null },
+      syncProgress: null,
+    };
+
+    const html = render();
+
+    expect(html).not.toContain('data-testid="apple-health-progress"');
+  });
+
+  it("defines every progress key in all six locale catalogs", () => {
+    const requiredKeys = [
+      "title",
+      "receivedLabel",
+      "oldestLabel",
+      "flowing",
+      "waiting",
+    ] as const;
+
+    for (const catalog of [en, de, es, fr, itMessages, pl]) {
+      const progress = catalog.settings.appleHealth.progress;
+      for (const key of requiredKeys) {
+        expect(progress[key]).toBeTypeOf("string");
+        expect(progress[key].length).toBeGreaterThan(0);
+      }
+    }
   });
 });

@@ -516,6 +516,9 @@
     "heroItemsTitle": "Destacados de hoy",
     "heroItemsDescription": "Elige qué tipos de elementos pueden aparecer en los destacados de hoy.",
     "heroItemsNotificationNote": "Los ajustes de notificaciones se gestionan por separado.",
+    "heroContentTitle": "La tarjeta superior muestra",
+    "heroContentScore": "Puntuación de salud y resumen del día",
+    "heroContentReminders": "Destacados de hoy",
     "heroItems": {
       "coach_checkin": "Revisión con Coach",
       "dose_window": "Dosis de medicamentos",
@@ -3168,7 +3171,8 @@
     "sleep": {
       "title": "Sueño",
       "description": "Desglose por fases y duración nocturna, tomados de Apple Health.",
-      "headlineTitle": "Media por noche",
+      "mainSleep": "Sueño principal",
+      "totalSleep": "Sueño total",
       "compositionTitle": "Distribución de fases",
       "compositionSubtitle": "Últimas {nights} noches",
       "compositionAriaLabel": "Distribución de fases del sueño en {nights} noches",
@@ -4517,7 +4521,7 @@
         "title": "Withings",
         "body": "Las básculas, los tensiómetros y los trackers de Withings se sincronizan automáticamente una vez conectados.",
         "cta": "Conectar Withings",
-        "setupCta": "Configurar en Ajustes",
+        "setupCta": "Configurar",
         "setupHint": "Necesita primero tu propia app de desarrollador de Withings, gratuita — unos 5 minutos, una sola vez."
       },
       "more": {
@@ -4528,7 +4532,8 @@
         "oura": "Oura",
         "polar": "Polar",
         "nightscout": "Nightscout",
-        "fitbit": "Fitbit"
+        "fitbit": "Fitbit",
+        "appleHealthHint": "Apple Health no tiene conexión web — termina aquí la puesta en marcha y luego abre la app HealthLog en tu iPhone para completar la configuración de Apple Health."
       },
       "import": "Importar historial existente"
     },
@@ -5967,7 +5972,7 @@
     },
     "notificationStatus": {
       "title": "Fiabilidad de los canales",
-      "description": "Estado por canal; «Desactivado automáticamente» detiene los reintentos tras errores permanentes.",
+      "description": "Estado de cada canal — «Desactivado automáticamente» significa detenido tras errores permanentes.",
       "emptyDescription": "Configura un canal en Ajustes › Integraciones › Canales de entrega.",
       "stateActive": "Activo",
       "stateAutoDisabled": "Desactivado automáticamente",
@@ -6387,6 +6392,13 @@
       "importNote": "¿Necesitas un historial anterior o no puedes usar la app de iOS? La carga XML/ZIP de Apple Health es una alternativa puntual y no activa la sincronización en vivo.",
       "importAction": "Abrir importación puntual",
       "staleNote": "Hace más de una semana que no llegan datos de Apple Health. Abre la app HealthLog en tu iPhone y revisa los permisos de Apple Health.",
+      "progress": {
+        "title": "Progreso de sincronización",
+        "receivedLabel": "Registros recibidos",
+        "oldestLabel": "Lectura más antigua alcanzada",
+        "flowing": "Han llegado datos en la última hora — la app del iPhone sigue enviando.",
+        "waiting": "Esperando a que la app del iPhone envíe más datos. La transferencia continúa cuando la app está abierta o cuando iOS le concede tiempo en segundo plano — una pausa durante la primera sincronización grande es normal, no un error."
+      },
       "delivery": {
         "title": "Entrega",
         "lastTriggerLabel": "La última sincronización llegó",
@@ -6891,6 +6903,23 @@
         "restoreTitle": "Restaurar desde copia de seguridad",
         "restoreDescription": "Esto reemplazará TODOS los datos actuales de {username} con la instantánea del {when}. Se eliminarán las mediciones, los medicamentos, los eventos de toma, las entradas de ánimo, los canales de notificación, las suscripciones push y las eliminaciones de Telegram en cola existentes.",
         "restorePromptLabel": "Escribe RESTORE para continuar",
+        "previewTitle": "Contenido de la copia",
+        "previewLoading": "Leyendo el contenido…",
+        "previewUnavailable": "No se pudo leer el contenido — restaurar sigue siendo posible.",
+        "previewEmpty": "El archivo no contiene registros.",
+        "previewOther": "Otros registros",
+        "previewMeasurements": "Mediciones",
+        "previewMedications": "Medicamentos y tomas",
+        "previewMood": "Registros de ánimo",
+        "previewLabs": "Resultados de laboratorio",
+        "previewDocuments": "Documentos",
+        "previewWorkouts": "Entrenamientos",
+        "previewCycles": "Datos del ciclo",
+        "previewVisits": "Visitas médicas",
+        "previewVaccinations": "Vacunas",
+        "previewReminders": "Recordatorios preventivos",
+        "previewCustomMetrics": "Métricas propias",
+        "previewHealthScores": "Historial de puntuación",
         "restoreConfirm": "Restaurar ahora",
         "restoreInProgress": "Restaurando...",
         "restoreSuccess": "Restauración completada",
@@ -8085,6 +8114,23 @@
     "delete": "Eliminar",
     "deleteConfirmTitle": "¿Eliminar recordatorio?",
     "deleteConfirmDescription": "Este recordatorio de revisión se eliminará de forma permanente.",
+    "postpone": {
+      "menuItem": "Aplazar…",
+      "title": "Aplazar vencimiento",
+      "description": "Solo mueve el vencimiento actual — el ritmo regular no cambia.",
+      "chip": "+{days} días",
+      "dateLabel": "Nueva fecha",
+      "confirm": "Aplazar"
+    },
+    "skip": {
+      "heading": "Omitir este vencimiento",
+      "explainer": "Se registra honestamente como omitido — no como hecho. El intervalo se reinicia desde hoy.",
+      "action": "Omitir",
+      "confirmTitle": "¿Omitir este vencimiento?"
+    },
+    "snoozedUntil": "Aplazado hasta {date}",
+    "skippedOn": "Omitido el {date}",
+    "skipCount": "omitido {count} veces",
     "disabledBadge": "Apagado",
     "nextDue": {
       "none": "Sin programar",
@@ -9035,7 +9081,9 @@
       "flaggedBadge": "Apoyo mostrado",
       "chartTitle": "Evolución de la puntuación",
       "totalLabel": "Puntuación",
-      "bandLabel": "Categoría"
+      "bandLabel": "Categoría",
+      "answersToggle": "Respuestas",
+      "answersUnavailable": "Las respuestas guardadas de esta revisión no se pueden descifrar."
     },
     "crisis": {
       "title": "No tienes que afrontar esto a solas",
@@ -9739,6 +9787,8 @@
       "editedToast": "Valor actualizado",
       "editError": "No se pudo actualizar el valor",
       "deletedToast": "Valor eliminado",
+      "restoredToast": "Valor restaurado",
+      "restoreError": "No se pudo restaurar",
       "deleteError": "No se pudo eliminar el valor"
     },
     "chart": {
@@ -10208,6 +10258,8 @@
       "measurementReminderDelete": "{name} eliminó un recordatorio de medición",
       "measurementReminderComplete": "{name} completó un recordatorio de medición",
       "measurementReminderSatisfy": "{name} cerró un recordatorio de medición",
+      "measurementReminderSkip": "{name} omitió un recordatorio de medición",
+      "measurementReminderSnooze": "{name} aplazó un recordatorio de medición",
       "labResultUpdate": "{name} cambió un resultado de laboratorio",
       "labResultDelete": "{name} eliminó un resultado de laboratorio",
       "labResultRestore": "{name} restauró un resultado de laboratorio",

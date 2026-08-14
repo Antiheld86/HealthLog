@@ -23,7 +23,7 @@ export function clampScore(value: number): number {
 export const SCORE_GREEN_FLOOR = 70;
 
 /** Below this is red. */
-export const SCORE_YELLOW_FLOOR = 50;
+const SCORE_YELLOW_FLOOR = 50;
 
 /**
  * The band a 0-100 score falls in, from the number alone.

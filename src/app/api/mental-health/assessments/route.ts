@@ -13,7 +13,8 @@
  * interpretation, no AI ingestion of item content, no third-party alerting.
  *
  * GET lists the caller's assessments (totals + bands + flags only — item-level
- * answers are excluded from this surface by construction).
+ * answers are excluded from this surface by construction; the by-id sibling
+ * route is the one read that decrypts them back).
  */
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";

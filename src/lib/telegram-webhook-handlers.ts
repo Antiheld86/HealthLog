@@ -838,13 +838,16 @@ export async function handleCallback(update: TelegramUpdate) {
       },
       select: {
         id: true,
+        userId: true,
         // v1.19.2 — the target metric; drives the optional numeric capture.
         measurementType: true,
         intervalDays: true,
         rrule: true,
         anchorDate: true,
         notifyHour: true,
+        nextDueAt: true,
         lastSatisfiedAt: true,
+        lastSkippedAt: true,
         createdAt: true,
       },
     });
@@ -857,7 +860,7 @@ export async function handleCallback(update: TelegramUpdate) {
       return;
     }
     const tz = user.timezone || DEFAULT_TIMEZONE;
-    await satisfyReminder(prisma, reminder, tz, new Date());
+    await satisfyReminder(prisma, reminder, tz, new Date(), "telegram");
     await answerTelegramCallbackQuery(
       botToken,
       callback.id,

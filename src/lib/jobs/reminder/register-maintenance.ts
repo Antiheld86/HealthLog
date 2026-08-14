@@ -1171,6 +1171,7 @@ export async function registerMaintenanceQueues(
       let users = 0;
       let skipped = 0;
       let documentsIndexed = 0;
+      let documentsRetokenised = 0;
       let documentsSkipped = 0;
       let documentsFailed = 0;
       for (const job of jobs) {
@@ -1182,17 +1183,19 @@ export async function registerMaintenanceQueues(
         try {
           const {
             indexed,
+            retokenised,
             skipped: docsSkipped,
             failed: docsFailed,
             reason,
           } = await runContentIndexBackfillForUser(userId);
           users++;
           documentsIndexed += indexed;
+          documentsRetokenised += retokenised;
           documentsSkipped += docsSkipped;
           documentsFailed += docsFailed;
           workerLog(
             "info",
-            `[document-content-index-backfill] user=${userId} indexed=${indexed} skipped=${docsSkipped} failed=${docsFailed} reason=${reason}`,
+            `[document-content-index-backfill] user=${userId} indexed=${indexed} retokenised=${retokenised} skipped=${docsSkipped} failed=${docsFailed} reason=${reason}`,
           );
         } catch (err) {
           recordError();
@@ -1209,6 +1212,7 @@ export async function registerMaintenanceQueues(
         users,
         skipped,
         documents_indexed: documentsIndexed,
+        documents_retokenised: documentsRetokenised,
         documents_skipped: documentsSkipped,
         documents_failed: documentsFailed,
       });
