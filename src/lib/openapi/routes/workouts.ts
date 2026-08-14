@@ -86,10 +86,14 @@ const workoutBatchResponse = z
 const workoutListEntry = z
   .object({
     id: z.string(),
-    sportType: z.string(),
-    startedAt: z.iso.datetime({ offset: true }),
-    endedAt: z.iso.datetime({ offset: true }),
-    durationSec: z.number().int().nonnegative(),
+    // v1.37.19 — these four are nullable to match the DTO (list-read.ts
+    // passes them through from nullable columns): an externally-synced
+    // session can arrive without a sport type or timing. Declaring them
+    // non-null was a strict-decoder bomb for the Swift client.
+    sportType: z.string().nullable(),
+    startedAt: z.iso.datetime({ offset: true }).nullable(),
+    endedAt: z.iso.datetime({ offset: true }).nullable(),
+    durationSec: z.number().int().nonnegative().nullable(),
     distanceM: z.number().nullable(),
     activeEnergyKcal: z.number().nullable(),
     avgHr: z.number().int().nullable(),

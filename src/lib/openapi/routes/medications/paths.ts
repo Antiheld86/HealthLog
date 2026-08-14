@@ -9,6 +9,7 @@ import {
   createMedicationSchema,
   updateMedicationSchema,
   intakeSchema,
+  listIntakeEventsSchema,
   createInventoryItemSchema,
   updateInventoryItemSchema,
   injectionSiteEnum,
@@ -441,6 +442,42 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
               schema: dataEnvelope(
                 medicationIntakeEventResource,
                 "ReplayMedicationIntakeResponse",
+              ),
+            },
+          },
+        },
+        "404": {
+          description: "Medication not found (or owned by another user).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+    get: {
+      tags: ["Medications"],
+      summary: "List a medication's intake events",
+      description:
+        "Paged intake history for one medication (tombstoned rows excluded). `status` filters by action state: `all` (default, byte-stable pre-v1.4.37 contract), `taken`, `skipped`, or `completed` (taken OR skipped — hides the ambiguous never-confirmed rows). Sorting by `takenAt` pins NULLs last so skipped/planned rows do not float above real timestamps.",
+      requestParams: {
+        path: z.object({ id: z.string() }),
+        query: listIntakeEventsSchema,
+      },
+      responses: {
+        ...recordRefusal(),
+        "200": {
+          description: "Intake event page.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({
+                  events: z.array(medicationIntakeEventResource),
+                  meta: z.object({
+                    total: z.number().int().nonnegative(),
+                    limit: z.number().int().positive(),
+                    offset: z.number().int().nonnegative(),
+                  }),
+                }),
+                "ListMedicationIntakeEventsResponse",
               ),
             },
           },

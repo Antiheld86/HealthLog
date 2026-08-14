@@ -427,14 +427,70 @@ export const medicationIntakeEventResource = z
     scheduledFor: z.iso.datetime({ offset: true }),
     takenAt: z.iso.datetime({ offset: true }).nullable(),
     skipped: z.boolean(),
+    autoMissed: z
+      .boolean()
+      .describe(
+        "True when the nightly cron closed the slot as missed (no user action). Auto-missed rows count against adherence but never consume inventory.",
+      ),
+    attributionSource: z
+      .enum(["AUTO", "USER_PIN"])
+      .describe(
+        "How the row bound to its schedule slot: AUTO = the write path's nearest-slot resolution; USER_PIN = the user explicitly pinned the slot (the dedup converge keeps the pinned row).",
+      ),
     source: z.enum(["WEB", "API", "REMINDER", "IMPORT", "APPLE_HEALTH"]),
     idempotencyKey: z.string().nullable(),
     createdAt: z.iso.datetime({ offset: true }),
+    updatedAt: z.iso.datetime({ offset: true }),
+    injectionSite: z
+      .enum([
+        "ABDOMEN_LEFT",
+        "ABDOMEN_RIGHT",
+        "ABDOMEN_UPPER_LEFT",
+        "ABDOMEN_UPPER_RIGHT",
+        "THIGH_LEFT",
+        "THIGH_RIGHT",
+        "UPPER_ARM_LEFT",
+        "UPPER_ARM_RIGHT",
+      ])
+      .nullable()
+      .describe(
+        "Recorded injection site for a site-tracked medication (GLP-1 rotation surface). NULL when the medication does not track sites or none was recorded.",
+      ),
+    doseTaken: z
+      .string()
+      .nullable()
+      .describe(
+        "Free-text dose actually taken when it differed from the scheduled dose (titration weeks, split doses). NULL = the scheduled dose.",
+      ),
+    inventoryConsumption: z
+      .unknown()
+      .nullable()
+      .describe(
+        "JSON ledger of the container decrements this intake caused (`[{itemId, units}]`), written by the consumption hook. NULL when nothing was consumed (skipped / no tracked inventory).",
+      ),
+    externalId: z
+      .string()
+      .nullable()
+      .describe(
+        "v1.28 — client-supplied stable id for externally-mirrored intakes (Apple Health sync); the dedup key for re-synced rows. NULL for native rows.",
+      ),
+    syncVersion: z
+      .number()
+      .int()
+      .describe(
+        "Monotonic per-row version for incremental sync readers; bumps on every mutation.",
+      ),
+    deletedAt: z.iso
+      .datetime({ offset: true })
+      .nullable()
+      .describe(
+        "Soft-delete tombstone. Non-null rows are excluded from every list/aggregate read; sync readers use it to propagate deletions.",
+      ),
   })
   .meta({
     id: "MedicationIntakeEvent",
     description:
-      "Single dose log row. `takenAt` is non-null for confirmed intakes; `skipped:true` represents a deliberately-missed dose (no inventory consumption).",
+      "Single dose log row — the FULL row shape both the intake POST (201/200) and the intake list GET return. `takenAt` is non-null for confirmed intakes; `skipped:true` represents a deliberately-missed dose (no inventory consumption).",
   });
 
 export const medicationCadenceTimelinePoint = z
