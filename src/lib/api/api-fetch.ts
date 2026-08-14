@@ -195,13 +195,35 @@ export function apiGet<T = unknown>(
   return apiFetch<T>(path, { ...init, method: "GET" });
 }
 
+/**
+ * Attach a per-call `Idempotency-Key` unless the caller already set one.
+ *
+ * Every `apiHandler` route accepts the header, and the write routes
+ * wrapped in `withIdempotency` dedupe on it — but almost no client call
+ * site sent one, so a transport-level replay of a create (a retried
+ * request, a re-sent form submission) could land a duplicate dose or
+ * vaccination and shift every derived series. Minting the key here
+ * protects every `apiPost` / `apiPatch` surface at once; a caller with a
+ * real natural key still wins by setting the header itself.
+ */
+function withDefaultIdempotencyKey(init: RequestInit): RequestInit {
+  const headers = new Headers(init.headers);
+  if (!headers.has("Idempotency-Key")) {
+    headers.set("Idempotency-Key", crypto.randomUUID());
+  }
+  return { ...init, headers };
+}
+
 /** POST with optional JSON body — resolves with the unwrapped `data`. */
 export function apiPost<T = unknown>(
   path: string,
   body?: unknown,
   init?: RequestInit,
 ): Promise<T> {
-  return apiFetch<T>(path, withJsonBody("POST", body, init));
+  return apiFetch<T>(
+    path,
+    withDefaultIdempotencyKey(withJsonBody("POST", body, init)),
+  );
 }
 
 /** PUT with optional JSON body — resolves with the unwrapped `data`. */
@@ -219,7 +241,10 @@ export function apiPatch<T = unknown>(
   body?: unknown,
   init?: RequestInit,
 ): Promise<T> {
-  return apiFetch<T>(path, withJsonBody("PATCH", body, init));
+  return apiFetch<T>(
+    path,
+    withDefaultIdempotencyKey(withJsonBody("PATCH", body, init)),
+  );
 }
 
 /** DELETE with optional JSON body — resolves with the unwrapped `data`. */
