@@ -13,7 +13,6 @@ import {
   type AssistantFlagSet,
 } from "@/hooks/use-feature-flags";
 
-import { SuggestedPrompts } from "@/components/insights/suggested-prompts";
 import { CoachLaunchButton } from "@/components/insights/coach-launch-button";
 import { LayoutCoachFab } from "@/components/insights/layout-coach-fab";
 import { LayoutCoachMount } from "@/components/insights/layout-coach-mount";
@@ -138,15 +137,11 @@ interface CoachSurface {
 }
 
 // v1.18.7 — the HeroStrip "Ask the coach" action button + the in-band
-// SuggestedPrompts chip strip were removed from the overview hero. The
-// Coach is the bottom-right drawer; its launcher + the standalone
-// SuggestedPrompts surface still carry the flag cascade below.
+// SuggestedPrompts chip strip were removed from the overview hero, and the
+// strip's component has since been deleted along with the rest of the
+// unmounted insights cluster. The Coach is the bottom-right drawer; the
+// launcher surfaces below carry the flag cascade.
 const COACH_SURFACES: CoachSurface[] = [
-  {
-    name: "SuggestedPrompts standalone",
-    mount: () => <SuggestedPrompts onPick={() => undefined} />,
-    proofWhenOn: 'data-slot="insights-suggested-prompts"',
-  },
   {
     name: "CoachLaunchButton inline pill",
     mount: () => (
@@ -278,7 +273,6 @@ describe("Coach disable cascade invariant", () => {
     // action button + suggested-prompt strip were removed from the band.
     "src/components/insights/layout-coach-fab.tsx",
     "src/components/insights/layout-coach-mount.tsx",
-    "src/components/insights/suggested-prompts.tsx",
     // v1.12.0 — the full-page Coach route gates on `flags.coach` and
     // redirects to `/insights` when the operator master flag is off.
     // v1.18.0 — moved to the standalone top-level `/coach` route.
@@ -405,6 +399,6 @@ describe("Coach disable cascade invariant", () => {
     // test above pins every other `flags.coach` call site.
     // v1.18.7 — dropped from 6 to 4: the two HeroStrip coach surfaces
     // (action button + suggested-prompt strip) were removed from the band.
-    expect(COACH_SURFACES.length).toBe(4);
+    expect(COACH_SURFACES.length).toBe(3);
   });
 });

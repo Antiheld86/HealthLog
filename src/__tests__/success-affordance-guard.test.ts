@@ -196,7 +196,6 @@ const PINNED_AFFORDANCES: Record<
     "text-success": 1,
   },
   "src/components/insights/personal-record-badge.tsx": { "text-success": 1 },
-  "src/components/insights/recommendation-feedback.tsx": { "text-success": 3 },
   "src/components/labs/biomarker-form.tsx": { "toast.success": 1 },
   "src/components/labs/biomarker-manager.tsx": { "toast.success": 2 },
   "src/components/labs/lab-biomarker-detail.tsx": { "toast.success": 1 },
