@@ -17,7 +17,6 @@ import type { AuthUser } from "@/hooks/use-auth";
 import { CoachLaunchButton } from "@/components/insights/coach-launch-button";
 import { LayoutCoachFab } from "@/components/insights/layout-coach-fab";
 import { LayoutCoachMount } from "@/components/insights/layout-coach-mount";
-import { SuggestedPrompts } from "@/components/insights/suggested-prompts";
 
 /**
  * v1.4.47 W3 — per-user "Hide Coach" opt-out invariant.
@@ -179,14 +178,11 @@ const DISABLE_COACH_SURFACES: DisableCoachSurface[] = [
     ),
     proofWhenVisible: 'data-slot="coach-launch-inline"',
   },
-  {
-    name: "SuggestedPrompts chip strip",
-    mount: () => <SuggestedPrompts onPick={() => undefined} />,
-    proofWhenVisible: 'data-slot="insights-suggested-prompts"',
-  },
-  // v1.18.7 — the HeroStrip "Ask the coach" action button was removed from
-  // the overview hero. The Coach is the bottom-right drawer; its launcher
-  // surfaces below carry the per-user disable gate.
+  // v1.18.7 — the HeroStrip "Ask the coach" action button and the
+  // SuggestedPrompts chip strip were removed from the overview hero, and the
+  // strip's component has now been deleted with the rest of the unmounted
+  // insights cluster. The Coach is the bottom-right drawer; the launcher
+  // surfaces above carry the per-user disable gate.
 ];
 
 describe("Coach per-user disableCoach invariant", () => {
@@ -294,7 +290,6 @@ describe("Coach per-user disableCoach invariant", () => {
     // the `useDisableCoach` call entirely.
     "src/components/insights/layout-coach-fab.tsx",
     "src/components/insights/layout-coach-mount.tsx",
-    "src/components/insights/suggested-prompts.tsx",
     // v1.12.0 — the full-page Coach route mirrors the launch-button /
     // FAB gate: operator master flag OR per-user opt-out redirects the
     // page back to `/insights` instead of painting a dead chat shell.

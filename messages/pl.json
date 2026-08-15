@@ -2312,7 +2312,6 @@
     }
   },
   "comparison": {
-    "toggleLabel": "Porównaj z",
     "baseline": {
       "none": "Wyłączone",
       "lastMonth": "Poprzedni miesiąc",
@@ -2433,23 +2432,6 @@
       "badge": "PR",
       "tooltip": "Rekord osobisty: {value} {unit} dnia {date}"
     },
-    "recommendation": {
-      "source": "Źródło",
-      "viewSource": "Otwórz wytyczne w nowej karcie",
-      "rationaleWindow": "Okno",
-      "rationaleComparedTo": "W porównaniu z",
-      "rationaleDeviation": "Odchylenie",
-      "rationaleExpand": "Pokaż uzasadnienie",
-      "rationaleCollapse": "Ukryj uzasadnienie",
-      "feedbackHelpful": "Przydatne",
-      "feedbackNotHelpful": "Mało przydatne",
-      "feedbackThanks": "Dzięki za opinię",
-      "feedbackAlreadyRated": "Już ocenione",
-      "feedbackError": "Nie udało się zapisać opinii. Spróbuj ponownie.",
-      "confidenceAria": "Pewność: {value} na 100",
-      "confidenceLow": "Niska pewność — mało danych",
-      "confidenceDraft": "Wersja robocza"
-    },
     "loadError": "Nie udało się załadować analiz",
     "heroPersonalBaseline": "Na podstawie ostatnich 90 dni",
     "heroRegenerating": "Generowanie",
@@ -2554,11 +2536,6 @@
         "minimumMet": "Pokrywa trzy obszary wymagane przez wynik",
         "areas": "{present} z {required} obszarów zdrowia"
       }
-    },
-    "suggestedPrompts": {
-      "label": "Zapytaj mnie",
-      "tellMyDoctor": "Co powinienem powiedzieć lekarzowi?",
-      "medicationWorking": "Czy mój lek działa?"
     },
     "dailyBriefing": {
       "title": "Briefing dnia",

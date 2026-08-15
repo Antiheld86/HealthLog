@@ -2312,7 +2312,6 @@
     }
   },
   "comparison": {
-    "toggleLabel": "Comparer avec",
     "baseline": {
       "none": "Désactivé",
       "lastMonth": "Mois précédent",
@@ -2433,23 +2432,6 @@
       "badge": "PR",
       "tooltip": "Record personnel : {value} {unit} le {date}"
     },
-    "recommendation": {
-      "source": "Source",
-      "viewSource": "Ouvrir la recommandation dans un nouvel onglet",
-      "rationaleWindow": "Fenêtre",
-      "rationaleComparedTo": "Comparé à",
-      "rationaleDeviation": "Écart",
-      "rationaleExpand": "Afficher la justification",
-      "rationaleCollapse": "Masquer la justification",
-      "feedbackHelpful": "Utile",
-      "feedbackNotHelpful": "Peu utile",
-      "feedbackThanks": "Merci pour ton retour",
-      "feedbackAlreadyRated": "Déjà noté",
-      "feedbackError": "Impossible d’enregistrer votre retour. Réessayez.",
-      "confidenceAria": "Confiance : {value} sur 100",
-      "confidenceLow": "Confiance faible — peu de points de données",
-      "confidenceDraft": "Brouillon"
-    },
     "loadError": "Impossible de charger les analyses",
     "heroPersonalBaseline": "Basé sur tes 90 derniers jours",
     "heroRegenerating": "Génération en cours",
@@ -2554,11 +2536,6 @@
         "minimumMet": "Couvre les trois domaines exigés par le score",
         "areas": "{present} domaines de santé sur {required}"
       }
-    },
-    "suggestedPrompts": {
-      "label": "Demande-moi",
-      "tellMyDoctor": "Que devrais-je dire à mon médecin ?",
-      "medicationWorking": "Mon médicament fonctionne-t-il ?"
     },
     "dailyBriefing": {
       "title": "Briefing du jour",

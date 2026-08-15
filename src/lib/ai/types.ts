@@ -33,10 +33,6 @@ export const insightRecommendationRationaleSchema = z.object({
   deviation: z.string(),
 });
 
-export type InsightRecommendationRationale = z.infer<
-  typeof insightRecommendationRationaleSchema
->;
-
 /**
  * v1.4.16 — recommendations can be either the legacy plain-string
  * shape OR a structured object carrying an optional medical-reference
@@ -76,8 +72,6 @@ export const insightRecommendationSchema = z.union([
     confidence: z.number().int().min(0).max(100).optional(),
   }),
 ]);
-
-export type InsightRecommendation = z.infer<typeof insightRecommendationSchema>;
 
 export const insightResultSchema = z.object({
   insightType: z.string().optional(),

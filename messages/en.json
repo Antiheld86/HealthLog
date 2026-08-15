@@ -2312,7 +2312,6 @@
     }
   },
   "comparison": {
-    "toggleLabel": "Compare to",
     "baseline": {
       "none": "None",
       "lastMonth": "Last month",
@@ -2433,23 +2432,6 @@
       "badge": "PR",
       "tooltip": "Personal record: {value} {unit} on {date}"
     },
-    "recommendation": {
-      "source": "Source",
-      "viewSource": "Open guideline in a new tab",
-      "rationaleWindow": "Window",
-      "rationaleComparedTo": "Compared to",
-      "rationaleDeviation": "Deviation",
-      "rationaleExpand": "Show why",
-      "rationaleCollapse": "Hide why",
-      "feedbackHelpful": "Helpful",
-      "feedbackNotHelpful": "Not helpful",
-      "feedbackThanks": "Thanks for your feedback",
-      "feedbackAlreadyRated": "Already rated",
-      "feedbackError": "Could not save your feedback. Please try again.",
-      "confidenceAria": "Confidence: {value} of 100",
-      "confidenceLow": "Low confidence — based on limited data",
-      "confidenceDraft": "Draft"
-    },
     "loadError": "Failed to load insights",
     "heroPersonalBaseline": "Based on your last 90 days",
     "heroRegenerating": "Regenerating",
@@ -2554,11 +2536,6 @@
         "minimumMet": "Covers the three areas the score needs",
         "areas": "{present} of {required} areas of health"
       }
-    },
-    "suggestedPrompts": {
-      "label": "Try asking",
-      "tellMyDoctor": "What should I tell my doctor?",
-      "medicationWorking": "Is my medication working?"
     },
     "dailyBriefing": {
       "title": "Daily Briefing",

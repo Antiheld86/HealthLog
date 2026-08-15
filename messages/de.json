@@ -2312,7 +2312,6 @@
     }
   },
   "comparison": {
-    "toggleLabel": "Vergleichen mit",
     "baseline": {
       "none": "Aus",
       "lastMonth": "Vormonat",
@@ -2433,23 +2432,6 @@
       "badge": "PR",
       "tooltip": "Persönlicher Rekord: {value} {unit} am {date}"
     },
-    "recommendation": {
-      "source": "Quelle",
-      "viewSource": "Leitlinie in neuem Tab öffnen",
-      "rationaleWindow": "Fenster",
-      "rationaleComparedTo": "Verglichen mit",
-      "rationaleDeviation": "Abweichung",
-      "rationaleExpand": "Begründung anzeigen",
-      "rationaleCollapse": "Begründung ausblenden",
-      "feedbackHelpful": "Hilfreich",
-      "feedbackNotHelpful": "Nicht hilfreich",
-      "feedbackThanks": "Danke für dein Feedback",
-      "feedbackAlreadyRated": "Bereits bewertet",
-      "feedbackError": "Dein Feedback konnte nicht gespeichert werden. Bitte versuche es erneut.",
-      "confidenceAria": "Vertrauen: {value} von 100",
-      "confidenceLow": "Geringes Vertrauen — wenige Datenpunkte",
-      "confidenceDraft": "Entwurf"
-    },
     "loadError": "Auswertungen konnten nicht geladen werden",
     "heroPersonalBaseline": "Basierend auf deinen letzten 90 Tagen",
     "heroRegenerating": "Wird generiert",
@@ -2554,11 +2536,6 @@
         "minimumMet": "Deckt die drei Felder ab, die der Score braucht",
         "areas": "{present} von {required} Feldern der Gesundheit"
       }
-    },
-    "suggestedPrompts": {
-      "label": "Frag mich",
-      "tellMyDoctor": "Was sollte ich meinem Arzt sagen?",
-      "medicationWorking": "Wirkt mein Medikament?"
     },
     "dailyBriefing": {
       "title": "Tagesbriefing",
