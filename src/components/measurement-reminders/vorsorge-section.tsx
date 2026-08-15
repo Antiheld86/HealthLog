@@ -785,7 +785,7 @@ export function VorsorgeSection({
  * means due/overdue now, lower means time still remains in the window.
  * Returns null when there is no interval to measure against (RRULE / unset).
  */
-/** v1.37.20 (#223) — the postpone sheet's quick-chip offsets, in days. */
+/** v1.37.20 (#223) — the offsets the postpone menu offers, in days. */
 const SNOOZE_CHIP_DAYS = [7, 30, 90] as const;
 
 /**
@@ -795,6 +795,32 @@ const SNOOZE_CHIP_DAYS = [7, 30, 90] as const;
  */
 function isoDayInTz(atMs: number, tz: string): string {
   return new Date(atMs).toLocaleDateString("sv-SE", { timeZone: tz });
+}
+
+/**
+ * The dates the postpone sheet's quick chips resolve to, on the display zone's
+ * calendar.
+ *
+ * Its own function because a chip labelled "+7 days" has to write the day that
+ * is actually seven days out, including across a DST shift, where adding
+ * 7 × 86 400 000 ms lands an hour either side of midnight and so can write the
+ * neighbouring date.
+ */
+export function postponeOffsetTargets(
+  nowMs: number,
+  tz: string,
+): { days: number; date: string }[] {
+  // Count days on the calendar, not in milliseconds: `now + 7 * DAY_MS` keeps
+  // the wall-clock time only where the offset stays constant, and a DST shift
+  // in between moves it an hour, which flips the date for anyone acting near
+  // midnight. Anchoring today's local date at UTC noon and stepping whole
+  // UTC days keeps every offset on the day its label names.
+  const anchor = new Date(`${isoDayInTz(nowMs, tz)}T12:00:00.000Z`);
+  return SNOOZE_CHIP_DAYS.map((days) => {
+    const target = new Date(anchor);
+    target.setUTCDate(target.getUTCDate() + days);
+    return { days, date: target.toISOString().slice(0, 10) };
+  });
 }
 
 function intervalProgress(
@@ -929,16 +955,10 @@ function VorsorgeCard({
           <Pencil className="mr-2 h-4 w-4" />
           {t("measurementReminders.edit")}
         </DropdownMenuItem>
-        {/* v1.37.20 (#223) — postpone lives in the kebab, never in the
-            primary-action bar (v1.27.5 rule: the action button keeps one
-            constant look in every state). */}
-        <DropdownMenuItem
-          disabled={busy}
-          onSelect={() => setPostponeOpen(true)}
-        >
-          <CalendarClock className="mr-2 h-4 w-4" />
-          {t("measurementReminders.postpone.menuItem")}
-        </DropdownMenuItem>
+        {/* v1.37.20 (#223) put postpone in the kebab. It reads better beside
+            the primary action, the way the medication card carries "taken"
+            and "skipped" side by side, so it is a card button now — see
+            `postponeButton` below. */}
         {/* v1.18.7 (Wave E) — jump to the measurements list pre-filtered to
             this reminder's type. Only for measurement-linked reminders; a
             free-text reminder has no readings to show. */}
@@ -1003,10 +1023,29 @@ function VorsorgeCard({
       </Button>
     ) : null;
 
+  // Postponing sits beside the primary action rather than inside the kebab,
+  // the way the medication card carries "taken" and "skipped" as two buttons
+  // on the card. Outline against the filled primary: the same pairing, and
+  // the same rule as everything else in this bar — one constant look, never
+  // tinted by how overdue the checkup is.
+  const postponeButton = canManage ? (
+    <Button
+      type="button"
+      variant="outline"
+      className="min-h-11"
+      data-slot="vorsorge-postpone"
+      onClick={() => setPostponeOpen(true)}
+      disabled={busy}
+    >
+      <CalendarClock className="h-4 w-4" />
+      {t("measurementReminders.postpone.menuItem")}
+    </Button>
+  ) : null;
+
   const primaryButton = canManage ? (
     <Button
       type="button"
-      className="min-h-11 w-full"
+      className="min-h-11 flex-1"
       onClick={onPrimaryAction}
       disabled={busy}
     >
@@ -1098,20 +1137,17 @@ function VorsorgeCard({
         {/* Quick chips write the date field rather than firing directly, so
             the person always sees (and can adjust) what will be sent. */}
         <div className="flex flex-wrap gap-2">
-          {SNOOZE_CHIP_DAYS.map((days) => {
-            const chipDate = isoDayInTz(now + days * DAY_MS, displayTz);
-            return (
-              <Button
-                key={days}
-                type="button"
-                size="sm"
-                variant={snoozeDate === chipDate ? "secondary" : "outline"}
-                onClick={() => setSnoozeDate(chipDate)}
-              >
-                {t("measurementReminders.postpone.chip", { days })}
-              </Button>
-            );
-          })}
+          {postponeOffsetTargets(now, displayTz).map(({ days, date }) => (
+            <Button
+              key={days}
+              type="button"
+              size="sm"
+              variant={snoozeDate === date ? "secondary" : "outline"}
+              onClick={() => setSnoozeDate(date)}
+            >
+              {t("measurementReminders.postpone.chip", { days })}
+            </Button>
+          ))}
         </div>
         <div className="space-y-2">
           <Label htmlFor={`snooze-date-${reminder.id}`}>
@@ -1255,8 +1291,24 @@ function VorsorgeCard({
               ) : null}
               {/* Icon-only in the dense list, labelled in the cards branch —
                   the same action either way, never one branch offering what
-                  the other withholds. Free-text reminders only: a typed /
-                  screening reminder has no practice visit behind it. */}
+                  the other withholds. */}
+              {canManage ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="size-11 sm:size-9"
+                  data-slot="vorsorge-postpone"
+                  aria-label={t("measurementReminders.postpone.menuItem")}
+                  title={t("measurementReminders.postpone.menuItem")}
+                  onClick={() => setPostponeOpen(true)}
+                  disabled={busy}
+                >
+                  <CalendarClock className="h-4 w-4" aria-hidden />
+                </Button>
+              ) : null}
+              {/* Free-text reminders only: a typed / screening reminder has no
+                  practice visit behind it. */}
               {canManage && !isLinked ? (
                 <Button
                   type="button"
@@ -1399,10 +1451,15 @@ function VorsorgeCard({
             </p>
           )}
 
-          {/* Bottom-pinned single primary action — green when due (MOD-06). */}
+          {/* Bottom-pinned action row: the primary action takes the width it
+              can, postpone sits beside it at its natural size — the same
+              two-button shape the medication card uses for taken / skipped. */}
           {primaryButton ? (
             <div className="mt-auto space-y-1.5 pt-0">
-              {primaryButton}
+              <div className="flex gap-2">
+                {primaryButton}
+                {postponeButton}
+              </div>
               {fileVisitButton}
             </div>
           ) : null}

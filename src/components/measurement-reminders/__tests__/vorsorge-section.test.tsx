@@ -33,7 +33,7 @@ vi.mock("@/hooks/use-measurement-reminders", () => ({
   }),
 }));
 
-import { VorsorgeSection } from "../vorsorge-section";
+import { VorsorgeSection, postponeOffsetTargets } from "../vorsorge-section";
 import { DISPLAY_TIMEZONE } from "@/lib/format-locale";
 
 /**
@@ -385,5 +385,62 @@ describe("<VorsorgeSection> loading + empty", () => {
     // Neutral "Coach" provenance badge + an "until <date>" course line.
     expect(html).toContain("Coach");
     expect(html).toContain("Until");
+  });
+});
+
+/**
+ * The postpone sheet's quick chips write a date into the field the person then
+ * confirms, so a chip that resolves to the wrong day sends the wrong day.
+ *
+ * Project convention here is SSR-only (no `@testing-library/react`) and the
+ * sheet renders nothing until it opens, so the chips are checked through the
+ * exported resolver rather than through the markup.
+ */
+describe("postponeOffsetTargets", () => {
+  const AT_NOON = Date.parse("2026-03-10T12:00:00.000Z");
+
+  it("offers the three documented offsets in order", () => {
+    expect(postponeOffsetTargets(AT_NOON, "Europe/Berlin")).toEqual([
+      { days: 7, date: "2026-03-17" },
+      { days: 30, date: "2026-04-09" },
+      { days: 90, date: "2026-06-08" },
+    ]);
+  });
+
+  it("counts from the day the person is on, not the UTC day", () => {
+    // 23:30 in Berlin on 10 March is still 22:30 UTC the same day, but in
+    // Auckland it is already the 11th. Each zone counts from its own date.
+    const lateBerlin = Date.parse("2026-03-10T22:30:00.000Z");
+    expect(postponeOffsetTargets(lateBerlin, "Europe/Berlin")[0]).toEqual({
+      days: 7,
+      date: "2026-03-17",
+    });
+    expect(postponeOffsetTargets(lateBerlin, "Pacific/Auckland")[0]).toEqual({
+      days: 7,
+      date: "2026-03-18",
+    });
+  });
+
+  it("keeps every offset on the day its label names across a DST shift", () => {
+    // Both fixtures sit late in the local evening, with a Berlin DST shift
+    // inside the seven days. Adding 7 × 86 400 000 ms holds the UTC instant
+    // and lets the changed offset move the wall clock over midnight, which is
+    // what these two pin against.
+    //
+    // Spring: 23:30 local on 27 March (CET). Seven days later Berlin is on
+    // CEST, so the naive sum reads 00:30 on 4 April — a day past what
+    // "+7 days" promises.
+    const beforeSpringForward = Date.parse("2026-03-27T22:30:00.000Z");
+    expect(
+      postponeOffsetTargets(beforeSpringForward, "Europe/Berlin")[0],
+    ).toEqual({ days: 7, date: "2026-04-03" });
+    // Autumn, the other direction: 00:30 local on 24 October (CEST). Berlin
+    // falls back on the 25th, so the naive sum reads 23:30 on 30 October — a
+    // day short.
+    const beforeFallBack = Date.parse("2026-10-23T22:30:00.000Z");
+    expect(postponeOffsetTargets(beforeFallBack, "Europe/Berlin")[0]).toEqual({
+      days: 7,
+      date: "2026-10-31",
+    });
   });
 });
