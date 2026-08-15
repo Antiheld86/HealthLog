@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.37.23] — 2026-08-15
+
+### Changed
+
+- Postponing a checkup is a button on the card now, beside "erledigt" or "jetzt messen", instead of a row inside the overflow menu. That is the shape the medication card has always had, where "genommen" and "übersprungen" sit next to each other, and it puts the action one tap away rather than three. The compact list view carries the same action as an icon button. Edit, measurements and delete stay in the menu.
+
+### Fixed
+
+- The quick options in the postpone sheet ("+7 Tage" and its siblings) fill in the day they name even when a daylight-saving change falls inside the span. They used to add a fixed number of hours, which shifts the clock past midnight in the week a country moves its offset, so the option could write the day before or after the one on its label.
+
 ## [1.37.22] — 2026-08-15
 
 ### Fixed
