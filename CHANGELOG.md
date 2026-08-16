@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.37.24] — 2026-08-16
+
+### Fixed
+
+- The hero card on the start page no longer says last night's sleep is still missing when no sleep reaches the record at all. It used to check only whether last night had arrived, so anyone without a tracker read the note every morning about a delay that was never going to end. The note now needs a night within the last week: a flat battery or a few nights without the device keeps it, a week of silence retires it, and someone who has never recorded sleep never sees it.
+- The same rule settles the day itself. Records with no sleep source used to sit on "provisional" indefinitely, which the daily push line reads too, so the notification carried the same untrue aside.
+
 ## [1.37.23] — 2026-08-15
 
 ### Changed
