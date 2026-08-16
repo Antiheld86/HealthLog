@@ -866,12 +866,38 @@ function composeLine(
   return t("daily.line.allClear");
 }
 
+/**
+ * How stale the freshest night may be before the record stops expecting one.
+ *
+ * A gap of a few days is ordinary for someone who does wear a tracker: a flat
+ * battery, a night without it, a holiday. A full week with nothing arriving
+ * says the source is not feeding this record at the moment, and "last night's
+ * sleep is not in yet" stops being a true statement about today.
+ */
+const SLEEP_EXPECTED_WITHIN_DAYS = 7;
+
+/**
+ * Whether this record should be waiting for last night's sleep at all.
+ *
+ * Waiting only makes sense when sleep actually reaches the record. Someone who
+ * owns no tracker has never had a night in it (`null`), and someone who has
+ * stopped wearing one stops having them; telling either of them every morning
+ * that last night's sleep "is not in yet" describes a delay that is never
+ * going to end. Both cases read as no sleep expected, which also settles the
+ * day as `final` instead of parking it on `provisional` forever.
+ */
+export function isSleepExpected(lastSeenDaysAgo: number | null): boolean {
+  if (lastSeenDaysAgo === null) return false;
+  return lastSeenDaysAgo <= SLEEP_EXPECTED_WITHIN_DAYS;
+}
+
 export function buildDailyDigest(
   input: DailyDigestInput,
   t: Translate,
 ): DailyDigest {
   // §E freshness lifecycle. The day is `final` once ANY of:
   //   - sleep is disabled (nothing to wait for);
+  //   - no sleep is expected in the first place (see `sleepExpected` below);
   //   - the event-driven morning refresh has run for today (authoritative,
   //     fast — flips the instant the sleep-arrival job stamps the marker);
   //   - last night's sleep is already visibly in the record (`daysAgo === 0`) —
@@ -880,10 +906,14 @@ export function buildDailyDigest(
   // Otherwise it stays `provisional`, and `sleepPending` drives the honest
   // "last night's sleep not yet in" note.
   const sleepEnabled = moduleEnabled(input.modules, "sleep");
+  const sleepExpected = isSleepExpected(input.sleepLastSeenDaysAgo);
   const lastNightSleepIn = input.sleepLastSeenDaysAgo === 0;
   const isFinal =
-    !sleepEnabled || input.morningRefreshedToday || lastNightSleepIn;
-  const sleepPending = sleepEnabled && !isFinal;
+    !sleepEnabled ||
+    !sleepExpected ||
+    input.morningRefreshedToday ||
+    lastNightSleepIn;
+  const sleepPending = sleepEnabled && sleepExpected && !isFinal;
   const phase: DailyDigest["phase"] = isFinal ? "final" : "provisional";
 
   const topSignal = input.briefing?.signalsOfDay?.[0] ?? null;
