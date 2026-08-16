@@ -101,7 +101,7 @@ importers:
         version: 3.0.2
       next:
         specifier: 16.2.11
-        version: 16.2.11(@babel/core@7.29.7(supports-color@7.2.0))(@playwright/test@1.60.0)(@types/node@26.1.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        version: 16.2.11(@babel/core@7.29.7(supports-color@7.2.0))(@playwright/test@1.62.1)(@types/node@26.1.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -177,7 +177,7 @@ importers:
     devDependencies:
       '@axe-core/playwright':
         specifier: ^4.12.1
-        version: 4.12.1(playwright-core@1.60.0)
+        version: 4.12.1(playwright-core@1.62.1)
       '@next/bundle-analyzer':
         specifier: ^16.2.12
         version: 16.2.12
@@ -185,8 +185,8 @@ importers:
         specifier: ^0.1.1
         version: 0.1.1(@types/node@26.1.1)(supports-color@7.2.0)
       '@playwright/test':
-        specifier: ^1.60.0
-        version: 1.60.0
+        specifier: ^1.62.1
+        version: 1.62.1
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.3.0
@@ -1933,9 +1933,9 @@ packages:
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
     engines: {node: '>=14'}
 
-  '@playwright/test@1.60.0':
-    resolution: {integrity: sha512-O71yZIbAh/PxDMNGns37GHBIfrVkEVyn+AXyIa5dOTfb4/xNvRWV+Vv/NMbNCtODB/pO7vLlF2OTmMVLhmr7Ag==}
-    engines: {node: '>=18'}
+  '@playwright/test@1.62.1':
+    resolution: {integrity: sha512-DTcUc8qii+cpHvtOwggMtBRMjKZHXYWdw8syRYu2vtzuq4Wxphqq4NfCs5Zt44L6mA8rfDfj+PHnxFc/FeK6mQ==}
+    engines: {node: '>=20'}
     hasBin: true
 
   '@polka/url@1.0.0-next.29':
@@ -5962,14 +5962,14 @@ packages:
     resolution: {integrity: sha512-nDywThFk1i4BQK4twPQ6TA4RT8bDY96yeuCVBWL3ePARCiEKDRSrNGbFIgUJpLp+XeIR65v8ra7WuJOFUBtkMA==}
     engines: {node: '>=8'}
 
-  playwright-core@1.60.0:
-    resolution: {integrity: sha512-9bW6zvX/m0lEbgTKJ6YppOKx8H3VOPBMOCFh2irXFOT4BbHgrx5hPjwJYLT40Lu+4qtD36qKc/Hn56StUW57IA==}
-    engines: {node: '>=18'}
+  playwright-core@1.62.1:
+    resolution: {integrity: sha512-wPYSwEBJY9GHraISXqyqtx0na0LpO3XEX7jNDhntbex7tzUS7kLnZsOlFruFJB4Hi/rhDMjXGqHewDZ68nYZVw==}
+    engines: {node: '>=20'}
     hasBin: true
 
-  playwright@1.60.0:
-    resolution: {integrity: sha512-hheHdokM8cdqCb0lcE3s+zT4t4W+vvjpGxsZlDnikarzx8tSzMebh3UiFtgqwFwnTnjYQcsyMF8ei2mCO/tpeA==}
-    engines: {node: '>=18'}
+  playwright@1.62.1:
+    resolution: {integrity: sha512-0M+L3LAD8/nm554LOla9Ayx0j0tmFZ0FBcoQ7F1VuVHpM/XpiC8RcDzBQB8W5+hA8L22THxELzeF+2WcUzvcLg==}
+    engines: {node: '>=20'}
     hasBin: true
 
   pngjs@5.0.0:
@@ -7503,10 +7503,10 @@ snapshots:
 
   '@aws/lambda-invoke-store@0.2.4': {}
 
-  '@axe-core/playwright@4.12.1(playwright-core@1.60.0)':
+  '@axe-core/playwright@4.12.1(playwright-core@1.62.1)':
     dependencies:
       axe-core: 4.12.1
-      playwright-core: 1.60.0
+      playwright-core: 1.62.1
 
   '@babel/code-frame@7.29.7':
     dependencies:
@@ -8913,9 +8913,9 @@ snapshots:
   '@pkgjs/parseargs@0.11.0':
     optional: true
 
-  '@playwright/test@1.60.0':
+  '@playwright/test@1.62.1':
     dependencies:
-      playwright: 1.60.0
+      playwright: 1.62.1
 
   '@polka/url@1.0.0-next.29': {}
 
@@ -12757,7 +12757,7 @@ snapshots:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
 
-  next@16.2.11(@babel/core@7.29.7(supports-color@7.2.0))(@playwright/test@1.60.0)(@types/node@26.1.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
+  next@16.2.11(@babel/core@7.29.7(supports-color@7.2.0))(@playwright/test@1.62.1)(@types/node@26.1.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7):
     dependencies:
       '@next/env': 16.2.11
       '@swc/helpers': 0.5.15
@@ -12776,7 +12776,7 @@ snapshots:
       '@next/swc-linux-x64-musl': 16.2.11
       '@next/swc-win32-arm64-msvc': 16.2.11
       '@next/swc-win32-x64-msvc': 16.2.11
-      '@playwright/test': 1.60.0
+      '@playwright/test': 1.62.1
       sharp: 0.35.3(@types/node@26.1.1)
     transitivePeerDependencies:
       - '@babel/core'
@@ -13132,11 +13132,11 @@ snapshots:
     dependencies:
       find-up: 3.0.0
 
-  playwright-core@1.60.0: {}
+  playwright-core@1.62.1: {}
 
-  playwright@1.60.0:
+  playwright@1.62.1:
     dependencies:
-      playwright-core: 1.60.0
+      playwright-core: 1.62.1
     optionalDependencies:
       fsevents: 2.3.2
 
