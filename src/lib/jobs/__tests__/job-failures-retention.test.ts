@@ -16,7 +16,7 @@ describe("pg-boss failed-row ledger retention", () => {
     ) as { version: string };
     const plans = readFileSync(join(PG_BOSS_ROOT, "dist/plans.js"), "utf8");
 
-    expect(packageJson.version).toBe("12.26.0");
+    expect(packageJson.version).toBe("12.27.0");
     expect(plans).toContain("retention_seconds: FORTEEN_DAYS");
     expect(plans).toContain("deletion_seconds: SEVEN_DAYS");
     expect(plans).toContain(
