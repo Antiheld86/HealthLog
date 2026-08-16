@@ -242,11 +242,11 @@ importers:
         specifier: ^8.22.0
         version: 8.22.0
       prettier:
-        specifier: ^3.9.1
-        version: 3.9.1
+        specifier: ^3.9.6
+        version: 3.9.6
       prettier-plugin-tailwindcss:
         specifier: ^0.8.1
-        version: 0.8.1(prettier@3.9.1)
+        version: 0.8.1(prettier@3.9.6)
       shadcn:
         specifier: ^4.16.1
         version: 4.16.1(@cfworker/json-schema@4.1.1)(supports-color@7.2.0)(typescript@6.0.3)
@@ -6035,8 +6035,8 @@ packages:
       prettier-plugin-svelte:
         optional: true
 
-  prettier@3.9.1:
-    resolution: {integrity: sha512-ppiDo2CSwexck1eyZUwJHg/N3nf1+6IRCv7W/VJ5vaLnVCmB7+3CdRfMwoCHBBX6xTrREDTksZ4OZl5SSf4zXA==}
+  prettier@3.9.6:
+    resolution: {integrity: sha512-OpN0zzVdiaiAhxpuuj5efpIS4sY9j7bY6uR5mnj5yPzGkdkjNKSJeUThPb60Jw29QuAZgA4o+/iB49kFiaBX6g==}
     engines: {node: '>=14'}
     hasBin: true
 
@@ -13073,11 +13073,11 @@ snapshots:
 
   prelude-ls@1.2.1: {}
 
-  prettier-plugin-tailwindcss@0.8.1(prettier@3.9.1):
+  prettier-plugin-tailwindcss@0.8.1(prettier@3.9.6):
     dependencies:
-      prettier: 3.9.1
+      prettier: 3.9.6
 
-  prettier@3.9.1: {}
+  prettier@3.9.6: {}
 
   pretty-ms@9.3.0:
     dependencies:
