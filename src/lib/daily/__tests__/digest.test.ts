@@ -161,9 +161,27 @@ describe("buildDailyDigest — freshness (provisional/final)", () => {
     expect(d.sleepPending).toBe(true);
   });
 
-  it("is provisional when sleep has never been recorded", () => {
+  it("is final (not pending) when sleep has never been recorded", () => {
+    // Someone with no tracker never has a night in the record. Waiting for one
+    // means the card would tell them every single morning that last night's
+    // sleep "is not in yet", about a delay that never ends.
     const d = buildDailyDigest(input({ sleepLastSeenDaysAgo: null }), t);
-    expect(d.sleepPending).toBe(true);
+    expect(d.phase).toBe("final");
+    expect(d.sleepPending).toBe(false);
+  });
+
+  it("keeps waiting through an ordinary gap, stops once the source has gone quiet", () => {
+    // A flat battery or a few nights without the tracker is not a reason to
+    // stop expecting tonight's sleep.
+    const shortGap = buildDailyDigest(input({ sleepLastSeenDaysAgo: 7 }), t);
+    expect(shortGap.phase).toBe("provisional");
+    expect(shortGap.sleepPending).toBe(true);
+
+    // A full week with nothing arriving is. Someone who has put the tracker
+    // away should not keep reading about last night's missing sleep.
+    const abandoned = buildDailyDigest(input({ sleepLastSeenDaysAgo: 8 }), t);
+    expect(abandoned.phase).toBe("final");
+    expect(abandoned.sleepPending).toBe(false);
   });
 
   it("is final (not pending) when the sleep module is off", () => {
@@ -194,13 +212,15 @@ describe("buildDailyDigest — freshness (provisional/final)", () => {
     expect(finalised.sleepPending).toBe(false);
   });
 
-  it("stays provisional when sleep never arrives (no marker, no reading)", () => {
+  it("settles the day even when sleep never arrives (no marker, no reading)", () => {
+    // Without this the day parks on `provisional` forever for every record
+    // that has no sleep source, which also leaks into the push line.
     const d = buildDailyDigest(
       input({ sleepLastSeenDaysAgo: null, morningRefreshedToday: false }),
       t,
     );
-    expect(d.phase).toBe("provisional");
-    expect(d.sleepPending).toBe(true);
+    expect(d.phase).toBe("final");
+    expect(d.sleepPending).toBe(false);
   });
 });
 

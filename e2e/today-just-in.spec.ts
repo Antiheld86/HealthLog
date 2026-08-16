@@ -153,6 +153,35 @@ test("a fresh arrival flips the day in place", async ({ page }) => {
       ).toBe(true);
     }
 
+    // A night from earlier in the week, so this is a record that expects
+    // sleep at all. The digest waits for last night only when sleep actually
+    // reaches the account (a night inside the last seven days); without one
+    // the purge above leaves a record with no sleep source, which reads
+    // `final` by design and puts the provisional assertion below out of
+    // reach. Written through the same ingest route as the fresh night, and
+    // swept by the same `e2e-just-in-` purge on the next run.
+    const priorNight = new Date(Date.now() - 3 * 24 * 60 * 60_000);
+    const priorWoke = new Date(priorNight.getTime() + 7 * 60 * 60_000);
+    const priorBatch = await page.request.post("/api/measurements/batch", {
+      data: {
+        entries: [
+          {
+            hkIdentifier: "HKCategoryTypeIdentifierSleepAnalysis",
+            value: 420,
+            unit: "min",
+            startDate: priorNight.toISOString(),
+            endDate: priorWoke.toISOString(),
+            externalId: `e2e-just-in-prior-${priorNight.getTime()}`,
+            sleepStage: 3,
+          },
+        ],
+      },
+    });
+    expect(
+      priorBatch.ok(),
+      `prior-night sleep batch must be accepted (got ${priorBatch.status()})`,
+    ).toBe(true);
+
     // The account needs a reason to paint a hero that is not the arrival
     // itself. A connection needing a reconnect is that reason: the digest
     // reads `integration_statuses` fresh on every request rather than
