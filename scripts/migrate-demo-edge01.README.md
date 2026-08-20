@@ -68,7 +68,17 @@ reset to `'disconnected'`), `ai_anthropic_key_encrypted`,
 Forced flags: `telegram_enabled=false`,
 `role='ADMIN'`.
 
-**Kept:** `password_hash` (demo login works), `avatar_bytes` /
+**Overwritten:** `password_hash`. The row arrives carrying the source
+account's hash, and the load is immediately followed by an `UPDATE` that sets
+the Argon2id hash of the demo password the README publishes, then asserts the
+stored value matches it byte for byte and aborts if it does not. The source is
+the operator's own instance, so its demo password can be rotated at any time;
+carrying that hash across is what silently broke the advertised demo login in
+issue #805. The statement travels on psql's stdin, never inside the ssh command
+string, because the hash contains `$argon2id` / `$v` / `$m` / `$t` / `$p`
+segments that a remote shell would expand to nothing.
+
+**Kept:** `avatar_bytes` /
 `avatar_content_type` / `avatar_updated_at` (profile photo), and all
 display / preference / layout JSON (`thresholds_json`,
 `dashboard_widgets_json`, `insights_layout_json`, `coach_prefs_json`,
