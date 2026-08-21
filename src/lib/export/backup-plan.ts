@@ -157,6 +157,11 @@ export const BACKED_UP_MODELS = [
   "VaccinationDocumentLink",
 
   // ── Coach ─────────────────────────────────────────────────────────────────
+  // The transcript — conversation, message, attachment — travels; see
+  // `src/lib/export/coach-backup.ts`. What is still owed is the Coach's
+  // MEMORY: the facts, plans and reminders it carries between threads. Each of
+  // those addresses a conversation by `sourceConversationId`, so they follow
+  // the transcript rather than lead it.
   "CoachConversation",
   "CoachMessage",
   "CoachConversationDocument",
@@ -211,6 +216,10 @@ export const BACKUP_WRITER_FILES: readonly string[] = [
   // The Vorsorge reminders and their completion ledger, both ends beside each
   // other like the visits and vaccinations above.
   "src/lib/export/reminders-backup.ts",
+  // The Coach transcript, same arrangement. `attachments` is a relation name
+  // this file shares with nothing else, but each model still reads through its
+  // own delegate here for the reason the visits comment gives.
+  "src/lib/export/coach-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 
@@ -222,6 +231,7 @@ export const BACKUP_RESTORE_FILES: readonly string[] = [
   "src/lib/export/visits-backup.ts",
   "src/lib/export/vaccinations-backup.ts",
   "src/lib/export/reminders-backup.ts",
+  "src/lib/export/coach-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 
@@ -306,6 +316,21 @@ export const TWO_ENDED_MODELS = [
   // dropping to NULL in the same release — the rows they name come back now.
   "MeasurementReminder",
   "MeasurementReminderEvent",
+  // The Coach's transcript. The register entry for the messages called them
+  // "the largest volume of free text an account owns after its documents",
+  // and until now a restored account got a Coach that had never spoken to it.
+  // The three travel together because two of them are meaningless alone: a
+  // turn without its thread has nowhere to hang, and an attachment names a
+  // pairing rather than a thing.
+  //
+  // `documentScoped` is the field that makes this more than history. It is a
+  // permanent fence — no code path lowers it — so a restore that let it
+  // default to false would hand the tool loop back to precisely the
+  // conversations the fence exists to keep away from it, invisibly. It is
+  // carried and asserted, not defaulted.
+  "CoachConversation",
+  "CoachMessage",
+  "CoachConversationDocument",
 ] as const;
 
 /** One model claimed to travel both ways. */
@@ -374,12 +399,6 @@ export const COVERAGE_PENDING: Readonly<Record<string, string>> = {
     "Which documents were filed against which condition. Documents and conditions both restore; the filing between them does not, so a restored vault is unsorted.",
   ExtractedFact:
     "Facts read out of a document by the AI pass, with their provenance back to the page. Re-derivable only by re-running the extraction against a provider, at the operator's cost.",
-  CoachConversation:
-    "The thread structure of past coaching conversations — which messages belong together and what each exchange was about. Without it the messages below, if they were ever carried, would restore as one undifferentiated pile.",
-  CoachMessage:
-    "The messages themselves, encrypted at rest. The largest volume of free text an account owns after its documents.",
-  CoachConversationDocument:
-    "Which documents a conversation was grounded in — the provenance that makes an old answer checkable.",
   CoachFact:
     "Durable facts the Coach was told to remember. A restore makes the account re-tell its history.",
   CoachPlan:

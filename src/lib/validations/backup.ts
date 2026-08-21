@@ -1042,6 +1042,57 @@ const measurementReminderEventBackupSchema = z
   })
   .passthrough();
 
+/**
+ * One Coach turn.
+ *
+ * `contentEncrypted` and `content` are the two ends of the same contract, so
+ * both are optional here and exactly one arrives: a disaster-recovery file
+ * carries the ciphertext, a portable file carries the prose. Requiring either
+ * would refuse half the valid files; requiring both would refuse all of them.
+ * The restore picks whichever it was handed.
+ */
+const coachMessageBackupSchema = z
+  .object({
+    id: z.string().min(1),
+    role: z.string().min(1),
+    contentEncrypted: base64BytesSchema.optional(),
+    content: z.string().optional(),
+    metricSourceJson: z.string().nullable().optional(),
+    providerType: z.string().nullable().optional(),
+    promptVersion: z.string().nullable().optional(),
+    tokensUsed: z.number().int().nullable().optional(),
+    model: z.string().nullable().optional(),
+    createdAt: isoDateTime,
+  })
+  .passthrough();
+
+const coachConversationDocumentBackupSchema = z
+  .object({
+    documentId: z.string().min(1),
+    addedAt: isoDateTime,
+  })
+  .passthrough();
+
+const coachConversationBackupSchema = z
+  .object({
+    id: z.string().min(1),
+    title: z.string(),
+    // NOT optional with a default. The fence is permanent and a file that does
+    // not state it is a file that cannot be trusted to re-fence the
+    // conversation, so the absence has to be visible rather than defaulted to
+    // the permissive value.
+    documentScoped: z.boolean(),
+    summaryEncrypted: base64BytesSchema.nullable().optional(),
+    summary: z.string().nullable().optional(),
+    summaryUpdatedAt: isoDateTime.nullable().optional(),
+    summaryTurnCount: z.number().int().min(0).optional(),
+    createdAt: isoDateTime,
+    updatedAt: isoDateTime,
+    messages: z.array(coachMessageBackupSchema).default([]),
+    attachments: z.array(coachConversationDocumentBackupSchema).default([]),
+  })
+  .passthrough();
+
 const allergyBackupSchema = z
   .object({
     id: z.string().min(1),
@@ -1208,6 +1259,7 @@ export const backupPayloadSchema = z
     // iOS #68). Defaulted for the same reason as the sections above: a file
     // written before the reminders travelled carries no key, and an account
     // with none writes [].
+    coachConversations: z.array(coachConversationBackupSchema).default([]),
     measurementReminders: z.array(measurementReminderBackupSchema).default([]),
     measurementReminderEvents: z
       .array(measurementReminderEventBackupSchema)
@@ -1298,6 +1350,10 @@ export interface BackupSummary {
   measurementReminders: number;
   /** v1.37.20 (#223 / iOS #68) — completion-ledger rows across every reminder. */
   measurementReminderEvents: number;
+  /** Coach conversation threads. */
+  coachConversations: number;
+  /** Coach turns across every thread. */
+  coachMessages: number;
 }
 
 export function summarizeBackup(payload: BackupPayload): BackupSummary {
@@ -1354,6 +1410,11 @@ export function summarizeBackup(payload: BackupPayload): BackupSummary {
     // file with reminders the way it once did for visits.
     measurementReminders: payload.measurementReminders.length,
     measurementReminderEvents: payload.measurementReminderEvents.length,
+    coachConversations: payload.coachConversations.length,
+    coachMessages: payload.coachConversations.reduce(
+      (total, conversation) => total + conversation.messages.length,
+      0,
+    ),
   };
 }
 

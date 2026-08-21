@@ -305,6 +305,10 @@ function makePrisma() {
     // same reason as the visit tables above.
     measurementReminder: { findMany: vi.fn().mockResolvedValue([]) },
     measurementReminderEvent: { findMany: vi.fn().mockResolvedValue([]) },
+    // The Coach transcript. Deliberately NOT `?? []` at the call site, so a
+    // future `include` that forgets the relation fails here loudly instead of
+    // exporting an account whose Coach never spoke.
+    coachConversation: { findMany: vi.fn().mockResolvedValue([]) },
     // Left unmocked on purpose: `buildProfileBackupSection` runs for real
     // against these, so the assertions below exercise the builder rather than
     // a stand-in that would agree with whatever the payload happened to do.

@@ -40,6 +40,7 @@ vi.mock("@/lib/db", () => ({
     // same reason as the visit tables above.
     measurementReminder: { findMany: vi.fn().mockResolvedValue([]) },
     measurementReminderEvent: { findMany: vi.fn().mockResolvedValue([]) },
+    coachConversation: { findMany: vi.fn().mockResolvedValue([]) },
     cycleProfile: { findUnique: vi.fn().mockResolvedValue(null) },
     menstrualCycle: { findMany: vi.fn().mockResolvedValue([]) },
     cycleDayLog: { findMany: vi.fn().mockResolvedValue([]) },
