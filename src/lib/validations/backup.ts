@@ -1192,6 +1192,31 @@ const coachReminderBackupSchema = z
   })
   .passthrough();
 
+/**
+ * A grouping the account created for its own mood factors. `id` is REQUIRED,
+ * unlike everywhere else in this file, because a custom tag addresses its
+ * category by that id and nothing else can resolve the pairing.
+ */
+const customMoodTagCategorySchema = z
+  .object({
+    id: z.string().min(1),
+    key: z.string().min(1),
+    labelKey: z.string().min(1),
+    icon: z.string().nullable().optional(),
+    sortOrder: z.number().int().optional(),
+    isActive: z.boolean().optional(),
+    labelEncrypted: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+/** A tag the account hid, named by key so a seeded tag resolves anywhere. */
+const hiddenMoodTagSchema = z
+  .object({
+    key: z.string().min(1),
+    createdAt: isoDateTime.optional(),
+  })
+  .passthrough();
+
 const allergyBackupSchema = z
   .object({
     id: z.string().min(1),
@@ -1313,6 +1338,8 @@ export const backupPayloadSchema = z
     // Defaulted rather than required: files written before this field existed
     // are still valid, and an account with no custom symptoms writes [].
     customSymptoms: z.array(customCycleSymptomSchema).default([]),
+    customMoodTagCategories: z.array(customMoodTagCategorySchema).default([]),
+    hiddenMoodTags: z.array(hiddenMoodTagSchema).default([]),
     customMoodTags: z.array(customMoodTagSchema).default([]),
     // Structured records default to empty arrays so older backups remain
     // parseable. Canonical DR writers add stable ids and encrypted document

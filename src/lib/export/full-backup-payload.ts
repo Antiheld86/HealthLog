@@ -92,6 +92,8 @@ export interface FullBackupCounts
   medicationInventoryItems: number;
   medicationInventoryEvents: number;
   moodEntries: number;
+  customMoodTagCategories: number;
+  hiddenMoodTags: number;
   cycles: number;
   cycleDayLogs: number;
   nutrientDays: number;
@@ -293,6 +295,8 @@ export async function buildFullBackupPayload(
     intakeEvents,
     moodEntries,
     customMoodTags,
+    customMoodTagCategories,
+    hiddenMoodTags,
     cycle,
     records,
     profile,
@@ -408,6 +412,26 @@ export async function buildFullBackupPayload(
     prisma.moodTag.findMany({
       where: { userId },
       orderBy: { key: "asc" },
+    }),
+    // The account's OWN categories. Seeded ones (`userId: null`) belong to the
+    // instance and are deliberately not carried — but a custom tag's
+    // `categoryId` is a real foreign key, so a category the account created
+    // itself has to travel or the tag above cannot be written at all. Before
+    // this section existed, that was not a gap in the restore: it was a
+    // constraint violation that took the WHOLE file down with it, so an
+    // account that had ever grouped its own mood factors could not be
+    // restored.
+    prisma.moodTagCategory.findMany({
+      where: { userId },
+      orderBy: { sortOrder: "asc" },
+    }),
+    // Which tags the account chose to hide. Carried by KEY rather than id:
+    // what people hide is almost always a SEEDED tag, whose id differs on
+    // every instance, so an id would resolve to nothing on the way back.
+    prisma.moodTagHidden.findMany({
+      where: { userId },
+      select: { moodTag: { select: { key: true } }, createdAt: true },
+      orderBy: { createdAt: "asc" },
     }),
     buildCycleBackupSection(prisma, userId, {
       purpose: disasterRecovery ? "disaster-recovery" : "portable-export",
@@ -773,6 +797,20 @@ export async function buildFullBackupPayload(
           : null,
       };
     }),
+    customMoodTagCategories: customMoodTagCategories.map((category) => ({
+      id: category.id,
+      key: category.key,
+      labelKey: category.labelKey,
+      icon: category.icon,
+      sortOrder: category.sortOrder,
+      isActive: category.isActive,
+      // Ciphertext verbatim, like the tag label beside it.
+      labelEncrypted: category.labelEncrypted,
+    })),
+    hiddenMoodTags: hiddenMoodTags.map((hidden) => ({
+      key: hidden.moodTag.key,
+      createdAt: hidden.createdAt.toISOString(),
+    })),
     customMoodTags: customMoodTags.map((tag) => ({
       ...(disasterRecovery ? { id: tag.id } : {}),
       key: tag.key,
@@ -851,6 +889,8 @@ export async function buildFullBackupPayload(
         0,
       ),
       moodEntries: moodEntries.length,
+      customMoodTagCategories: customMoodTagCategories.length,
+      hiddenMoodTags: hiddenMoodTags.length,
       cycles: cycle.cycles.length,
       cycleDayLogs: cycle.cycleDayLogs.length,
       nutrientDays: nutrientDays.length,

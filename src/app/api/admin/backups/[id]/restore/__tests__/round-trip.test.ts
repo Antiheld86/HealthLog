@@ -297,6 +297,8 @@ function sourceClient() {
     measurementReminder: { findMany: vi.fn().mockResolvedValue([]) },
     measurementReminderEvent: { findMany: vi.fn().mockResolvedValue([]) },
     coachConversation: { findMany: vi.fn().mockResolvedValue([]) },
+    moodTagCategory: { findMany: vi.fn().mockResolvedValue([]) },
+    moodTagHidden: { findMany: vi.fn().mockResolvedValue([]) },
     coachFact: { findMany: vi.fn().mockResolvedValue([]) },
     coachPlan: { findMany: vi.fn().mockResolvedValue([]) },
     coachReminder: { findMany: vi.fn().mockResolvedValue([]) },

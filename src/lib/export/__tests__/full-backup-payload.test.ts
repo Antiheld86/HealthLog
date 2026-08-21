@@ -345,6 +345,8 @@ function makePrisma() {
     // future `include` that forgets the relation fails here loudly instead of
     // exporting an account whose Coach never spoke.
     coachConversation: { findMany: vi.fn().mockResolvedValue([]) },
+    moodTagCategory: { findMany: vi.fn().mockResolvedValue([]) },
+    moodTagHidden: { findMany: vi.fn().mockResolvedValue([]) },
     coachFact: { findMany: vi.fn().mockResolvedValue([]) },
     coachPlan: { findMany: vi.fn().mockResolvedValue([]) },
     coachReminder: { findMany: vi.fn().mockResolvedValue([]) },

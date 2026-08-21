@@ -354,6 +354,17 @@ export const TWO_ENDED_MODELS = [
   // that recalculated would disagree with the account's own history.
   "MedicationInventoryItem",
   "MedicationInventoryEvent",
+  // The mood taxonomy the account shaped for itself. The category is not a
+  // nicety: `MoodTag.categoryId` is a real foreign key, so a category the
+  // person created and the file did not carry made the restore violate a
+  // constraint and roll the WHOLE account back. The register described this as
+  // custom tags landing in a grouping that no longer exists; measured, it was
+  // a 500 and an empty account.
+  //
+  // The hidden set travels by KEY rather than id, because what people hide is
+  // almost always a seeded tag whose id differs on every instance.
+  "MoodTagCategory",
+  "MoodTagHidden",
 ] as const;
 
 /** One model claimed to travel both ways. */
@@ -394,10 +405,6 @@ export const COVERAGE_PENDING: Readonly<Record<string, string>> = {
     "The history of how a schedule changed. Without it a restored medication keeps today's schedule and loses the record of when the dose or timing moved, which is the part a doctor asks about.",
   MedicationEfficacyTarget:
     "What a medication was supposed to move, and by how much. The drug comes back with no statement of what it was for.",
-  MoodTagCategory:
-    "Categories a person created to group their own mood factors. Custom tags restore into a grouping that no longer exists.",
-  MoodTagHidden:
-    "Which seeded mood tags the account chose to hide. A restore un-hides every one, so the mood editor comes back cluttered with tags the person removed on purpose.",
   MentalHealthAssessment:
     "Completed WHO-5, PHQ and GAD instruments with their scores and dates. Clinically meaningful history that no integration can re-sync, and the single largest gap on this list.",
   EcgRecording:
