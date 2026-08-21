@@ -50,7 +50,10 @@ import { restoreIntradayProfileData } from "@/lib/export/intraday-profile-backup
 import { restoreHealthScoreData } from "@/lib/export/health-score-backup";
 import { restoreVisitsData } from "@/lib/export/visits-backup";
 import { restoreVaccinationsData } from "@/lib/export/vaccinations-backup";
-import { restoreCoachData } from "@/lib/export/coach-backup";
+import {
+  restoreCoachData,
+  restoreCoachMemoryData,
+} from "@/lib/export/coach-backup";
 import { restoreRemindersData } from "@/lib/export/reminders-backup";
 import { invalidateUserData } from "@/lib/cache/invalidate";
 
@@ -102,6 +105,9 @@ interface RestoreResponse {
     coachConversations: number;
     coachMessages: number;
     coachConversationDocuments: number;
+    coachFacts: number;
+    coachPlans: number;
+    coachReminders: number;
   };
 }
 
@@ -1433,6 +1439,19 @@ const handler = apiHandler(
             skips,
           );
 
+          // What the Coach keeps between threads. AFTER the transcript,
+          // because all three carry a `sourceConversationId` that is resolved
+          // against the threads the branch above has just written — resolving
+          // earlier would cut every fact loose from the conversation it came
+          // out of and still report success.
+          const coachMemoryCleared = await restoreCoachMemoryData(
+            tx,
+            ownerId,
+            payload,
+            new Set(payload.coachConversations.map((c) => c.id)),
+            skips,
+          );
+
           const cleared = {
             measurements: measurements.count,
             medications: meds.count,
@@ -1470,6 +1489,9 @@ const handler = apiHandler(
             coachConversations: coachCleared.coachConversations,
             coachMessages: coachCleared.coachMessages,
             coachConversationDocuments: coachCleared.coachConversationDocuments,
+            coachFacts: coachMemoryCleared.coachFacts,
+            coachPlans: coachMemoryCleared.coachPlans,
+            coachReminders: coachMemoryCleared.coachReminders,
           };
           return { cleared, skipped: summarizeRestoreSkips(skips) };
         },

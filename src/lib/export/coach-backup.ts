@@ -438,3 +438,477 @@ function decodeBase64(encoded: string): Uint8Array<ArrayBuffer> {
   bytes.set(decoded);
   return bytes;
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * The Coach's MEMORY: the facts, plans and reminders it carries BETWEEN
+ * threads.
+ *
+ * The transcript above is what was said. This is what the Coach was asked to
+ * keep. Without it a restored account has every word of every conversation and
+ * a Coach that has to be told its own history again — which the register named
+ * exactly: "a restore makes the account re-tell its history", "keeps the talk
+ * and loses the commitment", "a restored account silently stops sending them".
+ *
+ * ## Tombstones ride, but only in a disaster-recovery file
+ *
+ * All three soft-delete. A deleted fact is hidden from injection and kept for
+ * audit, which is a distinction only the owning instance can act on, so a
+ * disaster-recovery payload carries the tombstone and a portable export omits
+ * it — the same split the Vorsorge reminders use. A portable file that carried
+ * them would hand a person rows their own app refuses to show them, and a
+ * restore that resurrected one would put a fact back into the Coach's mouth
+ * that the person had deliberately taken out of it.
+ *
+ * ## Two references, neither of them a foreign key
+ *
+ * `sourceConversationId` and `relatedPlanId` are bare id columns — the schema
+ * declares no relation for either, so nothing in the database refuses a value
+ * that points at nothing. That makes them more dangerous than a real key, not
+ * less: a dangling reference costs no error, it just quietly stops meaning
+ * anything, and the row goes on looking complete.
+ *
+ * So the restore resolves both against what it actually wrote and NULLS what it
+ * cannot resolve, then reports the count. Nulling rather than dropping is the
+ * point: a live reminder must not be lost because the plan it mentions was
+ * tombstoned out of a portable file. The reminder is still the person's, and it
+ * still fires. What it loses is a pointer that was already going nowhere.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** One durable fact the Coach was told to remember. */
+export interface CoachFactBackupEntry {
+  id: string;
+  /** Ciphertext as base64. Present on a disaster-recovery payload only. */
+  factEncrypted?: string;
+  /** Plaintext. Present on a portable payload only. */
+  fact?: string;
+  category: string;
+  confidence: number;
+  sourceConversationId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string | null;
+}
+
+/** One implementation intention: "if <cue>, then <action>". */
+export interface CoachPlanBackupEntry {
+  id: string;
+  metric: string;
+  ifCueEncrypted?: string;
+  ifCue?: string;
+  thenActionEncrypted?: string;
+  thenAction?: string;
+  targetEncrypted?: string | null;
+  target?: string | null;
+  outcomeEncrypted?: string | null;
+  outcome?: string | null;
+  status: string;
+  reviewDate: string | null;
+  sourceConversationId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string | null;
+}
+
+/** One thing to bring back up, in the person's own framing. */
+export interface CoachReminderBackupEntry {
+  id: string;
+  noteEncrypted?: string;
+  note?: string;
+  metric: string | null;
+  relatedPlanId: string | null;
+  triggerKind: string;
+  dueAt: string | null;
+  contextCue: string | null;
+  status: string;
+  source: string;
+  sourceConversationId: string | null;
+  lastSurfacedAt: string | null;
+  surfaceCount: number;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string | null;
+}
+
+export interface CoachMemoryBackupSection {
+  coachFacts: CoachFactBackupEntry[];
+  coachPlans: CoachPlanBackupEntry[];
+  coachReminders: CoachReminderBackupEntry[];
+}
+
+export interface CoachMemoryBackupCounts {
+  coachFacts: number;
+  coachPlans: number;
+  coachReminders: number;
+}
+
+export async function buildCoachMemoryBackupSection(
+  prisma: Pick<PrismaClient, "coachFact" | "coachPlan" | "coachReminder">,
+  userId: string,
+  options: CoachBackupOptions = {},
+): Promise<CoachMemoryBackupSection> {
+  const disasterRecovery = options.purpose === "disaster-recovery";
+  const scope = disasterRecovery ? { userId } : { userId, deletedAt: null };
+
+  const [factRows, planRows, reminderRows] = await Promise.all([
+    prisma.coachFact.findMany({
+      where: scope,
+      orderBy: { createdAt: "asc" },
+      select: COACH_FACT_BACKUP_SELECT,
+    }),
+    prisma.coachPlan.findMany({
+      where: scope,
+      orderBy: { createdAt: "asc" },
+      select: COACH_PLAN_BACKUP_SELECT,
+    }),
+    prisma.coachReminder.findMany({
+      where: scope,
+      orderBy: { createdAt: "asc" },
+      select: COACH_REMINDER_BACKUP_SELECT,
+    }),
+  ]);
+
+  const asBase64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
+  const asBase64OrNull = (bytes: Uint8Array | null) =>
+    bytes ? asBase64(bytes) : null;
+
+  return {
+    coachFacts: factRows.map((row) => ({
+      id: row.id,
+      ...(disasterRecovery
+        ? {
+            factEncrypted: asBase64(row.factEncrypted),
+            deletedAt: row.deletedAt?.toISOString() ?? null,
+          }
+        : { fact: decryptTurnSoft(row.factEncrypted) ?? "" }),
+      category: row.category,
+      confidence: row.confidence,
+      sourceConversationId: row.sourceConversationId,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    })),
+    coachPlans: planRows.map((row) => ({
+      id: row.id,
+      metric: row.metric,
+      ...(disasterRecovery
+        ? {
+            ifCueEncrypted: asBase64(row.ifCueEncrypted),
+            thenActionEncrypted: asBase64(row.thenActionEncrypted),
+            targetEncrypted: asBase64OrNull(row.targetEncrypted),
+            outcomeEncrypted: asBase64OrNull(row.outcomeEncrypted),
+            deletedAt: row.deletedAt?.toISOString() ?? null,
+          }
+        : {
+            ifCue: decryptTurnSoft(row.ifCueEncrypted) ?? "",
+            thenAction: decryptTurnSoft(row.thenActionEncrypted) ?? "",
+            target: decryptTurnSoft(row.targetEncrypted),
+            outcome: decryptTurnSoft(row.outcomeEncrypted),
+          }),
+      status: row.status,
+      reviewDate: row.reviewDate?.toISOString() ?? null,
+      sourceConversationId: row.sourceConversationId,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    })),
+    coachReminders: reminderRows.map((row) => ({
+      id: row.id,
+      ...(disasterRecovery
+        ? {
+            noteEncrypted: asBase64(row.noteEncrypted),
+            deletedAt: row.deletedAt?.toISOString() ?? null,
+          }
+        : { note: decryptTurnSoft(row.noteEncrypted) ?? "" }),
+      metric: row.metric,
+      relatedPlanId: row.relatedPlanId,
+      triggerKind: row.triggerKind,
+      dueAt: row.dueAt?.toISOString() ?? null,
+      contextCue: row.contextCue,
+      status: row.status,
+      source: row.source,
+      sourceConversationId: row.sourceConversationId,
+      lastSurfacedAt: row.lastSurfacedAt?.toISOString() ?? null,
+      surfaceCount: row.surfaceCount,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    })),
+  };
+}
+
+const COACH_FACT_BACKUP_SELECT = {
+  id: true,
+  factEncrypted: true,
+  category: true,
+  confidence: true,
+  sourceConversationId: true,
+  createdAt: true,
+  updatedAt: true,
+  deletedAt: true,
+} satisfies Prisma.CoachFactSelect;
+
+const COACH_PLAN_BACKUP_SELECT = {
+  id: true,
+  metric: true,
+  ifCueEncrypted: true,
+  thenActionEncrypted: true,
+  targetEncrypted: true,
+  outcomeEncrypted: true,
+  status: true,
+  reviewDate: true,
+  sourceConversationId: true,
+  createdAt: true,
+  updatedAt: true,
+  deletedAt: true,
+} satisfies Prisma.CoachPlanSelect;
+
+const COACH_REMINDER_BACKUP_SELECT = {
+  id: true,
+  noteEncrypted: true,
+  metric: true,
+  relatedPlanId: true,
+  triggerKind: true,
+  dueAt: true,
+  contextCue: true,
+  status: true,
+  source: true,
+  sourceConversationId: true,
+  lastSurfacedAt: true,
+  surfaceCount: true,
+  createdAt: true,
+  updatedAt: true,
+  deletedAt: true,
+} satisfies Prisma.CoachReminderSelect;
+
+/** Row counts for the audit trail, mirroring the other section counters. */
+export function countCoachMemoryBackupSection(
+  section: CoachMemoryBackupSection,
+): CoachMemoryBackupCounts {
+  return {
+    coachFacts: section.coachFacts.length,
+    coachPlans: section.coachPlans.length,
+    coachReminders: section.coachReminders.length,
+  };
+}
+
+/** Counts the Coach-memory restore wiped, for the audit trail. */
+export interface CoachMemoryRestoreCleared {
+  coachFacts: number;
+  coachPlans: number;
+  coachReminders: number;
+}
+
+type OptionalMemory<T> = { [K in keyof T]?: T[K] | undefined };
+
+export type RestoredCoachFact = Pick<
+  CoachFactBackupEntry,
+  "id" | "category" | "createdAt" | "updatedAt"
+> &
+  OptionalMemory<
+    Pick<
+      CoachFactBackupEntry,
+      | "factEncrypted"
+      | "fact"
+      | "confidence"
+      | "sourceConversationId"
+      | "deletedAt"
+    >
+  >;
+
+export type RestoredCoachPlan = Pick<
+  CoachPlanBackupEntry,
+  "id" | "metric" | "createdAt" | "updatedAt"
+> &
+  OptionalMemory<
+    Pick<
+      CoachPlanBackupEntry,
+      | "ifCueEncrypted"
+      | "ifCue"
+      | "thenActionEncrypted"
+      | "thenAction"
+      | "targetEncrypted"
+      | "target"
+      | "outcomeEncrypted"
+      | "outcome"
+      | "status"
+      | "reviewDate"
+      | "sourceConversationId"
+      | "deletedAt"
+    >
+  >;
+
+export type RestoredCoachReminder = Pick<
+  CoachReminderBackupEntry,
+  "id" | "source" | "createdAt" | "updatedAt"
+> &
+  OptionalMemory<
+    Pick<
+      CoachReminderBackupEntry,
+      | "noteEncrypted"
+      | "note"
+      | "metric"
+      | "relatedPlanId"
+      | "triggerKind"
+      | "dueAt"
+      | "contextCue"
+      | "status"
+      | "sourceConversationId"
+      | "lastSurfacedAt"
+      | "surfaceCount"
+      | "deletedAt"
+    >
+  >;
+
+export interface CoachMemoryRestoreInput {
+  coachFacts: RestoredCoachFact[];
+  coachPlans: RestoredCoachPlan[];
+  coachReminders: RestoredCoachReminder[];
+}
+
+/**
+ * Re-create the Coach's memory.
+ *
+ * MUST be called AFTER `restoreCoachData`: every one of the three carries a
+ * `sourceConversationId`, and a reference resolved before the threads exist
+ * would read as unresolvable and be nulled — a restore that reported success
+ * while quietly cutting every fact loose from the conversation it came out of.
+ *
+ * Plans go in before reminders for the same reason one step down: a reminder's
+ * `relatedPlanId` is resolved against the plans this function has just written.
+ */
+export async function restoreCoachMemoryData(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  payload: CoachMemoryRestoreInput,
+  conversationIds: ReadonlySet<string>,
+  skips: RestoreSkipLog,
+): Promise<CoachMemoryRestoreCleared> {
+  const [clearedFacts, clearedPlans, clearedReminders] = await Promise.all([
+    tx.coachFact.deleteMany({ where: { userId: ownerId } }),
+    tx.coachPlan.deleteMany({ where: { userId: ownerId } }),
+    tx.coachReminder.deleteMany({ where: { userId: ownerId } }),
+  ]);
+
+  // Both references are nulled rather than dropped when they do not resolve,
+  // and every miss is reported. See the section header: these are bare id
+  // columns, so a dangling value costs no error and simply stops meaning
+  // anything.
+  const danglingRefs: string[] = [];
+  const resolveConversation = (id: string | null | undefined) => {
+    if (!id) return null;
+    if (conversationIds.has(id)) return id;
+    danglingRefs.push(id);
+    return null;
+  };
+
+  if (payload.coachFacts.length > 0) {
+    await tx.coachFact.createMany({
+      data: payload.coachFacts.map((fact) => ({
+        id: fact.id,
+        userId: ownerId,
+        factEncrypted: resolveMemoryBytes(fact.factEncrypted, fact.fact),
+        category: fact.category,
+        confidence: fact.confidence ?? 50,
+        sourceConversationId: resolveConversation(fact.sourceConversationId),
+        createdAt: new Date(fact.createdAt),
+        updatedAt: new Date(fact.updatedAt),
+        deletedAt: fact.deletedAt ? new Date(fact.deletedAt) : null,
+      })),
+    });
+  }
+
+  if (payload.coachPlans.length > 0) {
+    await tx.coachPlan.createMany({
+      data: payload.coachPlans.map((plan) => ({
+        id: plan.id,
+        userId: ownerId,
+        metric: plan.metric,
+        ifCueEncrypted: resolveMemoryBytes(plan.ifCueEncrypted, plan.ifCue),
+        thenActionEncrypted: resolveMemoryBytes(
+          plan.thenActionEncrypted,
+          plan.thenAction,
+        ),
+        targetEncrypted: resolveOptionalMemoryBytes(
+          plan.targetEncrypted,
+          plan.target,
+        ),
+        outcomeEncrypted: resolveOptionalMemoryBytes(
+          plan.outcomeEncrypted,
+          plan.outcome,
+        ),
+        status: plan.status ?? "proposed",
+        reviewDate: plan.reviewDate ? new Date(plan.reviewDate) : null,
+        sourceConversationId: resolveConversation(plan.sourceConversationId),
+        createdAt: new Date(plan.createdAt),
+        updatedAt: new Date(plan.updatedAt),
+        deletedAt: plan.deletedAt ? new Date(plan.deletedAt) : null,
+      })),
+    });
+  }
+
+  const restoredPlanIds = new Set(payload.coachPlans.map((plan) => plan.id));
+  if (payload.coachReminders.length > 0) {
+    await tx.coachReminder.createMany({
+      data: payload.coachReminders.map((reminder) => {
+        let relatedPlanId = reminder.relatedPlanId ?? null;
+        if (relatedPlanId && !restoredPlanIds.has(relatedPlanId)) {
+          danglingRefs.push(relatedPlanId);
+          relatedPlanId = null;
+        }
+        return {
+          id: reminder.id,
+          userId: ownerId,
+          noteEncrypted: resolveMemoryBytes(
+            reminder.noteEncrypted,
+            reminder.note,
+          ),
+          metric: reminder.metric ?? null,
+          relatedPlanId,
+          triggerKind: reminder.triggerKind ?? "date",
+          dueAt: reminder.dueAt ? new Date(reminder.dueAt) : null,
+          contextCue: reminder.contextCue ?? null,
+          status: reminder.status ?? "active",
+          source: reminder.source,
+          sourceConversationId: resolveConversation(
+            reminder.sourceConversationId,
+          ),
+          lastSurfacedAt: reminder.lastSurfacedAt
+            ? new Date(reminder.lastSurfacedAt)
+            : null,
+          surfaceCount: reminder.surfaceCount ?? 0,
+          createdAt: new Date(reminder.createdAt),
+          updatedAt: new Date(reminder.updatedAt),
+          deletedAt: reminder.deletedAt ? new Date(reminder.deletedAt) : null,
+        };
+      }),
+    });
+  }
+
+  recordUnknownKeys(
+    skips,
+    "coachReference",
+    [...new Set(danglingRefs)],
+    danglingRefs,
+  );
+
+  return {
+    coachFacts: clearedFacts.count,
+    coachPlans: clearedPlans.count,
+    coachReminders: clearedReminders.count,
+  };
+}
+
+function resolveMemoryBytes(
+  ciphertext: string | undefined,
+  plaintext: string | undefined,
+): Uint8Array<ArrayBuffer> {
+  if (ciphertext !== undefined) return decodeBase64(ciphertext);
+  return encryptToBytes(plaintext ?? "");
+}
+
+function resolveOptionalMemoryBytes(
+  ciphertext: string | null | undefined,
+  plaintext: string | null | undefined,
+): Uint8Array<ArrayBuffer> | null {
+  if (ciphertext !== undefined) {
+    return ciphertext === null ? null : decodeBase64(ciphertext);
+  }
+  return plaintext ? encryptToBytes(plaintext) : null;
+}

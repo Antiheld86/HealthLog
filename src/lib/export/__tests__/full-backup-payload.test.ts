@@ -309,6 +309,9 @@ function makePrisma() {
     // future `include` that forgets the relation fails here loudly instead of
     // exporting an account whose Coach never spoke.
     coachConversation: { findMany: vi.fn().mockResolvedValue([]) },
+    coachFact: { findMany: vi.fn().mockResolvedValue([]) },
+    coachPlan: { findMany: vi.fn().mockResolvedValue([]) },
+    coachReminder: { findMany: vi.fn().mockResolvedValue([]) },
     // Left unmocked on purpose: `buildProfileBackupSection` runs for real
     // against these, so the assertions below exercise the builder rather than
     // a stand-in that would agree with whatever the payload happened to do.

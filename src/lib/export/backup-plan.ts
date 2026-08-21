@@ -331,6 +331,18 @@ export const TWO_ENDED_MODELS = [
   "CoachConversation",
   "CoachMessage",
   "CoachConversationDocument",
+  // And what the Coach keeps between threads. The transcript alone restores an
+  // account with every word of every conversation and a Coach that has to be
+  // told its own history again.
+  //
+  // Both of the references here — `sourceConversationId` on all three,
+  // `relatedPlanId` on the reminder — are bare id columns with no foreign key,
+  // so a value pointing at nothing costs no error and just stops meaning
+  // anything. The restore resolves them against what it wrote and reports what
+  // it could not, rather than writing a pointer it knows is dead.
+  "CoachFact",
+  "CoachPlan",
+  "CoachReminder",
 ] as const;
 
 /** One model claimed to travel both ways. */
@@ -399,12 +411,6 @@ export const COVERAGE_PENDING: Readonly<Record<string, string>> = {
     "Which documents were filed against which condition. Documents and conditions both restore; the filing between them does not, so a restored vault is unsorted.",
   ExtractedFact:
     "Facts read out of a document by the AI pass, with their provenance back to the page. Re-derivable only by re-running the extraction against a provider, at the operator's cost.",
-  CoachFact:
-    "Durable facts the Coach was told to remember. A restore makes the account re-tell its history.",
-  CoachPlan:
-    "An agreed plan and its progress. Restoring the conversation without the plan keeps the talk and loses the commitment.",
-  CoachReminder:
-    "Reminders the Coach agreed to send. A restored account silently stops sending them.",
   NotificationPreference:
     "Per-event channel and quiet-hours choices. A restore reverts to defaults, so an account that had deliberately silenced a category starts being notified again.",
   ReminderPhaseConfig:

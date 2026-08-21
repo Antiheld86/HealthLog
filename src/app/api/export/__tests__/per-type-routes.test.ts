@@ -43,6 +43,9 @@ vi.mock("@/lib/db", () => ({
     measurementReminder: { findMany: vi.fn().mockResolvedValue([]) },
     measurementReminderEvent: { findMany: vi.fn().mockResolvedValue([]) },
     coachConversation: { findMany: vi.fn().mockResolvedValue([]) },
+    coachFact: { findMany: vi.fn().mockResolvedValue([]) },
+    coachPlan: { findMany: vi.fn().mockResolvedValue([]) },
+    coachReminder: { findMany: vi.fn().mockResolvedValue([]) },
     // v1.15.0 — cycle tables read by the full-backup helper.
     cycleProfile: { findUnique: vi.fn() },
     menstrualCycle: { findMany: vi.fn() },
@@ -131,6 +134,9 @@ beforeEach(() => {
     [] as never,
   );
   vi.mocked(prisma.coachConversation.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.coachFact.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.coachPlan.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.coachReminder.findMany).mockResolvedValue([] as never);
 });
 
 afterEach(() => {
