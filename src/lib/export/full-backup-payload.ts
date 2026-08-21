@@ -91,6 +91,7 @@ export interface FullBackupCounts
   medicationDoseChanges: number;
   medicationInventoryItems: number;
   medicationInventoryEvents: number;
+  reminderPhaseConfigs: number;
   moodEntries: number;
   customMoodTagCategories: number;
   hiddenMoodTags: number;
@@ -382,6 +383,7 @@ export async function buildFullBackupPayload(
         doseChanges: { orderBy: { effectiveFrom: "asc" } },
         inventoryItems: { orderBy: { createdAt: "asc" } },
         inventoryEvents: { orderBy: { occurredAt: "asc" } },
+        phaseConfig: true,
       },
     }),
     prisma.medicationIntakeEvent.findMany({
@@ -691,6 +693,23 @@ export async function buildFullBackupPayload(
         createdAt: i.createdAt.toISOString(),
         updatedAt: i.updatedAt.toISOString(),
       })),
+      // The four reminder phase thresholds this drug was tuned to. One row or
+      // none, so it rides as an object rather than a list — and null means the
+      // person never tuned it, which is a different statement from "the file
+      // forgot to say".
+      phaseConfig: m.phaseConfig
+        ? {
+            ...(disasterRecovery ? { id: m.phaseConfig.id } : {}),
+            greenValue: m.phaseConfig.greenValue,
+            greenMode: m.phaseConfig.greenMode,
+            yellowValue: m.phaseConfig.yellowValue,
+            yellowMode: m.phaseConfig.yellowMode,
+            orangeValue: m.phaseConfig.orangeValue,
+            orangeMode: m.phaseConfig.orangeMode,
+            redValue: m.phaseConfig.redValue,
+            redMode: m.phaseConfig.redMode,
+          }
+        : null,
       inventoryEvents: m.inventoryEvents.map((e) => ({
         ...(disasterRecovery ? { id: e.id } : {}),
         delta: e.delta,
@@ -888,6 +907,7 @@ export async function buildFullBackupPayload(
         (total, m) => total + m.inventoryEvents.length,
         0,
       ),
+      reminderPhaseConfigs: medications.filter((m) => m.phaseConfig).length,
       moodEntries: moodEntries.length,
       customMoodTagCategories: customMoodTagCategories.length,
       hiddenMoodTags: hiddenMoodTags.length,

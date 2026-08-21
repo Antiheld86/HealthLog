@@ -225,6 +225,17 @@ function makePrisma() {
               updatedAt: new Date("2026-07-09T08:01:00.000Z"),
             },
           ],
+          phaseConfig: {
+            id: "phase-canonical",
+            greenValue: 45,
+            greenMode: "MINUTES",
+            yellowValue: 20,
+            yellowMode: "PERCENT",
+            orangeValue: 5,
+            orangeMode: "MINUTES",
+            redValue: 180,
+            redMode: "MINUTES",
+          },
           inventoryEvents: [
             {
               id: "stock-in",

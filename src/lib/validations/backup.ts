@@ -50,6 +50,7 @@ import {
   MeasurementSource,
   MeasurementType,
   MedicationCategory,
+  PhaseMode,
   MedicationContainerType,
   MedicationInventoryState,
   MedicationDeliveryForm,
@@ -238,6 +239,26 @@ const medicationInventoryEventSchema = z
   })
   .passthrough();
 
+/**
+ * The four reminder thresholds a drug was tuned to. Every field optional, so a
+ * file written before a threshold existed restores the schema default rather
+ * than refusing — but the OBJECT is nullable rather than absent, because "no
+ * tuning" and "this file does not say" are different claims.
+ */
+const reminderPhaseConfigSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    greenValue: z.number().int().optional(),
+    greenMode: z.enum(PhaseMode).optional(),
+    yellowValue: z.number().int().optional(),
+    yellowMode: z.enum(PhaseMode).optional(),
+    orangeValue: z.number().int().optional(),
+    orangeMode: z.enum(PhaseMode).optional(),
+    redValue: z.number().int().optional(),
+    redMode: z.enum(PhaseMode).optional(),
+  })
+  .passthrough();
+
 const medicationSchema = z
   .object({
     id: z.string().min(1).optional(),
@@ -280,6 +301,7 @@ const medicationSchema = z
     doseChanges: z.array(medicationDoseChangeSchema).default([]),
     inventoryItems: z.array(medicationInventoryItemSchema).default([]),
     inventoryEvents: z.array(medicationInventoryEventSchema).default([]),
+    phaseConfig: reminderPhaseConfigSchema.nullable().optional(),
   })
   .passthrough();
 

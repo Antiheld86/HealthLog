@@ -170,7 +170,10 @@ export const BACKED_UP_MODELS = [
   "CoachReminder",
 
   // ── Preferences and consent ───────────────────────────────────────────────
-  "NotificationPreference",
+  // `NotificationPreference` used to sit here. It moved to the deliberate
+  // exclusions: it addresses a notification channel by a hard foreign key, and
+  // the channel itself is excluded for carrying secrets, so there is nothing
+  // for a restored preference to attach to.
   "ReminderPhaseConfig",
   "ConsentReceipt",
 ] as const;
@@ -365,6 +368,13 @@ export const TWO_ENDED_MODELS = [
   // almost always a seeded tag whose id differs on every instance.
   "MoodTagCategory",
   "MoodTagHidden",
+  // Per-drug reminder phase timings: one row per medication, nested inside it,
+  // needing nothing the drug does not already bring. The register filed it
+  // next to the notification preferences as "the same shape of loss". It is
+  // not the same shape at all — this one hangs off something that travels,
+  // which is exactly why it could be cleared in an afternoon and the other
+  // could not be cleared at all.
+  "ReminderPhaseConfig",
 ] as const;
 
 /** One model claimed to travel both ways. */
@@ -425,10 +435,6 @@ export const COVERAGE_PENDING: Readonly<Record<string, string>> = {
     "Which documents were filed against which condition. Documents and conditions both restore; the filing between them does not, so a restored vault is unsorted.",
   ExtractedFact:
     "Facts read out of a document by the AI pass, with their provenance back to the page. Re-derivable only by re-running the extraction against a provider, at the operator's cost.",
-  NotificationPreference:
-    "Per-event channel and quiet-hours choices. A restore reverts to defaults, so an account that had deliberately silenced a category starts being notified again.",
-  ReminderPhaseConfig:
-    "Custom reminder phase timings. Same shape of loss as the preferences above.",
   ConsentReceipt:
     "The record of what the account agreed to and when. Arguably belongs with the instance rather than the account, and that question has to be settled before this one can be carried either way.",
 };
@@ -504,6 +510,18 @@ export const NOT_IN_BACKUP_MODELS: Readonly<Record<string, string>> = {
     "A Web Push endpoint issued by one browser for one origin. Another host cannot send to it, and the browser that owns it re-subscribes on its own.",
   NotificationChannel:
     "Carries channel secrets (Telegram chat binding, ntfy topic). Same reasoning as ApiToken.",
+  // Moved here from the coverage-pending register. The entry there read "a
+  // restore reverts to defaults, so an account that had deliberately silenced
+  // a category starts being notified again", which implies the tuning is
+  // recoverable and merely unbuilt. It is not. A preference addresses ONE
+  // channel by a hard foreign key, the restore deletes every channel, and the
+  // channel model is deliberately excluded right above this line. A carried
+  // preference would point at a row that cannot exist — the same constraint
+  // violation the custom mood categories were causing, waiting to happen.
+  // Re-applying somebody's tuning to a channel they add AFTER a restore is a
+  // feature about channel TYPES, not a backup contract about rows.
+  NotificationPreference:
+    "Per-event choices, each bound to one notification channel by a foreign key. The channel is excluded above and the restore deletes every one, so a carried preference would address a channel that will never exist.",
   UserKnownDevice:
     "A device-recognition ledger. Restoring it would pre-trust devices on a host that has never seen them.",
   StepUpElevation:
