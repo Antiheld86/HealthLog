@@ -161,6 +161,25 @@ function makePrisma() {
               createdAt: new Date("2026-07-17T21:05:00.000Z"),
             },
           ],
+          // One closed era and one still running. The open one is why
+          // `resumedAt` is nullable rather than absent: a reader treats null
+          // as "paused right now" and runs the span to the present, so a
+          // payload that dropped the distinction would report a resumption
+          // that never happened.
+          pauseEras: [
+            {
+              id: "pause-closed",
+              pausedAt: new Date("2026-05-02T08:00:00.000Z"),
+              resumedAt: new Date("2026-05-20T08:00:00.000Z"),
+              createdAt: new Date("2026-05-02T08:01:00.000Z"),
+            },
+            {
+              id: "pause-open",
+              pausedAt: new Date("2026-07-15T08:00:00.000Z"),
+              resumedAt: null,
+              createdAt: new Date("2026-07-15T08:01:00.000Z"),
+            },
+          ],
         },
       ]),
     },

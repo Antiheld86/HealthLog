@@ -624,6 +624,26 @@ const handler = apiHandler(
                       : {}),
                   })),
                 },
+                // Nested for the same reason as the two above — the FK binds
+                // to the id this drug actually got, so a portable file that
+                // mints fresh ids needs no remap.
+                //
+                // `resumedAt` passes through as null when the era is open. It
+                // is not defaulted to the restore time: a pause that was still
+                // running when the backup was taken is still running after the
+                // restore, and closing it here would silently convert an
+                // ongoing decision into a historical one.
+                pauseEras: {
+                  create: m.pauseEras.map((p) => ({
+                    ...(p.id ? { id: p.id } : {}),
+                    userId: ownerId,
+                    pausedAt: new Date(p.pausedAt),
+                    resumedAt: p.resumedAt ? new Date(p.resumedAt) : null,
+                    ...(p.createdAt
+                      ? { createdAt: new Date(p.createdAt) }
+                      : {}),
+                  })),
+                },
               },
             });
             restoredMedicationIds.add(created.id);

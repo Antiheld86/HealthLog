@@ -167,6 +167,23 @@ const medicationSideEffectSchema = z
   })
   .passthrough();
 
+/**
+ * A span during which the drug was deliberately not taken.
+ *
+ * `resumedAt` is nullable rather than optional, and the writer always emits
+ * it. An absent key and an explicit `null` would otherwise both have to mean
+ * "still paused", and a file that simply forgot the field would assert an open
+ * era that never existed. Readers run an open era to `now`.
+ */
+const medicationPauseEraSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    pausedAt: isoDateTime,
+    resumedAt: isoDateTime.nullable(),
+    createdAt: isoDateTime.optional(),
+  })
+  .passthrough();
+
 const medicationSchema = z
   .object({
     id: z.string().min(1).optional(),
@@ -201,6 +218,9 @@ const medicationSchema = z
     // Defaulted so a file written before side effects rode the wire still
     // parses, and a drug with none writes [].
     sideEffects: z.array(medicationSideEffectSchema).default([]),
+    // Defaulted for the same reason: a file written before pause eras rode the
+    // wire still parses, and a drug that was never paused writes [].
+    pauseEras: z.array(medicationPauseEraSchema).default([]),
   })
   .passthrough();
 
