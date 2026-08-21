@@ -102,6 +102,23 @@ readonly SRC_DB_CONTAINER
 readonly PG_USER="healthlog"
 readonly PG_DB="healthlog"
 
+# Argon2id hash of the demo password the README publishes ("demo123demo123").
+# Not a secret: it is printed in the README so anyone can sign in to the demo,
+# and it is the same literal that scripts/seed-demo.ts writes on a fresh seed.
+# The transfer still carries the source column, but the load is followed by an
+# explicit overwrite with this literal (see "FORCE THE PUBLISHED DEMO PASSWORD"
+# below). The source is the operator's own instance and its demo password can
+# be rotated at any time; carrying it across silently invalidated the published
+# credentials once already (public issue #805). Overwriting afterwards makes the
+# documented login true by construction after every migration.
+#
+# The overwrite travels on psql's STDIN, never inside the ssh command string:
+# the hash contains '$' segments that a remote shell would expand away.
+#
+# scripts/__tests__/demo-published-password-guard.test.ts pins this literal to
+# the one in scripts/seed-demo.ts, so editing one without the other fails.
+readonly PUBLIC_DEMO_PASSWORD_HASH='$argon2id$v=19$m=65536,t=3,p=4$Kips6OxPAl0vmspO9SoKZQ$oX9gLgwHVnnENCqBloyM13ewuqmhPnw8EpLoemS3MNI'
+
 # psql invocation builders. -v ON_ERROR_STOP=1 makes any SQL error a non-zero
 # exit so `set -e` aborts the pipeline. -X skips ~/.psqlrc.
 psql_src() {
@@ -465,6 +482,38 @@ copy_table() {
 # 1. users — the ONE row.
 copy_table "users" "$USERS_SELECT" \
   "users WHERE id = '$DEMO_USER_ID'" "$USERS_COLS"
+
+# ----------------------------------------------------------------------------
+# FORCE THE PUBLISHED DEMO PASSWORD
+# ----------------------------------------------------------------------------
+# The row just loaded carries the SOURCE account's password_hash. The source is
+# the operator's own instance, so that hash is whatever the operator last set —
+# not necessarily the password the README publishes. Overwrite it here so the
+# documented demo login works after every migration, not just the first one.
+#
+# The statement goes in on psql's STDIN. It must NOT be interpolated into the
+# ssh command string: the Argon2id hash contains '$argon2id', '$v', '$m', '$t'
+# and '$p' segments, and a remote shell would expand each of those to an empty
+# string and store a mangled hash that no password can ever match.
+echo
+echo "## FORCE published demo password on the loaded row ..."
+printf '%s\n' \
+  "UPDATE users SET password_hash = '$PUBLIC_DEMO_PASSWORD_HASH' WHERE id = '$DEMO_USER_ID';" \
+  | ssh "$DST_SSH" "docker exec -i $DST_DB_CONTAINER \
+      psql -X -v ON_ERROR_STOP=1 -U $PG_USER -d $PG_DB"
+
+# Prove the stored hash is byte-for-byte the published one. A mangled or
+# carried-over hash fails here instead of at some visitor's login screen.
+PW_OK="$(printf '%s\n' \
+  "SELECT count(*) FROM users WHERE id = '$DEMO_USER_ID' AND password_hash = '$PUBLIC_DEMO_PASSWORD_HASH';" \
+  | ssh "$DST_SSH" "docker exec -i $DST_DB_CONTAINER \
+      psql -X -tA -v ON_ERROR_STOP=1 -U $PG_USER -d $PG_DB" | tr -d '[:space:]')"
+if [[ "$PW_OK" != "1" ]]; then
+  echo "ABORT/FAIL: demo password_hash on edge01 is not the published literal (matched rows: $PW_OK)."
+  echo "            The demo login would be broken. Fix before serving the demo."
+  exit 1
+fi
+echo "   demo password_hash matches the published literal."
 
 # 2. measurements (live rows only).
 copy_table "measurements" "$MEAS_COLS" \
