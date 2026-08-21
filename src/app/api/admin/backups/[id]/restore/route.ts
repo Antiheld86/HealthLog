@@ -674,6 +674,49 @@ const handler = apiHandler(
                       : {}),
                   })),
                 },
+                // The packs, and the ledger behind their counts. Nested for
+                // the same reason as everything above it, and `unitsRemaining`
+                // is written VERBATIM rather than recomputed from the events —
+                // it is what the server had resolved and what the person was
+                // shown, and recomputing here would silently correct a count
+                // they may have adjusted by hand.
+                inventoryItems: {
+                  create: m.inventoryItems.map((i) => ({
+                    ...(i.id ? { id: i.id } : {}),
+                    userId: ownerId,
+                    state: (i.state ?? "ACTIVE") as never,
+                    containerType: (i.containerType ?? "OTHER") as never,
+                    unitsTotal: i.unitsTotal,
+                    unitsRemaining: i.unitsRemaining,
+                    firstUseAt: i.firstUseAt ? new Date(i.firstUseAt) : null,
+                    expiresAt: i.expiresAt ? new Date(i.expiresAt) : null,
+                    printedExpiry: i.printedExpiry
+                      ? new Date(i.printedExpiry)
+                      : null,
+                    purchasedAt: i.purchasedAt ? new Date(i.purchasedAt) : null,
+                    manufacturer: i.manufacturer ?? null,
+                    doseStrength: i.doseStrength ?? null,
+                    notes: null,
+                    notesEncrypted:
+                      i.notesEncrypted == null
+                        ? encryptNote(i.notes ?? null)
+                        : decodeEncryptedBytes(i.notesEncrypted),
+                    ...(i.createdAt
+                      ? { createdAt: new Date(i.createdAt) }
+                      : {}),
+                    ...(i.updatedAt
+                      ? { updatedAt: new Date(i.updatedAt) }
+                      : {}),
+                  })),
+                },
+                inventoryEvents: {
+                  create: m.inventoryEvents.map((e) => ({
+                    ...(e.id ? { id: e.id } : {}),
+                    delta: e.delta,
+                    reason: e.reason,
+                    occurredAt: new Date(e.occurredAt),
+                  })),
+                },
               },
             });
             restoredMedicationIds.add(created.id);

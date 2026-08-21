@@ -343,6 +343,17 @@ export const TWO_ENDED_MODELS = [
   "CoachFact",
   "CoachPlan",
   "CoachReminder",
+  // The packs on the shelf and the ledger behind their counts. The two travel
+  // together because the register itself paired them: without the events the
+  // count "cannot be rebuilt even in principle", and without the packs the
+  // events are a list of deltas against nothing.
+  //
+  // `unitsRemaining` is restored verbatim rather than recomputed from the
+  // ledger. It is the value the server had resolved and the person was shown,
+  // and every low-stock reminder already sent was computed from it — a restore
+  // that recalculated would disagree with the account's own history.
+  "MedicationInventoryItem",
+  "MedicationInventoryEvent",
 ] as const;
 
 /** One model claimed to travel both ways. */
@@ -383,10 +394,6 @@ export const COVERAGE_PENDING: Readonly<Record<string, string>> = {
     "The history of how a schedule changed. Without it a restored medication keeps today's schedule and loses the record of when the dose or timing moved, which is the part a doctor asks about.",
   MedicationEfficacyTarget:
     "What a medication was supposed to move, and by how much. The drug comes back with no statement of what it was for.",
-  MedicationInventoryItem:
-    "Pack sizes and remaining stock. A restored account reports no supply and every low-stock reminder has to be reconstructed by hand.",
-  MedicationInventoryEvent:
-    "The ledger of refills and consumption behind the stock count. Without it the count above cannot be rebuilt even in principle.",
   MoodTagCategory:
     "Categories a person created to group their own mood factors. Custom tags restore into a grouping that no longer exists.",
   MoodTagHidden:

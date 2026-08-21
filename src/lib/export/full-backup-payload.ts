@@ -89,6 +89,8 @@ export interface FullBackupCounts
   medicationSideEffects: number;
   medicationPauseEras: number;
   medicationDoseChanges: number;
+  medicationInventoryItems: number;
+  medicationInventoryEvents: number;
   moodEntries: number;
   cycles: number;
   cycleDayLogs: number;
@@ -374,6 +376,8 @@ export async function buildFullBackupPayload(
         sideEffects: { orderBy: { occurredAt: "desc" } },
         pauseEras: { orderBy: { pausedAt: "asc" } },
         doseChanges: { orderBy: { effectiveFrom: "asc" } },
+        inventoryItems: { orderBy: { createdAt: "asc" } },
+        inventoryEvents: { orderBy: { occurredAt: "asc" } },
       },
     }),
     prisma.medicationIntakeEvent.findMany({
@@ -630,6 +634,45 @@ export async function buildFullBackupPayload(
         doseUnit: d.doseUnit,
         createdAt: d.createdAt.toISOString(),
       })),
+      // The packs on the shelf, and the ledger behind the number on them.
+      //
+      // `unitsRemaining` is carried VERBATIM rather than recomputed from the
+      // events, for the same reason `nextDueAt` is: it is what the server had
+      // resolved and what the person was shown. Recomputing on the way back
+      // would silently correct a count the account may have adjusted by hand,
+      // and would disagree with every low-stock reminder already sent.
+      //
+      // Both Decimal columns cross the wire as strings. A pack of 0.5 mg
+      // halves is a real prescription, and JSON numbers would round it.
+      inventoryItems: m.inventoryItems.map((i) => ({
+        ...(disasterRecovery
+          ? {
+              id: i.id,
+              notes: i.notes,
+              notesEncrypted: i.notesEncrypted
+                ? Buffer.from(i.notesEncrypted).toString("base64")
+                : null,
+            }
+          : { notes: readNote(i.notesEncrypted, i.notes) }),
+        state: i.state,
+        containerType: i.containerType,
+        unitsTotal: i.unitsTotal.toString(),
+        unitsRemaining: i.unitsRemaining.toString(),
+        firstUseAt: i.firstUseAt?.toISOString() ?? null,
+        expiresAt: i.expiresAt?.toISOString() ?? null,
+        printedExpiry: i.printedExpiry?.toISOString() ?? null,
+        purchasedAt: i.purchasedAt?.toISOString() ?? null,
+        manufacturer: i.manufacturer,
+        doseStrength: i.doseStrength,
+        createdAt: i.createdAt.toISOString(),
+        updatedAt: i.updatedAt.toISOString(),
+      })),
+      inventoryEvents: m.inventoryEvents.map((e) => ({
+        ...(disasterRecovery ? { id: e.id } : {}),
+        delta: e.delta,
+        reason: e.reason,
+        occurredAt: e.occurredAt.toISOString(),
+      })),
     })),
     intakeEvents: intakeEvents.map((e) => ({
       ...(disasterRecovery
@@ -797,6 +840,14 @@ export async function buildFullBackupPayload(
       ),
       medicationDoseChanges: medications.reduce(
         (total, m) => total + m.doseChanges.length,
+        0,
+      ),
+      medicationInventoryItems: medications.reduce(
+        (total, m) => total + m.inventoryItems.length,
+        0,
+      ),
+      medicationInventoryEvents: medications.reduce(
+        (total, m) => total + m.inventoryEvents.length,
         0,
       ),
       moodEntries: moodEntries.length,
