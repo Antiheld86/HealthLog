@@ -46,15 +46,17 @@ import {
   WORK_STATUS_KEYS,
 } from "@/lib/mood/context-vocabulary";
 import {
-  dataEnvelope,
-  errorEnvelope,
-  recordRefusal,
-  stdResponses,
   MODULE_DISABLED_DESCRIPTION,
   baseUpdatedAtField,
-  updatedAtTokenField,
   conflictResponse409,
+  dataEnvelope,
+  errorEnvelope,
+  idempotencyKeyParameter,
+  idempotentWrite,
   invalidBaseTokenResponse,
+  recordRefusal,
+  stdResponses,
+  updatedAtTokenField,
 } from "./shared";
 
 // ── Request schemas — annotated for spec emission ────────────────────
@@ -762,6 +764,7 @@ export const moodPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   },
   "/api/mood-entries/bulk": {
     post: {
+      parameters: [idempotencyKeyParameter],
       tags: ["Mood"],
       summary: "Bulk mood backfill (iOS SyncMode)",
       description:
@@ -771,6 +774,7 @@ export const moodPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: bulkMoodPayload } },
       },
       responses: {
+        ...idempotentWrite(),
         "200": {
           description: "Batch processed (always 200 on a well-formed body).",
           content: {
@@ -1080,6 +1084,7 @@ export const moodPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       },
     },
     post: {
+      parameters: [idempotencyKeyParameter],
       tags: ["Mood"],
       summary: "Create a mood entry",
       description:
@@ -1089,6 +1094,7 @@ export const moodPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: createMoodEntryRequest } },
       },
       responses: {
+        ...idempotentWrite(),
         "201": {
           description:
             "Entry created (or upserted in place via `externalId`), with its persisted tag keys, rated factors and context.",
@@ -1165,6 +1171,7 @@ export const moodPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   },
   "/api/mood-entries/restore": {
     post: {
+      parameters: [idempotencyKeyParameter],
       tags: ["Mood"],
       summary: "Restore soft-deleted mood entries",
       description:
@@ -1174,6 +1181,7 @@ export const moodPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: moodEntryIdsPayload } },
       },
       responses: {
+        ...idempotentWrite(),
         "200": {
           description: "`restored` counts the rows actually un-tombstoned.",
           content: {
@@ -1192,6 +1200,7 @@ export const moodPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   },
   "/api/mood-entries/bulk-delete": {
     post: {
+      parameters: [idempotencyKeyParameter],
       tags: ["Mood"],
       summary: "Soft-delete mood entries in bulk",
       description:
@@ -1201,6 +1210,7 @@ export const moodPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: moodEntryIdsPayload } },
       },
       responses: {
+        ...idempotentWrite(),
         "200": {
           description: "`deleted` counts the rows actually tombstoned.",
           content: {

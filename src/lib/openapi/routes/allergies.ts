@@ -27,6 +27,8 @@ import {
 import {
   dataEnvelope,
   errorEnvelope,
+  idempotencyKeyParameter,
+  idempotentWrite,
   recordRefusal,
   stdResponses,
 } from "./shared";
@@ -102,11 +104,13 @@ export const allergyPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Record an allergy (v1.25)",
       description:
         "Creates one allergy/intolerance record for the caller. The free-text reaction + note are AES-256-GCM encrypted before write. Audits as `allergy.create`.",
+      parameters: [idempotencyKeyParameter],
       requestBody: {
         required: true,
         content: { "application/json": { schema: allergyCreateSchema } },
       },
       responses: {
+        ...idempotentWrite(),
         ...recordRefusal(),
         "201": {
           description: "Allergy created.",

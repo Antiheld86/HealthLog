@@ -35,6 +35,8 @@ import { measurementReminderDto } from "@/lib/validations/measurement-reminders"
 import {
   dataEnvelope,
   errorEnvelope,
+  idempotencyKeyParameter,
+  idempotentWrite,
   recordRefusal,
   stdResponses,
 } from "./shared";
@@ -237,6 +239,7 @@ export const vaccinationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       },
     },
     post: {
+      parameters: [idempotencyKeyParameter],
       tags: ["Records"],
       summary: "Log a vaccination",
       description:
@@ -246,6 +249,7 @@ export const vaccinationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: vaccinationCreateSchema } },
       },
       responses: {
+        ...idempotentWrite(),
         ...recordRefusal(),
         "201": {
           description: "Dose logged.",

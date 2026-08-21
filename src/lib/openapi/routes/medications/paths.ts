@@ -27,6 +27,8 @@ import {
   conflictResponse409,
   dataEnvelope,
   errorEnvelope,
+  idempotencyKeyParameter,
+  idempotentWrite,
   invalidBaseTokenResponse,
   recordRefusal,
   stdResponses,
@@ -171,6 +173,7 @@ const medicationIntakeImportJobStatusEnvelope = dataEnvelope(
 export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   "/api/medications/intake/bulk": {
     post: {
+      parameters: [idempotencyKeyParameter],
       tags: ["Medications"],
       summary: "Bulk medication-intake backfill (iOS SyncMode)",
       description:
@@ -180,6 +183,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: bulkIntakePayload } },
       },
       responses: {
+        ...idempotentWrite(),
         "200": {
           description: "Batch processed (always 200 on a well-formed body).",
           content: {
@@ -410,6 +414,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   },
   "/api/medications/{id}/intake": {
     post: {
+      parameters: [idempotencyKeyParameter],
       tags: ["Medications"],
       summary: "Log an intake event for a medication",
       description:
@@ -422,6 +427,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: intakeSchema } },
       },
       responses: {
+        ...idempotentWrite(),
         ...recordRefusal(),
         "201": {
           description: "Intake event created.",

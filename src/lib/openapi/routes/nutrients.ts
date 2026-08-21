@@ -24,6 +24,8 @@ import {
 import {
   dataEnvelope,
   errorEnvelope,
+  idempotencyKeyParameter,
+  idempotentWrite,
   recordRefusal,
   stdResponses,
 } from "./shared";
@@ -50,6 +52,7 @@ const catalogTable = NUTRIENT_DEFINITIONS.map(
 export const nutrientPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   "/api/nutrients/batch": {
     post: {
+      parameters: [idempotencyKeyParameter],
       tags: ["Nutrients"],
       summary: "Ingest micronutrient day totals (v1.28)",
       description:
@@ -60,6 +63,7 @@ export const nutrientPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: nutrientBatchSchema } },
       },
       responses: {
+        ...idempotentWrite(),
         "200": {
           description:
             "Batch processed; per-entry statuses inserted | updated | skipped.",
@@ -127,6 +131,7 @@ export const nutrientPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   },
   "/api/nutrients/water": {
     post: {
+      parameters: [idempotencyKeyParameter],
       tags: ["Nutrients"],
       summary: "Manual water quick-add (v1.29)",
       description:
@@ -138,6 +143,7 @@ export const nutrientPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...idempotentWrite(),
         "200": {
           description: "The MANUAL water row after the write.",
           content: {

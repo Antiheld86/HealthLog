@@ -19,6 +19,8 @@ import {
 import {
   dataEnvelope,
   errorEnvelope,
+  idempotencyKeyParameter,
+  idempotentWrite,
   recordRefusal,
   stdResponses,
 } from "./shared";
@@ -139,11 +141,13 @@ export const labsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Record a lab result",
       description:
         'Creates a single lab result for the caller. The optional `source` marks provenance (`"MANUAL"` | `"OCR"`); it defaults to `"MANUAL"` when omitted, so the legacy hand-entry contract is unchanged. The on-device-OCR client posts `"OCR"` after the human confirms the parsed values — the raw image never touches the server on this path. The optional note is AES-256-GCM encrypted before write. Audits as `labResult.create`.',
+      parameters: [idempotencyKeyParameter],
       requestBody: {
         required: true,
         content: { "application/json": { schema: createLabResultSchema } },
       },
       responses: {
+        ...idempotentWrite(),
         ...recordRefusal(),
         "201": {
           description: "Created lab result.",
@@ -232,6 +236,7 @@ export const labsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Restore soft-deleted lab results",
       description:
         "Un-tombstones 1..200 of the caller's soft-deleted lab results in one pass (the delete-Undo affordance). A foreign / live id is a silent no-op. Audits via the wide-event ledger.",
+      parameters: [idempotencyKeyParameter],
       requestBody: {
         required: true,
         content: {
@@ -243,6 +248,7 @@ export const labsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...idempotentWrite(),
         ...recordRefusal(),
         "200": {
           description: "Restore count.",
