@@ -82,6 +82,7 @@ vi.mock("@/lib/cache/invalidate", () => ({
 
 const OWNER_ID = "round-trip-owner";
 const AT = (iso: string) => new Date(iso);
+const DOSE_CHANGE_NOTE = "titration note, encrypted at rest";
 const SIDE_EFFECT_NOTE = "nausea for two hours after the evening dose";
 
 beforeEach(async () => {
@@ -107,6 +108,9 @@ const COUNT_BACK: Record<
     p.medicationSideEffect.count({ where: { userId } }),
   MedicationPauseEra: (p, userId) =>
     p.medicationPauseEra.count({ where: { userId } }),
+  // No own `userId` column — reached through the drug, like the schedules.
+  MedicationDoseChange: (p, userId) =>
+    p.medicationDoseChange.count({ where: { medication: { userId } } }),
   MoodEntry: (p, userId) => p.moodEntry.count({ where: { userId } }),
   MoodContext: (p, userId) => p.moodContext.count({ where: { userId } }),
   MoodEntryTagLink: (p, userId) =>
@@ -230,6 +234,27 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
   // drug is paused right now; a restore that closed it at restore time would
   // still count one row back here and read as recovered. The field-level
   // assertion at the end of the test is what holds the null.
+  // A two-step ramp. The ORDER is the content here: same drug, same unit,
+  // 5 mg then 10 mg. A restore that returned them reversed would still count
+  // two rows back and would describe the opposite clinical story.
+  await prisma.medicationDoseChange.createMany({
+    data: [
+      {
+        medicationId: medication.id,
+        effectiveFrom: AT("2026-04-01T08:00:00.000Z"),
+        doseValue: 5,
+        doseUnit: "mg",
+        noteEncrypted: encryptToBytes(DOSE_CHANGE_NOTE),
+      },
+      {
+        medicationId: medication.id,
+        effectiveFrom: AT("2026-06-01T08:00:00.000Z"),
+        doseValue: 10,
+        doseUnit: "mg",
+        noteEncrypted: null,
+      },
+    ],
+  });
   await prisma.medicationPauseEra.createMany({
     data: [
       {
@@ -730,6 +755,39 @@ describe("every model the plan claims two-ended survives a real restore", () => 
         resumedAt: "2026-05-20T08:00:00.000Z",
       },
       { pausedAt: "2026-07-15T08:00:00.000Z", resumedAt: null },
+    ]);
+
+    // The ramp, in order, with the note back in its column. Counting says two
+    // rows returned; only this says they came back as the same ramp, and that
+    // the encrypted note did not land in the plaintext column on the way.
+    const doses = await prisma.medicationDoseChange.findMany({
+      where: { medication: { userId: OWNER_ID } },
+      orderBy: { effectiveFrom: "asc" },
+    });
+    expect(
+      doses.map((d) => ({
+        effectiveFrom: d.effectiveFrom.toISOString(),
+        doseValue: d.doseValue,
+        doseUnit: d.doseUnit,
+        note: readNote(d.noteEncrypted, d.note),
+        plaintextColumn: d.note,
+      })),
+      "the titration must come back as the same ramp, in order",
+    ).toEqual([
+      {
+        effectiveFrom: "2026-04-01T08:00:00.000Z",
+        doseValue: 5,
+        doseUnit: "mg",
+        note: DOSE_CHANGE_NOTE,
+        plaintextColumn: null,
+      },
+      {
+        effectiveFrom: "2026-06-01T08:00:00.000Z",
+        doseValue: 10,
+        doseUnit: "mg",
+        note: null,
+        plaintextColumn: null,
+      },
     ]);
 
     // The dose, read back column by column. The count above says a row

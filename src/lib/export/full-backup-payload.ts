@@ -76,6 +76,7 @@ export interface FullBackupCounts
   intakeEvents: number;
   medicationSideEffects: number;
   medicationPauseEras: number;
+  medicationDoseChanges: number;
   moodEntries: number;
   cycles: number;
   cycleDayLogs: number;
@@ -358,6 +359,7 @@ export async function buildFullBackupPayload(
         schedules: true,
         sideEffects: { orderBy: { occurredAt: "desc" } },
         pauseEras: { orderBy: { pausedAt: "asc" } },
+        doseChanges: { orderBy: { effectiveFrom: "asc" } },
       },
     }),
     prisma.medicationIntakeEvent.findMany({
@@ -577,6 +579,29 @@ export async function buildFullBackupPayload(
         resumedAt: p.resumedAt ? p.resumedAt.toISOString() : null,
         createdAt: p.createdAt.toISOString(),
       })),
+      // Titration: when the dose moved, to what, and why. The drug comes
+      // back at today's dose either way; without these the ramp that led to
+      // it is gone, and that ramp is what a prescriber asks about.
+      //
+      // The note follows the side-effect contract beside it: a portable
+      // export carries the DECRYPTED note and no ciphertext, a
+      // disaster-recovery payload carries the ciphertext verbatim plus
+      // whatever legacy plaintext the row still holds.
+      doseChanges: m.doseChanges.map((d) => ({
+        ...(disasterRecovery
+          ? {
+              id: d.id,
+              note: d.note,
+              noteEncrypted: d.noteEncrypted
+                ? Buffer.from(d.noteEncrypted).toString("base64")
+                : null,
+            }
+          : { note: readNote(d.noteEncrypted, d.note) }),
+        effectiveFrom: d.effectiveFrom.toISOString(),
+        doseValue: d.doseValue,
+        doseUnit: d.doseUnit,
+        createdAt: d.createdAt.toISOString(),
+      })),
     })),
     intakeEvents: intakeEvents.map((e) => ({
       ...(disasterRecovery
@@ -738,6 +763,10 @@ export async function buildFullBackupPayload(
       ),
       medicationPauseEras: medications.reduce(
         (total, m) => total + m.pauseEras.length,
+        0,
+      ),
+      medicationDoseChanges: medications.reduce(
+        (total, m) => total + m.doseChanges.length,
         0,
       ),
       moodEntries: moodEntries.length,
