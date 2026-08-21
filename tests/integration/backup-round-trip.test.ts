@@ -82,6 +82,7 @@ vi.mock("@/lib/cache/invalidate", () => ({
 
 const OWNER_ID = "round-trip-owner";
 const AT = (iso: string) => new Date(iso);
+const INVENTORY_NOTE = "second pack, kept in the kitchen drawer";
 const COACH_FACT = "does not tolerate ACE inhibitors";
 const COACH_PLAN_CUE = "if the evening reading is over 140";
 const COACH_PLAN_ACTION = "then walk twenty minutes before dinner tomorrow";
@@ -182,6 +183,11 @@ const COUNT_BACK: Record<
   CoachFact: (p, userId) => p.coachFact.count({ where: { userId } }),
   CoachPlan: (p, userId) => p.coachPlan.count({ where: { userId } }),
   CoachReminder: (p, userId) => p.coachReminder.count({ where: { userId } }),
+  MedicationInventoryItem: (p, userId) =>
+    p.medicationInventoryItem.count({ where: { userId } }),
+  // No own `userId` column — reached through the drug, like the schedules.
+  MedicationInventoryEvent: (p, userId) =>
+    p.medicationInventoryEvent.count({ where: { medication: { userId } } }),
 };
 
 /**
@@ -256,6 +262,54 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
   // A two-step ramp. The ORDER is the content here: same drug, same unit,
   // 5 mg then 10 mg. A restore that returned them reversed would still count
   // two rows back and would describe the opposite clinical story.
+  // One open pack and one used up, plus the two ledger rows behind the open
+  // one. The count on the pack is deliberately NOT the sum of its events: 30
+  // in, 8 consumed, and the remaining count says 21 because the person threw
+  // one away without recording it. A restore that recomputed the count from
+  // the ledger would "fix" that to 22 and disagree with every low-stock
+  // reminder the account has already received.
+  const openPack = await prisma.medicationInventoryItem.create({
+    data: {
+      userId: OWNER_ID,
+      medicationId: medication.id,
+      state: "ACTIVE",
+      containerType: "BLISTER",
+      unitsTotal: "30",
+      unitsRemaining: "21",
+      firstUseAt: AT("2026-07-01T08:00:00.000Z"),
+      expiresAt: AT("2027-01-31T00:00:00.000Z"),
+      manufacturer: "Fixture Pharma",
+      doseStrength: "10 mg",
+      notesEncrypted: encryptToBytes(INVENTORY_NOTE),
+    },
+  });
+  await prisma.medicationInventoryItem.create({
+    data: {
+      userId: OWNER_ID,
+      medicationId: medication.id,
+      state: "USED_UP",
+      containerType: "BOTTLE",
+      unitsTotal: "60",
+      unitsRemaining: "0",
+    },
+  });
+  await prisma.medicationInventoryEvent.createMany({
+    data: [
+      {
+        medicationId: medication.id,
+        delta: 30,
+        reason: "purchased",
+        occurredAt: AT("2026-07-01T07:00:00.000Z"),
+      },
+      {
+        medicationId: medication.id,
+        delta: -8,
+        reason: "consumed",
+        occurredAt: AT("2026-07-09T07:00:00.000Z"),
+      },
+    ],
+  });
+
   await prisma.medicationDoseChange.createMany({
     data: [
       {
@@ -1013,6 +1067,53 @@ describe("every model the plan claims two-ended survives a real restore", () => 
       surfaceCount: 2,
       status: "active",
     });
+
+    // The shelf, and the count that must not be recomputed.
+    const packs = await prisma.medicationInventoryItem.findMany({
+      where: { userId: OWNER_ID },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(
+      packs.map((pack) => ({
+        state: pack.state,
+        containerType: pack.containerType,
+        total: pack.unitsTotal.toString(),
+        remaining: pack.unitsRemaining.toString(),
+        manufacturer: pack.manufacturer,
+        note: readNote(pack.notesEncrypted, pack.notes),
+        plaintextColumn: pack.notes,
+      })),
+      "the remaining count comes back as recorded, not as recalculated",
+    ).toEqual([
+      {
+        state: "ACTIVE",
+        containerType: "BLISTER",
+        total: "30",
+        remaining: "21",
+        manufacturer: "Fixture Pharma",
+        note: INVENTORY_NOTE,
+        plaintextColumn: null,
+      },
+      {
+        state: "USED_UP",
+        containerType: "BOTTLE",
+        total: "60",
+        remaining: "0",
+        manufacturer: null,
+        note: null,
+        plaintextColumn: null,
+      },
+    ]);
+    const stockLedger = await prisma.medicationInventoryEvent.findMany({
+      where: { medication: { userId: OWNER_ID } },
+      orderBy: { occurredAt: "asc" },
+    });
+    expect(
+      stockLedger.map((e) => ({ delta: e.delta, reason: e.reason })),
+    ).toEqual([
+      { delta: 30, reason: "purchased" },
+      { delta: -8, reason: "consumed" },
+    ]);
 
     // The ramp, in order, with the note back in its column. Counting says two
     // rows returned; only this says they came back as the same ramp, and that

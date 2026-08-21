@@ -50,6 +50,8 @@ import {
   MeasurementSource,
   MeasurementType,
   MedicationCategory,
+  MedicationContainerType,
+  MedicationInventoryState,
   MedicationDeliveryForm,
   MedicationScheduleType,
   MedicationSideEffectCategory,
@@ -202,6 +204,40 @@ const medicationDoseChangeSchema = z
   })
   .passthrough();
 
+/**
+ * A pack on the shelf. `unitsTotal` / `unitsRemaining` cross the wire as
+ * STRINGS: the columns are `Decimal(12,4)` because half tablets are a real
+ * prescription, and a JSON number would round them on the way through.
+ */
+const medicationInventoryItemSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    state: z.enum(MedicationInventoryState).optional(),
+    containerType: z.enum(MedicationContainerType).optional(),
+    unitsTotal: z.string().min(1),
+    unitsRemaining: z.string().min(1),
+    firstUseAt: isoDateTime.nullable().optional(),
+    expiresAt: isoDateTime.nullable().optional(),
+    printedExpiry: isoDateTime.nullable().optional(),
+    purchasedAt: isoDateTime.nullable().optional(),
+    manufacturer: z.string().nullable().optional(),
+    doseStrength: z.string().nullable().optional(),
+    notes: z.string().nullable().optional(),
+    notesEncrypted: base64BytesSchema.nullable().optional(),
+    createdAt: isoDateTime.optional(),
+    updatedAt: isoDateTime.optional(),
+  })
+  .passthrough();
+
+const medicationInventoryEventSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    delta: z.number().int(),
+    reason: z.string().min(1),
+    occurredAt: isoDateTime,
+  })
+  .passthrough();
+
 const medicationSchema = z
   .object({
     id: z.string().min(1).optional(),
@@ -242,6 +278,8 @@ const medicationSchema = z
     // Same default, same reason: an older file parses, a drug never titrated
     // writes [].
     doseChanges: z.array(medicationDoseChangeSchema).default([]),
+    inventoryItems: z.array(medicationInventoryItemSchema).default([]),
+    inventoryEvents: z.array(medicationInventoryEventSchema).default([]),
   })
   .passthrough();
 

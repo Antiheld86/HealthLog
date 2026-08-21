@@ -39,6 +39,7 @@ const deletedAt = new Date("2026-07-19T12:00:00.000Z");
 const measurementNote = encryptToBytes("canonical measurement note");
 const sideEffectNote = encryptToBytes("nausea after the evening dose");
 const doseChangeNote = encryptToBytes("titration note, encrypted at rest");
+const inventoryNote = encryptToBytes("second pack, kept in the kitchen drawer");
 const moodNotePlaintext = "quiet evening, slept badly";
 const moodNote = encryptToBytes(moodNotePlaintext);
 
@@ -201,6 +202,41 @@ function makePrisma() {
               note: null,
               noteEncrypted: null,
               createdAt: new Date("2026-06-01T08:01:00.000Z"),
+            },
+          ],
+          // One open pack and one used up, so the state enum is exercised on
+          // both arms, plus two ledger rows behind the open one.
+          inventoryItems: [
+            {
+              id: "pack-open",
+              state: "ACTIVE",
+              containerType: "BLISTER",
+              unitsTotal: { toString: () => "30.0000" },
+              unitsRemaining: { toString: () => "21.0000" },
+              firstUseAt: new Date("2026-07-01T08:00:00.000Z"),
+              expiresAt: new Date("2027-01-31T00:00:00.000Z"),
+              printedExpiry: null,
+              purchasedAt: null,
+              manufacturer: "Fixture Pharma",
+              doseStrength: "10 mg",
+              notes: null,
+              notesEncrypted: inventoryNote,
+              createdAt: new Date("2026-07-01T08:01:00.000Z"),
+              updatedAt: new Date("2026-07-09T08:01:00.000Z"),
+            },
+          ],
+          inventoryEvents: [
+            {
+              id: "stock-in",
+              delta: 30,
+              reason: "purchased",
+              occurredAt: new Date("2026-07-01T07:00:00.000Z"),
+            },
+            {
+              id: "stock-out",
+              delta: -8,
+              reason: "consumed",
+              occurredAt: new Date("2026-07-09T07:00:00.000Z"),
             },
           ],
         },
