@@ -157,9 +157,27 @@ COPY --from=builder /app/src/generated ./src/generated
 # the maintenance scripts already shipped in the standalone tree. The Prisma
 # config loads dotenv from /app, so expose the isolated copy there before
 # stripping npm/Corepack and their caches from the runtime surface.
+#
+# This install belongs to npm, not pnpm, so the `overrides` block in
+# `pnpm-workspace.yaml` does not reach it: a package pinned there for the app
+# tree still arrives here at whatever version Prisma asks for. That is not
+# hypothetical. `prisma@7.8.0` resolves `@prisma/config@7.8.0`, which resolves
+# `deepmerge-ts@7.1.5`, and the image scan reported CVE-2026-40345 (HIGH,
+# stack exhaustion on recursive merges) against `/opt/prisma-cli` on a commit
+# whose dependency audit over the app tree was green. Two installs, two
+# override mechanisms, one of them set. `overrides` is npm's own mechanism and
+# `npm pkg set` writes it into the package.json that `npm init -y` just
+# created, before anything resolves.
+#
+# Measured by rebuilding this exact install both ways: without the field
+# `deepmerge-ts@7.1.5` lands, with it `8.0.1` lands and `prisma --version`
+# still reports 7.8.0. Keep the range in step with the entry in
+# `pnpm-workspace.yaml` — they are one decision applied to two package
+# managers, and a fix that lands in only one of them is the defect above.
 RUN mkdir -p /opt/prisma-cli && \
     cd /opt/prisma-cli && \
     npm init -y && \
+    npm pkg set 'overrides.deepmerge-ts=^8.0.0' && \
     npm install --omit=dev prisma@7.8 @prisma/engines@7.8 tsx@4.23.1 dotenv@17.4.2 && \
     ln -sfn /opt/prisma-cli/node_modules/.bin/tsx /usr/local/bin/healthlog-tsx && \
     ln -sfn /opt/prisma-cli/node_modules/dotenv /app/node_modules/dotenv && \
