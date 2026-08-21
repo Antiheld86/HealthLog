@@ -75,6 +75,7 @@ export interface FullBackupCounts
   medications: number;
   intakeEvents: number;
   medicationSideEffects: number;
+  medicationPauseEras: number;
   moodEntries: number;
   cycles: number;
   cycleDayLogs: number;
@@ -356,6 +357,7 @@ export async function buildFullBackupPayload(
       include: {
         schedules: true,
         sideEffects: { orderBy: { occurredAt: "desc" } },
+        pauseEras: { orderBy: { pausedAt: "asc" } },
       },
     }),
     prisma.medicationIntakeEvent.findMany({
@@ -556,6 +558,25 @@ export async function buildFullBackupPayload(
         entry: s.entry,
         severity: s.severity,
       })),
+      // Nested for the same reason the two above are: a pause era is bound to
+      // its medication by id, and a nested create binds it to whatever id the
+      // parent actually got.
+      //
+      // These spans are what separates "stopped taking it" from "was told to
+      // stop taking it". Without them the compliance recomputation counts a
+      // deliberate pause as missed doses, so a restored account reads as
+      // non-adherent for a stretch during which it did exactly what it was
+      // told. Nothing else in the payload can reconstruct them: an era is a
+      // decision, not an observation, and no intake row records its absence.
+      //
+      // `resumedAt` stays nullable end to end — an open era means the
+      // medication is still paused, and readers run it to `now`.
+      pauseEras: m.pauseEras.map((p) => ({
+        ...(disasterRecovery ? { id: p.id } : {}),
+        pausedAt: p.pausedAt.toISOString(),
+        resumedAt: p.resumedAt ? p.resumedAt.toISOString() : null,
+        createdAt: p.createdAt.toISOString(),
+      })),
     })),
     intakeEvents: intakeEvents.map((e) => ({
       ...(disasterRecovery
@@ -713,6 +734,10 @@ export async function buildFullBackupPayload(
       intakeEvents: intakeEvents.length,
       medicationSideEffects: medications.reduce(
         (total, m) => total + m.sideEffects.length,
+        0,
+      ),
+      medicationPauseEras: medications.reduce(
+        (total, m) => total + m.pauseEras.length,
         0,
       ),
       moodEntries: moodEntries.length,

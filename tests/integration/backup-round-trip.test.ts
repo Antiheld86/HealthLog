@@ -105,6 +105,8 @@ const COUNT_BACK: Record<
     p.medicationIntakeEvent.count({ where: { userId } }),
   MedicationSideEffect: (p, userId) =>
     p.medicationSideEffect.count({ where: { userId } }),
+  MedicationPauseEra: (p, userId) =>
+    p.medicationPauseEra.count({ where: { userId } }),
   MoodEntry: (p, userId) => p.moodEntry.count({ where: { userId } }),
   MoodContext: (p, userId) => p.moodContext.count({ where: { userId } }),
   MoodEntryTagLink: (p, userId) =>
@@ -223,6 +225,26 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       severity: 3,
       notesEncrypted: encryptToBytes(SIDE_EFFECT_NOTE),
     },
+  });
+  // Two eras, and the open one carries the weight. `resumedAt: null` means the
+  // drug is paused right now; a restore that closed it at restore time would
+  // still count one row back here and read as recovered. The field-level
+  // assertion at the end of the test is what holds the null.
+  await prisma.medicationPauseEra.createMany({
+    data: [
+      {
+        userId: OWNER_ID,
+        medicationId: medication.id,
+        pausedAt: AT("2026-05-02T08:00:00.000Z"),
+        resumedAt: AT("2026-05-20T08:00:00.000Z"),
+      },
+      {
+        userId: OWNER_ID,
+        medicationId: medication.id,
+        pausedAt: AT("2026-07-15T08:00:00.000Z"),
+        resumedAt: null,
+      },
+    ],
   });
 
   // A RATED tag the account defined itself — the export carries only rated
@@ -684,6 +706,31 @@ describe("every model the plan claims two-ended survives a real restore", () => 
     expect(sideEffect.notes, "plaintext must not come back in the column").toBe(
       null,
     );
+
+    // Both pause eras, and the open one specifically. The count above only
+    // says two rows returned; a restore that closed the running pause at
+    // restore time would satisfy it exactly, and the account would come back
+    // saying a medication it is still off had been resumed — which the
+    // compliance recomputation then reads as doses missed on purpose-taken
+    // days. `null` is the assertion that matters here.
+    const eras = await prisma.medicationPauseEra.findMany({
+      where: { userId: OWNER_ID },
+      orderBy: { pausedAt: "asc" },
+      select: { pausedAt: true, resumedAt: true },
+    });
+    expect(
+      eras.map((e) => ({
+        pausedAt: e.pausedAt.toISOString(),
+        resumedAt: e.resumedAt ? e.resumedAt.toISOString() : null,
+      })),
+      "an open pause era must come back open",
+    ).toEqual([
+      {
+        pausedAt: "2026-05-02T08:00:00.000Z",
+        resumedAt: "2026-05-20T08:00:00.000Z",
+      },
+      { pausedAt: "2026-07-15T08:00:00.000Z", resumedAt: null },
+    ]);
 
     // The dose, read back column by column. The count above says a row
     // returned; a restore that wrote one row with every optional column
