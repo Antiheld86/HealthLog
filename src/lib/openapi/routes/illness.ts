@@ -32,6 +32,8 @@ import {
 import {
   dataEnvelope,
   errorEnvelope,
+  idempotencyKeyParameter,
+  idempotentWrite,
   recordRefusal,
   stdResponses,
 } from "./shared";
@@ -318,6 +320,7 @@ export const illnessPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Open an illness episode (v1.18.1)",
       description:
         "Creates one episode for the caller. `onsetAt` defaults to 'now' when omitted; the optional note is AES-256-GCM encrypted before write. A `parentConditionId` must reference an owned, live episode. Audits as `illness.episode.create`. Born-gated.",
+      parameters: [idempotencyKeyParameter],
       requestBody: {
         required: true,
         content: {
@@ -325,6 +328,7 @@ export const illnessPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...idempotentWrite(),
         ...recordRefusal(),
         "201": {
           description: "Episode created.",
@@ -422,7 +426,9 @@ export const illnessPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       description:
         "Clears `deletedAt`, bringing the episode and its preserved day-logs + encrypted note back into every read. A soft-delete keeps the row and children intact, so restore is a pure flag flip — nothing is re-created (the delete-Undo affordance). Idempotent — restoring a live episode is a no-op. Audits as `illness.episode.restore`. Owner-scoped + born-gated.",
       requestParams: { path: z.object({ id: z.string() }) },
+      parameters: [idempotencyKeyParameter],
       responses: {
+        ...idempotentWrite(),
         ...recordRefusal(),
         "200": {
           description: "Episode restored.",

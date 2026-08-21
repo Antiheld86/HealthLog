@@ -24,6 +24,8 @@ import {
 import {
   dataEnvelope,
   errorEnvelope,
+  idempotencyKeyParameter,
+  idempotentWrite,
   recordRefusal,
   stdResponses,
 } from "./shared";
@@ -159,11 +161,13 @@ export const customMetricPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Define a custom metric",
       description:
         "Creates a user-scoped custom metric. Re-creating a name that was previously soft-deleted revives that definition. Audits as `customMetric.create`.",
+      parameters: [idempotencyKeyParameter],
       requestBody: {
         required: true,
         content: { "application/json": { schema: createCustomMetricSchema } },
       },
       responses: {
+        ...idempotentWrite(),
         "201": {
           description: "Created custom metric.",
           content: {
@@ -288,6 +292,7 @@ export const customMetricPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       description:
         "Records a value against the custom metric, snapshotting the metric's unit. Audits as `customMetricEntry.create`.",
       requestParams: { path: z.object({ id: z.string() }) },
+      parameters: [idempotencyKeyParameter],
       requestBody: {
         required: true,
         content: {
@@ -295,6 +300,7 @@ export const customMetricPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...idempotentWrite(),
         "201": {
           description: "Created value.",
           content: {

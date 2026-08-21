@@ -177,6 +177,99 @@ export const stdResponses = {
   },
 };
 
+// ── Idempotent writes ────────────────────────────────────────────────
+
+/**
+ * What a route wrapped in `withIdempotency` accepts and answers.
+ *
+ * The mechanism has worked since long before it was published: send
+ * `Idempotency-Key` on a write, and a retry of the same key replays the first
+ * response instead of doing the work twice. It was described in route comments
+ * and nowhere a client could read it, so an app generated against the contract
+ * had no way to know a retry was safe. This publishes it.
+ *
+ * Three things a client cannot infer and has to be told:
+ *
+ *   1. **A malformed key is ignored, not refused.** `getIdempotencyKey` tests
+ *      `^[A-Za-z0-9_\-:.]{8,128}$` and returns null on a miss, so a key that is
+ *      too short or carries a stray character is indistinguishable from sending
+ *      none at all — the write proceeds, unprotected, with a 200. This is the
+ *      one failure here that is silent, which is why it leads.
+ *   2. **The replay is marked.** A response served from the cache carries
+ *      `X-Idempotent-Replay: true`. Without reading it a client cannot tell a
+ *      fresh 201 from a replayed one, which matters when the body reports what
+ *      was created.
+ *   3. **A concurrent duplicate is refused, not queued.** While the first
+ *      request is still running, a second one under the same key gets 409 with
+ *      `X-Idempotent-Replay: false` — the header is present in both directions
+ *      precisely so the two cases are told apart. Retry after a delay.
+ *
+ * Scope, so nobody reads more into it than is there: only POST, PUT, PATCH and
+ * DELETE are covered (`SUPPORTED_METHODS`), the key is scoped per user and per
+ * `(method, path)`, and `isCachableStatus` refuses to cache 5xx or the
+ * transient 401 / 403 / 408 / 429 — a retry after one of those runs for real.
+ *
+ * `src/__tests__/idempotency-contract-publication.test.ts` holds this to the
+ * routes that actually wrap `withIdempotency`, in both directions, so a new
+ * idempotent route that forgets to say so fails, and so does a claim here for
+ * a route that dropped the wrapper.
+ */
+export const idempotencyKeyParameter = {
+  name: "Idempotency-Key",
+  in: "header" as const,
+  required: false,
+  schema: {
+    type: "string" as const,
+    pattern: "^[A-Za-z0-9_\\-:.]{8,128}$",
+    minLength: 8,
+    maxLength: 128,
+  },
+  description:
+    "Makes this write safe to retry. Send the same key again and the first response is replayed rather than the work repeated, marked with `X-Idempotent-Replay: true`. A key that does not match the pattern is IGNORED rather than refused — the write then proceeds unprotected and looks exactly like a request that carried no key, so validate the key on your side. Scoped per user and per (method, path): the same key on a different route is a different key. While a first request under this key is still in flight, a second is refused with 409 rather than queued.",
+};
+
+/**
+ * Response headers are Zod here, not an OpenAPI literal — `zod-openapi` types
+ * `headers` as a `ZodObject` and emits the schema from it. Writing the literal
+ * shape by hand typechecks nowhere and was the first thing this file got wrong.
+ */
+const idempotentReplayHeaders = z.object({
+  "X-Idempotent-Replay": z.enum(["true", "false"]).meta({
+    description:
+      "`true` when this response was replayed from a stored one rather than produced now; `false` on the 409 that refuses a duplicate still in flight. Absent when the request carried no usable key.",
+  }),
+});
+
+interface IdempotentConflictResponse {
+  "409": {
+    description: string;
+    content: { "application/json": { schema: typeof errorEnvelope } };
+    headers: typeof idempotentReplayHeaders;
+  };
+}
+
+/**
+ * The 409 an idempotent route answers while an earlier request under the same
+ * key is still running, plus the replay header on the way back.
+ *
+ * Cached by identity like {@link recordRefusal} above, for the same reason: a
+ * fresh object per call site would print this paragraph thirty-seven times.
+ */
+let idempotentConflictCache: IdempotentConflictResponse | null = null;
+
+export function idempotentWrite(): IdempotentConflictResponse {
+  if (idempotentConflictCache) return idempotentConflictCache;
+  idempotentConflictCache = {
+    "409": {
+      description:
+        "A request with this `Idempotency-Key` is already in progress. Nothing was written by this call. Retry after a short delay; the response carries `X-Idempotent-Replay: false` to separate it from a replay.",
+      content: { "application/json": { schema: errorEnvelope } },
+      headers: idempotentReplayHeaders,
+    },
+  };
+  return idempotentConflictCache;
+}
+
 // ── The delegated-record refusal (v1.37.0) ───────────────────────────
 
 /**

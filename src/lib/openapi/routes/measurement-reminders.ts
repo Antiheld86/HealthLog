@@ -21,6 +21,8 @@ import {
 import {
   dataEnvelope,
   errorEnvelope,
+  idempotencyKeyParameter,
+  idempotentWrite,
   recordRefusal,
   stdResponses,
 } from "./shared";
@@ -61,6 +63,7 @@ export const measurementReminderPaths: NonNullable<ZodOpenApiObject["paths"]> =
         summary: "Create a Vorsorge reminder (v1.17.1)",
         description:
           "Creates a reminder and computes its server-authoritative nextDueAt. Exactly one of intervalDays (rolling) or rrule (RFC-5545) is required. Wrapped in withIdempotency. 201 on insert.",
+        parameters: [idempotencyKeyParameter],
         requestBody: {
           required: true,
           content: {
@@ -68,6 +71,7 @@ export const measurementReminderPaths: NonNullable<ZodOpenApiObject["paths"]> =
           },
         },
         responses: {
+          ...idempotentWrite(),
           ...recordRefusal(),
           "201": {
             description: "Reminder created.",

@@ -22,6 +22,8 @@ import {
 import {
   dataEnvelope,
   errorEnvelope,
+  idempotencyKeyParameter,
+  idempotentWrite,
   recordRefusal,
   stdResponses,
 } from "./shared";
@@ -101,11 +103,13 @@ export const biomarkerPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Define a biomarker",
       description:
         "Creates a user-scoped biomarker. The optional context note is AES-256-GCM encrypted before write. Audits as `biomarker.create`.",
+      parameters: [idempotencyKeyParameter],
       requestBody: {
         required: true,
         content: { "application/json": { schema: createBiomarkerSchema } },
       },
       responses: {
+        ...idempotentWrite(),
         ...recordRefusal(),
         "201": {
           description: "Created biomarker.",

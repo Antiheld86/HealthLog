@@ -24,6 +24,8 @@ import {
 import {
   dataEnvelope,
   errorEnvelope,
+  idempotencyKeyParameter,
+  idempotentWrite,
   recordRefusal,
   stdResponses,
 } from "./shared";
@@ -98,6 +100,7 @@ export const familyHistoryPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Record a family-history entry (v1.25)",
       description:
         "Creates one condition-by-relative record for the caller. The free-text note is AES-256-GCM encrypted before write. Audits as `family-history.create`.",
+      parameters: [idempotencyKeyParameter],
       requestBody: {
         required: true,
         content: {
@@ -105,6 +108,7 @@ export const familyHistoryPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...idempotentWrite(),
         ...recordRefusal(),
         "201": {
           description: "Entry created.",

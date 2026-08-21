@@ -20,6 +20,8 @@ import {
   MODULE_DISABLED_DESCRIPTION,
   dataEnvelope,
   errorEnvelope,
+  idempotencyKeyParameter,
+  idempotentWrite,
   recordRefusal,
   stdResponses,
 } from "./shared";
@@ -764,6 +766,7 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Create one measurement (or a small array)",
       description:
         "Single ingest. The body may also be a bare ARRAY of the same objects — the mode the iOS client uses for a combined blood-pressure + pulse or dual-value glucose write — in which case `data` is the array of created rows in request order. Use `/api/measurements/batch` for Apple Health upload streams.",
+      parameters: [idempotencyKeyParameter],
       requestBody: {
         required: true,
         content: {
@@ -776,6 +779,7 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...idempotentWrite(),
         ...recordRefusal(),
         "201": {
           description:
@@ -889,6 +893,7 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   },
   "/api/measurements/batch": {
     post: {
+      parameters: [idempotencyKeyParameter],
       tags: ["Measurements"],
       summary: "Apple Health batch ingest",
       description:
@@ -898,6 +903,7 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: batchPayloadSchema } },
       },
       responses: {
+        ...idempotentWrite(),
         "200": {
           description: "Batch processed.",
           content: {
@@ -940,6 +946,7 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   },
   "/api/measurements/bulk-delete": {
     post: {
+      parameters: [idempotencyKeyParameter],
       tags: ["Measurements"],
       summary: "Bulk soft-delete measurements",
       description:
@@ -951,6 +958,7 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...idempotentWrite(),
         ...recordRefusal(),
         "200": {
           description: "Bulk delete processed.",
@@ -969,6 +977,7 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   },
   "/api/measurements/restore": {
     post: {
+      parameters: [idempotencyKeyParameter],
       tags: ["Measurements"],
       summary: "Restore soft-deleted measurements",
       description:
@@ -980,6 +989,7 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...idempotentWrite(),
         ...recordRefusal(),
         "200": {
           description: "Restore processed.",

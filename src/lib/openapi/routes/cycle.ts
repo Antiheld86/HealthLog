@@ -27,6 +27,8 @@ import {
 import {
   dataEnvelope,
   errorEnvelope,
+  idempotencyKeyParameter,
+  idempotentWrite,
   recordRefusal,
   stdResponses,
 } from "./shared";
@@ -461,11 +463,13 @@ export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Capture a single cycle day-log (v1.15.0)",
       description:
         "Upserts on `(userId, source, externalId)` when externalId present, else `(userId, date)`. `note` encrypts at rest. 201 on insert, 200 on update. Gated: `cycle.disabled` 403 when the feature is off.",
+      parameters: [idempotencyKeyParameter],
       requestBody: {
         required: true,
         content: { "application/json": { schema: cycleDayLogInputSchema } },
       },
       responses: {
+        ...idempotentWrite(),
         "200": {
           description: "Existing day-log updated.",
           content: {
@@ -541,11 +545,13 @@ export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Bulk drain cycle day-logs (Outbox / HealthKit) (v1.15.0)",
       description:
         "Up to 500 entries; `withIdempotency`; rate-limited `cycle:day-logs:bulk:<userId>` 60/min. Per-entry status: inserted | duplicate | updated | skipped. Always 200.",
+      parameters: [idempotencyKeyParameter],
       requestBody: {
         required: true,
         content: { "application/json": { schema: cycleBulkSchema } },
       },
       responses: {
+        ...idempotentWrite(),
         "200": {
           description: "Batch processed (per-entry results).",
           content: {
@@ -565,11 +571,13 @@ export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Period-boundary shortcut (v1.15.0)",
       description:
         "One-tap started/ended period. `start` opens a new cycle (closing the prior); `end` stamps periodEndDate. Writes the boundary day-log. Gated.",
+      parameters: [idempotencyKeyParameter],
       requestBody: {
         required: true,
         content: { "application/json": { schema: cyclePeriodSchema } },
       },
       responses: {
+        ...idempotentWrite(),
         "200": {
           description: "Cycle + boundary day-log.",
           content: {

@@ -50,6 +50,8 @@ import {
   conflictResponse409,
   dataEnvelope,
   errorEnvelope,
+  idempotencyKeyParameter,
+  idempotentWrite,
   invalidBaseTokenResponse,
   recordRefusal,
   stdResponses,
@@ -1285,6 +1287,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Create an anamnesis fact",
       description:
         "Creates the first current revision for one closed fact kind. The answer is encrypted before persistence. A second current value for the same kind returns 409; corrections use the revision endpoint.",
+      parameters: [idempotencyKeyParameter],
       requestBody: {
         required: true,
         content: {
@@ -1292,6 +1295,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...idempotentWrite(),
         "201": {
           description: "The newly created current revision.",
           content: {

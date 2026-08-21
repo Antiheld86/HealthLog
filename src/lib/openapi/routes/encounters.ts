@@ -35,6 +35,8 @@ import {
 import {
   dataEnvelope,
   errorEnvelope,
+  idempotencyKeyParameter,
+  idempotentWrite,
   recordRefusal,
   stdResponses,
 } from "./shared";
@@ -246,6 +248,7 @@ export const encounterPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       },
     },
     post: {
+      parameters: [idempotencyKeyParameter],
       tags: ["Records"],
       summary: "File or book a visit",
       description:
@@ -255,6 +258,7 @@ export const encounterPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: encounterCreateSchema } },
       },
       responses: {
+        ...idempotentWrite(),
         ...recordRefusal(),
         "201": {
           description: "Visit filed.",
@@ -467,6 +471,7 @@ export const encounterPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       },
     },
     post: {
+      parameters: [idempotencyKeyParameter],
       tags: ["Records"],
       summary: "Add a practitioner",
       description:
@@ -476,6 +481,7 @@ export const encounterPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: practitionerCreateSchema } },
       },
       responses: {
+        ...idempotentWrite(),
         ...recordRefusal(),
         "201": {
           description: "Practitioner added.",

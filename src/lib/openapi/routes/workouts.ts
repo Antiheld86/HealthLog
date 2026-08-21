@@ -13,6 +13,8 @@ import {
   MODULE_DISABLED_DESCRIPTION,
   dataEnvelope,
   errorEnvelope,
+  idempotencyKeyParameter,
+  idempotentWrite,
   moduleDisabledResponse,
   recordRefusal,
   stdResponses,
@@ -309,6 +311,7 @@ export const workoutPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   },
   "/api/workouts/batch": {
     post: {
+      parameters: [idempotencyKeyParameter],
       tags: ["Measurements"],
       summary: "Typed workout batch ingest (v1.4.25 W16b)",
       description:
@@ -318,6 +321,7 @@ export const workoutPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: createBatchWorkoutSchema } },
       },
       responses: {
+        ...idempotentWrite(),
         "200": {
           description: "Batch processed.",
           content: {

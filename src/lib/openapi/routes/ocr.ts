@@ -17,7 +17,12 @@ import { z } from "zod/v4";
 
 import { ocrCommitSchema } from "@/lib/validations/labs-ocr";
 
-import { dataEnvelope, stdResponses } from "./shared";
+import {
+  dataEnvelope,
+  idempotencyKeyParameter,
+  idempotentWrite,
+  stdResponses,
+} from "./shared";
 
 ocrCommitSchema.meta({
   id: "OcrCommitRequest",
@@ -197,6 +202,7 @@ export const ocrPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   },
   "/api/labs/ocr/commit": {
     post: {
+      parameters: [idempotencyKeyParameter],
       tags: ["Labs"],
       summary: "Commit confirmed Lab-OCR rows",
       description:
@@ -206,6 +212,7 @@ export const ocrPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: ocrCommitSchema } },
       },
       responses: {
+        ...idempotentWrite(),
         "200": {
           description: "Inserted + skipped rows.",
           content: {

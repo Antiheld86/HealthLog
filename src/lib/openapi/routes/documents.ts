@@ -31,6 +31,8 @@ import {
 import {
   dataEnvelope,
   errorEnvelope,
+  idempotencyKeyParameter,
+  idempotentWrite,
   recordRefusal,
   stdResponses,
 } from "./shared";
@@ -359,6 +361,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       },
     },
     post: {
+      parameters: [idempotencyKeyParameter],
       tags: ["Documents"],
       summary: "Store a document (no extraction)",
       description:
@@ -397,6 +400,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
       },
       responses: {
+        ...idempotentWrite(),
         "200": {
           description:
             "Duplicate — the same bytes are already stored: the existing row, with `meta.duplicate: true` at the envelope level.",
@@ -1096,6 +1100,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       description:
         "The ONLY write path out of staging. Commits the user's approvals into the structured stores (labs / conditions / medications) and discards rejections. A low-confidence fact that was never edited cannot be approved (fail-closed). Idempotent (Idempotency-Key). Audits as `documents.inbound.confirm`.",
       parameters: [
+        idempotencyKeyParameter,
         {
           name: "id",
           in: "path",
@@ -1108,6 +1113,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         content: { "application/json": { schema: inboundConfirmSchema } },
       },
       responses: {
+        ...idempotentWrite(),
         "200": {
           description: "Per-decision outcome.",
           content: {

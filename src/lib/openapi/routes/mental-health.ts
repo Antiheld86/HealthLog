@@ -19,7 +19,13 @@ import {
   listAssessmentsSchema,
 } from "@/lib/validations/mental-health";
 
-import { dataEnvelope, recordRefusal, stdResponses } from "./shared";
+import {
+  dataEnvelope,
+  idempotencyKeyParameter,
+  idempotentWrite,
+  recordRefusal,
+  stdResponses,
+} from "./shared";
 
 createAssessmentSchema.meta({
   id: "CreateMentalHealthAssessmentRequest",
@@ -127,12 +133,14 @@ export const mentalHealthPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Record a completed screener",
       description:
         "Stores one administration (item answers encrypted) and writes the derived total as a server-owned PHQ9_SCORE / GAD7_SCORE / WHO5_SCORE / SCI_SCORE measurement (source COMPUTED — never client-writable). WHO-5 and SCI totals run HIGHER = better; their follow-up thresholds point downwards (≤ 50 / ≤ 16). On a positive PHQ-9 item-9 the response carries the locale-aware crisis-resource set.",
+      parameters: [idempotencyKeyParameter],
       requestBody: {
         content: {
           "application/json": { schema: createAssessmentSchema },
         },
       },
       responses: {
+        ...idempotentWrite(),
         ...recordRefusal(),
         "201": {
           description: "Assessment recorded.",
