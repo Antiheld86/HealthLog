@@ -38,6 +38,7 @@ import { restoreProfileData } from "../profile-backup";
 const deletedAt = new Date("2026-07-19T12:00:00.000Z");
 const measurementNote = encryptToBytes("canonical measurement note");
 const sideEffectNote = encryptToBytes("nausea after the evening dose");
+const doseChangeNote = encryptToBytes("titration note, encrypted at rest");
 const moodNotePlaintext = "quiet evening, slept badly";
 const moodNote = encryptToBytes(moodNotePlaintext);
 
@@ -178,6 +179,28 @@ function makePrisma() {
               pausedAt: new Date("2026-07-15T08:00:00.000Z"),
               resumedAt: null,
               createdAt: new Date("2026-07-15T08:01:00.000Z"),
+            },
+          ],
+          // A two-step ramp, one row carrying an encrypted note and one
+          // without, so both arms of the note contract are exercised.
+          doseChanges: [
+            {
+              id: "dose-ramp-up",
+              effectiveFrom: new Date("2026-04-01T08:00:00.000Z"),
+              doseValue: 5,
+              doseUnit: "mg",
+              note: null,
+              noteEncrypted: doseChangeNote,
+              createdAt: new Date("2026-04-01T08:01:00.000Z"),
+            },
+            {
+              id: "dose-ramp-hold",
+              effectiveFrom: new Date("2026-06-01T08:00:00.000Z"),
+              doseValue: 10,
+              doseUnit: "mg",
+              note: null,
+              noteEncrypted: null,
+              createdAt: new Date("2026-06-01T08:01:00.000Z"),
             },
           ],
         },

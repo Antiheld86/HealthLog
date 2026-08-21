@@ -644,6 +644,26 @@ const handler = apiHandler(
                       : {}),
                   })),
                 },
+                // The titration steps, nested for the same reason. The note
+                // takes the measurement contract next to it: ciphertext when
+                // the file has it, legacy plaintext encrypted on the way in,
+                // and the plaintext column left null either way.
+                doseChanges: {
+                  create: m.doseChanges.map((d) => ({
+                    ...(d.id ? { id: d.id } : {}),
+                    effectiveFrom: new Date(d.effectiveFrom),
+                    doseValue: d.doseValue,
+                    doseUnit: d.doseUnit,
+                    note: null,
+                    noteEncrypted:
+                      d.noteEncrypted == null
+                        ? encryptNote(d.note ?? null)
+                        : decodeEncryptedBytes(d.noteEncrypted),
+                    ...(d.createdAt
+                      ? { createdAt: new Date(d.createdAt) }
+                      : {}),
+                  })),
+                },
               },
             });
             restoredMedicationIds.add(created.id);

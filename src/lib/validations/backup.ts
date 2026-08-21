@@ -184,6 +184,24 @@ const medicationPauseEraSchema = z
   })
   .passthrough();
 
+/**
+ * One step of a titration: when the dose moved and to what.
+ *
+ * The note follows the side-effect contract — decrypted prose in a portable
+ * file, ciphertext plus any legacy plaintext in a recovery one.
+ */
+const medicationDoseChangeSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    effectiveFrom: isoDateTime,
+    doseValue: z.number(),
+    doseUnit: z.string().min(1),
+    note: z.string().nullable().optional(),
+    noteEncrypted: base64BytesSchema.nullable().optional(),
+    createdAt: isoDateTime.optional(),
+  })
+  .passthrough();
+
 const medicationSchema = z
   .object({
     id: z.string().min(1).optional(),
@@ -221,6 +239,9 @@ const medicationSchema = z
     // Defaulted for the same reason: a file written before pause eras rode the
     // wire still parses, and a drug that was never paused writes [].
     pauseEras: z.array(medicationPauseEraSchema).default([]),
+    // Same default, same reason: an older file parses, a drug never titrated
+    // writes [].
+    doseChanges: z.array(medicationDoseChangeSchema).default([]),
   })
   .passthrough();
 

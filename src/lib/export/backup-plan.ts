@@ -250,6 +250,7 @@ export const TWO_ENDED_MODELS = [
   "MedicationIntakeEvent",
   "MedicationSideEffect",
   "MedicationPauseEra",
+  "MedicationDoseChange",
   "MoodEntry",
   "MoodContext",
   "MoodEntryTagLink",
@@ -343,8 +344,6 @@ export const STRUCTURALLY_UNATTRIBUTABLE: Readonly<Record<string, string>> = {
 export const COVERAGE_PENDING: Readonly<Record<string, string>> = {
   MedicationScheduleRevision:
     "The history of how a schedule changed. Without it a restored medication keeps today's schedule and loses the record of when the dose or timing moved, which is the part a doctor asks about.",
-  MedicationDoseChange:
-    "Titration history — when a dose went up or down and by how much. A restore rebuilds the current dose and drops the ramp that led to it.",
   MedicationEfficacyTarget:
     "What a medication was supposed to move, and by how much. The drug comes back with no statement of what it was for.",
   MedicationInventoryItem:
