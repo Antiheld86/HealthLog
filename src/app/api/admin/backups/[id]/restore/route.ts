@@ -50,6 +50,7 @@ import { restoreIntradayProfileData } from "@/lib/export/intraday-profile-backup
 import { restoreHealthScoreData } from "@/lib/export/health-score-backup";
 import { restoreVisitsData } from "@/lib/export/visits-backup";
 import { restoreVaccinationsData } from "@/lib/export/vaccinations-backup";
+import { restoreCoachData } from "@/lib/export/coach-backup";
 import { restoreRemindersData } from "@/lib/export/reminders-backup";
 import { invalidateUserData } from "@/lib/cache/invalidate";
 
@@ -98,6 +99,9 @@ interface RestoreResponse {
     vaccinationLinks: number;
     measurementReminders: number;
     measurementReminderEvents: number;
+    coachConversations: number;
+    coachMessages: number;
+    coachConversationDocuments: number;
   };
 }
 
@@ -1413,6 +1417,22 @@ const handler = apiHandler(
             skips,
           );
 
+          // The Coach's threads, turns and document links. AFTER the
+          // documents on purpose: an attachment carries a `documentId` that
+          // is a foreign key against them, so running earlier would make
+          // every attachment unresolvable and drop the provenance that makes
+          // an old answer checkable. The id set is threaded in rather than
+          // re-queried so the function stays a pure reader of this
+          // transaction. Both ends of this section live in
+          // `src/lib/export/coach-backup.ts`.
+          const coachCleared = await restoreCoachData(
+            tx,
+            ownerId,
+            payload,
+            new Set(payload.documents.map((document) => document.id)),
+            skips,
+          );
+
           const cleared = {
             measurements: measurements.count,
             medications: meds.count,
@@ -1447,6 +1467,9 @@ const handler = apiHandler(
             measurementReminders: remindersCleared.measurementReminders,
             measurementReminderEvents:
               remindersCleared.measurementReminderEvents,
+            coachConversations: coachCleared.coachConversations,
+            coachMessages: coachCleared.coachMessages,
+            coachConversationDocuments: coachCleared.coachConversationDocuments,
           };
           return { cleared, skipped: summarizeRestoreSkips(skips) };
         },

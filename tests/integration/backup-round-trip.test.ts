@@ -82,6 +82,10 @@ vi.mock("@/lib/cache/invalidate", () => ({
 
 const OWNER_ID = "round-trip-owner";
 const AT = (iso: string) => new Date(iso);
+const COACH_SUMMARY = "earlier turns: weight trend and evening walks";
+const COACH_USER_TURN = "my readings look higher this week, is that real?";
+const COACH_ASSISTANT_TURN =
+  "the last seven mornings average 4 mmHg above the fortnight before";
 const DOSE_CHANGE_NOTE = "titration note, encrypted at rest";
 const SIDE_EFFECT_NOTE = "nausea for two hours after the evening dose";
 
@@ -163,6 +167,14 @@ const COUNT_BACK: Record<
     p.measurementReminder.count({ where: { userId } }),
   MeasurementReminderEvent: (p, userId) =>
     p.measurementReminderEvent.count({ where: { userId } }),
+  CoachConversation: (p, userId) =>
+    p.coachConversation.count({ where: { userId } }),
+  // Neither the turn nor the attachment carries its own `userId` — both are
+  // reached through the thread that holds them.
+  CoachMessage: (p, userId) =>
+    p.coachMessage.count({ where: { conversation: { userId } } }),
+  CoachConversationDocument: (p, userId) =>
+    p.coachConversationDocument.count({ where: { conversation: { userId } } }),
 };
 
 /**
@@ -475,6 +487,62 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
     },
   });
 
+  // Two Coach threads, and the pair is the point. One is an ordinary health
+  // conversation; the other is FENCED — `documentScoped` true, grounded in the
+  // document seeded above. A restore that let the flag default to false would
+  // return both threads, satisfy every count, and quietly hand the tool loop
+  // back to the one conversation whose history may contain document-derived
+  // text. That is why the assertion below reads the flag per thread rather
+  // than counting rows.
+  await prisma.coachConversation.create({
+    data: {
+      userId: OWNER_ID,
+      title: "How is my blood pressure trending?",
+      documentScoped: false,
+      summaryEncrypted: encryptToBytes(COACH_SUMMARY),
+      summaryUpdatedAt: AT("2026-07-20T10:00:00.000Z"),
+      summaryTurnCount: 4,
+      messages: {
+        create: [
+          {
+            role: "user",
+            encryptedContent: encryptToBytes(COACH_USER_TURN),
+            createdAt: AT("2026-07-20T09:58:00.000Z"),
+          },
+          {
+            role: "assistant",
+            encryptedContent: encryptToBytes(COACH_ASSISTANT_TURN),
+            providerType: "anthropic",
+            model: "claude-opus-5",
+            tokensUsed: 812,
+            createdAt: AT("2026-07-20T09:59:00.000Z"),
+          },
+        ],
+      },
+    },
+  });
+  await prisma.coachConversation.create({
+    data: {
+      userId: OWNER_ID,
+      title: "About my June labs",
+      documentScoped: true,
+      messages: {
+        create: [
+          {
+            role: "user",
+            encryptedContent: encryptToBytes("What does the ferritin mean?"),
+            createdAt: AT("2026-07-21T08:00:00.000Z"),
+          },
+        ],
+      },
+      attachments: {
+        create: [
+          { documentId: document.id, addedAt: AT("2026-07-21T07:59:00.000Z") },
+        ],
+      },
+    },
+  });
+
   // One visit, the practice it was at, and one link of each of the three
   // kinds. The links reach the document, the lab result and the condition
   // episode seeded above rather than fresh rows, because a link to something
@@ -755,6 +823,82 @@ describe("every model the plan claims two-ended survives a real restore", () => 
         resumedAt: "2026-05-20T08:00:00.000Z",
       },
       { pausedAt: "2026-07-15T08:00:00.000Z", resumedAt: null },
+    ]);
+
+    // The Coach came back able to speak, and the fence held.
+    //
+    // `documentScoped` is asserted per thread rather than in aggregate: a
+    // restore that wrote `false` everywhere would still return two threads,
+    // two counts and every turn, and the only visible difference would be a
+    // fenced conversation quietly holding a tool loop again.
+    // Resolved from the database rather than remembered from the fixture: the
+    // attachment has to point at the document the RESTORE put back, not at an
+    // id that happens to match one the seeding used.
+    const vaultDocument = await prisma.inboundDocument.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+    });
+    const threads = await prisma.coachConversation.findMany({
+      where: { userId: OWNER_ID },
+      orderBy: { createdAt: "asc" },
+      include: {
+        messages: { orderBy: { createdAt: "asc" } },
+        attachments: true,
+      },
+    });
+    expect(
+      threads.map((thread) => ({
+        title: thread.title,
+        documentScoped: thread.documentScoped,
+        summary: thread.summaryEncrypted
+          ? decryptFromBytes(thread.summaryEncrypted)
+          : null,
+        summaryTurnCount: thread.summaryTurnCount,
+        turns: thread.messages.map((message) => ({
+          role: message.role,
+          content: decryptFromBytes(message.encryptedContent),
+          model: message.model,
+          tokensUsed: message.tokensUsed,
+        })),
+        attachments: thread.attachments.map((a) => a.documentId),
+      })),
+      "the transcript, the fence and the provenance all come back",
+    ).toEqual([
+      {
+        title: "How is my blood pressure trending?",
+        documentScoped: false,
+        summary: COACH_SUMMARY,
+        summaryTurnCount: 4,
+        turns: [
+          {
+            role: "user",
+            content: COACH_USER_TURN,
+            model: null,
+            tokensUsed: null,
+          },
+          {
+            role: "assistant",
+            content: COACH_ASSISTANT_TURN,
+            model: "claude-opus-5",
+            tokensUsed: 812,
+          },
+        ],
+        attachments: [],
+      },
+      {
+        title: "About my June labs",
+        documentScoped: true,
+        summary: null,
+        summaryTurnCount: 0,
+        turns: [
+          {
+            role: "user",
+            content: "What does the ferritin mean?",
+            model: null,
+            tokensUsed: null,
+          },
+        ],
+        attachments: [vaultDocument.id],
+      },
     ]);
 
     // The ramp, in order, with the note back in its column. Counting says two

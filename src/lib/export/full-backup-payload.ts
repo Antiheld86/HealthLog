@@ -56,6 +56,12 @@ import {
   type RemindersBackupSection,
 } from "@/lib/export/reminders-backup";
 import {
+  buildCoachBackupSection,
+  countCoachBackupSection,
+  type CoachBackupCounts,
+  type CoachBackupSection,
+} from "@/lib/export/coach-backup";
+import {
   buildIntradayProfileBackupSection,
   countIntradayProfileBackupSection,
   type IntradayProfileBackupCounts,
@@ -70,7 +76,8 @@ export interface FullBackupCounts
     HealthScoreBackupCounts,
     VisitsBackupCounts,
     VaccinationsBackupCounts,
-    RemindersBackupCounts {
+    RemindersBackupCounts,
+    CoachBackupCounts {
   measurements: number;
   medications: number;
   intakeEvents: number;
@@ -287,6 +294,7 @@ export async function buildFullBackupPayload(
     visits,
     vaccinations,
     reminders,
+    coach,
     nutrientDays,
   ] = await Promise.all([
     disasterRecovery
@@ -435,6 +443,12 @@ export async function buildFullBackupPayload(
     buildRemindersBackupSection(prisma, userId, {
       purpose: disasterRecovery ? "disaster-recovery" : "portable-export",
     }),
+    // The Coach's conversations, turns and document links. Both ends live in
+    // `src/lib/export/coach-backup.ts` beside each other, the same arrangement
+    // as the three sections above and for the same reason.
+    buildCoachBackupSection(prisma, userId, {
+      purpose: disasterRecovery ? "disaster-recovery" : "portable-export",
+    }),
     // Nutrient day totals were absent from every export path, which
     // contradicted the schema's own reason for denormalising the unit column
     // ("rows stay self-describing in exports even if the catalog ever drifts").
@@ -464,6 +478,7 @@ export async function buildFullBackupPayload(
   const visitsSection: VisitsBackupSection = visits;
   const vaccinationsSection: VaccinationsBackupSection = vaccinations;
   const remindersSection: RemindersBackupSection = reminders;
+  const coachSection: CoachBackupSection = coach;
 
   const payload = {
     schemaVersion: BACKUP_SCHEMA_VERSION,
@@ -742,6 +757,7 @@ export async function buildFullBackupPayload(
     ...visitsSection,
     ...vaccinationsSection,
     ...remindersSection,
+    ...coachSection,
     nutrientDays: nutrientDays.map((n) => ({
       day: n.day,
       nutrient: n.nutrient,
@@ -780,6 +796,7 @@ export async function buildFullBackupPayload(
       ...countVisitsBackupSection(visits),
       ...countVaccinationsBackupSection(vaccinations),
       ...countRemindersBackupSection(reminders),
+      ...countCoachBackupSection(coach),
     },
   };
 }

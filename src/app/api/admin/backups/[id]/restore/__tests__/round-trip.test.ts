@@ -296,6 +296,7 @@ function sourceClient() {
     // same reason as the visit tables above.
     measurementReminder: { findMany: vi.fn().mockResolvedValue([]) },
     measurementReminderEvent: { findMany: vi.fn().mockResolvedValue([]) },
+    coachConversation: { findMany: vi.fn().mockResolvedValue([]) },
     customMetric: {
       findMany: vi.fn().mockResolvedValue([
         {

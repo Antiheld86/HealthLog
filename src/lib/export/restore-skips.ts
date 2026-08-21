@@ -55,7 +55,16 @@
  * it exists for the hand-edited or truncated file, where inventing the
  * reminder and silently dropping the row are equally wrong.
  *
- * The eighth, `checkupClosure`, is not about a restore at all, and it borrows
+ * The eighth, `coachAttachment`, is the same kind again, for the join naming
+ * which vault documents a Coach conversation was grounded in. The document is
+ * restored before the conversations are, so a file this release writes always
+ * resolves: a disaster-recovery payload carries every document, and a portable
+ * payload never reaches a restore while the account has any, because the route
+ * refuses it ahead of the wipe. It exists for the hand-edited or truncated
+ * file, where inventing the document and silently dropping the provenance are
+ * equally wrong.
+ *
+ * The ninth, `checkupClosure`, is not about a restore at all, and it borrows
  * this shape deliberately rather than growing a second reporting mechanism
  * beside it. The situation is the same one: something a write was asked to do
  * could not be done, the record itself survives, and the person is told which
@@ -71,6 +80,7 @@ export type SkippedCatalogue =
   | "visitReference"
   | "vaccinationReference"
   | "reminderReference"
+  | "coachAttachment"
   | "checkupClosure";
 
 /** One key this instance does not know, and the links it cost. */
