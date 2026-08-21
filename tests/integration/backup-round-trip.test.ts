@@ -82,6 +82,10 @@ vi.mock("@/lib/cache/invalidate", () => ({
 
 const OWNER_ID = "round-trip-owner";
 const AT = (iso: string) => new Date(iso);
+const COACH_FACT = "does not tolerate ACE inhibitors";
+const COACH_PLAN_CUE = "if the evening reading is over 140";
+const COACH_PLAN_ACTION = "then walk twenty minutes before dinner tomorrow";
+const COACH_REMINDER_NOTE = "ask how the evening walks are going";
 const COACH_SUMMARY = "earlier turns: weight trend and evening walks";
 const COACH_USER_TURN = "my readings look higher this week, is that real?";
 const COACH_ASSISTANT_TURN =
@@ -175,6 +179,9 @@ const COUNT_BACK: Record<
     p.coachMessage.count({ where: { conversation: { userId } } }),
   CoachConversationDocument: (p, userId) =>
     p.coachConversationDocument.count({ where: { conversation: { userId } } }),
+  CoachFact: (p, userId) => p.coachFact.count({ where: { userId } }),
+  CoachPlan: (p, userId) => p.coachPlan.count({ where: { userId } }),
+  CoachReminder: (p, userId) => p.coachReminder.count({ where: { userId } }),
 };
 
 /**
@@ -543,6 +550,48 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
     },
   });
 
+  // What the Coach keeps between threads, seeded so both references are
+  // exercised: the fact and the plan point back at the thread they came out
+  // of, and the reminder points at the plan.
+  const healthThread = await prisma.coachConversation.findFirstOrThrow({
+    where: { userId: OWNER_ID, documentScoped: false },
+  });
+  await prisma.coachFact.create({
+    data: {
+      userId: OWNER_ID,
+      factEncrypted: encryptToBytes(COACH_FACT),
+      category: "constraint",
+      confidence: 80,
+      sourceConversationId: healthThread.id,
+    },
+  });
+  const plan = await prisma.coachPlan.create({
+    data: {
+      userId: OWNER_ID,
+      metric: "BLOOD_PRESSURE",
+      ifCueEncrypted: encryptToBytes(COACH_PLAN_CUE),
+      thenActionEncrypted: encryptToBytes(COACH_PLAN_ACTION),
+      targetEncrypted: encryptToBytes("under 130 by October"),
+      status: "active",
+      reviewDate: AT("2026-10-01T00:00:00.000Z"),
+      sourceConversationId: healthThread.id,
+    },
+  });
+  await prisma.coachReminder.create({
+    data: {
+      userId: OWNER_ID,
+      noteEncrypted: encryptToBytes(COACH_REMINDER_NOTE),
+      metric: "BLOOD_PRESSURE",
+      relatedPlanId: plan.id,
+      triggerKind: "date",
+      dueAt: AT("2026-09-01T07:00:00.000Z"),
+      status: "active",
+      source: "extractor",
+      sourceConversationId: healthThread.id,
+      surfaceCount: 2,
+    },
+  });
+
   // One visit, the practice it was at, and one link of each of the three
   // kinds. The links reach the document, the lab result and the condition
   // episode seeded above rather than fresh rows, because a link to something
@@ -900,6 +949,70 @@ describe("every model the plan claims two-ended survives a real restore", () => 
         attachments: [vaultDocument.id],
       },
     ]);
+
+    // The Coach's memory, and both of its references still pointing at
+    // something. Neither is a foreign key, so a restore that wrote them back
+    // as null would break nothing, satisfy every count, and leave the account
+    // with a Coach that remembers a fact and no longer knows where it came
+    // from.
+    const restoredThread = await prisma.coachConversation.findFirstOrThrow({
+      where: { userId: OWNER_ID, documentScoped: false },
+    });
+    const restoredPlan = await prisma.coachPlan.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+    });
+    const fact = await prisma.coachFact.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+    });
+    expect({
+      fact: decryptFromBytes(fact.factEncrypted),
+      category: fact.category,
+      confidence: fact.confidence,
+      source: fact.sourceConversationId,
+      deletedAt: fact.deletedAt,
+    }).toEqual({
+      fact: COACH_FACT,
+      category: "constraint",
+      confidence: 80,
+      source: restoredThread.id,
+      deletedAt: null,
+    });
+    expect({
+      metric: restoredPlan.metric,
+      ifCue: decryptFromBytes(restoredPlan.ifCueEncrypted),
+      thenAction: decryptFromBytes(restoredPlan.thenActionEncrypted),
+      target: restoredPlan.targetEncrypted
+        ? decryptFromBytes(restoredPlan.targetEncrypted)
+        : null,
+      status: restoredPlan.status,
+      source: restoredPlan.sourceConversationId,
+    }).toEqual({
+      metric: "BLOOD_PRESSURE",
+      ifCue: COACH_PLAN_CUE,
+      thenAction: COACH_PLAN_ACTION,
+      target: "under 130 by October",
+      status: "active",
+      source: restoredThread.id,
+    });
+    const reminder = await prisma.coachReminder.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+    });
+    expect(
+      {
+        note: decryptFromBytes(reminder.noteEncrypted),
+        relatedPlanId: reminder.relatedPlanId,
+        source: reminder.sourceConversationId,
+        surfaceCount: reminder.surfaceCount,
+        status: reminder.status,
+      },
+      "the reminder still knows which plan it belongs to",
+    ).toEqual({
+      note: COACH_REMINDER_NOTE,
+      relatedPlanId: restoredPlan.id,
+      source: restoredThread.id,
+      surfaceCount: 2,
+      status: "active",
+    });
 
     // The ramp, in order, with the note back in its column. Counting says two
     // rows returned; only this says they came back as the same ramp, and that

@@ -64,7 +64,16 @@
  * file, where inventing the document and silently dropping the provenance are
  * equally wrong.
  *
- * The ninth, `checkupClosure`, is not about a restore at all, and it borrows
+ * The ninth, `coachReference`, names a conversation or a plan that a Coach
+ * fact, plan or reminder pointed at and the restore did not put back. It is
+ * unlike every kind above in one way worth stating: neither `sourceConversationId`
+ * nor `relatedPlanId` is a foreign key, so a dangling value costs no error and
+ * simply stops meaning anything. What is dropped here is therefore the POINTER
+ * and not the row — the fact, the plan and the reminder all restore, and the
+ * reminder still fires. A portable export omits tombstoned plans, which is the
+ * ordinary way a live reminder ends up naming one the file does not carry.
+ *
+ * The tenth, `checkupClosure`, is not about a restore at all, and it borrows
  * this shape deliberately rather than growing a second reporting mechanism
  * beside it. The situation is the same one: something a write was asked to do
  * could not be done, the record itself survives, and the person is told which
@@ -81,6 +90,7 @@ export type SkippedCatalogue =
   | "vaccinationReference"
   | "reminderReference"
   | "coachAttachment"
+  | "coachReference"
   | "checkupClosure";
 
 /** One key this instance does not know, and the links it cost. */

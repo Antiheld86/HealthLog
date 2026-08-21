@@ -1093,6 +1093,67 @@ const coachConversationBackupSchema = z
   })
   .passthrough();
 
+/**
+ * The Coach's memory. `deletedAt` is optional rather than nullable-required:
+ * a portable file omits tombstoned rows entirely and never states the field,
+ * while a disaster-recovery file always does.
+ */
+const coachFactBackupSchema = z
+  .object({
+    id: z.string().min(1),
+    factEncrypted: base64BytesSchema.optional(),
+    fact: z.string().optional(),
+    category: z.string().min(1),
+    confidence: z.number().int().min(0).max(100).optional(),
+    sourceConversationId: z.string().nullable().optional(),
+    createdAt: isoDateTime,
+    updatedAt: isoDateTime,
+    deletedAt: isoDateTime.nullable().optional(),
+  })
+  .passthrough();
+
+const coachPlanBackupSchema = z
+  .object({
+    id: z.string().min(1),
+    metric: z.string().min(1),
+    ifCueEncrypted: base64BytesSchema.optional(),
+    ifCue: z.string().optional(),
+    thenActionEncrypted: base64BytesSchema.optional(),
+    thenAction: z.string().optional(),
+    targetEncrypted: base64BytesSchema.nullable().optional(),
+    target: z.string().nullable().optional(),
+    outcomeEncrypted: base64BytesSchema.nullable().optional(),
+    outcome: z.string().nullable().optional(),
+    status: z.string().optional(),
+    reviewDate: isoDateTime.nullable().optional(),
+    sourceConversationId: z.string().nullable().optional(),
+    createdAt: isoDateTime,
+    updatedAt: isoDateTime,
+    deletedAt: isoDateTime.nullable().optional(),
+  })
+  .passthrough();
+
+const coachReminderBackupSchema = z
+  .object({
+    id: z.string().min(1),
+    noteEncrypted: base64BytesSchema.optional(),
+    note: z.string().optional(),
+    metric: z.string().nullable().optional(),
+    relatedPlanId: z.string().nullable().optional(),
+    triggerKind: z.string().optional(),
+    dueAt: isoDateTime.nullable().optional(),
+    contextCue: z.string().nullable().optional(),
+    status: z.string().optional(),
+    source: z.string().min(1),
+    sourceConversationId: z.string().nullable().optional(),
+    lastSurfacedAt: isoDateTime.nullable().optional(),
+    surfaceCount: z.number().int().min(0).optional(),
+    createdAt: isoDateTime,
+    updatedAt: isoDateTime,
+    deletedAt: isoDateTime.nullable().optional(),
+  })
+  .passthrough();
+
 const allergyBackupSchema = z
   .object({
     id: z.string().min(1),
@@ -1260,6 +1321,9 @@ export const backupPayloadSchema = z
     // written before the reminders travelled carries no key, and an account
     // with none writes [].
     coachConversations: z.array(coachConversationBackupSchema).default([]),
+    coachFacts: z.array(coachFactBackupSchema).default([]),
+    coachPlans: z.array(coachPlanBackupSchema).default([]),
+    coachReminders: z.array(coachReminderBackupSchema).default([]),
     measurementReminders: z.array(measurementReminderBackupSchema).default([]),
     measurementReminderEvents: z
       .array(measurementReminderEventBackupSchema)
@@ -1354,6 +1418,10 @@ export interface BackupSummary {
   coachConversations: number;
   /** Coach turns across every thread. */
   coachMessages: number;
+  /** Durable facts, agreed plans and things to bring back up. */
+  coachFacts: number;
+  coachPlans: number;
+  coachReminders: number;
 }
 
 export function summarizeBackup(payload: BackupPayload): BackupSummary {
@@ -1415,6 +1483,9 @@ export function summarizeBackup(payload: BackupPayload): BackupSummary {
       (total, conversation) => total + conversation.messages.length,
       0,
     ),
+    coachFacts: payload.coachFacts.length,
+    coachPlans: payload.coachPlans.length,
+    coachReminders: payload.coachReminders.length,
   };
 }
 
