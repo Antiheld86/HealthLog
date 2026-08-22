@@ -29,7 +29,7 @@ import { version as packageVersion } from "../../../package.json";
 
 const openApiBase: Pick<
   ZodOpenApiObject,
-  "openapi" | "info" | "servers" | "tags"
+  "openapi" | "info" | "servers" | "tags" | "security"
 > = {
   openapi: "3.1.0",
   info: {
@@ -80,6 +80,34 @@ const openApiBase: Pick<
     { name: "Admin" },
     { name: "Meta" },
   ],
+  /**
+   * How a caller authenticates, for every operation that does not say
+   * otherwise.
+   *
+   * The two schemes were defined under `components.securitySchemes` from the
+   * start and referenced by nothing — no document-level `security`, none on any
+   * operation. That is not a small omission: a client generated from the
+   * contract wires neither the `Authorization` header nor the session cookie,
+   * and reads the whole surface as an open API. The schemes being present is
+   * exactly what hid it, because the obvious check passes.
+   *
+   * Two entries rather than one object with two keys. In OpenAPI an array is
+   * OR and the keys inside one object are AND, so `[{bearerAuth: []},
+   * {cookieAuth: []}]` says "a token or a session", which is what the server
+   * accepts. One object with both keys would demand both at once.
+   *
+   * The order is deliberate: a generator that picks the first scheme it
+   * understands should reach for the Bearer token, because the native client is
+   * the reason this contract is published. The browser has its cookie already.
+   *
+   * Operations that genuinely take no credential override this with
+   * `security: []`; `openapi-security-declaration-guard.test.ts` holds the list
+   * of those and fails on an opt-out that is not on it. Note that the proxy's
+   * `PUBLIC_PATHS` is a different question and not the list — it says what the
+   * edge lets through, not what the handler behind it accepts, and
+   * `/api/ingest/medication` is on it while requiring a Bearer token.
+   */
+  security: [{ bearerAuth: [] }, { cookieAuth: [] }],
 };
 
 /**
