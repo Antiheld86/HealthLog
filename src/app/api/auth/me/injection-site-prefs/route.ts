@@ -18,8 +18,6 @@
  * limit, Zod safeParse → 422 via `returnAllZodIssues`, audit-log row,
  * field-by-field write (no mass assignment).
  */
-import { z } from "zod/v4";
-
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import {
   apiError,
@@ -33,28 +31,16 @@ import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import {
-  injectionSiteEnum,
   INJECTION_SITE_VALUES,
   type InjectionSiteValue,
 } from "@/lib/validations/medication";
+import { injectionSitePrefsPatchSchema } from "@/lib/validations/user-prefs";
 import { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 
 const PATCH_RATE_LIMIT = 60;
 const PATCH_WINDOW_MS = 60_000;
-
-const patchBodySchema = z.object({
-  // Dedup at write time; cap at the full enum size. An empty array
-  // clears the exclusion.
-  globalExcludedInjectionSites: z
-    .array(injectionSiteEnum)
-    .max(INJECTION_SITE_VALUES.length)
-    .meta({
-      description:
-        "User-level injection-site deny-list. Sites here are never offered for any medication and rejected at intake (deny wins). Empty array clears the exclusion.",
-    }),
-});
 
 interface InjectionSitePrefsResponse {
   globalExcludedInjectionSites: InjectionSiteValue[];
@@ -96,7 +82,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
   });
   if (jsonError) return jsonError;
 
-  const parsed = patchBodySchema.safeParse(body);
+  const parsed = injectionSitePrefsPatchSchema.safeParse(body);
   if (!parsed.success) {
     annotate({
       action: { name: "auth.me.injection-site-prefs.patch.invalid_shape" },

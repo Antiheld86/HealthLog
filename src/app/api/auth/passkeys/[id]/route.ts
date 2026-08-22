@@ -4,15 +4,13 @@ import {
   apiSuccess,
   apiError,
   getClientIp,
+  returnAllZodIssues,
   safeJson,
 } from "@/lib/api-response";
 import { NextRequest } from "next/server";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
-import { webauthnKeyNameSchema } from "@/lib/validations/mfa";
-import { z } from "zod/v4";
-
-const passkeyRenameSchema = z.object({ name: webauthnKeyNameSchema });
+import { passkeyRenameSchema } from "@/lib/validations/auth";
 
 export const PATCH = apiHandler(
   async (
@@ -29,7 +27,12 @@ export const PATCH = apiHandler(
 
     const parsed = passkeyRenameSchema.safeParse(body);
     if (!parsed.success) {
-      return apiError("Invalid request", 422);
+      // Multi-issue, like every sibling that parses a body. The flat
+      // `apiError("Invalid request", 422)` this replaces discarded the issues,
+      // so a person renaming a passkey could not tell an empty name from one
+      // over the 64-character limit — the form had nothing to put beside the
+      // field.
+      return returnAllZodIssues(parsed.error, 422);
     }
 
     const passkey = await prisma.passkey.findUnique({

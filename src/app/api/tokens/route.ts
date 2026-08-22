@@ -11,20 +11,30 @@
  * (`/api/medications/[id]/api-endpoint`), which issues both grants.
  *
  * Listing and revoking stay so existing tokens remain visible and revocable.
+ *
+ * The list is NOT gated on the instance-wide API switch, and the revoke is.
+ * The asymmetry is deliberate, and rests on what the switch actually does:
+ * `AppSettings.apiGlobal` gates the surfaces a token is FOR — external
+ * medication ingest, the MCP bridge — and not the token's ability to
+ * authenticate. Nothing on the `requireAuth` path consults it. So a token
+ * minted before an operator flipped the switch is still a live credential
+ * while it is off, and refusing the list hid exactly the credentials their
+ * owner most needed to see. Answering "which credentials exist on your own
+ * account" is never the unsafe half of this surface: it discloses no token
+ * material, and it is how a person finds the row to kill.
+ *
+ * The revoke keeps the gate as the surface stands. Whether the switch should
+ * also stop an owner killing a live token is a question about what the switch
+ * means, not a property of the read, so it is left where it was.
  */
 import { prisma } from "@/lib/db";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
-import { apiSuccess, apiError } from "@/lib/api-response";
-import { isApiGloballyEnabled } from "@/lib/app-settings";
+import { apiSuccess } from "@/lib/api-response";
 
 export const GET = apiHandler(async () => {
   const { user } = await requireAuth();
   annotate({ action: { name: "tokens.list" } });
-
-  if (!(await isApiGloballyEnabled())) {
-    return apiError("API is globally disabled", 403);
-  }
 
   const tokens = await prisma.apiToken.findMany({
     where: { userId: user.id },

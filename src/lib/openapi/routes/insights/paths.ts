@@ -10,6 +10,8 @@ import {
   MODULE_DISABLED_DESCRIPTION,
   dataEnvelope,
   errorEnvelope,
+  idempotencyKeyParameter,
+  idempotentWrite,
   moduleDisabledResponse,
   recordRefusal,
   stdResponses,
@@ -44,7 +46,33 @@ import {
   ecgDetailQuery,
   ecgDetailResponse,
   rhythmEventsResponse,
+  analyticsQuery,
+  analyticsResponse,
+  insightsSettingsResponse,
+  insightsSettingsPutRequest,
+  targetsResponse,
+  providerChainResponse,
+  providerChainPutRequest,
+  insightsGenerateReadResponse,
+  insightsGeneratePostRequest,
+  insightsGeneratePostResponse,
+  coachReadQuery,
+  coachReadStripResponse,
+  coachSeededQuestionResponse,
+  narrativeQuery,
+  narrativeResponse,
+  glp1TimelineQuery,
+  glp1TimelineResponse,
+  intradayPulseQuery,
+  intradayPulseResponse,
 } from "./schemas";
+import { recommendationFeedbackRequestSchema } from "@/lib/validations/recommendation-feedback";
+
+const insightsFeedbackRequest = recommendationFeedbackRequestSchema.meta({
+  id: "InsightsFeedbackRequest",
+  description:
+    "A thumbs-up / thumbs-down on one recommendation. The body carries the rec id AND a snapshot of the text as rendered, because deduplication is on the pair: a regeneration that rewrites the same id with new text is a genuinely different rating, which is the signal the aggregator wants. `providerType` and `promptVersion` are NOT accepted — the server fills both from the account's own attribution, so a client cannot tamper with the slice the quality dashboard reports on.",
+});
 
 export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   "/api/dashboard/snapshot": {
@@ -138,6 +166,398 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
                 insightsPregenerateResponse,
                 "InsightsPregenerateResponseEnvelope",
               ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/analytics": {
+    get: {
+      tags: ["Analytics"],
+      summary: "The full analytics envelope (two slices behind one path)",
+      description:
+        "The oldest composite read in the application. `?slice=summaries` answers the slim slice — per-type summaries and the freshness map, resolved from two SQL passes over the rollup tier. Everything else answers the thick default: the same summaries plus BMI, the blood-pressure in-target windows, per-context glucose and the clinical glucose panel, the three correlation hypotheses, the full health-score report and the trailing-30-day sleep-stage breakdown. No LLM is reachable from either path. Both are served through a stale-while-revalidate cache, and the DEFAULT slice's cache key includes the reader's locale, because the correlation narration is localised prose. Two behaviours worth knowing before integrating: the thick slice RECORDS the health score it computes, so this read is not side-effect-free, and it kicks off a background rollup refresh it deliberately does not await, so a reading logged seconds ago can be missing from the very first request after it lands and present on the next. Module handling is per BLOCK, not per request: the glucose blocks go null when the glucose module is off, and the health score simply drops the pillars whose modules are off. Cookie or Bearer auth; the caller is always resolved as themselves, so this read cannot be delegated to a shared record.",
+      requestParams: { query: analyticsQuery },
+      responses: {
+        "200": {
+          description:
+            "`AnalyticsDefaultSlice`, or `AnalyticsSummariesSlice` when `slice=summaries`. `Cache-Control` is the bfcache-friendly `private, max-age=0, must-revalidate` rather than `no-store`.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(analyticsResponse, "AnalyticsEnvelope"),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/insights/generate": {
+    get: {
+      tags: ["Insights"],
+      summary: "Read the cached advisor briefing (never generates)",
+      description:
+        'The read-only advisor. It serves the cached payload and NEVER calls a provider — the surfaces that mount on page load used to POST here, which blocked first paint on the whole provider chain. When the cache is stale or missing AND a provider exists it enqueues an out-of-band warm and says so in `revalidating`; the next read reflects it. User-initiated regeneration is the POST. Four honesty signals ride the payload and are the whole point of it: `hasProvider: false` means no warm pass can ever refresh what is shown, so stop polling and offer to connect one; `generationFailed` means the last attempt failed and the text is HELD rather than fresh; `generationFailureClass` says which lever to point at; and `briefingOmittedReason: "ungrounded"` means a generation SUCCEEDED and the grounding gate withheld the briefing, which is a different state from a failure. Gated on the Coach assistant surface — an operator who turns Coach off empties every advisor consumer. Cookie or Bearer auth; the caller is always resolved as themselves, so this read cannot be delegated to a shared record.',
+      responses: {
+        "200": {
+          description:
+            "The cached payload, or the empty shape when nothing is cached. Always 200 — an absent briefing is a normal answer here, not an error.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                insightsGenerateReadResponse,
+                "InsightsGenerateReadEnvelope",
+              ),
+            },
+          },
+        },
+        "403": {
+          description:
+            "The operator has switched the Coach assistant surface off (`meta.errorCode` = `assistant.disabled.coach`).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "401": stdResponses["401"],
+        "429": stdResponses["429"],
+      },
+    },
+    post: {
+      tags: ["Insights"],
+      summary: "Generate the advisor briefing inline (costs tokens)",
+      description:
+        "The only path in the advisor family that calls a provider, and it does so INLINE. Two gates bound it, and they bound different things. The RATE gate is `insights:<userId>`, ten generations per hour by default and configurable by the operator through `INSIGHTS_RATE_LIMIT_PER_HOUR` (a value below 1 falls back to the default); it is checked AFTER the cache short-circuit, so a cache hit never spends a token. The BUDGET gate is the day's token ceiling, refused at reservation time before any provider is contacted — so it is not a provider failure, records no failure marker, and answers 429 with `meta.errorCode` = `insights.generate.budgetExceeded`, which is how a client tells 'you asked too often' from 'the day's spend is gone'. Two more things a caller should know before integrating: a plain 200 does NOT mean a provider ran — a fresh cache inside 24 hours answers `cached: true`, and so does an exhausted quota when the fresh cache merely lacked a briefing — and a request that TIMES OUT client-side may still complete on the server, writing the briefing to the cache or a dated failure marker, which is exactly the pair the read GET reports so a client can settle an aborted regenerate by polling rather than guessing. Gated on the Coach assistant surface, consent-gated when the resolved chain egresses through the operator's server-managed key. Cookie or Bearer auth; not delegable.",
+      requestBody: {
+        required: false,
+        content: {
+          "application/json": { schema: insightsGeneratePostRequest },
+        },
+      },
+      responses: {
+        "200": {
+          description:
+            "A payload — freshly generated, served from the 24-hour cache, or served from a briefingless cache after the hourly quota refused the regeneration. `cached` tells the three apart.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                insightsGeneratePostResponse,
+                "InsightsGeneratePostEnvelope",
+              ),
+            },
+          },
+        },
+        "403": {
+          description:
+            "The Coach assistant surface is off (`assistant.disabled.coach`), or the resolved chain egresses through the operator's key and no consent receipt is on file (`consent.ai.required`).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "409": {
+          description:
+            "The account's privacy mode, exclude list, locale or profile changed while the generation was running, so the finished text describes a scope that no longer applies and is discarded rather than written. `meta.errorCode` = `insights.generate.scopeChanged` or `insights.generate.profileScopeChanged`. Retry.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "422": {
+          description:
+            "No AI provider is configured anywhere for this account, or the provider answered something that was not valid JSON (`meta.errorCode` = `ai_response_truncated` when the answer was cut off mid-stream rather than malformed), or the finished prose was withheld by the outbound safety screen (`insights.generate.outboundScreened`).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "429": {
+          description:
+            "Three different refusals share this status and are told apart by `meta.errorCode`. No code: more than the hourly limit of generations for this account. `insights.generate.budgetExceeded`: the DAY's token ceiling refused the reservation before any provider was contacted — retry tomorrow, not in an hour. No code, with provider wording: the upstream provider rate-limited every hop of the chain.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "503": {
+          description:
+            "Every provider in the chain failed for a reason that is not a rate limit — auth, timeout or an upstream 5xx. A dated failure marker is written, so the read GET reports the briefing as held rather than fresh.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "401": stdResponses["401"],
+      },
+    },
+  },
+  "/api/insights/provider-chain": {
+    get: {
+      tags: ["Insights"],
+      summary: "Read the account's AI-provider chain",
+      description:
+        "The chain as the settings surface renders it: the resolved head, the last provider that actually worked, and the PERSISTED list with disabled entries included. That last point is the one that matters — the resolved list drops disabled entries, and returning it here once made a disabled provider vanish from the settings list along with the toggle that would have brought it back. No key, token or account id is ever on this wire; the response carries provider TYPES and boolean state only. Cookie or Bearer auth; not delegable.",
+      responses: {
+        "200": {
+          description: "The chain summary.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                providerChainResponse,
+                "ProviderChainEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+    put: {
+      tags: ["Insights"],
+      summary: "Replace the account's AI-provider chain",
+      description:
+        "Persists the chain wholesale in the order the array gives. Any `priority` a client sends is accepted and IGNORED — the server recomputes it from insertion order, so a stale tab cannot store a chain whose displayed order disagrees with its stored one. A repeated provider type is refused rather than deduplicated on read, because drift between the two representations is the kind of thing that costs an evening. No credential is written or read here. Body capped at 64 KiB. Cookie or Bearer auth; not delegable.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: providerChainPutRequest },
+        },
+      },
+      responses: {
+        "200": {
+          description:
+            "Saved. The response confirms the write and does not echo the chain — re-read it if the resolved state is needed.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ saved: z.literal(true) }),
+                "ProviderChainSavedEnvelope",
+              ),
+            },
+          },
+        },
+        "422": {
+          description:
+            "The body was not a valid chain — an empty array, more entries than there are provider types, an unknown provider type, or the same type twice. A single-message envelope with no issue list.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "401": stdResponses["401"],
+        "429": stdResponses["429"],
+      },
+    },
+  },
+  "/api/insights/feedback": {
+    post: {
+      tags: ["Insights"],
+      summary: "Rate one recommendation",
+      description:
+        "Records a thumbs-up or thumbs-down against one recommendation, with the rendered text snapshotted alongside the id. The server fills the provider and prompt-version attribution from the account's own state so a client cannot skew the slice the quality dashboard reports on. Idempotent: send `Idempotency-Key` and a retry replays the first response rather than writing twice. Rate-limited 60/h per account — the unique index only catches EXACT replays, so without the cap a client could distort the aggregator by varying the id or the text per request. Body capped at 64 KiB. Cookie or Bearer auth; not delegable.",
+      parameters: [idempotencyKeyParameter],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: insightsFeedbackRequest },
+        },
+      },
+      responses: {
+        ...idempotentWrite(),
+        "201": {
+          description: "The rating was recorded.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({
+                  id: z.string(),
+                  createdAt: z.iso.datetime({ offset: true }),
+                }),
+                "InsightsFeedbackCreatedEnvelope",
+              ),
+            },
+          },
+        },
+        "422": {
+          description:
+            "The body failed validation. A single-message envelope (`Invalid feedback payload`) with no issue list — this route does not use the multi-issue form.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "429": {
+          description:
+            "More than 60 ratings in the trailing hour for this account.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "401": stdResponses["401"],
+      },
+    },
+  },
+  "/api/insights/coach-read": {
+    get: {
+      tags: ["Insights"],
+      summary: "The two-line Coach read for one metric",
+      description:
+        "The own-baseline placement and the single strongest lagged association whose outcome is the named metric — the two server-authoritative lines a metric sub-page renders above its chart. Pure compute over the baseline and correlation engines: no provider call and no cache table, so web and native decode the same DTO rather than each deriving one. Line two arrives as a finished sentence in the reader's language and is printed verbatim, so the resolved locale decides the row; a correlation failure degrades it to null and never sinks line one. Module-gated on `insights` and gated on the Coach assistant surface, because the strip is the ambient Coach presence on that page. Shared analytics-read budget. Delegable at MANAGE level over the whole record: it is computed across the record with no provider on the path. Cookie or Bearer auth.",
+      requestParams: { query: coachReadQuery },
+      responses: {
+        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
+        "200": {
+          description: "The strip.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                coachReadStripResponse,
+                "CoachReadStripEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/insights/coach/seeded-question": {
+    get: {
+      tags: ["Insights"],
+      summary: "Today's suggested Coach opener",
+      description:
+        "Resolves today's single most notable derived wellness signal into a tappable opener for the Coach's blank-chat hero, using the same confidence-gated detector the daily briefing uses. The selection happens SERVER-side and the client renders it rather than recomputing. `signal: null` is the ordinary answer and means the hero keeps its neutral greeting — never a fabricated opener. Two different causes produce that null and are indistinguishable on the wire: nothing crossed the notability gate, or the account has turned proactive suggestions off, in which case the detector does not run at all. Module-gated on `insights` and on the Coach assistant surface. Shared analytics-read budget. Cookie or Bearer auth; not delegable.",
+      responses: {
+        "200": {
+          description: "The opener, or the neutral null.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                coachSeededQuestionResponse,
+                "CoachSeededQuestionEnvelope",
+              ),
+            },
+          },
+        },
+        ...moduleDisabledResponse,
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/insights/narrative": {
+    get: {
+      tags: ["Insights"],
+      summary: "The latest week or month retrospective",
+      description:
+        "The last generated period summary for the record. Read-only by construction: it never blocks on a provider, serves the last good row immediately, and warms out of band when the row is stale or missing. A provider-less account is not left empty — the generator falls back to deterministic, non-causal prose, so even the no-key demo gets a retrospective on the next read. `revalidating` reports whether this read enqueued a warm, and is always FALSE on a delegated request: the route warms unconditionally rather than on a miss, so without that suppression a manager's first navigation here would be an egress of the owner's record the owner never asked for. Rows are keyed per locale, so `locale` selects a different stored row rather than translating one. Module-gated on `insights` and on the `insightStatus` assistant surface. Delegable at MANAGE level over the whole record. Cookie or Bearer auth.",
+      requestParams: { query: narrativeQuery },
+      responses: {
+        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
+        "200": {
+          description:
+            "The retrospective, or `narrative: null` when none is on file yet. Always 200 — absence is a normal answer.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(narrativeResponse, "NarrativeEnvelope"),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/insights/glp1-timeline": {
+    get: {
+      tags: ["Insights"],
+      summary: "GLP-1 therapy timeline",
+      description:
+        "A chronological merge of every GLP-1-relevant event the record holds: titration steps, injections with their sites, legacy stock-ledger movements, and side-effect-tagged mood days from the trailing 90 days. `hasGlp1: false` with no entries when the record holds no medication classified GLP-1, so the surface hides cleanly. Two limits worth knowing before reading the output as complete: inventory entries come from the LEGACY running-sum ledger only, so a medication tracked with per-container inventory shows none, and the side-effect scan matches a FIXED bilingual list of English and German tag strings, so a tag written in another language contributes nothing. `limit` is forgiving — an out-of-range or non-numeric value falls back to the default rather than 422-ing. Delegable at MANAGE level over the whole record: it spans medications and mood, with no provider on the path. Cookie or Bearer auth.",
+      requestParams: { query: glp1TimelineQuery },
+      responses: {
+        ...recordRefusal(),
+        "200": {
+          description: "The timeline, newest first.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                glp1TimelineResponse,
+                "Glp1TimelineEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/insights/pulse/intraday": {
+    get: {
+      tags: ["Insights"],
+      summary: "One day's intraday heart-rate shape",
+      description:
+        "The day's ten-minute mean heart-rate series plus, when every confidence gate holds, at most ONE cautious elevated-at-rest window. Computed from raw samples through the read-swap pattern rather than persisted as ten-minute rollups for all history, so a day outside the dense-retention window reads back at the coarser hourly grain instead of empty — `resolution` says which, and `tension` is always null on an hourly day because that read needs per-sample resolution. The bar for a tension window is deliberately high; under-flagging is the intended failure mode, and it is awareness, never a diagnosis. `date` is STRICT here, unlike the forgiving date filters elsewhere on the surface: anything but a `YYYY-MM-DD` literal is a 422. Module-gated on `insights`. Delegable at MANAGE level over the whole record. Cookie or Bearer auth.",
+      requestParams: { query: intradayPulseQuery },
+      responses: {
+        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
+        "200": {
+          description:
+            "The day's series. `Cache-Control` is the bfcache-friendly `private, max-age=0, must-revalidate` rather than `no-store`.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                intradayPulseResponse,
+                "IntradayPulseEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/insights/settings": {
+    get: {
+      tags: ["Insights"],
+      summary: "Read the account's AI-provider settings",
+      description:
+        "Returns the account's own provider connection state and privacy mode alongside PRESENCE-ONLY flags for the operator's shared key and shared ChatGPT connection. No key, token or account id is ever on this wire. Cookie or Bearer auth; the caller is always resolved as themselves, so this read cannot be delegated to a shared record.",
+      responses: {
+        "200": {
+          description: "The settings.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                insightsSettingsResponse,
+                "InsightsSettingsEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+    put: {
+      tags: ["Insights"],
+      summary: "Update the account's AI privacy mode",
+      description:
+        "Writes `privacyMode` and nothing else. Changing it clears the cached insight text and its timestamp so the next generation runs under the new mode. The body is inspected key by key rather than Zod-parsed: an unknown key is ignored rather than refused, and a body that recognises nothing is refused with 422 `No changes` rather than answered as a no-op — so a client cannot tell a typo'd field name from a rejected value except by reading the message. Body capped at 64 KiB. Cookie or Bearer auth; not delegable.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: insightsSettingsPutRequest },
+        },
+      },
+      responses: {
+        "200": {
+          description: "Saved.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ updated: z.literal(true) }),
+                "InsightsSettingsUpdatedEnvelope",
+              ),
+            },
+          },
+        },
+        "422": {
+          description:
+            "`Invalid privacy mode` when `privacyMode` was a string outside the two accepted values, or `No changes` when the body carried nothing this endpoint writes. Single-message envelope with no issue list — this route validates by hand rather than through Zod.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "401": stdResponses["401"],
+        "429": stdResponses["429"],
+      },
+    },
+  },
+  "/api/insights/targets": {
+    get: {
+      tags: ["Insights"],
+      summary: "Per-metric target tiles + consistency strips",
+      description:
+        "The whole targets page in one read: a tile per metric with its band, its current and 30-day-average values, and the seven-day consistency strip behind it, plus the page summary, the diastolic companion figures and the profile facts every band was resolved from. Pure compute over the record's own data — no provider anywhere on the path. Stale-while-revalidate: past the fresh window the prior body serves immediately while one background rebuild warms the cell, and a write hard-evicts the bucket so the account's own action lands on the next read. Delegable at MANAGE level over the whole record: the walk spans vitals, sleep, medications, mood and glucose, so a section-scoped grant is refused rather than served a filtered page. Not module-gated as a whole; a tile whose data does not exist is simply absent. Cookie or Bearer auth.",
+      responses: {
+        ...recordRefusal(),
+        "200": {
+          description: "The target tiles and their page summary.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(targetsResponse, "TargetsEnvelope"),
             },
           },
         },

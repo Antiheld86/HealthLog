@@ -148,7 +148,15 @@ describe("PATCH /api/auth/me/unit-preference", () => {
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
-  it("rejects malformed JSON with 422", async () => {
+  // The three cases below pin the capped `safeJson` read. Before it, the
+  // handler called `request.json()` bare: malformed JSON came back 422 rather
+  // than the 400 every sibling scalar answers, a wrong content type was parsed
+  // rather than refused, and there was NO body-size limit — this was the one
+  // endpoint in the family that would materialise whatever it was handed. The
+  // malformed-JSON assertion used to say 422 and was changed deliberately: it
+  // pinned the inconsistency rather than a contract, and the only caller
+  // branches on `res.ok` alone.
+  it("rejects malformed JSON with 400, like its sibling scalars", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
     const req = new Request("http://localhost/api/auth/me/unit-preference", {
       method: "PATCH",
@@ -156,7 +164,36 @@ describe("PATCH /api/auth/me/unit-preference", () => {
       headers: { "Content-Type": "application/json" },
     });
     const res = await (PATCH as (r: Request) => Promise<Response>)(req);
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(400);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses a body over the 1 KB cap with 413", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    // Valid JSON, valid enum value, and far too big: the cap has to be what
+    // rejects it, not the schema.
+    const req = new Request("http://localhost/api/auth/me/unit-preference", {
+      method: "PATCH",
+      body: JSON.stringify({
+        unitPreference: "imperial",
+        padding: "x".repeat(2048),
+      }),
+      headers: { "Content-Type": "application/json" },
+    });
+    const res = await (PATCH as (r: Request) => Promise<Response>)(req);
+    expect(res.status).toBe(413);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses a non-JSON content type with 415", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    const req = new Request("http://localhost/api/auth/me/unit-preference", {
+      method: "PATCH",
+      body: "unitPreference=imperial",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
+    const res = await (PATCH as (r: Request) => Promise<Response>)(req);
+    expect(res.status).toBe(415);
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 });

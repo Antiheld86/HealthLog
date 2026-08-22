@@ -2,6 +2,7 @@ import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiSuccess, apiError } from "@/lib/api-response";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { annotate } from "@/lib/logging/context";
+import { readSyncTriggerBody } from "@/lib/integrations/sync-request";
 import { syncUserFitbit } from "@/lib/fitbit/sync";
 import { resolveSyncOutcome } from "@/lib/outcome/written-outcome";
 import { NextRequest } from "next/server";
@@ -30,18 +31,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
     });
   }
 
-  let fullSync = false;
-  try {
-    const raw = await request.text();
-    // Flag-only payload — cap the parse cost (mirrors safeJson maxBytes).
-    if (raw.length > 64 * 1024) {
-      return apiError(`Request body exceeds ${64 * 1024} bytes`, 413);
-    }
-    const body = JSON.parse(raw);
-    fullSync = body?.fullSync === true;
-  } catch {
-    // no body provided -> default incremental sync
-  }
+  const body = await readSyncTriggerBody(request);
+  if (body.error) return body.error;
+  const { fullSync } = body;
 
   // The full-history walk is the expensive path (four paginated resource
   // walkers); cap it well below the incremental bucket so a re-trigger loop

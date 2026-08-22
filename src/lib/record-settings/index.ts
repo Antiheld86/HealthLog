@@ -18,6 +18,7 @@ export {
   managedModulePreferencesFrom,
   MANAGED_RECORD_SETTINGS_FIELD_ALLOWLIST,
   MANAGED_RECORD_SETTINGS_MODULE_DEFAULTS,
+  MANAGED_RECORD_SETTINGS_PATCH_SCHEMAS,
   parseManagedRecordSettingsPatch,
   safeParseManagedRecordSettingsPatch,
   type ManagedRecordSettingsFamily,

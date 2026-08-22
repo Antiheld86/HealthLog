@@ -7,7 +7,10 @@
  */
 import { z } from "zod/v4";
 import type { ZodOpenApiObject } from "zod-openapi";
-import { aboutMePutSchema } from "@/lib/validations/about-me";
+import {
+  aboutMeAdoptSchema,
+  aboutMePutSchema,
+} from "@/lib/validations/about-me";
 import {
   healthProfileAiSectionSchema,
   healthProfileFactCorrectionSchema,
@@ -24,6 +27,7 @@ import {
   ACCEPTED_INSIGHTS_TILE_IDS,
   INSIGHTS_SECTION_IDS,
 } from "@/lib/insights-layout";
+import { COACH_CONVERSATION_TITLE_MAX } from "@/lib/ai/coach/types";
 import { COACH_FACT_CATEGORIES } from "@/lib/ai/coach/facts";
 import { COACH_PLAN_STATUSES } from "@/lib/ai/coach/plans";
 import {
@@ -46,6 +50,7 @@ import {
   coachSuggestedActionSchema,
 } from "@/lib/validations/coach-reminder";
 import {
+  MODULE_DISABLED_DESCRIPTION,
   baseUpdatedAtField,
   conflictResponse409,
   dataEnvelope,
@@ -56,6 +61,15 @@ import {
   recordRefusal,
   stdResponses,
 } from "./shared";
+
+// The assigning form, deliberately: `schema.meta({...})` as a bare statement
+// returns a clone and registers nothing, so the component id would never
+// reach the emitted document.
+const aboutMeAdoptRequest = aboutMeAdoptSchema.meta({
+  id: "CoachAboutMeAdoptRequest",
+  description:
+    "An answer to fold into the stored self-context. `question` is the clarifying question it belongs to and is what the server matches the target field from; omit it for the remember-a-message path and the field is matched from `answer` instead. `answer` is capped at 500 characters — the same cap as a structured self-context field.",
+});
 
 emergencyProfileUpdateSchema.meta({
   id: "UpdateEmergencyProfileRequest",
@@ -678,6 +692,22 @@ const coachConversationDetailSchema = z
       "Full conversation with every message decrypted server-side. The client renders the bodies directly; no decryption key is involved.",
   });
 
+const renameCoachConversationRequest = z
+  .object({
+    title: z
+      .string()
+      .min(1)
+      .max(COACH_CONVERSATION_TITLE_MAX)
+      .describe(
+        "The new title. Trimmed before validation, so whitespace alone is refused as empty. 1..80 characters.",
+      ),
+  })
+  .meta({
+    id: "RenameCoachConversationRequest",
+    description:
+      "Rename body. Strict — an unrecognised key is refused rather than dropped, which is not how most partial updates on this surface behave.",
+  });
+
 const coachConversationDeletedResponse = z.object({
   deleted: z
     .literal(true)
@@ -836,6 +866,52 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
+      },
+    },
+    patch: {
+      tags: ["Insights"],
+      summary: "Rename one Coach conversation",
+      description:
+        "Sets the conversation's title. The only field this verb writes — the body is `.strict()`, so an unrecognised key is REFUSED rather than ignored, unlike most partial updates on this surface. The title is trimmed and must be 1..80 characters after trimming. A foreign or unknown id maps to 404 (never 403), so the existence channel does not leak across accounts. Coach-gated. Auth via cookie or Bearer; the caller is always resolved as themselves, so a conversation in a shared record is not reachable here.",
+      parameters: [
+        {
+          name: "id",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+          description: "Conversation id.",
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: renameCoachConversationRequest },
+        },
+      },
+      responses: {
+        "200": {
+          description:
+            "The new id and title. Deliberately NOT the full conversation — nothing else changed, and re-sending the messages on a rename would be a large body for no new information.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ id: z.string(), title: z.string() }),
+                "CoachConversationRenamed",
+              ),
+            },
+          },
+        },
+        "404": {
+          description: "Conversation not found or not owned by the caller.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "422": {
+          description:
+            "The body failed validation — an empty or over-long title, or an unrecognised key. Multi-issue envelope with `meta.errorCode` = `coach.conversation.invalidTitle`.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "401": stdResponses["401"],
+        "429": stdResponses["429"],
       },
     },
     delete: {
@@ -1482,6 +1558,61 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           },
         },
         ...stdResponses,
+      },
+    },
+  },
+  "/api/coach/about-me/adopt": {
+    post: {
+      tags: ["Insights"],
+      summary: "Fold an answer back into the stored self-context",
+      description:
+        'v1.16.4 — closes the clarifying-question loop. The Coach composer\'s chips insert a question the person answers in their own words; this endpoint moves that answer out of the chat transcript and into the matching structured self-context field.\n\n**Which field it lands on is inferred from the wording, not chosen by the caller.** The server keyword-matches allergy and condition stems across the six UI locales; anything else lands on `coachFocus`, the generic "worth knowing" slot. `question` is optional — the remember action on a chat message sends only the message text, and the field is then matched from that text. The chosen field is reported back so the client can say where it went.\n\n**Append, never replace.** Existing text stays and the answer joins on its own line, encrypted at rest. A structured field at its 500-character cap overflows into the free-text `aboutMe` instead of failing; only when THAT is full too does the write refuse.\n\n**A duplicate is a success, not an error.** An answer already contained in the target field or in `aboutMe` returns 200 with `adopted: false` and `reason: "duplicate"`, so tapping the offer twice cannot stack the same prose. Containment is checked case-insensitively on whitespace-collapsed text, so a near-identical rephrasing IS adopted as a second line.\n\nThe read-modify-write runs under a row lock, so two concurrent adoptions cannot lose an append or miss each other\'s dedupe. Audit rows carry the field name and the answer\'s LENGTH — never the text, which is free-form health prose. Coach-module-gated; rate-limited to 30 per minute per user; body cap 16 KiB.',
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: aboutMeAdoptRequest } },
+      },
+      responses: {
+        "200": {
+          description:
+            'The adoption resolved. `adopted: true` means the text was appended; `adopted: false` with `reason: "duplicate"` means it was already there and nothing was written.',
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({
+                  adopted: z.boolean(),
+                  field: z
+                    .enum(["conditions", "allergies", "coachFocus", "aboutMe"])
+                    .describe(
+                      "Where the answer went. `aboutMe` appears when the matched structured field was at its cap and the text overflowed into the free-text slot.",
+                    ),
+                  reason: z
+                    .literal("duplicate")
+                    .optional()
+                    .describe("Present only on the `adopted: false` arm."),
+                }),
+                "CoachAboutMeAdoptResponse",
+              ),
+            },
+          },
+        },
+        "403": {
+          description: MODULE_DISABLED_DESCRIPTION,
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "413": {
+          description: "Body exceeds 16 KiB.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "415": {
+          description: "`Content-Type` is not `application/json`.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+        "422": {
+          description:
+            "Either the body failed validation (every issue is listed), or the self-context is FULL — the matched field and the 4000-character `aboutMe` are both at their caps, so there is nowhere to put the answer. The two are told apart by the presence of the issue list.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
       },
     },
   },

@@ -451,6 +451,52 @@ describe("GET /api/analytics", () => {
 });
 
 /**
+ * `?slice=` is a closed set, and the cost of it not being one was the point.
+ *
+ * The route compared the raw string against `"summaries"` and fell through to
+ * the DEFAULT body on anything else, so `?slice=summary` answered 200 after
+ * running the heaviest chain on the surface. A client could sit on that typo
+ * indefinitely and see nothing but a slow, correct-looking response — the
+ * failure mode was invisible and expensive at the same time.
+ */
+describe("GET /api/analytics — the slice parameter is a closed set", () => {
+  const call = (url: string) =>
+    (GET as unknown as (request: Request) => Promise<Response>)(
+      new Request(url),
+    );
+
+  it.each(["summary", "SUMMARIES", "default", ""])(
+    "refuses ?slice=%s rather than serving the expensive default body",
+    async (value) => {
+      const res = await call(
+        `http://localhost/api/analytics?slice=${encodeURIComponent(value)}`,
+      );
+      expect(res.status).toBe(422);
+      const body = (await res.json()) as {
+        meta?: { errorCode?: string };
+        details?: { issues?: Array<{ path: string }> };
+      };
+      expect(body.meta?.errorCode).toBe("analytics.invalid_query");
+      expect(body.details?.issues?.map((i) => i.path)).toContain("slice");
+    },
+  );
+
+  it("still serves the default body when the parameter is absent", async () => {
+    const res = await call("http://localhost/api/analytics");
+    expect(res.status).toBe(200);
+  });
+
+  it("still serves the slim body for the one legal value", async () => {
+    const res = await call("http://localhost/api/analytics?slice=summaries");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: Record<string, unknown> };
+    // The slim slice is recognisable by what it does NOT carry.
+    expect(body.data).not.toHaveProperty("healthScore");
+    expect(body.data).toHaveProperty("summaries");
+  });
+});
+
+/**
  * v1.34.5 — the blood-pressure score's basis has to ARRIVE, not merely exist.
  *
  * The grader returns `{ score, basis }` and the pillar builder copies the

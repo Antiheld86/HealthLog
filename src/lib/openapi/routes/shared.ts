@@ -363,3 +363,36 @@ export const moduleDisabledResponse = {
     content: { "application/json": { schema: errorEnvelope } },
   },
 };
+
+/**
+ * What a device revocation actually removed.
+ *
+ * Two paths answer with this exact shape, because two routes are two doors onto
+ * one `revokeDeviceCascade` call: `DELETE /api/devices/{id}` and
+ * `DELETE /api/auth/me/devices/{id}`. They were documented independently and
+ * each minted a component called `DeviceRevokeResponse`, which the emitter
+ * refuses outright — one id cannot name two schemas. It lives here rather than
+ * in either module so neither owns it and the next door onto the same call
+ * finds it.
+ *
+ * The counts are the point. A client can tell the person how many credentials
+ * were killed rather than only that something happened.
+ */
+export const deviceRevokeResponse = z
+  .object({
+    id: z.string(),
+    revoked: z.literal(true),
+    refreshTokensRevoked: z
+      .number()
+      .int()
+      .describe("Refresh tokens the cascade revoked."),
+    accessTokensRevoked: z
+      .number()
+      .int()
+      .describe("Access tokens the cascade revoked."),
+  })
+  .meta({
+    id: "DeviceRevokeResponse",
+    description:
+      "What the revocation cascade actually removed. The counts let a client say how many credentials were killed rather than only that something happened.",
+  });

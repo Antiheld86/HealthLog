@@ -1,24 +1,20 @@
 import { NextRequest } from "next/server";
-import { apiHandler, requireAuth, HttpError } from "@/lib/api-handler";
+import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { prisma } from "@/lib/db";
-import { apiSuccess, apiError, safeJson } from "@/lib/api-response";
+import {
+  apiSuccess,
+  apiError,
+  returnAllZodIssues,
+  safeJson,
+} from "@/lib/api-response";
 import { isPublicUrl } from "@/lib/validations/notifications";
 import { isLocalAiHostAllowed } from "@/lib/ai/local-host-allowlist";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { resolveProviderAvailability } from "@/lib/ai/provider";
 import { annotate } from "@/lib/logging/context";
+import { aiProviderPatchSchema } from "@/lib/validations/ai-provider";
 
 export const dynamic = "force-dynamic";
-
-const ALLOWED = new Set([
-  "OPENAI",
-  "ANTHROPIC",
-  "LOCAL",
-  // v1.33.1 (#470) — the OpenAI-compatible gateway (LiteLLM / OpenRouter /
-  // vLLM). Its base URL, key and model live in their own three columns.
-  "OPENAI_COMPATIBLE",
-  "CHATGPT_OAUTH",
-]);
 
 export const GET = apiHandler(async () => {
   const { user } = await requireAuth();
@@ -78,39 +74,47 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
   const { user } = await requireAuth();
   annotate({ action: { name: "user.ai-provider.update" } });
 
-  const { data: body, error } = await safeJson<Record<string, unknown>>(
-    request,
-    { maxBytes: 64 * 1024 },
-  );
+  const { data: rawBody, error } = await safeJson<unknown>(request, {
+    maxBytes: 64 * 1024,
+  });
   if (error) return error;
+
+  // Every accepted field states its type in the schema, so a wrongly-typed
+  // value is a named issue rather than a key quietly dropped on the floor.
+  // The multi-issue envelope is safe to return even though this body carries
+  // plaintext credentials: Zod's type and range messages name the received
+  // TYPE, never the received value. See the note in the validations module
+  // before adding a `.refine()` here.
+  const parsed = aiProviderPatchSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    annotate({
+      action: { name: "user.ai-provider.update" },
+      meta: {
+        outcome: "validation_failed",
+        issue_count: parsed.error.issues.length,
+      },
+    });
+    return returnAllZodIssues(parsed.error, 422, {
+      errorCode: "ai_provider.invalid",
+    });
+  }
+  const body = parsed.data;
 
   const updates: Record<string, unknown> = {};
 
   if (body.provider !== undefined) {
-    if (body.provider === null || body.provider === "") {
-      updates.aiProvider = null;
-    } else if (
-      typeof body.provider === "string" &&
-      ALLOWED.has(body.provider)
-    ) {
-      updates.aiProvider = body.provider;
-    } else {
-      throw new HttpError(422, "Invalid provider");
-    }
+    updates.aiProvider =
+      body.provider === null || body.provider === "" ? null : body.provider;
   }
 
   if (body.model !== undefined) {
-    if (body.model === null || body.model === "") {
-      updates.aiModel = null;
-    } else if (typeof body.model === "string") {
-      updates.aiModel = body.model.trim() || null;
-    }
+    updates.aiModel = body.model === null ? null : body.model.trim() || null;
   }
 
   if (body.baseUrl !== undefined) {
     if (body.baseUrl === null || body.baseUrl === "") {
       updates.aiBaseUrl = null;
-    } else if (typeof body.baseUrl === "string") {
+    } else {
       const trimmed = body.baseUrl.trim();
       // SSRF guard: by default reject private/internal hostnames so a
       // compromised user account cannot point the server at the cloud
@@ -137,7 +141,7 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
   if (body.compatBaseUrl !== undefined) {
     if (body.compatBaseUrl === null || body.compatBaseUrl === "") {
       updates.aiCompatBaseUrl = null;
-    } else if (typeof body.compatBaseUrl === "string") {
+    } else {
       const trimmed = body.compatBaseUrl.trim();
       // Same SSRF floor as the Local provider: a public host always, a
       // private one only when the operator allowlisted it. Gateways on a LAN
@@ -154,72 +158,49 @@ export const PATCH = apiHandler(async (request: NextRequest) => {
   }
 
   if (body.compatModel !== undefined) {
-    if (body.compatModel === null || body.compatModel === "") {
-      updates.aiCompatModel = null;
-    } else if (typeof body.compatModel === "string") {
-      updates.aiCompatModel = body.compatModel.trim() || null;
-    }
+    updates.aiCompatModel =
+      body.compatModel === null ? null : body.compatModel.trim() || null;
   }
 
   if (body.compatKey !== undefined) {
-    if (body.compatKey === null || body.compatKey === "") {
-      updates.aiCompatKeyEncrypted = null;
-    } else if (typeof body.compatKey === "string") {
-      updates.aiCompatKeyEncrypted = encrypt(body.compatKey.trim());
-    }
+    updates.aiCompatKeyEncrypted =
+      body.compatKey === null || body.compatKey === ""
+        ? null
+        : encrypt(body.compatKey.trim());
   }
 
   if (body.anthropicKey !== undefined) {
-    if (body.anthropicKey === null || body.anthropicKey === "") {
-      updates.aiAnthropicKeyEncrypted = null;
-    } else if (typeof body.anthropicKey === "string") {
-      updates.aiAnthropicKeyEncrypted = encrypt(body.anthropicKey.trim());
-    }
+    updates.aiAnthropicKeyEncrypted =
+      body.anthropicKey === null || body.anthropicKey === ""
+        ? null
+        : encrypt(body.anthropicKey.trim());
   }
 
   if (body.localKey !== undefined) {
-    if (body.localKey === null || body.localKey === "") {
-      updates.aiLocalKeyEncrypted = null;
-    } else if (typeof body.localKey === "string") {
-      updates.aiLocalKeyEncrypted = encrypt(body.localKey.trim());
-    }
+    updates.aiLocalKeyEncrypted =
+      body.localKey === null || body.localKey === ""
+        ? null
+        : encrypt(body.localKey.trim());
   }
 
   if (body.openaiKey !== undefined) {
-    if (body.openaiKey === null || body.openaiKey === "") {
-      updates.aiOpenaiKeyEncrypted = null;
-    } else if (typeof body.openaiKey === "string") {
-      updates.aiOpenaiKeyEncrypted = encrypt(body.openaiKey.trim());
-    }
+    updates.aiOpenaiKeyEncrypted =
+      body.openaiKey === null || body.openaiKey === ""
+        ? null
+        : encrypt(body.openaiKey.trim());
   }
 
   // ── v1.22 (#89) — response timeout (seconds) ──────────────────
+  // The 10–600 bounds are the schema's; an out-of-range value never reaches
+  // here.
   if (body.responseTimeoutSeconds !== undefined) {
-    if (body.responseTimeoutSeconds === null) {
-      updates.aiResponseTimeoutSeconds = null;
-    } else if (
-      typeof body.responseTimeoutSeconds === "number" &&
-      Number.isInteger(body.responseTimeoutSeconds)
-    ) {
-      // Sane bounds: 10 s floor (a stricter value just trips the timeout) and
-      // 600 s ceiling (a generous cap for a slow self-hosted backend).
-      if (
-        body.responseTimeoutSeconds < 10 ||
-        body.responseTimeoutSeconds > 600
-      ) {
-        throw new HttpError(
-          422,
-          "Response timeout must be between 10 and 600 seconds",
-        );
-      }
-      updates.aiResponseTimeoutSeconds = body.responseTimeoutSeconds;
-    } else {
-      throw new HttpError(422, "Invalid response timeout");
-    }
+    updates.aiResponseTimeoutSeconds = body.responseTimeoutSeconds;
   }
 
   if (Object.keys(updates).length === 0) {
-    throw new HttpError(422, "No valid fields");
+    return apiError("No valid fields", 422, {
+      errorCode: "ai_provider.no_fields",
+    });
   }
 
   // When the provider switches away from LOCAL, drop any stored

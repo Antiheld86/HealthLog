@@ -1,5 +1,4 @@
 import { NextRequest } from "next/server";
-import { z } from "zod/v4";
 import { prisma } from "@/lib/db";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
@@ -7,6 +6,7 @@ import { apiSuccess, apiError } from "@/lib/api-response";
 import { CHANNEL_TYPE_LABELS, EVENT_TYPES } from "@/lib/notifications/types";
 import type { ChannelType, EventType } from "@/lib/notifications/types";
 import { reEnableChannel } from "@/lib/notifications/channel-state";
+import { reEnableChannelSchema } from "@/lib/validations/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -131,10 +131,6 @@ export const GET = apiHandler(async () => {
   return apiSuccess({ channels: data, events });
 });
 
-const reEnableSchema = z.object({
-  channelId: z.string().min(1).max(64),
-});
-
 /**
  * POST /api/notifications/status
  *
@@ -159,7 +155,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
     return apiError("Invalid JSON data", 422);
   }
 
-  const parsed = reEnableSchema.safeParse(body);
+  const parsed = reEnableChannelSchema.safeParse(body);
   if (!parsed.success) return apiError("Invalid data", 422);
 
   const channel = await prisma.notificationChannel.findFirst({

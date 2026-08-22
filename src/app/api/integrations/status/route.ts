@@ -149,9 +149,20 @@ export const GET = apiHandler(async () => {
   // single metric type has gone silent even while the integration reads green
   // ("connected · 5 min ago"). Fail-soft: this is an honesty signal, never worth
   // 500-ing the whole Settings card, so a groupBy hiccup degrades to no data.
-  const metricFreshness = await getSourceMetricFreshness(user.id).catch(
-    () => ({}) as Partial<Record<IntegrationKey, MetricFreshnessSample[]>>,
-  );
+  //
+  // The degradation is REPORTED rather than swallowed. Falling back to `{}`
+  // makes every entry's `metricFreshness` an empty array, which is exactly what
+  // a user with nothing recorded also sees — so "no metric has gone quiet" and
+  // "we could not tell whether a metric has gone quiet" were the same answer on
+  // the wire, and the honesty signal quietly became the thing it was built to
+  // prevent. `metricFreshnessDegraded` separates them. One flag rather than a
+  // nullable array per entry, because this is ONE query for all eight providers
+  // — it fails for all of them or for none.
+  let metricFreshnessDegraded = false;
+  const metricFreshness = await getSourceMetricFreshness(user.id).catch(() => {
+    metricFreshnessDegraded = true;
+    return {} as Partial<Record<IntegrationKey, MetricFreshnessSample[]>>;
+  });
 
   const now = Date.now();
   const whoopConnected = !!whoopConn?.whoopUserId;
@@ -243,8 +254,13 @@ export const GET = apiHandler(async () => {
   const stravaConnected = !!dbUser?.stravaAccessTokenEncrypted;
   const nightscoutConfigured = !!dbUser?.nightscoutUrlEncrypted;
 
+  if (metricFreshnessDegraded) {
+    annotate({ meta: { integrations_metric_freshness_degraded: true } });
+  }
+
   return apiSuccess({
     threshold: getPersistentFailureThreshold(),
+    metricFreshnessDegraded,
     integrations: [
       {
         ...publish(withingsStatus),

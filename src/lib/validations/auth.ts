@@ -1,5 +1,6 @@
 import { z } from "zod/v4";
 import { isValidKvnr, normaliseKvnr } from "@/lib/validations/kvnr";
+import { webauthnKeyNameSchema } from "@/lib/validations/mfa";
 
 /** Minimum password length — must match checkPasswordStrength() in @/lib/auth/password.ts */
 const PASSWORD_MIN_LENGTH = 12;
@@ -116,6 +117,14 @@ export const changePasswordSchema = z
     message: "Passwords do not match",
     path: ["confirmPassword"],
   });
+
+/**
+ * Rename a registered passkey — a PRIMARY sign-in credential, not the
+ * second-factor security key `mfaWebauthnRenameSchema` covers. The two carry
+ * the same label constraint and are served by different routes; they share the
+ * constraint rather than the schema so neither surface can drift the other.
+ */
+export const passkeyRenameSchema = z.object({ name: webauthnKeyNameSchema });
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginPasswordInput = z.infer<typeof loginPasswordSchema>;

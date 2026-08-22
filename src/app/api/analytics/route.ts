@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/db";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
-import { apiSuccess } from "@/lib/api-response";
+import { apiSuccess, returnAllZodIssues } from "@/lib/api-response";
+import { analyticsQuerySchema } from "@/lib/validations/analytics";
 import { NO_STORE_BUT_BFCACHE } from "@/lib/http/cache-headers";
 import { cachedSwr, caches, type ServerCache } from "@/lib/cache/server-cache";
 import { summarize, type DataPoint } from "@/lib/analytics/trends";
@@ -46,19 +47,38 @@ export const dynamic = "force-dynamic";
  * tests instantiate `new Request("http://localhost/api/analytics")`
  * and cast through). Falls back to the raw `URL(request.url)` parse
  * so the slim slice branch is reachable from both call shapes.
+ *
+ * Returns the object the query schema parses: an absent parameter is an
+ * absent KEY, not an empty string, so `slice` stays optional rather than
+ * failing the enum on every unparameterised call.
  */
-function readSliceParam(request: Request | undefined): string | null {
-  if (!request) return null;
+function readQueryParams(request: Request | undefined): Record<string, string> {
+  if (!request) return {};
   try {
-    return new URL(request.url).searchParams.get("slice");
+    return Object.fromEntries(new URL(request.url).searchParams);
   } catch {
-    return null;
+    return {};
   }
 }
 
 export const GET = apiHandler(async (request?: Request) => {
   const { user } = await requireAuth();
   annotate({ action: { name: "analytics.get" } });
+
+  // A `slice` outside the closed set is refused rather than served the
+  // default body. Falling through was the expensive failure: `?slice=summary`
+  // ran the full 30-query chain and answered 200, so a client could sit on a
+  // typo indefinitely while paying for the heaviest read on the surface.
+  const parsedQuery = analyticsQuerySchema.safeParse(readQueryParams(request));
+  if (!parsedQuery.success) {
+    annotate({
+      action: { name: "analytics.get" },
+      meta: { outcome: "invalid_query" },
+    });
+    return returnAllZodIssues(parsedQuery.error, 422, {
+      errorCode: "analytics.invalid_query",
+    });
+  }
 
   // v1.4.33 C1 — slim summaries slice for the dashboard tile strip.
   // The default path runs 30+ chunked findMany reads to feed
@@ -72,7 +92,7 @@ export const GET = apiHandler(async (request?: Request) => {
   // behind a hover-prefetch from the Coach drawer + the correlation
   // tile's `<InView>` boundary. Consumers that need only the headline
   // tile values land on this branch and skip the heavy chain.
-  if (readSliceParam(request) === "summaries") {
+  if (parsedQuery.data.slice === "summaries") {
     // v1.4.34 IW-G — read-through the analytics cache keyed on
     // (userId, slice). The slim slice is the dashboard tile strip's hot
     // path; multiple dashboard mounts inside a 60-second TTL all hit a

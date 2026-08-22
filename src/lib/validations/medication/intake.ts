@@ -200,3 +200,77 @@ export type BulkDeleteIntakeEventsInput = z.infer<
 export type IntakeInput = z.infer<typeof intakeSchema>;
 export type ListIntakeEventsInput = z.infer<typeof listIntakeEventsSchema>;
 export type UpdateIntakeEventInput = z.infer<typeof updateIntakeEventSchema>;
+
+/**
+ * Query for the top-level intake aggregator (`GET /api/medications/intake`).
+ *
+ * Lived inline in the route until the endpoint was published: the contract is
+ * generated from these schemas, so a shape that only exists inside a handler
+ * is a shape the spec has to restate — and a restatement drifts. `days` is
+ * read only by the `compliance` scope; the `today` scope resolves its window
+ * from the account's display timezone and ignores it.
+ */
+export const intakeAggregateQuerySchema = z.object({
+  scope: z
+    .enum(["today", "compliance"])
+    .describe(
+      "`today` lists the account's intake events for the current local day across every medication; `compliance` returns per-day scheduled-versus-taken buckets.",
+    ),
+  days: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(365)
+    .optional()
+    .default(30)
+    .describe(
+      "Trailing window for the `compliance` scope, 1..365, default 30. Ignored by the `today` scope.",
+    ),
+});
+
+/**
+ * Body for the top-level intake status toggle (`POST /api/medications/intake`).
+ *
+ * The event is named by id rather than by medication, and the medication is
+ * resolved from it — so there is no `medicationId` field and no `userId` one
+ * either; ownership is narrowed from the resolved record.
+ */
+export const intakeStatusUpdateSchema = z.object({
+  intakeId: z.string().min(1).describe("The intake event to act on."),
+  status: z
+    .enum(["taken", "skipped", "snoozed"])
+    .describe(
+      "`snoozed` writes the deferral onto the MEDICATION row rather than the event, so it defers every pending dose of that medication and not just this one.",
+    ),
+  takenAt: z.iso
+    .datetime({ offset: true })
+    .transform((s) => new Date(s))
+    .optional()
+    .describe(
+      "When the dose was taken. Defaults to now. Ignored unless the status is `taken`.",
+    ),
+  snoozedUntil: z.iso
+    .datetime({ offset: true })
+    .transform((s) => new Date(s))
+    .optional()
+    .describe(
+      "How long to defer. Defaults to 30 minutes from now. Deliberately UNBOUNDED — nothing here caps how far out it may sit. Ignored unless the status is `snoozed`.",
+    ),
+  injectionSite: injectionSiteEnum
+    .optional()
+    .describe(
+      "Site recorded alongside a `taken` toggle, validated server-side against the medication's effective allowed set. Dropped for a non-injection medication, for one with site tracking off, and for a skip or snooze.",
+    ),
+  forceSlotInstant: z.iso
+    .datetime({ offset: true })
+    .transform((s) => new Date(s))
+    .optional()
+    .describe(
+      "Pins a late take onto a named real slot of the medication instead of letting dose-window membership decide. Must BE one of that medication's slots — anything else is refused rather than approximated. Ignored for a skip or snooze.",
+    ),
+});
+
+export type IntakeAggregateQueryInput = z.infer<
+  typeof intakeAggregateQuerySchema
+>;
+export type IntakeStatusUpdateInput = z.infer<typeof intakeStatusUpdateSchema>;

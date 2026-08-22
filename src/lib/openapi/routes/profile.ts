@@ -14,6 +14,29 @@ import { modulePrefsPatchSchema } from "@/lib/validations/modules";
 import { MODULE_KEYS } from "@/lib/modules/registry";
 import { SCORE_PILLAR_IDS } from "@/lib/analytics/score/types";
 import { savedReportProfileSchema } from "@/lib/report-selection/profile-shape";
+import { injectionSiteEnum } from "@/lib/validations/medication";
+import { deviceDeliverySchema } from "@/lib/validations/notification-prefs";
+import { locales } from "@/lib/i18n/config";
+import {
+  thresholdsUpdateSchema,
+  ALL_METRICS,
+} from "@/lib/validations/thresholds";
+import type { ThresholdMetric } from "@/lib/analytics/effective-range";
+import {
+  documentsAutoAiReadPatchSchema,
+  injectionSitePrefsPatchSchema,
+  labsLocalOcrPatchSchema,
+  unitPreferencePatchSchema,
+  useCentralCodexPatchSchema,
+} from "@/lib/validations/user-prefs";
+import {
+  aiProviderPatchSchema,
+  aiTestOverrideSchema,
+} from "@/lib/validations/ai-provider";
+import {
+  HEALTH_PROFILE_FACT_KINDS,
+  healthProfileFactKindSchema,
+} from "@/lib/validations/health-profile-facts";
 import {
   dataEnvelope,
   errorEnvelope,
@@ -22,6 +45,8 @@ import {
   updatedAtTokenField,
   conflictResponse409,
   invalidBaseTokenResponse,
+  deviceRevokeResponse,
+  recordRefusal,
 } from "./shared";
 
 // v1.18.0 — module enable/disable. The PATCH request is the REAL runtime
@@ -302,7 +327,11 @@ const reportSelectionPutResponse = z
 // without those transforms so the spec stays a clean nullable-field
 // document. `insurerIkNumber` is the new v1.8.6 field: optional, 9-digit
 // German IKNR, surfaced on the FHIR `Coverage` payor.
-const profileUpdateRequest = z
+// Shared with `PUT /api/auth/profile`, which is served by the same
+// `applyProfileUpdate` helper and therefore accepts the identical body.
+// Exported rather than restated so the two paths cannot drift into two
+// contracts for one validator; `auth.ts` imports it.
+export const profileUpdateRequest = z
   .object({
     email: z.email().nullable().optional(),
     heightCm: z.number().min(50).max(300).nullable().optional(),
@@ -429,7 +458,7 @@ const profileUpdateResponse = z
   .meta({
     id: "ProfileUpdateResponse",
     description:
-      "Profile echo returned by the PATCH/PUT update path. Reports KVNR presence as a boolean rather than re-emitting the decrypted value.",
+      "Profile echo returned by PATCH /api/user/profile. Reports KVNR presence as a boolean rather than re-emitting the decrypted value. NOT the shape `PUT /api/auth/profile` returns — the two share a handler but project it differently (see `AuthProfileUpdateResponse`), which is why this is no longer described as covering both.",
   });
 
 // v1.16.16 — AI-provider read surface. iOS gates Coach visibility off
@@ -509,7 +538,378 @@ const aiProviderResponse = z
       "The calling user's AI-provider configuration plus the effective availability (`aiAvailable` + `managedBy`). Reports key presence + a masked preview only — never a plaintext key.",
   });
 
+// ── Per-user preference scalars + threshold overrides ────────────────
+// Four surfaces the iOS client has called since they shipped and that the
+// registry never carried. The request bodies come from the validation modules
+// the handlers themselves parse with, so the published wire cannot drift from
+// the runtime one; the responses are shapes the handlers assemble by hand and
+// are therefore described here.
+
+const unitPreferencePatchRequest = unitPreferencePatchSchema.meta({
+  id: "UnitPreferencePatchRequest",
+  description:
+    "Which display-unit branch to render. Presentation only — the stored measurement rows stay SI either way.",
+});
+
+const unitPreferenceResponse = z
+  .object({ unitPreference: z.enum(["metric", "imperial"]) })
+  .meta({ id: "UnitPreferenceResponse" });
+
+const documentsAutoAiReadPatchRequest = documentsAutoAiReadPatchSchema.meta({
+  id: "DocumentsAutoAiReadPatchRequest",
+  description:
+    "Turn automatic AI reading of newly uploaded documents on or off. Turning it on also mints an `ai_full` consent receipt and schedules a catch-up over the existing vault.",
+});
+
+const documentsAutoAiReadResponse = z
+  .object({ documentsAutoAiRead: z.boolean() })
+  .meta({ id: "DocumentsAutoAiReadResponse" });
+
+const injectionSitePrefsPatchRequest = injectionSitePrefsPatchSchema.meta({
+  id: "InjectionSitePrefsPatchRequest",
+  description:
+    "Replace the user-level injection-site deny-list. An empty array clears it.",
+});
+
+const injectionSitePrefsResponse = z
+  .object({
+    globalExcludedInjectionSites: z
+      .array(injectionSiteEnum)
+      .describe(
+        "The stored deny-list, deduplicated and in canonical enum order.",
+      ),
+  })
+  .meta({ id: "InjectionSitePrefsResponse" });
+
+/**
+ * The `?metric=` query enum, derived from the canonical metric list rather than
+ * restated — `ALL_METRICS` is what the handler checks the parameter against, so
+ * a metric added there cannot go missing from the published parameter.
+ */
+const thresholdMetricEnum = z
+  .enum(ALL_METRICS as [ThresholdMetric, ...ThresholdMetric[]])
+  .meta({ id: "ThresholdMetric" });
+
+const trafficRange = z
+  .object({
+    greenMin: z.number(),
+    greenMax: z.number(),
+    orangeMin: z.number(),
+    orangeMax: z.number(),
+  })
+  .meta({
+    id: "TrafficRange",
+    description:
+      "A traffic-light band: green is the target window, the orange wings stretch either side of it and are clamped to the metric's physiological bounds.",
+  });
+
+const effectiveRange = z
+  .object({
+    range: trafficRange
+      .nullable()
+      .describe(
+        "The band in force — the override when one is set, otherwise the computed default. Null when the default needs profile data the account has not supplied.",
+      ),
+    isOverride: z
+      .boolean()
+      .describe("Whether `range` came from a stored override."),
+    default: trafficRange
+      .nullable()
+      .describe(
+        "The unmodified computed default, so a client can render current-versus-default without recomputing it.",
+      ),
+    bounds: z
+      .object({
+        min: z.number(),
+        max: z.number(),
+        unit: z.string().describe("Canonical unit, e.g. `mmHg`, `kg`, `%`."),
+      })
+      .describe(
+        "Outer physiological guardrails for this metric — the range an override must sit inside. Not a default.",
+      ),
+  })
+  .meta({ id: "EffectiveRange" });
+
+const thresholdOverrideMap = z
+  .record(z.string(), z.object({ min: z.number(), max: z.number() }))
+  .meta({
+    id: "ThresholdOverrides",
+    description:
+      "Stored overrides, keyed by `ThresholdMetric`. Partial by construction — a metric absent from the map is on its computed default. `{}` means no override anywhere.",
+  });
+
+const thresholdsGetResponse = z
+  .object({
+    effective: z
+      .record(z.string(), effectiveRange)
+      .describe(
+        "Every `ThresholdMetric`, resolved. Exhaustive: a metric with no override and no derivable default is present with a null `range`, not missing.",
+      ),
+    overrides: thresholdOverrideMap,
+  })
+  .meta({ id: "ThresholdsResponse" });
+
+const thresholdsOverridesResponse = z
+  .object({ overrides: thresholdOverrideMap })
+  .meta({ id: "ThresholdsOverridesResponse" });
+
+const thresholdsUpdateRequest = thresholdsUpdateSchema.meta({
+  id: "ThresholdsUpdateRequest",
+  description:
+    "A partial map of `ThresholdMetric` to `{ min, max }`. Only the metrics named are written; the rest keep their existing override. Strict — an unknown key is a 422, not a silent drop. Each range must sit inside that metric's physiological bounds with `min` strictly below `max`.",
+});
+
+// ── Devices, the remaining scalar prefs, locale and timezone ─────────
+
+const deviceInfo = z
+  .object({
+    id: z.string(),
+    label: z
+      .string()
+      .describe(
+        "Best available name: the reported model, falling back to the bundle id, falling back to the bare platform string. Never blank.",
+      ),
+    platform: z.string(),
+    appVersion: z.string().nullable(),
+    locale: z.string().nullable(),
+    channels: z
+      .array(z.enum(["web_push", "apns"]))
+      .describe(
+        "Which push transports this device row can currently be reached on. Derived from which token columns are populated, not from a stored list.",
+      ),
+    lastSeenAt: z.iso.datetime({ offset: true }),
+    createdAt: z.iso.datetime({ offset: true }),
+    isCurrent: z
+      .boolean()
+      .describe(
+        "True only when the caller sent `X-Device-Id` AND that device still holds an unrevoked refresh token for this account. A browser session has no such anchor, so a cookie caller sees false on every row — that is correct, not a bug to work around.",
+      ),
+  })
+  .meta({
+    id: "DeviceInfo",
+    description:
+      "A registered device, as the security surface renders it. Identifying metadata only — no push tokens, no APNs identifiers, no IP addresses.",
+  });
+
+const deviceListResponse = z
+  .object({ devices: z.array(deviceInfo) })
+  .meta({ id: "DeviceListResponse" });
+
+const devicePatchRequest = z
+  .object({ medicationDelivery: deviceDeliverySchema })
+  .meta({
+    id: "DevicePatchRequest",
+    description:
+      "Per-device medication-reminder delivery override. `server` forces server-side dispatch to this device, `client` leaves it to the app's own local reminders, and `null` CLEARS the override so the device inherits the account default.",
+  });
+
+const labsLocalOcrPatchRequest = labsLocalOcrPatchSchema.meta({
+  id: "LabsLocalOcrPatchRequest",
+  description:
+    "Turn browser-side OCR on or off for lab-report scanning. When on, a text-only provider can still read a paper report because the image is transcribed on the device and only the TEXT is sent.",
+});
+
+const labsLocalOcrResponse = z
+  .object({ labsLocalOcrEnabled: z.boolean() })
+  .meta({ id: "LabsLocalOcrResponse" });
+
+const useCentralCodexPatchRequest = useCentralCodexPatchSchema.meta({
+  id: "UseCentralCodexPatchRequest",
+  description:
+    "Opt in or out of the operator's shared ChatGPT subscription as a trailing entry in this account's provider chain.",
+});
+
+const useCentralCodexResponse = z
+  .object({ useCentralCodex: z.boolean() })
+  .meta({ id: "UseCentralCodexResponse" });
+
+const localePutRequest = z
+  .object({
+    locale: z
+      .enum(locales)
+      .describe("One of the interface locales this build ships."),
+  })
+  .meta({
+    id: "LocalePutRequest",
+    description:
+      "The interface language. Validated against the supported set at the surface so the column can never hold a value the resolver would later have to defend against. The handler checks membership directly rather than through a Zod schema; the effect is the same.",
+  });
+
+const timezonePutRequest = z
+  .object({
+    timezone: z
+      .string()
+      .describe(
+        "An IANA zone name. Accepted when the running engine's `Intl.DateTimeFormat` accepts it, which is the whole IANA set the deployment knows — not a fixed list this contract could enumerate.",
+      ),
+  })
+  .meta({
+    id: "TimezonePutRequest",
+    description:
+      "The account's timezone. The handler reads and trims the field directly rather than through a Zod schema.",
+  });
+
+// The PATCH body is the runtime validator, imported rather than restated.
+// It used to be described here instead, because the route hand-rolled its
+// parse field by field and there was nothing to import; the route runs
+// `safeParse` now, so the published shape and the parse are one object.
+const aiProviderPatchRequest = aiProviderPatchSchema.meta({
+  id: "AiProviderPatchRequest",
+  description:
+    "Partial update of the calling user's AI-provider configuration. An omitted key is left untouched; `null` (or an empty string, on the string fields) clears the column. At least one recognised key must be present, or the write is refused. Key material is write-only: it is encrypted on the way in and never returned. Unknown keys are ignored rather than refused — the object is deliberately not strict, so a client sending a field this server does not know yet is not broken by it.",
+});
+
+const aiTestRequest = aiTestOverrideSchema.meta({
+  id: "AiTestRequest",
+  description:
+    "An UNSAVED provider selection to probe. Every field is optional and falls back to the stored configuration, so a user with a saved key can change only the model and test it without re-typing the credential. Nothing here is persisted. Strict: an unknown key is a 422.",
+});
+
+const aiTestResponse = z
+  .union([
+    z.object({
+      ok: z.literal(true),
+      providerType: z.string(),
+      model: z.string().nullable(),
+      tokensUsed: z.number().int().nullable(),
+      sample: z
+        .string()
+        .describe(
+          "First 200 characters of the provider's reply to the probe prompt. Model output, not a credential.",
+        ),
+    }),
+    z.object({
+      ok: z.literal(false),
+      providerType: z.string(),
+      reasonCode: z.enum([
+        "credentials",
+        "rate_limited",
+        "server_error",
+        "bad_request",
+        "unreachable",
+      ]),
+      reason: z
+        .string()
+        .describe(
+          "English fallback prose for the code. Secret-free by construction — the provider's own error body is logged server-side and never returned.",
+        ),
+      httpStatus: z
+        .number()
+        .int()
+        .nullable()
+        .describe(
+          "The upstream status, when there was one. Null for a transport failure.",
+        ),
+    }),
+  ])
+  .meta({
+    id: "AiTestResponse",
+    description:
+      "The probe outcome. Read `ok`, not the status code: a provider that answered and rejected the call is a 200 with `ok: false`.",
+  });
+
+// The shared-record profile summary. Deliberately bounded: allergies, family
+// history and the current lifestyle facts, and nothing else. No settings, no
+// AI configuration, no encrypted free text — which is what lets it be read
+// under a `profile` grant.
+const profileSummaryResponse = z
+  .object({
+    allergies: z
+      .array(z.object({ substance: z.string(), category: z.string() }))
+      .describe("Up to 25 live allergy records, newest first."),
+    familyHistory: z
+      .array(z.object({ condition: z.string(), relationship: z.string() }))
+      .describe("Up to 25 live family-history entries, newest first."),
+    facts: z
+      .array(
+        z.object({
+          label: healthProfileFactKindSchema.describe(
+            "The fact KIND, not a display label — the client localises it.",
+          ),
+          value: z
+            .string()
+            .describe(
+              "The current value of that fact, e.g. `NEVER` / `FORMER` / `CURRENT` for smoking status.",
+            ),
+        }),
+      )
+      .describe(
+        `Current lifestyle facts, at most one per kind (${HEALTH_PROFILE_FACT_KINDS.join(" / ")}). A kind with no current revision is OMITTED rather than reported as null, and so is one whose stored value could not be decrypted — the list is what is known, and absence is not distinguishable from unreadable here.`,
+      ),
+  })
+  .meta({
+    id: "ProfileSummary",
+    description:
+      "The bounded profile view a record viewer gets: allergies, family history and current lifestyle facts. Structurally incapable of becoming a Settings or AI surface.",
+  });
+
 export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
+  "/api/profile/summary": {
+    get: {
+      tags: ["Records"],
+      summary: "Read the bounded shared-record profile summary",
+      description:
+        "The short profile a record viewer needs, and only that: allergies, family history, and the current lifestyle facts. It carries no settings, no AI configuration and no encrypted free text, which is why it can be served on a `profile` grant while the full profile cannot.\n\nRead-only, and delegable: under a switched session or an account selector the payload is the RECORD's, not the caller's.",
+      responses: {
+        ...recordRefusal(),
+        "200": {
+          description: "The record's profile summary.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                profileSummaryResponse,
+                "ProfileSummaryEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/ai/test": {
+    post: {
+      tags: ["Auth"],
+      summary: "Probe the AI provider connection",
+      description:
+        "Sends a tiny fixed prompt to the resolved provider and reports whether it answered. The body is OPTIONAL: with no body the saved configuration is tested; with one, the unsaved selection is tested without touching the user row, so the settings surface can verify a credential before persisting it. Plaintext keys sent this way are never stored.\n\n**This route never returns 5xx, and that is deliberate.** A 5xx from the origin is rewritten to an HTML error page by a reverse proxy or CDN, and the client's `res.json()` then dies on `<!DOCTYPE`. So a provider failure comes back as **200 with `ok: false`** plus a categorised, secret-free `reasonCode`. Branch on `ok`, not on the status. The provider's own error text and body excerpt are logged for the operator and never put on the wire.\n\nThe probe is metered on the same daily AI budget every other AI surface writes to, because with an empty body it can resolve the OPERATOR's shared key — unmetered, that would be invisible spend on a surface that exists to answer 'are my settings right?'. A probe that fails is refunded.\n\nTwo ceilings: 5 per minute and 50 per day, per user.",
+      requestBody: {
+        required: false,
+        content: { "application/json": { schema: aiTestRequest } },
+      },
+      responses: {
+        "200": {
+          description:
+            "The probe ran. `ok: true` with the model's reply excerpt, or `ok: false` with the failure category — both are 200.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(aiTestResponse, "AiTestEnvelope"),
+            },
+          },
+        },
+        "413": {
+          description: "Body exceeds 64 KiB.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "415": {
+          description:
+            "A body was sent with a `Content-Type` other than `application/json`. Sending no body at all is fine.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+        "422": {
+          description:
+            "Nothing could be probed. Either the override body failed validation, or the resolved configuration is not usable — no provider selected, a required key or base URL missing, a model name missing for the gateway, ChatGPT OAuth not connected, or a base URL pointing at an internal host. The message names which.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "429": {
+          description:
+            "One of three ceilings: 5 probes per minute, 50 per day, or the account's daily AI token budget is exhausted. The message distinguishes them.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+  },
   "/api/user/ai-provider": {
     get: {
       tags: ["Auth"],
@@ -526,6 +926,44 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
           },
         },
         ...stdResponses,
+      },
+    },
+    patch: {
+      tags: ["Auth"],
+      summary: "Update the calling user's AI-provider configuration",
+      description:
+        "Partial update — an omitted key is left untouched, an explicit `null` (or an empty string, on the string fields) clears the column. Key material is write-only: it is encrypted at rest on the way in and the read never gives it back, only presence plus a four-character preview.\n\nOne implicit write is worth knowing about: switching `provider` to anything other than LOCAL, without naming `baseUrl` in the same request, CLEARS the stored base URL. The column is shared across providers, so leaving it would send a cloud key to a host that was configured for a self-hosted backend.\n\nA base URL — for LOCAL or for the OpenAI-compatible gateway — runs the SSRF floor: a private or internal host is refused unless the operator allowlisted that exact hostname on this instance.\n\nThe response is a bare `{ updated: true }` acknowledgement. It does not echo the resolved configuration, so a client that needs the new state re-reads the GET.\n\nA wrongly-typed value is refused, not skipped. Until this release the route inspected the body field by field with `typeof` guards, so a numeric `model` or a boolean `baseUrl` was dropped in silence and the write went ahead without it; a body of nothing but such keys came back as 'No valid fields' naming none of them. It runs the standard Zod parse now and answers the multi-issue 422 with the offending path.",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: aiProviderPatchRequest } },
+      },
+      responses: {
+        "200": {
+          description:
+            "Saved. The body is the fixed acknowledgement, not the resolved configuration.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ updated: z.literal(true) }),
+                "PatchAiProviderResponse",
+              ),
+            },
+          },
+        },
+        "413": {
+          description: "Body exceeds 64 KiB.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "415": {
+          description: "`Content-Type` is not `application/json`.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+        "422": {
+          description:
+            "Nothing was written. A body that failed validation carries the multi-issue list under `details.issues` with `meta.errorCode` = `ai_provider.invalid` — a wrongly-typed field, a `provider` outside the five, or a `responseTimeoutSeconds` that is not an integer in 10–600 all land there and name their path. Two single-message cases stay outside that list because they are not shape failures: no recognised field was present at all (`meta.errorCode` = `ai_provider.no_fields`), and a base URL pointing at an internal or private host the operator has not allowlisted.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
       },
     },
   },
@@ -1051,6 +1489,526 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
               schema: dataEnvelope(
                 reportSelectionPutResponse,
                 "PutReportSelectionResponseEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  // ── Appended: preference surfaces the iOS client calls that the registry
+  // never carried. All four take a cookie session or a wildcard Bearer token
+  // (`requireAuth()` with no declared scope), none are delegable — a request
+  // that attaches an account selector is refused before the handler runs — and
+  // every PATCH/PUT is a hard-set that answers with the resolved next state, so
+  // a client replaces its optimistic value rather than re-reading.
+  "/api/auth/me/unit-preference": {
+    get: {
+      tags: ["Auth"],
+      summary: "Read the metric/imperial display preference",
+      description:
+        "Which branch of the display-time transform registry the client should render (km/h vs mph, km vs mi). Canonical storage stays SI on every measurement row — this changes presentation only, and never what was written. Any stored value other than `imperial` resolves to `metric`, including a null on an account that predates the column.",
+      responses: {
+        "200": {
+          description: "The resolved preference.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                unitPreferenceResponse,
+                "GetUnitPreferenceEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+    patch: {
+      tags: ["Auth"],
+      summary: "Set the metric/imperial display preference",
+      description:
+        "Hard-set, idempotent, audit-logged. Rate-limited 60 / min per user.\n\n" +
+        "The body is capped at 1 KB and must carry `Content-Type: application/json`. Anything larger is 413, a wrong content type is 415, and a body that is not JSON at all is 400 — the same three the other scalars in this group answer.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: unitPreferencePatchRequest },
+        },
+      },
+      responses: {
+        "200": {
+          description: "The resolved next preference.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                unitPreferenceResponse,
+                "PatchUnitPreferenceEnvelope",
+              ),
+            },
+          },
+        },
+        "413": {
+          description: "Request body exceeds 1024 bytes. Nothing was written.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/me/documents-auto-ai-read": {
+    get: {
+      tags: ["Auth"],
+      summary: "Read the automatic document-reading opt-in",
+      description:
+        "Whether the auto-index-on-upload job may read a freshly uploaded document through the account's configured external provider with no per-document tap. OFF by default and off for any account that has never set it: the vault is local-first and every egress otherwise needs an explicit action plus an active consent receipt.",
+      responses: {
+        "200": {
+          description: "The current flag.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                documentsAutoAiReadResponse,
+                "GetDocumentsAutoAiReadEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+    patch: {
+      tags: ["Auth"],
+      summary: "Set the automatic document-reading opt-in",
+      description:
+        "Hard-set, idempotent, audit-logged. Rate-limited 60 / min per user.\n\n" +
+        "Turning it ON does two further things a caller should expect. It is itself the standing consent act, so the write appends an `ai_full` `ConsentReceipt` — the same receipt POST /api/consent/ai/web mints, and one DELETE /api/consent/ai/latest revokes without touching this flag. And a genuine OFF→ON flip schedules a bounded catch-up over the documents already in the vault, because the summary job is enqueued at upload time and would otherwise only ever apply to future uploads. The catch-up is fire-and-forget and re-runs every consent and budget gate per document.\n\n" +
+        "The body cap here is 1 KB, far tighter than the 64 KB its siblings allow — a payload above it is refused with 413 rather than parsed.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: documentsAutoAiReadPatchRequest },
+        },
+      },
+      responses: {
+        "200": {
+          description: "The resolved next flag.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                documentsAutoAiReadResponse,
+                "PatchDocumentsAutoAiReadEnvelope",
+              ),
+            },
+          },
+        },
+        "413": {
+          description: "Request body exceeds 1024 bytes. Nothing was written.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/me/injection-site-prefs": {
+    get: {
+      tags: ["Auth"],
+      summary: "Read the user-level injection-site deny-list",
+      description:
+        "Sites the account never wants offered. The list is a DENY, and deny wins everywhere: a site here is dropped from every medication's injection-site picker and refused at intake with 422, even when that medication names it among its preferred sites.",
+      responses: {
+        "200": {
+          description: "The current deny-list.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                injectionSitePrefsResponse,
+                "GetInjectionSitePrefsEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+    patch: {
+      tags: ["Auth"],
+      summary: "Replace the user-level injection-site deny-list",
+      description:
+        "Replace, not merge — the body states the whole list, and an empty array clears the exclusion. Hard-set, idempotent, audit-logged. Rate-limited 60 / min per user.\n\n" +
+        "The stored list is deduplicated and re-ordered into the canonical enum order before it is written, so the response can differ from the body that produced it while describing the same set. Take the response as the state.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: injectionSitePrefsPatchRequest },
+        },
+      },
+      responses: {
+        "200": {
+          description:
+            "The resolved next deny-list, deduplicated and in canonical order.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                injectionSitePrefsResponse,
+                "PatchInjectionSitePrefsEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/user/thresholds": {
+    get: {
+      tags: ["Analytics"],
+      summary: "Read the effective metric ranges and the caller's overrides",
+      description:
+        "Every threshold metric with its resolved traffic-light band, whether that band came from an override, the unmodified computed default beside it, and the metric's physiological bounds — so a settings surface can show current-versus-default and validate an edit without a second call.\n\n" +
+        "`range` and `default` are nullable: a metric whose default is derived from profile data the account has not supplied (height for weight, date of birth and gender for body fat) has no band to resolve until that data exists.",
+      responses: {
+        "200": {
+          description: "Effective ranges plus the stored overrides.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                thresholdsGetResponse,
+                "GetThresholdsEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description:
+            "The authenticated user row could not be loaded. In practice unreachable — the session that resolved the caller was validated against that row.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+    put: {
+      tags: ["Analytics"],
+      summary: "Set threshold overrides for one or more metrics",
+      description:
+        "MERGE, not replace, and it is the one write on this surface that behaves that way: the body is a partial map and only the metrics it names are touched. A metric omitted keeps whatever override it already had. To remove one, use DELETE with `?metric=` — sending it back as an absent key does nothing.\n\n" +
+        "Each range must sit inside that metric's physiological bounds with `min` strictly below `max`, and an unknown metric key is refused rather than ignored (the schema is strict). Rate-limited 30 / 5 min per user; audit-logged with the before and after maps. The response carries the merged override map, not the recomputed effective ranges — re-read the GET for those.",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: thresholdsUpdateRequest } },
+      },
+      responses: {
+        "200": {
+          description: "The merged override map.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                thresholdsOverridesResponse,
+                "PutThresholdsEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+    delete: {
+      tags: ["Analytics"],
+      summary: "Reset one threshold override, or all of them",
+      description:
+        "With `?metric=` it drops that metric's override; WITHOUT the parameter it drops EVERY override on the account. There is no confirmation step and no dry run, so a client that means to reset one metric must send the parameter.\n\n" +
+        "Audit-logged with the before and after maps. Unlike the PUT this path runs no rate limit of its own.",
+      requestParams: {
+        query: z.object({
+          metric: thresholdMetricEnum
+            .optional()
+            .describe(
+              "The single metric to reset. Omit to reset every override on the account.",
+            ),
+        }),
+      },
+      responses: {
+        "200": {
+          description: "The remaining override map.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                thresholdsOverridesResponse,
+                "DeleteThresholdsEnvelope",
+              ),
+            },
+          },
+        },
+        "400": {
+          description:
+            "`metric` was present but is not a known threshold metric. Nothing was reset.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+
+  // ── Appended: registered devices, the last two scalar prefs, and the
+  // locale / timezone setters.
+  "/api/auth/me/devices": {
+    get: {
+      tags: ["Auth"],
+      summary: "List the account's registered devices",
+      description:
+        "The devices this account has registered for push, newest activity first. Identifying metadata only: no push tokens, no APNs identifiers, no IP addresses — nothing here can be replayed to send a notification.\n\n" +
+        "`isCurrent` is not taken on trust. A caller may send `X-Device-Id`, but the badge is only set when that device also holds an unrevoked refresh token for this account, so a forged header cannot move it. A cookie caller has no such anchor and correctly sees `false` on every row.",
+      responses: {
+        "200": {
+          description: "Registered devices, most recently seen first.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(deviceListResponse, "DeviceListEnvelope"),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/me/devices/{id}": {
+    patch: {
+      tags: ["Auth"],
+      summary: "Set a device's medication-reminder delivery override",
+      description:
+        "Chooses where this one device's medication reminders come from: `server` for server-side dispatch, `client` to leave it to the app's own local reminders, or `null` to clear the override and inherit the account default. Scoped to the caller — a foreign id is 404, never another account's row.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: devicePatchRequest } },
+      },
+      responses: {
+        "200": {
+          description: "The device's resolved override.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({
+                  id: z.string(),
+                  medicationDelivery: deviceDeliverySchema,
+                }),
+                "DevicePatchEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description: "No such device for this account.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+    delete: {
+      tags: ["Auth"],
+      summary: "Revoke a device and every credential bound to it",
+      description:
+        "Deletes the device row and, in the same transaction, revokes every unrevoked refresh token bound to it plus the access tokens those refresh rows pair with. The counts come back so a client can say what was actually killed. One transaction on purpose: a partial cascade would leave a live device row whose tokens are all dead.\n\n" +
+        "This does NOT touch browser sessions. A session lives on its own row, not on a device, so signing a browser out is /api/auth/logout or the session list — the two surfaces cover different blast radii. Re-pairing later creates a fresh device row rather than reviving this one.\n\n" +
+        "Scoped to the caller: a foreign id answers 404 rather than confirming the id exists.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      responses: {
+        "200": {
+          description: "Device removed and its credentials revoked.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                deviceRevokeResponse,
+                "AccountDeviceRevokeEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description: "No such device for this account.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/me/labs-local-ocr": {
+    get: {
+      tags: ["Auth"],
+      summary: "Read the browser-side OCR opt-in",
+      description:
+        "Whether a lab-report scan should be transcribed on the device before anything is sent. It exists for the provider chains that cannot read an image at all — a text-only model, or the ChatGPT-OAuth path — so a person on one of those can still scan a paper report. The raw image never leaves the device in this mode; only the extracted text does. Less accurate than native vision, which is why the review screen stays mandatory either way.",
+      responses: {
+        "200": {
+          description: "The current flag.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                labsLocalOcrResponse,
+                "GetLabsLocalOcrEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+    patch: {
+      tags: ["Auth"],
+      summary: "Set the browser-side OCR opt-in",
+      description:
+        "Hard-set, idempotent, audit-logged. Rate-limited 60 / min per user; body capped at 1 KB.",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: labsLocalOcrPatchRequest } },
+      },
+      responses: {
+        "200": {
+          description: "The resolved next flag.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                labsLocalOcrResponse,
+                "PatchLabsLocalOcrEnvelope",
+              ),
+            },
+          },
+        },
+        "413": {
+          description: "Request body exceeds 1024 bytes. Nothing was written.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/me/use-central-codex": {
+    get: {
+      tags: ["Auth"],
+      summary: "Read the shared-Codex opt-in",
+      description:
+        "Whether this account's provider chain gains a trailing entry for the operator's own ChatGPT subscription. OFF by default.",
+      responses: {
+        "200": {
+          description: "The current flag.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                useCentralCodexResponse,
+                "GetUseCentralCodexEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+    patch: {
+      tags: ["Auth"],
+      summary: "Set the shared-Codex opt-in",
+      description:
+        "Hard-set, idempotent, audit-logged. Rate-limited 60 / min per user; body capped at 1 KB.\n\n" +
+        "Worth being plain about what turning it on does and does not do. The shared account is external, shared with every other user who opts in, bound by the operator's rate limits, and trains on its input by default. But the entry is server-managed, so the AI consent gate still applies: flipping this ON egresses nothing by itself, and without an active consent receipt nothing will leave for it.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: useCentralCodexPatchRequest },
+        },
+      },
+      responses: {
+        "200": {
+          description: "The resolved next flag.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                useCentralCodexResponse,
+                "PatchUseCentralCodexEnvelope",
+              ),
+            },
+          },
+        },
+        "413": {
+          description: "Request body exceeds 1024 bytes. Nothing was written.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/me/locale": {
+    put: {
+      tags: ["Auth"],
+      summary: "Set the interface language",
+      description:
+        "Writes the account's UI language and mirrors it into the locale cookie via `Set-Cookie`. Both halves matter: the column is what server-side work reads when there is no request to take a cookie from — a scheduled nudge, a Telegram message — and without it those went out in English however the person reads the app. The server-set cookie outlives the client-written one, which some browsers cap at seven days.\n\n" +
+        "An ACTOR surface, and the clearest case for that mode existing: the interface language belongs to the person reading the screen, never to the record on it. Under a record scope this would write a delegate's choice onto the owner's row and then mail the owner in a language they may not read. A request that attaches the per-request account selector (the `AccountSelector` header parameter) is refused with 403 `sharing.not_permitted`. It keeps answering while a switch is on rather than merely refusing safely, because the language switcher fires a mount-time backfill on every page load.\n\n" +
+        "Idempotent: when the column already matches, the write is skipped and only the cookie is refreshed. Body capped at 4 KB.",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: localePutRequest } },
+      },
+      responses: {
+        "200": {
+          description: "The accepted locale.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ locale: z.enum(locales) }),
+                "LocalePutEnvelope",
+              ),
+            },
+          },
+        },
+        "403": {
+          description:
+            "A selector header was attached to an actor surface (`meta.errorCode` = `sharing.not_permitted`).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/me/timezone": {
+    put: {
+      tags: ["Auth"],
+      summary: "Set the account timezone",
+      description:
+        "Lifted out of the profile patch so the picker can send one field without round-tripping the rest. Accepts any zone the running engine's `Intl` knows; anything else is 422 rather than stored, so the resolver never has to defend against a poisoned column. Audit-logged with the old and new zone.\n\n" +
+        "A change is not only a display preference. The medication-compliance rollup keys its rows by the LOCAL day a dose fell on, minted under whatever zone was in force at write time, so moving the zone re-buckets that history and the stored keys go stale — and the coverage probe compares counts rather than keys, so it cannot notice. The route therefore enqueues a re-fold of the trailing window whenever the zone actually changes. Best-effort and de-duplicated, so rapid re-picks collapse into one.",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: timezonePutRequest } },
+      },
+      responses: {
+        "200": {
+          description: "The accepted timezone.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ timezone: z.string() }),
+                "TimezonePutEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/me/passkey-nudge/dismiss": {
+    post: {
+      tags: ["Auth"],
+      summary: "Dismiss the add-a-passkey nudge",
+      description:
+        "Permanently hides the prompt that suggests adding a passkey. Cookie-only, takes no body, idempotent — dismissing twice is a success. The flag is also readable as `passkeyNudgeDismissed` on GET /api/auth/me/mfa.",
+      responses: {
+        "200": {
+          description: "Nudge dismissed.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ dismissed: z.literal(true) }),
+                "PasskeyNudgeDismissEnvelope",
               ),
             },
           },

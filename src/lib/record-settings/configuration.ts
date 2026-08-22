@@ -129,7 +129,13 @@ const managedCoachPreferencesSchema = coachPrefsSchema
   })
   .strict();
 
-const MANAGED_RECORD_SETTINGS_PATCH_SCHEMAS = {
+/**
+ * One strict patch schema per family. Exported so the OpenAPI registry can
+ * publish the same objects the handler parses rather than a restatement of
+ * them — every family is `strict()`, so a published paraphrase that drifted
+ * would promise a field the route answers 422 for.
+ */
+export const MANAGED_RECORD_SETTINGS_PATCH_SCHEMAS = {
   profile: profilePatchSchema,
   modules: z.object({ modulePreferences: modulePrefsPatchSchema }).strict(),
   notifications: z

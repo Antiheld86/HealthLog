@@ -29,7 +29,12 @@ import {
 } from "./account-sharing";
 import { adminDiagnosticPaths, adminInvitePaths } from "./admin";
 import { allergyPaths } from "./allergies";
+import { analyticsPaths } from "./analytics";
 import { authPaths } from "./auth";
+import { awardsPaths } from "./awards";
+import { environmentPaths } from "./environment";
+import { healthPaths } from "./health";
+import { ingestPaths } from "./ingest";
 import {
   coachFeedbackPaths,
   coachPaths,
@@ -65,11 +70,15 @@ import {
   medicationResource,
   medicationDoseHistoryImportFatalReasonEnum,
 } from "./medications";
+import { mcpPaths } from "./mcp";
 import { metaPaths } from "./meta";
 import { moodPaths } from "./mood";
+import { notificationTransportPaths } from "./notifications-transport";
+import { notificationChannelPaths } from "./notifications";
 import { nutrientPaths } from "./nutrients";
 import { onboardingPaths } from "./onboarding";
 import { profilePaths } from "./profile";
+import { recordSettingsPaths } from "./record-settings";
 import { settingsPaths } from "./settings";
 import { syncPaths } from "./sync";
 import { workoutPaths } from "./workouts";
@@ -128,6 +137,33 @@ export const openApiPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   // v1.36.0 — account sharing: the grant lifecycle and the switch endpoint
   // (appended, spread order is load-bearing).
   ...accountSharingPaths,
+  // Notification transport — the VAPID key, the Web Push subscription
+  // lifecycle and the per-channel self-tests (appended, spread order is
+  // load-bearing).
+  ...notificationTransportPaths,
+  // Notification channels + MCP connector credentials: both families answered
+  // the native client for several releases while being absent from the
+  // registry, because `openapi:check` compares the registry against the YAML
+  // and never the routes against the registry (appended, spread order is
+  // load-bearing).
+  ...notificationChannelPaths,
+  ...mcpPaths,
+  // The managed record's own configuration tree. Kept out of the sharing module
+  // because it is the one surface fenced by `requireGuardianAuth`, and its 403
+  // therefore has to be the shared refusal sentence rather than the neighbouring
+  // module's local wording (appended, spread order is load-bearing).
+  ...recordSettingsPaths,
+  // Routes that existed for releases without ever reaching the registry, so
+  // `openapi:check` saw no drift and reported nothing: it compares the
+  // registry against the committed YAML and has never compared the routes on
+  // disk against the registry. Appended, spread order is load-bearing.
+  ...healthPaths,
+  ...analyticsPaths,
+  ...awardsPaths,
+  ...environmentPaths,
+  ...ingestPaths,
+  // The environmental-context overview. Its own module because nothing else
+  // owns the surface (appended, spread order is load-bearing).
 };
 
 export const openApiComponents: NonNullable<ZodOpenApiObject["components"]> = {
