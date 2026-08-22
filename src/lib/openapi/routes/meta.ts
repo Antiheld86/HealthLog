@@ -339,6 +339,12 @@ export const metaPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   // ── Appended: two discovery reads the registry never carried.
   "/api/version": {
     get: {
+      // No credential: this operation is reachable before one exists.
+      // The document-level default offers the Bearer token and the session
+      // cookie as alternatives; an empty array is how OpenAPI says neither
+      // is required. The list of paths allowed to say it lives in
+      // `openapi-security-declaration-guard.test.ts`.
+      security: [],
       tags: ["Meta"],
       summary: "The running build's version, and how it was built",
       description:

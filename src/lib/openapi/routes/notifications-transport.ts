@@ -102,6 +102,12 @@ export const notificationTransportPaths: NonNullable<
 > = {
   "/api/notifications/vapid": {
     get: {
+      // No credential: this operation is reachable before one exists.
+      // The document-level default offers the Bearer token and the session
+      // cookie as alternatives; an empty array is how OpenAPI says neither
+      // is required. The list of paths allowed to say it lives in
+      // `openapi-security-declaration-guard.test.ts`.
+      security: [],
       tags: ["Notifications"],
       summary: "Read the instance's VAPID public key",
       description:

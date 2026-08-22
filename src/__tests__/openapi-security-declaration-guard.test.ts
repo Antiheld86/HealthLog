@@ -52,6 +52,12 @@ const HTTP_METHODS = ["get", "post", "put", "patch", "delete"] as const;
  * merely sits on the proxy's public-path list does not belong here.
  */
 const UNAUTHENTICATED: Readonly<Record<string, string>> = {
+  // `/api/auth/oidc/callback` is deliberately absent. It is anonymous, but it
+  // is not published at all: the provider drives it with its own query string
+  // and no client constructs one, so it is exempted from the contract by the
+  // coverage guard rather than published with an opt-out. This test is what
+  // caught the entry when it was written from the proxy's public-path list
+  // instead of from the published set.
   "/api/health":
     "Container healthcheck. Answers before any user exists and outside the response envelope.",
   "/api/version":
@@ -68,8 +74,6 @@ const UNAUTHENTICATED: Readonly<Record<string, string>> = {
     "Completes the passkey sign-in; the assertion is the credential.",
   "/api/auth/oidc/login":
     "Starts the identity-provider handoff, for the browser and for the native client.",
-  "/api/auth/oidc/callback":
-    "The provider drives this one with its own query string.",
   "/api/auth/oidc/status":
     "Says whether single sign-on is configured, so the sign-in screen can offer it.",
   "/api/notifications/vapid":

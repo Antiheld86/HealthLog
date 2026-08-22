@@ -618,6 +618,12 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   },
   "/api/auth/login": {
     post: {
+      // No credential: this operation is reachable before one exists.
+      // The document-level default offers the Bearer token and the session
+      // cookie as alternatives; an empty array is how OpenAPI says neither
+      // is required. The list of paths allowed to say it lives in
+      // `openapi-security-declaration-guard.test.ts`.
+      security: [],
       tags: ["Auth"],
       summary: "Email-or-username login (password)",
       description:
@@ -1124,6 +1130,12 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   },
   "/api/auth/passkey/login-verify": {
     post: {
+      // No credential: this operation is reachable before one exists.
+      // The document-level default offers the Bearer token and the session
+      // cookie as alternatives; an empty array is how OpenAPI says neither
+      // is required. The list of paths allowed to say it lives in
+      // `openapi-security-declaration-guard.test.ts`.
+      security: [],
       tags: ["Auth"],
       summary: "Passkey assertion verification",
       requestBody: {
@@ -1397,6 +1409,12 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   },
   "/api/auth/oidc/status": {
     get: {
+      // No credential: this operation is reachable before one exists.
+      // The document-level default offers the Bearer token and the session
+      // cookie as alternatives; an empty array is how OpenAPI says neither
+      // is required. The list of paths allowed to say it lives in
+      // `openapi-security-declaration-guard.test.ts`.
+      security: [],
       tags: ["Auth"],
       summary: "Whether SSO is configured, and whether it is the only way in",
       description:
@@ -1415,6 +1433,12 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   },
   "/api/auth/registration-status": {
     get: {
+      // No credential: this operation is reachable before one exists.
+      // The document-level default offers the Bearer token and the session
+      // cookie as alternatives; an empty array is how OpenAPI says neither
+      // is required. The list of paths allowed to say it lives in
+      // `openapi-security-declaration-guard.test.ts`.
+      security: [],
       tags: ["Auth"],
       summary: "Whether self-registration is open",
       description:
@@ -1437,6 +1461,12 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   },
   "/api/auth/passkey/login-options": {
     post: {
+      // No credential: this operation is reachable before one exists.
+      // The document-level default offers the Bearer token and the session
+      // cookie as alternatives; an empty array is how OpenAPI says neither
+      // is required. The list of paths allowed to say it lives in
+      // `openapi-security-declaration-guard.test.ts`.
+      security: [],
       tags: ["Auth"],
       summary: "Begin a passkey sign-in (discoverable credentials)",
       description:
@@ -1582,6 +1612,12 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   // the Codex device-auth flow.
   "/api/auth/register": {
     post: {
+      // No credential: this operation is reachable before one exists.
+      // The document-level default offers the Bearer token and the session
+      // cookie as alternatives; an empty array is how OpenAPI says neither
+      // is required. The list of paths allowed to say it lives in
+      // `openapi-security-declaration-guard.test.ts`.
+      security: [],
       tags: ["Auth"],
       summary: "Create an account",
       description:
@@ -1696,6 +1732,12 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   },
   "/api/auth/oidc/login": {
     get: {
+      // No credential: this operation is reachable before one exists.
+      // The document-level default offers the Bearer token and the session
+      // cookie as alternatives; an empty array is how OpenAPI says neither
+      // is required. The list of paths allowed to say it lives in
+      // `openapi-security-declaration-guard.test.ts`.
+      security: [],
       tags: ["Auth"],
       summary: "Start an SSO sign-in (browser redirect, or the native leg)",
       description:
