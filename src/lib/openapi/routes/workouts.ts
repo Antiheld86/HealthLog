@@ -7,14 +7,14 @@
  */
 import { z } from "zod/v4";
 import type { ZodOpenApiObject } from "zod-openapi";
-import { measurementSourceEnum } from "@/lib/validations/measurement";
-import { createBatchWorkoutSchema } from "@/lib/validations/workout";
 import {
   MODULE_DISABLED_DESCRIPTION,
+  createBatchWorkoutSchema,
   dataEnvelope,
   errorEnvelope,
   idempotencyKeyParameter,
   idempotentWrite,
+  measurementSourceEnum,
   moduleDisabledResponse,
   recordRefusal,
   stdResponses,

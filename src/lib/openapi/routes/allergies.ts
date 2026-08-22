@@ -33,19 +33,23 @@ import {
   stdResponses,
 } from "./shared";
 
-allergyCreateSchema.meta({
+// `.meta()` CLONES in Zod 4 rather than annotating in place, so the returned
+// schema has to be captured and referenced. A bare `schema.meta({...})`
+// statement registers nothing and the component id it names never reaches the
+// emitted document.
+const createAllergyRequest = allergyCreateSchema.meta({
   id: "CreateAllergyRequest",
   description:
     "Record an allergy/intolerance. `substance` is the user-facing allergen name (the FHIR AllergyIntolerance `code.text` anchor — never a machine-guessed code). The free-text `reaction` + `note` are encrypted at rest. `onsetAt` is optional (unknown when omitted). Patient-reported.",
 });
 
-allergyUpdateSchema.meta({
+const updateAllergyRequest = allergyUpdateSchema.meta({
   id: "UpdateAllergyRequest",
   description:
     "Partial edit of an allergy; an omitted key leaves the column untouched. A `null` `severity`/`onsetAt`/`reaction`/`note` clears that field. Rejects unknown keys.",
 });
 
-allergyListQuerySchema.meta({
+const listAllergiesQuery = allergyListQuerySchema.meta({
   id: "ListAllergiesQuery",
   description:
     "Query params for the allergy list: optional `limit` (1–200, default 100) and `includeInactive` ('true' | 'false'); 'false' returns only ACTIVE records. Newest-first.",
@@ -85,7 +89,7 @@ export const allergyPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "List allergies (v1.25)",
       description:
         "Returns the caller's live (non-deleted) allergy/intolerance records, newest-first. `includeInactive=false` returns only ACTIVE records.",
-      requestParams: { query: allergyListQuerySchema },
+      requestParams: { query: listAllergiesQuery },
       responses: {
         ...recordRefusal(),
         "200": {
@@ -107,7 +111,7 @@ export const allergyPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       parameters: [idempotencyKeyParameter],
       requestBody: {
         required: true,
-        content: { "application/json": { schema: allergyCreateSchema } },
+        content: { "application/json": { schema: createAllergyRequest } },
       },
       responses: {
         ...idempotentWrite(),
@@ -153,7 +157,7 @@ export const allergyPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestParams: { path: z.object({ id: z.string() }) },
       requestBody: {
         required: true,
-        content: { "application/json": { schema: allergyUpdateSchema } },
+        content: { "application/json": { schema: updateAllergyRequest } },
       },
       responses: {
         ...recordRefusal(),

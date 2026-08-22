@@ -14,12 +14,14 @@
 import type { ZodOpenApiObject } from "zod-openapi";
 import { z } from "zod/v4";
 
-import {
-  glucoseContextEnum,
-  measurementTypeEnum,
-} from "@/lib/validations/measurement";
+import { glucoseContextEnum } from "@/lib/validations/measurement";
 import { moodLevelEnum } from "@/lib/validations/mood";
-import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
+import {
+  dataEnvelope,
+  errorEnvelope,
+  measurementTypeEnum,
+  stdResponses,
+} from "./shared";
 
 const csvImportRowResult = z
   .object({

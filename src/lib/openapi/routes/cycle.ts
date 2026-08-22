@@ -52,52 +52,56 @@ const cyclePhaseEnumOpenapi = z
   .enum(["MENSTRUAL", "FOLLICULAR", "OVULATORY", "LUTEAL"])
   .meta({ id: "CyclePhase" });
 
-flowLevelEnum.meta({
+// `.meta()` CLONES in Zod 4 rather than annotating in place, so the returned
+// schema has to be captured and referenced. A bare `schema.meta({...})`
+// statement registers nothing and the component id it names never reaches the
+// emitted document.
+const flowLevelEnumOpenapi = flowLevelEnum.meta({
   id: "FlowLevel",
   description: "Menstrual-flow intensity.",
 });
-ovulationTestEnum.meta({
+const ovulationTestEnumOpenapi = ovulationTestEnum.meta({
   id: "OvulationTest",
   description: "Ovulation predictor-kit (OPK) reading.",
 });
-cervicalMucusEnum.meta({
+const cervicalMucusEnumOpenapi = cervicalMucusEnum.meta({
   id: "CervicalMucus",
   description: "Cervical-mucus quality.",
 });
-homeTestResultEnum.meta({
+const homeTestResultEnumOpenapi = homeTestResultEnum.meta({
   id: "HomeTestResult",
   description: "At-home test result (pregnancy / progesterone).",
 });
-cycleTrackingGoalEnum.meta({
+const cycleTrackingGoalEnumOpenapi = cycleTrackingGoalEnum.meta({
   id: "CycleTrackingGoal",
   description: "Drives cycle copy + fertile-window gating.",
 });
 
-cycleDayLogInputSchema.meta({
+const cycleDayLogInput = cycleDayLogInputSchema.meta({
   id: "CycleDayLogInput",
   description:
     "One day's cycle capture. `note` is encrypted at rest; every other field is queryable plaintext. UPSERT key: `(userId, source, externalId)` when externalId present, else `(userId, date)`. Shared by the single POST, the bulk drain, and the period shortcut.",
 });
 
-cycleBulkSchema.meta({
+const cycleDayLogBulkRequest = cycleBulkSchema.meta({
   id: "CycleDayLogBulkRequest",
   description:
     "Outbox / HealthKit drain. Up to 500 entries per call; wrapped in `withIdempotency`; rate-limited 60/min. Each entry upserts per the day-log key.",
 });
 
-cyclePeriodSchema.meta({
+const cyclePeriodRequest = cyclePeriodSchema.meta({
   id: "CyclePeriodRequest",
   description:
     "One-tap period boundary. `start` opens a new cycle (closing the prior), `end` stamps the current cycle's periodEndDate; both write a boundary day-log.",
 });
 
-cyclePrefsSchema.meta({
+const cyclePrefsRequest = cyclePrefsSchema.meta({
   id: "CyclePrefsRequest",
   description:
     "Partial cycle-preferences deep-merge. `enabled` flips the feature gate (`cycleTrackingEnabled`). Omitted fields are left untouched.",
 });
 
-cycleDayLogPatchSchema.meta({
+const cycleDayLogPatchRequest = cycleDayLogPatchSchema.meta({
   id: "CycleDayLogPatchRequest",
   description:
     "Partial day-log edit. Every field optional; `note` re-encrypts (explicit null clears it). `date` / `source` / `externalId` are immutable on update.",
@@ -113,19 +117,19 @@ const cycleDayLogDto = z
     id: z.string(),
     date: z.string(),
     cycleId: z.string().nullable(),
-    flow: flowLevelEnum.nullable(),
+    flow: flowLevelEnumOpenapi.nullable(),
     intermenstrualBleeding: z.boolean(),
     basalBodyTempC: z.number().nullable(),
     temperatureExcluded: z.boolean(),
-    ovulationTest: ovulationTestEnum.nullable(),
-    cervicalMucus: cervicalMucusEnum.nullable(),
+    ovulationTest: ovulationTestEnumOpenapi.nullable(),
+    cervicalMucus: cervicalMucusEnumOpenapi.nullable(),
     cervixPosition: cervixPositionEnum.nullable(),
     cervixFirmness: cervixFirmnessEnum.nullable(),
     cervixOpening: cervixOpeningEnum.nullable(),
     sexualActivity: z.boolean(),
     protectedSex: z.boolean().nullable(),
-    pregnancyTest: homeTestResultEnum.nullable(),
-    progesteroneTest: homeTestResultEnum.nullable(),
+    pregnancyTest: homeTestResultEnumOpenapi.nullable(),
+    progesteroneTest: homeTestResultEnumOpenapi.nullable(),
     contraceptive: z.string().nullable(),
     symptoms: z.array(cycleSymptomDto),
     note: z.string().nullable(),
@@ -191,7 +195,7 @@ const cycleCalendarDayDto = z.object({
     description:
       "Whether a logged cycle opens on this day. Deleting this day's log removes that cycle start with it.",
   }),
-  flow: flowLevelEnum.nullable(),
+  flow: flowLevelEnumOpenapi.nullable(),
   hasSymptoms: z.boolean(),
   confidence: z.number(),
   // v1.15.0 — logged basal-body-temperature + fertility-sign markers, surfaced
@@ -199,8 +203,8 @@ const cycleCalendarDayDto = z.object({
   // loaded server-side for the symptothermal layer; no extra query).
   basalBodyTempC: z.number().nullable(),
   temperatureExcluded: z.boolean(),
-  ovulationTest: ovulationTestEnum.nullable(),
-  cervicalMucus: cervicalMucusEnum.nullable(),
+  ovulationTest: ovulationTestEnumOpenapi.nullable(),
+  cervicalMucus: cervicalMucusEnumOpenapi.nullable(),
   cervixPosition: cervixPositionEnum.nullable(),
   cervixFirmness: cervixFirmnessEnum.nullable(),
   cervixOpening: cervixOpeningEnum.nullable(),
@@ -247,7 +251,7 @@ const cycleVerdictDto = z
 
 const cycleProfileDto = z
   .object({
-    goal: cycleTrackingGoalEnum,
+    goal: cycleTrackingGoalEnumOpenapi,
     cycleTrackingEnabled: z.boolean(),
     secondarySymptom: secondarySymptomEnum,
     rawChartMode: z.boolean(),
@@ -266,7 +270,7 @@ const cycleProfileDto = z
 
 const cycleCalendarResponse = z.object({
   profile: z.object({
-    goal: cycleTrackingGoalEnum,
+    goal: cycleTrackingGoalEnumOpenapi,
     rawChartMode: z.boolean(),
     predictionEnabled: z.boolean(),
     cyclesObserved: z.number().int(),
@@ -444,10 +448,6 @@ const cycleDisabledOnADelegableRoute = recordRefusal(
 // rest and never reaches a wide event or an audit excerpt — only the icon and
 // the minted key do.
 
-// `.meta()` RETURNS a new schema in Zod 4 rather than annotating in place, so
-// the result has to be captured and referenced. A bare `schema.meta({...})`
-// statement registers nothing, and the component id it names never reaches
-// the document.
 const createCycleCustomSymptomRequest = createCustomSymptomSchema.meta({
   id: "CreateCycleCustomSymptomRequest",
   description:
@@ -682,7 +682,7 @@ export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       parameters: [idempotencyKeyParameter],
       requestBody: {
         required: true,
-        content: { "application/json": { schema: cycleDayLogInputSchema } },
+        content: { "application/json": { schema: cycleDayLogInput } },
       },
       responses: {
         ...idempotentWrite(),
@@ -719,7 +719,7 @@ export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestParams: { path: z.object({ id: z.string() }) },
       requestBody: {
         required: true,
-        content: { "application/json": { schema: cycleDayLogPatchSchema } },
+        content: { "application/json": { schema: cycleDayLogPatchRequest } },
       },
       responses: {
         "200": {
@@ -764,7 +764,7 @@ export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       parameters: [idempotencyKeyParameter],
       requestBody: {
         required: true,
-        content: { "application/json": { schema: cycleBulkSchema } },
+        content: { "application/json": { schema: cycleDayLogBulkRequest } },
       },
       responses: {
         ...idempotentWrite(),
@@ -790,7 +790,7 @@ export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       parameters: [idempotencyKeyParameter],
       requestBody: {
         required: true,
-        content: { "application/json": { schema: cyclePeriodSchema } },
+        content: { "application/json": { schema: cyclePeriodRequest } },
       },
       responses: {
         ...idempotentWrite(),
@@ -979,7 +979,7 @@ export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Deep-merges the supplied fields. `enabled` flips `cycleTrackingEnabled`. Returns the merged CycleProfileDTO. NOT gated.",
       requestBody: {
         required: true,
-        content: { "application/json": { schema: cyclePrefsSchema } },
+        content: { "application/json": { schema: cyclePrefsRequest } },
       },
       responses: {
         "200": {

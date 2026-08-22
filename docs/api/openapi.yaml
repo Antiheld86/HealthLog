@@ -312,123 +312,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                date:
-                  type: string
-                  pattern: ^\d{4}-\d{2}-\d{2}$
-                flow:
-                  type: string
-                  enum:
-                    - NONE
-                    - SPOTTING
-                    - LIGHT
-                    - MEDIUM
-                    - HEAVY
-                intermenstrualBleeding:
-                  type: boolean
-                basalBodyTempC:
-                  type: number
-                  minimum: 30
-                  maximum: 45
-                temperatureExcluded:
-                  type: boolean
-                ovulationTest:
-                  type: string
-                  enum:
-                    - NEGATIVE
-                    - POSITIVE_LH_SURGE
-                    - ESTROGEN_SURGE
-                    - INDETERMINATE
-                cervicalMucus:
-                  type: string
-                  enum:
-                    - DRY
-                    - STICKY
-                    - CREAMY
-                    - WATERY
-                    - EGG_WHITE
-                cervixPosition:
-                  type: string
-                  enum:
-                    - LOW
-                    - HIGH
-                cervixFirmness:
-                  type: string
-                  enum:
-                    - FIRM
-                    - SOFT
-                cervixOpening:
-                  type: string
-                  enum:
-                    - CLOSED
-                    - OPEN
-                sexualActivity:
-                  type: boolean
-                protectedSex:
-                  anyOf:
-                    - type: boolean
-                    - type: "null"
-                pregnancyTest:
-                  type: string
-                  enum:
-                    - NEGATIVE
-                    - POSITIVE
-                    - INDETERMINATE
-                progesteroneTest:
-                  type: string
-                  enum:
-                    - NEGATIVE
-                    - POSITIVE
-                    - INDETERMINATE
-                contraceptive:
-                  type: string
-                  enum:
-                    - NONE
-                    - UNSPECIFIED
-                    - IMPLANT
-                    - INJECTION
-                    - IUD
-                    - INTRAVAGINAL_RING
-                    - ORAL
-                    - PATCH
-                    - EMERGENCY
-                symptoms:
-                  maxItems: 40
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      key:
-                        type: string
-                        minLength: 1
-                        maxLength: 80
-                      severity:
-                        type: integer
-                        minimum: 1
-                        maximum: 4
-                    required:
-                      - key
-                note:
-                  type: string
-                  maxLength: 500
-                loggedAt:
-                  type: string
-                  format: date-time
-                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                source:
-                  default: MANUAL
-                  type: string
-                  enum:
-                    - MANUAL
-                    - APPLE_HEALTH
-                externalId:
-                  type: string
-                  minLength: 1
-                  maxLength: 120
-              required:
-                - date
-                - loggedAt
+              $ref: "#/components/schemas/CycleDayLogInput"
       responses:
         "200":
           description: Existing day-log updated.
@@ -482,129 +366,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                flow:
-                  anyOf:
-                    - type: string
-                      enum:
-                        - NONE
-                        - SPOTTING
-                        - LIGHT
-                        - MEDIUM
-                        - HEAVY
-                    - type: "null"
-                intermenstrualBleeding:
-                  type: boolean
-                basalBodyTempC:
-                  anyOf:
-                    - type: number
-                      minimum: 30
-                      maximum: 45
-                    - type: "null"
-                temperatureExcluded:
-                  type: boolean
-                ovulationTest:
-                  anyOf:
-                    - type: string
-                      enum:
-                        - NEGATIVE
-                        - POSITIVE_LH_SURGE
-                        - ESTROGEN_SURGE
-                        - INDETERMINATE
-                    - type: "null"
-                cervicalMucus:
-                  anyOf:
-                    - type: string
-                      enum:
-                        - DRY
-                        - STICKY
-                        - CREAMY
-                        - WATERY
-                        - EGG_WHITE
-                    - type: "null"
-                cervixPosition:
-                  anyOf:
-                    - type: string
-                      enum:
-                        - LOW
-                        - HIGH
-                    - type: "null"
-                cervixFirmness:
-                  anyOf:
-                    - type: string
-                      enum:
-                        - FIRM
-                        - SOFT
-                    - type: "null"
-                cervixOpening:
-                  anyOf:
-                    - type: string
-                      enum:
-                        - CLOSED
-                        - OPEN
-                    - type: "null"
-                sexualActivity:
-                  type: boolean
-                protectedSex:
-                  anyOf:
-                    - type: boolean
-                    - type: "null"
-                pregnancyTest:
-                  anyOf:
-                    - type: string
-                      enum:
-                        - NEGATIVE
-                        - POSITIVE
-                        - INDETERMINATE
-                    - type: "null"
-                progesteroneTest:
-                  anyOf:
-                    - type: string
-                      enum:
-                        - NEGATIVE
-                        - POSITIVE
-                        - INDETERMINATE
-                    - type: "null"
-                contraceptive:
-                  anyOf:
-                    - type: string
-                      enum:
-                        - NONE
-                        - UNSPECIFIED
-                        - IMPLANT
-                        - INJECTION
-                        - IUD
-                        - INTRAVAGINAL_RING
-                        - ORAL
-                        - PATCH
-                        - EMERGENCY
-                    - type: "null"
-                symptoms:
-                  maxItems: 40
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      key:
-                        type: string
-                        minLength: 1
-                        maxLength: 80
-                      severity:
-                        type: integer
-                        minimum: 1
-                        maximum: 4
-                    required:
-                      - key
-                note:
-                  anyOf:
-                    - type: string
-                      maxLength: 500
-                    - type: "null"
-                loggedAt:
-                  type: string
-                  format: date-time
-                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+              $ref: "#/components/schemas/CycleDayLogPatchRequest"
       responses:
         "200":
           description: Day-log updated.
@@ -661,132 +423,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                entries:
-                  minItems: 1
-                  maxItems: 500
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      date:
-                        type: string
-                        pattern: ^\d{4}-\d{2}-\d{2}$
-                      flow:
-                        type: string
-                        enum:
-                          - NONE
-                          - SPOTTING
-                          - LIGHT
-                          - MEDIUM
-                          - HEAVY
-                      intermenstrualBleeding:
-                        type: boolean
-                      basalBodyTempC:
-                        type: number
-                        minimum: 30
-                        maximum: 45
-                      temperatureExcluded:
-                        type: boolean
-                      ovulationTest:
-                        type: string
-                        enum:
-                          - NEGATIVE
-                          - POSITIVE_LH_SURGE
-                          - ESTROGEN_SURGE
-                          - INDETERMINATE
-                      cervicalMucus:
-                        type: string
-                        enum:
-                          - DRY
-                          - STICKY
-                          - CREAMY
-                          - WATERY
-                          - EGG_WHITE
-                      cervixPosition:
-                        type: string
-                        enum:
-                          - LOW
-                          - HIGH
-                      cervixFirmness:
-                        type: string
-                        enum:
-                          - FIRM
-                          - SOFT
-                      cervixOpening:
-                        type: string
-                        enum:
-                          - CLOSED
-                          - OPEN
-                      sexualActivity:
-                        type: boolean
-                      protectedSex:
-                        anyOf:
-                          - type: boolean
-                          - type: "null"
-                      pregnancyTest:
-                        type: string
-                        enum:
-                          - NEGATIVE
-                          - POSITIVE
-                          - INDETERMINATE
-                      progesteroneTest:
-                        type: string
-                        enum:
-                          - NEGATIVE
-                          - POSITIVE
-                          - INDETERMINATE
-                      contraceptive:
-                        type: string
-                        enum:
-                          - NONE
-                          - UNSPECIFIED
-                          - IMPLANT
-                          - INJECTION
-                          - IUD
-                          - INTRAVAGINAL_RING
-                          - ORAL
-                          - PATCH
-                          - EMERGENCY
-                      symptoms:
-                        maxItems: 40
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            key:
-                              type: string
-                              minLength: 1
-                              maxLength: 80
-                            severity:
-                              type: integer
-                              minimum: 1
-                              maximum: 4
-                          required:
-                            - key
-                      note:
-                        type: string
-                        maxLength: 500
-                      loggedAt:
-                        type: string
-                        format: date-time
-                        pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                      source:
-                        default: MANUAL
-                        type: string
-                        enum:
-                          - MANUAL
-                          - APPLE_HEALTH
-                      externalId:
-                        type: string
-                        minLength: 1
-                        maxLength: 120
-                    required:
-                      - date
-                      - loggedAt
-              required:
-                - entries
+              $ref: "#/components/schemas/CycleDayLogBulkRequest"
       responses:
         "200":
           description: Batch processed (per-entry results).
@@ -813,28 +450,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                action:
-                  type: string
-                  enum:
-                    - start
-                    - end
-                date:
-                  type: string
-                  pattern: ^\d{4}-\d{2}-\d{2}$
-                externalId:
-                  type: string
-                  minLength: 1
-                  maxLength: 120
-                loggedAt:
-                  type: string
-                  format: date-time
-                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-              required:
-                - action
-                - date
-                - loggedAt
+              $ref: "#/components/schemas/CyclePeriodRequest"
       responses:
         "200":
           description: Cycle + boundary day-log.
@@ -1008,49 +624,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                enabled:
-                  type: boolean
-                goal:
-                  type: string
-                  enum:
-                    - GENERAL_HEALTH
-                    - AVOID_PREGNANCY
-                    - TRYING_TO_CONCEIVE
-                    - PERIMENOPAUSE
-                    - OFF
-                secondarySymptom:
-                  type: string
-                  enum:
-                    - MUCUS
-                    - CERVIX
-                rawChartMode:
-                  type: boolean
-                predictionEnabled:
-                  type: boolean
-                discreetNotifications:
-                  type: boolean
-                sensitiveCategoryEncryption:
-                  type: boolean
-                typicalCycleLength:
-                  anyOf:
-                    - type: integer
-                      minimum: 15
-                      maximum: 60
-                    - type: "null"
-                typicalPeriodLength:
-                  anyOf:
-                    - type: integer
-                      minimum: 1
-                      maximum: 15
-                    - type: "null"
-                lutealPhaseLength:
-                  anyOf:
-                    - type: integer
-                      minimum: 10
-                      maximum: 16
-                    - type: "null"
+              $ref: "#/components/schemas/CyclePrefsRequest"
       responses:
         "200":
           description: Merged cycle preferences.
@@ -1211,67 +785,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                format:
-                  type: string
-                  enum:
-                    - pdf
-                    - fhir
-                    - package
-                range:
-                  type: object
-                  properties:
-                    startDate:
-                      type: string
-                      format: date-time
-                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                    endDate:
-                      type: string
-                      format: date-time
-                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                    days:
-                      type: integer
-                      minimum: 1
-                      maximum: 365
-                  additionalProperties: false
-                selection:
-                  type: object
-                  properties:
-                    v:
-                      type: number
-                      const: 2
-                    leaves:
-                      maxItems: 94
-                      type: array
-                      items:
-                        type: string
-                        minLength: 1
-                        maxLength: 64
-                  required:
-                    - v
-                    - leaves
-                  additionalProperties: false
-                locale:
-                  type: string
-                  enum:
-                    - de
-                    - en
-                    - fr
-                    - es
-                    - it
-                    - pl
-                practiceName:
-                  type: string
-                  maxLength: 120
-                includeCharts:
-                  type: boolean
-                germanAtc:
-                  type: boolean
-              required:
-                - format
-                - selection
-              additionalProperties: false
+              $ref: "#/components/schemas/HealthRecordExportRequest"
       responses:
         "200":
           description: "Export generated. Content-Type varies by `format`: application/pdf, application/fhir+json, or
@@ -1324,57 +838,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                label:
-                  type: string
-                  minLength: 1
-                  maxLength: 120
-                rangeStart:
-                  type: string
-                  format: date-time
-                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                rangeEnd:
-                  anyOf:
-                    - type: string
-                      format: date-time
-                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                    - type: "null"
-                selection:
-                  type: object
-                  properties:
-                    v:
-                      type: number
-                      const: 2
-                    leaves:
-                      maxItems: 94
-                      type: array
-                      items:
-                        type: string
-                        minLength: 1
-                        maxLength: 64
-                  required:
-                    - v
-                    - leaves
-                  additionalProperties: false
-                documentIds:
-                  maxItems: 50
-                  type: array
-                  items:
-                    type: string
-                    minLength: 1
-                    maxLength: 64
-                documentOnly:
-                  type: boolean
-                expiresAt:
-                  type: string
-                  format: date-time
-                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-              required:
-                - label
-                - rangeStart
-                - expiresAt
-              additionalProperties: false
+              $ref: "#/components/schemas/CreateShareLinkRequest"
       responses:
         "201":
           description: Share link created. `token` carries the raw `hls_` value and is unrecoverable after this response.
@@ -2222,17 +1686,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                email:
-                  type: string
-                  minLength: 1
-                password:
-                  type: string
-                  minLength: 1
-              required:
-                - email
-                - password
+              $ref: "#/components/schemas/LoginPasswordRequest"
       responses:
         "200":
           description: Login succeeded (token bundle / cookie) — or a second factor is required (`meta.mfaRequired`).
@@ -4011,240 +3465,10 @@ paths:
           application/json:
             schema:
               anyOf:
-                - type: object
-                  properties:
-                    type:
-                      type: string
-                      enum:
-                        - WEIGHT
-                        - BLOOD_PRESSURE_SYS
-                        - BLOOD_PRESSURE_DIA
-                        - PULSE
-                        - BODY_FAT
-                        - SLEEP_DURATION
-                        - ACTIVITY_STEPS
-                        - BLOOD_GLUCOSE
-                        - TOTAL_BODY_WATER
-                        - BONE_MASS
-                        - OXYGEN_SATURATION
-                        - HEART_RATE_VARIABILITY
-                        - RESTING_HEART_RATE
-                        - ACTIVE_ENERGY_BURNED
-                        - FLIGHTS_CLIMBED
-                        - WALKING_RUNNING_DISTANCE
-                        - VO2_MAX
-                        - BODY_TEMPERATURE
-                        - FAT_FREE_MASS
-                        - FAT_MASS
-                        - MUSCLE_MASS
-                        - SKIN_TEMPERATURE
-                        - PULSE_WAVE_VELOCITY
-                        - VASCULAR_AGE
-                        - VISCERAL_FAT
-                        - AUDIO_EXPOSURE_ENV
-                        - AUDIO_EXPOSURE_HEADPHONE
-                        - TIME_IN_DAYLIGHT
-                        - WALKING_STEADINESS
-                        - AUDIO_EXPOSURE_EVENT
-                        - RESPIRATORY_RATE
-                        - BODY_MASS_INDEX
-                        - LEAN_BODY_MASS
-                        - WALKING_HEART_RATE_AVERAGE
-                        - WALKING_ASYMMETRY
-                        - WALKING_DOUBLE_SUPPORT
-                        - WALKING_STEP_LENGTH
-                        - WALKING_SPEED
-                        - CARDIO_RECOVERY
-                        - WRIST_TEMPERATURE
-                        - FALL_COUNT
-                        - SIX_MINUTE_WALK_DISTANCE
-                        - STAIR_ASCENT_SPEED
-                        - STAIR_DESCENT_SPEED
-                        - BREATHING_DISTURBANCES
-                        - IRREGULAR_RHYTHM_NOTIFICATION
-                        - HIGH_HEART_RATE_EVENT
-                        - LOW_HEART_RATE_EVENT
-                        - WALKING_STEADINESS_EVENT
-                        - BREATHING_DISTURBANCE_EVENT
-                        - RECOVERY_SCORE
-                        - STRESS_SCORE
-                        - STRAIN_SCORE
-                        - HRV_RMSSD
-                        - DAY_STRAIN
-                        - WORKOUT_STRAIN
-                        - SLEEP_PERFORMANCE
-                        - SLEEP_EFFICIENCY
-                        - SLEEP_CONSISTENCY
-                        - SLEEP_NEED
-                        - ENERGY_EXPENDITURE_KJ
-                        - AVERAGE_HEART_RATE
-                        - MAX_HEART_RATE
-                        - SLEEP_DISTURBANCE_COUNT
-                        - ANS_CHARGE
-                        - CARDIO_LOAD
-                        - SLEEP_SCORE
-                        - BODY_TEMPERATURE_DEVIATION
-                        - RESILIENCE
-                        - PHQ9_SCORE
-                        - GAD7_SCORE
-                        - GRIP_STRENGTH
-                        - PAIN_NRS
-                        - WAIST_CIRCUMFERENCE
-                        - WAIST_TO_HEIGHT
-                        - WHO5_SCORE
-                        - SCI_SCORE
-                    value:
-                      type: number
-                    measuredAt:
-                      type: string
-                      format: date-time
-                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                    notes:
-                      type: string
-                      maxLength: 200
-                    source:
-                      default: MANUAL
-                      type: string
-                      enum:
-                        - MANUAL
-                        - APPLE_HEALTH
-                    glucoseContext:
-                      type: string
-                      enum:
-                        - FASTING
-                        - POSTPRANDIAL
-                        - RANDOM
-                        - BEDTIME
-                    deviceType:
-                      anyOf:
-                        - type: string
-                          minLength: 1
-                          maxLength: 32
-                        - type: "null"
-                    symptomsPresent:
-                      type: boolean
-                  required:
-                    - type
-                    - value
-                    - measuredAt
+                - $ref: "#/components/schemas/CreateMeasurementRequest"
                 - type: array
                   items:
-                    type: object
-                    properties:
-                      type:
-                        type: string
-                        enum:
-                          - WEIGHT
-                          - BLOOD_PRESSURE_SYS
-                          - BLOOD_PRESSURE_DIA
-                          - PULSE
-                          - BODY_FAT
-                          - SLEEP_DURATION
-                          - ACTIVITY_STEPS
-                          - BLOOD_GLUCOSE
-                          - TOTAL_BODY_WATER
-                          - BONE_MASS
-                          - OXYGEN_SATURATION
-                          - HEART_RATE_VARIABILITY
-                          - RESTING_HEART_RATE
-                          - ACTIVE_ENERGY_BURNED
-                          - FLIGHTS_CLIMBED
-                          - WALKING_RUNNING_DISTANCE
-                          - VO2_MAX
-                          - BODY_TEMPERATURE
-                          - FAT_FREE_MASS
-                          - FAT_MASS
-                          - MUSCLE_MASS
-                          - SKIN_TEMPERATURE
-                          - PULSE_WAVE_VELOCITY
-                          - VASCULAR_AGE
-                          - VISCERAL_FAT
-                          - AUDIO_EXPOSURE_ENV
-                          - AUDIO_EXPOSURE_HEADPHONE
-                          - TIME_IN_DAYLIGHT
-                          - WALKING_STEADINESS
-                          - AUDIO_EXPOSURE_EVENT
-                          - RESPIRATORY_RATE
-                          - BODY_MASS_INDEX
-                          - LEAN_BODY_MASS
-                          - WALKING_HEART_RATE_AVERAGE
-                          - WALKING_ASYMMETRY
-                          - WALKING_DOUBLE_SUPPORT
-                          - WALKING_STEP_LENGTH
-                          - WALKING_SPEED
-                          - CARDIO_RECOVERY
-                          - WRIST_TEMPERATURE
-                          - FALL_COUNT
-                          - SIX_MINUTE_WALK_DISTANCE
-                          - STAIR_ASCENT_SPEED
-                          - STAIR_DESCENT_SPEED
-                          - BREATHING_DISTURBANCES
-                          - IRREGULAR_RHYTHM_NOTIFICATION
-                          - HIGH_HEART_RATE_EVENT
-                          - LOW_HEART_RATE_EVENT
-                          - WALKING_STEADINESS_EVENT
-                          - BREATHING_DISTURBANCE_EVENT
-                          - RECOVERY_SCORE
-                          - STRESS_SCORE
-                          - STRAIN_SCORE
-                          - HRV_RMSSD
-                          - DAY_STRAIN
-                          - WORKOUT_STRAIN
-                          - SLEEP_PERFORMANCE
-                          - SLEEP_EFFICIENCY
-                          - SLEEP_CONSISTENCY
-                          - SLEEP_NEED
-                          - ENERGY_EXPENDITURE_KJ
-                          - AVERAGE_HEART_RATE
-                          - MAX_HEART_RATE
-                          - SLEEP_DISTURBANCE_COUNT
-                          - ANS_CHARGE
-                          - CARDIO_LOAD
-                          - SLEEP_SCORE
-                          - BODY_TEMPERATURE_DEVIATION
-                          - RESILIENCE
-                          - PHQ9_SCORE
-                          - GAD7_SCORE
-                          - GRIP_STRENGTH
-                          - PAIN_NRS
-                          - WAIST_CIRCUMFERENCE
-                          - WAIST_TO_HEIGHT
-                          - WHO5_SCORE
-                          - SCI_SCORE
-                      value:
-                        type: number
-                      measuredAt:
-                        type: string
-                        format: date-time
-                        pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                      notes:
-                        type: string
-                        maxLength: 200
-                      source:
-                        default: MANUAL
-                        type: string
-                        enum:
-                          - MANUAL
-                          - APPLE_HEALTH
-                      glucoseContext:
-                        type: string
-                        enum:
-                          - FASTING
-                          - POSTPRANDIAL
-                          - RANDOM
-                          - BEDTIME
-                      deviceType:
-                        anyOf:
-                          - type: string
-                            minLength: 1
-                            maxLength: 32
-                          - type: "null"
-                      symptomsPresent:
-                        type: boolean
-                    required:
-                      - type
-                      - value
-                      - measuredAt
+                    $ref: "#/components/schemas/CreateMeasurementRequest"
       responses:
         "201":
           description: Created. A single resource for the object body; an array of resources, in request order, for the array body.
@@ -4731,179 +3955,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                workouts:
-                  minItems: 1
-                  maxItems: 100
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      sportType:
-                        type: string
-                        enum:
-                          - walking
-                          - running
-                          - cycling
-                          - hiking
-                          - swimming
-                          - rowing
-                          - elliptical
-                          - stairClimber
-                          - yoga
-                          - mindAndBody
-                          - strength
-                          - hiit
-                          - dance
-                          - golf
-                          - badminton
-                          - tennis
-                          - basketball
-                          - soccer
-                          - crossTraining
-                          - mixedCardio
-                          - other
-                      startedAt:
-                        type: string
-                        format: date-time
-                        pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                      endedAt:
-                        type: string
-                        format: date-time
-                        pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                      totalEnergyKcal:
-                        type: number
-                        minimum: 0
-                        maximum: 50000
-                      totalDistanceM:
-                        type: number
-                        minimum: 0
-                        maximum: 1000000
-                      avgHeartRate:
-                        type: integer
-                        minimum: 20
-                        maximum: 300
-                      maxHeartRate:
-                        type: integer
-                        minimum: 20
-                        maximum: 300
-                      minHeartRate:
-                        type: integer
-                        minimum: 20
-                        maximum: 300
-                      stepCount:
-                        type: integer
-                        minimum: 0
-                        maximum: 200000
-                      elevationM:
-                        type: number
-                        minimum: -500
-                        maximum: 10000
-                      pauseDurationSec:
-                        type: integer
-                        minimum: 0
-                        maximum: 86400
-                      source:
-                        default: MANUAL
-                        type: string
-                        enum:
-                          - MANUAL
-                          - APPLE_HEALTH
-                      externalId:
-                        type: string
-                        maxLength: 128
-                      externalSourceVersion:
-                        type: string
-                        maxLength: 64
-                      metadata:
-                        type: object
-                        propertyNames:
-                          type: string
-                        additionalProperties: {}
-                      route:
-                        type: object
-                        properties:
-                          geometry:
-                            type: object
-                            properties:
-                              type:
-                                type: string
-                                const: LineString
-                              coordinates:
-                                minItems: 2
-                                maxItems: 20000
-                                type: array
-                                items:
-                                  type: array
-                                  prefixItems:
-                                    - type: number
-                                      minimum: -180
-                                      maximum: 180
-                                    - type: number
-                                      minimum: -90
-                                      maximum: 90
-                                  items:
-                                    type: number
-                            required:
-                              - type
-                              - coordinates
-                          sampleTimestamps:
-                            type: array
-                            items:
-                              type: object
-                              properties:
-                                t:
-                                  type: string
-                                  format: date-time
-                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                                speedMs:
-                                  type: number
-                                  minimum: 0
-                                  maximum: 50
-                                hr:
-                                  type: integer
-                                  minimum: 20
-                                  maximum: 300
-                              required:
-                                - t
-                        required:
-                          - geometry
-                      samples:
-                        minItems: 1
-                        maxItems: 30000
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            t:
-                              type: string
-                              format: date-time
-                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                            hr:
-                              type: integer
-                              minimum: 20
-                              maximum: 300
-                            speedMs:
-                              type: number
-                              minimum: 0
-                              maximum: 50
-                            power:
-                              type: number
-                              minimum: 0
-                              maximum: 3000
-                            cadence:
-                              type: number
-                              minimum: 0
-                              maximum: 400
-                          required:
-                            - t
-                    required:
-                      - sportType
-                      - startedAt
-                      - endedAt
-              required:
-                - workouts
+              $ref: "#/components/schemas/CreateBatchWorkoutRequest"
       responses:
         "200":
           description: Batch processed.
@@ -9115,90 +8167,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                conversationId:
-                  type: string
-                  minLength: 1
-                  maxLength: 64
-                message:
-                  type: string
-                  minLength: 1
-                  maxLength: 4000
-                prefill:
-                  type: string
-                  maxLength: 2000
-                locale:
-                  type: string
-                  enum:
-                    - en
-                    - de
-                scope:
-                  type: object
-                  properties:
-                    sources:
-                      maxItems: 40
-                      type: array
-                      items:
-                        type: string
-                        enum:
-                          - bp
-                          - weight
-                          - pulse
-                          - mood
-                          - compliance
-                          - hrv
-                          - sleep
-                          - resting_hr
-                          - steps
-                          - active_energy
-                          - flights
-                          - distance
-                          - vo2_max
-                          - body_temp
-                          - walking_hr
-                          - respiratory_rate
-                          - spo2
-                          - pulse_wave_velocity
-                          - vascular_age
-                          - body_fat
-                          - fat_mass
-                          - fat_free_mass
-                          - muscle_mass
-                          - lean_body_mass
-                          - bone_mass
-                          - total_body_water
-                          - bmi
-                          - visceral_fat
-                          - glucose
-                          - walking_steadiness
-                          - walking_asymmetry
-                          - walking_double_support
-                          - walking_step_length
-                          - walking_speed
-                          - audio_env
-                          - audio_headphone
-                          - audio_event
-                          - daylight
-                          - skin_temp
-                          - workouts
-                    window:
-                      type: string
-                      enum:
-                        - last7days
-                        - last30days
-                        - last90days
-                        - lastYear
-                        - allTime
-                guidedQuestion:
-                  type: string
-                  minLength: 1
-                  maxLength: 500
-                workoutId:
-                  type: string
-                  maxLength: 64
-              required:
-                - message
+              $ref: "#/components/schemas/CoachChatRequest"
       responses:
         "200":
           description: Server-Sent Events stream of `token` / `provenance` / `done` / `error` frames.
@@ -9903,54 +8872,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                bloodType:
-                  anyOf:
-                    - type: string
-                      enum:
-                        - A_POS
-                        - A_NEG
-                        - B_POS
-                        - B_NEG
-                        - AB_POS
-                        - AB_NEG
-                        - O_POS
-                        - O_NEG
-                        - UNKNOWN
-                    - type: "null"
-                organDonor:
-                  anyOf:
-                    - type: string
-                      enum:
-                        - YES
-                        - NO
-                        - UNKNOWN
-                    - type: "null"
-                advanceDirective:
-                  anyOf:
-                    - type: string
-                      enum:
-                        - EXISTS
-                        - NONE
-                        - UNKNOWN
-                    - type: "null"
-                contacts:
-                  anyOf:
-                    - type: string
-                      maxLength: 2000
-                    - type: "null"
-                implants:
-                  anyOf:
-                    - type: string
-                      maxLength: 1000
-                    - type: "null"
-                note:
-                  anyOf:
-                    - type: string
-                      maxLength: 2000
-                    - type: "null"
-              additionalProperties: false
+              $ref: "#/components/schemas/UpdateEmergencyProfileRequest"
       responses:
         "200":
           description: The updated emergency profile.
@@ -10157,24 +9079,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                status:
-                  type: string
-                  enum:
-                    - proposed
-                    - active
-                    - met
-                    - abandoned
-                    - review_due
-                    - reviewed
-                reviewDate:
-                  anyOf:
-                    - type: string
-                      format: date-time
-                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                    - type: "null"
-              additionalProperties: false
+              $ref: "#/components/schemas/CoachPlanPatchRequest"
       responses:
         "200":
           description: The plan after the lifecycle update.
@@ -10243,21 +9148,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                cadenceId:
-                  type: string
-                  minLength: 1
-                  maxLength: 64
-                action:
-                  type: string
-                  enum:
-                    - accept
-                    - dismiss
-                    - stop
-              required:
-                - cadenceId
-                - action
+              $ref: "#/components/schemas/CoachReminderSuggestionAction"
       responses:
         "200":
           description: "A dismiss/stop, or an accept that matched an existing reminder (`duplicate: true`)."
@@ -10986,86 +9877,8 @@ paths:
         - in: query
           name: metric
           schema:
-            type: string
-            enum:
-              - WEIGHT
-              - BLOOD_PRESSURE_SYS
-              - BLOOD_PRESSURE_DIA
-              - PULSE
-              - BODY_FAT
-              - SLEEP_DURATION
-              - ACTIVITY_STEPS
-              - BLOOD_GLUCOSE
-              - TOTAL_BODY_WATER
-              - BONE_MASS
-              - OXYGEN_SATURATION
-              - HEART_RATE_VARIABILITY
-              - RESTING_HEART_RATE
-              - ACTIVE_ENERGY_BURNED
-              - FLIGHTS_CLIMBED
-              - WALKING_RUNNING_DISTANCE
-              - VO2_MAX
-              - BODY_TEMPERATURE
-              - FAT_FREE_MASS
-              - FAT_MASS
-              - MUSCLE_MASS
-              - SKIN_TEMPERATURE
-              - PULSE_WAVE_VELOCITY
-              - VASCULAR_AGE
-              - VISCERAL_FAT
-              - AUDIO_EXPOSURE_ENV
-              - AUDIO_EXPOSURE_HEADPHONE
-              - TIME_IN_DAYLIGHT
-              - WALKING_STEADINESS
-              - AUDIO_EXPOSURE_EVENT
-              - RESPIRATORY_RATE
-              - BODY_MASS_INDEX
-              - LEAN_BODY_MASS
-              - WALKING_HEART_RATE_AVERAGE
-              - WALKING_ASYMMETRY
-              - WALKING_DOUBLE_SUPPORT
-              - WALKING_STEP_LENGTH
-              - WALKING_SPEED
-              - CARDIO_RECOVERY
-              - WRIST_TEMPERATURE
-              - FALL_COUNT
-              - SIX_MINUTE_WALK_DISTANCE
-              - STAIR_ASCENT_SPEED
-              - STAIR_DESCENT_SPEED
-              - BREATHING_DISTURBANCES
-              - IRREGULAR_RHYTHM_NOTIFICATION
-              - HIGH_HEART_RATE_EVENT
-              - LOW_HEART_RATE_EVENT
-              - WALKING_STEADINESS_EVENT
-              - BREATHING_DISTURBANCE_EVENT
-              - RECOVERY_SCORE
-              - STRESS_SCORE
-              - STRAIN_SCORE
-              - HRV_RMSSD
-              - DAY_STRAIN
-              - WORKOUT_STRAIN
-              - SLEEP_PERFORMANCE
-              - SLEEP_EFFICIENCY
-              - SLEEP_CONSISTENCY
-              - SLEEP_NEED
-              - ENERGY_EXPENDITURE_KJ
-              - AVERAGE_HEART_RATE
-              - MAX_HEART_RATE
-              - SLEEP_DISTURBANCE_COUNT
-              - ANS_CHARGE
-              - CARDIO_LOAD
-              - SLEEP_SCORE
-              - BODY_TEMPERATURE_DEVIATION
-              - RESILIENCE
-              - PHQ9_SCORE
-              - GAD7_SCORE
-              - GRIP_STRENGTH
-              - PAIN_NRS
-              - WAIST_CIRCUMFERENCE
-              - WAIST_TO_HEIGHT
-              - WHO5_SCORE
-              - SCI_SCORE
             description: "The metric the strip is about. Closed enum: an unknown value 422s."
+            $ref: "#/components/schemas/MeasurementType"
           required: true
           description: "The metric the strip is about. Closed enum: an unknown value 422s."
       responses:
@@ -11307,86 +10120,8 @@ paths:
         - in: query
           name: type
           schema:
-            type: string
-            enum:
-              - WEIGHT
-              - BLOOD_PRESSURE_SYS
-              - BLOOD_PRESSURE_DIA
-              - PULSE
-              - BODY_FAT
-              - SLEEP_DURATION
-              - ACTIVITY_STEPS
-              - BLOOD_GLUCOSE
-              - TOTAL_BODY_WATER
-              - BONE_MASS
-              - OXYGEN_SATURATION
-              - HEART_RATE_VARIABILITY
-              - RESTING_HEART_RATE
-              - ACTIVE_ENERGY_BURNED
-              - FLIGHTS_CLIMBED
-              - WALKING_RUNNING_DISTANCE
-              - VO2_MAX
-              - BODY_TEMPERATURE
-              - FAT_FREE_MASS
-              - FAT_MASS
-              - MUSCLE_MASS
-              - SKIN_TEMPERATURE
-              - PULSE_WAVE_VELOCITY
-              - VASCULAR_AGE
-              - VISCERAL_FAT
-              - AUDIO_EXPOSURE_ENV
-              - AUDIO_EXPOSURE_HEADPHONE
-              - TIME_IN_DAYLIGHT
-              - WALKING_STEADINESS
-              - AUDIO_EXPOSURE_EVENT
-              - RESPIRATORY_RATE
-              - BODY_MASS_INDEX
-              - LEAN_BODY_MASS
-              - WALKING_HEART_RATE_AVERAGE
-              - WALKING_ASYMMETRY
-              - WALKING_DOUBLE_SUPPORT
-              - WALKING_STEP_LENGTH
-              - WALKING_SPEED
-              - CARDIO_RECOVERY
-              - WRIST_TEMPERATURE
-              - FALL_COUNT
-              - SIX_MINUTE_WALK_DISTANCE
-              - STAIR_ASCENT_SPEED
-              - STAIR_DESCENT_SPEED
-              - BREATHING_DISTURBANCES
-              - IRREGULAR_RHYTHM_NOTIFICATION
-              - HIGH_HEART_RATE_EVENT
-              - LOW_HEART_RATE_EVENT
-              - WALKING_STEADINESS_EVENT
-              - BREATHING_DISTURBANCE_EVENT
-              - RECOVERY_SCORE
-              - STRESS_SCORE
-              - STRAIN_SCORE
-              - HRV_RMSSD
-              - DAY_STRAIN
-              - WORKOUT_STRAIN
-              - SLEEP_PERFORMANCE
-              - SLEEP_EFFICIENCY
-              - SLEEP_CONSISTENCY
-              - SLEEP_NEED
-              - ENERGY_EXPENDITURE_KJ
-              - AVERAGE_HEART_RATE
-              - MAX_HEART_RATE
-              - SLEEP_DISTURBANCE_COUNT
-              - ANS_CHARGE
-              - CARDIO_LOAD
-              - SLEEP_SCORE
-              - BODY_TEMPERATURE_DEVIATION
-              - RESILIENCE
-              - PHQ9_SCORE
-              - GAD7_SCORE
-              - GRIP_STRENGTH
-              - PAIN_NRS
-              - WAIST_CIRCUMFERENCE
-              - WAIST_TO_HEIGHT
-              - WHO5_SCORE
-              - SCI_SCORE
             description: "The measurement type to read (single metric — no fan-out). Closed enum: an unknown type 422s."
+            $ref: "#/components/schemas/MeasurementType"
           required: true
           description: "The measurement type to read (single metric — no fan-out). Closed enum: an unknown type 422s."
         - in: query
@@ -13401,25 +12136,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                kind:
-                  type: string
-                  enum:
-                    - ai_full
-                    - ai_insights_only
-                    - ai_coach
-                artefact:
-                  type: string
-                  minLength: 1
-                signedAt:
-                  type: string
-                  format: date-time
-                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-              required:
-                - kind
-                - artefact
-                - signedAt
+              $ref: "#/components/schemas/ConsentPostBody"
       responses:
         "200":
           description: The minted receipt.
@@ -13451,14 +12168,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                intent:
-                  default: heal
-                  type: string
-                  enum:
-                    - heal
-                    - affirmative
+              $ref: "#/components/schemas/WebConsentGrantBody"
       responses:
         "200":
           description: Grant outcome.
@@ -14460,63 +13170,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                rows:
-                  minItems: 1
-                  maxItems: 100
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      analyte:
-                        type: string
-                        minLength: 1
-                        maxLength: 120
-                      panel:
-                        anyOf:
-                          - type: string
-                            minLength: 1
-                            maxLength: 120
-                          - type: string
-                            const: ""
-                      value:
-                        type: number
-                      valueText:
-                        type: string
-                        minLength: 1
-                        maxLength: 120
-                      unit:
-                        type: string
-                        minLength: 1
-                        maxLength: 40
-                      referenceLow:
-                        type: number
-                      referenceHigh:
-                        type: number
-                      referenceText:
-                        anyOf:
-                          - type: string
-                            maxLength: 120
-                          - type: string
-                            const: ""
-                      takenAt:
-                        type: string
-                        format: date-time
-                        pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
-                    required:
-                      - analyte
-                      - takenAt
-                documentId:
-                  type: string
-                  minLength: 1
-                  maxLength: 64
-                encounterId:
-                  type: string
-                  minLength: 1
-                  maxLength: 40
-              required:
-                - rows
+              $ref: "#/components/schemas/OcrCommitRequest"
       responses:
         "200":
           description: Inserted + skipped rows.
@@ -14559,33 +13213,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                name:
-                  type: string
-                  minLength: 1
-                  maxLength: 120
-                unit:
-                  type: string
-                  minLength: 1
-                  maxLength: 40
-                lowerBound:
-                  type: number
-                upperBound:
-                  type: number
-                context:
-                  type: string
-                  maxLength: 2000
-                panel:
-                  anyOf:
-                    - type: string
-                      minLength: 1
-                      maxLength: 120
-                    - type: string
-                      const: ""
-              required:
-                - name
-                - unit
+              $ref: "#/components/schemas/CreateBiomarkerRequest"
       responses:
         "201":
           description: Created biomarker.
@@ -14649,40 +13277,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                name:
-                  type: string
-                  minLength: 1
-                  maxLength: 120
-                unit:
-                  type: string
-                  minLength: 1
-                  maxLength: 40
-                lowerBound:
-                  anyOf:
-                    - type: number
-                    - type: "null"
-                upperBound:
-                  anyOf:
-                    - type: number
-                    - type: "null"
-                context:
-                  anyOf:
-                    - type: string
-                      maxLength: 2000
-                    - type: "null"
-                panel:
-                  anyOf:
-                    - anyOf:
-                        - type: string
-                          minLength: 1
-                          maxLength: 120
-                        - type: string
-                          const: ""
-                    - type: "null"
-                hidden:
-                  type: boolean
+              $ref: "#/components/schemas/UpdateBiomarkerRequest"
       responses:
         "200":
           description: Updated biomarker.
@@ -14791,78 +13386,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                occurredAt:
-                  type: string
-                  format: date-time
-                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                status:
-                  default: DONE
-                  type: string
-                  enum:
-                    - PLANNED
-                    - DONE
-                    - CANCELLED
-                    - NO_SHOW
-                kind:
-                  default: OTHER
-                  type: string
-                  enum:
-                    - ROUTINE
-                    - ACUTE
-                    - SPECIALIST
-                    - PREVENTIVE
-                    - EMERGENCY
-                    - HOSPITAL
-                    - THERAPY
-                    - OTHER
-                practitionerId:
-                  anyOf:
-                    - type: string
-                      minLength: 1
-                      maxLength: 40
-                    - type: "null"
-                reason:
-                  anyOf:
-                    - type: string
-                      maxLength: 2000
-                    - type: "null"
-                outcome:
-                  anyOf:
-                    - type: string
-                      maxLength: 4000
-                    - type: "null"
-                reminderId:
-                  anyOf:
-                    - type: string
-                      minLength: 1
-                      maxLength: 40
-                    - type: "null"
-                documentIds:
-                  maxItems: 100
-                  type: array
-                  items:
-                    type: string
-                    minLength: 1
-                    maxLength: 40
-                labResultIds:
-                  maxItems: 100
-                  type: array
-                  items:
-                    type: string
-                    minLength: 1
-                    maxLength: 40
-                episodeIds:
-                  maxItems: 100
-                  type: array
-                  items:
-                    type: string
-                    minLength: 1
-                    maxLength: 40
-              required:
-                - occurredAt
-              additionalProperties: false
+              $ref: "#/components/schemas/CreateEncounterRequest"
       responses:
         "201":
           description: Visit filed.
@@ -14950,74 +13474,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                occurredAt:
-                  type: string
-                  format: date-time
-                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                status:
-                  type: string
-                  enum:
-                    - PLANNED
-                    - DONE
-                    - CANCELLED
-                    - NO_SHOW
-                kind:
-                  type: string
-                  enum:
-                    - ROUTINE
-                    - ACUTE
-                    - SPECIALIST
-                    - PREVENTIVE
-                    - EMERGENCY
-                    - HOSPITAL
-                    - THERAPY
-                    - OTHER
-                practitionerId:
-                  anyOf:
-                    - type: string
-                      minLength: 1
-                      maxLength: 40
-                    - type: "null"
-                reason:
-                  anyOf:
-                    - type: string
-                      maxLength: 2000
-                    - type: "null"
-                outcome:
-                  anyOf:
-                    - type: string
-                      maxLength: 4000
-                    - type: "null"
-                reminderId:
-                  anyOf:
-                    - type: string
-                      minLength: 1
-                      maxLength: 40
-                    - type: "null"
-                documentIds:
-                  maxItems: 100
-                  type: array
-                  items:
-                    type: string
-                    minLength: 1
-                    maxLength: 40
-                labResultIds:
-                  maxItems: 100
-                  type: array
-                  items:
-                    type: string
-                    minLength: 1
-                    maxLength: 40
-                episodeIds:
-                  maxItems: 100
-                  type: array
-                  items:
-                    type: string
-                    minLength: 1
-                    maxLength: 40
-              additionalProperties: false
+              $ref: "#/components/schemas/UpdateEncounterRequest"
       responses:
         "200":
           description: Visit updated.
@@ -15099,26 +13556,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                targetKind:
-                  type: string
-                  enum:
-                    - document
-                    - labResult
-                    - conditionEpisode
-                targetIds:
-                  minItems: 1
-                  maxItems: 100
-                  type: array
-                  items:
-                    type: string
-                    minLength: 1
-                    maxLength: 40
-              required:
-                - targetKind
-                - targetIds
-              additionalProperties: false
+              $ref: "#/components/schemas/EncounterLinkRequest"
       responses:
         "200":
           description: The visit's links after the change.
@@ -15147,26 +13585,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                targetKind:
-                  type: string
-                  enum:
-                    - document
-                    - labResult
-                    - conditionEpisode
-                targetIds:
-                  minItems: 1
-                  maxItems: 100
-                  type: array
-                  items:
-                    type: string
-                    minLength: 1
-                    maxLength: 40
-              required:
-                - targetKind
-                - targetIds
-              additionalProperties: false
+              $ref: "#/components/schemas/EncounterLinkRequest"
       responses:
         "200":
           description: The visit's links after the change.
@@ -15220,40 +13639,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                name:
-                  type: string
-                  minLength: 1
-                  maxLength: 160
-                specialty:
-                  anyOf:
-                    - type: string
-                      maxLength: 120
-                    - type: "null"
-                practice:
-                  anyOf:
-                    - type: string
-                      maxLength: 160
-                    - type: "null"
-                location:
-                  anyOf:
-                    - type: string
-                      maxLength: 300
-                    - type: "null"
-                phone:
-                  anyOf:
-                    - type: string
-                      maxLength: 60
-                    - type: "null"
-                note:
-                  anyOf:
-                    - type: string
-                      maxLength: 2000
-                    - type: "null"
-              required:
-                - name
-              additionalProperties: false
+              $ref: "#/components/schemas/CreatePractitionerRequest"
       responses:
         "201":
           description: Practitioner added.
@@ -15311,38 +13697,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                name:
-                  type: string
-                  minLength: 1
-                  maxLength: 160
-                specialty:
-                  anyOf:
-                    - type: string
-                      maxLength: 120
-                    - type: "null"
-                practice:
-                  anyOf:
-                    - type: string
-                      maxLength: 160
-                    - type: "null"
-                location:
-                  anyOf:
-                    - type: string
-                      maxLength: 300
-                    - type: "null"
-                phone:
-                  anyOf:
-                    - type: string
-                      maxLength: 60
-                    - type: "null"
-                note:
-                  anyOf:
-                    - type: string
-                      maxLength: 2000
-                    - type: "null"
-              additionalProperties: false
+              $ref: "#/components/schemas/UpdatePractitionerRequest"
       responses:
         "200":
           description: Practitioner updated.
@@ -16583,60 +14938,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                substance:
-                  type: string
-                  minLength: 1
-                  maxLength: 160
-                category:
-                  default: OTHER
-                  type: string
-                  enum:
-                    - FOOD
-                    - MEDICATION
-                    - ENVIRONMENT
-                    - BIOLOGIC
-                    - OTHER
-                type:
-                  default: ALLERGY
-                  type: string
-                  enum:
-                    - ALLERGY
-                    - INTOLERANCE
-                severity:
-                  anyOf:
-                    - type: string
-                      enum:
-                        - MILD
-                        - MODERATE
-                        - SEVERE
-                    - type: "null"
-                status:
-                  default: ACTIVE
-                  type: string
-                  enum:
-                    - ACTIVE
-                    - INACTIVE
-                    - RESOLVED
-                onsetAt:
-                  anyOf:
-                    - type: string
-                      format: date-time
-                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                    - type: "null"
-                reaction:
-                  anyOf:
-                    - type: string
-                      maxLength: 2000
-                    - type: "null"
-                note:
-                  anyOf:
-                    - type: string
-                      maxLength: 2000
-                    - type: "null"
-              required:
-                - substance
+              $ref: "#/components/schemas/CreateAllergyRequest"
       responses:
         "201":
           description: Allergy created.
@@ -16694,56 +14996,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                substance:
-                  type: string
-                  minLength: 1
-                  maxLength: 160
-                category:
-                  type: string
-                  enum:
-                    - FOOD
-                    - MEDICATION
-                    - ENVIRONMENT
-                    - BIOLOGIC
-                    - OTHER
-                type:
-                  type: string
-                  enum:
-                    - ALLERGY
-                    - INTOLERANCE
-                severity:
-                  anyOf:
-                    - type: string
-                      enum:
-                        - MILD
-                        - MODERATE
-                        - SEVERE
-                    - type: "null"
-                status:
-                  type: string
-                  enum:
-                    - ACTIVE
-                    - INACTIVE
-                    - RESOLVED
-                onsetAt:
-                  anyOf:
-                    - type: string
-                      format: date-time
-                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                    - type: "null"
-                reaction:
-                  anyOf:
-                    - type: string
-                      maxLength: 2000
-                    - type: "null"
-                note:
-                  anyOf:
-                    - type: string
-                      maxLength: 2000
-                    - type: "null"
-              additionalProperties: false
+              $ref: "#/components/schemas/UpdateAllergyRequest"
       responses:
         "200":
           description: Allergy updated.
@@ -22177,6 +20430,578 @@ components:
       description: "Partial custom-symptom edit; at least one of `label` / `icon` / `isActive` is required. `isActive: false`
         hides the symptom while every day log that references it stays intact; `isActive: true` brings it back, and the
         per-record cap is re-checked on the way in so hiding and re-enabling cannot be used to exceed it."
+    CycleDayLogInput:
+      type: object
+      properties:
+        date:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+        flow:
+          type: string
+          enum:
+            - NONE
+            - SPOTTING
+            - LIGHT
+            - MEDIUM
+            - HEAVY
+        intermenstrualBleeding:
+          type: boolean
+        basalBodyTempC:
+          type: number
+          minimum: 30
+          maximum: 45
+        temperatureExcluded:
+          type: boolean
+        ovulationTest:
+          type: string
+          enum:
+            - NEGATIVE
+            - POSITIVE_LH_SURGE
+            - ESTROGEN_SURGE
+            - INDETERMINATE
+        cervicalMucus:
+          type: string
+          enum:
+            - DRY
+            - STICKY
+            - CREAMY
+            - WATERY
+            - EGG_WHITE
+        cervixPosition:
+          type: string
+          enum:
+            - LOW
+            - HIGH
+        cervixFirmness:
+          type: string
+          enum:
+            - FIRM
+            - SOFT
+        cervixOpening:
+          type: string
+          enum:
+            - CLOSED
+            - OPEN
+        sexualActivity:
+          type: boolean
+        protectedSex:
+          anyOf:
+            - type: boolean
+            - type: "null"
+        pregnancyTest:
+          type: string
+          enum:
+            - NEGATIVE
+            - POSITIVE
+            - INDETERMINATE
+        progesteroneTest:
+          type: string
+          enum:
+            - NEGATIVE
+            - POSITIVE
+            - INDETERMINATE
+        contraceptive:
+          type: string
+          enum:
+            - NONE
+            - UNSPECIFIED
+            - IMPLANT
+            - INJECTION
+            - IUD
+            - INTRAVAGINAL_RING
+            - ORAL
+            - PATCH
+            - EMERGENCY
+        symptoms:
+          maxItems: 40
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+                minLength: 1
+                maxLength: 80
+              severity:
+                type: integer
+                minimum: 1
+                maximum: 4
+            required:
+              - key
+        note:
+          type: string
+          maxLength: 500
+        loggedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        source:
+          default: MANUAL
+          type: string
+          enum:
+            - MANUAL
+            - APPLE_HEALTH
+        externalId:
+          type: string
+          minLength: 1
+          maxLength: 120
+      required:
+        - date
+        - loggedAt
+      description: "One day's cycle capture. `note` is encrypted at rest; every other field is queryable plaintext. UPSERT
+        key: `(userId, source, externalId)` when externalId present, else `(userId, date)`. Shared by the single POST,
+        the bulk drain, and the period shortcut."
+    CycleDayLogPatchRequest:
+      type: object
+      properties:
+        flow:
+          anyOf:
+            - type: string
+              enum:
+                - NONE
+                - SPOTTING
+                - LIGHT
+                - MEDIUM
+                - HEAVY
+            - type: "null"
+        intermenstrualBleeding:
+          type: boolean
+        basalBodyTempC:
+          anyOf:
+            - type: number
+              minimum: 30
+              maximum: 45
+            - type: "null"
+        temperatureExcluded:
+          type: boolean
+        ovulationTest:
+          anyOf:
+            - type: string
+              enum:
+                - NEGATIVE
+                - POSITIVE_LH_SURGE
+                - ESTROGEN_SURGE
+                - INDETERMINATE
+            - type: "null"
+        cervicalMucus:
+          anyOf:
+            - type: string
+              enum:
+                - DRY
+                - STICKY
+                - CREAMY
+                - WATERY
+                - EGG_WHITE
+            - type: "null"
+        cervixPosition:
+          anyOf:
+            - type: string
+              enum:
+                - LOW
+                - HIGH
+            - type: "null"
+        cervixFirmness:
+          anyOf:
+            - type: string
+              enum:
+                - FIRM
+                - SOFT
+            - type: "null"
+        cervixOpening:
+          anyOf:
+            - type: string
+              enum:
+                - CLOSED
+                - OPEN
+            - type: "null"
+        sexualActivity:
+          type: boolean
+        protectedSex:
+          anyOf:
+            - type: boolean
+            - type: "null"
+        pregnancyTest:
+          anyOf:
+            - type: string
+              enum:
+                - NEGATIVE
+                - POSITIVE
+                - INDETERMINATE
+            - type: "null"
+        progesteroneTest:
+          anyOf:
+            - type: string
+              enum:
+                - NEGATIVE
+                - POSITIVE
+                - INDETERMINATE
+            - type: "null"
+        contraceptive:
+          anyOf:
+            - type: string
+              enum:
+                - NONE
+                - UNSPECIFIED
+                - IMPLANT
+                - INJECTION
+                - IUD
+                - INTRAVAGINAL_RING
+                - ORAL
+                - PATCH
+                - EMERGENCY
+            - type: "null"
+        symptoms:
+          maxItems: 40
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+                minLength: 1
+                maxLength: 80
+              severity:
+                type: integer
+                minimum: 1
+                maximum: 4
+            required:
+              - key
+        note:
+          anyOf:
+            - type: string
+              maxLength: 500
+            - type: "null"
+        loggedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+      description: Partial day-log edit. Every field optional; `note` re-encrypts (explicit null clears it). `date` / `source`
+        / `externalId` are immutable on update.
+    CycleDayLogBulkRequest:
+      type: object
+      properties:
+        entries:
+          minItems: 1
+          maxItems: 500
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                pattern: ^\d{4}-\d{2}-\d{2}$
+              flow:
+                type: string
+                enum:
+                  - NONE
+                  - SPOTTING
+                  - LIGHT
+                  - MEDIUM
+                  - HEAVY
+              intermenstrualBleeding:
+                type: boolean
+              basalBodyTempC:
+                type: number
+                minimum: 30
+                maximum: 45
+              temperatureExcluded:
+                type: boolean
+              ovulationTest:
+                type: string
+                enum:
+                  - NEGATIVE
+                  - POSITIVE_LH_SURGE
+                  - ESTROGEN_SURGE
+                  - INDETERMINATE
+              cervicalMucus:
+                type: string
+                enum:
+                  - DRY
+                  - STICKY
+                  - CREAMY
+                  - WATERY
+                  - EGG_WHITE
+              cervixPosition:
+                type: string
+                enum:
+                  - LOW
+                  - HIGH
+              cervixFirmness:
+                type: string
+                enum:
+                  - FIRM
+                  - SOFT
+              cervixOpening:
+                type: string
+                enum:
+                  - CLOSED
+                  - OPEN
+              sexualActivity:
+                type: boolean
+              protectedSex:
+                anyOf:
+                  - type: boolean
+                  - type: "null"
+              pregnancyTest:
+                type: string
+                enum:
+                  - NEGATIVE
+                  - POSITIVE
+                  - INDETERMINATE
+              progesteroneTest:
+                type: string
+                enum:
+                  - NEGATIVE
+                  - POSITIVE
+                  - INDETERMINATE
+              contraceptive:
+                type: string
+                enum:
+                  - NONE
+                  - UNSPECIFIED
+                  - IMPLANT
+                  - INJECTION
+                  - IUD
+                  - INTRAVAGINAL_RING
+                  - ORAL
+                  - PATCH
+                  - EMERGENCY
+              symptoms:
+                maxItems: 40
+                type: array
+                items:
+                  type: object
+                  properties:
+                    key:
+                      type: string
+                      minLength: 1
+                      maxLength: 80
+                    severity:
+                      type: integer
+                      minimum: 1
+                      maximum: 4
+                  required:
+                    - key
+              note:
+                type: string
+                maxLength: 500
+              loggedAt:
+                type: string
+                format: date-time
+                pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+              source:
+                default: MANUAL
+                type: string
+                enum:
+                  - MANUAL
+                  - APPLE_HEALTH
+              externalId:
+                type: string
+                minLength: 1
+                maxLength: 120
+            required:
+              - date
+              - loggedAt
+      required:
+        - entries
+      description: Outbox / HealthKit drain. Up to 500 entries per call; wrapped in `withIdempotency`; rate-limited 60/min.
+        Each entry upserts per the day-log key.
+    CyclePeriodRequest:
+      type: object
+      properties:
+        action:
+          type: string
+          enum:
+            - start
+            - end
+        date:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+        externalId:
+          type: string
+          minLength: 1
+          maxLength: 120
+        loggedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+      required:
+        - action
+        - date
+        - loggedAt
+      description: One-tap period boundary. `start` opens a new cycle (closing the prior), `end` stamps the current cycle's
+        periodEndDate; both write a boundary day-log.
+    CyclePrefsRequest:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        goal:
+          type: string
+          enum:
+            - GENERAL_HEALTH
+            - AVOID_PREGNANCY
+            - TRYING_TO_CONCEIVE
+            - PERIMENOPAUSE
+            - OFF
+        secondarySymptom:
+          type: string
+          enum:
+            - MUCUS
+            - CERVIX
+        rawChartMode:
+          type: boolean
+        predictionEnabled:
+          type: boolean
+        discreetNotifications:
+          type: boolean
+        sensitiveCategoryEncryption:
+          type: boolean
+        typicalCycleLength:
+          anyOf:
+            - type: integer
+              minimum: 15
+              maximum: 60
+            - type: "null"
+        typicalPeriodLength:
+          anyOf:
+            - type: integer
+              minimum: 1
+              maximum: 15
+            - type: "null"
+        lutealPhaseLength:
+          anyOf:
+            - type: integer
+              minimum: 10
+              maximum: 16
+            - type: "null"
+      description: Partial cycle-preferences deep-merge. `enabled` flips the feature gate (`cycleTrackingEnabled`). Omitted
+        fields are left untouched.
+    HealthRecordExportRequest:
+      type: object
+      properties:
+        format:
+          type: string
+          enum:
+            - pdf
+            - fhir
+            - package
+        range:
+          type: object
+          properties:
+            startDate:
+              type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            endDate:
+              type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            days:
+              type: integer
+              minimum: 1
+              maximum: 365
+          additionalProperties: false
+        selection:
+          type: object
+          properties:
+            v:
+              type: number
+              const: 2
+            leaves:
+              maxItems: 94
+              type: array
+              items:
+                type: string
+                minLength: 1
+                maxLength: 64
+          required:
+            - v
+            - leaves
+          additionalProperties: false
+        locale:
+          type: string
+          enum:
+            - de
+            - en
+            - fr
+            - es
+            - it
+            - pl
+        practiceName:
+          type: string
+          maxLength: 120
+        includeCharts:
+          type: boolean
+        germanAtc:
+          type: boolean
+      required:
+        - format
+        - selection
+      additionalProperties: false
+      description: "v1.7.0 — health-record / doctor-handover export selection. `format` picks PDF, FHIR R4 document Bundle, or
+        a combined zip package. `selection` is REQUIRED and carries the leaf inclusion list — membership is inclusion,
+        absence is exclusion, and there is no server-side default; the retired grouped `sections` shape is a 422. No
+        `userId` field — the user is always narrowed from the session/Bearer. The route is strict: unknown keys 422."
+    CreateShareLinkRequest:
+      type: object
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 120
+        rangeStart:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        rangeEnd:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
+        selection:
+          type: object
+          properties:
+            v:
+              type: number
+              const: 2
+            leaves:
+              maxItems: 94
+              type: array
+              items:
+                type: string
+                minLength: 1
+                maxLength: 64
+          required:
+            - v
+            - leaves
+          additionalProperties: false
+        documentIds:
+          maxItems: 50
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        documentOnly:
+          type: boolean
+        expiresAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+      required:
+        - label
+        - rangeStart
+        - expiresAt
+      additionalProperties: false
+      description: "v1.11.0 — owner request to mint a clinician share link to their own health record. `expiresAt` is required
+        (absolute ISO instant) and capped at 90 days. `rangeStart`/`rangeEnd` freeze the reporting window (rangeEnd null
+        = rolling). `selection` freezes which record leaves the link may serve, and omitting it means an empty scope
+        rather than a default one. `documentIds` freezes the documents the link carries; `documentOnly` mints a share
+        that serves those documents and no record scope at all. A share link serves the rendered page and the documents
+        frozen onto it — there is no FHIR or other machine-readable face behind a share token. Strict: unknown keys
+        422."
     EncryptedExportRequest:
       type: object
       properties:
@@ -22199,6 +21024,20 @@ components:
       required:
         - identifier
       description: "Discovery lookup for the iOS onboarding flow: given a typed email or username, resolve the next sign-in step."
+    LoginPasswordRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+      required:
+        - email
+        - password
+      description: "Email-or-username login. The native-client flow returns a paired access + refresh token when
+        X-Client-Type: native or the iOS UA prefix is present."
     MfaVerifyRequest:
       type: object
       properties:
@@ -22735,6 +21574,127 @@ components:
         - credential
       description: Finish a passkey enrollment. The handler reads these two fields directly rather than through a Zod schema;
         a missing one is a 422.
+    CreateMeasurementRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - WEIGHT
+            - BLOOD_PRESSURE_SYS
+            - BLOOD_PRESSURE_DIA
+            - PULSE
+            - BODY_FAT
+            - SLEEP_DURATION
+            - ACTIVITY_STEPS
+            - BLOOD_GLUCOSE
+            - TOTAL_BODY_WATER
+            - BONE_MASS
+            - OXYGEN_SATURATION
+            - HEART_RATE_VARIABILITY
+            - RESTING_HEART_RATE
+            - ACTIVE_ENERGY_BURNED
+            - FLIGHTS_CLIMBED
+            - WALKING_RUNNING_DISTANCE
+            - VO2_MAX
+            - BODY_TEMPERATURE
+            - FAT_FREE_MASS
+            - FAT_MASS
+            - MUSCLE_MASS
+            - SKIN_TEMPERATURE
+            - PULSE_WAVE_VELOCITY
+            - VASCULAR_AGE
+            - VISCERAL_FAT
+            - AUDIO_EXPOSURE_ENV
+            - AUDIO_EXPOSURE_HEADPHONE
+            - TIME_IN_DAYLIGHT
+            - WALKING_STEADINESS
+            - AUDIO_EXPOSURE_EVENT
+            - RESPIRATORY_RATE
+            - BODY_MASS_INDEX
+            - LEAN_BODY_MASS
+            - WALKING_HEART_RATE_AVERAGE
+            - WALKING_ASYMMETRY
+            - WALKING_DOUBLE_SUPPORT
+            - WALKING_STEP_LENGTH
+            - WALKING_SPEED
+            - CARDIO_RECOVERY
+            - WRIST_TEMPERATURE
+            - FALL_COUNT
+            - SIX_MINUTE_WALK_DISTANCE
+            - STAIR_ASCENT_SPEED
+            - STAIR_DESCENT_SPEED
+            - BREATHING_DISTURBANCES
+            - IRREGULAR_RHYTHM_NOTIFICATION
+            - HIGH_HEART_RATE_EVENT
+            - LOW_HEART_RATE_EVENT
+            - WALKING_STEADINESS_EVENT
+            - BREATHING_DISTURBANCE_EVENT
+            - RECOVERY_SCORE
+            - STRESS_SCORE
+            - STRAIN_SCORE
+            - HRV_RMSSD
+            - DAY_STRAIN
+            - WORKOUT_STRAIN
+            - SLEEP_PERFORMANCE
+            - SLEEP_EFFICIENCY
+            - SLEEP_CONSISTENCY
+            - SLEEP_NEED
+            - ENERGY_EXPENDITURE_KJ
+            - AVERAGE_HEART_RATE
+            - MAX_HEART_RATE
+            - SLEEP_DISTURBANCE_COUNT
+            - ANS_CHARGE
+            - CARDIO_LOAD
+            - SLEEP_SCORE
+            - BODY_TEMPERATURE_DEVIATION
+            - RESILIENCE
+            - PHQ9_SCORE
+            - GAD7_SCORE
+            - GRIP_STRENGTH
+            - PAIN_NRS
+            - WAIST_CIRCUMFERENCE
+            - WAIST_TO_HEIGHT
+            - WHO5_SCORE
+            - SCI_SCORE
+        value:
+          type: number
+        measuredAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        notes:
+          type: string
+          maxLength: 200
+        source:
+          default: MANUAL
+          type: string
+          enum:
+            - MANUAL
+            - APPLE_HEALTH
+        glucoseContext:
+          type: string
+          enum:
+            - FASTING
+            - POSTPRANDIAL
+            - RANDOM
+            - BEDTIME
+        deviceType:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 32
+            - type: "null"
+        symptomsPresent:
+          type: boolean
+      required:
+        - type
+        - value
+        - measuredAt
+      description: "Single-measurement ingest body. Plausibility-range guard runs server-side; out-of-range values fail 422.
+        `glucoseContext` stays REQUIRED on a `BLOOD_GLUCOSE` row here: this is the hand-entry surface, where the person
+        taking the reading knows whether it was fasting or after a meal. The bulk ingest paths (CSV import, JSON import,
+        device sync) accept a contextless reading, because a sensor export classifies nothing per sample."
     AppleHealthBatchRequest:
       type: object
       properties:
@@ -22908,6 +21868,185 @@ components:
         - ids
       description: 1..200 measurement ids, scoped to the caller. Forged / foreign / not-deleted ids are silently skipped (no
         existence leak).
+    CreateBatchWorkoutRequest:
+      type: object
+      properties:
+        workouts:
+          minItems: 1
+          maxItems: 100
+          type: array
+          items:
+            type: object
+            properties:
+              sportType:
+                type: string
+                enum:
+                  - walking
+                  - running
+                  - cycling
+                  - hiking
+                  - swimming
+                  - rowing
+                  - elliptical
+                  - stairClimber
+                  - yoga
+                  - mindAndBody
+                  - strength
+                  - hiit
+                  - dance
+                  - golf
+                  - badminton
+                  - tennis
+                  - basketball
+                  - soccer
+                  - crossTraining
+                  - mixedCardio
+                  - other
+              startedAt:
+                type: string
+                format: date-time
+                pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+              endedAt:
+                type: string
+                format: date-time
+                pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+              totalEnergyKcal:
+                type: number
+                minimum: 0
+                maximum: 50000
+              totalDistanceM:
+                type: number
+                minimum: 0
+                maximum: 1000000
+              avgHeartRate:
+                type: integer
+                minimum: 20
+                maximum: 300
+              maxHeartRate:
+                type: integer
+                minimum: 20
+                maximum: 300
+              minHeartRate:
+                type: integer
+                minimum: 20
+                maximum: 300
+              stepCount:
+                type: integer
+                minimum: 0
+                maximum: 200000
+              elevationM:
+                type: number
+                minimum: -500
+                maximum: 10000
+              pauseDurationSec:
+                type: integer
+                minimum: 0
+                maximum: 86400
+              source:
+                default: MANUAL
+                type: string
+                enum:
+                  - MANUAL
+                  - APPLE_HEALTH
+              externalId:
+                type: string
+                maxLength: 128
+              externalSourceVersion:
+                type: string
+                maxLength: 64
+              metadata:
+                type: object
+                propertyNames:
+                  type: string
+                additionalProperties: {}
+              route:
+                type: object
+                properties:
+                  geometry:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                        const: LineString
+                      coordinates:
+                        minItems: 2
+                        maxItems: 20000
+                        type: array
+                        items:
+                          type: array
+                          prefixItems:
+                            - type: number
+                              minimum: -180
+                              maximum: 180
+                            - type: number
+                              minimum: -90
+                              maximum: 90
+                          items:
+                            type: number
+                    required:
+                      - type
+                      - coordinates
+                  sampleTimestamps:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        t:
+                          type: string
+                          format: date-time
+                          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                        speedMs:
+                          type: number
+                          minimum: 0
+                          maximum: 50
+                        hr:
+                          type: integer
+                          minimum: 20
+                          maximum: 300
+                      required:
+                        - t
+                required:
+                  - geometry
+              samples:
+                minItems: 1
+                maxItems: 30000
+                type: array
+                items:
+                  type: object
+                  properties:
+                    t:
+                      type: string
+                      format: date-time
+                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+                    hr:
+                      type: integer
+                      minimum: 20
+                      maximum: 300
+                    speedMs:
+                      type: number
+                      minimum: 0
+                      maximum: 50
+                    power:
+                      type: number
+                      minimum: 0
+                      maximum: 3000
+                    cadence:
+                      type: number
+                      minimum: 0
+                      maximum: 400
+                  required:
+                    - t
+            required:
+              - sportType
+              - startedAt
+              - endedAt
+      required:
+        - workouts
+      description: "Typed workout batch ingest. Each entry is an HKWorkout-aligned record with an optional nested GeoJSON
+        LineString route AND an optional route-independent per-workout heart-rate series (`samples`: `[{ t, hr?,
+        speedMs?, power?, cadence? }]`, up to 30 000 points). The `samples` series is the strain-engine input for indoor
+        workouts that have no GPS route. Up to 100 workouts per call; nested route geometry capped at 20 000 points.
+        Withings server-to-server callers pass source: WITHINGS and ship no route (Withings reports aggregates only)."
     DeviceRegisterRequest:
       type: object
       properties:
@@ -24682,6 +23821,96 @@ components:
       required:
         - timezone
       description: The account's timezone. The handler reads and trims the field directly rather than through a Zod schema.
+    CoachChatRequest:
+      type: object
+      properties:
+        conversationId:
+          type: string
+          minLength: 1
+          maxLength: 64
+        message:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        prefill:
+          type: string
+          maxLength: 2000
+        locale:
+          type: string
+          enum:
+            - en
+            - de
+        scope:
+          type: object
+          properties:
+            sources:
+              maxItems: 40
+              type: array
+              items:
+                type: string
+                enum:
+                  - bp
+                  - weight
+                  - pulse
+                  - mood
+                  - compliance
+                  - hrv
+                  - sleep
+                  - resting_hr
+                  - steps
+                  - active_energy
+                  - flights
+                  - distance
+                  - vo2_max
+                  - body_temp
+                  - walking_hr
+                  - respiratory_rate
+                  - spo2
+                  - pulse_wave_velocity
+                  - vascular_age
+                  - body_fat
+                  - fat_mass
+                  - fat_free_mass
+                  - muscle_mass
+                  - lean_body_mass
+                  - bone_mass
+                  - total_body_water
+                  - bmi
+                  - visceral_fat
+                  - glucose
+                  - walking_steadiness
+                  - walking_asymmetry
+                  - walking_double_support
+                  - walking_step_length
+                  - walking_speed
+                  - audio_env
+                  - audio_headphone
+                  - audio_event
+                  - daylight
+                  - skin_temp
+                  - workouts
+            window:
+              type: string
+              enum:
+                - last7days
+                - last30days
+                - last90days
+                - lastYear
+                - allTime
+        guidedQuestion:
+          type: string
+          minLength: 1
+          maxLength: 500
+        workoutId:
+          type: string
+          maxLength: 64
+      required:
+        - message
+      description: Inbound Coach turn. `message` is the user's turn (1–4 000 chars). `conversationId` is omitted to start a
+        new conversation (the server mints a title from the first message) and supplied to continue one. `scope` narrows
+        which metrics the snapshot ships and which window the timeline covers; omitted fields fall back to server
+        defaults. `locale` picks the reply language. `guidedQuestion` carries the clarifying question a message answers
+        (client-side bubble, never persisted). No `userId` field — the owner is narrowed from the session / Bearer.
     RenameCoachConversationRequest:
       type: object
       properties:
@@ -24867,6 +24096,58 @@ components:
         - version
       description: PUT body for the Insights layout — the layout fields plus the optional optimistic-concurrency base token
         (`baseUpdatedAt`). Omit the token for the legacy unconditional write.
+    UpdateEmergencyProfileRequest:
+      type: object
+      properties:
+        bloodType:
+          anyOf:
+            - type: string
+              enum:
+                - A_POS
+                - A_NEG
+                - B_POS
+                - B_NEG
+                - AB_POS
+                - AB_NEG
+                - O_POS
+                - O_NEG
+                - UNKNOWN
+            - type: "null"
+        organDonor:
+          anyOf:
+            - type: string
+              enum:
+                - YES
+                - NO
+                - UNKNOWN
+            - type: "null"
+        advanceDirective:
+          anyOf:
+            - type: string
+              enum:
+                - EXISTS
+                - NONE
+                - UNKNOWN
+            - type: "null"
+        contacts:
+          anyOf:
+            - type: string
+              maxLength: 2000
+            - type: "null"
+        implants:
+          anyOf:
+            - type: string
+              maxLength: 1000
+            - type: "null"
+        note:
+          anyOf:
+            - type: string
+              maxLength: 2000
+            - type: "null"
+      additionalProperties: false
+      description: Partial edit of the emergency (Notfalldaten) profile. An omitted key leaves the column untouched; a `null`
+        enum or an emptied free-text field clears it. `bloodType`, `organDonor` and `advanceDirective` are closed enums;
+        `contacts`, `implants` and `note` are encrypted at rest. Rejects unknown keys.
     CoachAboutMeAdoptRequest:
       type: object
       properties:
@@ -24883,6 +24164,49 @@ components:
       description: An answer to fold into the stored self-context. `question` is the clarifying question it belongs to and is
         what the server matches the target field from; omit it for the remember-a-message path and the field is matched
         from `answer` instead. `answer` is capped at 500 characters — the same cap as a structured self-context field.
+    CoachPlanPatchRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - proposed
+            - active
+            - met
+            - abandoned
+            - review_due
+            - reviewed
+        reviewDate:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
+      additionalProperties: false
+      description: "v1.21.3 — confirm or update a Coach plan's lifecycle. `status` moves a `proposed` plan to `active`
+        (confirm), or to `met` / `abandoned`. `reviewDate` pins (ISO instant) or clears (null) a check-in checkpoint. At
+        least one field is required. Strict: unknown keys 422 — the body can never carry the metric, the encrypted text,
+        or a userId."
+    CoachReminderSuggestionAction:
+      type: object
+      properties:
+        cadenceId:
+          type: string
+          minLength: 1
+          maxLength: 64
+        action:
+          type: string
+          enum:
+            - accept
+            - dismiss
+            - stop
+      required:
+        - cadenceId
+        - action
+      description: "v1.18.1 — act on a Coach cadence suggestion. `cadenceId` names a closed-catalog preset (e.g.
+        `weight_daily`, `bp_7_2_2`); the client never sends a schedule. `action`: `accept` creates a
+        `MeasurementReminder` (origin: COACH) through the same engine the Vorsorge surface uses; `dismiss` records
+        dismissal memory; `stop` suppresses all future cadence suggestions. Strict: unknown keys 422."
     CoachReminderCreate:
       type: object
       properties:
@@ -25088,6 +24412,88 @@ components:
         genuinely different rating, which is the signal the aggregator wants. `providerType` and `promptVersion` are NOT
         accepted — the server fills both from the account's own attribution, so a client cannot tamper with the slice
         the quality dashboard reports on."
+    MeasurementType:
+      type: string
+      enum:
+        - WEIGHT
+        - BLOOD_PRESSURE_SYS
+        - BLOOD_PRESSURE_DIA
+        - PULSE
+        - BODY_FAT
+        - SLEEP_DURATION
+        - ACTIVITY_STEPS
+        - BLOOD_GLUCOSE
+        - TOTAL_BODY_WATER
+        - BONE_MASS
+        - OXYGEN_SATURATION
+        - HEART_RATE_VARIABILITY
+        - RESTING_HEART_RATE
+        - ACTIVE_ENERGY_BURNED
+        - FLIGHTS_CLIMBED
+        - WALKING_RUNNING_DISTANCE
+        - VO2_MAX
+        - BODY_TEMPERATURE
+        - FAT_FREE_MASS
+        - FAT_MASS
+        - MUSCLE_MASS
+        - SKIN_TEMPERATURE
+        - PULSE_WAVE_VELOCITY
+        - VASCULAR_AGE
+        - VISCERAL_FAT
+        - AUDIO_EXPOSURE_ENV
+        - AUDIO_EXPOSURE_HEADPHONE
+        - TIME_IN_DAYLIGHT
+        - WALKING_STEADINESS
+        - AUDIO_EXPOSURE_EVENT
+        - RESPIRATORY_RATE
+        - BODY_MASS_INDEX
+        - LEAN_BODY_MASS
+        - WALKING_HEART_RATE_AVERAGE
+        - WALKING_ASYMMETRY
+        - WALKING_DOUBLE_SUPPORT
+        - WALKING_STEP_LENGTH
+        - WALKING_SPEED
+        - CARDIO_RECOVERY
+        - WRIST_TEMPERATURE
+        - FALL_COUNT
+        - SIX_MINUTE_WALK_DISTANCE
+        - STAIR_ASCENT_SPEED
+        - STAIR_DESCENT_SPEED
+        - BREATHING_DISTURBANCES
+        - IRREGULAR_RHYTHM_NOTIFICATION
+        - HIGH_HEART_RATE_EVENT
+        - LOW_HEART_RATE_EVENT
+        - WALKING_STEADINESS_EVENT
+        - BREATHING_DISTURBANCE_EVENT
+        - RECOVERY_SCORE
+        - STRESS_SCORE
+        - STRAIN_SCORE
+        - HRV_RMSSD
+        - DAY_STRAIN
+        - WORKOUT_STRAIN
+        - SLEEP_PERFORMANCE
+        - SLEEP_EFFICIENCY
+        - SLEEP_CONSISTENCY
+        - SLEEP_NEED
+        - ENERGY_EXPENDITURE_KJ
+        - AVERAGE_HEART_RATE
+        - MAX_HEART_RATE
+        - SLEEP_DISTURBANCE_COUNT
+        - ANS_CHARGE
+        - CARDIO_LOAD
+        - SLEEP_SCORE
+        - BODY_TEMPERATURE_DEVIATION
+        - RESILIENCE
+        - PHQ9_SCORE
+        - GAD7_SCORE
+        - GRIP_STRENGTH
+        - PAIN_NRS
+        - WAIST_CIRCUMFERENCE
+        - WAIST_TO_HEIGHT
+        - WHO5_SCORE
+        - SCI_SCORE
+      description: DB-stored measurement category. v1.4.23 added 7 Apple Health values (HRV, resting HR, active energy,
+        flights, walking/running distance, VO2 max, body temperature).
     InsightsSettingsPutRequest:
       type: object
       properties:
@@ -26160,6 +25566,41 @@ components:
       required:
         - confirm
       description: Typed confirmation for erasing the record. No undo.
+    ConsentPostBody:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+            - ai_full
+            - ai_insights_only
+            - ai_coach
+        artefact:
+          type: string
+          minLength: 1
+        signedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+      required:
+        - kind
+        - artefact
+        - signedAt
+      description: Explicit AI-consent grant. `artefact` is an opaque signed receipt (base64 PDF or JWT, ≤ 64 KB UTF-8 bytes);
+        `signedAt` is an ISO-8601 instant. Always appends a fresh row — re-granting after a revoke mints a new receipt.
+    WebConsentGrantBody:
+      type: object
+      properties:
+        intent:
+          default: heal
+          type: string
+          enum:
+            - heal
+            - affirmative
+      description: "Optional. Omitting the body (or sending `intent: \"heal\"`) is the AI-settings mount heal: it mints only
+        for an account with no `ai_full` consent history at all, so a standing revocation is never resurrected. `intent:
+        \"affirmative\"` is the user's own grant action and may supersede an earlier revocation, exactly as a first
+        grant would."
     JsonImportRequest:
       type: object
       properties:
@@ -26179,85 +25620,7 @@ components:
       type: object
       properties:
         type:
-          type: string
-          enum:
-            - WEIGHT
-            - BLOOD_PRESSURE_SYS
-            - BLOOD_PRESSURE_DIA
-            - PULSE
-            - BODY_FAT
-            - SLEEP_DURATION
-            - ACTIVITY_STEPS
-            - BLOOD_GLUCOSE
-            - TOTAL_BODY_WATER
-            - BONE_MASS
-            - OXYGEN_SATURATION
-            - HEART_RATE_VARIABILITY
-            - RESTING_HEART_RATE
-            - ACTIVE_ENERGY_BURNED
-            - FLIGHTS_CLIMBED
-            - WALKING_RUNNING_DISTANCE
-            - VO2_MAX
-            - BODY_TEMPERATURE
-            - FAT_FREE_MASS
-            - FAT_MASS
-            - MUSCLE_MASS
-            - SKIN_TEMPERATURE
-            - PULSE_WAVE_VELOCITY
-            - VASCULAR_AGE
-            - VISCERAL_FAT
-            - AUDIO_EXPOSURE_ENV
-            - AUDIO_EXPOSURE_HEADPHONE
-            - TIME_IN_DAYLIGHT
-            - WALKING_STEADINESS
-            - AUDIO_EXPOSURE_EVENT
-            - RESPIRATORY_RATE
-            - BODY_MASS_INDEX
-            - LEAN_BODY_MASS
-            - WALKING_HEART_RATE_AVERAGE
-            - WALKING_ASYMMETRY
-            - WALKING_DOUBLE_SUPPORT
-            - WALKING_STEP_LENGTH
-            - WALKING_SPEED
-            - CARDIO_RECOVERY
-            - WRIST_TEMPERATURE
-            - FALL_COUNT
-            - SIX_MINUTE_WALK_DISTANCE
-            - STAIR_ASCENT_SPEED
-            - STAIR_DESCENT_SPEED
-            - BREATHING_DISTURBANCES
-            - IRREGULAR_RHYTHM_NOTIFICATION
-            - HIGH_HEART_RATE_EVENT
-            - LOW_HEART_RATE_EVENT
-            - WALKING_STEADINESS_EVENT
-            - BREATHING_DISTURBANCE_EVENT
-            - RECOVERY_SCORE
-            - STRESS_SCORE
-            - STRAIN_SCORE
-            - HRV_RMSSD
-            - DAY_STRAIN
-            - WORKOUT_STRAIN
-            - SLEEP_PERFORMANCE
-            - SLEEP_EFFICIENCY
-            - SLEEP_CONSISTENCY
-            - SLEEP_NEED
-            - ENERGY_EXPENDITURE_KJ
-            - AVERAGE_HEART_RATE
-            - MAX_HEART_RATE
-            - SLEEP_DISTURBANCE_COUNT
-            - ANS_CHARGE
-            - CARDIO_LOAD
-            - SLEEP_SCORE
-            - BODY_TEMPERATURE_DEVIATION
-            - RESILIENCE
-            - PHQ9_SCORE
-            - GAD7_SCORE
-            - GRIP_STRENGTH
-            - PAIN_NRS
-            - WAIST_CIRCUMFERENCE
-            - WAIST_TO_HEIGHT
-            - WHO5_SCORE
-            - SCI_SCORE
+          $ref: "#/components/schemas/MeasurementType"
         value:
           type: number
           description: Checked against the type's server-side plausibility range; an out-of-range value fails the whole request
@@ -26490,6 +25853,498 @@ components:
       required:
         - mode
         - text
+    OcrCommitRequest:
+      type: object
+      properties:
+        rows:
+          minItems: 1
+          maxItems: 100
+          type: array
+          items:
+            type: object
+            properties:
+              analyte:
+                type: string
+                minLength: 1
+                maxLength: 120
+              panel:
+                anyOf:
+                  - type: string
+                    minLength: 1
+                    maxLength: 120
+                  - type: string
+                    const: ""
+              value:
+                type: number
+              valueText:
+                type: string
+                minLength: 1
+                maxLength: 120
+              unit:
+                type: string
+                minLength: 1
+                maxLength: 40
+              referenceLow:
+                type: number
+              referenceHigh:
+                type: number
+              referenceText:
+                anyOf:
+                  - type: string
+                    maxLength: 120
+                  - type: string
+                    const: ""
+              takenAt:
+                type: string
+                format: date-time
+                pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+            required:
+              - analyte
+              - takenAt
+        documentId:
+          type: string
+          minLength: 1
+          maxLength: 64
+        encounterId:
+          type: string
+          minLength: 1
+          maxLength: 40
+      required:
+        - rows
+      description: The rows a human confirmed on the Lab-OCR review screen. Each row is EITHER numeric (`value` + `unit`,
+        optional reference bounds) OR qualitative (`valueText`) — exactly one. `analyte` drives a resolve-or-mint of the
+        user-scoped biomarker; `takenAt` is a backdatable ISO instant. No `userId` field — it is narrowed from the
+        session. 1..100 rows. The route skips a row that duplicates a live reading (same analyte + day + value). The
+        optional `encounterId` files the panel against a visit the caller owns — ONE link per written result row, so a
+        marker re-run on a different day belongs to its own visit; always optional, and a link that could not be made
+        never fails the commit.
+    CreateBiomarkerRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        unit:
+          type: string
+          minLength: 1
+          maxLength: 40
+        lowerBound:
+          type: number
+        upperBound:
+          type: number
+        context:
+          type: string
+          maxLength: 2000
+        panel:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 120
+            - type: string
+              const: ""
+      required:
+        - name
+        - unit
+      description: "Define a user-scoped biomarker ONCE: canonical `name`, `unit`, optional reference bounds (`lowerBound` /
+        `upperBound`; when both present `lowerBound` must not exceed `upperBound`), an optional encrypted `context`
+        note, and an optional `panel` grouping. The name is unique per user (no second 'LDL'). Recording a value later
+        just picks this marker — its unit + range are never re-entered."
+    UpdateBiomarkerRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        unit:
+          type: string
+          minLength: 1
+          maxLength: 40
+        lowerBound:
+          anyOf:
+            - type: number
+            - type: "null"
+        upperBound:
+          anyOf:
+            - type: number
+            - type: "null"
+        context:
+          anyOf:
+            - type: string
+              maxLength: 2000
+            - type: "null"
+        panel:
+          anyOf:
+            - anyOf:
+                - type: string
+                  minLength: 1
+                  maxLength: 120
+                - type: string
+                  const: ""
+            - type: "null"
+        hidden:
+          type: boolean
+      description: Partial edit of a biomarker. An omitted key leaves the column untouched; an explicit `null` on `context` /
+        `panel` / a bound clears it. Set `hidden` to drop / restore the marker in the active list + lab-entry pickers. A
+        rename that collides with another of the caller's markers is rejected 409.
+    CreateEncounterRequest:
+      type: object
+      properties:
+        occurredAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        status:
+          default: DONE
+          type: string
+          enum:
+            - PLANNED
+            - DONE
+            - CANCELLED
+            - NO_SHOW
+        kind:
+          default: OTHER
+          type: string
+          enum:
+            - ROUTINE
+            - ACUTE
+            - SPECIALIST
+            - PREVENTIVE
+            - EMERGENCY
+            - HOSPITAL
+            - THERAPY
+            - OTHER
+        practitionerId:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 40
+            - type: "null"
+        reason:
+          anyOf:
+            - type: string
+              maxLength: 2000
+            - type: "null"
+        outcome:
+          anyOf:
+            - type: string
+              maxLength: 4000
+            - type: "null"
+        reminderId:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 40
+            - type: "null"
+        documentIds:
+          maxItems: 100
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 40
+        labResultIds:
+          maxItems: 100
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 40
+        episodeIds:
+          maxItems: 100
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 40
+      required:
+        - occurredAt
+      additionalProperties: false
+      description: "File a visit, or book one. `occurredAt` is the only required field — a visit saves with a date and nothing
+        else. A future instant with `status: PLANNED` books an appointment and mints exactly one reminder for it.
+        `reason` and `outcome` are encrypted at rest. The three id arrays pre-link documents, lab results and condition
+        episodes; an id naming nothing the caller owns is dropped rather than refused, so a link never blocks a save."
+    UpdateEncounterRequest:
+      type: object
+      properties:
+        occurredAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        status:
+          type: string
+          enum:
+            - PLANNED
+            - DONE
+            - CANCELLED
+            - NO_SHOW
+        kind:
+          type: string
+          enum:
+            - ROUTINE
+            - ACUTE
+            - SPECIALIST
+            - PREVENTIVE
+            - EMERGENCY
+            - HOSPITAL
+            - THERAPY
+            - OTHER
+        practitionerId:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 40
+            - type: "null"
+        reason:
+          anyOf:
+            - type: string
+              maxLength: 2000
+            - type: "null"
+        outcome:
+          anyOf:
+            - type: string
+              maxLength: 4000
+            - type: "null"
+        reminderId:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 40
+            - type: "null"
+        documentIds:
+          maxItems: 100
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 40
+        labResultIds:
+          maxItems: 100
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 40
+        episodeIds:
+          maxItems: 100
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 40
+      additionalProperties: false
+      description: Partial edit of a visit; an omitted key leaves the column untouched, and a body naming nothing is a 422.
+        Moving `occurredAt` re-anchors the appointment reminder the visit already owns and never mints a second. Moving
+        `status` to DONE closes the checkup named by `reminderId`, on the transition only. CANCELLED and NO_SHOW stop
+        the reminder without deleting the row. A present id array replaces that link family, empty array included.
+    EncounterLinkRequest:
+      type: object
+      properties:
+        targetKind:
+          type: string
+          enum:
+            - document
+            - labResult
+            - conditionEpisode
+        targetIds:
+          minItems: 1
+          maxItems: 100
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 40
+      required:
+        - targetKind
+        - targetIds
+      additionalProperties: false
+      description: Targets to file against, or unfile from, a visit. Idempotent in both directions and capped at 100 ids. Ids
+        naming nothing the caller owns come back in `unknown` rather than failing the request.
+    CreatePractitionerRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        specialty:
+          anyOf:
+            - type: string
+              maxLength: 120
+            - type: "null"
+        practice:
+          anyOf:
+            - type: string
+              maxLength: 160
+            - type: "null"
+        location:
+          anyOf:
+            - type: string
+              maxLength: 300
+            - type: "null"
+        phone:
+          anyOf:
+            - type: string
+              maxLength: 60
+            - type: "null"
+        note:
+          anyOf:
+            - type: string
+              maxLength: 2000
+            - type: "null"
+      required:
+        - name
+      additionalProperties: false
+      description: Add a doctor or practice to the caller's own address book. `name` is the only required field and is stored
+        as queryable plaintext so the picker can search and sort it; `note` is encrypted at rest. `specialty` is free
+        text rather than an enum. Nothing is unique across accounts.
+    UpdatePractitionerRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        specialty:
+          anyOf:
+            - type: string
+              maxLength: 120
+            - type: "null"
+        practice:
+          anyOf:
+            - type: string
+              maxLength: 160
+            - type: "null"
+        location:
+          anyOf:
+            - type: string
+              maxLength: 300
+            - type: "null"
+        phone:
+          anyOf:
+            - type: string
+              maxLength: 60
+            - type: "null"
+        note:
+          anyOf:
+            - type: string
+              maxLength: 2000
+            - type: "null"
+      additionalProperties: false
+      description: Partial edit; an omitted key leaves the column untouched, an explicit null clears it, and a body naming
+        nothing is a 422.
+    CreateAllergyRequest:
+      type: object
+      properties:
+        substance:
+          type: string
+          minLength: 1
+          maxLength: 160
+        category:
+          default: OTHER
+          type: string
+          enum:
+            - FOOD
+            - MEDICATION
+            - ENVIRONMENT
+            - BIOLOGIC
+            - OTHER
+        type:
+          default: ALLERGY
+          type: string
+          enum:
+            - ALLERGY
+            - INTOLERANCE
+        severity:
+          anyOf:
+            - type: string
+              enum:
+                - MILD
+                - MODERATE
+                - SEVERE
+            - type: "null"
+        status:
+          default: ACTIVE
+          type: string
+          enum:
+            - ACTIVE
+            - INACTIVE
+            - RESOLVED
+        onsetAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
+        reaction:
+          anyOf:
+            - type: string
+              maxLength: 2000
+            - type: "null"
+        note:
+          anyOf:
+            - type: string
+              maxLength: 2000
+            - type: "null"
+      required:
+        - substance
+      description: Record an allergy/intolerance. `substance` is the user-facing allergen name (the FHIR AllergyIntolerance
+        `code.text` anchor — never a machine-guessed code). The free-text `reaction` + `note` are encrypted at rest.
+        `onsetAt` is optional (unknown when omitted). Patient-reported.
+    UpdateAllergyRequest:
+      type: object
+      properties:
+        substance:
+          type: string
+          minLength: 1
+          maxLength: 160
+        category:
+          type: string
+          enum:
+            - FOOD
+            - MEDICATION
+            - ENVIRONMENT
+            - BIOLOGIC
+            - OTHER
+        type:
+          type: string
+          enum:
+            - ALLERGY
+            - INTOLERANCE
+        severity:
+          anyOf:
+            - type: string
+              enum:
+                - MILD
+                - MODERATE
+                - SEVERE
+            - type: "null"
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - INACTIVE
+            - RESOLVED
+        onsetAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
+        reaction:
+          anyOf:
+            - type: string
+              maxLength: 2000
+            - type: "null"
+        note:
+          anyOf:
+            - type: string
+              maxLength: 2000
+            - type: "null"
+      additionalProperties: false
+      description: Partial edit of an allergy; an omitted key leaves the column untouched. A `null`
+        `severity`/`onsetAt`/`reaction`/`note` clears that field. Rejects unknown keys.
     InboundExtractRequest:
       anyOf:
         - type: object
@@ -28488,13 +28343,7 @@ components:
             - type: "null"
         flow:
           anyOf:
-            - type: string
-              enum:
-                - NONE
-                - SPOTTING
-                - LIGHT
-                - MEDIUM
-                - HEAVY
+            - $ref: "#/components/schemas/FlowLevel"
             - type: "null"
         intermenstrualBleeding:
           type: boolean
@@ -28506,22 +28355,11 @@ components:
           type: boolean
         ovulationTest:
           anyOf:
-            - type: string
-              enum:
-                - NEGATIVE
-                - POSITIVE_LH_SURGE
-                - ESTROGEN_SURGE
-                - INDETERMINATE
+            - $ref: "#/components/schemas/OvulationTest"
             - type: "null"
         cervicalMucus:
           anyOf:
-            - type: string
-              enum:
-                - DRY
-                - STICKY
-                - CREAMY
-                - WATERY
-                - EGG_WHITE
+            - $ref: "#/components/schemas/CervicalMucus"
             - type: "null"
         cervixPosition:
           anyOf:
@@ -28552,19 +28390,11 @@ components:
             - type: "null"
         pregnancyTest:
           anyOf:
-            - type: string
-              enum:
-                - NEGATIVE
-                - POSITIVE
-                - INDETERMINATE
+            - $ref: "#/components/schemas/HomeTestResult"
             - type: "null"
         progesteroneTest:
           anyOf:
-            - type: string
-              enum:
-                - NEGATIVE
-                - POSITIVE
-                - INDETERMINATE
+            - $ref: "#/components/schemas/HomeTestResult"
             - type: "null"
         contraceptive:
           anyOf:
@@ -28639,6 +28469,39 @@ components:
       additionalProperties: false
       description: The canonical day-log row iOS mirrors. `note` is decrypted on read. Soft-deleted rows ride
         `/api/sync/changes` as tombstones.
+    FlowLevel:
+      type: string
+      enum:
+        - NONE
+        - SPOTTING
+        - LIGHT
+        - MEDIUM
+        - HEAVY
+      description: Menstrual-flow intensity.
+    OvulationTest:
+      type: string
+      enum:
+        - NEGATIVE
+        - POSITIVE_LH_SURGE
+        - ESTROGEN_SURGE
+        - INDETERMINATE
+      description: Ovulation predictor-kit (OPK) reading.
+    CervicalMucus:
+      type: string
+      enum:
+        - DRY
+        - STICKY
+        - CREAMY
+        - WATERY
+        - EGG_WHITE
+      description: Cervical-mucus quality.
+    HomeTestResult:
+      type: string
+      enum:
+        - NEGATIVE
+        - POSITIVE
+        - INDETERMINATE
+      description: At-home test result (pregnancy / progesterone).
     CycleDayLogEnvelope:
       type: object
       properties:
@@ -28852,13 +28715,7 @@ components:
               type: object
               properties:
                 goal:
-                  type: string
-                  enum:
-                    - GENERAL_HEALTH
-                    - AVOID_PREGNANCY
-                    - TRYING_TO_CONCEIVE
-                    - PERIMENOPAUSE
-                    - OFF
+                  $ref: "#/components/schemas/CycleTrackingGoal"
                 rawChartMode:
                   type: boolean
                 predictionEnabled:
@@ -28905,13 +28762,7 @@ components:
                     description: Whether a logged cycle opens on this day. Deleting this day's log removes that cycle start with it.
                   flow:
                     anyOf:
-                      - type: string
-                        enum:
-                          - NONE
-                          - SPOTTING
-                          - LIGHT
-                          - MEDIUM
-                          - HEAVY
+                      - $ref: "#/components/schemas/FlowLevel"
                       - type: "null"
                   hasSymptoms:
                     type: boolean
@@ -28925,22 +28776,11 @@ components:
                     type: boolean
                   ovulationTest:
                     anyOf:
-                      - type: string
-                        enum:
-                          - NEGATIVE
-                          - POSITIVE_LH_SURGE
-                          - ESTROGEN_SURGE
-                          - INDETERMINATE
+                      - $ref: "#/components/schemas/OvulationTest"
                       - type: "null"
                   cervicalMucus:
                     anyOf:
-                      - type: string
-                        enum:
-                          - DRY
-                          - STICKY
-                          - CREAMY
-                          - WATERY
-                          - EGG_WHITE
+                      - $ref: "#/components/schemas/CervicalMucus"
                       - type: "null"
                   cervixPosition:
                     anyOf:
@@ -29012,6 +28852,15 @@ components:
         - data
         - error
       additionalProperties: false
+    CycleTrackingGoal:
+      type: string
+      enum:
+        - GENERAL_HEALTH
+        - AVOID_PREGNANCY
+        - TRYING_TO_CONCEIVE
+        - PERIMENOPAUSE
+        - OFF
+      description: Drives cycle copy + fertile-window gating.
     CyclePredictionDTO:
       type: object
       properties:
@@ -29532,13 +29381,7 @@ components:
       type: object
       properties:
         goal:
-          type: string
-          enum:
-            - GENERAL_HEALTH
-            - AVOID_PREGNANCY
-            - TRYING_TO_CONCEIVE
-            - PERIMENOPAUSE
-            - OFF
+          $ref: "#/components/schemas/CycleTrackingGoal"
         cycleTrackingEnabled:
           type: boolean
         secondarySymptom:
@@ -36581,85 +36424,7 @@ components:
           description: Stored row id, or a synthetic key (`day:<type>:<dayKey>`, `sleep-seg:<dayKey>:<n>`) on the collapsed list
             modes.
         type:
-          type: string
-          enum:
-            - WEIGHT
-            - BLOOD_PRESSURE_SYS
-            - BLOOD_PRESSURE_DIA
-            - PULSE
-            - BODY_FAT
-            - SLEEP_DURATION
-            - ACTIVITY_STEPS
-            - BLOOD_GLUCOSE
-            - TOTAL_BODY_WATER
-            - BONE_MASS
-            - OXYGEN_SATURATION
-            - HEART_RATE_VARIABILITY
-            - RESTING_HEART_RATE
-            - ACTIVE_ENERGY_BURNED
-            - FLIGHTS_CLIMBED
-            - WALKING_RUNNING_DISTANCE
-            - VO2_MAX
-            - BODY_TEMPERATURE
-            - FAT_FREE_MASS
-            - FAT_MASS
-            - MUSCLE_MASS
-            - SKIN_TEMPERATURE
-            - PULSE_WAVE_VELOCITY
-            - VASCULAR_AGE
-            - VISCERAL_FAT
-            - AUDIO_EXPOSURE_ENV
-            - AUDIO_EXPOSURE_HEADPHONE
-            - TIME_IN_DAYLIGHT
-            - WALKING_STEADINESS
-            - AUDIO_EXPOSURE_EVENT
-            - RESPIRATORY_RATE
-            - BODY_MASS_INDEX
-            - LEAN_BODY_MASS
-            - WALKING_HEART_RATE_AVERAGE
-            - WALKING_ASYMMETRY
-            - WALKING_DOUBLE_SUPPORT
-            - WALKING_STEP_LENGTH
-            - WALKING_SPEED
-            - CARDIO_RECOVERY
-            - WRIST_TEMPERATURE
-            - FALL_COUNT
-            - SIX_MINUTE_WALK_DISTANCE
-            - STAIR_ASCENT_SPEED
-            - STAIR_DESCENT_SPEED
-            - BREATHING_DISTURBANCES
-            - IRREGULAR_RHYTHM_NOTIFICATION
-            - HIGH_HEART_RATE_EVENT
-            - LOW_HEART_RATE_EVENT
-            - WALKING_STEADINESS_EVENT
-            - BREATHING_DISTURBANCE_EVENT
-            - RECOVERY_SCORE
-            - STRESS_SCORE
-            - STRAIN_SCORE
-            - HRV_RMSSD
-            - DAY_STRAIN
-            - WORKOUT_STRAIN
-            - SLEEP_PERFORMANCE
-            - SLEEP_EFFICIENCY
-            - SLEEP_CONSISTENCY
-            - SLEEP_NEED
-            - ENERGY_EXPENDITURE_KJ
-            - AVERAGE_HEART_RATE
-            - MAX_HEART_RATE
-            - SLEEP_DISTURBANCE_COUNT
-            - ANS_CHARGE
-            - CARDIO_LOAD
-            - SLEEP_SCORE
-            - BODY_TEMPERATURE_DEVIATION
-            - RESILIENCE
-            - PHQ9_SCORE
-            - GAD7_SCORE
-            - GRIP_STRENGTH
-            - PAIN_NRS
-            - WAIST_CIRCUMFERENCE
-            - WAIST_TO_HEIGHT
-            - WHO5_SCORE
-            - SCI_SCORE
+          $ref: "#/components/schemas/MeasurementType"
         value:
           type: number
         unit:
@@ -36669,22 +36434,7 @@ components:
           format: date-time
           pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
         source:
-          type: string
-          enum:
-            - MANUAL
-            - WITHINGS
-            - IMPORT
-            - APPLE_HEALTH
-            - COMPUTED
-            - WHOOP
-            - FITBIT
-            - NIGHTSCOUT
-            - POLAR
-            - OURA
-            - TELEGRAM
-            - MCP
-            - GOOGLE_HEALTH
-            - STRAVA
+          $ref: "#/components/schemas/MeasurementSource"
         notes:
           anyOf:
             - type: string
@@ -36771,6 +36521,24 @@ components:
         - syncVersion
         - updatedAt
       additionalProperties: false
+    MeasurementSource:
+      type: string
+      enum:
+        - MANUAL
+        - WITHINGS
+        - IMPORT
+        - APPLE_HEALTH
+        - COMPUTED
+        - WHOOP
+        - FITBIT
+        - NIGHTSCOUT
+        - POLAR
+        - OURA
+        - TELEGRAM
+        - MCP
+        - GOOGLE_HEALTH
+        - STRAVA
+      description: Origin of the measurement. v1.4.23 added APPLE_HEALTH for the iOS HealthKit batch ingest path.
     SyncMeasurementTombstone:
       type: object
       properties:
@@ -37012,170 +36780,14 @@ components:
         series:
           type: object
           propertyNames:
-            type: string
-            enum:
-              - WEIGHT
-              - BLOOD_PRESSURE_SYS
-              - BLOOD_PRESSURE_DIA
-              - PULSE
-              - BODY_FAT
-              - SLEEP_DURATION
-              - ACTIVITY_STEPS
-              - BLOOD_GLUCOSE
-              - TOTAL_BODY_WATER
-              - BONE_MASS
-              - OXYGEN_SATURATION
-              - HEART_RATE_VARIABILITY
-              - RESTING_HEART_RATE
-              - ACTIVE_ENERGY_BURNED
-              - FLIGHTS_CLIMBED
-              - WALKING_RUNNING_DISTANCE
-              - VO2_MAX
-              - BODY_TEMPERATURE
-              - FAT_FREE_MASS
-              - FAT_MASS
-              - MUSCLE_MASS
-              - SKIN_TEMPERATURE
-              - PULSE_WAVE_VELOCITY
-              - VASCULAR_AGE
-              - VISCERAL_FAT
-              - AUDIO_EXPOSURE_ENV
-              - AUDIO_EXPOSURE_HEADPHONE
-              - TIME_IN_DAYLIGHT
-              - WALKING_STEADINESS
-              - AUDIO_EXPOSURE_EVENT
-              - RESPIRATORY_RATE
-              - BODY_MASS_INDEX
-              - LEAN_BODY_MASS
-              - WALKING_HEART_RATE_AVERAGE
-              - WALKING_ASYMMETRY
-              - WALKING_DOUBLE_SUPPORT
-              - WALKING_STEP_LENGTH
-              - WALKING_SPEED
-              - CARDIO_RECOVERY
-              - WRIST_TEMPERATURE
-              - FALL_COUNT
-              - SIX_MINUTE_WALK_DISTANCE
-              - STAIR_ASCENT_SPEED
-              - STAIR_DESCENT_SPEED
-              - BREATHING_DISTURBANCES
-              - IRREGULAR_RHYTHM_NOTIFICATION
-              - HIGH_HEART_RATE_EVENT
-              - LOW_HEART_RATE_EVENT
-              - WALKING_STEADINESS_EVENT
-              - BREATHING_DISTURBANCE_EVENT
-              - RECOVERY_SCORE
-              - STRESS_SCORE
-              - STRAIN_SCORE
-              - HRV_RMSSD
-              - DAY_STRAIN
-              - WORKOUT_STRAIN
-              - SLEEP_PERFORMANCE
-              - SLEEP_EFFICIENCY
-              - SLEEP_CONSISTENCY
-              - SLEEP_NEED
-              - ENERGY_EXPENDITURE_KJ
-              - AVERAGE_HEART_RATE
-              - MAX_HEART_RATE
-              - SLEEP_DISTURBANCE_COUNT
-              - ANS_CHARGE
-              - CARDIO_LOAD
-              - SLEEP_SCORE
-              - BODY_TEMPERATURE_DEVIATION
-              - RESILIENCE
-              - PHQ9_SCORE
-              - GAD7_SCORE
-              - GRIP_STRENGTH
-              - PAIN_NRS
-              - WAIST_CIRCUMFERENCE
-              - WAIST_TO_HEIGHT
-              - WHO5_SCORE
-              - SCI_SCORE
+            $ref: "#/components/schemas/MeasurementType"
           additionalProperties:
             type: array
             items:
               type: object
               properties:
                 type:
-                  type: string
-                  enum:
-                    - WEIGHT
-                    - BLOOD_PRESSURE_SYS
-                    - BLOOD_PRESSURE_DIA
-                    - PULSE
-                    - BODY_FAT
-                    - SLEEP_DURATION
-                    - ACTIVITY_STEPS
-                    - BLOOD_GLUCOSE
-                    - TOTAL_BODY_WATER
-                    - BONE_MASS
-                    - OXYGEN_SATURATION
-                    - HEART_RATE_VARIABILITY
-                    - RESTING_HEART_RATE
-                    - ACTIVE_ENERGY_BURNED
-                    - FLIGHTS_CLIMBED
-                    - WALKING_RUNNING_DISTANCE
-                    - VO2_MAX
-                    - BODY_TEMPERATURE
-                    - FAT_FREE_MASS
-                    - FAT_MASS
-                    - MUSCLE_MASS
-                    - SKIN_TEMPERATURE
-                    - PULSE_WAVE_VELOCITY
-                    - VASCULAR_AGE
-                    - VISCERAL_FAT
-                    - AUDIO_EXPOSURE_ENV
-                    - AUDIO_EXPOSURE_HEADPHONE
-                    - TIME_IN_DAYLIGHT
-                    - WALKING_STEADINESS
-                    - AUDIO_EXPOSURE_EVENT
-                    - RESPIRATORY_RATE
-                    - BODY_MASS_INDEX
-                    - LEAN_BODY_MASS
-                    - WALKING_HEART_RATE_AVERAGE
-                    - WALKING_ASYMMETRY
-                    - WALKING_DOUBLE_SUPPORT
-                    - WALKING_STEP_LENGTH
-                    - WALKING_SPEED
-                    - CARDIO_RECOVERY
-                    - WRIST_TEMPERATURE
-                    - FALL_COUNT
-                    - SIX_MINUTE_WALK_DISTANCE
-                    - STAIR_ASCENT_SPEED
-                    - STAIR_DESCENT_SPEED
-                    - BREATHING_DISTURBANCES
-                    - IRREGULAR_RHYTHM_NOTIFICATION
-                    - HIGH_HEART_RATE_EVENT
-                    - LOW_HEART_RATE_EVENT
-                    - WALKING_STEADINESS_EVENT
-                    - BREATHING_DISTURBANCE_EVENT
-                    - RECOVERY_SCORE
-                    - STRESS_SCORE
-                    - STRAIN_SCORE
-                    - HRV_RMSSD
-                    - DAY_STRAIN
-                    - WORKOUT_STRAIN
-                    - SLEEP_PERFORMANCE
-                    - SLEEP_EFFICIENCY
-                    - SLEEP_CONSISTENCY
-                    - SLEEP_NEED
-                    - ENERGY_EXPENDITURE_KJ
-                    - AVERAGE_HEART_RATE
-                    - MAX_HEART_RATE
-                    - SLEEP_DISTURBANCE_COUNT
-                    - ANS_CHARGE
-                    - CARDIO_LOAD
-                    - SLEEP_SCORE
-                    - BODY_TEMPERATURE_DEVIATION
-                    - RESILIENCE
-                    - PHQ9_SCORE
-                    - GAD7_SCORE
-                    - GRIP_STRENGTH
-                    - PAIN_NRS
-                    - WAIST_CIRCUMFERENCE
-                    - WAIST_TO_HEIGHT
-                    - WHO5_SCORE
-                    - SCI_SCORE
+                  $ref: "#/components/schemas/MeasurementType"
                 value:
                   type: number
                   description: Daily mean (spot metrics) or SUM (cumulative).
@@ -37446,85 +37058,7 @@ components:
           description: Stored row id, or a synthetic key (`day:<type>:<dayKey>`, `sleep-seg:<dayKey>:<n>`) on the collapsed list
             modes.
         type:
-          type: string
-          enum:
-            - WEIGHT
-            - BLOOD_PRESSURE_SYS
-            - BLOOD_PRESSURE_DIA
-            - PULSE
-            - BODY_FAT
-            - SLEEP_DURATION
-            - ACTIVITY_STEPS
-            - BLOOD_GLUCOSE
-            - TOTAL_BODY_WATER
-            - BONE_MASS
-            - OXYGEN_SATURATION
-            - HEART_RATE_VARIABILITY
-            - RESTING_HEART_RATE
-            - ACTIVE_ENERGY_BURNED
-            - FLIGHTS_CLIMBED
-            - WALKING_RUNNING_DISTANCE
-            - VO2_MAX
-            - BODY_TEMPERATURE
-            - FAT_FREE_MASS
-            - FAT_MASS
-            - MUSCLE_MASS
-            - SKIN_TEMPERATURE
-            - PULSE_WAVE_VELOCITY
-            - VASCULAR_AGE
-            - VISCERAL_FAT
-            - AUDIO_EXPOSURE_ENV
-            - AUDIO_EXPOSURE_HEADPHONE
-            - TIME_IN_DAYLIGHT
-            - WALKING_STEADINESS
-            - AUDIO_EXPOSURE_EVENT
-            - RESPIRATORY_RATE
-            - BODY_MASS_INDEX
-            - LEAN_BODY_MASS
-            - WALKING_HEART_RATE_AVERAGE
-            - WALKING_ASYMMETRY
-            - WALKING_DOUBLE_SUPPORT
-            - WALKING_STEP_LENGTH
-            - WALKING_SPEED
-            - CARDIO_RECOVERY
-            - WRIST_TEMPERATURE
-            - FALL_COUNT
-            - SIX_MINUTE_WALK_DISTANCE
-            - STAIR_ASCENT_SPEED
-            - STAIR_DESCENT_SPEED
-            - BREATHING_DISTURBANCES
-            - IRREGULAR_RHYTHM_NOTIFICATION
-            - HIGH_HEART_RATE_EVENT
-            - LOW_HEART_RATE_EVENT
-            - WALKING_STEADINESS_EVENT
-            - BREATHING_DISTURBANCE_EVENT
-            - RECOVERY_SCORE
-            - STRESS_SCORE
-            - STRAIN_SCORE
-            - HRV_RMSSD
-            - DAY_STRAIN
-            - WORKOUT_STRAIN
-            - SLEEP_PERFORMANCE
-            - SLEEP_EFFICIENCY
-            - SLEEP_CONSISTENCY
-            - SLEEP_NEED
-            - ENERGY_EXPENDITURE_KJ
-            - AVERAGE_HEART_RATE
-            - MAX_HEART_RATE
-            - SLEEP_DISTURBANCE_COUNT
-            - ANS_CHARGE
-            - CARDIO_LOAD
-            - SLEEP_SCORE
-            - BODY_TEMPERATURE_DEVIATION
-            - RESILIENCE
-            - PHQ9_SCORE
-            - GAD7_SCORE
-            - GRIP_STRENGTH
-            - PAIN_NRS
-            - WAIST_CIRCUMFERENCE
-            - WAIST_TO_HEIGHT
-            - WHO5_SCORE
-            - SCI_SCORE
+          $ref: "#/components/schemas/MeasurementType"
         value:
           type: number
         unit:
@@ -37534,22 +37068,7 @@ components:
           format: date-time
           pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
         source:
-          type: string
-          enum:
-            - MANUAL
-            - WITHINGS
-            - IMPORT
-            - APPLE_HEALTH
-            - COMPUTED
-            - WHOOP
-            - FITBIT
-            - NIGHTSCOUT
-            - POLAR
-            - OURA
-            - TELEGRAM
-            - MCP
-            - GOOGLE_HEALTH
-            - STRAVA
+          $ref: "#/components/schemas/MeasurementSource"
         notes:
           anyOf:
             - type: string
@@ -37640,85 +37159,7 @@ components:
       type: object
       properties:
         type:
-          type: string
-          enum:
-            - WEIGHT
-            - BLOOD_PRESSURE_SYS
-            - BLOOD_PRESSURE_DIA
-            - PULSE
-            - BODY_FAT
-            - SLEEP_DURATION
-            - ACTIVITY_STEPS
-            - BLOOD_GLUCOSE
-            - TOTAL_BODY_WATER
-            - BONE_MASS
-            - OXYGEN_SATURATION
-            - HEART_RATE_VARIABILITY
-            - RESTING_HEART_RATE
-            - ACTIVE_ENERGY_BURNED
-            - FLIGHTS_CLIMBED
-            - WALKING_RUNNING_DISTANCE
-            - VO2_MAX
-            - BODY_TEMPERATURE
-            - FAT_FREE_MASS
-            - FAT_MASS
-            - MUSCLE_MASS
-            - SKIN_TEMPERATURE
-            - PULSE_WAVE_VELOCITY
-            - VASCULAR_AGE
-            - VISCERAL_FAT
-            - AUDIO_EXPOSURE_ENV
-            - AUDIO_EXPOSURE_HEADPHONE
-            - TIME_IN_DAYLIGHT
-            - WALKING_STEADINESS
-            - AUDIO_EXPOSURE_EVENT
-            - RESPIRATORY_RATE
-            - BODY_MASS_INDEX
-            - LEAN_BODY_MASS
-            - WALKING_HEART_RATE_AVERAGE
-            - WALKING_ASYMMETRY
-            - WALKING_DOUBLE_SUPPORT
-            - WALKING_STEP_LENGTH
-            - WALKING_SPEED
-            - CARDIO_RECOVERY
-            - WRIST_TEMPERATURE
-            - FALL_COUNT
-            - SIX_MINUTE_WALK_DISTANCE
-            - STAIR_ASCENT_SPEED
-            - STAIR_DESCENT_SPEED
-            - BREATHING_DISTURBANCES
-            - IRREGULAR_RHYTHM_NOTIFICATION
-            - HIGH_HEART_RATE_EVENT
-            - LOW_HEART_RATE_EVENT
-            - WALKING_STEADINESS_EVENT
-            - BREATHING_DISTURBANCE_EVENT
-            - RECOVERY_SCORE
-            - STRESS_SCORE
-            - STRAIN_SCORE
-            - HRV_RMSSD
-            - DAY_STRAIN
-            - WORKOUT_STRAIN
-            - SLEEP_PERFORMANCE
-            - SLEEP_EFFICIENCY
-            - SLEEP_CONSISTENCY
-            - SLEEP_NEED
-            - ENERGY_EXPENDITURE_KJ
-            - AVERAGE_HEART_RATE
-            - MAX_HEART_RATE
-            - SLEEP_DISTURBANCE_COUNT
-            - ANS_CHARGE
-            - CARDIO_LOAD
-            - SLEEP_SCORE
-            - BODY_TEMPERATURE_DEVIATION
-            - RESILIENCE
-            - PHQ9_SCORE
-            - GAD7_SCORE
-            - GRIP_STRENGTH
-            - PAIN_NRS
-            - WAIST_CIRCUMFERENCE
-            - WAIST_TO_HEIGHT
-            - WHO5_SCORE
-            - SCI_SCORE
+          $ref: "#/components/schemas/MeasurementType"
         value:
           type: number
           description: The bucket's aggregated value.
@@ -38061,22 +37502,7 @@ components:
                   description: Wake-day key (YYYY-MM-DD).
                 source:
                   anyOf:
-                    - type: string
-                      enum:
-                        - MANUAL
-                        - WITHINGS
-                        - IMPORT
-                        - APPLE_HEALTH
-                        - COMPUTED
-                        - WHOOP
-                        - FITBIT
-                        - NIGHTSCOUT
-                        - POLAR
-                        - OURA
-                        - TELEGRAM
-                        - MCP
-                        - GOOGLE_HEALTH
-                        - STRAVA
+                    - $ref: "#/components/schemas/MeasurementSource"
                     - type: "null"
                 start:
                   type: string
@@ -38230,22 +37656,7 @@ components:
                 description: Wake-day key (YYYY-MM-DD).
               source:
                 anyOf:
-                  - type: string
-                    enum:
-                      - MANUAL
-                      - WITHINGS
-                      - IMPORT
-                      - APPLE_HEALTH
-                      - COMPUTED
-                      - WHOOP
-                      - FITBIT
-                      - NIGHTSCOUT
-                      - POLAR
-                      - OURA
-                      - TELEGRAM
-                      - MCP
-                      - GOOGLE_HEALTH
-                      - STRAVA
+                  - $ref: "#/components/schemas/MeasurementSource"
                   - type: "null"
               start:
                 type: string
@@ -38451,25 +37862,10 @@ components:
               maximum: 9007199254740991
               description: Nights still needed before the debt is asserted (0 when ready).
             source:
-              type: string
-              enum:
-                - MANUAL
-                - WITHINGS
-                - IMPORT
-                - APPLE_HEALTH
-                - COMPUTED
-                - WHOOP
-                - FITBIT
-                - NIGHTSCOUT
-                - POLAR
-                - OURA
-                - TELEGRAM
-                - MCP
-                - GOOGLE_HEALTH
-                - STRAVA
               description: v1.25.0 — the active source the debt is resolved FROM, picked off the user's `sleepDebt` source ladder.
                 `COMPUTED` is HealthLog's own rolling-balance estimate (the only producer today); a provider value would
                 be a device-native debt. Clients explain the figure when it is `COMPUTED`.
+              $ref: "#/components/schemas/MeasurementSource"
           required:
             - state
             - debtMinutes
@@ -38602,85 +37998,7 @@ components:
           type: string
           description: The RECORD's user id — under a delegated read this is the owner, not the caller.
         metricType:
-          type: string
-          enum:
-            - WEIGHT
-            - BLOOD_PRESSURE_SYS
-            - BLOOD_PRESSURE_DIA
-            - PULSE
-            - BODY_FAT
-            - SLEEP_DURATION
-            - ACTIVITY_STEPS
-            - BLOOD_GLUCOSE
-            - TOTAL_BODY_WATER
-            - BONE_MASS
-            - OXYGEN_SATURATION
-            - HEART_RATE_VARIABILITY
-            - RESTING_HEART_RATE
-            - ACTIVE_ENERGY_BURNED
-            - FLIGHTS_CLIMBED
-            - WALKING_RUNNING_DISTANCE
-            - VO2_MAX
-            - BODY_TEMPERATURE
-            - FAT_FREE_MASS
-            - FAT_MASS
-            - MUSCLE_MASS
-            - SKIN_TEMPERATURE
-            - PULSE_WAVE_VELOCITY
-            - VASCULAR_AGE
-            - VISCERAL_FAT
-            - AUDIO_EXPOSURE_ENV
-            - AUDIO_EXPOSURE_HEADPHONE
-            - TIME_IN_DAYLIGHT
-            - WALKING_STEADINESS
-            - AUDIO_EXPOSURE_EVENT
-            - RESPIRATORY_RATE
-            - BODY_MASS_INDEX
-            - LEAN_BODY_MASS
-            - WALKING_HEART_RATE_AVERAGE
-            - WALKING_ASYMMETRY
-            - WALKING_DOUBLE_SUPPORT
-            - WALKING_STEP_LENGTH
-            - WALKING_SPEED
-            - CARDIO_RECOVERY
-            - WRIST_TEMPERATURE
-            - FALL_COUNT
-            - SIX_MINUTE_WALK_DISTANCE
-            - STAIR_ASCENT_SPEED
-            - STAIR_DESCENT_SPEED
-            - BREATHING_DISTURBANCES
-            - IRREGULAR_RHYTHM_NOTIFICATION
-            - HIGH_HEART_RATE_EVENT
-            - LOW_HEART_RATE_EVENT
-            - WALKING_STEADINESS_EVENT
-            - BREATHING_DISTURBANCE_EVENT
-            - RECOVERY_SCORE
-            - STRESS_SCORE
-            - STRAIN_SCORE
-            - HRV_RMSSD
-            - DAY_STRAIN
-            - WORKOUT_STRAIN
-            - SLEEP_PERFORMANCE
-            - SLEEP_EFFICIENCY
-            - SLEEP_CONSISTENCY
-            - SLEEP_NEED
-            - ENERGY_EXPENDITURE_KJ
-            - AVERAGE_HEART_RATE
-            - MAX_HEART_RATE
-            - SLEEP_DISTURBANCE_COUNT
-            - ANS_CHARGE
-            - CARDIO_LOAD
-            - SLEEP_SCORE
-            - BODY_TEMPERATURE_DEVIATION
-            - RESILIENCE
-            - PHQ9_SCORE
-            - GAD7_SCORE
-            - GRIP_STRENGTH
-            - PAIN_NRS
-            - WAIST_CIRCUMFERENCE
-            - WAIST_TO_HEIGHT
-            - WHO5_SCORE
-            - SCI_SCORE
+          $ref: "#/components/schemas/MeasurementType"
         metricSlot:
           anyOf:
             - type: string
@@ -38709,22 +38027,7 @@ components:
           description: The measurement that achieved the record. Nulled rather than cascaded when that measurement is later
             deleted, so the historical fact survives the reading behind it.
         source:
-          type: string
-          enum:
-            - MANUAL
-            - WITHINGS
-            - IMPORT
-            - APPLE_HEALTH
-            - COMPUTED
-            - WHOOP
-            - FITBIT
-            - NIGHTSCOUT
-            - POLAR
-            - OURA
-            - TELEGRAM
-            - MCP
-            - GOOGLE_HEALTH
-            - STRAVA
+          $ref: "#/components/schemas/MeasurementSource"
         externalId:
           anyOf:
             - type: string
@@ -38850,22 +38153,7 @@ components:
               maximum: 9007199254740991
             - type: "null"
         source:
-          type: string
-          enum:
-            - MANUAL
-            - WITHINGS
-            - IMPORT
-            - APPLE_HEALTH
-            - COMPUTED
-            - WHOOP
-            - FITBIT
-            - NIGHTSCOUT
-            - POLAR
-            - OURA
-            - TELEGRAM
-            - MCP
-            - GOOGLE_HEALTH
-            - STRAVA
+          $ref: "#/components/schemas/MeasurementSource"
         externalId:
           anyOf:
             - type: string
@@ -38970,22 +38258,7 @@ components:
               maximum: 9007199254740991
             - type: "null"
         source:
-          type: string
-          enum:
-            - MANUAL
-            - WITHINGS
-            - IMPORT
-            - APPLE_HEALTH
-            - COMPUTED
-            - WHOOP
-            - FITBIT
-            - NIGHTSCOUT
-            - POLAR
-            - OURA
-            - TELEGRAM
-            - MCP
-            - GOOGLE_HEALTH
-            - STRAVA
+          $ref: "#/components/schemas/MeasurementSource"
         externalId:
           anyOf:
             - type: string
@@ -47579,67 +46852,7 @@ components:
       type: object
       properties:
         data:
-          type: object
-          properties:
-            bloodType:
-              anyOf:
-                - type: string
-                  enum:
-                    - A_POS
-                    - A_NEG
-                    - B_POS
-                    - B_NEG
-                    - AB_POS
-                    - AB_NEG
-                    - O_POS
-                    - O_NEG
-                    - UNKNOWN
-                - type: "null"
-            organDonor:
-              anyOf:
-                - type: string
-                  enum:
-                    - YES
-                    - NO
-                    - UNKNOWN
-                - type: "null"
-            advanceDirective:
-              anyOf:
-                - type: string
-                  enum:
-                    - EXISTS
-                    - NONE
-                    - UNKNOWN
-                - type: "null"
-            contacts:
-              anyOf:
-                - type: string
-                - type: "null"
-            contactsUnreadable:
-              type: boolean
-            implants:
-              anyOf:
-                - type: string
-                - type: "null"
-            implantsUnreadable:
-              type: boolean
-            note:
-              anyOf:
-                - type: string
-                - type: "null"
-            noteUnreadable:
-              type: boolean
-          required:
-            - bloodType
-            - organDonor
-            - advanceDirective
-            - contacts
-            - contactsUnreadable
-            - implants
-            - implantsUnreadable
-            - note
-            - noteUnreadable
-          additionalProperties: false
+          $ref: "#/components/schemas/EmergencyProfile"
         error:
           type: "null"
         meta:
@@ -47652,71 +46865,76 @@ components:
         - data
         - error
       additionalProperties: false
+    EmergencyProfile:
+      type: object
+      properties:
+        bloodType:
+          anyOf:
+            - type: string
+              enum:
+                - A_POS
+                - A_NEG
+                - B_POS
+                - B_NEG
+                - AB_POS
+                - AB_NEG
+                - O_POS
+                - O_NEG
+                - UNKNOWN
+            - type: "null"
+        organDonor:
+          anyOf:
+            - type: string
+              enum:
+                - YES
+                - NO
+                - UNKNOWN
+            - type: "null"
+        advanceDirective:
+          anyOf:
+            - type: string
+              enum:
+                - EXISTS
+                - NONE
+                - UNKNOWN
+            - type: "null"
+        contacts:
+          anyOf:
+            - type: string
+            - type: "null"
+        contactsUnreadable:
+          type: boolean
+        implants:
+          anyOf:
+            - type: string
+            - type: "null"
+        implantsUnreadable:
+          type: boolean
+        note:
+          anyOf:
+            - type: string
+            - type: "null"
+        noteUnreadable:
+          type: boolean
+      required:
+        - bloodType
+        - organDonor
+        - advanceDirective
+        - contacts
+        - contactsUnreadable
+        - implants
+        - implantsUnreadable
+        - note
+        - noteUnreadable
+      additionalProperties: false
+      description: "The caller's emergency profile: three closed-enum facts plus three decrypted free-text fields. A free-text
+        field is null when unset; its `*Unreadable` flag is true when ciphertext was present but could not be decrypted
+        (a key-rotation gap, fail-soft rather than 500)."
     UpdateEmergencyProfileResponse:
       type: object
       properties:
         data:
-          type: object
-          properties:
-            bloodType:
-              anyOf:
-                - type: string
-                  enum:
-                    - A_POS
-                    - A_NEG
-                    - B_POS
-                    - B_NEG
-                    - AB_POS
-                    - AB_NEG
-                    - O_POS
-                    - O_NEG
-                    - UNKNOWN
-                - type: "null"
-            organDonor:
-              anyOf:
-                - type: string
-                  enum:
-                    - YES
-                    - NO
-                    - UNKNOWN
-                - type: "null"
-            advanceDirective:
-              anyOf:
-                - type: string
-                  enum:
-                    - EXISTS
-                    - NONE
-                    - UNKNOWN
-                - type: "null"
-            contacts:
-              anyOf:
-                - type: string
-                - type: "null"
-            contactsUnreadable:
-              type: boolean
-            implants:
-              anyOf:
-                - type: string
-                - type: "null"
-            implantsUnreadable:
-              type: boolean
-            note:
-              anyOf:
-                - type: string
-                - type: "null"
-            noteUnreadable:
-              type: boolean
-          required:
-            - bloodType
-            - organDonor
-            - advanceDirective
-            - contacts
-            - contactsUnreadable
-            - implants
-            - implantsUnreadable
-            - note
-            - noteUnreadable
-          additionalProperties: false
+          $ref: "#/components/schemas/EmergencyProfile"
         error:
           type: "null"
         meta:
@@ -49227,85 +48445,7 @@ components:
                     - type: object
                       properties:
                         metricType:
-                          type: string
-                          enum:
-                            - WEIGHT
-                            - BLOOD_PRESSURE_SYS
-                            - BLOOD_PRESSURE_DIA
-                            - PULSE
-                            - BODY_FAT
-                            - SLEEP_DURATION
-                            - ACTIVITY_STEPS
-                            - BLOOD_GLUCOSE
-                            - TOTAL_BODY_WATER
-                            - BONE_MASS
-                            - OXYGEN_SATURATION
-                            - HEART_RATE_VARIABILITY
-                            - RESTING_HEART_RATE
-                            - ACTIVE_ENERGY_BURNED
-                            - FLIGHTS_CLIMBED
-                            - WALKING_RUNNING_DISTANCE
-                            - VO2_MAX
-                            - BODY_TEMPERATURE
-                            - FAT_FREE_MASS
-                            - FAT_MASS
-                            - MUSCLE_MASS
-                            - SKIN_TEMPERATURE
-                            - PULSE_WAVE_VELOCITY
-                            - VASCULAR_AGE
-                            - VISCERAL_FAT
-                            - AUDIO_EXPOSURE_ENV
-                            - AUDIO_EXPOSURE_HEADPHONE
-                            - TIME_IN_DAYLIGHT
-                            - WALKING_STEADINESS
-                            - AUDIO_EXPOSURE_EVENT
-                            - RESPIRATORY_RATE
-                            - BODY_MASS_INDEX
-                            - LEAN_BODY_MASS
-                            - WALKING_HEART_RATE_AVERAGE
-                            - WALKING_ASYMMETRY
-                            - WALKING_DOUBLE_SUPPORT
-                            - WALKING_STEP_LENGTH
-                            - WALKING_SPEED
-                            - CARDIO_RECOVERY
-                            - WRIST_TEMPERATURE
-                            - FALL_COUNT
-                            - SIX_MINUTE_WALK_DISTANCE
-                            - STAIR_ASCENT_SPEED
-                            - STAIR_DESCENT_SPEED
-                            - BREATHING_DISTURBANCES
-                            - IRREGULAR_RHYTHM_NOTIFICATION
-                            - HIGH_HEART_RATE_EVENT
-                            - LOW_HEART_RATE_EVENT
-                            - WALKING_STEADINESS_EVENT
-                            - BREATHING_DISTURBANCE_EVENT
-                            - RECOVERY_SCORE
-                            - STRESS_SCORE
-                            - STRAIN_SCORE
-                            - HRV_RMSSD
-                            - DAY_STRAIN
-                            - WORKOUT_STRAIN
-                            - SLEEP_PERFORMANCE
-                            - SLEEP_EFFICIENCY
-                            - SLEEP_CONSISTENCY
-                            - SLEEP_NEED
-                            - ENERGY_EXPENDITURE_KJ
-                            - AVERAGE_HEART_RATE
-                            - MAX_HEART_RATE
-                            - SLEEP_DISTURBANCE_COUNT
-                            - ANS_CHARGE
-                            - CARDIO_LOAD
-                            - SLEEP_SCORE
-                            - BODY_TEMPERATURE_DEVIATION
-                            - RESILIENCE
-                            - PHQ9_SCORE
-                            - GAD7_SCORE
-                            - GRIP_STRENGTH
-                            - PAIN_NRS
-                            - WAIST_CIRCUMFERENCE
-                            - WAIST_TO_HEIGHT
-                            - WHO5_SCORE
-                            - SCI_SCORE
+                          $ref: "#/components/schemas/MeasurementType"
                         daysInside:
                           type: integer
                           minimum: -9007199254740991
@@ -52905,22 +52045,7 @@ components:
           pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
           description: Device-reported event time (`measuredAt`).
         source:
-          type: string
-          enum:
-            - MANUAL
-            - WITHINGS
-            - IMPORT
-            - APPLE_HEALTH
-            - COMPUTED
-            - WHOOP
-            - FITBIT
-            - NIGHTSCOUT
-            - POLAR
-            - OURA
-            - TELEGRAM
-            - MCP
-            - GOOGLE_HEALTH
-            - STRAVA
+          $ref: "#/components/schemas/MeasurementSource"
         deviceType:
           anyOf:
             - type: string
@@ -68426,6 +67551,8 @@ components:
         - showEvidenceByDefault
         - defaultWindow
       additionalProperties: false
+      description: Per-user Coach prompt-tuning preferences (v1.4.23 H4). All fields default to the legacy v1.4.22 behaviour
+        when omitted.
   parameters:
     AccountSelector:
       name: X-HealthLog-Account
