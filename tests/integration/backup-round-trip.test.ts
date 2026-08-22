@@ -82,6 +82,11 @@ vi.mock("@/lib/cache/invalidate", () => ({
 
 const OWNER_ID = "round-trip-owner";
 const AT = (iso: string) => new Date(iso);
+const PHQ9_RESPONSES = JSON.stringify({
+  items: [2, 1, 2, 2, 1, 1, 2, 1, 2],
+  schema: 1,
+});
+const CONSENT_ARTEFACT = "JVBERi0xLjQKJWZpeHR1cmU=";
 const INVENTORY_NOTE = "second pack, kept in the kitchen drawer";
 const COACH_FACT = "does not tolerate ACE inhibitors";
 const COACH_PLAN_CUE = "if the evening reading is over 140";
@@ -193,6 +198,9 @@ const COUNT_BACK: Record<
   MoodTagHidden: (p, userId) => p.moodTagHidden.count({ where: { userId } }),
   ReminderPhaseConfig: (p, userId) =>
     p.reminderPhaseConfig.count({ where: { medication: { userId } } }),
+  MentalHealthAssessment: (p, userId) =>
+    p.mentalHealthAssessment.count({ where: { userId } }),
+  ConsentReceipt: (p, userId) => p.consentReceipt.count({ where: { userId } }),
 };
 
 /**
@@ -273,6 +281,50 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
   // one away without recording it. A restore that recomputed the count from
   // the ledger would "fix" that to 22 and disagree with every low-stock
   // reminder the account has already received.
+  // A PHQ-9 administration whose item 9 was answered above zero. The flag and
+  // the encrypted answers are seeded to DISAGREE with a naive recomputation:
+  // the flag says true, and a restore that decided to recompute it would have
+  // to decrypt the blob to do so, which is the handling this data is kept away
+  // from. The assertion below reads the flag and the ciphertext separately.
+  await prisma.mentalHealthAssessment.create({
+    data: {
+      userId: OWNER_ID,
+      instrument: "PHQ9",
+      locale: "de",
+      version: "standard",
+      responsesEncrypted: encryptToBytes(PHQ9_RESPONSES),
+      totalScore: 14,
+      severityBand: "moderate",
+      item9Flagged: true,
+      crisisShownAt: AT("2026-07-05T18:02:00.000Z"),
+      takenAt: AT("2026-07-05T18:00:00.000Z"),
+      tz: "Europe/Berlin",
+      source: "WEB",
+    },
+  });
+
+  // One active consent and one revoked. The revocation is the part a restore
+  // can quietly lose: dropping `revokedAt` turns a withdrawn agreement back
+  // into a standing one, and the latest-per-user lookup shortcuts on exactly
+  // that column.
+  await prisma.consentReceipt.createMany({
+    data: [
+      {
+        userId: OWNER_ID,
+        kind: "ai-processing",
+        artefact: CONSENT_ARTEFACT,
+        signedAt: AT("2026-06-01T09:00:00.000Z"),
+      },
+      {
+        userId: OWNER_ID,
+        kind: "research-sharing",
+        artefact: "eyJhbGciOiJub25lIn0.e30.",
+        signedAt: AT("2026-06-02T09:00:00.000Z"),
+        revokedAt: AT("2026-07-10T11:00:00.000Z"),
+      },
+    ],
+  });
+
   // Tuned away from every default, and one threshold in PERCENT rather than
   // MINUTES: a restore that fell back to the schema defaults would return four
   // plausible numbers and silently change when this drug turns orange.
@@ -1110,6 +1162,49 @@ describe("every model the plan claims two-ended survives a real restore", () => 
       surfaceCount: 2,
       status: "active",
     });
+
+    // The screener came back readable, and the flag came back as recorded.
+    const screener = await prisma.mentalHealthAssessment.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+    });
+    expect({
+      instrument: screener.instrument,
+      totalScore: screener.totalScore,
+      severityBand: screener.severityBand,
+      item9Flagged: screener.item9Flagged,
+      crisisShown: screener.crisisShownAt?.toISOString() ?? null,
+      responses: decryptFromBytes(screener.responsesEncrypted),
+    }).toEqual({
+      instrument: "PHQ9",
+      totalScore: 14,
+      severityBand: "moderate",
+      item9Flagged: true,
+      crisisShown: "2026-07-05T18:02:00.000Z",
+      responses: PHQ9_RESPONSES,
+    });
+
+    // Both consents, and the revocation still standing. A restore that lost
+    // `revokedAt` would return the same two rows and turn a withdrawn
+    // agreement back into an active one.
+    const consents = await prisma.consentReceipt.findMany({
+      where: { userId: OWNER_ID },
+      orderBy: { signedAt: "asc" },
+    });
+    expect(
+      consents.map((c) => ({
+        kind: c.kind,
+        artefact: c.artefact,
+        revoked: c.revokedAt?.toISOString() ?? null,
+      })),
+      "a revoked consent must not come back as an active one",
+    ).toEqual([
+      { kind: "ai-processing", artefact: CONSENT_ARTEFACT, revoked: null },
+      {
+        kind: "research-sharing",
+        artefact: "eyJhbGciOiJub25lIn0.e30.",
+        revoked: "2026-07-10T11:00:00.000Z",
+      },
+    ]);
 
     // The account's own grouping came back, and the hidden tag is hidden
     // again — resolved by key, so it points at whatever id this instance uses.

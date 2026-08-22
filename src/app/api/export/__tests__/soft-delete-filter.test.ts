@@ -27,6 +27,8 @@ vi.mock("@/lib/db", () => ({
     moodTag: { findMany: vi.fn() },
     moodTagCategory: { findMany: vi.fn() },
     moodTagHidden: { findMany: vi.fn() },
+    mentalHealthAssessment: { findMany: vi.fn() },
+    consentReceipt: { findMany: vi.fn() },
     nutrientIntakeDay: { findMany: vi.fn().mockResolvedValue([]) },
     user: { findUnique: vi.fn() },
     passkey: { findMany: vi.fn() },
@@ -139,6 +141,10 @@ beforeEach(() => {
   vi.mocked(prisma.moodTag.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.moodTagCategory.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.moodTagHidden.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.mentalHealthAssessment.findMany).mockResolvedValue(
+    [] as never,
+  );
+  vi.mocked(prisma.consentReceipt.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.moodEntry.count).mockResolvedValue(0);
   vi.mocked(prisma.user.findUnique).mockResolvedValue({
     heightCm: null,

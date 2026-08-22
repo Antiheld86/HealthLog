@@ -50,6 +50,7 @@ import { restoreIntradayProfileData } from "@/lib/export/intraday-profile-backup
 import { restoreHealthScoreData } from "@/lib/export/health-score-backup";
 import { restoreVisitsData } from "@/lib/export/visits-backup";
 import { restoreVaccinationsData } from "@/lib/export/vaccinations-backup";
+import { restoreSensitiveData } from "@/lib/export/sensitive-backup";
 import {
   restoreCoachData,
   restoreCoachMemoryData,
@@ -108,6 +109,8 @@ interface RestoreResponse {
     coachFacts: number;
     coachPlans: number;
     coachReminders: number;
+    mentalHealthAssessments: number;
+    consentReceipts: number;
   };
 }
 
@@ -1605,6 +1608,16 @@ const handler = apiHandler(
             skips,
           );
 
+          // The screener history and the consent record. Neither references
+          // anything but the account, so the position here is free; it sits
+          // last because that is where the section was added, not because
+          // anything above it matters to these two.
+          const sensitiveCleared = await restoreSensitiveData(
+            tx,
+            ownerId,
+            payload,
+          );
+
           const cleared = {
             measurements: measurements.count,
             medications: meds.count,
@@ -1645,6 +1658,8 @@ const handler = apiHandler(
             coachFacts: coachMemoryCleared.coachFacts,
             coachPlans: coachMemoryCleared.coachPlans,
             coachReminders: coachMemoryCleared.coachReminders,
+            mentalHealthAssessments: sensitiveCleared.mentalHealthAssessments,
+            consentReceipts: sensitiveCleared.consentReceipts,
           };
           return { cleared, skipped: summarizeRestoreSkips(skips) };
         },

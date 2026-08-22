@@ -223,6 +223,9 @@ export const BACKUP_WRITER_FILES: readonly string[] = [
   // this file shares with nothing else, but each model still reads through its
   // own delegate here for the reason the visits comment gives.
   "src/lib/export/coach-backup.ts",
+  // The screener history and the consent record, disaster-recovery only. The
+  // reasons for that live in the module itself.
+  "src/lib/export/sensitive-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 
@@ -235,6 +238,7 @@ export const BACKUP_RESTORE_FILES: readonly string[] = [
   "src/lib/export/vaccinations-backup.ts",
   "src/lib/export/reminders-backup.ts",
   "src/lib/export/coach-backup.ts",
+  "src/lib/export/sensitive-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 
@@ -375,6 +379,15 @@ export const TWO_ENDED_MODELS = [
   // which is exactly why it could be cleared in an afternoon and the other
   // could not be cleared at all.
   "ReminderPhaseConfig",
+  // Two models that ride in a disaster-recovery file and deliberately not in a
+  // portable one. Everywhere else that split is about ENCODING; here it is
+  // about whether the row should leave the instance at all, and the two
+  // reasons are different from each other. Both are written out in
+  // `src/lib/export/sensitive-backup.ts`, and the portable file discloses the
+  // omission in its own manifest rather than reporting an account that has
+  // neither.
+  "MentalHealthAssessment",
+  "ConsentReceipt",
 ] as const;
 
 /** One model claimed to travel both ways. */
@@ -415,8 +428,6 @@ export const COVERAGE_PENDING: Readonly<Record<string, string>> = {
     "The history of how a schedule changed. Without it a restored medication keeps today's schedule and loses the record of when the dose or timing moved, which is the part a doctor asks about.",
   MedicationEfficacyTarget:
     "What a medication was supposed to move, and by how much. The drug comes back with no statement of what it was for.",
-  MentalHealthAssessment:
-    "Completed WHO-5, PHQ and GAD instruments with their scores and dates. Clinically meaningful history that no integration can re-sync, and the single largest gap on this list.",
   EcgRecording:
     "ECG traces and their rhythm classification. The originating device may still hold them, but a self-hoster who exported and wiped has nothing to re-sync from.",
   WorkoutRoute:
@@ -435,8 +446,6 @@ export const COVERAGE_PENDING: Readonly<Record<string, string>> = {
     "Which documents were filed against which condition. Documents and conditions both restore; the filing between them does not, so a restored vault is unsorted.",
   ExtractedFact:
     "Facts read out of a document by the AI pass, with their provenance back to the page. Re-derivable only by re-running the extraction against a provider, at the operator's cost.",
-  ConsentReceipt:
-    "The record of what the account agreed to and when. Arguably belongs with the instance rather than the account, and that question has to be settled before this one can be carried either way.",
 };
 
 /**

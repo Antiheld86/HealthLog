@@ -56,6 +56,13 @@ import {
   type RemindersBackupSection,
 } from "@/lib/export/reminders-backup";
 import {
+  buildSensitiveBackupSection,
+  countSensitiveBackupSection,
+  type SensitiveBackupCounts,
+  type SensitiveBackupManifest,
+  type SensitiveBackupSection,
+} from "@/lib/export/sensitive-backup";
+import {
   buildCoachBackupSection,
   buildCoachMemoryBackupSection,
   countCoachBackupSection,
@@ -82,7 +89,8 @@ export interface FullBackupCounts
     VaccinationsBackupCounts,
     RemindersBackupCounts,
     CoachBackupCounts,
-    CoachMemoryBackupCounts {
+    CoachMemoryBackupCounts,
+    SensitiveBackupCounts {
   measurements: number;
   medications: number;
   intakeEvents: number;
@@ -308,6 +316,7 @@ export async function buildFullBackupPayload(
     reminders,
     coach,
     coachMemory,
+    sensitive,
     nutrientDays,
   ] = await Promise.all([
     disasterRecovery
@@ -491,6 +500,12 @@ export async function buildFullBackupPayload(
     buildCoachMemoryBackupSection(prisma, userId, {
       purpose: disasterRecovery ? "disaster-recovery" : "portable-export",
     }),
+    // The screener history and the consent record. Both ride in a
+    // disaster-recovery file only, for two different reasons that are written
+    // out in `src/lib/export/sensitive-backup.ts` rather than summarised here.
+    buildSensitiveBackupSection(prisma, userId, {
+      purpose: disasterRecovery ? "disaster-recovery" : "portable-export",
+    }),
     // Nutrient day totals were absent from every export path, which
     // contradicted the schema's own reason for denormalising the unit column
     // ("rows stay self-describing in exports even if the catalog ever drifts").
@@ -522,6 +537,11 @@ export async function buildFullBackupPayload(
   const remindersSection: RemindersBackupSection = reminders;
   const coachSection: CoachBackupSection = coach;
   const coachMemorySection: CoachMemoryBackupSection = coachMemory;
+  const sensitiveSection: SensitiveBackupSection = {
+    mentalHealthAssessments: sensitive.mentalHealthAssessments,
+    consentReceipts: sensitive.consentReceipts,
+  };
+  const sensitiveManifest: SensitiveBackupManifest = sensitive.manifest;
 
   const payload = {
     schemaVersion: BACKUP_SCHEMA_VERSION,
@@ -872,6 +892,11 @@ export async function buildFullBackupPayload(
     ...remindersSection,
     ...coachSection,
     ...coachMemorySection,
+    ...sensitiveSection,
+    // Merged rather than added beside it: the records section already owns a
+    // `manifest` key, and two of them would silently shadow each other
+    // depending on spread order.
+    manifest: { ...recordsSection.manifest, ...sensitiveManifest },
     nutrientDays: nutrientDays.map((n) => ({
       day: n.day,
       nutrient: n.nutrient,
@@ -923,6 +948,7 @@ export async function buildFullBackupPayload(
       ...countRemindersBackupSection(reminders),
       ...countCoachBackupSection(coach),
       ...countCoachMemoryBackupSection(coachMemory),
+      ...countSensitiveBackupSection(sensitive),
     },
   };
 }
