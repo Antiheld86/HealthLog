@@ -1,5 +1,53 @@
 # Changelog
 
+## [1.37.25] — 2026-08-22
+
+Two things this release is about. The Coach could state a figure your record does not support, in exactly the situation where it was most likely to: when you asked about something you have never recorded. And a backup you cannot fully restore is not a backup, so the register of what a restore left behind went from twenty-seven tables to two.
+
+### Fixed
+
+- The Coach checks its own numbers against a record of what it looked up, and rewrites any figure that record cannot account for. That check did not run when every lookup came back empty. Ask about a metric you have never tracked, and an invented number was passed straight through, with no note that anything went unchecked, so the answer read exactly like a verified one. The check now runs on a turn where the lookups found nothing, and because removing only the digits would leave the sentence still claiming a trend that does not exist, such an answer is replaced with a plain statement that nothing is recorded.
+- The Coach could also narrate a weight history that no longer exists. Syncing a body-composition provider replaces your rows, but the monthly summaries folded from the old ones stayed behind, so the same block could show a year at 95 kg beside an all-time range that peaked at 80. A summary is an average of real readings and cannot fall outside their own extremes; when it does, the history band is dropped and the Coach is told it was withheld rather than shown a number nobody can account for.
+- The Insights page promised "based on your last 90 days" whether or not there was a briefing behind it, and the pulse page promised a personalised Karvonen target band while computing population percentiles by age and sex, or a flat 60 to 100 when your age is unknown. Both now say what they do, in every language. The Coach's "all time" window was 365 days, the same as the option beside it called "year so far"; both labels tell the truth now.
+- An account that had grouped its own mood factors could not be restored at all. Not partially: the restore hit a foreign key on a custom category the file never carried, rolled the whole transaction back, and answered with a constraint name and an empty account. The categories a person creates travel now, and they are written before the tags that point at them.
+- Signing in from the iOS app failed behind a reverse proxy that does not pass the host through. The redirect was built from the address the server process bound to, so it came back as `https://0.0.0.0:3000/...`, which iOS refuses outright. Redirects to this same deployment no longer name a host at all. Seven places had the same bug; all seven are fixed, and a test fails if the pattern comes back.
+- The Prisma CLI in the published image still resolved the vulnerable deepmerge-ts. The application tree had been pinned already, but that install is a separate one with its own resolution, so the image carried the advisory while every dependency check read clean. A test holds the two pins in step now.
+- The demo instance resets its published credentials on every migration run, so the account named on the site keeps working.
+- Turning the API off used to lock people out of their own tokens. The operator switch was checked on the read as well as the revoke, so a user could neither see nor clean up tokens that were still live. It stops tokens from working; it no longer stops you tidying them.
+- A preference update read its request body with no size limit at all, where its two neighbours cap at one kilobyte. Four more routes threw away the detail of why they refused a value, so a name that was empty and a name that was too long came back as the same sentence.
+- Someone managing a shared record could write a titration step onto a medication and then be refused that medication's history. The read is fenced at the same level as its siblings now.
+- Disconnecting a Withings account left the connection state reading "connected" until something else refreshed it, because the teardown neither wrote its audit row nor parked the ledger the way every sibling does. Two more teardowns wrote no audit trail at all when there was nothing connected.
+- Two sync routes had no rate limit where their siblings carry two each, and every sync route read its request body inside a swallowing catch, so a typo in the body reported a successful run. A body that is absent still means an incremental sync; a body that is present and wrong is refused now.
+- The integrations page could not tell "nothing delivered yet" from "the freshness query failed": both arrived as an empty list. The failure says so.
+- Two list endpoints widened their result on a typo instead of refusing it: an unknown metric type was dropped and the read came back unfiltered, and a nonsense page size reverted to the default.
+- The medication ingest endpoint counted its rate limit per client address, so several bridges behind one router starved each other. It counts per token now.
+
+### Added
+
+The restore now returns your conversation history with the Coach: every thread, every turn in it, the record of which documents a thread was grounded in, and the facts, plans and reminders it carries between threads. Until now a restored account had a Coach that had never spoken to it and had to be told its own history again.
+
+It also returns the medication history: pause periods, the titration steps behind today's dose, the packs on the shelf, and the ledger of refills and consumption behind their counts. The remaining count comes back exactly as recorded rather than recalculated from the ledger, because that number is what the low-stock reminders were computed from. Per-drug reminder phase timings travel too, so a restored drug turns orange when it did before instead of falling back to the defaults. Archived schedule eras come back with their succession chain intact, and what a medication was meant to move comes back with the analyte it pointed at.
+
+The rest, in short: ECG strips with their waveform, their classification and the reading they were filed against, where a restore into a populated account used to leave the old strips behind. Which conditions a document was filed under, and the facts extracted from it, including which of those were reviewed and committed to the record. The mood taxonomy an account shaped for itself: the groupings it created and the seeded factors it chose to hide. Personal bests, badges, and the per-day environment readings with the location periods that explain them.
+
+Screener history and the consent record come back in the disaster-recovery export only. Completed WHO-5, PHQ and GAD administrations include the PHQ-9 self-harm item, which is not written into a portable file that can be opened anywhere. The portable export says in its own manifest that they are absent rather than leaving you to notice.
+
+### Changed
+
+The published API document listed 262 paths. The application answers on 410.
+
+The drift check compares the registry against the committed document and fails when they disagree. It has never compared the routes on disk against the registry, so a route that was never registered produced no drift and no failure: the document stayed internally consistent while going quietly incomplete. Forty-three of the missing paths are ones the iOS app calls every day.
+
+Every route is now either published or named in a list with a reason for its absence. Seventy-three are deliberately outside, and the reasons say which kind: the admin console cannot be reached by an API client at all, OAuth callbacks are driven by the provider, webhooks authenticate by a shared secret, and three discovery documents have their format fixed by somebody else's specification.
+
+The document also says how to authenticate, which it never did. Both schemes were defined and neither was referenced, so anyone generating a client from the contract got one that sends no credentials and treats the whole surface as open.
+
+Two tests keep it that way. One walks the route tree and fails on a verb that is neither published nor excused. The other fails on an operation that names no scheme.
+
+- The idempotency contract is in the published API document. Thirty-four write operations declare the `Idempotency-Key` header they honour and the `X-Idempotent-Replay` header they answer with, including the detail that a malformed key is ignored rather than refused.
+- Per-event notification preferences are recorded as deliberately outside the backup rather than as an unpaid debt. Each one addresses a single notification channel by a foreign key, the channel itself is excluded for carrying secrets, and the restore deletes every channel it finds, so a carried preference would point at a row that cannot exist.
+- Dependency updates: pg-boss, Playwright, Testcontainers, Prettier, and two workflow actions.
+
 ## [1.37.24] — 2026-08-16
 
 ### Fixed
