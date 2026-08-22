@@ -739,11 +739,23 @@ export function findUnverifiedCoachNumbersInLedger(
   prose: string,
   ledger: ReadonlyArray<LedgerEntry>,
   locale: Locale = "en",
+  opts: { gradeAgainstEmptyLedger?: boolean } = {},
 ): UnverifiedCoachNumber[] {
   if (!prose) return [];
-  // No authoritative figures (a qualitative turn / no-tools path) — nothing to
-  // grade against. The prompt-level grounding rule remains the backstop.
-  if (ledger.length === 0) return [];
+  // An empty ledger is ambiguous on its own, so the caller resolves it.
+  //
+  // Default (`false`): no authoritative figures were delivered — a qualitative
+  // turn, or the no-tools path on a cheap follow-up. Nothing to grade against,
+  // and the prompt-level grounding rule remains the backstop.
+  //
+  // `gradeAgainstEmptyLedger: true`: the caller KNOWS this turn went looking
+  // and came back with nothing — every retrieval tool it called reported
+  // `{ present: false }`. Then an empty ledger is not "no information", it is
+  // the positive statement that the record holds nothing to cite, so every
+  // magnitude in the reply is unreconciled by construction and must be graded
+  // as such. Only the chat route passes this; the fenced-chat and eval callers
+  // keep the default.
+  if (ledger.length === 0 && !opts.gradeAgainstEmptyLedger) return [];
 
   const spans = sentenceSpans(prose);
   const sentenceAt = (index: number): string => {

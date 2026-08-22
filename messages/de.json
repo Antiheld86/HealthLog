@@ -8967,7 +8967,8 @@
       "outOfScope": "Ich kann nur bei den Gesundheitsdaten in deinem Log helfen — Messwerte, Medikamente, Stimmung, Trends. Fragen außerhalb dieses Themas beantworte ich nicht.",
       "promptInjection": "In deiner Nachricht stehen Anweisungen, die meine Vorgaben überschreiben sollen. Ich bin der HealthLog-Coach und fasse ausschließlich deine eigenen Gesundheitsdaten zusammen — formuliere deine Frage bitte in diesem Rahmen neu.",
       "conversationPoisoned": "Eine frühere Nachricht in dieser Unterhaltung enthält Anweisungen, die meine Vorgaben überschreiben sollen. Beginne bitte eine neue Unterhaltung."
-    }
+    },
+    "noRecordedData": "Zu deiner Frage sind bei dir keine Messwerte erfasst, also kann ich dir dazu keine Zahl nennen. Sobald du etwas eingetragen hast, frag mich noch einmal — dann rechne ich mit deinen eigenen Werten."
   },
   "safety": {
     "floor": {

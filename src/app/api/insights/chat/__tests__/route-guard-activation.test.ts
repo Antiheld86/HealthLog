@@ -1,30 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 /**
- * CHARACTERISATION — when the Coach's numeric grounding guard is armed, and
- * when it is not.
+ * REGRESSION — when the Coach's numeric grounding guard is armed, and when it
+ * deliberately is not.
  *
  * The guard rewrites any figure in the reply that the turn's Grounding Ledger
- * cannot account for. It runs only when `activatingPayloads` is non-empty, and
- * on the tool path that array comes solely from `loop.toolResults`. A tool that
- * found nothing at all resolves to `{ present: false, reason: "none" }` with no
- * `available` payload, and `loop.ts` drops that shape from `toolResults`
- * (pinned in `tools-loop-miss-payloads.test.ts`). The no-tools snapshot
- * fallback is populated only in the non-tool-mode branch, so on the tool path
- * there is nothing to fall back to.
+ * cannot account for. Its activation used to key solely off `loop.toolResults`,
+ * and a tool that found nothing resolves to `{ present: false, reason: "none" }`
+ * with no `available` payload, which `loop.ts` drops (pinned in
+ * `tools-loop-miss-payloads.test.ts`). So the guard disarmed itself exactly
+ * when the record was empty, and a fabricated figure shipped verbatim with no
+ * withheld-figure marker.
  *
- * The consequence, pinned below: on a tool-mode turn where every tool missed —
- * i.e. exactly when the user has no data for what they asked about — a figure
- * the model invented is streamed and persisted verbatim, and the reply carries
- * no `unverifiedFigures` marker, so it reads to the user as fully checked.
+ * `toolTrace` now discriminates the two cases the old condition conflated:
  *
- * These tests assert the CURRENT behaviour, not the desired one. If the
- * activation gate is widened so the guard covers the all-missed turn, they will
- * fail — that failure is the fix landing, and the assertions should be flipped
- * to the safe expectation at that point.
- *
- * The first test is the control: with one present tool result the guard is
- * armed and the same invented figure is stripped.
+ *   - tools RAN and every one missed  -> grade. An empty ledger is the finding,
+ *     not a reason to skip, so every magnitude is unreconciled. A reply that
+ *     loses a figure this way is replaced with the honest "nothing recorded"
+ *     answer rather than shipping elided prose that still asserts a series.
+ *   - the model called NO tool        -> stay dormant. This is the v1.32.1
+ *     contract: the tool-mode base prompt deliberately carries no pre-computed
+ *     figures, and flagging a legitimately recalled one was a real regression.
  */
 
 const SNAPSHOT_JSON = '{"bp":{"aggregate":{"mean":128}}}';
@@ -301,6 +297,27 @@ describe("coach chat — grounding-guard activation", () => {
     });
   });
 
+  /** Drive the loop with an explicit trace so a MISS is modelled faithfully. */
+  function stubMissedTurn(prose: string): void {
+    parseKeyValuesSentinel.mockReturnValue({
+      prose,
+      keyValues: [],
+      malformed: false,
+      malformedEntries: [],
+    });
+    parseSuggestReminder.mockReturnValue({ prose });
+    runCoachToolLoop.mockImplementation(async () => ({
+      result: { content: prose, tokensUsed: 80, model: "m" },
+      workingProviderType: "anthropic",
+      totalTokens: 80,
+      rounds: 1,
+      // The tool ran and found nothing; `loop.ts` drops the pure miss from
+      // `toolResults` but the trace still records the call.
+      toolTrace: [{ name: "get_sleep", present: false }],
+      toolResults: [],
+    }));
+  }
+
   it("CONTROL — one present tool result arms the guard: the invented figure is stripped", async () => {
     stubReply("Your sleep averaged 432 minutes last week.", [
       { present: true, data: { metric: "bp", aggregate: { avgSys30: 128 } } },
@@ -314,22 +331,58 @@ describe("coach chat — grounding-guard activation", () => {
     expect(assistantProvenance()?.unverifiedFigures).toBe(1);
   });
 
-  it("every tool missed: the guard stays dormant and the invented figure survives", async () => {
-    // A pure miss never reaches `toolResults` (see tools-loop-miss-payloads),
-    // so this is what the route sees when the record holds nothing.
-    stubReply("Your sleep averaged 432 minutes last week.", []);
+  it("every tool missed: the fabricated figure is caught and the turn is replaced", async () => {
+    stubMissedTurn("Your sleep averaged 432 minutes last week.");
 
     await post(chatReq({ conversationId: "c1", message: "how did I sleep?" }));
     await sse.done;
 
-    expect(assistantContent()).toBe(
-      "Your sleep averaged 432 minutes last week.",
-    );
-    // No withheld-figure notice either, so the reply reads as verified.
+    const content = assistantContent();
+    expect(content).not.toContain("432");
+    // Not the elided prose either — the sentence asserted a series the record
+    // does not hold, so the whole turn is replaced with the honest answer.
+    expect(content).not.toContain("[…]");
+    expect(content).toContain("recorded readings");
+    // The replacement copy says it in words, so the count-based notice is off.
     expect(assistantProvenance()?.unverifiedFigures).toBeUndefined();
   });
 
-  it("the model called no tool at all: the guard stays dormant", async () => {
+  it("every tool missed but the figure is grounded by a prior turn: left alone", async () => {
+    // Turn 1 fetched systolic 128 and persisted it as a tool figure. This turn
+    // every tool misses, but recalling 128 still reconciles, so nothing is
+    // stripped and the reply is NOT replaced.
+    fetchConversationWithMessages.mockResolvedValue({
+      id: "c1",
+      attachmentCount: 0,
+      summary: null,
+      messages: [
+        { role: "user", content: "How is my BP?" },
+        {
+          role: "assistant",
+          content: "Your systolic averaged 128.",
+          metricSource: { groundedFigures: [128] },
+        },
+      ],
+    });
+    stubMissedTurn(
+      "No sleep readings yet. Your systolic 128 average is unrelated to that.",
+    );
+
+    await post(chatReq({ conversationId: "c1", message: "and my sleep?" }));
+    await sse.done;
+
+    const content = assistantContent();
+    expect(content).toContain("128");
+    expect(content).not.toContain("[…]");
+    expect(content).not.toContain("recorded readings");
+  });
+
+  it("the model called no tool at all: the guard stays dormant (v1.32.1)", async () => {
+    // Deliberately unchanged behaviour. The tool-mode base prompt carries no
+    // pre-computed figures, so a number here came from the transcript or the
+    // model's own recall, and grading it off the counts-only inventory flagged
+    // legitimate figures as ungrounded. `toolTrace` is empty, so the widened
+    // activation above does not reach this case.
     const prose = "Your resting heart rate has been averaging 58 bpm.";
     parseKeyValuesSentinel.mockReturnValue({
       prose,

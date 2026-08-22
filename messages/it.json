@@ -8967,7 +8967,8 @@
       "outOfScope": "Posso aiutarti solo con i dati di salute del tuo registro: misurazioni, farmaci, umore, tendenze. Non rispondo a domande al di fuori di questo ambito.",
       "promptInjection": "Ho notato istruzioni che cercano di aggirare le mie direttive. Sono il Coach di HealthLog e riassumo soltanto i tuoi dati di salute — riformula la domanda in questi termini, per favore.",
       "conversationPoisoned": "Un messaggio precedente di questa conversazione contiene istruzioni che cercano di aggirare le mie direttive. Inizia una nuova conversazione, per favore."
-    }
+    },
+    "noRecordedData": "Non hai misurazioni registrate su quello che chiedi, quindi non posso darti alcun valore. Appena ne inserisci qualcuna, richiedimelo e userò i tuoi dati."
   },
   "safety": {
     "floor": {

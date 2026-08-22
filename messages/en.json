@@ -8967,7 +8967,8 @@
       "outOfScope": "I can only help with the health metrics in your log — measurements, medications, mood, trends. I cannot answer questions outside that scope.",
       "promptInjection": "I noticed wording that tries to override my instructions. I am the HealthLog Coach and only summarise your own health data — please rephrase your question in those terms.",
       "conversationPoisoned": "An earlier message in this conversation contains wording that overrides my instructions. Please start a new conversation."
-    }
+    },
+    "noRecordedData": "I don't have any recorded readings for what you asked about, so there is nothing I can give you a figure from. Once you log some, ask me again and I'll work from your own numbers."
   },
   "safety": {
     "floor": {
