@@ -2748,8 +2748,8 @@
         "last7days": "Ostatnie 7 dni",
         "last30days": "Ostatnie 30 dni",
         "last90days": "Ostatnie 90 dni",
-        "lastYear": "od początku roku",
-        "allTime": "Cały okres"
+        "lastYear": "ostatnie 12 miesięcy",
+        "allTime": "cały okres (12 miesięcy szczegółowo)"
       },
       "windowLabel": "Okres",
       "settingsAriaLabel": "Ustawienia coacha",
@@ -3047,7 +3047,7 @@
       "loadError": "Nie udało się teraz wczytać tej metryki.",
       "blutdruckDescription": "Twój przebieg skurczowego/rozkurczowego z zakresami docelowymi dopasowanymi do wieku i oceną tekstową.",
       "gewichtDescription": "Przebieg wagi na tle zdrowego pasma wyliczonego z twojego wzrostu, z oceną.",
-      "pulsDescription": "Resting pulse vs. the personalised Karvonen target band, plus a written assessment.",
+      "pulsDescription": "Tętno spoczynkowe na tle zakresu referencyjnego według wieku i płci, opartego na percentylach populacyjnych CDC/NCHS, wraz z oceną opisową.",
       "stimmungDescription": "Dzienne wartości nastroju w czasie wraz z oceną tekstową.",
       "medikamenteDescription": "Kalendarz przyjęć dla każdego leku plus ocena tekstowa.",
       "bmiDescription": "BMI obliczone z twojej wagi i wzrostu, z oceną.",
@@ -8967,7 +8967,8 @@
       "outOfScope": "Mogę pomóc wyłącznie z danymi zdrowotnymi z Twojego dziennika: pomiarami, lekami, nastrojem, trendami. Na pytania spoza tego zakresu nie odpowiadam.",
       "promptInjection": "Zauważyłem polecenia, które próbują obejść moje wytyczne. Jestem Coachem HealthLog i podsumowuję wyłącznie Twoje własne dane zdrowotne — sformułuj pytanie w tych ramach.",
       "conversationPoisoned": "Wcześniejsza wiadomość w tej rozmowie zawiera polecenia, które próbują obejść moje wytyczne. Rozpocznij nową rozmowę."
-    }
+    },
+    "noRecordedData": "Nie masz zapisanych żadnych pomiarów dla tego, o co pytasz, więc nie mogę podać Ci żadnej liczby. Gdy coś zapiszesz, zapytaj ponownie — wtedy oprę się na Twoich własnych wartościach."
   },
   "safety": {
     "floor": {

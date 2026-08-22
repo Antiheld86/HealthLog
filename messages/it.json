@@ -2748,8 +2748,8 @@
         "last7days": "Ultimi 7 giorni",
         "last30days": "Ultimi 30 giorni",
         "last90days": "Ultimi 90 giorni",
-        "lastYear": "anno in corso",
-        "allTime": "Tutto il tempo"
+        "lastYear": "ultimi 12 mesi",
+        "allTime": "tutto il tempo (12 mesi in dettaglio)"
       },
       "windowLabel": "Periodo",
       "settingsAriaLabel": "Impostazioni del coach",
@@ -3047,7 +3047,7 @@
       "loadError": "Impossibile caricare questa metrica al momento.",
       "blutdruckDescription": "Il tuo andamento sistolico/diastolico con range obiettivo adattati all’età e una valutazione testuale.",
       "gewichtDescription": "Andamento del peso rispetto alla fascia sana derivata dalla tua altezza, con valutazione.",
-      "pulsDescription": "Resting pulse vs. the personalised Karvonen target band, plus a written assessment.",
+      "pulsDescription": "Battito a riposo confrontato con una fascia di riferimento per età e sesso, basata sui percentili di popolazione CDC/NCHS, con una valutazione scritta.",
       "stimmungDescription": "Valori giornalieri di umore nel tempo, con una valutazione testuale.",
       "medikamenteDescription": "Calendario delle assunzioni per farmaco e una valutazione testuale.",
       "bmiDescription": "BMI derivato dal tuo peso e dalla tua altezza, con valutazione.",
@@ -8967,7 +8967,8 @@
       "outOfScope": "Posso aiutarti solo con i dati di salute del tuo registro: misurazioni, farmaci, umore, tendenze. Non rispondo a domande al di fuori di questo ambito.",
       "promptInjection": "Ho notato istruzioni che cercano di aggirare le mie direttive. Sono il Coach di HealthLog e riassumo soltanto i tuoi dati di salute — riformula la domanda in questi termini, per favore.",
       "conversationPoisoned": "Un messaggio precedente di questa conversazione contiene istruzioni che cercano di aggirare le mie direttive. Inizia una nuova conversazione, per favore."
-    }
+    },
+    "noRecordedData": "Non hai misurazioni registrate su quello che chiedi, quindi non posso darti alcun valore. Appena ne inserisci qualcuna, richiedimelo e userò i tuoi dati."
   },
   "safety": {
     "floor": {

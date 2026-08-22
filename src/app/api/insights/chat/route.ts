@@ -639,6 +639,13 @@ async function handleChatRequest(request: NextRequest): Promise<Response> {
     // delivered this turn (`includeFullSnapshot`); on a cheap follow-up the block
     // was not re-sent, so there is no fresh authoritative set to grade against.
     let noToolsSnapshotPayloads: unknown[] = [];
+    // The DATA INVENTORY manifest (per-domain sample counts) that rode this
+    // turn's tool-mode prompt. Hoisted out of the tool branch because the
+    // all-missed activation below needs it as a WIDENER: the counts were in
+    // front of the model, so a plain count restatement ("you've logged 42 BP
+    // readings") must stay grounded even on a turn whose every tool missed.
+    // Never an ACTIVATOR on its own — see the v1.32.1 note below.
+    let inventoryPayloads: unknown[] = [];
     let totalTokensSpent: number;
     // v1.21.0 (F3) — cached-input tokens to subtract at reconcile (prompt-cached
     // input the user did not re-pay for must not be billed to the daily meter).
@@ -705,6 +712,7 @@ async function handleChatRequest(request: NextRequest): Promise<Response> {
           // out-of-window aggregate rule 3 lets the model cite. Ground it.
           ...(loop.toolResults ?? []).map((r) => r.data ?? r.available),
         ];
+        inventoryPayloads = [inventory.entries];
         toolResultPayloads =
           presentToolPayloads.length > 0
             ? [...presentToolPayloads, inventory.entries]
@@ -993,17 +1001,43 @@ async function handleChatRequest(request: NextRequest): Promise<Response> {
     // active grading — they never ACTIVATE it, so a snapshot figure the model
     // cited on a no-tool turn is still left alone (the v1.32.1 regression guard
     // holds). Assistant prose is never a ledger source (D3).
+    //
+    // The turn that CALLED tools and got nothing back is graded too. It used to
+    // be the one turn the verifier sat out: a pure miss carries no `data` and no
+    // `available`, `runCoachToolLoop` drops that shape from `toolResults`, and
+    // the no-tools snapshot fallback below is populated only in the non-tool
+    // branch — so `activatingPayloads` came out empty and every figure in the
+    // reply shipped unchecked. That is backwards. A turn whose every tool
+    // reported `{ present: false }` is not an absence of evidence about the
+    // reply, it is evidence that the record holds nothing to cite, which is
+    // exactly when a fabricated figure is both likeliest and most harmful.
+    //
+    // `toolTrace` is the discriminant, because it records every tool that ran
+    // INCLUDING the pure misses. It separates the two cases the old condition
+    // conflated: tools ran and found nothing (grade — the model was told the
+    // record is empty and answered with numbers anyway), versus the model
+    // answered without calling a tool at all (stay dormant — the v1.32.1
+    // regression, where the base prompt deliberately carries no pre-computed
+    // figures and flagging a legitimately recalled one was a real defect).
+    const missedEveryTool =
+      toolMode && toolTrace.length > 0 && toolResultPayloads.length === 0;
     const activatingPayloads =
       toolResultPayloads.length > 0
         ? toolResultPayloads
-        : noToolsSnapshotPayloads;
+        : missedEveryTool
+          ? inventoryPayloads
+          : noToolsSnapshotPayloads;
     let groundedFigures: number[] = [];
     // v1.32.14 — count of figures withheld from THIS reply (each rewritten to the
     // elision mark). Hoisted out of the guard block so it can ride the provenance
     // envelope and drive the quiet per-message notice. Stays 0 on a blocked turn
     // (the guard is skipped, its fallback prose carries no figures).
     let unverifiedStripped = 0;
-    if (activatingPayloads.length > 0) {
+    // True when the guard stripped a figure on a turn whose every tool missed —
+    // i.e. the model put a number on a record that holds none. Drives the
+    // honest-replacement below.
+    let fabricatedOnEmptyRecord = false;
+    if (activatingPayloads.length > 0 || missedEveryTool) {
       const ledger = buildGroundingLedger({
         toolPayloads: activatingPayloads,
         priorToolFigures,
@@ -1026,6 +1060,9 @@ async function handleChatRequest(request: NextRequest): Promise<Response> {
           replyText,
           ledger,
           locale,
+          // On an all-missed turn an EMPTY ledger is the finding, not a reason
+          // to skip: nothing was retrievable, so nothing can reconcile.
+          { gradeAgainstEmptyLedger: missedEveryTool },
         );
         if (unverified.length > 0) {
           const { prose: corrected, stripped } = stripUnverifiedNumbers(
@@ -1034,6 +1071,7 @@ async function handleChatRequest(request: NextRequest): Promise<Response> {
           );
           replyText = corrected;
           unverifiedStripped = stripped;
+          fabricatedOnEmptyRecord = missedEveryTool && stripped > 0;
           annotate({
             action: { name: "coach.prose.number_unverified" },
             meta: {
@@ -1046,6 +1084,42 @@ async function handleChatRequest(request: NextRequest): Promise<Response> {
           });
         }
       }
+    }
+
+    // A stripped reply on an empty record is not worth sending. Eliding the
+    // digits leaves the sentences that carried them — "your sleep averaged […]
+    // minutes, up from […]" still asserts a series, an average and a direction
+    // for a metric the tools just reported has no readings at all. The false
+    // claim survives the strip; only its precision goes. So replace the turn
+    // with the honest answer instead of shipping the elided mush.
+    //
+    // Scoped tightly: this fires only when every tool missed AND the guard
+    // actually stripped something. A reply that cited a legitimately grounded
+    // figure (a prior turn's tool result, an inventory count) reconciles
+    // against the ledger, strips nothing, and is left alone.
+    //
+    // REPLACE, not withhold — the same policy the outbound screen uses on this
+    // surface, for the same reason: the user is waiting on a synchronous answer
+    // and silence reads as a failure.
+    //
+    // Accepted trade-off: a reply mixing one grounded recall with one
+    // fabrication is replaced wholesale, losing the good half. That is the
+    // right way round — the alternative leaves an invented figure's sentence
+    // on screen.
+    if (fabricatedOnEmptyRecord) {
+      replyText = getServerTranslator(locale).t("coach.noRecordedData");
+      // The reply now carries no figures at all, so the withheld-figure notice
+      // would be describing prose the reader can no longer see. The replacement
+      // copy states the same thing in plain words.
+      unverifiedStripped = 0;
+      annotate({
+        action: { name: "coach.prose.empty_record_replaced" },
+        meta: { promptVersion: PROMPT_VERSION },
+      });
+      await auditLog("insights.coach.empty_record_replaced", {
+        userId,
+        details: { conversationId: workingConversationId },
+      });
     }
 
     // v1.21.0 (NEW-C C-3) — Learn-link post-filter. The prompt instructs the

@@ -119,9 +119,11 @@ describe("the Coach snapshot stamp", () => {
       scope: { sources: ["pulse", "weight"] },
     };
 
-    const stale = annotateSnapshotFreshness(snapshot);
+    const { stale, coarseWithheld } = annotateSnapshotFreshness(snapshot);
 
     expect(stale).toEqual(["pulse"]);
+    // Neither block carries a coarse band, so nothing is disputed.
+    expect(coarseWithheld).toEqual([]);
     expect((snapshot.pulse as { asOf: unknown }).asOf).toEqual({
       daysAgo: 5,
       isToday: false,
@@ -134,5 +136,64 @@ describe("the Coach snapshot stamp", () => {
     });
     expect(snapshot.memory).toEqual({ headline: "steady month" });
     expect(snapshot.scope).toEqual({ sources: ["pulse", "weight"] });
+  });
+
+  /**
+   * A coarse bucket mean is an average of real rows, so it cannot sit outside
+   * those rows' own all-time extremes. When it does, the rollup band is
+   * describing readings the live read cannot see and must not be narrated.
+   */
+  it("drops a coarse band whose bucket mean the live extremes cannot account for", () => {
+    const snapshot: Record<string, unknown> = {
+      weight: {
+        aggregate: {
+          allTimeMin: 80,
+          allTimeMax: 80,
+          coverage: { count: 6, newestDaysAgo: 0 },
+        },
+        timeline: {
+          recent: [],
+          coarse: { monthly: [["2026-01-01", 95, 95, 95]], yearly: [] },
+        },
+      },
+    };
+
+    const { coarseWithheld } = annotateSnapshotFreshness(snapshot);
+
+    expect(coarseWithheld).toEqual(["weight"]);
+    const weight = snapshot.weight as {
+      timeline: { coarse?: unknown };
+      asOf: { coarseHistoryWithheld?: true; currentForTodayClaims: boolean };
+    };
+    expect(weight.timeline.coarse).toBeUndefined();
+    expect(weight.asOf.coarseHistoryWithheld).toBe(true);
+    // Raw recency is untouched — the surviving readings are still from today.
+    expect(weight.asOf.currentForTodayClaims).toBe(true);
+  });
+
+  it("keeps a coarse band that reconciles with the live extremes", () => {
+    const snapshot: Record<string, unknown> = {
+      weight: {
+        aggregate: {
+          allTimeMin: 78,
+          allTimeMax: 96,
+          coverage: { count: 40, newestDaysAgo: 0 },
+        },
+        timeline: {
+          recent: [],
+          coarse: { monthly: [["2026-01-01", 95, 94, 96]], yearly: [] },
+        },
+      },
+    };
+
+    const { coarseWithheld } = annotateSnapshotFreshness(snapshot);
+
+    expect(coarseWithheld).toEqual([]);
+    const weight = snapshot.weight as {
+      timeline: { coarse?: unknown };
+      asOf: { coarseHistoryWithheld?: true };
+    };
+    expect(weight.timeline.coarse).toBeDefined();
+    expect(weight.asOf.coarseHistoryWithheld).toBeUndefined();
   });
 });

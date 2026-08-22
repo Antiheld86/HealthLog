@@ -2748,8 +2748,8 @@
         "last7days": "letzte 7 Tage",
         "last30days": "letzte 30 Tage",
         "last90days": "letzte 90 Tage",
-        "lastYear": "Jahresrückblick",
-        "allTime": "gesamter Zeitraum"
+        "lastYear": "letzte 12 Monate",
+        "allTime": "gesamter Zeitraum (12 Monate im Detail)"
       },
       "windowLabel": "Zeitraum",
       "settingsAriaLabel": "Coach-Einstellungen",
@@ -3047,7 +3047,7 @@
       "loadError": "Diese Messgröße konnte gerade nicht geladen werden.",
       "blutdruckDescription": "Dein systolisch-/diastolisch-Verlauf mit altersangepassten Zielbereichen und einer textbasierten Einschätzung.",
       "gewichtDescription": "Gewichtsverlauf gegen das aus deiner Größe abgeleitete gesunde Band, mit Einschätzung.",
-      "pulsDescription": "Pulsverlauf gegenüber dem persönlichen Karvonen-Zielband, mit Einschätzung.",
+      "pulsDescription": "Ruhepuls im Vergleich zu einem alters- und geschlechtsabhängigen Referenzband aus CDC/NCHS-Populationsperzentilen, mit Einschätzung.",
       "stimmungDescription": "Tägliche Stimmungswerte im Zeitverlauf mit einer textbasierten Einschätzung.",
       "medikamenteDescription": "Einnahme-Kalender pro Medikament plus eine textbasierte Einschätzung.",
       "bmiDescription": "BMI aus deinem Gewicht und deiner Größe abgeleitet, mit Einschätzung.",
@@ -8967,7 +8967,8 @@
       "outOfScope": "Ich kann nur bei den Gesundheitsdaten in deinem Log helfen — Messwerte, Medikamente, Stimmung, Trends. Fragen außerhalb dieses Themas beantworte ich nicht.",
       "promptInjection": "In deiner Nachricht stehen Anweisungen, die meine Vorgaben überschreiben sollen. Ich bin der HealthLog-Coach und fasse ausschließlich deine eigenen Gesundheitsdaten zusammen — formuliere deine Frage bitte in diesem Rahmen neu.",
       "conversationPoisoned": "Eine frühere Nachricht in dieser Unterhaltung enthält Anweisungen, die meine Vorgaben überschreiben sollen. Beginne bitte eine neue Unterhaltung."
-    }
+    },
+    "noRecordedData": "Zu deiner Frage sind bei dir keine Messwerte erfasst, also kann ich dir dazu keine Zahl nennen. Sobald du etwas eingetragen hast, frag mich noch einmal — dann rechne ich mit deinen eigenen Werten."
   },
   "safety": {
     "floor": {

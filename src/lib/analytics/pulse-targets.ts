@@ -68,14 +68,19 @@ export function getPersonalizedPulseTarget(
   age: number | null,
   gender: PulseGender,
 ): PersonalizedPulseTarget {
-  // AHA fallback for adults when profile context is missing.
+  // No age to personalise against (missing profile, or under 20 where the
+  // percentile table does not apply), so this arm returns a fixed band that is
+  // the same for everyone. The source label says so in as many words: the
+  // surrounding UI describes the pulse band as age- and sex-based, and a reader
+  // who falls into this arm needs to know theirs is not.
   if (age == null || age < 20) {
     return {
       greenMin: 60,
       greenMax: 100,
       orangeMin: 55,
       orangeMax: 105,
-      source: "AHA (adults, resting pulse 60-100 bpm)",
+      source:
+        "AHA general adult range (resting pulse 60-100 bpm) — not personalised",
     };
   }
 

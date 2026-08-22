@@ -199,14 +199,24 @@ export function HeroStrip({
             <ProseBlocks text={subtitle} />
           </div>
           <div className="text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-            <span data-slot="insights-hero-strip-baseline">
-              {t("insights.heroPersonalBaseline")}
-            </span>
+            {/* The baseline line describes where the SUBTITLE came from, so it
+                may only show when the subtitle IS a briefing. Without one the
+                subtitle falls back to generic copy derived from nothing, and
+                this line went on claiming a personal baseline underneath it —
+                the one part of the row that was ungated while both its
+                siblings already checked for their own data first. */}
+            {briefing && (
+              <span data-slot="insights-hero-strip-baseline">
+                {t("insights.heroPersonalBaseline")}
+              </span>
+            )}
             {generatedLine && (
               <>
-                <span aria-hidden="true" className="opacity-50">
-                  ·
-                </span>
+                {briefing && (
+                  <span aria-hidden="true" className="opacity-50">
+                    ·
+                  </span>
+                )}
                 <span data-slot="insights-hero-strip-generated">
                   {generatedLine}
                 </span>

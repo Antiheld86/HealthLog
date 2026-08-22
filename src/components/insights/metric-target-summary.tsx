@@ -28,8 +28,8 @@ import { apiGet } from "@/lib/api/api-fetch";
  * nothing and a cold sub-page warms the cache its siblings reuse. We
  * never recompute the ranges here: the route is the single source of
  * truth for the age-based ESH blood-pressure band, the WHO weight / BMI
- * band, the Karvonen pulse band, the AASM sleep band, the ADA / DDG
- * glucose bands, and the medication / mood targets.
+ * band, the CDC/NCHS percentile pulse band, the AASM sleep band, the
+ * ADA / DDG glucose bands, and the medication / mood targets.
  *
  * The panel is a compact reference panel carrying the full target
  * context:

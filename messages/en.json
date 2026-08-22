@@ -2748,8 +2748,8 @@
         "last7days": "last 7 days",
         "last30days": "last 30 days",
         "last90days": "last 90 days",
-        "lastYear": "year so far",
-        "allTime": "all time"
+        "lastYear": "last 12 months",
+        "allTime": "all time (12 months of detail)"
       },
       "windowLabel": "Window",
       "settingsAriaLabel": "Coach settings",
@@ -3047,7 +3047,7 @@
       "loadError": "Could not load this metric right now.",
       "blutdruckDescription": "Your systolic / diastolic trend with age-personalised target zones and a written assessment.",
       "gewichtDescription": "Weight trend mapped against your height-derived healthy band, plus a written assessment.",
-      "pulsDescription": "Pulse trend against the personalised Karvonen target band, plus a written assessment.",
+      "pulsDescription": "Resting pulse against an age- and sex-based reference band from CDC/NCHS population percentiles, plus a written assessment.",
       "stimmungDescription": "Daily mood scores over time with a written assessment.",
       "medikamenteDescription": "Per-medication adherence calendars and a written assessment.",
       "bmiDescription": "BMI derived from your weight and height, with a written assessment.",
@@ -8967,7 +8967,8 @@
       "outOfScope": "I can only help with the health metrics in your log — measurements, medications, mood, trends. I cannot answer questions outside that scope.",
       "promptInjection": "I noticed wording that tries to override my instructions. I am the HealthLog Coach and only summarise your own health data — please rephrase your question in those terms.",
       "conversationPoisoned": "An earlier message in this conversation contains wording that overrides my instructions. Please start a new conversation."
-    }
+    },
+    "noRecordedData": "I don't have any recorded readings for what you asked about, so there is nothing I can give you a figure from. Once you log some, ask me again and I'll work from your own numbers."
   },
   "safety": {
     "floor": {

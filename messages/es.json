@@ -2748,8 +2748,8 @@
         "last7days": "Últimos 7 días",
         "last30days": "Últimos 30 días",
         "last90days": "Últimos 90 días",
-        "lastYear": "lo que va de año",
-        "allTime": "Todo el tiempo"
+        "lastYear": "últimos 12 meses",
+        "allTime": "todo el tiempo (12 meses en detalle)"
       },
       "windowLabel": "Periodo",
       "settingsAriaLabel": "Ajustes del coach",
@@ -3047,7 +3047,7 @@
       "loadError": "No se pudo cargar esta métrica ahora mismo.",
       "blutdruckDescription": "Tu evolución sistólica/diastólica con rangos objetivo ajustados a la edad y una valoración en texto.",
       "gewichtDescription": "Evolución del peso frente a la banda saludable derivada de tu altura, con valoración.",
-      "pulsDescription": "Resting pulse vs. the personalised Karvonen target band, plus a written assessment.",
+      "pulsDescription": "Pulso en reposo frente a una banda de referencia por edad y sexo basada en percentiles poblacionales de CDC/NCHS, con una valoración escrita.",
       "stimmungDescription": "Valores diarios de estado de ánimo en el tiempo, con una valoración en texto.",
       "medikamenteDescription": "Calendario de tomas por medicamento, más una valoración en texto.",
       "bmiDescription": "IMC derivado de tu peso y altura, con valoración.",
@@ -8967,7 +8967,8 @@
       "outOfScope": "Solo puedo ayudarte con los datos de salud de tu registro: mediciones, medicamentos, estado de ánimo, tendencias. No puedo responder preguntas fuera de ese ámbito.",
       "promptInjection": "He detectado instrucciones que intentan anular mis directrices. Soy el Coach de HealthLog y solo resumo tus propios datos de salud; reformula tu pregunta en esos términos, por favor.",
       "conversationPoisoned": "Un mensaje anterior de esta conversación contiene instrucciones que intentan anular mis directrices. Empieza una conversación nueva, por favor."
-    }
+    },
+    "noRecordedData": "No tienes ninguna medición registrada sobre lo que preguntas, así que no puedo darte ninguna cifra. Cuando registres algo, vuelve a preguntarme y trabajaré con tus propios datos."
   },
   "safety": {
     "floor": {
