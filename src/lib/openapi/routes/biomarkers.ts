@@ -28,13 +28,17 @@ import {
   stdResponses,
 } from "./shared";
 
-createBiomarkerSchema.meta({
+// `.meta()` CLONES in Zod 4 rather than annotating in place, so the returned
+// schema has to be captured and referenced. A bare `schema.meta({...})`
+// statement registers nothing and the component id it names never reaches the
+// emitted document.
+const createBiomarkerRequest = createBiomarkerSchema.meta({
   id: "CreateBiomarkerRequest",
   description:
     "Define a user-scoped biomarker ONCE: canonical `name`, `unit`, optional reference bounds (`lowerBound` / `upperBound`; when both present `lowerBound` must not exceed `upperBound`), an optional encrypted `context` note, and an optional `panel` grouping. The name is unique per user (no second 'LDL'). Recording a value later just picks this marker — its unit + range are never re-entered.",
 });
 
-updateBiomarkerSchema.meta({
+const updateBiomarkerRequest = updateBiomarkerSchema.meta({
   id: "UpdateBiomarkerRequest",
   description:
     "Partial edit of a biomarker. An omitted key leaves the column untouched; an explicit `null` on `context` / `panel` / a bound clears it. Set `hidden` to drop / restore the marker in the active list + lab-entry pickers. A rename that collides with another of the caller's markers is rejected 409.",
@@ -106,7 +110,7 @@ export const biomarkerPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       parameters: [idempotencyKeyParameter],
       requestBody: {
         required: true,
-        content: { "application/json": { schema: createBiomarkerSchema } },
+        content: { "application/json": { schema: createBiomarkerRequest } },
       },
       responses: {
         ...idempotentWrite(),
@@ -153,7 +157,7 @@ export const biomarkerPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestParams: { path: z.object({ id: z.string() }) },
       requestBody: {
         required: true,
-        content: { "application/json": { schema: updateBiomarkerSchema } },
+        content: { "application/json": { schema: updateBiomarkerRequest } },
       },
       responses: {
         ...recordRefusal(),

@@ -41,37 +41,40 @@ import {
   stdResponses,
 } from "./shared";
 
-vaccinationCreateSchema.meta({
+// Zod 4's `.meta()` returns a NEW instance carrying the id rather than
+// annotating in place, so each annotated schema is bound to a const and the
+// route table below references that const — a bare call would register nothing.
+const createVaccinationRequest = vaccinationCreateSchema.meta({
   id: "CreateVaccinationRequest",
   description:
     "Log one administered dose. `occurredAt` is required and must not be in the future — a vaccination is recorded after the fact, and a planned booster is a reminder rather than a record. Exactly one identity arm is required: either `antigenSlug` (a slug the catalogue offers) or `vaccineName` (whatever the person's own record says, verbatim, which may be a trade name). Everything else is optional, so a decades-old paper entry with nothing but a date and a name is loggable. `note` is encrypted at rest. `documentIds` pre-links the scanned pages; an id naming nothing the caller owns is dropped rather than refused, so a link never blocks a save. Logging a dose satisfies any booster reminder keyed to one of its component antigens.",
 });
 
-vaccinationUpdateSchema.meta({
+const updateVaccinationRequest = vaccinationUpdateSchema.meta({
   id: "UpdateVaccinationRequest",
   description:
     "Partial edit of a dose; an omitted key leaves the column untouched, and a body naming nothing is a 422. `occurredAt` is editable because a transcription typo is the common case — and editing it deliberately does NOT re-run the booster satisfaction, so correcting a date can never move a reminder's due date. An edit that would leave the record with neither identity arm is refused. A present `documentIds` array replaces the links, empty array included.",
 });
 
-vaccinationListQuerySchema.meta({
+const listVaccinationsQuery = vaccinationListQuerySchema.meta({
   id: "ListVaccinationsQuery",
   description:
     "Filters for the immunization list: `antigenSlug`, `from` / `to` (ISO-8601 instants) and `limit` (1–500, default 300). The list is full and bounded rather than paged — a vaccination record is a lifetime document but a short one.",
 });
 
-vaccinationBoosterSchema.meta({
+const vaccinationBoosterRequest = vaccinationBoosterSchema.meta({
   id: "VaccinationBoosterRequest",
   description:
     "The confirm body for a booster reminder — the person's own values, accepted or edited from the catalogue's prefill. `intervalMonths` is bounded at 600 (a decade booster is 120); `label` is composed client-side so its locale is the person's own. There is no antigen field: the server reads the antigen from the dose's catalogue entry, never from the request, so a client cannot key a reminder onto an antigen the dose does not contain.",
 });
 
-vaccinationSuggestQuerySchema.meta({
+const vaccinationSuggestQuery = vaccinationSuggestQuerySchema.meta({
   id: "VaccinationSuggestQuery",
   description:
     "The single input to the upload suggestion: the document's anchor date (ISO-8601 with offset). No ids — the candidate doses come from the caller's own record, narrowed from the session.",
 });
 
-vaccinationLinkSchema.meta({
+const vaccinationLinkRequest = vaccinationLinkSchema.meta({
   id: "VaccinationLinkRequest",
   description:
     "Documents to file against, or unfile from, a dose. Idempotent in both directions and capped at 100 ids. Ids naming nothing the caller owns come back in `unknown` rather than failing the request.",
@@ -224,7 +227,7 @@ export const vaccinationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "List vaccinations",
       description:
         "Returns the caller's live doses, newest first, each with its series resolved per component antigen. Soft-deleted doses are excluded.",
-      requestParams: { query: vaccinationListQuerySchema },
+      requestParams: { query: listVaccinationsQuery },
       responses: {
         ...recordRefusal(),
         "200": {
@@ -246,7 +249,7 @@ export const vaccinationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Records one administered dose and satisfies every live booster reminder keyed to one of its component antigens — so a single combined dose settles each of the antigens it contains. Satisfaction is forward-only: a dose older than a reminder's last satisfaction is a no-op, which is what makes back-entering an old paper record safe. Honours `Idempotency-Key`. Audits as `vaccination.record.create`.",
       requestBody: {
         required: true,
-        content: { "application/json": { schema: vaccinationCreateSchema } },
+        content: { "application/json": { schema: createVaccinationRequest } },
       },
       responses: {
         ...idempotentWrite(),
@@ -292,7 +295,7 @@ export const vaccinationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestParams: idPath,
       requestBody: {
         required: true,
-        content: { "application/json": { schema: vaccinationUpdateSchema } },
+        content: { "application/json": { schema: updateVaccinationRequest } },
       },
       responses: {
         ...recordRefusal(),
@@ -363,7 +366,7 @@ export const vaccinationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestParams: idPath,
       requestBody: {
         required: true,
-        content: { "application/json": { schema: vaccinationBoosterSchema } },
+        content: { "application/json": { schema: vaccinationBoosterRequest } },
       },
       responses: {
         ...recordRefusal(),
@@ -406,7 +409,7 @@ export const vaccinationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Suggest the dose a document belongs to",
       description:
         "Which dose does a document dated `anchor` most plausibly belong to? The document upload review asks this when a scan is classified `VACCINATION`. The window (±7 days, shared with the visit moment) and the one-pre-selects / many-offer-a-picker verdict are decided server-side so the browser never re-derives them. Owner-scoped; the anchor is the only input and it is a date, not an id.",
-      requestParams: { query: vaccinationSuggestQuerySchema },
+      requestParams: { query: vaccinationSuggestQuery },
       responses: {
         ...recordRefusal(),
         "200": {
@@ -433,7 +436,7 @@ export const vaccinationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestParams: idPath,
       requestBody: {
         required: true,
-        content: { "application/json": { schema: vaccinationLinkSchema } },
+        content: { "application/json": { schema: vaccinationLinkRequest } },
       },
       responses: {
         "200": {
@@ -462,7 +465,7 @@ export const vaccinationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestParams: idPath,
       requestBody: {
         required: true,
-        content: { "application/json": { schema: vaccinationLinkSchema } },
+        content: { "application/json": { schema: vaccinationLinkRequest } },
       },
       responses: {
         "200": {

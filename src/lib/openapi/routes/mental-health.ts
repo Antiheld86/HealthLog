@@ -27,13 +27,16 @@ import {
   stdResponses,
 } from "./shared";
 
-createAssessmentSchema.meta({
+// Zod 4's `.meta()` returns a NEW instance carrying the id rather than
+// annotating in place, so each annotated schema is bound to a const and the
+// route table below references that const — a bare call would register nothing.
+const createMentalHealthAssessmentRequest = createAssessmentSchema.meta({
   id: "CreateMentalHealthAssessmentRequest",
   description:
     "Record one completed screener administration: PHQ-9 (9 items, 0–3), GAD-7 (7 items, 0–3), WHO-5 (5 items, 0–5) or SCI (8 items, 0–4). The array length and per-item ceiling must match the instrument. The item answers are encrypted at rest and never returned. The server computes the total (WHO-5 reports raw-sum × 4 as 0–100) + severity band + item-9 safety flag. Opt-in, beside mood tracking — this is a screening surface, not a diagnosis.",
 });
 
-listAssessmentsSchema.meta({
+const listMentalHealthAssessmentsQuery = listAssessmentsSchema.meta({
   id: "ListMentalHealthAssessmentsQuery",
   description:
     "Filter the caller's screener history by instrument; paginate with limit/offset.",
@@ -111,7 +114,7 @@ export const mentalHealthPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "List the caller's screener history",
       description:
         "Returns PHQ-9 / GAD-7 / WHO-5 / SCI administrations (newest first). Totals + bands + flags only; raw item answers are never returned.",
-      requestParams: { query: listAssessmentsSchema },
+      requestParams: { query: listMentalHealthAssessmentsQuery },
       responses: {
         ...recordRefusal(),
         "200": {
@@ -136,7 +139,7 @@ export const mentalHealthPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       parameters: [idempotencyKeyParameter],
       requestBody: {
         content: {
-          "application/json": { schema: createAssessmentSchema },
+          "application/json": { schema: createMentalHealthAssessmentRequest },
         },
       },
       responses: {

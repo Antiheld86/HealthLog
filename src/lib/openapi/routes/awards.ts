@@ -13,13 +13,11 @@ import { z } from "zod/v4";
 import type { ZodOpenApiObject } from "zod-openapi";
 
 import {
-  measurementSourceEnum,
-  measurementTypeEnum,
-} from "@/lib/validations/measurement";
-import {
   MODULE_DISABLED_DESCRIPTION,
   dataEnvelope,
   errorEnvelope,
+  measurementSourceEnum,
+  measurementTypeEnum,
   recordRefusal,
   stdResponses,
 } from "./shared";

@@ -30,25 +30,28 @@ import {
   stdResponses,
 } from "./shared";
 
-createCustomMetricSchema.meta({
+// Zod 4's `.meta()` returns a NEW instance carrying the id rather than
+// annotating in place, so each annotated schema is bound to a const and the
+// route table below references that const — a bare call would register nothing.
+const createCustomMetricRequest = createCustomMetricSchema.meta({
   id: "CreateCustomMetricRequest",
   description:
     "Define a user-scoped custom metric ONCE: free-text `name` + `unit`, an optional target window (`targetLow` / `targetHigh`; when both present `targetLow` must not exceed `targetHigh`), optional display `decimals`, an optional `description`, and explicit `correlationEnabled` opt-in. The name is unique per user. Logging a value later snapshots its unit.",
 });
 
-updateCustomMetricSchema.meta({
+const updateCustomMetricRequest = updateCustomMetricSchema.meta({
   id: "UpdateCustomMetricRequest",
   description:
     "Partial edit of a custom metric. An omitted key leaves the column untouched; an explicit `null` on a target bound / `decimals` / `description` clears it. `correlationEnabled` explicitly controls use as a bounded behaviour channel. A conflicting rename is rejected 409.",
 });
 
-createCustomMetricEntrySchema.meta({
+const createCustomMetricEntryRequest = createCustomMetricEntrySchema.meta({
   id: "CreateCustomMetricEntryRequest",
   description:
     "Log a value against a custom metric: numeric `value`, ISO 8601 `measuredAt`, optional free-text `note`. The metric's current unit is snapshotted onto the entry server-side.",
 });
 
-updateCustomMetricEntrySchema.meta({
+const updateCustomMetricEntryRequest = updateCustomMetricEntrySchema.meta({
   id: "UpdateCustomMetricEntryRequest",
   description:
     "Partial edit of a logged value. An omitted key leaves the column untouched; an explicit `null` on `note` clears it.",
@@ -164,7 +167,7 @@ export const customMetricPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       parameters: [idempotencyKeyParameter],
       requestBody: {
         required: true,
-        content: { "application/json": { schema: createCustomMetricSchema } },
+        content: { "application/json": { schema: createCustomMetricRequest } },
       },
       responses: {
         ...idempotentWrite(),
@@ -213,7 +216,7 @@ export const customMetricPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestParams: { path: z.object({ id: z.string() }) },
       requestBody: {
         required: true,
-        content: { "application/json": { schema: updateCustomMetricSchema } },
+        content: { "application/json": { schema: updateCustomMetricRequest } },
       },
       responses: {
         "200": {
@@ -296,7 +299,7 @@ export const customMetricPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestBody: {
         required: true,
         content: {
-          "application/json": { schema: createCustomMetricEntrySchema },
+          "application/json": { schema: createCustomMetricEntryRequest },
         },
       },
       responses: {
@@ -326,7 +329,7 @@ export const customMetricPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestBody: {
         required: true,
         content: {
-          "application/json": { schema: updateCustomMetricEntrySchema },
+          "application/json": { schema: updateCustomMetricEntryRequest },
         },
       },
       responses: {

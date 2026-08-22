@@ -19,6 +19,32 @@ import {
   stdResponses,
 } from "./shared";
 
+// The two request bodies this module publishes. `.meta()` CLONES in Zod 4
+// rather than annotating in place, so the returned schema has to be captured
+// and referenced: a bare `schema.meta({...})` statement registers nothing and
+// the component id it names never reaches the emitted document. Both
+// annotations used to sit in `./coach`, which imported the schemas for no
+// other reason and never referenced them; the two operations that DO send
+// these bodies are both here.
+//
+// v1.7.0 — health-record export selection. Strict shape: unknown keys
+// (including any attempt to smuggle a userId) 422 via returnAllZodIssues.
+// v1.11.0 — clinician share-link create payload. Strict; no `userId` field
+// (the owner is always narrowed from the session/Bearer). `expiresAt` is
+// required and capped at SHARE_LINK_MAX_DAYS; the scope columns are frozen
+// write-once at creation.
+const createShareLinkRequest = createShareLinkSchema.meta({
+  id: "CreateShareLinkRequest",
+  description:
+    "v1.11.0 — owner request to mint a clinician share link to their own health record. `expiresAt` is required (absolute ISO instant) and capped at 90 days. `rangeStart`/`rangeEnd` freeze the reporting window (rangeEnd null = rolling). `selection` freezes which record leaves the link may serve, and omitting it means an empty scope rather than a default one. `documentIds` freezes the documents the link carries; `documentOnly` mints a share that serves those documents and no record scope at all. A share link serves the rendered page and the documents frozen onto it — there is no FHIR or other machine-readable face behind a share token. Strict: unknown keys 422.",
+});
+
+const healthRecordExportRequest = exportSelectionSchema.meta({
+  id: "HealthRecordExportRequest",
+  description:
+    "v1.7.0 — health-record / doctor-handover export selection. `format` picks PDF, FHIR R4 document Bundle, or a combined zip package. `selection` is REQUIRED and carries the leaf inclusion list — membership is inclusion, absence is exclusion, and there is no server-side default; the retired grouped `sections` shape is a 422. No `userId` field — the user is always narrowed from the session/Bearer. The route is strict: unknown keys 422.",
+});
+
 // v1.11.0 — clinician share-link owner-facing summary (never the raw token).
 const shareLinkSummary = z.object({
   id: z.string(),
@@ -91,7 +117,7 @@ export const healthRecordPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestBody: {
         required: true,
         content: {
-          "application/json": { schema: exportSelectionSchema },
+          "application/json": { schema: healthRecordExportRequest },
         },
       },
       responses: {
@@ -124,7 +150,7 @@ export const healthRecordPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestBody: {
         required: true,
         content: {
-          "application/json": { schema: createShareLinkSchema },
+          "application/json": { schema: createShareLinkRequest },
         },
       },
       responses: {

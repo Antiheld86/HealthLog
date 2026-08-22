@@ -24,7 +24,11 @@ import {
   stdResponses,
 } from "./shared";
 
-ocrCommitSchema.meta({
+// `.meta()` CLONES in Zod 4 rather than annotating in place, so the returned
+// schema has to be captured and referenced. A bare `schema.meta({...})`
+// statement registers nothing and the component id it names never reaches the
+// emitted document.
+const ocrCommitRequest = ocrCommitSchema.meta({
   id: "OcrCommitRequest",
   description:
     "The rows a human confirmed on the Lab-OCR review screen. Each row is EITHER numeric (`value` + `unit`, optional reference bounds) OR qualitative (`valueText`) — exactly one. `analyte` drives a resolve-or-mint of the user-scoped biomarker; `takenAt` is a backdatable ISO instant. No `userId` field — it is narrowed from the session. 1..100 rows. The route skips a row that duplicates a live reading (same analyte + day + value). The optional `encounterId` files the panel against a visit the caller owns — ONE link per written result row, so a marker re-run on a different day belongs to its own visit; always optional, and a link that could not be made never fails the commit.",
@@ -209,7 +213,7 @@ export const ocrPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         'Writes ONLY the rows the human confirmed on the review screen. Each row resolves-or-mints a user-scoped biomarker and creates a `LabResult` with `source: "OCR"`; a row that duplicates a live reading is skipped. Idempotent (Idempotency-Key). Audits as `labs.ocr.commit`. `userId` is narrowed from the session, never a body field.',
       requestBody: {
         required: true,
-        content: { "application/json": { schema: ocrCommitSchema } },
+        content: { "application/json": { schema: ocrCommitRequest } },
       },
       responses: {
         ...idempotentWrite(),

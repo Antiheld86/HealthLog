@@ -6,10 +6,7 @@
  * runtime request parsing, so the wire contract stays single-source.
  */
 import { z } from "zod/v4";
-import {
-  measurementTypeEnum,
-  measurementSourceEnum,
-} from "@/lib/validations/measurement";
+import { measurementSourceEnum, measurementTypeEnum } from "../shared";
 import { METRIC_STATUS_IDS } from "@/lib/insights/metric-status-registry";
 import {
   DERIVED_METRIC_IDS,

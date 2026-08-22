@@ -78,25 +78,28 @@ const documentChatListSchema = z
   })
   .meta({ id: "DocumentChatList" });
 
-inboundConfirmSchema.meta({
+// Zod 4's `.meta()` returns a NEW instance carrying the id rather than
+// annotating in place, so each annotated schema is bound to a const and the
+// route table below references that const — a bare call would register nothing.
+const inboundConfirmRequest = inboundConfirmSchema.meta({
   id: "InboundConfirmRequest",
   description:
     "The approve/reject decisions a human made on the review screen. Each names a staged fact by id. Approved facts are committed to the structured stores (labs / conditions / medications) through their normal create paths; rejected facts are discarded. A fact still flagged `needsReview` (below the confidence floor, never edited) cannot be approved — it is reported back as `needsReview`. No `userId` field — it is narrowed from the session; every fact id is re-scoped to the document + caller.",
 });
 
-inboundFactEditSchema.meta({
+const inboundFactEditRequest = inboundFactEditSchema.meta({
   id: "InboundFactEditRequest",
   description:
     "A correction to a staged fact before approval (fixes OCR / units / dates / codes). Discriminated by `factType` so the edit cannot change the fact's resource type. A successful edit clears `needsReview` — the values become user-asserted.",
 });
 
-documentUpdateSchema.meta({
+const documentUpdateRequest = documentUpdateSchema.meta({
   id: "DocumentUpdateRequest",
   description:
     "Metadata edit for a stored document: `title` (user label; null clears it), `kind` (category), `documentDate` (user filing date, YYYY-MM-DD; null clears it), `episodeIds` (REPLACE-SET of condition links — the document's links become exactly this set; an empty array unlinks everything; every id must be a live episode of the caller or the whole request answers 404), `encounterIds` (the same replace-set semantics over the caller's visits). At least one field required. No `userId` field — narrowed from the session and fed to the Prisma `where` with the row id.",
 });
 
-documentBulkSchema.meta({
+const documentBulkRequest = documentBulkSchema.meta({
   id: "DocumentBulkRequest",
   description:
     "One bulk action over up to 100 owner-scoped documents: `setKind` (requires `kind`), `linkEpisode` / `unlinkEpisode` (require `episodeId`), `linkEncounter` / `unlinkEncounter` (require `encounterId`), `delete` (tombstone, undo-able for 30 days), `restore` (clear tombstone). Partial failures never abort the batch — see the per-id result array.",
@@ -514,7 +517,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Applies one action to up to 100 owner-scoped documents and returns a per-id result array — a partial failure never aborts the batch. `error` is `notFound` (unknown / foreign / tombstoned where liveness is required) or `conflict` (restore blocked by a live duplicate of the same bytes).",
       requestBody: {
         required: true,
-        content: { "application/json": { schema: documentBulkSchema } },
+        content: { "application/json": { schema: documentBulkRequest } },
       },
       responses: {
         "200": {
@@ -587,7 +590,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       ],
       requestBody: {
         required: true,
-        content: { "application/json": { schema: documentUpdateSchema } },
+        content: { "application/json": { schema: documentUpdateRequest } },
       },
       responses: {
         "200": {
@@ -1078,7 +1081,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       ],
       requestBody: {
         required: true,
-        content: { "application/json": { schema: inboundFactEditSchema } },
+        content: { "application/json": { schema: inboundFactEditRequest } },
       },
       responses: {
         "200": {
@@ -1110,7 +1113,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       ],
       requestBody: {
         required: true,
-        content: { "application/json": { schema: inboundConfirmSchema } },
+        content: { "application/json": { schema: inboundConfirmRequest } },
       },
       responses: {
         ...idempotentWrite(),

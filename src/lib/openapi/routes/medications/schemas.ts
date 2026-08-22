@@ -967,7 +967,10 @@ export const doseHistoryResponse = z
       "Per-slot dose ledger over [from, to]: every expected slot with a status plus every off-schedule intake tagged ad-hoc. Built from the same band minter + `reconstructDoseHistory` the compliance % consumes, so the history view and the rate never contradict each other.",
   });
 
-medicationExtractionSchema.meta({
+// Zod 4's `.meta()` returns a NEW instance carrying the id rather than
+// annotating in place, so the annotated clone is exported and the path table
+// references it — a bare call would register nothing.
+export const medicationExtractionResult = medicationExtractionSchema.meta({
   id: "MedicationExtractionResult",
   description:
     "Citation-guarded partial extraction of medication scheduling fields. Every field is optional; the wizard merges what is present onto the form state and leaves the rest blank. `name` and `dose` are post-validated against the original free-text and dropped when not substring-matched, so the wizard cannot silently land a hallucinated brand or dose. `cadenceKind` / `doseUnit` / `weekdays` are closed enums; numeric fields are clamped to the wizard's wire bounds.",

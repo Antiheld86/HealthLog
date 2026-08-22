@@ -41,49 +41,53 @@ import {
   stdResponses,
 } from "./shared";
 
-encounterCreateSchema.meta({
+// `.meta()` CLONES in Zod 4 rather than annotating in place, so the returned
+// schema has to be captured and referenced. A bare `schema.meta({...})`
+// statement registers nothing and the component id it names never reaches the
+// emitted document.
+const createEncounterRequest = encounterCreateSchema.meta({
   id: "CreateEncounterRequest",
   description:
     "File a visit, or book one. `occurredAt` is the only required field — a visit saves with a date and nothing else. A future instant with `status: PLANNED` books an appointment and mints exactly one reminder for it. `reason` and `outcome` are encrypted at rest. The three id arrays pre-link documents, lab results and condition episodes; an id naming nothing the caller owns is dropped rather than refused, so a link never blocks a save.",
 });
 
-encounterUpdateSchema.meta({
+const updateEncounterRequest = encounterUpdateSchema.meta({
   id: "UpdateEncounterRequest",
   description:
     "Partial edit of a visit; an omitted key leaves the column untouched, and a body naming nothing is a 422. Moving `occurredAt` re-anchors the appointment reminder the visit already owns and never mints a second. Moving `status` to DONE closes the checkup named by `reminderId`, on the transition only. CANCELLED and NO_SHOW stop the reminder without deleting the row. A present id array replaces that link family, empty array included.",
 });
 
-encounterListQuerySchema.meta({
+const listEncountersQuery = encounterListQuerySchema.meta({
   id: "ListEncountersQuery",
   description:
     "Window and filters for the visit list: `from` / `to` (ISO-8601 instants), `status`, `practitionerId`, `episodeId` (only visits filed against that condition episode — the condition side of the link, and the only direction it is offered in), and `limit` (1–200, default 100).",
 });
 
-encounterSuggestQuerySchema.meta({
+const suggestEncounterQuery = encounterSuggestQuerySchema.meta({
   id: "SuggestEncounterQuery",
   description:
     "The date to resolve around, as an ISO-8601 instant with an offset. A document uses `reportDate ?? documentDate`; a lab panel uses `takenAt`.",
 });
 
-encounterLinkSchema.meta({
+const encounterLinkRequest = encounterLinkSchema.meta({
   id: "EncounterLinkRequest",
   description:
     "Targets to file against, or unfile from, a visit. Idempotent in both directions and capped at 100 ids. Ids naming nothing the caller owns come back in `unknown` rather than failing the request.",
 });
 
-practitionerCreateSchema.meta({
+const createPractitionerRequest = practitionerCreateSchema.meta({
   id: "CreatePractitionerRequest",
   description:
     "Add a doctor or practice to the caller's own address book. `name` is the only required field and is stored as queryable plaintext so the picker can search and sort it; `note` is encrypted at rest. `specialty` is free text rather than an enum. Nothing is unique across accounts.",
 });
 
-practitionerUpdateSchema.meta({
+const updatePractitionerRequest = practitionerUpdateSchema.meta({
   id: "UpdatePractitionerRequest",
   description:
     "Partial edit; an omitted key leaves the column untouched, an explicit null clears it, and a body naming nothing is a 422.",
 });
 
-practitionerListQuerySchema.meta({
+const listPractitionersQuery = practitionerListQuerySchema.meta({
   id: "ListPractitionersQuery",
   description:
     "Query params for the address book: `q` (case-insensitive substring of the name OR the practice — a person looks one up by whichever of the two they remember) and `limit` (1–200, default 100). Name-ordered.",
@@ -233,7 +237,7 @@ export const encounterPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "List visits",
       description:
         "Returns the caller's live visits, split into `upcoming` and `past`. Bounded and windowed; soft-deleted visits are excluded.",
-      requestParams: { query: encounterListQuerySchema },
+      requestParams: { query: listEncountersQuery },
       responses: {
         ...recordRefusal(),
         "200": {
@@ -255,7 +259,7 @@ export const encounterPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Creates one visit. A future instant with `status: PLANNED` books an appointment and mints its reminder; a past instant with `status: DONE` and a `reminderId` closes that checkup. Claiming both is a 422 — a visit that has not happened cannot have closed anything. Honours `Idempotency-Key`. Audits as `encounter.visit.create`.",
       requestBody: {
         required: true,
-        content: { "application/json": { schema: encounterCreateSchema } },
+        content: { "application/json": { schema: createEncounterRequest } },
       },
       responses: {
         ...idempotentWrite(),
@@ -278,7 +282,7 @@ export const encounterPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Which visit does a record dated around this day belong to?",
       description:
         "Resolves the caller's live DONE or PLANNED visits within ±7 days of `anchor` into a verdict, so the three capture moments that ask the question — a document arriving, a lab panel committed from an extraction, a lab panel typed by hand — all read the same answer. `one` means pre-select it visibly with one undo; `many` means offer a picker with NOTHING pre-selected, because pre-selecting the first of two teaches a person to stop reading suggestions; `none` means offer nothing at all. Cancelled visits and no-shows are never candidates: neither happened, so neither produced the record being filed. No AI provider is involved and none is required.",
-      requestParams: { query: encounterSuggestQuerySchema },
+      requestParams: { query: suggestEncounterQuery },
       responses: {
         ...recordRefusal(),
         "200": {
@@ -325,7 +329,7 @@ export const encounterPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestParams: idPath,
       requestBody: {
         required: true,
-        content: { "application/json": { schema: encounterUpdateSchema } },
+        content: { "application/json": { schema: updateEncounterRequest } },
       },
       responses: {
         ...recordRefusal(),
@@ -396,7 +400,7 @@ export const encounterPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestParams: idPath,
       requestBody: {
         required: true,
-        content: { "application/json": { schema: encounterLinkSchema } },
+        content: { "application/json": { schema: encounterLinkRequest } },
       },
       responses: {
         "200": {
@@ -425,7 +429,7 @@ export const encounterPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestParams: idPath,
       requestBody: {
         required: true,
-        content: { "application/json": { schema: encounterLinkSchema } },
+        content: { "application/json": { schema: encounterLinkRequest } },
       },
       responses: {
         "200": {
@@ -453,7 +457,7 @@ export const encounterPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "List practitioners",
       description:
         "Returns the caller's address book, name-ordered, with an optional case-insensitive name search.",
-      requestParams: { query: practitionerListQuerySchema },
+      requestParams: { query: listPractitionersQuery },
       responses: {
         ...recordRefusal(),
         "200": {
@@ -478,7 +482,7 @@ export const encounterPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Creates one address-book entry. Honours `Idempotency-Key`. Audits as `practitioner.contact.create`.",
       requestBody: {
         required: true,
-        content: { "application/json": { schema: practitionerCreateSchema } },
+        content: { "application/json": { schema: createPractitionerRequest } },
       },
       responses: {
         ...idempotentWrite(),
@@ -524,7 +528,7 @@ export const encounterPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestParams: idPath,
       requestBody: {
         required: true,
-        content: { "application/json": { schema: practitionerUpdateSchema } },
+        content: { "application/json": { schema: updatePractitionerRequest } },
       },
       responses: {
         ...recordRefusal(),

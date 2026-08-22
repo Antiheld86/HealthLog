@@ -30,19 +30,22 @@ import {
   stdResponses,
 } from "./shared";
 
-familyHistoryCreateSchema.meta({
+// Zod 4's `.meta()` returns a NEW instance carrying the id rather than
+// annotating in place, so each annotated schema is bound to a const and the
+// route table below references that const — a bare call would register nothing.
+const createFamilyHistoryRequest = familyHistoryCreateSchema.meta({
   id: "CreateFamilyHistoryRequest",
   description:
     "Record one condition for one relative (a FHIR FamilyMemberHistory with a single condition). `condition` is the user-facing label (the `condition.code.text` anchor — never a machine-guessed code); `ageAtOnset` is the relative's age (years) when it began. The free-text `note` is encrypted at rest. Patient-reported.",
 });
 
-familyHistoryUpdateSchema.meta({
+const updateFamilyHistoryRequest = familyHistoryUpdateSchema.meta({
   id: "UpdateFamilyHistoryRequest",
   description:
     "Partial edit of a family-history entry; an omitted key leaves the column untouched. A `null` `ageAtOnset`/`note` clears that field. Rejects unknown keys.",
 });
 
-familyHistoryListQuerySchema.meta({
+const listFamilyHistoryQuery = familyHistoryListQuerySchema.meta({
   id: "ListFamilyHistoryQuery",
   description:
     "Query params for the family-history list: optional `limit` (1–200, default 100). Newest-first.",
@@ -78,7 +81,7 @@ export const familyHistoryPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "List family history (v1.25)",
       description:
         "Returns the caller's live (non-deleted) family-history entries, newest-first.",
-      requestParams: { query: familyHistoryListQuerySchema },
+      requestParams: { query: listFamilyHistoryQuery },
       responses: {
         ...recordRefusal(),
         "200": {
@@ -104,7 +107,7 @@ export const familyHistoryPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestBody: {
         required: true,
         content: {
-          "application/json": { schema: familyHistoryCreateSchema },
+          "application/json": { schema: createFamilyHistoryRequest },
         },
       },
       responses: {
@@ -158,7 +161,7 @@ export const familyHistoryPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestBody: {
         required: true,
         content: {
-          "application/json": { schema: familyHistoryUpdateSchema },
+          "application/json": { schema: updateFamilyHistoryRequest },
         },
       },
       responses: {

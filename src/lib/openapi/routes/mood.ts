@@ -61,40 +61,41 @@ import {
 } from "./shared";
 
 // ── Request schemas — annotated for spec emission ────────────────────
+//
+// Assigned rather than annotated in place: Zod 4's `.meta()` returns a NEW
+// instance carrying the id, so the route table below must reference these
+// consts for the names to reach `components.schemas`.
 
-createCustomTagSchema.meta({
+const createMoodTagRequest = createCustomTagSchema.meta({
   id: "CreateMoodTagRequest",
   description:
     "Create a per-user custom mood tag (BINARY only). `label` is encrypted at rest. `icon` must come from the curated allowlist (unknown name → 422). `categoryKey` picks the home group — any seeded category key or one of the caller's own `customcat:` group keys; omitted → the seeded `custom` category. Capped at 50 active custom tags per user (422).",
 });
 
-updateCustomTagSchema.meta({
+const updateMoodTagRequest = updateCustomTagSchema.meta({
   id: "UpdateMoodTagRequest",
   description:
     "Partial custom-tag edit; at least one field required. `isActive:false` archives (history intact), `isActive:true` restores. `categoryKey` moves the tag to another group (a real categoryId move).",
 });
 
-createCustomGroupSchema.meta({
+const createMoodTagGroupRequest = createCustomGroupSchema.meta({
   id: "CreateMoodTagGroupRequest",
   description:
     "Create a per-user custom mood-tag group. `label` is encrypted at rest; `icon` must come from the curated allowlist. Capped at 12 active custom groups per user (422).",
 });
 
-updateCustomGroupSchema.meta({
+const updateMoodTagGroupRequest = updateCustomGroupSchema.meta({
   id: "UpdateMoodTagGroupRequest",
   description:
     "Partial custom-group edit; at least one field required. `isActive:false` retires the group without touching its tags.",
 });
 
-hideCatalogueTagSchema.meta({
+const hideMoodTagRequest = hideCatalogueTagSchema.meta({
   id: "HideMoodTagRequest",
   description:
     "Hide / show a CATALOGUE tag for the calling user. Custom tags are hidden via their own `isActive` flag on the custom PATCH instead (this route 400s a `custom:` key).",
 });
 
-// Assigned rather than annotated in place: Zod 4's `.meta()` returns a NEW
-// instance carrying the id, so the route table below must reference these
-// consts for the names to reach `components.schemas`.
 const createMoodEntryRequest = createMoodEntrySchema.meta({
   id: "CreateMoodEntryRequest",
   description:
@@ -113,7 +114,15 @@ const listMoodEntriesQuery = listMoodEntriesSchema.meta({
     "Filters + paging for the mood-entry list. `from` / `to` bound the local-day `date` label (YYYY-MM-DD, inclusive). `limit` capped at 500.",
 });
 
-moodTagLayoutSchema.meta({
+/**
+ * Exported for the forced registration in `./index.ts`.
+ *
+ * Both consumers are an `.extend()` of this base, and `.extend()` builds a new
+ * object rather than a reference, so the name never carries forward on its own
+ * even though the annotation is in the assigning form. Same shape as
+ * `CoachPrefs` and `Medication`, and the same remedy.
+ */
+export const moodTagLayout = moodTagLayoutSchema.meta({
   id: "MoodTagLayout",
   description:
     "Per-user mood-tag presentation blob. `groupOrder`: category keys in display order (unknown dropped, missing appended in seeded order). `placements`: categoryKey → ordered tag keys; a placed tag renders in that group at that index, un-placed tags follow in their home category. Display-only — placements referencing hidden/archived/unknown keys are silently dropped at read time. Both fields optional: PUT merges preserve-when-absent.",
@@ -220,7 +229,7 @@ const moodTagLayoutResolved = z
 
 // v1.32.22 (M2) — the PUT request extends the layout schema with the base
 // token (stripped pre-Zod at runtime).
-const moodTagLayoutPutRequest = moodTagLayoutSchema
+const moodTagLayoutPutRequest = moodTagLayout
   .extend({ baseUpdatedAt: baseUpdatedAtField })
   .meta({
     id: "MoodTagLayoutPutRequest",
@@ -1349,7 +1358,7 @@ export const moodPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Mints a `custom:<uuid>` key, encrypts the label at rest, stores a BINARY tag owned by the caller under the chosen group (default: the seeded `custom` category). 422 over the 50-tag cap or on an unknown / foreign `categoryKey`.",
       requestBody: {
         required: true,
-        content: { "application/json": { schema: createCustomTagSchema } },
+        content: { "application/json": { schema: createMoodTagRequest } },
       },
       responses: {
         "201": {
@@ -1376,7 +1385,7 @@ export const moodPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestParams: { path: z.object({ key: z.string() }) },
       requestBody: {
         required: true,
-        content: { "application/json": { schema: updateCustomTagSchema } },
+        content: { "application/json": { schema: updateMoodTagRequest } },
       },
       responses: {
         "200": {
@@ -1429,7 +1438,7 @@ export const moodPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestParams: { path: z.object({ key: z.string() }) },
       requestBody: {
         required: true,
-        content: { "application/json": { schema: hideCatalogueTagSchema } },
+        content: { "application/json": { schema: hideMoodTagRequest } },
       },
       responses: {
         "200": {
@@ -1460,7 +1469,7 @@ export const moodPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Mints a `customcat:<uuid>` key, encrypts the label at rest, stores a group owned by the caller. 422 over the 12-group cap.",
       requestBody: {
         required: true,
-        content: { "application/json": { schema: createCustomGroupSchema } },
+        content: { "application/json": { schema: createMoodTagGroupRequest } },
       },
       responses: {
         "201": {
@@ -1487,7 +1496,7 @@ export const moodPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestParams: { path: z.object({ key: z.string() }) },
       requestBody: {
         required: true,
-        content: { "application/json": { schema: updateCustomGroupSchema } },
+        content: { "application/json": { schema: updateMoodTagGroupRequest } },
       },
       responses: {
         "200": {
