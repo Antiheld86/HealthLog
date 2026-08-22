@@ -45,6 +45,8 @@ vi.mock("@/lib/db", () => ({
     coachConversation: { findMany: vi.fn().mockResolvedValue([]) },
     moodTagCategory: { findMany: vi.fn().mockResolvedValue([]) },
     moodTagHidden: { findMany: vi.fn().mockResolvedValue([]) },
+    mentalHealthAssessment: { findMany: vi.fn().mockResolvedValue([]) },
+    consentReceipt: { findMany: vi.fn().mockResolvedValue([]) },
     coachFact: { findMany: vi.fn().mockResolvedValue([]) },
     coachPlan: { findMany: vi.fn().mockResolvedValue([]) },
     coachReminder: { findMany: vi.fn().mockResolvedValue([]) },
@@ -141,6 +143,10 @@ beforeEach(() => {
   vi.mocked(prisma.coachReminder.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.moodTagCategory.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.moodTagHidden.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.mentalHealthAssessment.findMany).mockResolvedValue(
+    [] as never,
+  );
+  vi.mocked(prisma.consentReceipt.findMany).mockResolvedValue([] as never);
 });
 
 afterEach(() => {
