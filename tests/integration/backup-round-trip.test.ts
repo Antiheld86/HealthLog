@@ -188,6 +188,9 @@ const COUNT_BACK: Record<
   // No own `userId` column — reached through the drug, like the schedules.
   MedicationInventoryEvent: (p, userId) =>
     p.medicationInventoryEvent.count({ where: { medication: { userId } } }),
+  MoodTagCategory: (p, userId) =>
+    p.moodTagCategory.count({ where: { userId } }),
+  MoodTagHidden: (p, userId) => p.moodTagHidden.count({ where: { userId } }),
 };
 
 /**
@@ -350,10 +353,22 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
   const moodCategory = await prisma.moodTagCategory.findFirstOrThrow({
     where: { userId: null },
   });
+  // A category the account created itself, not a seeded one. It cascades away
+  // with the user, and `MoodTag.categoryId` is a real foreign key — so before
+  // the category travelled, this one row made the restore violate
+  // `mood_tags_category_id_fkey` and answer 500 with the account left empty.
+  const ownCategory = await prisma.moodTagCategory.create({
+    data: {
+      userId: OWNER_ID,
+      key: "round_trip_own_category",
+      labelKey: "mood.category.roundTripOwn",
+      sortOrder: 90,
+    },
+  });
   const moodTag = await prisma.moodTag.create({
     data: {
       userId: OWNER_ID,
-      categoryId: moodCategory.id,
+      categoryId: ownCategory.id,
       key: "round_trip_factor",
       labelKey: "mood.tag.roundTripFactor",
       kind: "RATED",
@@ -361,6 +376,15 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       scaleMax: 5,
     },
   });
+  // A SEEDED tag the account chose to hide. The id differs per instance, so
+  // this is the row that proves the hidden set travels by key.
+  const seededTagToHide = await prisma.moodTag.findFirstOrThrow({
+    where: { userId: null },
+  });
+  await prisma.moodTagHidden.create({
+    data: { userId: OWNER_ID, moodTagId: seededTagToHide.id },
+  });
+
   await prisma.moodEntry.create({
     data: {
       userId: OWNER_ID,
@@ -1067,6 +1091,37 @@ describe("every model the plan claims two-ended survives a real restore", () => 
       surfaceCount: 2,
       status: "active",
     });
+
+    // The account's own grouping came back, and the hidden tag is hidden
+    // again — resolved by key, so it points at whatever id this instance uses.
+    const ownCategories = await prisma.moodTagCategory.findMany({
+      where: { userId: OWNER_ID },
+    });
+    expect(
+      ownCategories.map((c) => ({ key: c.key, labelKey: c.labelKey })),
+    ).toEqual([
+      {
+        key: "round_trip_own_category",
+        labelKey: "mood.category.roundTripOwn",
+      },
+    ]);
+    const restoredTag = await prisma.moodTag.findFirstOrThrow({
+      where: { key: "round_trip_factor" },
+    });
+    expect(
+      restoredTag.categoryId,
+      "the custom tag is grouped under the account's own category",
+    ).toBe(ownCategories[0].id);
+
+    const hidden = await prisma.moodTagHidden.findMany({
+      where: { userId: OWNER_ID },
+      include: { moodTag: { select: { key: true, userId: true } } },
+    });
+    // Exactly one, and it points at a SEEDED tag — which is only possible if
+    // the key was resolved against this instance's catalogue rather than an id
+    // carried in the file.
+    expect(hidden).toHaveLength(1);
+    expect(hidden[0].moodTag.userId).toBeNull();
 
     // The shelf, and the count that must not be recomputed.
     const packs = await prisma.medicationInventoryItem.findMany({
