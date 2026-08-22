@@ -15,13 +15,22 @@
  * Mirrors the `disable-coach` per-user-scalar pattern: 60/min rate
  * limit, Zod safeParse → 422 via `returnAllZodIssues`, audit-log row,
  * field-by-field write (no mass assignment).
+ *
+ * The body goes through `safeJson` with a 1 KB cap, like the
+ * `documents-auto-ai-read` scalar beside it. It used to read a bare
+ * `request.json()`, which applied no size limit at all — the one endpoint in
+ * this family that would materialise whatever it was sent — and answered a
+ * malformed body with 422 where every sibling answers 400. Both were
+ * accidents of the original copy, not a contract: the only caller checks
+ * `res.ok` and never the status.
  */
-import { apiHandler, requireAuth, HttpError } from "@/lib/api-handler";
+import { apiHandler, requireAuth } from "@/lib/api-handler";
 import {
   apiError,
   apiSuccess,
   getClientIp,
   returnAllZodIssues,
+  safeJson,
 } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
@@ -73,12 +82,12 @@ export const PATCH = apiHandler(async (req: Request) => {
     return response;
   }
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    throw new HttpError(422, "unit-preference.body.invalid_json");
-  }
+  // The body is a single enum value — bound the parse so a malformed or
+  // oversized payload is rejected before it is materialised.
+  const { data: body, error: jsonError } = await safeJson(req, {
+    maxBytes: 1024,
+  });
+  if (jsonError) return jsonError;
 
   const parsed = unitPreferencePatchSchema.safeParse(body);
   if (!parsed.success) {

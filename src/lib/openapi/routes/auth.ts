@@ -1316,7 +1316,7 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Rename a registered passkey",
       description:
         "Relabels one primary sign-in credential, scoped to the authenticated user. Returns the full passkey row, so the client can replace its list entry rather than re-read.\n\n" +
-        'Unlike the rest of this surface the 422 carries a single flat message rather than the multi-issue envelope `returnAllZodIssues` produces — the handler answers `apiError("Invalid request", 422)` and discards the Zod issues, so a client cannot tell an empty name from an over-long one.',
+        "The name is trimmed before validation and must be 1 to 64 characters once trimmed. A rejected name earns the standard multi-issue 422, so a form can put the reason beside the field rather than showing a bare “invalid request”.",
       requestParams: { path: z.object({ id: z.string() }) },
       requestBody: {
         required: true,
@@ -1376,7 +1376,7 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "List the caller's API tokens",
       description:
         "Every `ApiToken` row belonging to the caller, newest first, revoked ones included — presence in this list is not validity, `revoked` is. The hash is never returned and there is no path that re-reveals a token's plaintext.\n\n" +
-        'Two things the name understates. The list is not limited to tokens a person minted from the settings surface: a native login mints a wildcard access token as an `ApiToken` row, so a signed-in phone shows up here too. And there is no mint on this path any more — the generic POST that issued `["medication:ingest"]` was removed, because that scope reached no ingest route while the pre-fail-closed default let it reach everything else. The working credential comes from the per-medication API-endpoint toggle.',
+        "Three things the name understates. The list is not limited to tokens a person minted from the settings surface: a native login mints a wildcard access token as an `ApiToken` row, so a signed-in phone shows up here too. There is no mint on this path any more — the generic POST that issued `[\"medication:ingest\"]` was removed, because that scope reached no ingest route while the pre-fail-closed default let it reach everything else; the working credential comes from the per-medication API-endpoint toggle. And unlike the revoke, this read is NOT gated on the operator's instance-wide API switch: that switch governs the surfaces a token is for, not a token's ability to authenticate, so tokens stay live while it is off and their owner has to be able to see them.",
       responses: {
         "200": {
           description: "The caller's tokens, newest first.",
@@ -1388,11 +1388,6 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
               ),
             },
           },
-        },
-        "403": {
-          description:
-            "The operator has switched the API off instance-wide (`AppSettings.apiGlobal`). Checked after authentication, carries no `meta.errorCode`, and applies to the read as well as the revoke — a user cannot inspect their own tokens while the switch is off.",
-          content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
       },
@@ -1420,7 +1415,7 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
         "403": {
           description:
-            "The operator has switched the API off instance-wide (`AppSettings.apiGlobal`). No `meta.errorCode`; nothing was revoked.",
+            "The operator has switched the API off instance-wide (`AppSettings.apiGlobal`). No `meta.errorCode`; nothing was revoked. The sibling list is deliberately not gated this way — a token stays live while the switch is off, so its owner can still see it here even though this call will not kill it.",
           content: { "application/json": { schema: errorEnvelope } },
         },
         "404": {

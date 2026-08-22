@@ -1223,7 +1223,7 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Set the metric/imperial display preference",
       description:
         "Hard-set, idempotent, audit-logged. Rate-limited 60 / min per user.\n\n" +
-        "The only endpoint in this group that reads its body with a bare `request.json()` rather than the capped `safeJson` helper, so it applies no body-size limit and answers a malformed body with 422 where its siblings answer 400. Both are the code as it stands.",
+        "The body is capped at 1 KB and must carry `Content-Type: application/json`. Anything larger is 413, a wrong content type is 415, and a body that is not JSON at all is 400 — the same three the other scalars in this group answer.",
       requestBody: {
         required: true,
         content: {
@@ -1241,6 +1241,10 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
               ),
             },
           },
+        },
+        "413": {
+          description: "Request body exceeds 1024 bytes. Nothing was written.",
+          content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
       },
