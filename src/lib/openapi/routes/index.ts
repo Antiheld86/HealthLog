@@ -65,8 +65,10 @@ import {
   medicationResource,
   medicationDoseHistoryImportFatalReasonEnum,
 } from "./medications";
+import { mcpPaths } from "./mcp";
 import { metaPaths } from "./meta";
 import { moodPaths } from "./mood";
+import { notificationChannelPaths } from "./notifications";
 import { nutrientPaths } from "./nutrients";
 import { onboardingPaths } from "./onboarding";
 import { profilePaths } from "./profile";
@@ -128,6 +130,13 @@ export const openApiPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   // v1.36.0 — account sharing: the grant lifecycle and the switch endpoint
   // (appended, spread order is load-bearing).
   ...accountSharingPaths,
+  // Notification channels + MCP connector credentials: both families answered
+  // the native client for several releases while being absent from the
+  // registry, because `openapi:check` compares the registry against the YAML
+  // and never the routes against the registry (appended, spread order is
+  // load-bearing).
+  ...notificationChannelPaths,
+  ...mcpPaths,
 };
 
 export const openApiComponents: NonNullable<ZodOpenApiObject["components"]> = {

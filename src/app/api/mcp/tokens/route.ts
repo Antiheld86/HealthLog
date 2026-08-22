@@ -18,7 +18,6 @@
  * every REST write) — it only admits the confirmed in-process write tools.
  */
 import { NextRequest } from "next/server";
-import { z } from "zod/v4";
 
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import {
@@ -33,16 +32,11 @@ import { issueApiToken } from "@/lib/auth/issue-token";
 import { isApiGloballyEnabled } from "@/lib/app-settings";
 import { prisma } from "@/lib/db";
 import { SCOPE_HEALTH_READ, SCOPE_HEALTH_WRITE } from "@/lib/mcp/oauth/config";
-
-const createSchema = z.object({
-  name: z.string().min(1, "Name required").max(100),
-  expiresInDays: z.number().int().min(1).max(365).optional(),
-  // The ONLY two scope shapes this endpoint will mint. `read` (default) is the
-  // least-privilege read token; `read_write` adds `health:write` so the
-  // confirmed `/mcp` write tools become available. Anything else is rejected
-  // by the enum — the endpoint can never mint a wildcard or arbitrary grant.
-  scope: z.enum(["read", "read_write"]).optional().default("read"),
-});
+// The ONLY two scope shapes this endpoint will mint. `read` (default) is the
+// least-privilege read token; `read_write` adds `health:write` so the confirmed
+// `/mcp` write tools become available. Anything else is rejected by the enum —
+// the endpoint can never mint a wildcard or arbitrary grant.
+import { createMcpTokenSchema } from "@/lib/validations/mcp";
 
 export const GET = apiHandler(async () => {
   const { user } = await requireAuth();
@@ -89,7 +83,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   });
   if (jsonError) return jsonError;
 
-  const parsed = createSchema.safeParse(body);
+  const parsed = createMcpTokenSchema.safeParse(body);
   if (!parsed.success) {
     return returnAllZodIssues(parsed.error, 422);
   }
