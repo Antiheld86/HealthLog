@@ -14,7 +14,6 @@ import { z } from "zod/v4";
 import type { ZodOpenApiObject } from "zod-openapi";
 import {
   changePasswordSchema,
-  loginPasswordSchema,
   passkeyRenameSchema,
   registerSchema,
 } from "@/lib/validations/auth";
@@ -36,7 +35,12 @@ import {
   stepUpMintSchema,
   stepUpOptionsSchema,
 } from "@/lib/validations/step-up";
-import { dataEnvelope, stdResponses, errorEnvelope } from "./shared";
+import {
+  dataEnvelope,
+  stdResponses,
+  errorEnvelope,
+  loginPasswordSchema,
+} from "./shared";
 
 // ── Sub-schemas owned here (route-specific shapes) ───────────────────
 

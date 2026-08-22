@@ -7,7 +7,6 @@
  */
 import { z } from "zod/v4";
 import type { ZodOpenApiObject } from "zod-openapi";
-import { coachPrefsSchema } from "@/lib/validations/coach-prefs";
 import { notificationPrefsSchema } from "@/lib/validations/notification-prefs";
 import { sourcePrioritySchema } from "@/lib/validations/source-priority";
 import { modulePrefsPatchSchema } from "@/lib/validations/modules";
@@ -38,6 +37,7 @@ import {
   healthProfileFactKindSchema,
 } from "@/lib/validations/health-profile-facts";
 import {
+  coachPrefsSchema,
   dataEnvelope,
   errorEnvelope,
   stdResponses,

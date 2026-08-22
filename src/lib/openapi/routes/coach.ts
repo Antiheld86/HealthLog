@@ -33,15 +33,12 @@ import { COACH_PLAN_STATUSES } from "@/lib/ai/coach/plans";
 import {
   COACH_PLAN_SCOPES,
   coachPlanPatchSchema,
-  coachPlansListQuerySchema,
 } from "@/lib/validations/coach-plan";
 import { coachChatRequestSchema } from "@/lib/ai/coach/types";
 import {
   coachAttachmentCreateSchema,
   fencedChatRequestSchema,
 } from "@/lib/validations/inbound-documents";
-import { exportSelectionSchema } from "@/lib/validations/health-record-export";
-import { createShareLinkSchema } from "@/lib/validations/clinician-share-link";
 import { coachReminderSuggestionActionSchema } from "@/lib/validations/coach-reminder-suggestion";
 import { COACH_REMINDER_STATUSES } from "@/lib/ai/coach/reminders";
 import {
@@ -71,13 +68,13 @@ const aboutMeAdoptRequest = aboutMeAdoptSchema.meta({
     "An answer to fold into the stored self-context. `question` is the clarifying question it belongs to and is what the server matches the target field from; omit it for the remember-a-message path and the field is matched from `answer` instead. `answer` is capped at 500 characters — the same cap as a structured self-context field.",
 });
 
-emergencyProfileUpdateSchema.meta({
+const updateEmergencyProfileRequest = emergencyProfileUpdateSchema.meta({
   id: "UpdateEmergencyProfileRequest",
   description:
     "Partial edit of the emergency (Notfalldaten) profile. An omitted key leaves the column untouched; a `null` enum or an emptied free-text field clears it. `bloodType`, `organDonor` and `advanceDirective` are closed enums; `contacts`, `implants` and `note` are encrypted at rest. Rejects unknown keys.",
 });
 
-emergencyProfileDtoSchema.meta({
+const emergencyProfile = emergencyProfileDtoSchema.meta({
   id: "EmergencyProfile",
   description:
     "The caller's emergency profile: three closed-enum facts plus three decrypted free-text fields. A free-text field is null when unset; its `*Unreadable` flag is true when ciphertext was present but could not be decrypted (a key-rotation gap, fail-soft rather than 500).",
@@ -88,7 +85,7 @@ emergencyProfileDtoSchema.meta({
 // client sends ONLY the cadence id + the action; the server resolves the
 // metric + schedule + course window from the closed catalog and (for
 // `accept`) mints a `MeasurementReminder` with `origin: COACH`.
-coachReminderSuggestionActionSchema.meta({
+const coachReminderSuggestionAction = coachReminderSuggestionActionSchema.meta({
   id: "CoachReminderSuggestionAction",
   description:
     "v1.18.1 — act on a Coach cadence suggestion. `cadenceId` names a closed-catalog preset (e.g. `weight_daily`, `bp_7_2_2`); the client never sends a schedule. `action`: `accept` creates a `MeasurementReminder` (origin: COACH) through the same engine the Vorsorge surface uses; `dismiss` records dismissal memory; `stop` suppresses all future cadence suggestions. Strict: unknown keys 422.",
@@ -130,7 +127,7 @@ export const coachReminderSuggestionPaths: NonNullable<
       requestBody: {
         required: true,
         content: {
-          "application/json": { schema: coachReminderSuggestionActionSchema },
+          "application/json": { schema: coachReminderSuggestionAction },
         },
       },
       responses: {
@@ -264,24 +261,6 @@ const insightsLayoutResult = insightsLayoutSchema
       "Resolved Insights layout plus the optimistic-concurrency `updatedAt` token.",
   });
 
-// v1.7.0 — health-record export selection. Strict shape: unknown keys
-// (including any attempt to smuggle a userId) 422 via returnAllZodIssues.
-// v1.11.0 — clinician share-link create payload. Strict; no `userId` field
-// (the owner is always narrowed from the session/Bearer). `expiresAt` is
-// required and capped at SHARE_LINK_MAX_DAYS; the scope columns are frozen
-// write-once at creation.
-createShareLinkSchema.meta({
-  id: "CreateShareLinkRequest",
-  description:
-    "v1.11.0 — owner request to mint a clinician share link to their own health record. `expiresAt` is required (absolute ISO instant) and capped at 90 days. `rangeStart`/`rangeEnd` freeze the reporting window (rangeEnd null = rolling). `sections` freezes which record domains the link may serve. A share link serves the rendered page and the documents frozen onto it — there is no FHIR or other machine-readable face behind a share token. Strict: unknown keys 422.",
-});
-
-exportSelectionSchema.meta({
-  id: "HealthRecordExportRequest",
-  description:
-    "v1.7.0 — health-record / doctor-handover export selection. `format` picks PDF, FHIR R4 document Bundle, or a combined zip package. Grouped `sections` toggles drive which domains are read (mood is opt-in, off by default). No `userId` field — the user is always narrowed from the session/Bearer. The route is strict: unknown keys 422.",
-});
-
 // ── Coach facts (v1.11.1) ────────────────────────────────────────────
 // Read + delete surface for the durable facts the Coach extracts. Facts
 // are server-extracted, not user-authored, so there is no create/update
@@ -396,17 +375,21 @@ const coachPlanDeletedResponse = z.object({
     ),
 });
 
-coachPlanPatchSchema.meta({
+const coachPlanPatchRequest = coachPlanPatchSchema.meta({
   id: "CoachPlanPatchRequest",
   description:
     "v1.21.3 — confirm or update a Coach plan's lifecycle. `status` moves a `proposed` plan to `active` (confirm), or to `met` / `abandoned`. `reviewDate` pins (ISO instant) or clears (null) a check-in checkpoint. At least one field is required. Strict: unknown keys 422 — the body can never carry the metric, the encrypted text, or a userId.",
 });
 
-coachPlansListQuerySchema.meta({
-  id: "CoachPlansListQuery",
-  description:
-    "Optional `?status=` filter for the plans list (a single lifecycle status), or `?scope=` for a named group (open = proposed + active + review_due, past = met + abandoned + reviewed, all = every non-deleted plan). Mutually exclusive. Both omitted returns the non-terminal set (proposed + active).",
-});
+// `GET /api/coach/plans` publishes its two query parameters by hand below,
+// not through `requestParams.query`: the runtime schema carries a cross-field
+// `.refine()` (status and scope are mutually exclusive) that the expansion
+// cannot express, and the hand-written pair carries per-parameter prose it
+// would drop. A `CoachPlansListQuery` annotation sat here claiming a component
+// id that nothing referenced and that a query object could never reach anyway
+// — the emitter inlines query objects into `parameters`. Every clause of it is
+// already published on the operation and on both parameters, so it is gone
+// rather than left registering nothing.
 
 // ── Coach episodic reminders (v1.22 B2/B6) ──────────────────────────────
 const coachReminderItem = z
@@ -727,7 +710,7 @@ const coachAttachmentsResponseSchema = z
   })
   .meta({ id: "CoachAttachments" });
 
-coachChatRequestSchema.meta({
+const coachChatRequest = coachChatRequestSchema.meta({
   id: "CoachChatRequest",
   description:
     "Inbound Coach turn. `message` is the user's turn (1–4 000 chars). `conversationId` is omitted to start a new conversation (the server mints a title from the first message) and supplied to continue one. `scope` narrows which metrics the snapshot ships and which window the timeline covers; omitted fields fall back to server defaults. `locale` picks the reply language. `guidedQuestion` carries the clarifying question a message answers (client-side bubble, never persisted). No `userId` field — the owner is narrowed from the session / Bearer.",
@@ -804,7 +787,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestBody: {
         required: true,
         content: {
-          "application/json": { schema: coachChatRequestSchema },
+          "application/json": { schema: coachChatRequest },
         },
       },
       responses: {
@@ -1468,7 +1451,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: {
             "application/json": {
               schema: dataEnvelope(
-                emergencyProfileDtoSchema,
+                emergencyProfile,
                 "GetEmergencyProfileResponse",
               ),
             },
@@ -1485,7 +1468,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestBody: {
         required: true,
         content: {
-          "application/json": { schema: emergencyProfileUpdateSchema },
+          "application/json": { schema: updateEmergencyProfileRequest },
         },
       },
       responses: {
@@ -1494,7 +1477,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: {
             "application/json": {
               schema: dataEnvelope(
-                emergencyProfileDtoSchema,
+                emergencyProfile,
                 "UpdateEmergencyProfileResponse",
               ),
             },
@@ -1675,7 +1658,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestBody: {
         required: true,
         content: {
-          "application/json": { schema: coachPlanPatchSchema },
+          "application/json": { schema: coachPlanPatchRequest },
         },
       },
       responses: {

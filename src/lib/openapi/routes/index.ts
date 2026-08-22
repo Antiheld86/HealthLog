@@ -82,7 +82,7 @@ import { recordSettingsPaths } from "./record-settings";
 import { settingsPaths } from "./settings";
 import { syncPaths } from "./sync";
 import { workoutPaths } from "./workouts";
-import { coachPrefsSchema } from "@/lib/validations/coach-prefs";
+import { coachPrefsSchema } from "./shared";
 
 export const openApiPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   ...cyclePaths,

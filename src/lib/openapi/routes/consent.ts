@@ -26,18 +26,23 @@ import { z } from "zod/v4";
 
 import {
   consentKindEnum,
-  consentPostBody,
-  webConsentGrantBody,
+  consentPostBody as consentPostBodyBase,
+  webConsentGrantBody as webConsentGrantBodyBase,
 } from "@/lib/validations/consent";
 import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
 
-consentPostBody.meta({
+// `.meta()` CLONES in Zod 4 rather than annotating in place, so the returned
+// schema has to be captured and referenced. A bare `schema.meta({...})`
+// statement registers nothing and the component id it names never reaches the
+// emitted document. The imports are aliased so the annotated clone can keep the
+// name every use site below already spells.
+const consentPostBody = consentPostBodyBase.meta({
   id: "ConsentPostBody",
   description:
     "Explicit AI-consent grant. `artefact` is an opaque signed receipt (base64 PDF or JWT, ≤ 64 KB UTF-8 bytes); `signedAt` is an ISO-8601 instant. Always appends a fresh row — re-granting after a revoke mints a new receipt.",
 });
 
-webConsentGrantBody.meta({
+const webConsentGrantBody = webConsentGrantBodyBase.meta({
   id: "WebConsentGrantBody",
   description:
     'Optional. Omitting the body (or sending `intent: "heal"`) is the AI-settings mount heal: it mints only for an account with no `ai_full` consent history at all, so a standing revocation is never resurrected. `intent: "affirmative"` is the user\'s own grant action and may supersede an earlier revocation, exactly as a first grant would.',

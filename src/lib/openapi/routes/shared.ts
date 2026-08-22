@@ -7,14 +7,14 @@
  */
 import { z } from "zod/v4";
 import {
-  createMeasurementSchema,
-  listMeasurementsSchema,
-  measurementTypeEnum,
-  measurementSourceEnum,
+  createMeasurementSchema as createMeasurementSchemaBase,
+  listMeasurementsSchema as listMeasurementsSchemaBase,
+  measurementTypeEnum as measurementTypeEnumBase,
+  measurementSourceEnum as measurementSourceEnumBase,
 } from "@/lib/validations/measurement";
-import { loginPasswordSchema } from "@/lib/validations/auth";
-import { coachPrefsSchema } from "@/lib/validations/coach-prefs";
-import { createBatchWorkoutSchema } from "@/lib/validations/workout";
+import { loginPasswordSchema as loginPasswordSchemaBase } from "@/lib/validations/auth";
+import { coachPrefsSchema as coachPrefsSchemaBase } from "@/lib/validations/coach-prefs";
+import { createBatchWorkoutSchema as createBatchWorkoutSchemaBase } from "@/lib/validations/workout";
 
 /**
  * Common envelopes — every HealthLog API response wraps payload in
@@ -48,44 +48,53 @@ export function dataEnvelope<T extends z.ZodType>(payload: T, id: string) {
 }
 
 // ── Schemas — annotated for spec emission ────────────────────────────
+//
+// `.meta()` CLONES in Zod 4 rather than annotating in place, so the returned
+// schema has to be captured and referenced: a bare `schema.meta({...})`
+// statement registers nothing and the component id it names never reaches the
+// emitted document. These seven are shared across route modules, so the
+// annotated clone is exported from here under the name the use sites already
+// spell and the base import is aliased. A module that wants the published
+// form imports it from `./shared`; importing the raw schema from
+// `@/lib/validations/*` instead is what inlined these anonymously.
 
-measurementTypeEnum.meta({
+export const measurementTypeEnum = measurementTypeEnumBase.meta({
   id: "MeasurementType",
   description:
     "DB-stored measurement category. v1.4.23 added 7 Apple Health values (HRV, resting HR, active energy, flights, walking/running distance, VO2 max, body temperature).",
 });
 
-measurementSourceEnum.meta({
+export const measurementSourceEnum = measurementSourceEnumBase.meta({
   id: "MeasurementSource",
   description:
     "Origin of the measurement. v1.4.23 added APPLE_HEALTH for the iOS HealthKit batch ingest path.",
 });
 
-loginPasswordSchema.meta({
+export const loginPasswordSchema = loginPasswordSchemaBase.meta({
   id: "LoginPasswordRequest",
   description:
     "Email-or-username login. The native-client flow returns a paired access + refresh token when X-Client-Type: native or the iOS UA prefix is present.",
 });
 
-createMeasurementSchema.meta({
+export const createMeasurementSchema = createMeasurementSchemaBase.meta({
   id: "CreateMeasurementRequest",
   description:
     "Single-measurement ingest body. Plausibility-range guard runs server-side; out-of-range values fail 422. `glucoseContext` stays REQUIRED on a `BLOOD_GLUCOSE` row here: this is the hand-entry surface, where the person taking the reading knows whether it was fasting or after a meal. The bulk ingest paths (CSV import, JSON import, device sync) accept a contextless reading, because a sensor export classifies nothing per sample.",
 });
 
-listMeasurementsSchema.meta({
+export const listMeasurementsSchema = listMeasurementsSchemaBase.meta({
   id: "ListMeasurementsQuery",
   description:
     "Query params for the measurements list endpoint. `limit` capped at 500.",
 });
 
-coachPrefsSchema.meta({
+export const coachPrefsSchema = coachPrefsSchemaBase.meta({
   id: "CoachPrefs",
   description:
     "Per-user Coach prompt-tuning preferences (v1.4.23 H4). All fields default to the legacy v1.4.22 behaviour when omitted.",
 });
 
-createBatchWorkoutSchema.meta({
+export const createBatchWorkoutSchema = createBatchWorkoutSchemaBase.meta({
   id: "CreateBatchWorkoutRequest",
   description:
     "Typed workout batch ingest. Each entry is an HKWorkout-aligned record with an optional nested GeoJSON LineString route AND an optional route-independent per-workout heart-rate series (`samples`: `[{ t, hr?, speedMs?, power?, cadence? }]`, up to 30 000 points). The `samples` series is the strain-engine input for indoor workouts that have no GPS route. Up to 100 workouts per call; nested route geometry capped at 20 000 points. Withings server-to-server callers pass source: WITHINGS and ship no route (Withings reports aggregates only).",
