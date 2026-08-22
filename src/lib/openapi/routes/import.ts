@@ -4,10 +4,12 @@
  *
  * The CSV importer is the cold-start escape hatch for self-hosters migrating
  * from a spreadsheet or another tracker. The JSON importer (`/api/import`)
- * restores the structure `GET /api/export/json` emits. The Apple-Health
- * route (`/api/import/apple-health-export`) predates the contract surface
- * and remains undocumented here. iOS calls neither — its canonical ingest is
- * `POST /api/measurements/batch`.
+ * restores the structure `GET /api/export/json` emits. The Apple-Health pair
+ * (`/api/import/apple-health-export` + its status poll) takes the `export.zip`
+ * the Health app produces and hands it to a background worker; iOS does not
+ * call it — the native client's canonical ingest is
+ * `POST /api/measurements/batch`, and this route exists for the person who
+ * exports from the phone and uploads through the browser.
  */
 import type { ZodOpenApiObject } from "zod-openapi";
 import { z } from "zod/v4";
@@ -255,6 +257,148 @@ export const importPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             "A write failed partway through the file. `meta.errorCode` = `import.write_failed`, `meta.retryable` = true, `meta.stats` carries the counts that landed before the failure. Rows already written stay written; retry the same file — rows with `externalId` re-import idempotently, rows without one may duplicate.",
           content: { "application/json": { schema: errorEnvelope } },
         },
+      },
+    },
+  },
+  "/api/import/apple-health-export": {
+    post: {
+      tags: ["Import"],
+      summary: "Upload an Apple Health export.zip for background import",
+      description:
+        "Takes the `export.zip` the Health app produces and hands it to a background worker. The response is **202 with a `jobId`** — nothing has been imported yet. Poll `GET /api/import/apple-health-export/{jobId}/status` for the outcome.\n\nBody is `multipart/form-data` with the file under the field name `file`, capped at 1.5 GB. The upload is streamed straight to disk rather than buffered, computing a SHA-256 in the same pass; the declared `Content-Length` is checked first as a cheap pre-flight, but the streaming sink enforces the cap independently, so a missing or lying header does not get past it.\n\n**Idempotency is by CONTENT, not by an `Idempotency-Key`.** A 1 GB upload has no stable client-side key, so re-uploading the exact same bytes resolves to the previous job and returns `idempotent: true` without re-queueing. The match only covers a job that is still viable — queued, in flight, or done. A previously FAILED job is deliberately not matched, so the same export can always be retried with the same bytes rather than being tombstoned by its own failure.\n\nRate-limited to 3 uploads per minute per user, checked before the body is touched. Cookie or wildcard Bearer.",
+      requestBody: {
+        required: true,
+        content: {
+          "multipart/form-data": {
+            schema: z.object({
+              file: z
+                .string()
+                .describe(
+                  "The Apple Health `export.zip`, up to 1.5 GB. The field name is load-bearing — a part under any other name is not found and the request fails as a malformed upload.",
+                ),
+            }),
+          },
+        },
+      },
+      responses: {
+        "202": {
+          description:
+            "Accepted and queued (or matched to a job already carrying these bytes). `status` is `queued` for a fresh job and the existing job's current status on a content match.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({
+                  jobId: z.string(),
+                  status: z
+                    .enum([
+                      "queued",
+                      "unpacking",
+                      "parsing",
+                      "upserting",
+                      "done",
+                    ])
+                    .describe(
+                      "`queued` on a fresh enqueue. On a content match it is whatever the matched job is doing now — never `failed`, because a failed job is not matched.",
+                    ),
+                  idempotent: z
+                    .boolean()
+                    .optional()
+                    .describe(
+                      "`true` only when these exact bytes matched a still-viable job and nothing was queued. ABSENT (not `false`) on a fresh enqueue.",
+                    ),
+                }),
+                "AppleHealthImportKickoffEnvelope",
+              ),
+            },
+          },
+        },
+        "400": {
+          description: "The request carried no body at all.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "413": {
+          description:
+            "The declared `Content-Length` exceeds 1.5 GB. A body that exceeds the cap without declaring it is refused by the streaming sink instead, which surfaces as the 422 below.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+        "422": {
+          description:
+            "The multipart body could not be streamed to disk — no `file` part, a malformed boundary, or the size cap tripped mid-stream. The message names the failure.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "429": {
+          description: "More than 3 uploads in a minute for this user.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "503": {
+          description:
+            "No background worker is bound to this process, so the job cannot be queued. The upload was staged and is discarded; retry once a worker is running.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+  },
+  "/api/import/apple-health-export/{jobId}/status": {
+    get: {
+      tags: ["Import"],
+      summary: "Poll an Apple Health import job",
+      description:
+        "The state of one import job. The web client polls every 2 seconds while the job is running and every 30 seconds once it is terminal.\n\nVisible to the job's owner, and to the admin who triggered it through the admin variant. Anyone else gets **404, not 403** — existence is not leaked to an outsider, so a 404 means either 'no such job' or 'not yours' and a client cannot tell which.\n\nThe `result` block is scrubbed before it is served: the ECG counters are re-read as bounded non-negative integers so a malformed worker payload cannot put arbitrary values on this wire.",
+      requestParams: {
+        path: z.object({
+          jobId: z.string().describe("The id returned by the upload."),
+        }),
+      },
+      responses: {
+        "200": {
+          description: "The job's current state.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({
+                  jobId: z.string(),
+                  status: z
+                    .string()
+                    .describe(
+                      "`queued`, `unpacking`, `parsing`, `upserting`, `done` or `failed`. A plain string on the wire, not a closed enum — the column is untyped and a future phase name would arrive here without a schema change.",
+                    ),
+                  startedAt: z.iso.datetime({ offset: true }),
+                  completedAt: z.iso.datetime({ offset: true }).nullable(),
+                  uploadBytes: z.number().int(),
+                  exportedAt: z.iso
+                    .datetime({ offset: true })
+                    .nullable()
+                    .describe(
+                      "The instant the Health app stamped on the export itself, once the worker has read it. Null before then.",
+                    ),
+                  progress: z
+                    .record(z.string(), z.unknown())
+                    .describe(
+                      "Free-form phase progress written by the worker. `{}` before the first phase reports. Shape is not part of the contract.",
+                    ),
+                  result: z
+                    .record(z.string(), z.unknown())
+                    .nullable()
+                    .describe(
+                      "The worker's outcome summary, null until it finishes. Free-form except for `ecg`, whose five counters (`discovered` / `imported` / `updated` / `skipped` / `failed`) are normalised to bounded non-negative integers before serving.",
+                    ),
+                  failureReason: z
+                    .string()
+                    .nullable()
+                    .describe("Free text on `failed`; null otherwise."),
+                }),
+                "AppleHealthImportStatusEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description:
+            "No such job, or one the caller may not see. The two are indistinguishable on purpose.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
       },
     },
   },

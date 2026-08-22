@@ -5,17 +5,7 @@ import { apiSuccess, apiError, safeJson } from "@/lib/api-response";
 import { setOnboardingPendingCookie } from "@/lib/auth/session";
 import { NextRequest } from "next/server";
 import { z } from "zod/v4";
-
-const onboardingSchema = z.object({
-  displayName: z.string().trim().min(1).max(50).optional(),
-  heightCm: z.number().min(50).max(300).optional(),
-  dateOfBirth: z.string().optional(),
-  // Same three values the profile schema stores. A narrower enum here
-  // rejected the whole onboarding submission over a field the account
-  // is allowed to hold, and left the value unrecordable until the person
-  // found the setting again afterwards.
-  gender: z.enum(["MALE", "FEMALE", "OTHER"]).optional(),
-});
+import { onboardingCompleteSchema } from "@/lib/validations/onboarding";
 
 /**
  * Complete the onboarding flow. Saves optional profile data and marks
@@ -30,7 +20,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   });
 
   if (jsonError) return jsonError;
-  const result = z.safeParse(onboardingSchema, body);
+  const result = z.safeParse(onboardingCompleteSchema, body);
   if (!result.success) {
     return apiError("Invalid input", 422, {
       errorCode: "onboarding.complete.invalid",

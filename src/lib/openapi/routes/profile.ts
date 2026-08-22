@@ -15,6 +15,14 @@ import { MODULE_KEYS } from "@/lib/modules/registry";
 import { SCORE_PILLAR_IDS } from "@/lib/analytics/score/types";
 import { savedReportProfileSchema } from "@/lib/report-selection/profile-shape";
 import {
+  AI_PROVIDER_KINDS,
+  aiTestOverrideSchema,
+} from "@/lib/validations/ai-provider";
+import {
+  HEALTH_PROFILE_FACT_KINDS,
+  healthProfileFactKindSchema,
+} from "@/lib/validations/health-profile-facts";
+import {
   dataEnvelope,
   errorEnvelope,
   stdResponses,
@@ -22,6 +30,7 @@ import {
   updatedAtTokenField,
   conflictResponse409,
   invalidBaseTokenResponse,
+  recordRefusal,
 } from "./shared";
 
 // v1.18.0 — module enable/disable. The PATCH request is the REAL runtime
@@ -509,7 +518,233 @@ const aiProviderResponse = z
       "The calling user's AI-provider configuration plus the effective availability (`aiAvailable` + `managedBy`). Reports key presence + a masked preview only — never a plaintext key.",
   });
 
+// The PATCH body is documented here rather than imported from a validations
+// module because there is nothing to import: the route hand-rolls its parse
+// field by field instead of running a Zod `safeParse`, so the shape below is
+// read off that code. Two consequences a client needs to be told, because no
+// generated schema would carry them: a key of the wrong TYPE (a number
+// `model`, a boolean `baseUrl`) is silently ignored rather than refused, and
+// a body containing only such keys fails as "No valid fields" rather than
+// naming the offender.
+const aiProviderPatchRequest = z
+  .object({
+    provider: z
+      .enum(AI_PROVIDER_KINDS)
+      .nullable()
+      .optional()
+      .describe(
+        'The provider to select. `null` or `""` clears it. Any other unrecognised value is a 422 — this is the one field whose bad value is refused rather than skipped.',
+      ),
+    model: z
+      .string()
+      .nullable()
+      .optional()
+      .describe('Trimmed; `null`, `""` or whitespace-only clears it.'),
+    baseUrl: z
+      .string()
+      .nullable()
+      .optional()
+      .describe(
+        'Custom base URL for the LOCAL provider. `null` or `""` clears it. A non-empty value runs the SSRF floor: a private or internal host is refused with 422 unless the operator allowlisted that exact host. NOTE this column is shared — switching `provider` away from LOCAL in the same request clears it automatically, so a stored cloud key can never be sent to a host configured for something else.',
+      ),
+    compatBaseUrl: z
+      .string()
+      .nullable()
+      .optional()
+      .describe(
+        "Base URL of the OpenAI-compatible gateway. Its own column, deliberately not shared with `baseUrl`. Same SSRF floor.",
+      ),
+    compatModel: z.string().nullable().optional(),
+    compatKey: z
+      .string()
+      .nullable()
+      .optional()
+      .describe(
+        'Bearer for the gateway; encrypted at rest. `null` or `""` clears it. Never echoed back — the read reports presence only.',
+      ),
+    anthropicKey: z
+      .string()
+      .nullable()
+      .optional()
+      .describe('Encrypted at rest. `null` or `""` clears it.'),
+    localKey: z
+      .string()
+      .nullable()
+      .optional()
+      .describe('Encrypted at rest. `null` or `""` clears it.'),
+    openaiKey: z
+      .string()
+      .nullable()
+      .optional()
+      .describe('Encrypted at rest. `null` or `""` clears it.'),
+    responseTimeoutSeconds: z
+      .number()
+      .int()
+      .min(10)
+      .max(600)
+      .nullable()
+      .optional()
+      .describe(
+        "Per-user AI response timeout in seconds, 10–600. `null` restores the built-in default (~120 s). A number outside the range, or a non-integer, is a 422.",
+      ),
+  })
+  .meta({
+    id: "AiProviderPatchRequest",
+    description:
+      "Partial update of the calling user's AI-provider configuration. An omitted key is untouched; an explicit `null` (or empty string, on the string fields) clears the column. At least one recognised key must be present. Key material is write-only: it is encrypted on the way in and never returned.",
+  });
+
+const aiTestRequest = aiTestOverrideSchema.meta({
+  id: "AiTestRequest",
+  description:
+    "An UNSAVED provider selection to probe. Every field is optional and falls back to the stored configuration, so a user with a saved key can change only the model and test it without re-typing the credential. Nothing here is persisted. Strict: an unknown key is a 422.",
+});
+
+const aiTestResponse = z
+  .union([
+    z.object({
+      ok: z.literal(true),
+      providerType: z.string(),
+      model: z.string().nullable(),
+      tokensUsed: z.number().int().nullable(),
+      sample: z
+        .string()
+        .describe(
+          "First 200 characters of the provider's reply to the probe prompt. Model output, not a credential.",
+        ),
+    }),
+    z.object({
+      ok: z.literal(false),
+      providerType: z.string(),
+      reasonCode: z.enum([
+        "credentials",
+        "rate_limited",
+        "server_error",
+        "bad_request",
+        "unreachable",
+      ]),
+      reason: z
+        .string()
+        .describe(
+          "English fallback prose for the code. Secret-free by construction — the provider's own error body is logged server-side and never returned.",
+        ),
+      httpStatus: z
+        .number()
+        .int()
+        .nullable()
+        .describe(
+          "The upstream status, when there was one. Null for a transport failure.",
+        ),
+    }),
+  ])
+  .meta({
+    id: "AiTestResponse",
+    description:
+      "The probe outcome. Read `ok`, not the status code: a provider that answered and rejected the call is a 200 with `ok: false`.",
+  });
+
+// The shared-record profile summary. Deliberately bounded: allergies, family
+// history and the current lifestyle facts, and nothing else. No settings, no
+// AI configuration, no encrypted free text — which is what lets it be read
+// under a `profile` grant.
+const profileSummaryResponse = z
+  .object({
+    allergies: z
+      .array(z.object({ substance: z.string(), category: z.string() }))
+      .describe("Up to 25 live allergy records, newest first."),
+    familyHistory: z
+      .array(z.object({ condition: z.string(), relationship: z.string() }))
+      .describe("Up to 25 live family-history entries, newest first."),
+    facts: z
+      .array(
+        z.object({
+          label: healthProfileFactKindSchema.describe(
+            "The fact KIND, not a display label — the client localises it.",
+          ),
+          value: z
+            .string()
+            .describe(
+              "The current value of that fact, e.g. `NEVER` / `FORMER` / `CURRENT` for smoking status.",
+            ),
+        }),
+      )
+      .describe(
+        `Current lifestyle facts, at most one per kind (${HEALTH_PROFILE_FACT_KINDS.join(" / ")}). A kind with no current revision is OMITTED rather than reported as null, and so is one whose stored value could not be decrypted — the list is what is known, and absence is not distinguishable from unreadable here.`,
+      ),
+  })
+  .meta({
+    id: "ProfileSummary",
+    description:
+      "The bounded profile view a record viewer gets: allergies, family history and current lifestyle facts. Structurally incapable of becoming a Settings or AI surface.",
+  });
+
 export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
+  "/api/profile/summary": {
+    get: {
+      tags: ["Records"],
+      summary: "Read the bounded shared-record profile summary",
+      description:
+        "The short profile a record viewer needs, and only that: allergies, family history, and the current lifestyle facts. It carries no settings, no AI configuration and no encrypted free text, which is why it can be served on a `profile` grant while the full profile cannot.\n\nRead-only, and delegable: under a switched session or an account selector the payload is the RECORD's, not the caller's.",
+      responses: {
+        ...recordRefusal(),
+        "200": {
+          description: "The record's profile summary.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                profileSummaryResponse,
+                "ProfileSummaryEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/ai/test": {
+    post: {
+      tags: ["Auth"],
+      summary: "Probe the AI provider connection",
+      description:
+        "Sends a tiny fixed prompt to the resolved provider and reports whether it answered. The body is OPTIONAL: with no body the saved configuration is tested; with one, the unsaved selection is tested without touching the user row, so the settings surface can verify a credential before persisting it. Plaintext keys sent this way are never stored.\n\n**This route never returns 5xx, and that is deliberate.** A 5xx from the origin is rewritten to an HTML error page by a reverse proxy or CDN, and the client's `res.json()` then dies on `<!DOCTYPE`. So a provider failure comes back as **200 with `ok: false`** plus a categorised, secret-free `reasonCode`. Branch on `ok`, not on the status. The provider's own error text and body excerpt are logged for the operator and never put on the wire.\n\nThe probe is metered on the same daily AI budget every other AI surface writes to, because with an empty body it can resolve the OPERATOR's shared key — unmetered, that would be invisible spend on a surface that exists to answer 'are my settings right?'. A probe that fails is refunded.\n\nTwo ceilings: 5 per minute and 50 per day, per user.",
+      requestBody: {
+        required: false,
+        content: { "application/json": { schema: aiTestRequest } },
+      },
+      responses: {
+        "200": {
+          description:
+            "The probe ran. `ok: true` with the model's reply excerpt, or `ok: false` with the failure category — both are 200.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(aiTestResponse, "AiTestEnvelope"),
+            },
+          },
+        },
+        "413": {
+          description: "Body exceeds 64 KiB.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "415": {
+          description:
+            "A body was sent with a `Content-Type` other than `application/json`. Sending no body at all is fine.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+        "422": {
+          description:
+            "Nothing could be probed. Either the override body failed validation, or the resolved configuration is not usable — no provider selected, a required key or base URL missing, a model name missing for the gateway, ChatGPT OAuth not connected, or a base URL pointing at an internal host. The message names which.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "429": {
+          description:
+            "One of three ceilings: 5 probes per minute, 50 per day, or the account's daily AI token budget is exhausted. The message distinguishes them.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+  },
   "/api/user/ai-provider": {
     get: {
       tags: ["Auth"],
@@ -526,6 +761,44 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
           },
         },
         ...stdResponses,
+      },
+    },
+    patch: {
+      tags: ["Auth"],
+      summary: "Update the calling user's AI-provider configuration",
+      description:
+        "Partial update — an omitted key is left untouched, an explicit `null` (or an empty string, on the string fields) clears the column. Key material is write-only: it is encrypted at rest on the way in and the read never gives it back, only presence plus a four-character preview.\n\nOne implicit write is worth knowing about: switching `provider` to anything other than LOCAL, without naming `baseUrl` in the same request, CLEARS the stored base URL. The column is shared across providers, so leaving it would send a cloud key to a host that was configured for a self-hosted backend.\n\nA base URL — for LOCAL or for the OpenAI-compatible gateway — runs the SSRF floor: a private or internal host is refused unless the operator allowlisted that exact hostname on this instance.\n\nThe response is a bare `{ updated: true }` acknowledgement. It does not echo the resolved configuration, so a client that needs the new state re-reads the GET.\n\nUnlike its neighbours this route does not run a Zod parse: it inspects the body field by field, so a key of the WRONG TYPE is skipped in silence rather than refused, and a body of nothing but such keys comes back as 422 'No valid fields' without naming any of them.",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: aiProviderPatchRequest } },
+      },
+      responses: {
+        "200": {
+          description:
+            "Saved. The body is the fixed acknowledgement, not the resolved configuration.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ updated: z.literal(true) }),
+                "PatchAiProviderResponse",
+              ),
+            },
+          },
+        },
+        "413": {
+          description: "Body exceeds 64 KiB.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "415": {
+          description: "`Content-Type` is not `application/json`.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+        "422": {
+          description:
+            "Nothing was written. Either no recognised field was present ('No valid fields'), or `provider` named a value outside the five, or `responseTimeoutSeconds` was not an integer in 10–600, or a base URL pointed at an internal or private host the operator has not allowlisted. Single-message — there is no per-issue list on this route.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
       },
     },
   },

@@ -1,5 +1,4 @@
 import type { NextRequest } from "next/server";
-import { z } from "zod/v4";
 
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import {
@@ -14,10 +13,8 @@ import { prisma, toJson } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
 import { annotate } from "@/lib/logging/context";
 import { checkRateLimit } from "@/lib/rate-limit";
-import {
-  ONBOARDING_GOAL_SLUGS,
-  buildGoalSeededDashboardLayout,
-} from "@/lib/onboarding/goals";
+import { buildGoalSeededDashboardLayout } from "@/lib/onboarding/goals";
+import { onboardingStepSchema } from "@/lib/validations/onboarding";
 
 /**
  * v1.4.25 W14b — POST /api/onboarding/step.
@@ -45,19 +42,13 @@ import {
  * but tight enough to defang a stuck retry loop.
  */
 
-const stepBodySchema = z.object({
-  step: z.number().int().min(1).max(4),
-  // v1.17.1 — optional goal slugs from the GoalsChipPicker (step 2
-  // submit). Validated against the closed slug enum so an unknown slug
-  // 422s; deduped + capped at the full set size. Persisted to
-  // `User.onboardingGoals` (field-by-field, no mass assignment) and on
-  // completion (step 4) seeds the dashboard layout when the user never
-  // customized it. Omitted leaves the stored goals untouched.
-  goals: z
-    .array(z.enum(ONBOARDING_GOAL_SLUGS))
-    .max(ONBOARDING_GOAL_SLUGS.length)
-    .optional(),
-});
+// v1.17.1 — the optional goal slugs from the GoalsChipPicker (step 2 submit)
+// ride the same body. Validated against the closed slug enum so an unknown
+// slug 422s; persisted to `User.onboardingGoals` field-by-field (no mass
+// assignment) and, on completion (step 4), used to seed the dashboard layout
+// when the user never customized it. Omitted leaves the stored goals
+// untouched. The schema itself lives in `@/lib/validations/onboarding` so the
+// OpenAPI registry reads the same object this parse does.
 
 export const POST = apiHandler(async (request: NextRequest) => {
   const { user } = await requireAuth();
@@ -83,7 +74,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   });
   if (jsonError) return jsonError;
 
-  const parsed = stepBodySchema.safeParse(body);
+  const parsed = onboardingStepSchema.safeParse(body);
   if (!parsed.success) {
     annotate({
       action: { name: "onboarding.step" },

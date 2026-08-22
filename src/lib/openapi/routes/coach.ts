@@ -7,7 +7,10 @@
  */
 import { z } from "zod/v4";
 import type { ZodOpenApiObject } from "zod-openapi";
-import { aboutMePutSchema } from "@/lib/validations/about-me";
+import {
+  aboutMeAdoptSchema,
+  aboutMePutSchema,
+} from "@/lib/validations/about-me";
 import {
   healthProfileAiSectionSchema,
   healthProfileFactCorrectionSchema,
@@ -46,6 +49,7 @@ import {
   coachSuggestedActionSchema,
 } from "@/lib/validations/coach-reminder";
 import {
+  MODULE_DISABLED_DESCRIPTION,
   baseUpdatedAtField,
   conflictResponse409,
   dataEnvelope,
@@ -56,6 +60,15 @@ import {
   recordRefusal,
   stdResponses,
 } from "./shared";
+
+// The assigning form, deliberately: `schema.meta({...})` as a bare statement
+// returns a clone and registers nothing, so the component id would never
+// reach the emitted document.
+const aboutMeAdoptRequest = aboutMeAdoptSchema.meta({
+  id: "CoachAboutMeAdoptRequest",
+  description:
+    "An answer to fold into the stored self-context. `question` is the clarifying question it belongs to and is what the server matches the target field from; omit it for the remember-a-message path and the field is matched from `answer` instead. `answer` is capped at 500 characters — the same cap as a structured self-context field.",
+});
 
 emergencyProfileUpdateSchema.meta({
   id: "UpdateEmergencyProfileRequest",
@@ -1482,6 +1495,61 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           },
         },
         ...stdResponses,
+      },
+    },
+  },
+  "/api/coach/about-me/adopt": {
+    post: {
+      tags: ["Insights"],
+      summary: "Fold an answer back into the stored self-context",
+      description:
+        'v1.16.4 — closes the clarifying-question loop. The Coach composer\'s chips insert a question the person answers in their own words; this endpoint moves that answer out of the chat transcript and into the matching structured self-context field.\n\n**Which field it lands on is inferred from the wording, not chosen by the caller.** The server keyword-matches allergy and condition stems across the six UI locales; anything else lands on `coachFocus`, the generic "worth knowing" slot. `question` is optional — the remember action on a chat message sends only the message text, and the field is then matched from that text. The chosen field is reported back so the client can say where it went.\n\n**Append, never replace.** Existing text stays and the answer joins on its own line, encrypted at rest. A structured field at its 500-character cap overflows into the free-text `aboutMe` instead of failing; only when THAT is full too does the write refuse.\n\n**A duplicate is a success, not an error.** An answer already contained in the target field or in `aboutMe` returns 200 with `adopted: false` and `reason: "duplicate"`, so tapping the offer twice cannot stack the same prose. Containment is checked case-insensitively on whitespace-collapsed text, so a near-identical rephrasing IS adopted as a second line.\n\nThe read-modify-write runs under a row lock, so two concurrent adoptions cannot lose an append or miss each other\'s dedupe. Audit rows carry the field name and the answer\'s LENGTH — never the text, which is free-form health prose. Coach-module-gated; rate-limited to 30 per minute per user; body cap 16 KiB.',
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: aboutMeAdoptRequest } },
+      },
+      responses: {
+        "200": {
+          description:
+            'The adoption resolved. `adopted: true` means the text was appended; `adopted: false` with `reason: "duplicate"` means it was already there and nothing was written.',
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({
+                  adopted: z.boolean(),
+                  field: z
+                    .enum(["conditions", "allergies", "coachFocus", "aboutMe"])
+                    .describe(
+                      "Where the answer went. `aboutMe` appears when the matched structured field was at its cap and the text overflowed into the free-text slot.",
+                    ),
+                  reason: z
+                    .literal("duplicate")
+                    .optional()
+                    .describe("Present only on the `adopted: false` arm."),
+                }),
+                "CoachAboutMeAdoptResponse",
+              ),
+            },
+          },
+        },
+        "403": {
+          description: MODULE_DISABLED_DESCRIPTION,
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "413": {
+          description: "Body exceeds 16 KiB.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "415": {
+          description: "`Content-Type` is not `application/json`.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+        "422": {
+          description:
+            "Either the body failed validation (every issue is listed), or the self-context is FULL — the matched field and the 4000-character `aboutMe` are both at their caps, so there is nowhere to put the answer. The two are told apart by the presence of the issue list.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
       },
     },
   },
