@@ -1238,11 +1238,20 @@ async function buildCoachSnapshotImpl(
   // hero line said "today" about a metric last measured five days earlier. The
   // stamp sits on the block itself so the age travels with the numbers into
   // every surface the snapshot feeds — hero, briefing, Coach reply, tools.
-  const staleBlocks = annotateSnapshotFreshness(compactSnapshot);
-  if (staleBlocks.length > 0) {
+  const freshness = annotateSnapshotFreshness(compactSnapshot);
+  if (freshness.stale.length > 0) {
     annotate({
       action: { name: "coach.snapshot.stale_blocks" },
-      meta: { blocks: staleBlocks.sort() },
+      meta: { blocks: freshness.stale.sort() },
+    });
+  }
+  // A rollup band that no longer reconciles with the rows underneath it is an
+  // operator-visible defect, not just a narration problem — the bucket is wrong
+  // on disk and stays wrong until something recomputes it.
+  if (freshness.coarseWithheld.length > 0) {
+    annotate({
+      action: { name: "coach.snapshot.coarse_withheld" },
+      meta: { blocks: freshness.coarseWithheld.sort() },
     });
   }
 

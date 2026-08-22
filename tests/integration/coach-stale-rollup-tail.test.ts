@@ -1,30 +1,36 @@
 /**
- * CHARACTERISATION — a rollup bucket outlives the rows it was folded from, and
- * the Coach is shown the result without any marker saying so.
+ * REGRESSION — a rollup bucket must not narrate rows that no longer exist.
  *
  * The read-swap in `tiered-context.ts` falls back to live SQL only when a band
- * is EMPTY (`if (buckets.length > 0) return buckets;`), so a bucket that is
- * merely wrong is served as though it were current. The one staleness repair,
- * `ensureUserRollupsFresh`, recomputes the DAY tier over the trailing 90 days
- * only, and keys off `Measurement.updatedAt` — which a HARD delete does not
- * bump. `src/lib/whoop/sync-body.ts` performs exactly such a hard
- * `measurement.deleteMany` on a WEIGHT row with no rollup invalidation, so this
- * reproduces that shape against a MONTH-band bucket.
+ * is EMPTY, so a bucket that is merely WRONG is served as though it were
+ * current. The one staleness repair, `ensureUserRollupsFresh`, recomputes the
+ * DAY tier over the trailing 90 days only, and keys off `Measurement.updatedAt`
+ * — which a HARD delete does not bump. `src/lib/whoop/sync-body.ts` performs
+ * exactly such a hard `measurement.deleteMany` on a WEIGHT row with no rollup
+ * invalidation, so this reproduces that shape against a MONTH-band bucket.
  *
- * What this pins, in the snapshot the Coach narrates from:
- *   - `weight.timeline.coarse.monthly` still carries the deleted value;
- *   - `weight.aggregate.allTimeMin/Max` correctly carry only the surviving
- *     value, so the snapshot contradicts itself and nothing flags which half
- *     is right;
- *   - `weight.asOf.currentForTodayClaims` is true, because `asOf` is derived
- *     from the freshest RAW reading and knows nothing about rollup age.
+ * Before the fix the Coach snapshot carried two irreconcilable accounts of the
+ * same record with nothing marking which to believe: `coarse.monthly` reported
+ * the deleted value while `aggregate.allTimeMin/Max` beside it reported only
+ * the surviving one, under an `asOf` stamped current because it is derived from
+ * raw reading age and knows nothing about rollup age.
  *
- * This asserts CURRENT behaviour. Closing the gap — comparing bucket
- * `computedAt` against the type's in-window `MAX(measurement.updatedAt)`, or
- * invalidating on the hard delete — will redden it, and the assertions should
- * then be flipped to the honest expectation.
- */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+ * `annotateSnapshotFreshness` now reconciles the two where they are assembled.
+ * A bucket mean is an average of real rows, so it must lie within those rows'
+ * all-time extremes; a mean outside them proves the bucket outlived its rows.
+ * The disputed coarse tail is dropped and `asOf.coarseHistoryWithheld` records
+ * that it was — narrating a ghost is worse than narrating less.
+ *
+ * `currentForTodayClaims` deliberately stays true here. It means "the freshest
+ * READING is recent enough for present tense", and it is: the surviving rows
+ * are from today. Suppressing it would silence a true statement to punish a
+ * stale history band.
+ *
+ * The row on disk is still wrong. The deeper fix is to make the tier notice —
+ * either compare a bucket's `computedAt` against the type's in-window
+ * MAX(`updatedAt`), or invalidate on the hard-delete path — and that is a
+ * larger change than this honesty repair.
+ */ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 process.env.ENCRYPTION_KEY ??=
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -49,7 +55,7 @@ const LIVE_KG = 80;
 interface WeightBlock {
   aggregate: { allTimeMin: number; allTimeMax: number };
   timeline: { coarse?: { monthly: Array<[string, number, number, number]> } };
-  asOf: { currentForTodayClaims: boolean };
+  asOf: { currentForTodayClaims: boolean; coarseHistoryWithheld?: true };
 }
 
 describe("coach snapshot — a rollup bucket that outlived its rows", () => {
@@ -57,7 +63,7 @@ describe("coach snapshot — a rollup bucket that outlived its rows", () => {
     await truncateAllTables(prisma);
   });
 
-  it("serves the deleted value in the coarse tail while claiming the block is current", async () => {
+  it("withholds the coarse tail whose buckets the live record cannot account for", async () => {
     const user = await prisma.user.create({
       data: {
         email: "stale-rollup@example.test",
@@ -117,17 +123,18 @@ describe("coach snapshot — a rollup bucket that outlived its rows", () => {
     const weight = (snap.sections as Record<string, unknown>)
       .weight as WeightBlock;
 
-    // The coarse tail the Coach narrates still reports the deleted value.
-    const monthly = weight.timeline.coarse?.monthly ?? [];
-    expect(monthly.length).toBeGreaterThan(0);
-    expect(monthly.every((row) => row[1] === GHOST_KG)).toBe(true);
-    expect(snap.snapshotJson).toContain(String(GHOST_KG));
-
-    // …while the all-time extremes, read live, know only the surviving value.
+    // The all-time extremes, read live, know only the surviving value.
     expect(weight.aggregate.allTimeMin).toBe(LIVE_KG);
     expect(weight.aggregate.allTimeMax).toBe(LIVE_KG);
 
-    // …and the block is stamped current, which licenses present-tense prose.
+    // The coarse tail could not be reconciled with them, so it is gone…
+    expect(weight.timeline.coarse).toBeUndefined();
+    expect(weight.asOf.coarseHistoryWithheld).toBe(true);
+
+    // …and the deleted value reaches no part of what the model is shown.
+    expect(snap.snapshotJson).not.toContain(String(GHOST_KG));
+
+    // The freshest reading is still from today, so present tense is still fair.
     expect(weight.asOf.currentForTodayClaims).toBe(true);
   });
 });
