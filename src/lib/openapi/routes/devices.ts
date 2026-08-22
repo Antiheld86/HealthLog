@@ -92,4 +92,51 @@ export const devicePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       },
     },
   },
+  "/api/devices/{id}": {
+    delete: {
+      tags: ["Devices"],
+      summary: "Revoke a device and everything bound to it",
+      description:
+        "Deletes the device and, in one transaction, revokes every refresh and access token bound to it — the cleanup a native client runs when it rotates its own registration. The counts come back so the caller can log what the cascade actually killed. Scoped to the caller's own devices: an id belonging to somebody else is indistinguishable from one that does not exist. This is a second URL for `DELETE /api/auth/me/devices/{id}`; the two share one transactional helper and behave identically, and the duplication exists so the native rotation loop has a path that is not the settings-surface one. Auth via cookie or Bearer.",
+      parameters: [
+        {
+          name: "id",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+          description: "Device id.",
+        },
+      ],
+      responses: {
+        "200": {
+          description: "The device and its tokens were revoked.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({
+                  id: z.string(),
+                  revoked: z.literal(true),
+                  refreshTokensRevoked: z
+                    .number()
+                    .int()
+                    .describe("Refresh tokens the cascade revoked."),
+                  accessTokensRevoked: z
+                    .number()
+                    .int()
+                    .describe("Access tokens the cascade revoked."),
+                }),
+                "DeviceRevokeResponse",
+              ),
+            },
+          },
+        },
+        "404": {
+          description:
+            "No such device for this caller — also the answer for one already revoked, so a retry after a successful revoke is a 404 rather than an idempotent 200.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
 };
