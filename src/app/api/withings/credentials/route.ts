@@ -2,7 +2,9 @@ import { prisma } from "@/lib/db";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiSuccess, apiError, safeJson } from "@/lib/api-response";
 import { isP2025 } from "@/lib/prisma-errors";
+import { auditLog } from "@/lib/auth/audit";
 import { annotate } from "@/lib/logging/context";
+import { markDisconnected } from "@/lib/integrations/status";
 import { encrypt } from "@/lib/crypto";
 import { withingsCredentialsSchema } from "@/lib/validations/withings";
 import { NextRequest } from "next/server";
@@ -60,6 +62,13 @@ export const PUT = apiHandler(async (request: NextRequest) => {
 
 /**
  * Delete Withings credentials and disconnect.
+ *
+ * Audits the teardown and parks the integration ledger at `disconnected`, for
+ * parity with the Fitbit / Google Health / WHOOP credential-DELETE. Withings
+ * was the one provider that did neither: the connection row went, the
+ * credential columns went, and the ledger kept whatever state it last held —
+ * so a client reading `state` afterwards was told `connected` about a
+ * connection that no longer existed, and a sensitive teardown left no trail.
  */
 export const DELETE = apiHandler(async () => {
   const { user } = await requireAuth();
@@ -83,6 +92,9 @@ export const DELETE = apiHandler(async () => {
       withingsClientSecretEncrypted: null,
     },
   });
+
+  await auditLog("withings.credentials.delete", { userId: user.id });
+  await markDisconnected(user.id, "withings");
 
   return apiSuccess({ deleted: true });
 });

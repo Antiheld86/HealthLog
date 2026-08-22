@@ -24,6 +24,9 @@ vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/auth/audit", () => ({
   auditLog: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("@/lib/integrations/status", () => ({
+  markDisconnected: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@/lib/logging/transports", () => ({ emitIfSampled: vi.fn() }));
 vi.mock("@/lib/db-compat", () => ({
   ensureDbCompatibility: vi.fn().mockResolvedValue(undefined),
@@ -40,6 +43,8 @@ vi.mock("next/headers", () => ({
 import { DELETE } from "../route";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
+import { auditLog } from "@/lib/auth/audit";
+import { markDisconnected } from "@/lib/integrations/status";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -92,5 +97,42 @@ describe("DELETE /api/withings/credentials", () => {
     // Critically: the credentials must NOT be nulled, because doing so while
     // the encrypted OAuth tokens survive is the worst of both states.
     expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Withings was the one provider whose credential DELETE wrote no audit row
+   * and left the ledger alone. Fitbit, Google Health and WHOOP all park theirs,
+   * and three of them say in their own comments that they do it for parity —
+   * with a list that never included Withings. The visible cost was a client
+   * reading `state` after the teardown and being told `connected` about a
+   * connection that no longer existed.
+   */
+  it("audits the teardown and parks the ledger at disconnected", async () => {
+    vi.mocked(prisma.withingsConnection.delete).mockResolvedValue({} as never);
+    const res = await DELETE();
+    expect(res.status).toBe(200);
+    expect(auditLog).toHaveBeenCalledWith("withings.credentials.delete", {
+      userId: "user-1",
+    });
+    expect(markDisconnected).toHaveBeenCalledWith("user-1", "withings");
+  });
+
+  it("still audits and parks when the connection row was already gone", async () => {
+    vi.mocked(prisma.withingsConnection.delete).mockRejectedValue(p2025());
+    const res = await DELETE();
+    expect(res.status).toBe(200);
+    expect(auditLog).toHaveBeenCalledWith("withings.credentials.delete", {
+      userId: "user-1",
+    });
+    expect(markDisconnected).toHaveBeenCalledWith("user-1", "withings");
+  });
+
+  it("does not audit or park when the teardown itself failed", async () => {
+    vi.mocked(prisma.withingsConnection.delete).mockRejectedValue(
+      new Error("connection terminated unexpectedly"),
+    );
+    await DELETE();
+    expect(auditLog).not.toHaveBeenCalled();
+    expect(markDisconnected).not.toHaveBeenCalled();
   });
 });

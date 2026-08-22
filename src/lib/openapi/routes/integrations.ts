@@ -15,8 +15,10 @@
  * descriptions say so per path rather than smoothing it over. Three divergences
  * are worth knowing before reading further:
  *
- *   * A disconnect is 404-on-repeat for six providers and an idempotent 200 for
- *     two. Which is which is stated on each path.
+ *   * `POST /api/<provider>/disconnect` is 404-on-repeat for all seven
+ *     providers that have one; `DELETE /api/<provider>/credentials` is an
+ *     idempotent 200 for all six. The same user-facing gesture, opposite
+ *     contracts, and the split follows the URL rather than the provider.
  *   * `/api/<provider>/test` answers `{ ok, latencyMs }`; the same-named
  *     `/api/integrations/<provider>/test` answers `{ ok, lastSyncedAt,
  *     latencyMs }`, and the Google Health one additionally accepts a body that
@@ -649,10 +651,10 @@ const selfRateLimited429 = {
 };
 
 /**
- * The manual-sync body. Every sync route parses it the same way and the parse
- * is deliberately forgiving: a missing body, an unparseable body and a body
- * without the key all mean the same thing — an incremental run. Only a literal
- * `true` selects the full-history walk.
+ * The manual-sync body. Every sync route reads it through the same helper, and
+ * the helper separates three cases the old per-route copies collapsed into one:
+ * an ABSENT body is an incremental run, a body that is present and unparseable
+ * is a 400, and a body that is present and fails this schema is a 422.
  */
 const syncTriggerRequest = z
   .object({
@@ -660,13 +662,13 @@ const syncTriggerRequest = z
       .boolean()
       .optional()
       .describe(
-        "`true` walks full history; anything else (including a malformed body, which is swallowed rather than refused) runs the incremental sync.",
+        "`true` walks full history; `false` or omitted runs the incremental sync. A non-boolean here is refused with 422 — it is NOT read as `false`.",
       ),
   })
   .meta({
     id: "SyncTriggerRequest",
     description:
-      "Optional flag-only body for a manual sync. Note that this body is NOT validated: a parse failure silently degrades to `fullSync: false` rather than answering 422, so a client typo reads as a successful incremental run.",
+      'Optional flag-only body for a manual sync. Omit the body entirely (or send `{}`) for an incremental run — that is the documented shape and it keeps working. A body that IS present must be valid: unparseable JSON is 400, and a body failing this schema is 422 with the multi-issue envelope. This matters because it used to be neither: `{ "fullSync": "true" }` was silently read as `false` and answered 200, so a client that asked for full history and mistyped the value was told the run it never requested had succeeded. Unknown keys are still ignored.',
   });
 
 const syncTriggerOutcome = z
@@ -862,7 +864,7 @@ const integrationEnvelopeEntry = z
     metricFreshness: z
       .array(metricFreshnessEntry)
       .describe(
-        "Per-metric-type freshness for this provider's data. Empty when the provider has delivered nothing, and also empty when the freshness read itself failed — the endpoint degrades to no data rather than failing the whole envelope, so an empty list is not proof of no data.",
+        "Per-metric-type freshness for this provider's data. Empty when the provider has delivered nothing — and also empty when the freshness read failed, because the endpoint degrades to no data rather than failing the whole envelope. Read the top-level `metricFreshnessDegraded` to tell those two apart before rendering an empty list as 'nothing has gone quiet'.",
       ),
     connected: z.boolean(),
     configured: z.boolean(),
@@ -905,6 +907,11 @@ const integrationStatusEnvelope = z
       .int()
       .describe(
         "Consecutive persistent failures at which the operator is alerted. Operator-level, configurable via env.",
+      ),
+    metricFreshnessDegraded: z
+      .boolean()
+      .describe(
+        "The per-metric freshness query failed, so EVERY entry's `metricFreshness` is an empty array regardless of what the record actually holds. One flag rather than one per entry, because it is a single query for all eight providers: it fails for all of them or for none. When true, render the freshness section as unavailable rather than as 'no metric has gone quiet' — the two used to be indistinguishable on the wire, which turned the honesty signal into the thing it was built to prevent. The rest of the envelope is unaffected and still complete.",
       ),
     integrations: z
       .array(integrationEnvelopeEntry)
@@ -1380,7 +1387,7 @@ export const integrationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Integrations"],
       summary: "Delete the caller's Withings credentials and connection",
       description:
-        "Deletes the connection row (with its encrypted OAuth tokens) and clears both credential columns. Idempotent — a missing connection row is a benign no-op, so a repeat call still answers 200. Unlike every sibling provider's credential DELETE, this one writes NO audit row and does NOT park the `withings` ledger: the ledger keeps whatever state it last held, so a client should not read `state` as proof of a live connection after this call. Auth via cookie or Bearer.",
+        "Deletes the connection row (with its encrypted OAuth tokens), clears both credential columns, audits the teardown and parks the `withings` ledger at `disconnected`. Idempotent — a missing connection row is a benign no-op, so a repeat call still answers 200. Auth via cookie or Bearer.",
       responses: {
         "200": {
           description: "Credentials and connection removed.",
@@ -1402,7 +1409,7 @@ export const integrationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Integrations"],
       summary: "Trigger a Withings sync",
       description:
-        "Incremental by default; `{ fullSync: true }` walks full history. NOT rate-limited — the only manual sync in this group without a limiter, alongside WHOOP's. Auth via cookie or Bearer.",
+        "Incremental by default; `{ fullSync: true }` walks full history. Two limiters apply, matching the Fitbit / Google Health siblings: 5 requests / 60 s for any run, and additionally 1 per hour for a full one. Auth via cookie or Bearer.",
       requestBody: {
         required: false,
         content: { "application/json": { schema: syncTriggerRequest } },
@@ -1419,11 +1426,26 @@ export const integrationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
+        "400": {
+          description:
+            "Body is not parseable JSON. An ABSENT body is not this case — omit the body entirely for an incremental run.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
         "413": {
           description: "Body exceeds 64 KiB.",
           content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
+        "422": {
+          description:
+            "The body was present and failed the schema — `fullSync` was not a boolean. Nothing was synced. Note that this is a behaviour change: such a body used to be read as `fullSync: false` and answered 200.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "429": {
+          description:
+            "Either limiter tripped: more than 5 syncs in 60 s, or a second full sync within the hour. `meta.errorCode` = `rate_limited_self` for both; the message distinguishes them.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
       },
     },
   },
@@ -1432,7 +1454,7 @@ export const integrationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Integrations"],
       summary: "Trigger a WHOOP sync",
       description:
-        "Incremental by default; `{ fullSync: true }` walks full history. NOT rate-limited — the only manual sync in this group without a limiter, alongside Withings'. Auth via cookie or Bearer.",
+        "Incremental by default; `{ fullSync: true }` walks full history across the four WHOOP resources. Two limiters apply, matching the Fitbit / Google Health siblings: 5 requests / 60 s for any run, and additionally 1 per hour for a full one. Auth via cookie or Bearer.",
       requestBody: {
         required: false,
         content: { "application/json": { schema: syncTriggerRequest } },
@@ -1449,11 +1471,26 @@ export const integrationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
+        "400": {
+          description:
+            "Body is not parseable JSON. An ABSENT body is not this case — omit the body entirely for an incremental run.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
         "413": {
           description: "Body exceeds 64 KiB.",
           content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
+        "422": {
+          description:
+            "The body was present and failed the schema — `fullSync` was not a boolean. Nothing was synced. Note that this is a behaviour change: such a body used to be read as `fullSync: false` and answered 200.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "429": {
+          description:
+            "Either limiter tripped: more than 5 syncs in 60 s, or a second full sync within the hour. `meta.errorCode` = `rate_limited_self` for both; the message distinguishes them.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
       },
     },
   },
@@ -1630,11 +1667,21 @@ export const integrationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
+        "400": {
+          description:
+            "Body is not parseable JSON. An ABSENT body is not this case — omit the body entirely for an incremental run.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
         "413": {
           description: "Body exceeds 64 KiB.",
           content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
+        "422": {
+          description:
+            "The body was present and failed the schema — `fullSync` was not a boolean. Nothing was synced. Note that this is a behaviour change: such a body used to be read as `fullSync: false` and answered 200.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
         "429": {
           description:
             "Either limiter tripped: more than 5 syncs in 60 s, or a second full sync within the hour. `meta.errorCode` = `rate_limited_self` for both; the message distinguishes them.",
@@ -1788,12 +1835,22 @@ export const integrationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           description: "Body exceeds 64 KiB.",
           content: { "application/json": { schema: errorEnvelope } },
         },
+        "400": {
+          description:
+            "Body is not parseable JSON. An ABSENT body is not this case — omit the body entirely for an incremental run.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
         "502": {
           description:
             "The run failed and wrote nothing. A run that wrote something before failing answers 200 instead.",
           content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
+        "422": {
+          description:
+            "The body was present and failed the schema — `fullSync` was not a boolean. Nothing was synced. Note that this is a behaviour change: such a body used to be read as `fullSync: false` and answered 200.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
         "429": {
           description:
             "Either limiter tripped: more than 5 syncs in 60 s, or a second full sync within the hour. `meta.errorCode` = `rate_limited_self`.",
@@ -1850,7 +1907,7 @@ export const integrationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Integrations"],
       summary: "Delete the caller's Oura credentials and connection",
       description:
-        "Clears the stored access and refresh tokens as well as the BYO pair — a token minted against a deleted app is orphaned, so the grant goes with the keys. Always answers 200. The audit row and the ledger park are written only when a token was actually present, so tearing down an unconnected credential pair leaves no audit trail. Auth via cookie or Bearer.",
+        "Clears the stored access and refresh tokens as well as the BYO pair — a token minted against a deleted app is orphaned, so the grant goes with the keys. Always answers 200, and always audits the teardown and parks the `oura` ledger at `disconnected`, whether or not a token was present. Auth via cookie or Bearer.",
       responses: {
         "200": {
           description: "Credentials and any connection removed.",
@@ -1983,7 +2040,7 @@ export const integrationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Integrations"],
       summary: "Delete the caller's Polar credentials and connection",
       description:
-        "Clears the stored access token and member id as well as the BYO pair — a token minted under a deleted AccessLink app is orphaned, so the grant goes with the keys. Always answers 200, and unlike Oura's and Strava's equivalents it audits and parks the ledger unconditionally, whether or not a token was present. Auth via cookie or Bearer.",
+        "Clears the stored access token and member id as well as the BYO pair — a token minted under a deleted AccessLink app is orphaned, so the grant goes with the keys. Always answers 200, and always audits the teardown and parks the `polar` ledger at `disconnected`, whether or not a token was present. Auth via cookie or Bearer.",
       responses: {
         "200": {
           description: "Credentials and any connection removed.",
@@ -2119,7 +2176,7 @@ export const integrationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Integrations"],
       summary: "Delete the caller's Strava credentials and connection",
       description:
-        "Clears the stored access token, refresh token and athlete id as well as the BYO pair. Always answers 200. The audit row and the ledger park are written only when a token was actually present. Note that this path does NOT deauthorize at Strava — only `POST /api/strava/disconnect` does, so removing the credentials here leaves the app authorised on the user's Strava account. Auth via cookie or Bearer.",
+        "Clears the stored access token, refresh token and athlete id as well as the BYO pair. Always answers 200, and always audits the teardown and parks the `strava` ledger at `disconnected`, whether or not a token was present. Note that this path does NOT deauthorize at Strava — only `POST /api/strava/disconnect` does, so removing the credentials here leaves the app authorised on the user's Strava account. Auth via cookie or Bearer.",
       responses: {
         "200": {
           description: "Credentials and any connection removed.",
