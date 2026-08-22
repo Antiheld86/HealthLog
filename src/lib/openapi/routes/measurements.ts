@@ -525,7 +525,11 @@ const averageSleepResource = z.object({
     .describe("Scorable nights still needed before the average is asserted."),
 });
 
-const sleepRhythmResponse = z
+// Exported because `GET /api/dashboard/summary` carries the identical DTO on
+// its `sleepRhythm` key — the route builds it from the same
+// `computeSleepRhythmFromNights` call `/api/sleep/rhythm` uses. Two copies of
+// the shape would be two things to keep in step.
+export const sleepRhythmResponse = z
   .object({
     sleepDebt: sleepDebtResource,
     chronotype: chronotypeResource,
@@ -535,6 +539,81 @@ const sleepRhythmResponse = z
     id: "SleepRhythmResource",
     description:
       "Server-authoritative sleep-rhythm read: the outstanding sleep-debt balance over the rolling window + MCTQ chronotype (MSF/MSFsc band, social jetlag). Free vs work nights default to weekend = free in the user's timezone (no work calendar). A view over existing per-stage SLEEP_DURATION rows — no schema, no new type.",
+  });
+
+// ── Personal records ─────────────────────────────────────────────────
+//
+// `GET /api/personal-records` shipped as a schema-only contract so the native
+// client could build its query path against a stable shape before the
+// detection worker landed. It answers the stored rows verbatim — including
+// `userId` and the provenance foreign key — because the handler passes the
+// Prisma result straight to `apiSuccess` with no projection.
+
+const personalRecordQuery = z
+  .object({
+    metricType: measurementTypeEnum
+      .optional()
+      .describe(
+        "Restrict to one measurement type. A value outside the enum is DROPPED rather than refused — the read then covers every metric, which is indistinguishable from omitting the parameter.",
+      ),
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(500)
+      .optional()
+      .default(100)
+      .describe(
+        "Row cap, 1..500, default 100. A non-integer, zero, negative or non-numeric value falls back to the default and a value above the ceiling clamps to 500 — none of them 422.",
+      ),
+  })
+  .meta({ id: "PersonalRecordQuery" });
+
+const personalRecordResource = z
+  .object({
+    id: z.string(),
+    userId: z
+      .string()
+      .describe(
+        "The RECORD owner's id, which is not the caller's id on a delegated read.",
+      ),
+    metricType: measurementTypeEnum,
+    metricSlot: z
+      .string()
+      .nullable()
+      .describe(
+        "Per-sport-type bucket for workout-driven records (e.g. `running_5km_time`). Null for a plain measurement-driven record, where the metric type alone is the dimension.",
+      ),
+    direction: z
+      .enum(["MAX", "MIN"])
+      .describe(
+        "Which way is better for this metric: `MAX` for steps / VO2 max / HRV / distance / daylight, `MIN` for resting heart rate / body fat / audio exposure.",
+      ),
+    value: z.number(),
+    unit: z.string(),
+    achievedAt: z.iso
+      .datetime({ offset: true })
+      .describe(
+        "When the record was set. The list orders on this, newest first.",
+      ),
+    sourceMeasurementId: z
+      .string()
+      .nullable()
+      .describe(
+        "The measurement row that achieved the record. Nulled rather than cascaded when that measurement is deleted, so the historical fact survives its source.",
+      ),
+    source: measurementSourceEnum,
+    externalId: z.string().nullable(),
+    createdAt: z.iso
+      .datetime({ offset: true })
+      .describe(
+        "When the detection worker wrote the row — distinct from `achievedAt`, which is when the reading happened.",
+      ),
+  })
+  .meta({
+    id: "PersonalRecord",
+    description:
+      "One personal record: the best value a metric (optionally within a per-sport slot) has reached, in the direction that counts as better for it.",
   });
 
 // ── Time-series adapter (iOS chart source) ───────────────────────────
@@ -1053,6 +1132,30 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           },
         },
         ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/personal-records": {
+    get: {
+      tags: ["Measurements"],
+      summary: "List the record's personal records",
+      description:
+        "Returns the account's personal-record rows, `achievedAt` descending. Both query parameters are FORGIVING rather than strict: an unrecognised `metricType` is dropped (the read falls back to every metric) and an unusable `limit` clamps to the default instead of 422-ing, so a loosely-typed client filter cannot take the page down. Rows are the stored entities verbatim, including `userId` and the provenance `sourceMeasurementId`. Delegable at READ level over the `measurements` section. Not module-gated: the list spans metrics from several modules and is filtered by the caller's `metricType`, not by the account's module map — a record achieved under a metric whose module is now off is still returned. Cookie or Bearer auth.",
+      requestParams: { query: personalRecordQuery },
+      responses: {
+        ...recordRefusal(),
+        "200": {
+          description: "The personal-record rows (possibly empty).",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.array(personalRecordResource),
+                "PersonalRecordListEnvelope",
+              ),
+            },
+          },
+        },
         ...stdResponses,
       },
     },

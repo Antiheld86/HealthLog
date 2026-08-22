@@ -1598,3 +1598,649 @@ export const rhythmEventsResponse = z
     description:
       "Timeline of device-flagged EVENT rows (irregular-rhythm / high-HR / low-HR / walking-steadiness / breathing-disturbance) the user's wearable (Apple Watch / Withings ScanWatch) already produced and synced. AWARENESS / SCREENING of the DEVICE's own decision — HealthLog stores and reflects the classification result verbatim, never a raw waveform, and never re-classifies. Read-only; no LLM call.",
   });
+
+// ── The analytics envelope (`GET /api/analytics`) ─────────────────────
+//
+// The oldest composite read in the application, and it was never in the
+// registry: `openapi:check` compares the registry against the YAML and never
+// the ROUTE TREE against the registry, so a route registered nowhere drifted
+// with nothing going red.
+//
+// Two response shapes behind one path. `?slice=summaries` answers the slim
+// slice (per-type summaries only, resolved from two SQL passes); every other
+// request — including a `slice` value the route does not recognise — answers
+// the thick default. They share `summaries` / `lastSeenByType` /
+// `sleepSourceDiscrepancy` and agree on nothing else, so both are described
+// rather than merged into an all-optional shape that would describe neither.
+
+export const trendSlope = z
+  .object({
+    slope: z.number().describe("Least-squares slope in units per day."),
+    direction: z.enum(["up", "down", "stable"]),
+    confidence: z.number().describe("R² of the fit, 0..1."),
+  })
+  .meta({ id: "TrendSlope" });
+
+export const dataSummary = z
+  .object({
+    count: z.number().int(),
+    latest: z.number().nullable(),
+    min: z.number().nullable(),
+    max: z.number().nullable(),
+    mean: z.number().nullable(),
+    median: z
+      .number()
+      .nullable()
+      .describe(
+        "50th percentile over the trailing 90 days on this route (the SQL path fixes that window). Linear-interpolated midpoint. Null on an empty series.",
+      ),
+    avg7: z.number().nullable(),
+    avg30: z.number().nullable(),
+    slope7: trendSlope.nullable(),
+    slope30: trendSlope
+      .nullable()
+      .describe(
+        "Regression over the trailing window, anchored on NOW rather than on the newest reading — a series that stopped weeks ago reports null rather than a stale slope.",
+      ),
+    avg30LastMonth: z
+      .number()
+      .nullable()
+      .optional()
+      .describe(
+        "Mean over the 30 days ending 30 days ago — the prior period a tile's delta caption compares against.",
+      ),
+    avg30LastYear: z
+      .number()
+      .nullable()
+      .optional()
+      .describe(
+        "Mean over the 30 days ending 365 days ago. Populated only for types whose WEEK/MONTH/YEAR rollup tier carries the year-ago window.",
+      ),
+  })
+  .meta({
+    id: "DataSummary",
+    description:
+      "Per-measurement-type summary. Every statistic is null on an empty series rather than 0, so a client never charts a zero it was never given. `anomalyCount` and `slope90` were computed here historically and left this wire in v1.37.19 — they are not fields of this shape.",
+  });
+
+const lastSeenSlot = z
+  .object({
+    lastSeenAt: z.iso.datetime({ offset: true }),
+    daysAgo: z
+      .number()
+      .int()
+      .describe(
+        "Whole days since `lastSeenAt`, re-derived per request rather than served from the cache, so the staleness caption stays correct across a day boundary.",
+      ),
+  })
+  .nullable();
+
+const sleepSourceDiscrepancy = z
+  .object({
+    deltaMinutes: z.number().int().nonnegative(),
+    sources: z.array(
+      z.object({
+        source: z.string(),
+        deviceType: z.string().nullable(),
+        asleepMinutes: z.number().int().nonnegative(),
+      }),
+    ),
+  })
+  .nullable()
+  .describe(
+    "Non-null when two writer buckets reported clearly different asleep totals for the night behind `summaries.SLEEP_DURATION.latest`. Observational only — the served summary stays the winning writer's totals.",
+  );
+
+export const analyticsSummariesSliceResponse = z
+  .object({
+    summaries: z
+      .record(z.string(), dataSummary)
+      .describe("Keyed by MeasurementType. Types with no data are omitted."),
+    bmi: z
+      .null()
+      .describe(
+        "Always null on this slice — BMI is derived on the default slice from `summaries.WEIGHT.latest` and the profile height. The key is present so the two slices decode into one type.",
+      ),
+    lastSeenByType: z.record(z.string(), lastSeenSlot),
+    sleepSourceDiscrepancy,
+  })
+  .meta({
+    id: "AnalyticsSummariesSlice",
+    description:
+      "The slim `?slice=summaries` answer: the per-type summaries the dashboard tile strip needs, resolved from two SQL passes over the rollup tier instead of the default slice's thirty-query chain. Drops correlations, the health score, the BP-in-target block, per-context glucose and the sleep-stage breakdown.",
+  });
+
+const analyticsCorrelationOk = z.object({
+  kind: z.string().describe("Hypothesis identity."),
+  status: z.literal("ok"),
+  statistic: z
+    .number()
+    .describe(
+      "Pearson r for the BP-compliance and mood-pulse hypotheses; eta-squared for the weight-weekday one.",
+    ),
+  n: z.number().int(),
+  pValue: z.number().describe("Two-sided. Below 0.05 to surface at all."),
+  confidenceBand: z.unknown().describe("95 % confidence band for the UI chip."),
+  interpretation: z
+    .string()
+    .describe(
+      "One already-localised conservative sentence, rendered verbatim. Never claims causation. Localised per reader, which is why the cached envelope is keyed by locale.",
+    ),
+  points: z.array(z.object({ x: z.number(), y: z.number() })),
+  xLabel: z.string(),
+  yLabel: z.string(),
+  patternId: z.string().optional(),
+  canonicalKey: z.string().optional(),
+  dismissed: z.boolean().optional(),
+});
+
+const analyticsCorrelationInsufficient = z.object({
+  kind: z.string(),
+  status: z.literal("insufficient"),
+  n: z.number().int().describe("What was counted, even below the threshold."),
+  reason: z.enum(["too_few_pairs", "not_significant", "no_variance"]),
+  points: z
+    .array(z.object({ x: z.number(), y: z.number() }))
+    .describe("Preview points the empty state can hint progress with."),
+});
+
+const analyticsCorrelation = z
+  .union([analyticsCorrelationOk, analyticsCorrelationInsufficient])
+  .describe(
+    "Discriminated on `status`. The `ok` arm carries the statistic and its narration; the `insufficient` arm carries neither and says why. The pattern fields (`patternId` / `canonicalKey` / `dismissed`) ride the `ok` arm only, and only once the hypothesis has been persisted.",
+  );
+
+const healthScoreDerivedInsufficient = z.object({
+  status: z.literal("insufficient"),
+  coverage: derivedCoverage,
+  provenance: derivedProvenance,
+  reason: z.string(),
+});
+
+const healthScoreComposite = z
+  .union([
+    z.object({
+      status: z.literal("ok"),
+      value: z.object({
+        score: z.number(),
+        band: z.enum(["green", "yellow", "red"]),
+        bandSetter: z
+          .string()
+          .nullable()
+          .describe(
+            "The pillar that lowered the mean score's band; null when no pillar did.",
+          ),
+        composition: z
+          .array(z.string())
+          .describe(
+            "Registry-ordered eligible pillar ids. Part of the number's identity: two scores with different compositions are not comparable.",
+          ),
+        configured: z
+          .boolean()
+          .describe(
+            "True when the account's own recipe narrows the composition below what its defaults would resolve to today. The configuration blob itself is never on this wire.",
+          ),
+        noiseFloor: z.number(),
+        scoreVersion: z.number().int(),
+      }),
+      coverage: derivedCoverage,
+      confidence: derivedConfidence,
+      provenance: derivedProvenance,
+    }),
+    healthScoreDerivedInsufficient,
+  ])
+  .describe(
+    "Discriminated on `status`. The `insufficient` arm carries NO `value` and NO `confidence` key at all — they are absent, not null — which is how a composite reads before three distinct domains are eligible.",
+  );
+
+const healthScorePillar = z.object({
+  id: z.string().describe("Pillar id."),
+  domain: z
+    .enum(["cardiometabolic", "activity", "sleep", "adiposity", "wellbeing"])
+    .describe(
+      "Which area the pillar speaks to. Three of the seven pillars share `cardiometabolic`, so a selection of four pillars can still fail the three-distinct-domains rule.",
+    ),
+  result: z
+    .union([
+      z.object({
+        status: z.literal("ok"),
+        value: z.object({
+          score: z.number(),
+          observed: z.object({
+            value: z.number(),
+            unit: z.string(),
+            label: z
+              .string()
+              .describe("Complete display value, paired values included."),
+            asOf: z.string(),
+            sources: z.array(z.string()),
+          }),
+          reference: z.object({
+            kind: z.enum([
+              "clinical-threshold",
+              "population-percentile",
+              "guideline-band",
+            ]),
+            low: z.number().nullable(),
+            high: z.number().nullable(),
+            label: z.string(),
+            source: z.string(),
+          }),
+          personalReference: z
+            .unknown()
+            .optional()
+            .describe(
+              "The user's own yardstick, same shape as `reference`, shown beside the scored one. Absent when there is none — the pillar is always GRADED against the reference, never against this.",
+            ),
+          scoreBasis: z
+            .unknown()
+            .optional()
+            .describe(
+              "Which input set the score and by how much. Blood pressure only today: it is the one pillar that scores the WORSE of two axes, so the number alone cannot say which one it came from. A pillar with nothing of the kind to say omits the key.",
+            ),
+          noiseFloor: z.number(),
+          deltaEligible: z
+            .boolean()
+            .describe(
+              "False for slow markers, which contribute to the level but never to the weekly delta.",
+            ),
+          deltaIdentity: z.string(),
+        }),
+        coverage: derivedCoverage,
+        confidence: derivedConfidence,
+        provenance: derivedProvenance,
+      }),
+      healthScoreDerivedInsufficient,
+    ])
+    .describe("Same `Derived<T>` union as the composite."),
+});
+
+export const healthScoreReport = z
+  .object({
+    composite: healthScoreComposite,
+    pillars: z
+      .array(healthScorePillar)
+      .describe("Every pillar the scorer evaluated, eligible or not."),
+    delta: z
+      .number()
+      .nullable()
+      .describe(
+        "Week-over-week move; null whenever `deltaReason` explains why there is none.",
+      ),
+    deltaReason: z
+      .enum([
+        "algorithm_changed",
+        "config_changed",
+        "composition_changed",
+        "first_eligibility_window",
+        "below_noise_floor",
+        "no_previous_window",
+        "no_current_score",
+      ])
+      .nullable()
+      .describe(
+        "Why the delta was suppressed. `config_changed` is the one that is easy to misread as a health event: the person changed their own recipe inside the comparison window, so both windows computed under the new recipe and the arithmetic only looks comparable.",
+      ),
+    scoreVersion: z
+      .number()
+      .int()
+      .describe(
+        "The scoring METHOD's identity, not the schema version. It moves when the rules move, which is what lets a stored day say which rules produced it.",
+      ),
+    weightGoal: z
+      .union([
+        z.object({
+          status: z.literal("ok"),
+          value: z.object({
+            currentKg: z.number(),
+            target: z.object({ min: z.number(), max: z.number() }),
+            distanceKg: z.number(),
+            deltaKg: z
+              .number()
+              .nullable()
+              .describe("Positive means the distance to the band narrowed."),
+            asOf: z.string(),
+            source: z.string(),
+          }),
+          coverage: derivedCoverage,
+          confidence: derivedConfidence,
+          provenance: derivedProvenance,
+        }),
+        healthScoreDerivedInsufficient,
+      ])
+      .describe("Same `Derived<T>` union again."),
+    algorithmNotice: z
+      .object({ itemKey: z.string(), dismissed: z.boolean() })
+      .nullable()
+      .describe(
+        "The once-per-account notice that the scoring rules moved; null when there is nothing to say.",
+      ),
+    restMode: z
+      .object({
+        active: z.literal(true),
+        since: z.string().nullable(),
+        episodeCount: z.number().int(),
+      })
+      .nullable()
+      .optional()
+      .describe(
+        "Set on every response this route produces (null when no illness episode is active). Rest Mode FRAMES the score and never changes it: the number above is left exactly as computed and this attaches the value-free context. Resolved as of the scored window, not a fresh now.",
+      ),
+  })
+  .meta({
+    id: "HealthScoreReport",
+    description:
+      "The versioned cardiometabolic reference score: the composite, every pillar with its own observation and reference band, the week-over-week delta with the reason it may be absent, the weight-goal derivation and the algorithm notice. Recorded to the score history as a side effect of this read.",
+  });
+
+const sleepStageComposition = z
+  .object({
+    windowDays: z.number().int(),
+    nights: z
+      .number()
+      .int()
+      .describe("Nights carrying at least one stage entry in the window."),
+    totalMinutes: z
+      .number()
+      .describe("Sum of every value in `stages` — nights only, naps excluded."),
+    stages: z
+      .record(z.string(), z.number())
+      .describe("Window totals per stage, naps excluded."),
+    perNight: z.array(
+      z.object({
+        dayKey: z
+          .string()
+          .describe("Wake-day key `YYYY-MM-DD` in the account's timezone."),
+        stages: z
+          .record(z.string(), z.number())
+          .describe(
+            "Per-stage minutes of the MAIN night only. `IN_BED` is the session envelope and is carried as such.",
+          ),
+        napMinutes: z
+          .number()
+          .optional()
+          .describe(
+            "Time asleep across the day's naps. ABSENT on a day without one — there is no zero to render and nothing to caption.",
+          ),
+        napCount: z
+          .number()
+          .int()
+          .optional()
+          .describe("Absent alongside `napMinutes`."),
+      }),
+    ),
+  })
+  .nullable()
+  .describe(
+    "Trailing-30-day per-stage breakdown, null when no session in the window carries stage data. Sessions are reconstructed and collapsed to one canonical source per night before the sum, so a dual-source night is not double-counted and a midnight-spanning night is not split across two days.",
+  );
+
+export const analyticsDefaultSliceResponse = z
+  .object({
+    summaries: z.record(z.string(), dataSummary),
+    bmi: z
+      .number()
+      .nullable()
+      .describe(
+        "Derived from the latest weight and the profile height, one decimal. Null without a height or without a weight reading.",
+      ),
+    bpInTargetPct: z
+      .number()
+      .nullable()
+      .describe(
+        "Trailing-90-day in-target percentage — the headline window. Null without personalised targets (which need a date of birth) or without readings.",
+      ),
+    bpInTargetPct7d: z.number().nullable(),
+    bpInTargetPct30d: z.number().nullable(),
+    bpInTargetPctAllTime: z.number().nullable(),
+    bpInTargetPctPriorMonth: z.number().nullable(),
+    bpInTargetPctPriorYear: z
+      .number()
+      .nullable()
+      .describe(
+        "Period-aligned prior windows, so a comparison caption's arithmetic matches its label.",
+      ),
+    bpInTargetCount90: z
+      .number()
+      .int()
+      .nullable()
+      .describe("Readings behind the 90-day figure, for the thin-data gate."),
+    bpInTargetSpanDays90: z
+      .number()
+      .int()
+      .nullable()
+      .describe("Effective span the 90-day figure actually covers."),
+    glucoseByContext: z
+      .record(z.string(), dataSummary)
+      .nullable()
+      .describe(
+        "Per-context summaries (`FASTING` / `POSTPRANDIAL` / `RANDOM` / `BEDTIME`) over the trailing 30 days, canonical mg/dL. A context with no readings is omitted. NULL — not an empty object — when the glucose module is off.",
+      ),
+    glucoseClinical: glucoseClinicalSchema
+      .nullable()
+      .describe(
+        "The clinical panel over the same 30-day window, always populated when the module is on (even with zero readings, so the client renders the calm still-learning state from an object rather than a missing key). Null when the glucose module is off.",
+      ),
+    correlations: z
+      .object({
+        bpCompliance: analyticsCorrelation,
+        moodPulse: analyticsCorrelation,
+        weightWeekday: analyticsCorrelation,
+        degraded: z
+          .boolean()
+          .describe(
+            "Reserved for a load-shedding branch. Pinned false by both current paths — do not branch on it yet.",
+          ),
+        windowDays: z
+          .number()
+          .int()
+          .describe("The window actually scanned, in days (28 today)."),
+        path: z
+          .enum(["rollup", "live"])
+          .describe(
+            "Which read served the measurement side. Falls to `live` for an account more than three hours from UTC, where the rollup table's UTC-midnight day key would slip a calendar day against the mood and intake streams.",
+          ),
+      })
+      .describe(
+        "The three pre-defined hypotheses over a 28-day window. Descriptive, never causal.",
+      ),
+    healthScore: healthScoreReport,
+    sleepStages: sleepStageComposition,
+    sleepSourceDiscrepancy,
+    lastSeenByType: z.record(z.string(), lastSeenSlot),
+  })
+  .meta({
+    id: "AnalyticsDefaultSlice",
+    description:
+      "The thick default answer: per-type summaries plus BMI, the blood-pressure in-target windows, the glucose blocks, the three correlation hypotheses, the full health-score report, the sleep-stage breakdown and the freshness map. Every block is deterministic — no LLM is reachable from this path.",
+  });
+
+export const analyticsQuery = z
+  .object({
+    slice: z
+      .literal("summaries")
+      .optional()
+      .describe(
+        "Send `summaries` for the slim slice. Any OTHER value — including a misspelling — falls through to the thick default rather than 422-ing, so a typo costs latency and not an error.",
+      ),
+  })
+  .meta({ id: "AnalyticsQuery" });
+
+export const analyticsResponse = z
+  .union([analyticsDefaultSliceResponse, analyticsSummariesSliceResponse])
+  .describe(
+    "Which shape arrives is decided by `slice`, not by the data: `?slice=summaries` answers `AnalyticsSummariesSlice`, everything else answers `AnalyticsDefaultSlice`.",
+  );
+
+// ── Insights provider settings (`/api/insights/settings`) ─────────────
+
+export const insightsSettingsResponse = z
+  .object({
+    codexStatus: z
+      .string()
+      .describe(
+        "The account's own ChatGPT-OAuth connection state; `disconnected` when the account row carries none.",
+      ),
+    codexConnectedAt: z.iso
+      .datetime({ offset: true })
+      .nullable()
+      .describe("When that connection was made; null when never connected."),
+    hasAdminKey: z
+      .boolean()
+      .describe(
+        "Presence only: whether the operator has stored a shared AI key. The key itself never leaves the server.",
+      ),
+    codexOauthConfigured: z
+      .boolean()
+      .describe(
+        "Whether the operator configured an OAuth client id. False means the connect flow is dead end-to-end, so hide the button rather than sending the user to a login they can never complete.",
+      ),
+    centralCodexAvailable: z
+      .boolean()
+      .describe(
+        "Presence only: whether the operator has connected the shared central ChatGPT account AND all three of its stored credentials are present. The encrypted credentials themselves are NEVER returned to a non-admin client.",
+      ),
+    useCentralCodex: z
+      .boolean()
+      .describe(
+        "The account's own opt-in to that shared connection. Off by default everywhere.",
+      ),
+    privacyMode: z
+      .enum(["aggregated", "raw"])
+      .describe(
+        "What leaves for the provider: aggregated figures or raw readings. `aggregated` when the account has never chosen.",
+      ),
+    lastInsightAt: z.iso
+      .datetime({ offset: true })
+      .nullable()
+      .describe("When the cached insight text was last written."),
+  })
+  .meta({
+    id: "InsightsSettingsResponse",
+    description:
+      "The account's AI-provider settings as the settings surface reads them. Every operator-side field is presence-only — no key, token or account id is ever on this wire.",
+  });
+
+export const insightsSettingsPutRequest = z
+  .object({
+    privacyMode: z
+      .enum(["aggregated", "raw"])
+      .optional()
+      .describe(
+        "The only field this endpoint writes. Changing it CLEARS the cached insight text and its timestamp, so the next read regenerates under the new mode rather than serving text produced under the old one.",
+      ),
+  })
+  .meta({
+    id: "InsightsSettingsPutRequest",
+    description:
+      "Partial settings update. The body is read key by key rather than parsed as a whole: unknown keys are IGNORED, not refused, and a body that changes nothing recognised is refused with 422 rather than answered as a no-op. `privacyMode` is the only writable field today.",
+  });
+
+// ── Target tiles (`GET /api/insights/targets`) ────────────────────────
+
+const targetItem = z
+  .object({
+    type: z
+      .string()
+      .describe(
+        "Target identity. A MeasurementType token for the vital tiles, and a domain token for the derived ones (sleep, medication compliance, mood, the glucose tiles).",
+      ),
+    label: z.string().describe("Already-resolved display label."),
+    current: z.number().nullable(),
+    average30: z.number().nullable(),
+    trend: z
+      .enum(["up", "down", "stable"])
+      .nullable()
+      .describe("Null when there is not enough series to call one."),
+    unit: z.string(),
+    range: z
+      .object({ min: z.number(), max: z.number() })
+      .nullable()
+      .describe(
+        "The band the tile grades against, resolved from the account's own profile facts and any personal override. Null when no band can be resolved.",
+      ),
+    classification: z
+      .object({ category: z.string(), color: z.string() })
+      .nullable()
+      .describe("Where the current value sits in the band; null without one."),
+    source: z
+      .string()
+      .describe("Provenance token for the 'where this comes from' link."),
+    daysInRange7d: z.number().int(),
+    daysLogged7d: z.number().int(),
+    daysInRange30d: z.number().int(),
+    daysLogged30d: z.number().int(),
+    lastMetGoalAt: z.string().nullable(),
+    streakDays: z.number().int(),
+    insufficientData: z
+      .boolean()
+      .describe(
+        "True when the consistency figures are below their floor. Render the calm learning state instead of the strip.",
+      ),
+    consistency7d: z
+      .array(z.enum(["in", "near", "out"]).nullable())
+      .describe(
+        "Seven day bands, oldest first. A null entry is an UNLOGGED day, which is not the same as an out-of-range one.",
+      ),
+    details: z
+      .object({
+        medications: z
+          .array(
+            z.object({
+              name: z.string(),
+              compliance7: z.number(),
+              compliance30: z.number(),
+            }),
+          )
+          .optional(),
+      })
+      .optional()
+      .describe(
+        "Per-tile extras. Only the medication-compliance tile carries any today; every other tile omits the key.",
+      ),
+  })
+  .meta({
+    id: "TargetItem",
+    description:
+      "One target tile: the current value against its band, plus the consistency strip behind it. The tile array's membership varies per account — a medication tile appears only with active medications, and the glucose tiles only with readings.",
+  });
+
+export const targetsResponse = z
+  .object({
+    targets: z
+      .array(targetItem)
+      .describe(
+        "Vital tiles in registry order with the sleep tile spliced in after pulse, then the medication tile when one applies, then the mood tiles, then the glucose tiles.",
+      ),
+    pageSummary: z.object({
+      targetsMetThisWeek: z.number().int(),
+      totalTargets: z.number().int(),
+      streakHighlight: z
+        .object({ metric: z.string(), days: z.number().int() })
+        .nullable(),
+    }),
+    bpDiastolic: z
+      .object({
+        current: z.number().nullable(),
+        average30: z.number().nullable(),
+        range: z.object({ min: z.number(), max: z.number() }).nullable(),
+      })
+      .describe(
+        "The diastolic half, carried beside the tiles rather than as one: the blood-pressure tile grades on systolic, and this is what the card needs to render the pair.",
+      ),
+    profile: z
+      .object({
+        heightCm: z.number().nullable(),
+        age: z.number().int().nullable(),
+        gender: z.enum(["MALE", "FEMALE", "OTHER"]).nullable(),
+        glucoseUnit: z.string(),
+      })
+      .describe(
+        "The profile facts the bands were resolved from, echoed so a client can explain a band instead of guessing at it.",
+      ),
+  })
+  .meta({
+    id: "TargetsResponse",
+    description:
+      "Per-metric target tiles with their consistency strips, the page-level summary, the diastolic companion figures and the profile facts every band was resolved from. Pure compute over the record's own data; no provider anywhere on the path.",
+  });

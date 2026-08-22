@@ -1289,3 +1289,152 @@ export const medicationDoseHistoryImportFatalReasonEnum = z
     description:
       "Whole-file refusal reason on the 422 `errorCode`. empty_file — no data rows. missing_required_columns — the CSV header is missing a column the parser needs. unreadable_json — the body did not parse as JSON. json_not_an_array — parsed JSON is not an array (and no nested array was found under any key). json_carries_no_intake_time — well-formed JSON export input, refused by design (see above).",
   });
+
+// ── The top-level intake aggregator (`/api/medications/intake`) ───────
+//
+// Two scopes behind one GET plus the status toggle every dose surface posts
+// to. Never registered until now: `openapi:check` compares the registry
+// against the YAML and never the route tree against the registry.
+
+export const todayIntakeEntry = z
+  .object({
+    id: z.string().describe("Intake-event id."),
+    medicationId: z.string(),
+    scheduledAt: z.iso
+      .datetime({ offset: true })
+      .describe(
+        "The slot the dose belongs to — the event's `scheduledFor`, renamed on this wire only.",
+      ),
+    takenAt: z.iso.datetime({ offset: true }).nullable(),
+    status: z
+      .enum(["skipped", "taken", "missed", "pending", "snoozed"])
+      .describe(
+        "Resolved in that precedence order. `missed` is TERMINAL — the nightly cron closed a never-acted slot — and is not a `pending` that can still be answered. `snoozed` is not a property of this event at all: it reflects the MEDICATION's deferral stamp still lying in the future, so every pending dose of that medication reads snoozed at once.",
+      ),
+    snoozedUntil: z.iso
+      .datetime({ offset: true })
+      .nullable()
+      .describe(
+        "The medication's deferral stamp, repeated on each of its events. Null when the medication is not deferred.",
+      ),
+  })
+  .meta({
+    id: "TodayIntakeEntry",
+    description:
+      "One of today's dose slots, flattened for the dose sheet and the dashboard tile. A deliberately narrow projection — not the full intake-event row.",
+  });
+
+export const complianceDayBucket = z
+  .object({
+    date: z.string().describe("`YYYY-MM-DD` in the account's timezone."),
+    scheduled: z
+      .number()
+      .int()
+      .describe(
+        "Doses the SCHEDULE expected that day, from the recurrence engine — not the count of logged rows. That distinction is the point of the field: counting rows made every window read ~100 % because each logged dose was both numerator and denominator.",
+      ),
+    taken: z.number().int().describe("Doses actually taken that day."),
+  })
+  .meta({
+    id: "MedicationComplianceDayBucket",
+    description:
+      "One day of schedule-anchored compliance. Paused days drop out of the denominator, and archived schedule eras are honoured, so `scheduled` reflects what was actually expected at the time.",
+  });
+
+// ── GLP-1 detail (`/api/medications/{id}/glp1`) ───────────────────────
+
+export const glp1DoseChange = z
+  .object({
+    id: z.string(),
+    effectiveFrom: z.iso.datetime({ offset: true }),
+    doseValue: z.number(),
+    doseUnit: z.string(),
+    note: z
+      .string()
+      .nullable()
+      .describe(
+        "Titration note, decrypted on read. Null when none was recorded.",
+      ),
+  })
+  .meta({
+    id: "Glp1DoseChange",
+    description:
+      "One titration step, oldest first. The note is encrypted at rest and the plaintext column is left null on every write this endpoint makes.",
+  });
+
+export const glp1Inventory = z
+  .object({
+    pensRemaining: z
+      .number()
+      .int()
+      .nullable()
+      .describe("Usable containers (ACTIVE or IN_USE with units left)."),
+    dosesRemaining: z
+      .number()
+      .int()
+      .nullable()
+      .describe(
+        "Pooled units divided by the medication's `unitsPerDose`, floored — consumption spills across containers.",
+      ),
+    weeksOfSupply: z
+      .number()
+      .int()
+      .nullable()
+      .describe(
+        "Equal to `dosesRemaining`. It is the weekly-cadence approximation the canonical GLP-1 case makes, and it is NOT re-derived for a medication on any other cadence.",
+      ),
+    lowStock: z
+      .boolean()
+      .describe(
+        "The same reorder-lead-aware runway evaluation the daily low-stock notification runs, so the card and the notification cannot disagree. False whenever the low-stock alert is switched off, and false when no schedule consumes the medication (no consumption means no runway, which is not the same as plenty).",
+      ),
+  })
+  .meta({
+    id: "Glp1Inventory",
+    description:
+      "Running supply math. Computed over the per-container entities when any exist; otherwise, and only then, over the legacy running-sum ledger. Containers always win — the ledger never overrides them.",
+  });
+
+export const glp1DetailResponse = z
+  .object({
+    doseChanges: z
+      .array(glp1DoseChange)
+      .describe("Full titration history, `effectiveFrom` ascending."),
+    recentIntakes: z
+      .array(
+        z.object({
+          takenAt: z.iso.datetime({ offset: true }).nullable(),
+          injectionSite: z
+            .string()
+            .nullable()
+            .describe("Recorded site, or null when none was captured."),
+        }),
+      )
+      .describe(
+        "The last twelve taken doses, newest first, for the site-rotation view.",
+      ),
+    inventory: glp1Inventory
+      .nullable()
+      .describe(
+        "Null when the medication has neither containers nor a usable legacy ledger — an unknown supply, which is not zero supply.",
+      ),
+  })
+  .meta({
+    id: "Glp1DetailResponse",
+    description:
+      "The GLP-1 card's extras: titration history, recent injections with their sites, and the running supply math.",
+  });
+
+export const glp1InventoryEvent = z
+  .object({
+    id: z.string(),
+    medicationId: z.string(),
+    delta: z.number().int().describe("Positive added, negative consumed."),
+    reason: z.string(),
+    occurredAt: z.iso.datetime({ offset: true }),
+  })
+  .meta({
+    id: "Glp1InventoryEvent",
+    description:
+      "A row of the DEPRECATED running-sum inventory ledger. Register containers through the inventory endpoints instead; reads fall back to this ledger only while a medication has no containers at all.",
+  });

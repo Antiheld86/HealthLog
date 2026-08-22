@@ -44,6 +44,11 @@ import {
   ecgDetailQuery,
   ecgDetailResponse,
   rhythmEventsResponse,
+  analyticsQuery,
+  analyticsResponse,
+  insightsSettingsResponse,
+  insightsSettingsPutRequest,
+  targetsResponse,
 } from "./schemas";
 
 export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
@@ -138,6 +143,101 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
                 insightsPregenerateResponse,
                 "InsightsPregenerateResponseEnvelope",
               ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/analytics": {
+    get: {
+      tags: ["Analytics"],
+      summary: "The full analytics envelope (two slices behind one path)",
+      description:
+        "The oldest composite read in the application. `?slice=summaries` answers the slim slice — per-type summaries and the freshness map, resolved from two SQL passes over the rollup tier. Everything else answers the thick default: the same summaries plus BMI, the blood-pressure in-target windows, per-context glucose and the clinical glucose panel, the three correlation hypotheses, the full health-score report and the trailing-30-day sleep-stage breakdown. No LLM is reachable from either path. Both are served through a stale-while-revalidate cache, and the DEFAULT slice's cache key includes the reader's locale, because the correlation narration is localised prose. Two behaviours worth knowing before integrating: the thick slice RECORDS the health score it computes, so this read is not side-effect-free, and it kicks off a background rollup refresh it deliberately does not await, so a reading logged seconds ago can be missing from the very first request after it lands and present on the next. Module handling is per BLOCK, not per request: the glucose blocks go null when the glucose module is off, and the health score simply drops the pillars whose modules are off. Cookie or Bearer auth; the caller is always resolved as themselves, so this read cannot be delegated to a shared record.",
+      requestParams: { query: analyticsQuery },
+      responses: {
+        "200": {
+          description:
+            "`AnalyticsDefaultSlice`, or `AnalyticsSummariesSlice` when `slice=summaries`. `Cache-Control` is the bfcache-friendly `private, max-age=0, must-revalidate` rather than `no-store`.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(analyticsResponse, "AnalyticsEnvelope"),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/insights/settings": {
+    get: {
+      tags: ["Insights"],
+      summary: "Read the account's AI-provider settings",
+      description:
+        "Returns the account's own provider connection state and privacy mode alongside PRESENCE-ONLY flags for the operator's shared key and shared ChatGPT connection. No key, token or account id is ever on this wire. Cookie or Bearer auth; the caller is always resolved as themselves, so this read cannot be delegated to a shared record.",
+      responses: {
+        "200": {
+          description: "The settings.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                insightsSettingsResponse,
+                "InsightsSettingsEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+    put: {
+      tags: ["Insights"],
+      summary: "Update the account's AI privacy mode",
+      description:
+        "Writes `privacyMode` and nothing else. Changing it clears the cached insight text and its timestamp so the next generation runs under the new mode. The body is inspected key by key rather than Zod-parsed: an unknown key is ignored rather than refused, and a body that recognises nothing is refused with 422 `No changes` rather than answered as a no-op — so a client cannot tell a typo'd field name from a rejected value except by reading the message. Body capped at 64 KiB. Cookie or Bearer auth; not delegable.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: insightsSettingsPutRequest },
+        },
+      },
+      responses: {
+        "200": {
+          description: "Saved.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ updated: z.literal(true) }),
+                "InsightsSettingsUpdatedEnvelope",
+              ),
+            },
+          },
+        },
+        "422": {
+          description:
+            "`Invalid privacy mode` when `privacyMode` was a string outside the two accepted values, or `No changes` when the body carried nothing this endpoint writes. Single-message envelope with no issue list — this route validates by hand rather than through Zod.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "401": stdResponses["401"],
+        "429": stdResponses["429"],
+      },
+    },
+  },
+  "/api/insights/targets": {
+    get: {
+      tags: ["Insights"],
+      summary: "Per-metric target tiles + consistency strips",
+      description:
+        "The whole targets page in one read: a tile per metric with its band, its current and 30-day-average values, and the seven-day consistency strip behind it, plus the page summary, the diastolic companion figures and the profile facts every band was resolved from. Pure compute over the record's own data — no provider anywhere on the path. Stale-while-revalidate: past the fresh window the prior body serves immediately while one background rebuild warms the cell, and a write hard-evicts the bucket so the account's own action lands on the next read. Delegable at MANAGE level over the whole record: the walk spans vitals, sleep, medications, mood and glucose, so a section-scoped grant is refused rather than served a filtered page. Not module-gated as a whole; a tile whose data does not exist is simply absent. Cookie or Bearer auth.",
+      responses: {
+        ...recordRefusal(),
+        "200": {
+          description: "The target tiles and their page summary.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(targetsResponse, "TargetsEnvelope"),
             },
           },
         },

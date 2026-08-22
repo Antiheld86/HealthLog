@@ -24,6 +24,7 @@ import {
   cyclePeriodSchema,
   cyclePrefsSchema,
 } from "@/lib/validations/cycle";
+import { createCustomSymptomSchema } from "@/lib/cycle/custom-symptoms-shared";
 import {
   dataEnvelope,
   errorEnvelope,
@@ -434,7 +435,110 @@ const cycleDisabledOnADelegableRoute = recordRefusal(
   CYCLE_DISABLED_DESCRIPTION,
 );
 
+// ── Custom symptom catalogue (v1.15.1) ───────────────────────────────
+// The per-record symptom vocabulary the log-day sheet merges into the seeded
+// chip grid. The label is intent-revealing free text, so it is encrypted at
+// rest and never reaches a wide event or an audit excerpt — only the icon and
+// the minted key do.
+
+createCustomSymptomSchema.meta({
+  id: "CreateCycleCustomSymptomRequest",
+  description:
+    "Create-a-custom-symptom body. `label` is trimmed and must be 1..40 characters. `icon` is optional and must name one of the twenty allow-listed Lucide icons (unknown names 422 rather than falling back). `categoryKey` is reserved for a future per-symptom category choice and today accepts only the literal `custom`. The minted key, the sort order and the owning record all come from the server.",
+});
+
+const cycleCustomSymptom = z
+  .object({
+    key: z
+      .string()
+      .describe(
+        "The minted `custom:<uuid>` key. Stable, and the value a day-log's symptom list carries for this symptom.",
+      ),
+    label: z
+      .string()
+      .nullable()
+      .describe(
+        "The decrypted label. Null when the stored ciphertext could not be decrypted — one unreadable row fails soft rather than taking the whole catalogue read down, and the client falls back to the generic label.",
+      ),
+    icon: z
+      .string()
+      .nullable()
+      .describe(
+        "Lucide icon name from the closed allow-list, or null. The allow-list is limited to names the iOS client maps to an SF Symbol, so a custom symptom never falls back to the generic glyph on one platform.",
+      ),
+    custom: z
+      .literal(true)
+      .describe(
+        "Always true. Lets a client merge this list into the seeded catalogue and still tell the two apart.",
+      ),
+  })
+  .meta({
+    id: "CycleCustomSymptom",
+    description:
+      "One user-minted cycle symptom. The label is stored encrypted and decrypted on read; the key is what a day log references.",
+  });
+
 export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
+  "/api/cycle/symptoms/custom": {
+    get: {
+      tags: ["Cycle"],
+      summary: "List the record's custom cycle symptoms (v1.15.1)",
+      description:
+        "Returns the active custom symptoms in `sortOrder`, labels decrypted, so the log-day sheet can merge them into the seeded chip grid. Deactivated symptoms are excluded. Gated: `cycle.disabled` 403 when cycle tracking is off for the RECORD. Delegable at READ level over the `cycle` section. Cookie or Bearer auth.",
+      responses: {
+        "200": {
+          description: "The active custom symptoms (possibly empty).",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ symptoms: z.array(cycleCustomSymptom) }),
+                "CycleCustomSymptomListEnvelope",
+              ),
+            },
+          },
+        },
+        ...cycleDisabledOnADelegableRoute,
+        ...stdResponses,
+      },
+    },
+    post: {
+      tags: ["Cycle"],
+      summary: "Create a custom cycle symptom (v1.15.1)",
+      description:
+        "Mints a `custom:<uuid>` key, encrypts the label at rest, and stores the row under the global `custom` category owned by the record. Returns 201 with the created symptom, the submitted label echoed back in plaintext. Capped at 50 active custom symptoms per record. Rate-limited 30/min keyed on the ACTOR, so a delegate burns their own allowance rather than locking the owner out and cannot collect a fresh one by switching records. Audits as `cycle.symptom.custom.create` with the icon only — never the label. Delegable at MANAGE level over the `cycle` section: the record's own symptom vocabulary is what the day-log writes need in order to say anything.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: createCustomSymptomSchema },
+        },
+      },
+      responses: {
+        "201": {
+          description: "The created custom symptom.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                cycleCustomSymptom,
+                "CycleCustomSymptomCreatedEnvelope",
+              ),
+            },
+          },
+        },
+        ...cycleDisabledOnADelegableRoute,
+        ...stdResponses,
+        "422": {
+          description:
+            "Either the body failed validation — the multi-issue envelope with `meta.errorCode` = `cycle.symptom.custom.invalid` (an empty or over-40-character label, an icon outside the allow-list, a `categoryKey` other than `custom`) — or the record already holds 50 active custom symptoms, in which case `meta.errorCode` = `cycle.symptom.custom.limit` and there is no issue list. Branch on the code, not on the presence of issues.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "429": {
+          description:
+            "More than 30 creates in the trailing minute for this ACTOR (`cycle:symptom:custom:<actorId>`).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+  },
   "/api/cycle/day-logs": {
     get: {
       tags: ["Cycle"],

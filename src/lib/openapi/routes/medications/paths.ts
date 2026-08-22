@@ -13,6 +13,9 @@ import {
   createInventoryItemSchema,
   updateInventoryItemSchema,
   injectionSiteEnum,
+  intakeAggregateQuerySchema,
+  intakeStatusUpdateSchema,
+  glp1PostBodySchema,
 } from "@/lib/validations/medication";
 import { medicationExtractionSchema } from "@/lib/ai/coach/medication-extract-prompt";
 import {
@@ -63,6 +66,11 @@ import {
   doseHistoryResponse,
   medicationIntakeImportJobStatusResponse,
   medicationDoseHistoryImportResponse,
+  todayIntakeEntry,
+  complianceDayBucket,
+  glp1DetailResponse,
+  glp1DoseChange,
+  glp1InventoryEvent,
 } from "./schemas";
 
 // ── Bulk intake backfill (iOS SyncMode) — mirrors the route's
@@ -171,6 +179,142 @@ const medicationIntakeImportJobStatusEnvelope = dataEnvelope(
 );
 
 export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
+  "/api/medications/intake": {
+    get: {
+      tags: ["Medications"],
+      summary: "Today's doses, or per-day compliance",
+      description:
+        "Two reads behind one path, chosen by `scope`. `today` lists every dose slot for the current local day across all medications, ordered by slot. `compliance` returns per-day scheduled-versus-taken buckets over the trailing `days`. The `today` scope WRITES before it reads: it projects the pending intake rows for every active schedule whose window opens today and idempotently backfills the missing ones, because a daily schedule has no row to read until the reminder worker reaches the end of its dose window — so a plain read would return an empty morning. The `compliance` scope is cached per (record, days, timezone). Delegable at READ level over the `medications` section. Not module-gated. Cookie or Bearer auth.",
+      requestParams: { query: intakeAggregateQuerySchema },
+      responses: {
+        ...recordRefusal(),
+        "200": {
+          description:
+            "`TodayIntakeEntry[]` for `scope=today`, `MedicationComplianceDayBucket[]` for `scope=compliance`. The array is the whole payload — there is no wrapper object inside `data`.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.union([
+                  z.array(todayIntakeEntry),
+                  z.array(complianceDayBucket),
+                ]),
+                "MedicationIntakeAggregateEnvelope",
+              ),
+            },
+          },
+        },
+        "422": {
+          description:
+            "The query failed validation — a missing or unknown `scope`, or a `days` outside 1..365. Multi-issue envelope; an audit breadcrumb is filed under the RECORD as `medications.intake.list.validation-failed` with the issue messages stripped of echoed input.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "401": stdResponses["401"],
+        "429": stdResponses["429"],
+      },
+    },
+    post: {
+      tags: ["Medications"],
+      summary: "Mark a dose taken, skipped or snoozed",
+      description:
+        "Updates one intake event by id and returns the full row. A `taken` toggle re-runs slot attribution, so an off-window or edited take re-binds to the right slot instead of leaving `scheduledFor` stale — and when it re-binds to a DIFFERENT slot the source row is tombstoned and the dose converges onto the target slot, which means the returned row's `id` can differ from the `intakeId` that was sent. Inventory is consumed exactly once on a genuine transition into taken and refunded on the way out. A `snoozed` toggle writes the deferral onto the MEDICATION, deferring every pending dose of it. Two transitions are refused for a DELEGATE and stay open to the owner: snoozing, because the field is unbounded and every surface that exists to make delegation visible would describe years of silenced reminders as `marked a dose`; and flipping an already-resolved event, because marking an open dose is a contribution while changing a decision the owner already recorded is an edit. Delegable at WRITE level over the `medications` section, and the owner is notified when somebody else marks their dose. Cookie or Bearer auth.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: intakeStatusUpdateSchema },
+        },
+      },
+      responses: {
+        ...recordRefusal(
+          "Refused: a delegate tried to snooze, or to change a dose the owner had already recorded as taken or skipped (`meta.errorCode` = `sharing.not_permitted`). Both stay open to the owner, and the attempt is filed on the owner's activity trail.",
+        ),
+        "200": {
+          description:
+            "The updated intake event. On a slot move this is the CONVERGED row, whose id may differ from the requested one.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                medicationIntakeEventResource,
+                "MedicationIntakeStatusEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description:
+            "No live intake event with that id for this record — an unknown id, a tombstoned one, and one belonging to another record are indistinguishable.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "422": {
+          description:
+            "Body validation failed (multi-issue envelope, breadcrumbed as `medications.intake.update.validation-failed`), or `meta.errorCode` = `medications.intake.injection_site.disallowed` when the site is outside the medication's effective allowed set, or `medications.intake.force_slot.invalid` when `forceSlotInstant` is not a real slot of the medication. The latter two carry no issue list — branch on the code.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "401": stdResponses["401"],
+        "429": stdResponses["429"],
+      },
+    },
+  },
+  "/api/medications/{id}/glp1": {
+    get: {
+      tags: ["Medications"],
+      summary: "GLP-1 detail — titration, recent injections, supply",
+      description:
+        "Returns the extras the GLP-1 card variant, the dashboard tile and the doctor-report section read: the full dose-change history, the last twelve injections with their sites, and the running supply math carrying the same low-stock verdict the daily notification uses. NOT delegable — unlike the POST on this same path, this read resolves the caller as themselves, so a manager acting inside a shared record is answered 404 here while their write on the same medication succeeds. Cookie or Bearer auth.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      responses: {
+        "200": {
+          description: "The GLP-1 detail block.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                glp1DetailResponse,
+                "Glp1DetailResponseEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description: "Medication not found (or owned by another account).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+    post: {
+      tags: ["Medications"],
+      summary: "Record a titration step or a legacy stock correction",
+      description:
+        "The body carries exactly one of `doseChange` or `inventory`; carrying both or neither is refused. `doseChange` writes a titration step with its note encrypted at rest and evicts the medication caches so the card's runway reflects the new daily-dose estimate. `inventory` is DEPRECATED: it appends to the legacy running-sum pen ledger, which reads back only while the medication has no per-container inventory items — new callers register containers through the inventory endpoints instead. Rate-limited 30/min keyed on the ACTOR, so a delegate burns their own allowance and cannot collect a fresh one by switching records. Audits both branches as `medication.glp1.update`. Delegable at MANAGE level over the `medications` section: a titration step is record data and the dose is what the server then acts on.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: glp1PostBodySchema } },
+      },
+      responses: {
+        ...recordRefusal(),
+        "201": {
+          description:
+            "Created. The body carries `doseChange` OR `inventory` — whichever branch the request took — and never both.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.union([
+                  z.object({ doseChange: glp1DoseChange }),
+                  z.object({ inventory: glp1InventoryEvent }),
+                ]),
+                "Glp1PostResponseEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description: "Medication not found (or owned by another account).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
   "/api/medications/intake/bulk": {
     post: {
       parameters: [idempotencyKeyParameter],

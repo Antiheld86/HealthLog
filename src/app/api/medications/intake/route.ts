@@ -12,7 +12,6 @@
  *     Updates the named MedicationIntakeEvent and returns the updated row.
  */
 import { NextRequest } from "next/server";
-import { z } from "zod/v4";
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import {
   apiError,
@@ -46,7 +45,8 @@ import {
   restoreForIntake,
 } from "@/lib/medications/inventory/consumption";
 import {
-  injectionSiteEnum,
+  intakeAggregateQuerySchema,
+  intakeStatusUpdateSchema,
   type InjectionSiteValue,
 } from "@/lib/validations/medication";
 import { queueMedicationIntakeSync } from "@/lib/notifications/medication-intake-sync";
@@ -54,40 +54,15 @@ import { dispatchMedicationIntakeWebClear } from "@/lib/notifications/web-push-c
 import { notifyDelegatedIntake } from "@/lib/notifications/delegated-intake";
 import { countOutstandingDosesToday } from "@/lib/medications/outstanding-doses";
 
-const querySchema = z.object({
-  scope: z.enum(["today", "compliance"]),
-  days: z.coerce.number().int().min(1).max(365).optional().default(30),
-});
-
-const updateSchema = z.object({
-  intakeId: z.string().min(1),
-  status: z.enum(["taken", "skipped", "snoozed"]),
-  takenAt: z.iso
-    .datetime({ offset: true })
-    .transform((s) => new Date(s))
-    .optional(),
-  snoozedUntil: z.iso
-    .datetime({ offset: true })
-    .transform((s) => new Date(s))
-    .optional(),
-  // v1.8.5 — optional injection site captured alongside a "taken"
-  // status toggle. Validated server-side against the medication's
-  // effective allowed set; ignored for skipped / snoozed.
-  injectionSite: injectionSiteEnum.optional(),
-  // v1.15.18 — late-take "attribute anyway" pin. When a "taken" toggle lands
-  // outside every dose window the UI can offer to pin the take onto a chosen
-  // real slot ("diesem Slot zuordnen?"); the server validates the instant is
-  // a real slot of the medication (422 otherwise). Ignored for skip / snooze.
-  forceSlotInstant: z.iso
-    .datetime({ offset: true })
-    .transform((s) => new Date(s))
-    .optional(),
-});
+// The query + body schemas moved to `@/lib/validations/medication` when this
+// endpoint joined the published contract: the OpenAPI registry generates from
+// the validation modules, and a schema that only exists inside a handler is
+// one the spec has to restate — which is a second copy to keep in step.
 
 export const GET = apiHandler(async (request: NextRequest) => {
   const { user } = await requireRecordAuth("read", "medications");
 
-  const parsed = querySchema.safeParse(
+  const parsed = intakeAggregateQuerySchema.safeParse(
     Object.fromEntries(request.nextUrl.searchParams),
   );
   if (!parsed.success) {
@@ -233,7 +208,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   });
   if (error) return error;
 
-  const parsed = updateSchema.safeParse(body);
+  const parsed = intakeStatusUpdateSchema.safeParse(body);
   if (!parsed.success) {
     // v1.4.43 W6 — intake-event update hot path; multi-issue 422 +
     // audit breadcrumb keyed `medications.intake.update.validation-failed`.

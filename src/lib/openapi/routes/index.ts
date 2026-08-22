@@ -49,6 +49,7 @@ import { exportPaths } from "./export";
 import { familyHistoryPaths } from "./family-history";
 import { healthRecordPaths } from "./health-record";
 import { encounterPaths } from "./encounters";
+import { environmentPaths } from "./environment";
 import { vaccinationPaths } from "./vaccinations";
 import { illnessPaths } from "./illness";
 import { importPaths } from "./import";
@@ -128,6 +129,9 @@ export const openApiPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   // v1.36.0 — account sharing: the grant lifecycle and the switch endpoint
   // (appended, spread order is load-bearing).
   ...accountSharingPaths,
+  // The environmental-context overview. Its own module because nothing else
+  // owns the surface (appended, spread order is load-bearing).
+  ...environmentPaths,
 };
 
 export const openApiComponents: NonNullable<ZodOpenApiObject["components"]> = {
