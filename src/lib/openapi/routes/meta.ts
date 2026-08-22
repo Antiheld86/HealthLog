@@ -1,5 +1,6 @@
 /**
- * OpenAPI route table — server capabilities discovery.
+ * OpenAPI route table — server capabilities discovery, build identity, and the
+ * operator's assistant feature matrix.
  *
  * Part of the OpenAPI route table; aggregated in `./index.ts`.
  * Schemas come from `src/lib/validations/*` where shared with the
@@ -7,7 +8,7 @@
  */
 import { z } from "zod/v4";
 import type { ZodOpenApiObject } from "zod-openapi";
-import { dataEnvelope, stdResponses } from "./shared";
+import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
 
 // v1.10.2 — live capability / discovery response. Every list is sourced
 // server-side from the canonical registry it documents, so the wire shape
@@ -176,6 +177,120 @@ const measurementCategoriesResponse = z
       "The measurement categorisation overlay: the ordered category list plus the MeasurementType → category assignments. Derived server-side from the canonical map; cached `public, max-age=600`.",
   });
 
+// ── Build identity ───────────────────────────────────────────────────
+// The route every deploy is verified against. `version` prefers the build-arg
+// the release workflow injects over the package.json fallback, so a cached
+// build layer cannot re-ship the previous release's version string.
+
+const versionResponse = z
+  .object({
+    version: z
+      .string()
+      .describe(
+        "The running build's version. From the image build arg when present, falling back to package.json for a local dev run.",
+      ),
+    buildSha: z
+      .string()
+      .nullable()
+      .describe(
+        "Short Git SHA baked at image build time. Null for a local dev run, which is how a client tells a released image from one.",
+      ),
+    builtAt: z.iso
+      .datetime({ offset: true })
+      .nullable()
+      .describe("ISO-8601 build timestamp. Null for a local dev run."),
+    license: z.string(),
+    repository: z.url(),
+    changelog: z.url(),
+    docs: z.url(),
+    offlineGeoEnabled: z
+      .boolean()
+      .describe(
+        "A GeoLite2-City database is present and in use. When false, login-IP geolocation falls back to the online provider named below — every login IP then leaves the host.",
+      ),
+    geoProviderHost: z
+      .string()
+      .describe(
+        "Host of the online geolocation provider the fallback would use, so an operator surface names the real one instead of assuming the default.",
+      ),
+  })
+  .meta({
+    id: "VersionResponse",
+    description:
+      "The running build's identity plus the offline-geolocation state. Public — no authentication, no account data.",
+  });
+
+// ── Assistant feature flags ──────────────────────────────────────────
+
+const assistantFlagsResponse = z
+  .object({
+    assistant: z
+      .object({
+        enabled: z
+          .boolean()
+          .describe("Master kill-switch for every assistant surface."),
+        coach: z.boolean().describe("Coach drawer, chat stream, history."),
+        briefing: z
+          .boolean()
+          .describe("Daily Briefing card and its recommendations."),
+        insightStatus: z
+          .boolean()
+          .describe("Per-metric status cards on the insight sub-pages."),
+        correlations: z
+          .boolean()
+          .describe("Correlation narration on the insights page."),
+      })
+      .describe(
+        "The resolved matrix. The master is already applied: when `enabled` is false every sub-flag is false in this payload, so a client reads `coach` directly and never composes `enabled && coach`.",
+      ),
+  })
+  .meta({
+    id: "AssistantFlagsResponse",
+    description:
+      "The operator's assistant visibility matrix, resolved. Gates the server-routed AND the on-device assistant surfaces, so a client hides the surface end-to-end rather than degrading it.",
+  });
+
+// ── Update check ─────────────────────────────────────────────────────
+
+const updateCheckResponse = z
+  .object({
+    status: z
+      .enum(["up_to_date", "newer_available", "unknown"])
+      .describe(
+        "`unknown` is a normal outcome, not an error — it means the release feed could not be reached or read.",
+      ),
+    current: z.string().describe("The version this instance is running."),
+    latest_tag: z
+      .string()
+      .optional()
+      .describe("The newest published release tag. Absent when `unknown`."),
+    html_url: z
+      .url()
+      .nullable()
+      .optional()
+      .describe("Release page to deep-link to. Only on `newer_available`."),
+    published_at: z.iso
+      .datetime({ offset: true })
+      .nullable()
+      .optional()
+      .describe("When that release was published. Only on `newer_available`."),
+    checked_at: z.iso
+      .datetime({ offset: true })
+      .optional()
+      .describe("When the check ran. Absent when `unknown`."),
+    reason: z
+      .string()
+      .optional()
+      .describe(
+        "Only on `unknown`: `network_error`, or `github_status_<code>` when the feed answered but not with a success.",
+      ),
+  })
+  .meta({
+    id: "UpdateCheckResponse",
+    description:
+      "Whether a newer release exists. The three states are carried in `status`; which of the optional fields are present follows from it.",
+  });
+
 export const metaPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   "/api/measurement-categories": {
     get: {
@@ -216,6 +331,83 @@ export const metaPaths: NonNullable<ZodOpenApiObject["paths"]> = {
               ),
             },
           },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  // ── Appended: two discovery reads the registry never carried.
+  "/api/version": {
+    get: {
+      tags: ["Meta"],
+      summary: "The running build's version, and how it was built",
+      description:
+        "Public — no session, no token, no account data. This is the endpoint a deploy is verified against: after pushing a new image, read `version` plus `buildSha` on every target, because the `:latest` pull is the source of truth and a queued deploy status is not.\n\n" +
+        "`buildSha` and `builtAt` are baked at image build time and are null for a local development run, which is how a client tells the two apart. `offlineGeoEnabled` and `geoProviderHost` describe where login-IP geolocation resolves: with the GeoLite2 databases present nothing leaves the host, and without them the named provider sees every login address.",
+      responses: {
+        "200": {
+          description: "Build identity and offline-geolocation state.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(versionResponse, "VersionEnvelope"),
+            },
+          },
+        },
+      },
+    },
+  },
+  "/api/feature-flags": {
+    get: {
+      tags: ["Meta"],
+      summary: "The operator's assistant feature matrix",
+      description:
+        "Which assistant surfaces this deployment offers. The master flag is applied server-side before the shape leaves the handler, so every sub-flag is already false when the master is off and a client never composes the two.\n\n" +
+        "An ACTOR surface: it answers about the deployment, not about a record, so it keeps answering while the caller is acting on somebody else's — the Coach launcher and the assistant chrome are gated on it, and a refusal here would delete a piece of the shell rather than a piece of the data. A request that attaches the per-request account selector (the `AccountSelector` header parameter) is refused with 403 `sharing.not_permitted` rather than quietly answered.\n\n" +
+        "Served with `Cache-Control: private, max-age=60`: an operator's toggle propagates within a minute, and the flag read stays off the hot mount path in the meantime.",
+      responses: {
+        "200": {
+          description: "The resolved assistant matrix.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                assistantFlagsResponse,
+                "AssistantFlagsEnvelope",
+              ),
+            },
+          },
+        },
+        "403": {
+          description:
+            "A selector header was attached to an actor surface (`meta.errorCode` = `sharing.not_permitted`).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+
+  "/api/version/check-updates": {
+    get: {
+      tags: ["Meta"],
+      summary: "Check whether a newer release exists",
+      description:
+        "A server-side proxy for the project's public release feed. It exists because the production CSP allows almost nothing on `connect-src`, so a browser calling the feed directly is silently blocked — which is exactly how the first version of the “check for updates” button appeared to do nothing.\n\n" +
+        "Authenticated (cookie or a wildcard Bearer token): there is no reason an anonymous caller should poll a third-party API through this instance. No credential is forwarded to the feed, so the request runs under the host's anonymous quota — roughly sixty an hour per address, shared by everyone on the instance.\n\n" +
+        'It is deliberately hard to fail. A network error, an outage, or a rate-limited feed all return 200 with `status: "unknown"` and a machine-readable `reason`, so the UI can offer a retry instead of a red banner nobody can act on. The one genuine error is a feed that answers successfully with no version tag in it. Nothing is cached server-side; the client is expected to hold the result.',
+      responses: {
+        "200": {
+          description:
+            "Up to date, an update is available, or the check could not be completed.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(updateCheckResponse, "UpdateCheckEnvelope"),
+            },
+          },
+        },
+        "502": {
+          description:
+            'The release feed answered but carried no version tag. Distinct from `status: "unknown"`, which covers not reaching it at all.',
+          content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
       },

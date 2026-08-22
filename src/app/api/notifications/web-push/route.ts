@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
-import { apiSuccess, apiError } from "@/lib/api-response";
+import { apiSuccess, apiError, returnAllZodIssues } from "@/lib/api-response";
 import { encrypt } from "@/lib/crypto";
 import { webPushSubscriptionSchema } from "@/lib/validations/notifications";
 import { z } from "zod/v4";
@@ -17,6 +17,23 @@ const subscribeSchema = webPushSubscriptionSchema;
 const unsubscribeSchema = z.object({
   endpoint: z.string().url(),
 });
+
+/*
+ * Both parses below answer with the multi-issue envelope, like every other
+ * body-parsing route in the tree. They used to answer a flat
+ * `apiError("Invalid data", 422)`, which made a non-HTTPS endpoint, an
+ * endpoint pointing at an internal host, an over-long one and a missing
+ * subscription key byte-identical to each other — a client could see that its
+ * subscription was refused and had no way to learn which rule it broke.
+ *
+ * Echoing the issues is safe here, and it is worth writing down why rather
+ * than leaving it to be re-derived. The endpoint is a routing secret and the
+ * keys are subscription crypto material, so the refusal must not carry them
+ * back. It does not: `sanitiseZodIssues` emits `path`, `code` and `message`
+ * only — `issue.params`, which is where Zod keeps a rejected value, stays
+ * server-side — and every message this schema can produce is a fixed string
+ * or a length/format default. None of them interpolates the value.
+ */
 
 /**
  * POST /api/notifications/web-push
@@ -38,7 +55,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   }
 
   const parsed = subscribeSchema.safeParse(body);
-  if (!parsed.success) return apiError("Invalid data", 422);
+  if (!parsed.success) return returnAllZodIssues(parsed.error, 422);
 
   const { endpoint, keys } = parsed.data;
   const userAgent = request.headers.get("user-agent") ?? undefined;
@@ -104,7 +121,7 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
   }
 
   const parsed = unsubscribeSchema.safeParse(body);
-  if (!parsed.success) return apiError("Invalid data", 422);
+  if (!parsed.success) return returnAllZodIssues(parsed.error, 422);
 
   await prisma.pushSubscription.deleteMany({
     where: {

@@ -20,8 +20,6 @@
  * field-by-field write (no mass assignment). Idempotent — always returns the
  * resolved next state so the client can hard-set the optimistic update.
  */
-import { z } from "zod";
-
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import {
   apiError,
@@ -36,10 +34,7 @@ import { ensureWebAiConsentReceipt } from "@/lib/consent/web-grant";
 import { prisma } from "@/lib/db";
 import { enqueueSummaryCatchUp } from "@/lib/jobs/document-summary-catchup";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
-
-const patchBodySchema = z.object({
-  documentsAutoAiRead: z.boolean(),
-});
+import { documentsAutoAiReadPatchSchema } from "@/lib/validations/user-prefs";
 
 export const dynamic = "force-dynamic";
 
@@ -87,7 +82,7 @@ export const PATCH = apiHandler(async (req: Request) => {
   });
   if (jsonError) return jsonError;
 
-  const parsed = patchBodySchema.safeParse(body);
+  const parsed = documentsAutoAiReadPatchSchema.safeParse(body);
   if (!parsed.success) {
     annotate({
       action: { name: "auth.me.documentsAutoAiRead.patch.invalid_shape" },

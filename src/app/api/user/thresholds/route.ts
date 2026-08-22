@@ -1,8 +1,12 @@
 /**
  * GET / PUT / DELETE per-user threshold overrides.
  *
- * GET returns `{ defaults, overrides, effective }` so the settings UI can
- * show a side-by-side comparison.
+ * GET returns `{ effective, overrides }`. The side-by-side comparison the
+ * settings UI draws comes out of `effective`, not out of a sibling key: each
+ * entry carries `range` (the band in force), `isOverride`, `default` (the
+ * unmodified computed band) and `bounds`. There is no top-level `defaults`
+ * key and there never was — this comment promised one for long enough that
+ * it is worth stating the absence rather than just deleting the word.
  * PUT accepts a partial map — only the provided metrics are updated, others
  * keep their existing override or remain on the default.
  * DELETE with ?metric=... resets one metric to default.
