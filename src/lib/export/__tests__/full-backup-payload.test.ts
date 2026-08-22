@@ -373,6 +373,10 @@ function makePrisma() {
     // Empty for the same reason as the sections above.
     documentConditionLink: { findMany: vi.fn().mockResolvedValue([]) },
     extractedFact: { findMany: vi.fn().mockResolvedValue([]) },
+    // The ECG strips. Empty for the same reason as the sections above:
+    // an account whose watch has never taken one is the ordinary case the
+    // builder must still answer for.
+    ecgRecording: { findMany: vi.fn().mockResolvedValue([]) },
     // Left unmocked on purpose: `buildProfileBackupSection` runs for real
     // against these, so the assertions below exercise the builder rather than
     // a stand-in that would agree with whatever the payload happened to do.

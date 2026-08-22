@@ -58,6 +58,10 @@ import {
   encryptFactData,
   encryptFactProvenance,
 } from "@/lib/documents/store";
+import {
+  decryptWaveformFromBytes,
+  encryptWaveformToBytes,
+} from "@/lib/withings/ecg-waveform-codec";
 import { buildFullBackupPayload } from "@/lib/export/full-backup-payload";
 import { TWO_ENDED_MODELS, type TwoEndedModel } from "@/lib/export/backup-plan";
 import { POST } from "@/app/api/admin/backups/[id]/restore/route";
@@ -109,6 +113,8 @@ const COACH_ASSISTANT_TURN =
 const DOSE_CHANGE_NOTE = "titration note, encrypted at rest";
 const EXTRACTED_FACT_SPAN = "Ferritin  91 ng/mL   (30 - 400)";
 const SIDE_EFFECT_NOTE = "nausea for two hours after the evening dose";
+/** A short micro-volt strip. Long enough that a defaulted empty array shows. */
+const ECG_SAMPLES = [-12, 4, 118, -33, 7, 2, -5, 61];
 
 beforeEach(async () => {
   await truncateAllTables(getPrismaClient());
@@ -222,6 +228,7 @@ const COUNT_BACK: Record<
     p.environmentContext.count({ where: { userId } }),
   EnvironmentTravelLocation: (p, userId) =>
     p.environmentTravelLocation.count({ where: { userId } }),
+  EcgRecording: (p, userId) => p.ecgRecording.count({ where: { userId } }),
 };
 
 /**
@@ -245,6 +252,37 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       unit: "kg",
       measuredAt: AT("2026-07-01T07:00:00.000Z"),
       source: "MANUAL",
+    },
+  });
+  // The EVENT row an ECG strip is filed against, and the strip itself. The
+  // pairing is the point: `EcgRecording.measurementId` is a real foreign key,
+  // so this is the reference whose remap has to survive the round trip rather
+  // than fail the transaction.
+  const rhythmEvent = await prisma.measurement.create({
+    data: {
+      userId: OWNER_ID,
+      type: "IRREGULAR_RHYTHM_NOTIFICATION",
+      value: 1,
+      unit: "event",
+      measuredAt: AT("2026-06-15T14:22:00.000Z"),
+      source: "WITHINGS",
+      rhythmClassification: "IRREGULAR",
+    },
+  });
+  await prisma.ecgRecording.create({
+    data: {
+      userId: OWNER_ID,
+      source: "WITHINGS",
+      externalRecordingId: "round-trip-signal-1",
+      recordedAt: AT("2026-06-15T14:22:00.000Z"),
+      waveformEncrypted: encryptWaveformToBytes(ECG_SAMPLES),
+      samplingFrequency: 300,
+      sampleCount: ECG_SAMPLES.length,
+      durationSeconds: ECG_SAMPLES.length / 300,
+      lead: "I",
+      averageHeartRate: 88,
+      rhythmClassification: "IRREGULAR",
+      measurementId: rhythmEvent.id,
     },
   });
   await prisma.intradayCumulativeProfile.create({
@@ -1764,6 +1802,51 @@ describe("every model the plan claims two-ended survives a real restore", () => 
         page: 2,
         confidence: 0.94,
       },
+    });
+
+    // The strip, read back column by column.
+    //
+    // Counting proves a recording returned. It cannot tell that recording from
+    // one whose trace is an empty array, whose verdict defaulted to NULL and
+    // whose instant is the restore time — and each of those three is the whole
+    // value of the row on its own. A strip with no rhythm classification is a
+    // squiggle nobody has read; a strip with no `recordedAt` belongs to no day
+    // and cannot be put beside the event it explains; a strip with no samples
+    // is a claim that an ECG exists which nothing can draw.
+    //
+    // `measurementId` is resolved from the DATABASE rather than remembered
+    // from the fixture, because the property the remap owes is that the strip
+    // points at the event row THIS restore wrote.
+    const restoredEvent = await prisma.measurement.findFirstOrThrow({
+      where: { userId: OWNER_ID, type: "IRREGULAR_RHYTHM_NOTIFICATION" },
+    });
+    const strip = await prisma.ecgRecording.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+    });
+    expect({
+      source: strip.source,
+      externalRecordingId: strip.externalRecordingId,
+      recordedAt: strip.recordedAt.toISOString(),
+      samplingFrequency: strip.samplingFrequency,
+      sampleCount: strip.sampleCount,
+      durationSeconds: strip.durationSeconds,
+      lead: strip.lead,
+      averageHeartRate: strip.averageHeartRate,
+      rhythmClassification: strip.rhythmClassification,
+      measurementId: strip.measurementId,
+      waveform: decryptWaveformFromBytes(strip.waveformEncrypted),
+    }).toEqual({
+      source: "WITHINGS",
+      externalRecordingId: "round-trip-signal-1",
+      recordedAt: "2026-06-15T14:22:00.000Z",
+      samplingFrequency: 300,
+      sampleCount: ECG_SAMPLES.length,
+      durationSeconds: ECG_SAMPLES.length / 300,
+      lead: "I",
+      averageHeartRate: 88,
+      rhythmClassification: "IRREGULAR",
+      measurementId: restoredEvent.id,
+      waveform: ECG_SAMPLES,
     });
 
     // The appointment's reminder reference survives too — same remap, other

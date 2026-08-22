@@ -59,6 +59,7 @@ import { restoreRemindersData } from "@/lib/export/reminders-backup";
 import { restoreDocumentFilingData } from "@/lib/export/document-filing-backup";
 import { restoreAwardsData } from "@/lib/export/awards-backup";
 import { restoreEnvironmentData } from "@/lib/export/environment-backup";
+import { restoreEcgData } from "@/lib/export/ecg-backup";
 import { invalidateUserData } from "@/lib/cache/invalidate";
 
 export const dynamic = "force-dynamic";
@@ -120,6 +121,7 @@ interface RestoreResponse {
     userAchievements: number;
     environmentContexts: number;
     environmentTravelLocations: number;
+    ecgRecordings: number;
   };
 }
 
@@ -1678,6 +1680,23 @@ const handler = apiHandler(
             skips,
           );
 
+          // The ECG strips. AFTER the measurements on purpose: a recording
+          // carries a `measurementId` that is a real foreign key against the
+          // EVENT row it was filed with, so a reference written before that
+          // row exists does not merely dangle — it violates the constraint
+          // and rolls the whole restore back. The id set is the one the
+          // measurement branch actually wrote, threaded in rather than
+          // re-queried so the function stays a pure reader of this
+          // transaction. Both ends of this section live in
+          // `src/lib/export/ecg-backup.ts`.
+          const ecgCleared = await restoreEcgData(
+            tx,
+            ownerId,
+            payload,
+            new Set(stableRows.map((row) => row.id)),
+            skips,
+          );
+
           // The per-day readings and the location periods that explain them.
           // Neither references anything but the account, so this section has
           // no ordering constraint against any other and sits here beside the
@@ -1742,6 +1761,7 @@ const handler = apiHandler(
             environmentContexts: environmentCleared.environmentContexts,
             environmentTravelLocations:
               environmentCleared.environmentTravelLocations,
+            ecgRecordings: ecgCleared.ecgRecordings,
           };
           return { cleared, skipped: summarizeRestoreSkips(skips) };
         },

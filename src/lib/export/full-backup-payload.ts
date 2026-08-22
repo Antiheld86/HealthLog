@@ -91,6 +91,12 @@ import {
   type EnvironmentBackupSection,
 } from "@/lib/export/environment-backup";
 import {
+  buildEcgBackupSection,
+  countEcgBackupSection,
+  type EcgBackupCounts,
+  type EcgBackupSection,
+} from "@/lib/export/ecg-backup";
+import {
   buildIntradayProfileBackupSection,
   countIntradayProfileBackupSection,
   type IntradayProfileBackupCounts,
@@ -111,7 +117,8 @@ export interface FullBackupCounts
     SensitiveBackupCounts,
     DocumentFilingBackupCounts,
     AwardsBackupCounts,
-    EnvironmentBackupCounts {
+    EnvironmentBackupCounts,
+    EcgBackupCounts {
   measurements: number;
   medications: number;
   intakeEvents: number;
@@ -341,6 +348,7 @@ export async function buildFullBackupPayload(
     documentFiling,
     awards,
     environment,
+    ecg,
     nutrientDays,
   ] = await Promise.all([
     disasterRecovery
@@ -549,6 +557,12 @@ export async function buildFullBackupPayload(
     // `src/lib/export/environment-backup.ts`, and the purpose is absent for
     // the same reason as the awards above.
     buildEnvironmentBackupSection(prisma, userId),
+    // The ECG strips, their rhythm verdicts and their traces. Both ends live
+    // in `src/lib/export/ecg-backup.ts` beside each other, the same
+    // arrangement as the sections above and for the same reason.
+    buildEcgBackupSection(prisma, userId, {
+      purpose: disasterRecovery ? "disaster-recovery" : "portable-export",
+    }),
     // Nutrient day totals were absent from every export path, which
     // contradicted the schema's own reason for denormalising the unit column
     // ("rows stay self-describing in exports even if the catalog ever drifts").
@@ -588,6 +602,7 @@ export async function buildFullBackupPayload(
   const documentFilingSection: DocumentFilingBackupSection = documentFiling;
   const awardsSection: AwardsBackupSection = awards;
   const environmentSection: EnvironmentBackupSection = environment;
+  const ecgSection: EcgBackupSection = ecg;
 
   const payload = {
     schemaVersion: BACKUP_SCHEMA_VERSION,
@@ -946,6 +961,7 @@ export async function buildFullBackupPayload(
     ...documentFilingSection,
     ...awardsSection,
     ...environmentSection,
+    ...ecgSection,
     nutrientDays: nutrientDays.map((n) => ({
       day: n.day,
       nutrient: n.nutrient,
@@ -1001,6 +1017,7 @@ export async function buildFullBackupPayload(
       ...countDocumentFilingBackupSection(documentFiling),
       ...countAwardsBackupSection(awards),
       ...countEnvironmentBackupSection(environment),
+      ...countEcgBackupSection(ecg),
     },
   };
 }

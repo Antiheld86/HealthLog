@@ -104,6 +104,14 @@
  * `ON DELETE SET NULL` in the first place. The ordinary way it fails to
  * resolve is a portable export whose source measurement was soft-deleted, and
  * a legacy file whose measurements carry no ids at all.
+ * The tenth, `ecgReference`, names the EVENT measurement an ECG strip was
+ * filed against that the restore did not put back. Unlike `coachReference` it
+ * is a real foreign key, so writing the dangling value would not quietly stop
+ * meaning anything — it would violate the constraint and roll the whole
+ * restore back over one cross-reference. What is dropped is the POINTER: the
+ * strip, its instant and its rhythm verdict all restore. A portable export
+ * omits soft-deleted measurements, which is the ordinary way a live recording
+ * ends up naming one the file does not carry.
  *
  * The eleventh, `checkupClosure`, is not about a restore at all, and it borrows
  * this shape deliberately rather than growing a second reporting mechanism
@@ -127,6 +135,7 @@ export type SkippedCatalogue =
   | "extractedFact"
   | "factCommitment"
   | "personalRecordReference"
+  | "ecgReference"
   | "checkupClosure";
 
 /** One key this instance does not know, and the links it cost. */

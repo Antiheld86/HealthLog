@@ -1514,6 +1514,36 @@ const documentBackupSchema = z
   })
   .passthrough();
 
+/**
+ * One ECG strip.
+ *
+ * `waveformEncrypted` and `waveform` are the two ends of the same contract, so
+ * both are optional here and exactly one arrives: a disaster-recovery file
+ * carries the ciphertext, a portable file carries the micro-volt samples.
+ * Requiring either would refuse half the valid files. `samplingFrequency` and
+ * `sampleCount` stay required in both, because without them the samples are a
+ * list of numbers with no time axis.
+ */
+const ecgRecordingBackupSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    source: z.enum(MeasurementSource),
+    externalRecordingId: z.string().min(1),
+    recordedAt: isoDateTime,
+    waveformEncrypted: base64BytesSchema.optional(),
+    waveform: z.array(z.number()).optional(),
+    samplingFrequency: z.number().int(),
+    sampleCount: z.number().int(),
+    durationSeconds: z.number().nullable().optional(),
+    lead: z.string().nullable().optional(),
+    averageHeartRate: z.number().int().nullable().optional(),
+    rhythmClassification: z.enum(RhythmClassification).nullable().optional(),
+    measurementId: z.string().min(1).nullable().optional(),
+    createdAt: isoDateTime,
+    updatedAt: isoDateTime,
+  })
+  .passthrough();
+
 const backupManifestSchema = z
   .object({
     documents: z
@@ -1627,6 +1657,10 @@ export const backupPayloadSchema = z
     environmentTravelLocations: z
       .array(environmentTravelLocationBackupSchema)
       .default([]),
+    // The ECG strips. Defaulted for the same reason as the sections above: a
+    // file written before the recordings travelled carries no key, and an
+    // account whose watch has never taken one writes [].
+    ecgRecordings: z.array(ecgRecordingBackupSchema).default([]),
     manifest: backupManifestSchema.nullable().default(null),
     // v1.37.19 (A6-9) — field paths a PORTABLE export could not decrypt
     // (fail-soft nulls). Disclosed in the file so a nulled field is
@@ -1737,6 +1771,8 @@ export interface BackupSummary {
   environmentContexts: number;
   /** Declared stretches spent away from home. */
   environmentTravelLocations: number;
+  /** ECG strips, with their rhythm verdict and their trace. */
+  ecgRecordings: number;
 }
 
 export function summarizeBackup(payload: BackupPayload): BackupSummary {
@@ -1815,6 +1851,7 @@ export function summarizeBackup(payload: BackupPayload): BackupSummary {
     userAchievements: payload.userAchievements.length,
     environmentContexts: payload.environmentContexts.length,
     environmentTravelLocations: payload.environmentTravelLocations.length,
+    ecgRecordings: payload.ecgRecordings.length,
   };
 }
 

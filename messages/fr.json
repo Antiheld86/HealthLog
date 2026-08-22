@@ -6919,7 +6919,8 @@
         "restoreSkippedExtractedFact": "Donnée du document",
         "restoreSkippedFactCommitment": "Enregistrement de la donnée",
         "docsLink": "Documentation",
-        "restoreSkippedPersonalRecordReference": "Provenance d'un record personnel"
+        "restoreSkippedPersonalRecordReference": "Provenance d'un record personnel",
+        "restoreSkippedEcgReference": "Provenance d'un tracé ECG"
       },
       "danger-zone": {
         "title": "Zone de danger",
