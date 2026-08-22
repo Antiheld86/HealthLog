@@ -6912,6 +6912,12 @@
         "restoreSkippedVisitReference": "Référence de visite",
         "restoreSkippedVaccinationReference": "Référence de vaccination",
         "restoreSkippedCheckupClosure": "Clôture d'un examen",
+        "restoreSkippedReminderReference": "Référence de rappel",
+        "restoreSkippedCoachAttachment": "Lien de document du Coach",
+        "restoreSkippedCoachReference": "Référence du Coach",
+        "restoreSkippedDocumentConditionLink": "Classement du document",
+        "restoreSkippedExtractedFact": "Donnée du document",
+        "restoreSkippedFactCommitment": "Enregistrement de la donnée",
         "docsLink": "Documentation"
       },
       "danger-zone": {

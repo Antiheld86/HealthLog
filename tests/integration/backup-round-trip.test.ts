@@ -26,18 +26,22 @@
  * The registry below is keyed by `TwoEndedModel`, so a name added to the plan's
  * two-ended list without a row seeded and counted here does not compile.
  *
- * What this still does not prove, with one exception: that a restored row
- * carries the right VALUES. It asks whether the rows came back, not whether
- * they came back intact — `admin-backups-canonical-roundtrip.test.ts` is where
- * field-level fidelity is asserted. A restore that wrote one row per model with
- * every column defaulted would satisfy this file and fail that one.
+ * What the count-back alone does not prove: that a restored row carries the
+ * right VALUES. It asks whether the rows came back, not whether they came back
+ * intact — `admin-backups-canonical-roundtrip.test.ts` is where field-level
+ * fidelity is asserted for the file as a whole. A restore that wrote one row
+ * per model with every column defaulted would satisfy the counts and fail that
+ * one.
  *
- * The exception is the medication side effect. Its note lives in an encrypted
- * column beside a legacy plaintext one, so "the row came back" and "the note
- * came back" are genuinely different answers here: a restore that dropped the
- * ciphertext would still be counted as recovered by everything above. The
- * severity, the category and the entry are asserted alongside it, because a
- * side effect without them says something happened and not what.
+ * So each section added since has brought a field-level assertion of its own
+ * for the column whose loss the count cannot see: the side effect's encrypted
+ * note beside its legacy plaintext one, the open pause era's null `resumedAt`,
+ * the Coach's permanent fence flag and its two bare-id references, the stock
+ * count that must not be recalculated from its ledger, the dose ramp's order,
+ * the reminder's snooze and skip cursors — and, at the bottom of this file, the
+ * document filing's PAIRING and the review decision on a staged fact. Each one
+ * is a thing a restore could get wrong while returning the right number of
+ * rows, which is the only test worth writing here.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -48,6 +52,12 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import { encrypt, encryptBytes } from "@/lib/crypto";
 import { decryptFromBytes, encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 import { readNote } from "@/lib/crypto/note-cipher";
+import {
+  decryptFactData,
+  decryptFactProvenance,
+  encryptFactData,
+  encryptFactProvenance,
+} from "@/lib/documents/store";
 import { buildFullBackupPayload } from "@/lib/export/full-backup-payload";
 import { TWO_ENDED_MODELS, type TwoEndedModel } from "@/lib/export/backup-plan";
 import { POST } from "@/app/api/admin/backups/[id]/restore/route";
@@ -97,6 +107,7 @@ const COACH_USER_TURN = "my readings look higher this week, is that real?";
 const COACH_ASSISTANT_TURN =
   "the last seven mornings average 4 mmHg above the fortnight before";
 const DOSE_CHANGE_NOTE = "titration note, encrypted at rest";
+const EXTRACTED_FACT_SPAN = "Ferritin  91 ng/mL   (30 - 400)";
 const SIDE_EFFECT_NOTE = "nausea for two hours after the evening dose";
 
 beforeEach(async () => {
@@ -201,6 +212,9 @@ const COUNT_BACK: Record<
   MentalHealthAssessment: (p, userId) =>
     p.mentalHealthAssessment.count({ where: { userId } }),
   ConsentReceipt: (p, userId) => p.consentReceipt.count({ where: { userId } }),
+  DocumentConditionLink: (p, userId) =>
+    p.documentConditionLink.count({ where: { userId } }),
+  ExtractedFact: (p, userId) => p.extractedFact.count({ where: { userId } }),
 };
 
 /**
@@ -508,6 +522,18 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       onsetAt: AT("2026-06-20T00:00:00.000Z"),
     },
   });
+  // A SECOND condition, and the one the document below is actually filed
+  // against. Two episodes is what makes the filing assertion mean something:
+  // with one, a restore that pointed every link at the first condition it
+  // found would return the right count and read as correct.
+  const filedEpisode = await prisma.illnessEpisode.create({
+    data: {
+      userId: OWNER_ID,
+      label: "Iron deficiency",
+      type: "CHRONIC",
+      onsetAt: AT("2026-03-01T00:00:00.000Z"),
+    },
+  });
   const illnessSymptom = await prisma.illnessSymptom.create({
     data: { key: "round_trip_cough", labelKey: "illness.symptom.roundTrip" },
   });
@@ -640,6 +666,56 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       byteSize: documentBytes.byteLength,
       contentEncrypted,
       contentCodec: "binary2",
+    },
+  });
+
+  // The page filed under the SECOND condition, not the first. A restore that
+  // kept the count and lost the pairing would leave the vault sorted wrongly
+  // rather than visibly unsorted, which is harder to notice and worse.
+  await prisma.documentConditionLink.create({
+    data: {
+      userId: OWNER_ID,
+      documentId: document.id,
+      episodeId: filedEpisode.id,
+      createdAt: AT("2026-07-02T09:00:00.000Z"),
+    },
+  });
+
+  // One staged fact, already reviewed, approved and committed to the ferritin
+  // lab row above. Every column that records the decision is set AWAY from its
+  // schema default on purpose: `PENDING`, `needsReview: true` and two NULL
+  // commitment columns are what a restore that ignores them writes, and the
+  // assertion after the restore is what catches that. A fact handed back as
+  // PENDING is offered for review again, and approving it a second time writes
+  // a second lab result for a reading the account already has.
+  await prisma.extractedFact.create({
+    data: {
+      userId: OWNER_ID,
+      documentId: document.id,
+      factType: "OBSERVATION",
+      status: "APPROVED",
+      confidence: 0.94,
+      needsReview: false,
+      committedRecordId: labResult.id,
+      committedRecordType: "labResult",
+      dataEncrypted: encryptFactData({
+        label: "Ferritin",
+        code: null,
+        codeSystem: null,
+        value: 91,
+        valueText: null,
+        unit: "ng/mL",
+        referenceLow: 30,
+        referenceHigh: 400,
+        effectiveDate: "2026-06-30",
+      }),
+      provenanceEncrypted: encryptFactProvenance({
+        sourceText: EXTRACTED_FACT_SPAN,
+        anchored: true,
+        sourceOffset: 412,
+        page: 2,
+        confidence: 0.94,
+      }),
     },
   });
 
@@ -1457,6 +1533,95 @@ describe("every model the plan claims two-ended survives a real restore", () => 
       },
     ]);
 
+    // The vault came back SORTED, not merely populated.
+    //
+    // The count says one filing returned. It cannot say which page was filed
+    // under which condition, and the account has two conditions — so a restore
+    // that paired the document with the first episode it found would satisfy
+    // every count above and hand back a lab report filed under a head cold.
+    // The pair is resolved through the relations rather than compared against
+    // the ids the fixture used, because both ends were re-created by the
+    // restore and it is the pairing that has to survive, not the identifiers.
+    const filing = await prisma.documentConditionLink.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+      include: {
+        document: { select: { title: true } },
+        episode: { select: { label: true } },
+      },
+    });
+    expect(
+      {
+        document: filing.document.title,
+        condition: filing.episode.label,
+        createdAt: filing.createdAt.toISOString(),
+      },
+      "the page must come back filed under the condition it was filed under",
+    ).toEqual({
+      document: "June labs",
+      condition: "Iron deficiency",
+      createdAt: "2026-07-02T09:00:00.000Z",
+    });
+
+    // The staged fact, and the decision on it.
+    //
+    // This is the assertion the count cannot make. `status`, `needsReview`,
+    // `committedRecordId` and `committedRecordType` all default to "nobody has
+    // looked at this yet", so a restore that wrote the row and ignored them
+    // returns exactly one fact, exactly as the plan promises, and hands the
+    // account a reviewed and committed reading back in its review queue. The
+    // confirm endpoint acts only on a PENDING fact and commits it through the
+    // normal create, so approving it a second time writes a SECOND ferritin
+    // result. The commitment is checked against the lab row the restore itself
+    // wrote, because a pointer that survives as a string but no longer names a
+    // live row is the same loss wearing a value.
+    const restoredLab = await prisma.labResult.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+    });
+    const stagedFact = await prisma.extractedFact.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+      include: { document: { select: { title: true } } },
+    });
+    expect(
+      {
+        document: stagedFact.document.title,
+        factType: stagedFact.factType,
+        status: stagedFact.status,
+        confidence: stagedFact.confidence,
+        needsReview: stagedFact.needsReview,
+        committedRecordId: stagedFact.committedRecordId,
+        committedRecordType: stagedFact.committedRecordType,
+        data: decryptFactData(stagedFact.dataEncrypted),
+        provenance: decryptFactProvenance(stagedFact.provenanceEncrypted),
+      },
+      "a reviewed and committed fact must not come back up for review",
+    ).toEqual({
+      document: "June labs",
+      factType: "OBSERVATION",
+      status: "APPROVED",
+      confidence: 0.94,
+      needsReview: false,
+      committedRecordId: restoredLab.id,
+      committedRecordType: "labResult",
+      data: {
+        label: "Ferritin",
+        code: null,
+        codeSystem: null,
+        value: 91,
+        valueText: null,
+        unit: "ng/mL",
+        referenceLow: 30,
+        referenceHigh: 400,
+        effectiveDate: "2026-06-30",
+      },
+      provenance: {
+        sourceText: EXTRACTED_FACT_SPAN,
+        anchored: true,
+        sourceOffset: 412,
+        page: 2,
+        confidence: 0.94,
+      },
+    });
+
     // The appointment's reminder reference survives too — same remap, other
     // referrer.
     const restoredEncounter = await prisma.encounter.findFirstOrThrow({
@@ -1580,6 +1745,192 @@ describe("every model the plan claims two-ended survives a real restore", () => 
       antigenSlug: "retired-antigen-from-an-older-release",
       vaccineName: "Whatever the Pass called it in 1987",
       reminderId: null,
+    });
+  });
+
+  /**
+   * The hand-edited file, which is the only way the vault filing can carry a
+   * reference the restore cannot place.
+   *
+   * The builder carries a filing or a staged fact only when both of its ends
+   * are carried, so no file this release writes reaches the drop path. That is
+   * exactly why the path is worth a test of its own: an arm nothing exercises
+   * is an arm nobody notices is wrong, and here being wrong has two very
+   * different prices. `documentConditionLink.episodeId` is a real foreign key,
+   * so writing it unchecked does not lose one edge — it violates a constraint
+   * and rolls the WHOLE account back, which is what the mood categories did
+   * before they travelled. `ExtractedFact.committedRecordId` is a bare id
+   * column with no relation, so writing it unchecked costs no error at all and
+   * simply leaves a fact pointing at a lab result that is not there.
+   *
+   * Both references are broken in the same file so the two answers can be seen
+   * side by side: a dropped row and a nulled pointer, each named in the report,
+   * and a restore that still answers 200.
+   */
+  it("drops and names a filing and a commitment a truncated file cannot resolve", async () => {
+    const prisma = getPrismaClient();
+    await seedAdminSession(prisma);
+    await createOwner(prisma);
+
+    const episode = await prisma.illnessEpisode.create({
+      data: {
+        userId: OWNER_ID,
+        label: "Iron deficiency",
+        type: "CHRONIC",
+        onsetAt: AT("2026-03-01T00:00:00.000Z"),
+      },
+    });
+    const labResult = await prisma.labResult.create({
+      data: {
+        userId: OWNER_ID,
+        analyte: "Ferritin",
+        value: 91,
+        unit: "ng/mL",
+        takenAt: AT("2026-06-30T09:00:00.000Z"),
+      },
+    });
+    const documentBytes = encryptBytes(Buffer.from("truncated-file fixture"));
+    const contentEncrypted = new Uint8Array(
+      new ArrayBuffer(documentBytes.byteLength),
+    );
+    contentEncrypted.set(documentBytes);
+    const document = await prisma.inboundDocument.create({
+      data: {
+        userId: OWNER_ID,
+        kind: "LAB_RESULT",
+        title: "June labs",
+        mimeType: "application/pdf",
+        byteSize: documentBytes.byteLength,
+        contentEncrypted,
+        contentCodec: "binary2",
+      },
+    });
+    await prisma.documentConditionLink.create({
+      data: {
+        userId: OWNER_ID,
+        documentId: document.id,
+        episodeId: episode.id,
+      },
+    });
+    await prisma.extractedFact.create({
+      data: {
+        userId: OWNER_ID,
+        documentId: document.id,
+        factType: "OBSERVATION",
+        status: "APPROVED",
+        confidence: 0.9,
+        needsReview: false,
+        committedRecordId: labResult.id,
+        committedRecordType: "labResult",
+        dataEncrypted: encryptFactData({
+          label: "Ferritin",
+          code: null,
+          codeSystem: null,
+          value: 91,
+          valueText: null,
+          unit: "ng/mL",
+          referenceLow: null,
+          referenceHigh: null,
+          effectiveDate: "2026-06-30",
+        }),
+        provenanceEncrypted: encryptFactProvenance({
+          sourceText: EXTRACTED_FACT_SPAN,
+          anchored: true,
+          sourceOffset: 412,
+          page: 2,
+          confidence: 0.9,
+        }),
+      },
+    });
+
+    const { payload } = await buildFullBackupPayload(prisma, OWNER_ID, {
+      purpose: "disaster-recovery",
+    });
+    // The edit a truncated or hand-repaired file makes: both references now
+    // name rows the file no longer carries.
+    const edited = payload as typeof payload & {
+      documentConditionLinks: Array<{ episodeId: string }>;
+      extractedFacts: Array<{ committedRecordId: string | null }>;
+    };
+    edited.documentConditionLinks[0].episodeId = "condition-not-in-this-file";
+    edited.extractedFacts[0].committedRecordId = "lab-not-in-this-file";
+
+    await prisma.user.delete({ where: { id: OWNER_ID } });
+    await createOwner(prisma);
+
+    const backup = await prisma.dataBackup.create({
+      data: {
+        userId: OWNER_ID,
+        type: "TWO_ENDED_ROUND_TRIP",
+        data: encrypt(JSON.stringify(payload)),
+      },
+    });
+    const response = await POST(
+      new Request(`http://localhost/api/admin/backups/${backup.id}/restore`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirm: "RESTORE" }),
+      }) as never,
+      { params: Promise.resolve({ id: backup.id }) },
+    );
+    const body = await response.json();
+    expect(
+      response.status,
+      "a filing naming a condition the file does not carry must cost that " +
+        "filing, not the account",
+    ).toBe(200);
+
+    const reported = body.data.skipped.catalogueKeys as Array<{
+      catalogue: string;
+      key: string;
+      links: number;
+    }>;
+    expect(
+      reported.filter((entry) =>
+        ["documentConditionLink", "factCommitment"].includes(entry.catalogue),
+      ),
+    ).toEqual([
+      {
+        catalogue: "documentConditionLink",
+        key: "condition-not-in-this-file",
+        links: 1,
+      },
+      { catalogue: "factCommitment", key: "lab-not-in-this-file", links: 1 },
+    ]);
+
+    // The filing is gone because it had nowhere to hang. The fact is NOT: what
+    // it lost is a pointer that was already going nowhere, and the transcribed
+    // reading is still the account's.
+    expect(
+      await prisma.documentConditionLink.count({ where: { userId: OWNER_ID } }),
+    ).toBe(0);
+    const survivor = await prisma.extractedFact.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+    });
+    expect({
+      status: survivor.status,
+      needsReview: survivor.needsReview,
+      committedRecordId: survivor.committedRecordId,
+      committedRecordType: survivor.committedRecordType,
+      data: decryptFactData(survivor.dataEncrypted),
+    }).toEqual({
+      status: "APPROVED",
+      needsReview: false,
+      // Nulled as a pair: a type with no id would claim a commitment the row
+      // cannot name.
+      committedRecordId: null,
+      committedRecordType: null,
+      data: {
+        label: "Ferritin",
+        code: null,
+        codeSystem: null,
+        value: 91,
+        valueText: null,
+        unit: "ng/mL",
+        referenceLow: null,
+        referenceHigh: null,
+        effectiveDate: "2026-06-30",
+      },
     });
   });
 });

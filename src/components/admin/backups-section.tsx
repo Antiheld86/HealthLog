@@ -332,7 +332,34 @@ function catalogueLabel(
   if (catalogue === "checkupClosure") {
     return t("admin.section.backups.restoreSkippedCheckupClosure");
   }
-  return t("admin.section.backups.restoreSkippedMoodFactor");
+  if (catalogue === "reminderReference") {
+    return t("admin.section.backups.restoreSkippedReminderReference");
+  }
+  if (catalogue === "coachAttachment") {
+    return t("admin.section.backups.restoreSkippedCoachAttachment");
+  }
+  if (catalogue === "coachReference") {
+    return t("admin.section.backups.restoreSkippedCoachReference");
+  }
+  if (catalogue === "documentConditionLink") {
+    return t("admin.section.backups.restoreSkippedDocumentConditionLink");
+  }
+  if (catalogue === "extractedFact") {
+    return t("admin.section.backups.restoreSkippedExtractedFact");
+  }
+  if (catalogue === "factCommitment") {
+    return t("admin.section.backups.restoreSkippedFactCommitment");
+  }
+  if (catalogue === "moodFactor") {
+    return t("admin.section.backups.restoreSkippedMoodFactor");
+  }
+  // Not a fallback: the chain above is exhaustive and this line is what makes
+  // the compiler say so. A catalogue added without a label here now stops the
+  // build instead of shipping under a label that belongs to something else,
+  // which is what three of them were already doing — a dropped Coach
+  // attachment reached the operator's screen labelled "mood factor".
+  const unlabelled: never = catalogue;
+  return unlabelled;
 }
 
 /**

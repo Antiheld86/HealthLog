@@ -48,6 +48,10 @@ vi.mock("@/lib/db", () => ({
     coachFact: { findMany: vi.fn().mockResolvedValue([]) },
     coachPlan: { findMany: vi.fn().mockResolvedValue([]) },
     coachReminder: { findMany: vi.fn().mockResolvedValue([]) },
+    // What a document was filed against, and what was read out of it.
+    // Empty for the same reason as the sections above.
+    documentConditionLink: { findMany: vi.fn().mockResolvedValue([]) },
+    extractedFact: { findMany: vi.fn().mockResolvedValue([]) },
     cycleProfile: { findUnique: vi.fn().mockResolvedValue(null) },
     menstrualCycle: { findMany: vi.fn().mockResolvedValue([]) },
     cycleDayLog: { findMany: vi.fn().mockResolvedValue([]) },

@@ -50,6 +50,10 @@ vi.mock("@/lib/db", () => ({
     coachFact: { findMany: vi.fn().mockResolvedValue([]) },
     coachPlan: { findMany: vi.fn().mockResolvedValue([]) },
     coachReminder: { findMany: vi.fn().mockResolvedValue([]) },
+    // What a document was filed against, and what was read out of it.
+    // Empty for the same reason as the sections above.
+    documentConditionLink: { findMany: vi.fn().mockResolvedValue([]) },
+    extractedFact: { findMany: vi.fn().mockResolvedValue([]) },
     // v1.15.0 — cycle tables read by the full-backup helper.
     cycleProfile: { findUnique: vi.fn() },
     menstrualCycle: { findMany: vi.fn() },
@@ -147,6 +151,10 @@ beforeEach(() => {
     [] as never,
   );
   vi.mocked(prisma.consentReceipt.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.documentConditionLink.findMany).mockResolvedValue(
+    [] as never,
+  );
+  vi.mocked(prisma.extractedFact.findMany).mockResolvedValue([] as never);
 });
 
 afterEach(() => {

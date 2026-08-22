@@ -56,6 +56,7 @@ import {
   restoreCoachMemoryData,
 } from "@/lib/export/coach-backup";
 import { restoreRemindersData } from "@/lib/export/reminders-backup";
+import { restoreDocumentFilingData } from "@/lib/export/document-filing-backup";
 import { invalidateUserData } from "@/lib/cache/invalidate";
 
 export const dynamic = "force-dynamic";
@@ -90,6 +91,8 @@ interface RestoreResponse {
     familyHistory: number;
     workouts: number;
     documents: number;
+    documentConditionLinks: number;
+    extractedFacts: number;
     healthProfile: number;
     healthProfileFactRevisions: number;
     customMetrics: number;
@@ -1215,6 +1218,10 @@ const handler = apiHandler(
             restoredBiomarkerIds.add(created.id);
           }
 
+          // Collected for the staged facts further down: an approved fact's
+          // `committedRecordId` names the lab result it was committed to, and
+          // that reference is resolved against the rows this loop writes.
+          const restoredLabResultIds = new Set<string>();
           for (const lab of payload.labResults) {
             const biomarkerId =
               lab.biomarkerId !== undefined
@@ -1231,7 +1238,7 @@ const handler = apiHandler(
                 `Unknown biomarker reference: ${lab.biomarkerId ?? lab.biomarkerName}`,
               );
             }
-            await tx.labResult.create({
+            const createdLab = await tx.labResult.create({
               data: {
                 ...(lab.id ? { id: lab.id } : {}),
                 userId: ownerId,
@@ -1265,6 +1272,7 @@ const handler = apiHandler(
                   : {}),
               },
             });
+            restoredLabResultIds.add(createdLab.id);
           }
 
           const episodeIds = new Set(
@@ -1538,6 +1546,34 @@ const handler = apiHandler(
             });
           }
 
+          // What the vault was filed against, and what was read out of it.
+          // AFTER the documents and the condition episodes because both are
+          // foreign keys here — a filing written before either exists does not
+          // drop quietly, it violates a constraint and costs the operator the
+          // whole restore. AFTER the lab results and the medications for a
+          // second reason: an approved fact's `committedRecordId` is resolved
+          // against the rows those branches wrote, and resolving before they
+          // exist would null every commitment and still report success. Both
+          // ends of this section live in
+          // `src/lib/export/document-filing-backup.ts`.
+          const documentFilingCleared = await restoreDocumentFilingData(
+            tx,
+            ownerId,
+            payload,
+            {
+              documentIds: new Set(
+                payload.documents.map((document) => document.id),
+              ),
+              episodeIds,
+              committedRecordIds: new Set([
+                ...restoredLabResultIds,
+                ...episodeIds,
+                ...restoredMedicationIds,
+              ]),
+            },
+            skips,
+          );
+
           // The Vorsorge reminders and their completion ledger (v1.37.20,
           // #223 / iOS #68), BEFORE the visits and the vaccinations: both of
           // those remap a `reminderId` against the reminders in the database,
@@ -1637,6 +1673,9 @@ const handler = apiHandler(
             familyHistory: familyHistory.count,
             workouts: workouts.count,
             documents: documents.count,
+            documentConditionLinks:
+              documentFilingCleared.documentConditionLinks,
+            extractedFacts: documentFilingCleared.extractedFacts,
             healthProfile: profileCleared.healthProfile,
             healthProfileFactRevisions:
               profileCleared.healthProfileFactRevisions,
