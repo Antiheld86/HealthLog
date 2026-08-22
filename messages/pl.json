@@ -6920,7 +6920,8 @@
         "restoreSkippedFactCommitment": "Zapis faktu",
         "docsLink": "Dokumentacja",
         "restoreSkippedPersonalRecordReference": "Pochodzenie rekordu osobistego",
-        "restoreSkippedEcgReference": "Pochodzenie zapisu EKG"
+        "restoreSkippedEcgReference": "Pochodzenie zapisu EKG",
+        "restoreSkippedMedicationTarget": "Analit docelowy leku"
       },
       "danger-zone": {
         "title": "Strefa zagrożenia",

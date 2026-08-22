@@ -113,7 +113,17 @@
  * omits soft-deleted measurements, which is the ordinary way a live recording
  * ends up naming one the file does not carry.
  *
- * The eleventh, `checkupClosure`, is not about a restore at all, and it borrows
+ * The eleventh, `medicationTarget`, names the lab analyte a medication's
+ * pinned efficacy target pointed at that the restore did not put back. It is
+ * the one kind here where the ROW is dropped rather than the pointer, and the
+ * reason is what the row is: an override exists only to say "this drug is for
+ * that analyte", so an override with nothing on the far side states nothing.
+ * The resolver already treats a target with neither arm set as "no override",
+ * so writing one back would restore a row that means nothing and still claims
+ * the primary slot. The drug, its schedule and its whole history come back;
+ * what is lost is one statement of intent, and the operator is told which.
+ *
+ * The twelfth, `checkupClosure`, is not about a restore at all, and it borrows
  * this shape deliberately rather than growing a second reporting mechanism
  * beside it. The situation is the same one: something a write was asked to do
  * could not be done, the record itself survives, and the person is told which
@@ -136,6 +146,7 @@ export type SkippedCatalogue =
   | "factCommitment"
   | "personalRecordReference"
   | "ecgReference"
+  | "medicationTarget"
   | "checkupClosure";
 
 /** One key this instance does not know, and the links it cost. */

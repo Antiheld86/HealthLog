@@ -128,6 +128,7 @@ export interface FullBackupCounts
   medicationInventoryItems: number;
   medicationInventoryEvents: number;
   reminderPhaseConfigs: number;
+  medicationEfficacyTargets: number;
   moodEntries: number;
   customMoodTagCategories: number;
   hiddenMoodTags: number;
@@ -425,6 +426,14 @@ export async function buildFullBackupPayload(
         inventoryItems: { orderBy: { createdAt: "asc" } },
         inventoryEvents: { orderBy: { occurredAt: "asc" } },
         phaseConfig: true,
+        // What the drug was supposed to move. The biomarker is read by NAME
+        // rather than by id, exactly as the lab results beside it are: a
+        // portable restore mints a fresh biomarker id, and `(userId, name)` is
+        // the natural key the catalogue is already unique on.
+        efficacyTargets: {
+          orderBy: { createdAt: "asc" },
+          include: { biomarker: { select: { name: true } } },
+        },
       },
     }),
     prisma.medicationIntakeEvent.findMany({
@@ -797,6 +806,29 @@ export async function buildFullBackupPayload(
         reason: e.reason,
         occurredAt: e.occurredAt.toISOString(),
       })),
+      // What the drug is FOR, in the person's own words rather than the
+      // resolver's. A row exists only where they overrode the derived
+      // ATC / name inference, so it is the one durable statement of intent
+      // the "Wirkung" view holds — and the drug restores with no statement of
+      // what it was for without it.
+      //
+      // The lab arm travels as a NAME, the way a lab result's does. The id is
+      // fresh on a portable restore, and `Biomarker` is unique on
+      // `(userId, name)`, so the name is the only thing that survives the
+      // trip. It is resolved on the way back against the biomarkers the
+      // restore wrote.
+      efficacyTargets: m.efficacyTargets.map((t) => ({
+        ...(disasterRecovery
+          ? {
+              id: t.id,
+              createdAt: t.createdAt.toISOString(),
+              updatedAt: t.updatedAt.toISOString(),
+            }
+          : {}),
+        measurementType: t.measurementType,
+        biomarkerName: t.biomarker?.name ?? null,
+        primary: t.primary,
+      })),
     })),
     intakeEvents: intakeEvents.map((e) => ({
       ...(disasterRecovery
@@ -998,6 +1030,10 @@ export async function buildFullBackupPayload(
         0,
       ),
       reminderPhaseConfigs: medications.filter((m) => m.phaseConfig).length,
+      medicationEfficacyTargets: medications.reduce(
+        (total, m) => total + m.efficacyTargets.length,
+        0,
+      ),
       moodEntries: moodEntries.length,
       customMoodTagCategories: customMoodTagCategories.length,
       hiddenMoodTags: hiddenMoodTags.length,

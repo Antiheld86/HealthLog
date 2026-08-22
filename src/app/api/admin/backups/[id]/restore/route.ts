@@ -566,6 +566,17 @@ const handler = apiHandler(
 
           const medByName = new Map<string, string>();
           const restoredMedicationIds = new Set<string>();
+          // The efficacy targets cannot ride inside the medication create
+          // beside the schedules and the packs: `biomarkerId` is a foreign key
+          // into a catalogue this transaction has not restored yet. They are
+          // collected here against the id the drug ACTUALLY got and written in
+          // a second pass once the biomarkers exist; the pass itself says why
+          // hoisting the biomarker restore above the medications is the worse
+          // of the two orderings.
+          const pendingEfficacyTargets: Array<{
+            medicationId: string;
+            target: (typeof payload.medications)[number]["efficacyTargets"][number];
+          }> = [];
           for (const m of payload.medications) {
             const created = await tx.medication.create({
               data: {
@@ -771,6 +782,12 @@ const handler = apiHandler(
             });
             restoredMedicationIds.add(created.id);
             if (!medByName.has(m.name)) medByName.set(m.name, created.id);
+            for (const target of m.efficacyTargets) {
+              pendingEfficacyTargets.push({
+                medicationId: created.id,
+                target,
+              });
+            }
           }
 
           if (payload.intakeEvents.length > 0) {
@@ -1230,6 +1247,65 @@ const handler = apiHandler(
           // `committedRecordId` names the lab result it was committed to, and
           // that reference is resolved against the rows this loop writes.
           const restoredLabResultIds = new Set<string>();
+          // What each drug was supposed to move, written now that both ends
+          // exist. The drugs came back several hundred lines up and the
+          // analytes only just now, and one of those two had to move for a
+          // target to reach the database at all.
+          //
+          // The second pass wins over hoisting the biomarker restore above the
+          // medications, for two reasons. `biomarkerByName` and
+          // `restoredBiomarkerIds` are read by the lab-result loop directly
+          // below, so moving the block would separate a map from its only
+          // other consumer and leave a future edit free to re-order them back
+          // without anything noticing. And the direction of the dependency
+          // would read backwards: a pinned target is a leaf of the medication
+          // tree, and letting a leaf dictate where the clinical record is
+          // rebuilt inverts what the file is about. A second pass states the
+          // constraint where it applies instead of hiding it in a line order.
+          //
+          // A named analyte the restore did not put back cannot be written:
+          // `biomarkerId` is a real foreign key, so a dangling value would
+          // fail the constraint and roll the entire account back over one
+          // override. The row is dropped and NAMED. Dropping rather than
+          // nulling is deliberate here: the override IS the reference, and a
+          // row with neither arm set is what the resolver already reads as "no
+          // override", so keeping it would restore something that means
+          // nothing while still claiming the primary slot. A target that
+          // carried no name in the first place is a genuine live state (the
+          // analyte was deleted before the export) and comes back as written.
+          const unresolvedTargetAnalytes: string[] = [];
+          const writableTargets = pendingEfficacyTargets.filter((pending) => {
+            const name = pending.target.biomarkerName;
+            if (!name || biomarkerByName.has(name)) return true;
+            unresolvedTargetAnalytes.push(name);
+            return false;
+          });
+          if (writableTargets.length > 0) {
+            await tx.medicationEfficacyTarget.createMany({
+              data: writableTargets.map(({ medicationId, target }) => ({
+                ...(target.id ? { id: target.id } : {}),
+                medicationId,
+                measurementType: target.measurementType ?? null,
+                biomarkerId: target.biomarkerName
+                  ? (biomarkerByName.get(target.biomarkerName) ?? null)
+                  : null,
+                primary: target.primary ?? true,
+                ...(target.createdAt
+                  ? { createdAt: new Date(target.createdAt) }
+                  : {}),
+                ...(target.updatedAt
+                  ? { updatedAt: new Date(target.updatedAt) }
+                  : {}),
+              })),
+            });
+          }
+          recordUnknownKeys(
+            skips,
+            "medicationTarget",
+            [...new Set(unresolvedTargetAnalytes)],
+            unresolvedTargetAnalytes,
+          );
+
           for (const lab of payload.labResults) {
             const biomarkerId =
               lab.biomarkerId !== undefined

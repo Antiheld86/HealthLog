@@ -454,6 +454,18 @@ export const TWO_ENDED_MODELS = [
   // fortnight at home, days after a restore that reported success.
   "EnvironmentContext",
   "EnvironmentTravelLocation",
+  // What each drug was supposed to move. The register said the drug comes
+  // back with no statement of what it was for, and that is exactly the row:
+  // one exists ONLY where the person overrode the derived ATC / name
+  // resolution, so it is a decision and never a computation.
+  //
+  // It travels by biomarker NAME rather than by id, the way a lab result's
+  // cross-reference does, because a portable restore mints a fresh catalogue
+  // id and `(userId, name)` is what the catalogue is unique on. The reference
+  // is a real foreign key, so a name the restore cannot resolve is dropped and
+  // reported rather than written — a dangling id here would fail the
+  // constraint and cost the whole account.
+  "MedicationEfficacyTarget",
   // The ECG strips. The register said the originating device may still hold
   // them, which is true for about as long as the phone beside it does — and
   // is not true at all once a Withings connection is revoked, because the
@@ -506,8 +518,6 @@ export const STRUCTURALLY_UNATTRIBUTABLE: Readonly<Record<string, string>> = {
 export const COVERAGE_PENDING: Readonly<Record<string, string>> = {
   MedicationScheduleRevision:
     "The history of how a schedule changed. Without it a restored medication keeps today's schedule and loses the record of when the dose or timing moved, which is the part a doctor asks about.",
-  MedicationEfficacyTarget:
-    "What a medication was supposed to move, and by how much. The drug comes back with no statement of what it was for.",
   WorkoutRoute:
     "GPS traces. Deliberately absent from the payload today and DISCLOSED as absent in the file's own manifest, which is why this is a documented exclusion rather than a silent one — but it is still a loss for a self-hoster with no other copy.",
   WorkoutSamples:

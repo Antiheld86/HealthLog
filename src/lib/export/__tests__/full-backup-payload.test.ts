@@ -236,6 +236,18 @@ function makePrisma() {
             redValue: 180,
             redMode: "MINUTES",
           },
+          // One pinned efficacy target, on the lab arm. The biomarker rides
+          // as a NAME, the way a lab result's cross-reference does.
+          efficacyTargets: [
+            {
+              id: "target-canonical",
+              measurementType: null,
+              biomarker: { name: "Ferritin" },
+              primary: true,
+              createdAt: new Date("2026-07-01T08:00:00.000Z"),
+              updatedAt: new Date("2026-07-01T08:00:00.000Z"),
+            },
+          ],
           inventoryEvents: [
             {
               id: "stock-in",

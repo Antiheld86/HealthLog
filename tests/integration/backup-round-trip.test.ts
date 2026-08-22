@@ -229,6 +229,9 @@ const COUNT_BACK: Record<
   EnvironmentTravelLocation: (p, userId) =>
     p.environmentTravelLocation.count({ where: { userId } }),
   EcgRecording: (p, userId) => p.ecgRecording.count({ where: { userId } }),
+  // No own `userId` column — reached through the drug, like the schedules.
+  MedicationEfficacyTarget: (p, userId) =>
+    p.medicationEfficacyTarget.count({ where: { medication: { userId } } }),
 };
 
 /**
@@ -549,6 +552,17 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       value: 91,
       unit: "ng/mL",
       takenAt: AT("2026-06-30T09:00:00.000Z"),
+    },
+  });
+  // What the drug above is FOR, pinned to the analyte just created. The two
+  // rows are seeded at opposite ends of this fixture on purpose: the drug is
+  // restored hundreds of lines before the analyte, so this pairing is what
+  // proves the second pass runs late enough to resolve the name.
+  await prisma.medicationEfficacyTarget.create({
+    data: {
+      medicationId: medication.id,
+      biomarkerId: biomarker.id,
+      primary: true,
     },
   });
   await prisma.allergy.create({
@@ -1802,6 +1816,45 @@ describe("every model the plan claims two-ended survives a real restore", () => 
         page: 2,
         confidence: 0.94,
       },
+    });
+
+    // The pinned target, and the analyte it points at.
+    //
+    // Counting says one override returned. It cannot say the override still
+    // MEANS anything: a restore that wrote the row with `biomarkerId` nulled
+    // returns a drug with no statement of what it was for, which is precisely
+    // what the register said the alternative cost, and nothing anywhere would
+    // complain — the resolver silently falls back to deriving a target and the
+    // page still renders.
+    //
+    // Both ends are resolved from the DATABASE rather than remembered from the
+    // fixture. The property the second pass owes is that the target points at
+    // the biomarker THIS restore wrote, which an id carried over from the
+    // seeding would not distinguish from a restore that copied a stale value.
+    const restoredBiomarker = await prisma.biomarker.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+    });
+    const restoredMedication = await prisma.medication.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+    });
+    const target = await prisma.medicationEfficacyTarget.findFirstOrThrow({
+      where: { medication: { userId: OWNER_ID } },
+      include: { biomarker: { select: { name: true, userId: true } } },
+    });
+    expect({
+      medicationId: target.medicationId,
+      biomarkerId: target.biomarkerId,
+      biomarkerName: target.biomarker?.name ?? null,
+      biomarkerOwner: target.biomarker?.userId ?? null,
+      measurementType: target.measurementType,
+      primary: target.primary,
+    }).toEqual({
+      medicationId: restoredMedication.id,
+      biomarkerId: restoredBiomarker.id,
+      biomarkerName: "Ferritin",
+      biomarkerOwner: OWNER_ID,
+      measurementType: null,
+      primary: true,
     });
 
     // The strip, read back column by column.

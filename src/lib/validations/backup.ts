@@ -264,6 +264,27 @@ const reminderPhaseConfigSchema = z
   })
   .passthrough();
 
+/**
+ * What a medication was supposed to move.
+ *
+ * The lab arm is a biomarker NAME rather than an id, the way a lab result's
+ * cross-reference is: the id is fresh on a portable restore, and `Biomarker`
+ * is unique on `(userId, name)`. Both arms are nullable because the live
+ * schema produces a row with neither — deleting a biomarker sets the column
+ * NULL and leaves the override behind as an orphan the resolver reads as "no
+ * override".
+ */
+const medicationEfficacyTargetSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    measurementType: z.enum(MeasurementType).nullable().optional(),
+    biomarkerName: z.string().min(1).nullable().optional(),
+    primary: z.boolean().optional(),
+    createdAt: isoDateTime.optional(),
+    updatedAt: isoDateTime.optional(),
+  })
+  .passthrough();
+
 const medicationSchema = z
   .object({
     id: z.string().min(1).optional(),
@@ -307,6 +328,9 @@ const medicationSchema = z
     inventoryItems: z.array(medicationInventoryItemSchema).default([]),
     inventoryEvents: z.array(medicationInventoryEventSchema).default([]),
     phaseConfig: reminderPhaseConfigSchema.nullable().optional(),
+    // Same default, same reason: an older file parses, and a drug whose
+    // target the resolver derives rather than the person pinning it writes [].
+    efficacyTargets: z.array(medicationEfficacyTargetSchema).default([]),
   })
   .passthrough();
 
@@ -1697,6 +1721,8 @@ export interface BackupSummary {
   intakeEvents: number;
   /** Side effects recorded against a drug, across every medication. */
   medicationSideEffects: number;
+  /** Pinned efficacy targets, across every medication. */
+  medicationEfficacyTargets: number;
   moodEntries: number;
   /** v1.15.0 — observed cycle spans in the backup. */
   cycles: number;
@@ -1785,6 +1811,10 @@ export function summarizeBackup(payload: BackupPayload): BackupSummary {
     intakeEvents: payload.intakeEvents.length,
     medicationSideEffects: payload.medications.reduce(
       (sum, medication) => sum + medication.sideEffects.length,
+      0,
+    ),
+    medicationEfficacyTargets: payload.medications.reduce(
+      (sum, medication) => sum + medication.efficacyTargets.length,
       0,
     ),
     moodEntries: payload.moodEntries.length,

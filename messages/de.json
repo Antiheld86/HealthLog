@@ -6920,7 +6920,8 @@
         "restoreSkippedFactCommitment": "Befundübernahme",
         "docsLink": "Dokumentation",
         "restoreSkippedPersonalRecordReference": "Herkunft einer Bestleistung",
-        "restoreSkippedEcgReference": "Herkunft eines EKG-Streifens"
+        "restoreSkippedEcgReference": "Herkunft eines EKG-Streifens",
+        "restoreSkippedMedicationTarget": "Zielwert-Analyt einer Medikation"
       },
       "danger-zone": {
         "title": "Gefahrenzone",
