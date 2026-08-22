@@ -709,6 +709,42 @@ const handler = apiHandler(
                       : {}),
                   })),
                 },
+                // One row or none, so `create` on the optional side rather
+                // than a list. A file that says nothing leaves the drug
+                // untuned, which is what it was.
+                ...(m.phaseConfig
+                  ? {
+                      phaseConfig: {
+                        create: {
+                          ...(m.phaseConfig.id ? { id: m.phaseConfig.id } : {}),
+                          ...(m.phaseConfig.greenValue !== undefined
+                            ? { greenValue: m.phaseConfig.greenValue }
+                            : {}),
+                          ...(m.phaseConfig.greenMode
+                            ? { greenMode: m.phaseConfig.greenMode }
+                            : {}),
+                          ...(m.phaseConfig.yellowValue !== undefined
+                            ? { yellowValue: m.phaseConfig.yellowValue }
+                            : {}),
+                          ...(m.phaseConfig.yellowMode
+                            ? { yellowMode: m.phaseConfig.yellowMode }
+                            : {}),
+                          ...(m.phaseConfig.orangeValue !== undefined
+                            ? { orangeValue: m.phaseConfig.orangeValue }
+                            : {}),
+                          ...(m.phaseConfig.orangeMode
+                            ? { orangeMode: m.phaseConfig.orangeMode }
+                            : {}),
+                          ...(m.phaseConfig.redValue !== undefined
+                            ? { redValue: m.phaseConfig.redValue }
+                            : {}),
+                          ...(m.phaseConfig.redMode
+                            ? { redMode: m.phaseConfig.redMode }
+                            : {}),
+                        },
+                      },
+                    }
+                  : {}),
                 inventoryEvents: {
                   create: m.inventoryEvents.map((e) => ({
                     ...(e.id ? { id: e.id } : {}),

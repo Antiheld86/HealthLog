@@ -191,6 +191,8 @@ const COUNT_BACK: Record<
   MoodTagCategory: (p, userId) =>
     p.moodTagCategory.count({ where: { userId } }),
   MoodTagHidden: (p, userId) => p.moodTagHidden.count({ where: { userId } }),
+  ReminderPhaseConfig: (p, userId) =>
+    p.reminderPhaseConfig.count({ where: { medication: { userId } } }),
 };
 
 /**
@@ -271,6 +273,23 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
   // one away without recording it. A restore that recomputed the count from
   // the ledger would "fix" that to 22 and disagree with every low-stock
   // reminder the account has already received.
+  // Tuned away from every default, and one threshold in PERCENT rather than
+  // MINUTES: a restore that fell back to the schema defaults would return four
+  // plausible numbers and silently change when this drug turns orange.
+  await prisma.reminderPhaseConfig.create({
+    data: {
+      medicationId: medication.id,
+      greenValue: 45,
+      greenMode: "MINUTES",
+      yellowValue: 20,
+      yellowMode: "PERCENT",
+      orangeValue: 5,
+      orangeMode: "MINUTES",
+      redValue: 180,
+      redMode: "MINUTES",
+    },
+  });
+
   const openPack = await prisma.medicationInventoryItem.create({
     data: {
       userId: OWNER_ID,
@@ -1122,6 +1141,22 @@ describe("every model the plan claims two-ended survives a real restore", () => 
     // carried in the file.
     expect(hidden).toHaveLength(1);
     expect(hidden[0].moodTag.userId).toBeNull();
+
+    // Every threshold as tuned, including the one that is not in minutes.
+    const phase = await prisma.reminderPhaseConfig.findFirstOrThrow({
+      where: { medication: { userId: OWNER_ID } },
+    });
+    expect({
+      green: [phase.greenValue, phase.greenMode],
+      yellow: [phase.yellowValue, phase.yellowMode],
+      orange: [phase.orangeValue, phase.orangeMode],
+      red: [phase.redValue, phase.redMode],
+    }).toEqual({
+      green: [45, "MINUTES"],
+      yellow: [20, "PERCENT"],
+      orange: [5, "MINUTES"],
+      red: [180, "MINUTES"],
+    });
 
     // The shelf, and the count that must not be recomputed.
     const packs = await prisma.medicationInventoryItem.findMany({
