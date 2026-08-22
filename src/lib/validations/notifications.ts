@@ -13,6 +13,15 @@ export const notificationChannelEnabledSchema = z.strictObject({
 });
 
 /**
+ * Body of `POST /api/notifications/status` — clear the auto-disable on one of
+ * the caller's own channels. The channel is looked up scoped to the session
+ * user, so an id alone cannot re-enable somebody else's channel.
+ */
+export const reEnableChannelSchema = z.object({
+  channelId: z.string().min(1).max(64),
+});
+
+/**
  * Parse a dotted-quad IPv4 string into normalized octets.
  *
  * Returns null if the input is not exactly four octets, contains non-digit

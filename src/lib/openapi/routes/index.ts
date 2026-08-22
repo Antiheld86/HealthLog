@@ -65,12 +65,15 @@ import {
   medicationResource,
   medicationDoseHistoryImportFatalReasonEnum,
 } from "./medications";
+import { mcpPaths } from "./mcp";
 import { metaPaths } from "./meta";
 import { moodPaths } from "./mood";
 import { notificationTransportPaths } from "./notifications-transport";
+import { notificationChannelPaths } from "./notifications";
 import { nutrientPaths } from "./nutrients";
 import { onboardingPaths } from "./onboarding";
 import { profilePaths } from "./profile";
+import { recordSettingsPaths } from "./record-settings";
 import { settingsPaths } from "./settings";
 import { syncPaths } from "./sync";
 import { workoutPaths } from "./workouts";
@@ -133,6 +136,18 @@ export const openApiPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   // lifecycle and the per-channel self-tests (appended, spread order is
   // load-bearing).
   ...notificationTransportPaths,
+  // Notification channels + MCP connector credentials: both families answered
+  // the native client for several releases while being absent from the
+  // registry, because `openapi:check` compares the registry against the YAML
+  // and never the routes against the registry (appended, spread order is
+  // load-bearing).
+  ...notificationChannelPaths,
+  ...mcpPaths,
+  // The managed record's own configuration tree. Kept out of the sharing module
+  // because it is the one surface fenced by `requireGuardianAuth`, and its 403
+  // therefore has to be the shared refusal sentence rather than the neighbouring
+  // module's local wording (appended, spread order is load-bearing).
+  ...recordSettingsPaths,
 };
 
 export const openApiComponents: NonNullable<ZodOpenApiObject["components"]> = {

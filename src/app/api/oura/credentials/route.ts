@@ -67,19 +67,20 @@ export const PUT = apiHandler(async (request: NextRequest) => {
  * Delete Oura credentials and the active connection.
  *
  * Deleting the BYO credentials drops a live connection (a token minted against
- * the deleted app is now orphaned), so when an access token was present this
- * mirrors `/api/oura/disconnect`: audit the event and park the integration
- * ledger at `disconnected` rather than leaving it stale at its last state.
+ * the deleted app is now orphaned), so this mirrors `/api/oura/disconnect`:
+ * audit the event and park the integration ledger at `disconnected` rather than
+ * leaving it stale at its last state.
+ *
+ * Both are unconditional, matching the Polar twin. They used to run only when
+ * an access token happened to be present, so tearing down a stored credential
+ * pair that had never been connected left no audit row at all — and a
+ * credential teardown is exactly the event an operator reads the trail for. The
+ * ledger park is idempotent, so running it for an already-disconnected provider
+ * costs one write and changes nothing.
  */
 export const DELETE = apiHandler(async () => {
   const { user } = await requireAuth();
   annotate({ action: { name: "oura.credentials.delete" } });
-
-  const dbUser = await prisma.user.findUnique({
-    where: { id: user.id },
-    select: { ouraAccessTokenEncrypted: true },
-  });
-  const wasConnected = !!dbUser?.ouraAccessTokenEncrypted;
 
   await prisma.user.update({
     where: { id: user.id },
@@ -90,10 +91,8 @@ export const DELETE = apiHandler(async () => {
   });
   await clearOuraClientCredentials(user.id);
 
-  if (wasConnected) {
-    await auditLog("oura.credentials.delete", { userId: user.id });
-    await markDisconnected(user.id, "oura");
-  }
+  await auditLog("oura.credentials.delete", { userId: user.id });
+  await markDisconnected(user.id, "oura");
 
   return apiSuccess({ deleted: true });
 });

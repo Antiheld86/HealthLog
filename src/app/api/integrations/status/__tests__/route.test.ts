@@ -70,10 +70,19 @@ type Entry = {
   metricFreshness?: Array<{ type: string; lastSeenAt: string; stale: boolean }>;
 };
 
+async function fetchEnvelope(): Promise<{
+  integrations: Entry[];
+  metricFreshnessDegraded: boolean;
+}> {
+  return (await (GET as unknown as () => Promise<{ data: unknown }>)())
+    .data as {
+    integrations: Entry[];
+    metricFreshnessDegraded: boolean;
+  };
+}
+
 async function fetchEntries(): Promise<Entry[]> {
-  const res = (await (GET as unknown as () => Promise<{ data: unknown }>)())
-    .data as { integrations: Entry[] };
-  return res.integrations;
+  return (await fetchEnvelope()).integrations;
 }
 
 describe("/api/integrations/status — Polar/Oura fold (04-M2)", () => {
@@ -275,5 +284,63 @@ describe("/api/integrations/status — a provider that has delivered nothing for
       verdict: "failing",
       since: failingSince,
     });
+  });
+});
+
+/**
+ * The freshness read is fail-soft, and it used to be fail-silent with it.
+ *
+ * `getSourceMetricFreshness` is one query for all eight providers, wrapped in a
+ * `.catch(() => ({}))` so a groupBy hiccup never 500s the whole settings
+ * surface. The fallback makes every entry's `metricFreshness` an empty array —
+ * which is byte-identical to what a user with nothing recorded sees. So the
+ * honesty signal built to say "this metric has gone quiet" answered "nothing
+ * has gone quiet" when it had in fact failed to look.
+ *
+ * `metricFreshnessDegraded` separates the two. It stays a flag rather than a
+ * nullable array per entry because the query fails for all eight providers at
+ * once or for none of them.
+ */
+describe("/api/integrations/status — the freshness read failed", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    for (const key of Object.keys(perIntegrationLedger)) {
+      delete perIntegrationLedger[key];
+    }
+    userFind.mockResolvedValue({});
+    whoopFind.mockResolvedValue(null);
+    polarAvailable.mockResolvedValue(true);
+    ouraAvailable.mockResolvedValue(false);
+  });
+
+  it("reports the degradation instead of passing an empty list off as an answer", async () => {
+    (prisma.measurement.groupBy as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error("statement timeout"),
+    );
+
+    const envelope = await fetchEnvelope();
+
+    expect(envelope.metricFreshnessDegraded).toBe(true);
+    // Still fail-soft: the rest of the envelope survives, all eight entries
+    // present, because a freshness hiccup is never worth the settings surface.
+    expect(envelope.integrations).toHaveLength(8);
+    for (const entry of envelope.integrations) {
+      expect(entry.metricFreshness).toEqual([]);
+    }
+  });
+
+  it("reports no degradation when the read simply found nothing", async () => {
+    (prisma.measurement.groupBy as ReturnType<typeof vi.fn>).mockResolvedValue(
+      [],
+    );
+    (prisma.workout.groupBy as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+    const envelope = await fetchEnvelope();
+
+    // The same empty lists as above, and this is the case they honestly mean.
+    expect(envelope.metricFreshnessDegraded).toBe(false);
+    for (const entry of envelope.integrations) {
+      expect(entry.metricFreshness).toEqual([]);
+    }
   });
 });

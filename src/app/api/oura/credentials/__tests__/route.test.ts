@@ -111,12 +111,23 @@ describe("DELETE /api/oura/credentials", () => {
     expect(markDisconnected).toHaveBeenCalledWith("u1", "oura");
   });
 
-  it("skips audit + ledger update when nothing was connected", async () => {
+  /**
+   * This case used to assert the opposite, and the assertion was the defect.
+   *
+   * Auditing only when a token happened to be present meant that tearing down
+   * a stored credential pair which had never completed OAuth left no trail at
+   * all — and a credential teardown is exactly the event an operator reads the
+   * audit trail for. The Polar twin has always done both unconditionally; the
+   * old expectation pinned the divergence rather than catching it.
+   */
+  it("audits + marks disconnected even when nothing was connected", async () => {
     userFind.mockResolvedValue({ ouraAccessTokenEncrypted: null });
     const res = await del();
     expect(res.data).toEqual({ deleted: true });
     expect(clearMock).toHaveBeenCalledWith("u1");
-    expect(auditLog).not.toHaveBeenCalled();
-    expect(markDisconnected).not.toHaveBeenCalled();
+    expect(auditLog).toHaveBeenCalledWith("oura.credentials.delete", {
+      userId: "u1",
+    });
+    expect(markDisconnected).toHaveBeenCalledWith("u1", "oura");
   });
 });

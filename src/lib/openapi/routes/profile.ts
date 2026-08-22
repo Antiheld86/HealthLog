@@ -37,6 +37,7 @@ import {
   updatedAtTokenField,
   conflictResponse409,
   invalidBaseTokenResponse,
+  deviceRevokeResponse,
 } from "./shared";
 
 // v1.18.0 — module enable/disable. The PATCH request is the REAL runtime
@@ -691,19 +692,6 @@ const devicePatchRequest = z
     id: "DevicePatchRequest",
     description:
       "Per-device medication-reminder delivery override. `server` forces server-side dispatch to this device, `client` leaves it to the app's own local reminders, and `null` CLEARS the override so the device inherits the account default.",
-  });
-
-const deviceRevokeResponse = z
-  .object({
-    id: z.string(),
-    revoked: z.literal(true),
-    refreshTokensRevoked: z.number().int(),
-    accessTokensRevoked: z.number().int(),
-  })
-  .meta({
-    id: "DeviceRevokeResponse",
-    description:
-      "What the revocation cascade actually removed. The counts are the point: a client can tell the person how many credentials were killed rather than saying only that something happened.",
   });
 
 const labsLocalOcrPatchRequest = labsLocalOcrPatchSchema.meta({
@@ -1624,7 +1612,7 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
             "application/json": {
               schema: dataEnvelope(
                 deviceRevokeResponse,
-                "DeviceRevokeEnvelope",
+                "AccountDeviceRevokeEnvelope",
               ),
             },
           },
