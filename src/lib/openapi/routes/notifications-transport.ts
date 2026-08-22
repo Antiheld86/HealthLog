@@ -130,7 +130,7 @@ export const notificationTransportPaths: NonNullable<
       description:
         "Stores a browser Push subscription for the caller and, on the first one, creates the account's Web Push notification channel enabled. Upsert by endpoint: re-posting the same endpoint refreshes its keys rather than duplicating the row, so a client can send this on every page load without checking first.\n\n" +
         "The subscription keys are encrypted at rest. The endpoint is validated as HTTPS and as a public host before anything is written — the push library dials it later through its own fetch, outside the shared egress wrapper, so input time is where that has to be caught.\n\n" +
-        "Body capped at 64 KB. A malformed body and a rejected endpoint both answer 422 with one flat message; the Zod issues are not surfaced, so a client cannot tell an invalid endpoint from a missing key.",
+        "Body capped at 64 KB. A rejected subscription answers the standard multi-issue 422, so a client can tell a non-HTTPS endpoint from an internal-host one from a missing key. The issue list carries `path`, `code` and `message` and never the rejected value — neither the endpoint nor the subscription keys are echoed back.",
       requestBody: {
         required: true,
         content: { "application/json": { schema: webPushSubscribeRequest } },
@@ -159,7 +159,7 @@ export const notificationTransportPaths: NonNullable<
       summary: "Forget a Web Push subscription",
       description:
         "Removes the caller's subscription for the given endpoint. Idempotent and silent about the outcome: an endpoint that was never stored, and one belonging to another account, both answer the same success — the response says nothing about how many rows matched, so it cannot be used to probe whether an endpoint exists.\n\n" +
-        "The Web Push channel row is left in place; this removes a destination, not the channel. Body capped at 64 KB.",
+        "The Web Push channel row is left in place; this removes a destination, not the channel. Body capped at 64 KB; a malformed `endpoint` answers the standard multi-issue 422, which does not echo the value.",
       requestBody: {
         required: true,
         content: { "application/json": { schema: webPushUnsubscribeRequest } },
