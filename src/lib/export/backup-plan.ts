@@ -236,6 +236,11 @@ export const BACKUP_WRITER_FILES: readonly string[] = [
   // the reason the visits comment gives.
   "src/lib/export/awards-backup.ts",
   "src/lib/export/environment-backup.ts",
+  // The ECG strips, same arrangement again. The recording reads through its
+  // OWN delegate here rather than riding the measurement it references,
+  // because that reference is a pointer between two independently carried
+  // tables and not a parent-child ride.
+  "src/lib/export/ecg-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 
@@ -252,6 +257,7 @@ export const BACKUP_RESTORE_FILES: readonly string[] = [
   "src/lib/export/document-filing-backup.ts",
   "src/lib/export/awards-backup.ts",
   "src/lib/export/environment-backup.ts",
+  "src/lib/export/ecg-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 
@@ -448,6 +454,47 @@ export const TWO_ENDED_MODELS = [
   // fortnight at home, days after a restore that reported success.
   "EnvironmentContext",
   "EnvironmentTravelLocation",
+  // How a schedule got to where it is. The register said a restored
+  // medication keeps today's schedule and loses the record of when the dose or
+  // the timing moved. Measured, it costs more than a record: the era minter
+  // reads past days against the schedule that was live THEN, so an account
+  // that came back without its eras has its own compliance history rewritten
+  // against a plan it was not on.
+  //
+  // `supersededByRevisionId` is the reference that made this its own problem.
+  // It is a bare id column with no `@relation`, so a dangling value costs no
+  // error and simply stops meaning anything — and every era consumer skips a
+  // row that carries it, which means losing the pointer puts a corrected era
+  // back on the timeline beside its own correction. It travels as a POSITION
+  // in the drug's own ordered era list, because a portable restore mints fresh
+  // ids and the list is the only address space both ends share.
+  "MedicationScheduleRevision",
+  // What each drug was supposed to move. The register said the drug comes
+  // back with no statement of what it was for, and that is exactly the row:
+  // one exists ONLY where the person overrode the derived ATC / name
+  // resolution, so it is a decision and never a computation.
+  //
+  // It travels by biomarker NAME rather than by id, the way a lab result's
+  // cross-reference does, because a portable restore mints a fresh catalogue
+  // id and `(userId, name)` is what the catalogue is unique on. The reference
+  // is a real foreign key, so a name the restore cannot resolve is dropped and
+  // reported rather than written — a dangling id here would fail the
+  // constraint and cost the whole account.
+  "MedicationEfficacyTarget",
+  // The ECG strips. The register said the originating device may still hold
+  // them, which is true for about as long as the phone beside it does — and
+  // is not true at all once a Withings connection is revoked, because the
+  // signal id stops resolving with it.
+  //
+  // `measurementId` is the reference that made this more than a copy job. It
+  // is a REAL foreign key against the EVENT measurement the strip was filed
+  // with, so a value the restore cannot resolve does not dangle quietly the
+  // way the Coach's `sourceConversationId` does: it violates the constraint
+  // and takes the whole account down with it. A portable export omits
+  // soft-deleted measurements, so that case is reachable rather than
+  // theoretical. The reference is resolved against what the restore wrote,
+  // nulled when it cannot be, and reported either way.
+  "EcgRecording",
 ] as const;
 
 /** One model claimed to travel both ways. */
@@ -484,12 +531,6 @@ export const STRUCTURALLY_UNATTRIBUTABLE: Readonly<Record<string, string>> = {
  * rather than by what is cheapest to write.
  */
 export const COVERAGE_PENDING: Readonly<Record<string, string>> = {
-  MedicationScheduleRevision:
-    "The history of how a schedule changed. Without it a restored medication keeps today's schedule and loses the record of when the dose or timing moved, which is the part a doctor asks about.",
-  MedicationEfficacyTarget:
-    "What a medication was supposed to move, and by how much. The drug comes back with no statement of what it was for.",
-  EcgRecording:
-    "ECG traces and their rhythm classification. The originating device may still hold them, but a self-hoster who exported and wiped has nothing to re-sync from.",
   WorkoutRoute:
     "GPS traces. Deliberately absent from the payload today and DISCLOSED as absent in the file's own manifest, which is why this is a documented exclusion rather than a silent one — but it is still a loss for a self-hoster with no other copy.",
   WorkoutSamples:

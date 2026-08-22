@@ -264,6 +264,55 @@ const reminderPhaseConfigSchema = z
   })
   .passthrough();
 
+/**
+ * One archived schedule era.
+ *
+ * `supersededByIndex` is the self-reference, and it is a POSITION in the
+ * drug's own `scheduleRevisions` array rather than an id: a portable restore
+ * mints fresh ids, so an id would address nothing. It stays a plain integer
+ * with no range check here on purpose — the file is the wrong place to learn
+ * that a position is out of range, because the array it indexes into is the
+ * array being parsed. The restore does that check, against the rows it
+ * actually wrote, and reports what it cannot resolve.
+ *
+ * `payload` is the snapshot of the superseded schedule rows, carried as
+ * written. Unknown on purpose rather than typed: it is an era's frozen copy of
+ * a shape that has changed several times, and a restore must not refuse a file
+ * because a five-release-old snapshot spells a field the current form does not.
+ */
+const medicationScheduleRevisionSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    validFrom: isoDateTime,
+    validUntil: isoDateTime,
+    payload: z.unknown(),
+    source: z.string().min(1).optional(),
+    supersededByIndex: z.number().int().nullable().optional(),
+    createdAt: isoDateTime.optional(),
+  })
+  .passthrough();
+
+/**
+ * What a medication was supposed to move.
+ *
+ * The lab arm is a biomarker NAME rather than an id, the way a lab result's
+ * cross-reference is: the id is fresh on a portable restore, and `Biomarker`
+ * is unique on `(userId, name)`. Both arms are nullable because the live
+ * schema produces a row with neither — deleting a biomarker sets the column
+ * NULL and leaves the override behind as an orphan the resolver reads as "no
+ * override".
+ */
+const medicationEfficacyTargetSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    measurementType: z.enum(MeasurementType).nullable().optional(),
+    biomarkerName: z.string().min(1).nullable().optional(),
+    primary: z.boolean().optional(),
+    createdAt: isoDateTime.optional(),
+    updatedAt: isoDateTime.optional(),
+  })
+  .passthrough();
+
 const medicationSchema = z
   .object({
     id: z.string().min(1).optional(),
@@ -307,6 +356,12 @@ const medicationSchema = z
     inventoryItems: z.array(medicationInventoryItemSchema).default([]),
     inventoryEvents: z.array(medicationInventoryEventSchema).default([]),
     phaseConfig: reminderPhaseConfigSchema.nullable().optional(),
+    // Same default, same reason: an older file parses, and a drug whose
+    // target the resolver derives rather than the person pinning it writes [].
+    efficacyTargets: z.array(medicationEfficacyTargetSchema).default([]),
+    // Same default again. A drug whose plan has never been replaced has no
+    // archived era, and a file written before the eras travelled has no key.
+    scheduleRevisions: z.array(medicationScheduleRevisionSchema).default([]),
   })
   .passthrough();
 
@@ -1514,6 +1569,36 @@ const documentBackupSchema = z
   })
   .passthrough();
 
+/**
+ * One ECG strip.
+ *
+ * `waveformEncrypted` and `waveform` are the two ends of the same contract, so
+ * both are optional here and exactly one arrives: a disaster-recovery file
+ * carries the ciphertext, a portable file carries the micro-volt samples.
+ * Requiring either would refuse half the valid files. `samplingFrequency` and
+ * `sampleCount` stay required in both, because without them the samples are a
+ * list of numbers with no time axis.
+ */
+const ecgRecordingBackupSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    source: z.enum(MeasurementSource),
+    externalRecordingId: z.string().min(1),
+    recordedAt: isoDateTime,
+    waveformEncrypted: base64BytesSchema.optional(),
+    waveform: z.array(z.number()).optional(),
+    samplingFrequency: z.number().int(),
+    sampleCount: z.number().int(),
+    durationSeconds: z.number().nullable().optional(),
+    lead: z.string().nullable().optional(),
+    averageHeartRate: z.number().int().nullable().optional(),
+    rhythmClassification: z.enum(RhythmClassification).nullable().optional(),
+    measurementId: z.string().min(1).nullable().optional(),
+    createdAt: isoDateTime,
+    updatedAt: isoDateTime,
+  })
+  .passthrough();
+
 const backupManifestSchema = z
   .object({
     documents: z
@@ -1627,6 +1712,10 @@ export const backupPayloadSchema = z
     environmentTravelLocations: z
       .array(environmentTravelLocationBackupSchema)
       .default([]),
+    // The ECG strips. Defaulted for the same reason as the sections above: a
+    // file written before the recordings travelled carries no key, and an
+    // account whose watch has never taken one writes [].
+    ecgRecordings: z.array(ecgRecordingBackupSchema).default([]),
     manifest: backupManifestSchema.nullable().default(null),
     // v1.37.19 (A6-9) — field paths a PORTABLE export could not decrypt
     // (fail-soft nulls). Disclosed in the file so a nulled field is
@@ -1663,6 +1752,10 @@ export interface BackupSummary {
   intakeEvents: number;
   /** Side effects recorded against a drug, across every medication. */
   medicationSideEffects: number;
+  /** Pinned efficacy targets, across every medication. */
+  medicationEfficacyTargets: number;
+  /** Archived schedule eras, across every medication. */
+  medicationScheduleRevisions: number;
   moodEntries: number;
   /** v1.15.0 — observed cycle spans in the backup. */
   cycles: number;
@@ -1737,6 +1830,8 @@ export interface BackupSummary {
   environmentContexts: number;
   /** Declared stretches spent away from home. */
   environmentTravelLocations: number;
+  /** ECG strips, with their rhythm verdict and their trace. */
+  ecgRecordings: number;
 }
 
 export function summarizeBackup(payload: BackupPayload): BackupSummary {
@@ -1749,6 +1844,14 @@ export function summarizeBackup(payload: BackupPayload): BackupSummary {
     intakeEvents: payload.intakeEvents.length,
     medicationSideEffects: payload.medications.reduce(
       (sum, medication) => sum + medication.sideEffects.length,
+      0,
+    ),
+    medicationEfficacyTargets: payload.medications.reduce(
+      (sum, medication) => sum + medication.efficacyTargets.length,
+      0,
+    ),
+    medicationScheduleRevisions: payload.medications.reduce(
+      (sum, medication) => sum + medication.scheduleRevisions.length,
       0,
     ),
     moodEntries: payload.moodEntries.length,
@@ -1815,6 +1918,7 @@ export function summarizeBackup(payload: BackupPayload): BackupSummary {
     userAchievements: payload.userAchievements.length,
     environmentContexts: payload.environmentContexts.length,
     environmentTravelLocations: payload.environmentTravelLocations.length,
+    ecgRecordings: payload.ecgRecordings.length,
   };
 }
 

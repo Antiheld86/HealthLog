@@ -58,6 +58,10 @@ import {
   encryptFactData,
   encryptFactProvenance,
 } from "@/lib/documents/store";
+import {
+  decryptWaveformFromBytes,
+  encryptWaveformToBytes,
+} from "@/lib/withings/ecg-waveform-codec";
 import { buildFullBackupPayload } from "@/lib/export/full-backup-payload";
 import { TWO_ENDED_MODELS, type TwoEndedModel } from "@/lib/export/backup-plan";
 import { POST } from "@/app/api/admin/backups/[id]/restore/route";
@@ -109,6 +113,8 @@ const COACH_ASSISTANT_TURN =
 const DOSE_CHANGE_NOTE = "titration note, encrypted at rest";
 const EXTRACTED_FACT_SPAN = "Ferritin  91 ng/mL   (30 - 400)";
 const SIDE_EFFECT_NOTE = "nausea for two hours after the evening dose";
+/** A short micro-volt strip. Long enough that a defaulted empty array shows. */
+const ECG_SAMPLES = [-12, 4, 118, -33, 7, 2, -5, 61];
 
 beforeEach(async () => {
   await truncateAllTables(getPrismaClient());
@@ -222,6 +228,12 @@ const COUNT_BACK: Record<
     p.environmentContext.count({ where: { userId } }),
   EnvironmentTravelLocation: (p, userId) =>
     p.environmentTravelLocation.count({ where: { userId } }),
+  EcgRecording: (p, userId) => p.ecgRecording.count({ where: { userId } }),
+  // No own `userId` column — reached through the drug, like the schedules.
+  MedicationEfficacyTarget: (p, userId) =>
+    p.medicationEfficacyTarget.count({ where: { medication: { userId } } }),
+  MedicationScheduleRevision: (p, userId) =>
+    p.medicationScheduleRevision.count({ where: { medication: { userId } } }),
 };
 
 /**
@@ -245,6 +257,37 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       unit: "kg",
       measuredAt: AT("2026-07-01T07:00:00.000Z"),
       source: "MANUAL",
+    },
+  });
+  // The EVENT row an ECG strip is filed against, and the strip itself. The
+  // pairing is the point: `EcgRecording.measurementId` is a real foreign key,
+  // so this is the reference whose remap has to survive the round trip rather
+  // than fail the transaction.
+  const rhythmEvent = await prisma.measurement.create({
+    data: {
+      userId: OWNER_ID,
+      type: "IRREGULAR_RHYTHM_NOTIFICATION",
+      value: 1,
+      unit: "event",
+      measuredAt: AT("2026-06-15T14:22:00.000Z"),
+      source: "WITHINGS",
+      rhythmClassification: "IRREGULAR",
+    },
+  });
+  await prisma.ecgRecording.create({
+    data: {
+      userId: OWNER_ID,
+      source: "WITHINGS",
+      externalRecordingId: "round-trip-signal-1",
+      recordedAt: AT("2026-06-15T14:22:00.000Z"),
+      waveformEncrypted: encryptWaveformToBytes(ECG_SAMPLES),
+      samplingFrequency: 300,
+      sampleCount: ECG_SAMPLES.length,
+      durationSeconds: ECG_SAMPLES.length / 300,
+      lead: "I",
+      averageHeartRate: 88,
+      rhythmClassification: "IRREGULAR",
+      measurementId: rhythmEvent.id,
     },
   });
   await prisma.intradayCumulativeProfile.create({
@@ -426,6 +469,42 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       },
     ],
   });
+  // Three archived eras, and the CHAIN through them is the content. The
+  // middle one was corrected, so it points at the third; the first and the
+  // third stand on their own. A restore that returned three rows with every
+  // link null satisfies any count and has destroyed the only thing the
+  // pointer says — every era consumer skips a superseded row, so the
+  // corrected middle era would come back live beside the correction that
+  // replaced it and the timeline would show the same window twice.
+  await prisma.medicationScheduleRevision.create({
+    data: {
+      medicationId: medication.id,
+      validFrom: AT("2026-01-01T00:00:00.000Z"),
+      validUntil: AT("2026-03-01T00:00:00.000Z"),
+      payload: [{ windowStart: "07:00", windowEnd: "09:00", dose: "5 mg" }],
+      source: "ARCHIVED",
+    },
+  });
+  const correctionEra = await prisma.medicationScheduleRevision.create({
+    data: {
+      medicationId: medication.id,
+      validFrom: AT("2026-03-01T00:00:00.000Z"),
+      validUntil: AT("2026-05-01T00:00:00.000Z"),
+      payload: [{ windowStart: "08:00", windowEnd: "10:00", dose: "10 mg" }],
+      source: "MANUAL",
+    },
+  });
+  await prisma.medicationScheduleRevision.create({
+    data: {
+      medicationId: medication.id,
+      validFrom: AT("2026-02-01T00:00:00.000Z"),
+      validUntil: AT("2026-03-01T00:00:00.000Z"),
+      payload: [{ windowStart: "12:00", windowEnd: "13:00", dose: "10 mg" }],
+      source: "ARCHIVED",
+      supersededByRevisionId: correctionEra.id,
+    },
+  });
+
   await prisma.medicationPauseEra.createMany({
     data: [
       {
@@ -511,6 +590,17 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       value: 91,
       unit: "ng/mL",
       takenAt: AT("2026-06-30T09:00:00.000Z"),
+    },
+  });
+  // What the drug above is FOR, pinned to the analyte just created. The two
+  // rows are seeded at opposite ends of this fixture on purpose: the drug is
+  // restored hundreds of lines before the analyte, so this pairing is what
+  // proves the second pass runs late enough to resolve the name.
+  await prisma.medicationEfficacyTarget.create({
+    data: {
+      medicationId: medication.id,
+      biomarkerId: biomarker.id,
+      primary: true,
     },
   });
   await prisma.allergy.create({
@@ -1765,6 +1855,155 @@ describe("every model the plan claims two-ended survives a real restore", () => 
         confidence: 0.94,
       },
     });
+    // The archived eras, and the CHAIN through them.
+    //
+    // Counting says three eras returned, and three eras with every link null
+    // would satisfy it exactly while having thrown away the only thing the
+    // pointer states. That is not a cosmetic loss: every era consumer skips a
+    // superseded row, so a corrected era whose link came back null goes live
+    // again beside the correction that replaced it, and the account gets two
+    // overlapping plans for one window with its past compliance minted against
+    // whichever the query happened to read.
+    //
+    // Asserted as the shape of the chain rather than as ids: the ids are fresh
+    // on a portable restore, and what the two-pass write owes is that era two
+    // still points at era three and that nothing else points anywhere.
+    const scheduleEras = await prisma.medicationScheduleRevision.findMany({
+      where: { medication: { userId: OWNER_ID } },
+      orderBy: [{ validFrom: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+    });
+    const eraPositionById = new Map(
+      scheduleEras.map((era, index) => [era.id, index]),
+    );
+    expect(
+      scheduleEras.map((era) => ({
+        validFrom: era.validFrom.toISOString(),
+        validUntil: era.validUntil.toISOString(),
+        source: era.source,
+        payload: era.payload,
+        supersedes: era.supersededByRevisionId
+          ? (eraPositionById.get(era.supersededByRevisionId) ?? "dangling")
+          : null,
+      })),
+      "the corrected era must come back still pointing at its correction",
+    ).toEqual([
+      {
+        validFrom: "2026-01-01T00:00:00.000Z",
+        validUntil: "2026-03-01T00:00:00.000Z",
+        source: "ARCHIVED",
+        payload: [{ windowStart: "07:00", windowEnd: "09:00", dose: "5 mg" }],
+        supersedes: null,
+      },
+      {
+        validFrom: "2026-02-01T00:00:00.000Z",
+        validUntil: "2026-03-01T00:00:00.000Z",
+        source: "ARCHIVED",
+        payload: [{ windowStart: "12:00", windowEnd: "13:00", dose: "10 mg" }],
+        supersedes: 2,
+      },
+      {
+        validFrom: "2026-03-01T00:00:00.000Z",
+        validUntil: "2026-05-01T00:00:00.000Z",
+        source: "MANUAL",
+        payload: [{ windowStart: "08:00", windowEnd: "10:00", dose: "10 mg" }],
+        supersedes: null,
+      },
+    ]);
+    // What the pointer actually buys, stated as the thing the app reads: the
+    // timeline query drops superseded rows, so exactly two eras are live.
+    expect(
+      await prisma.medicationScheduleRevision.count({
+        where: {
+          medication: { userId: OWNER_ID },
+          supersededByRevisionId: null,
+        },
+      }),
+      "a lost pointer puts a corrected era back on the timeline",
+    ).toBe(2);
+
+    // The pinned target, and the analyte it points at.
+    //
+    // Counting says one override returned. It cannot say the override still
+    // MEANS anything: a restore that wrote the row with `biomarkerId` nulled
+    // returns a drug with no statement of what it was for, which is precisely
+    // what the register said the alternative cost, and nothing anywhere would
+    // complain — the resolver silently falls back to deriving a target and the
+    // page still renders.
+    //
+    // Both ends are resolved from the DATABASE rather than remembered from the
+    // fixture. The property the second pass owes is that the target points at
+    // the biomarker THIS restore wrote, which an id carried over from the
+    // seeding would not distinguish from a restore that copied a stale value.
+    const restoredBiomarker = await prisma.biomarker.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+    });
+    const restoredMedication = await prisma.medication.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+    });
+    const target = await prisma.medicationEfficacyTarget.findFirstOrThrow({
+      where: { medication: { userId: OWNER_ID } },
+      include: { biomarker: { select: { name: true, userId: true } } },
+    });
+    expect({
+      medicationId: target.medicationId,
+      biomarkerId: target.biomarkerId,
+      biomarkerName: target.biomarker?.name ?? null,
+      biomarkerOwner: target.biomarker?.userId ?? null,
+      measurementType: target.measurementType,
+      primary: target.primary,
+    }).toEqual({
+      medicationId: restoredMedication.id,
+      biomarkerId: restoredBiomarker.id,
+      biomarkerName: "Ferritin",
+      biomarkerOwner: OWNER_ID,
+      measurementType: null,
+      primary: true,
+    });
+
+    // The strip, read back column by column.
+    //
+    // Counting proves a recording returned. It cannot tell that recording from
+    // one whose trace is an empty array, whose verdict defaulted to NULL and
+    // whose instant is the restore time — and each of those three is the whole
+    // value of the row on its own. A strip with no rhythm classification is a
+    // squiggle nobody has read; a strip with no `recordedAt` belongs to no day
+    // and cannot be put beside the event it explains; a strip with no samples
+    // is a claim that an ECG exists which nothing can draw.
+    //
+    // `measurementId` is resolved from the DATABASE rather than remembered
+    // from the fixture, because the property the remap owes is that the strip
+    // points at the event row THIS restore wrote.
+    const restoredEvent = await prisma.measurement.findFirstOrThrow({
+      where: { userId: OWNER_ID, type: "IRREGULAR_RHYTHM_NOTIFICATION" },
+    });
+    const strip = await prisma.ecgRecording.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+    });
+    expect({
+      source: strip.source,
+      externalRecordingId: strip.externalRecordingId,
+      recordedAt: strip.recordedAt.toISOString(),
+      samplingFrequency: strip.samplingFrequency,
+      sampleCount: strip.sampleCount,
+      durationSeconds: strip.durationSeconds,
+      lead: strip.lead,
+      averageHeartRate: strip.averageHeartRate,
+      rhythmClassification: strip.rhythmClassification,
+      measurementId: strip.measurementId,
+      waveform: decryptWaveformFromBytes(strip.waveformEncrypted),
+    }).toEqual({
+      source: "WITHINGS",
+      externalRecordingId: "round-trip-signal-1",
+      recordedAt: "2026-06-15T14:22:00.000Z",
+      samplingFrequency: 300,
+      sampleCount: ECG_SAMPLES.length,
+      durationSeconds: ECG_SAMPLES.length / 300,
+      lead: "I",
+      averageHeartRate: 88,
+      rhythmClassification: "IRREGULAR",
+      measurementId: restoredEvent.id,
+      waveform: ECG_SAMPLES,
+    });
 
     // The appointment's reminder reference survives too — same remap, other
     // referrer.
@@ -1964,6 +2203,121 @@ describe("every model the plan claims two-ended survives a real restore", () => 
       sameLat: true,
       sameLon: true,
     });
+  });
+
+  /**
+   * A supersede pointer that names a position the file does not have.
+   *
+   * The builder computes the index from the same list it writes, so no file
+   * this release produces can trip this. A hand-edited or truncated one can,
+   * and the question it asks has to be answered somewhere: the era it names
+   * does not exist, the column is a bare id with no constraint to stop a
+   * wrong value, and inventing a neighbouring era to point at would be worse
+   * than either dropping or refusing.
+   *
+   * The answer is that the ERA restores and the POINTER does not, and the
+   * position is reported. Refusing the file would cost an operator every era
+   * of every drug over one bad integer; writing the link would put a
+   * correction pointer at whatever row happened to be there.
+   */
+  it("keeps an archived era whose supersede pointer names a position out of range, and reports the position", async () => {
+    const prisma = getPrismaClient();
+    await seedAdminSession(prisma);
+    await createOwner(prisma);
+
+    const medication = await prisma.medication.create({
+      data: { userId: OWNER_ID, name: "Out-of-range tablet", dose: "5 mg" },
+    });
+    await prisma.medicationScheduleRevision.createMany({
+      data: [
+        {
+          medicationId: medication.id,
+          validFrom: AT("2026-01-01T00:00:00.000Z"),
+          validUntil: AT("2026-02-01T00:00:00.000Z"),
+          payload: [{ windowStart: "07:00", windowEnd: "09:00" }],
+          source: "ARCHIVED",
+        },
+        {
+          medicationId: medication.id,
+          validFrom: AT("2026-02-01T00:00:00.000Z"),
+          validUntil: AT("2026-03-01T00:00:00.000Z"),
+          payload: [{ windowStart: "08:00", windowEnd: "10:00" }],
+          source: "MANUAL",
+        },
+      ],
+    });
+
+    const { payload } = await buildFullBackupPayload(prisma, OWNER_ID, {
+      purpose: "disaster-recovery",
+    });
+    // Hand-edit the file the way a person with a text editor would: point the
+    // first era at an era that is not there.
+    const medications = payload.medications as Array<{
+      scheduleRevisions: Array<{ supersededByIndex: number | null }>;
+    }>;
+    medications[0].scheduleRevisions[0].supersededByIndex = 7;
+
+    await prisma.user.delete({ where: { id: OWNER_ID } });
+    await createOwner(prisma);
+
+    const backup = await prisma.dataBackup.create({
+      data: {
+        userId: OWNER_ID,
+        type: "TWO_ENDED_ROUND_TRIP",
+        data: encrypt(JSON.stringify(payload)),
+      },
+    });
+    const response = await POST(
+      new Request(`http://localhost/api/admin/backups/${backup.id}/restore`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirm: "RESTORE" }),
+      }) as never,
+      { params: Promise.resolve({ id: backup.id }) },
+    );
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).toBe(200);
+
+    const reported = body.data.skipped.catalogueKeys as Array<{
+      catalogue: string;
+      key: string;
+      links: number;
+    }>;
+    expect(
+      reported.filter((entry) => entry.catalogue === "scheduleRevisionLink"),
+      "the position the file named is not in the file, so dropping the link " +
+        "is correct and saying nothing about it is not",
+    ).toEqual([
+      {
+        catalogue: "scheduleRevisionLink",
+        key: "medications[0].scheduleRevisions[0].supersededByIndex=7",
+        links: 1,
+      },
+    ]);
+
+    const restoredEras = await prisma.medicationScheduleRevision.findMany({
+      where: { medication: { userId: OWNER_ID } },
+      orderBy: { validFrom: "asc" },
+    });
+    expect(
+      restoredEras.map((era) => ({
+        validFrom: era.validFrom.toISOString(),
+        source: era.source,
+        supersededByRevisionId: era.supersededByRevisionId,
+      })),
+      "both eras come back; only the pointer is lost",
+    ).toEqual([
+      {
+        validFrom: "2026-01-01T00:00:00.000Z",
+        source: "ARCHIVED",
+        supersededByRevisionId: null,
+      },
+      {
+        validFrom: "2026-02-01T00:00:00.000Z",
+        source: "MANUAL",
+        supersededByRevisionId: null,
+      },
+    ]);
   });
 
   /**

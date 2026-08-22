@@ -236,6 +236,41 @@ function makePrisma() {
             redValue: 180,
             redMode: "MINUTES",
           },
+          // Two archived eras, the first corrected by the second. The
+          // pointer is what makes this more than two rows: the payload has
+          // to carry it as the SECOND era's position, not as its id.
+          scheduleRevisions: [
+            {
+              id: "era-original",
+              validFrom: new Date("2026-01-01T00:00:00.000Z"),
+              validUntil: new Date("2026-03-01T00:00:00.000Z"),
+              payload: [{ windowStart: "07:00", windowEnd: "09:00" }],
+              source: "ARCHIVED",
+              supersededByRevisionId: "era-correction",
+              createdAt: new Date("2026-03-01T00:00:01.000Z"),
+            },
+            {
+              id: "era-correction",
+              validFrom: new Date("2026-03-01T00:00:00.000Z"),
+              validUntil: new Date("2026-05-01T00:00:00.000Z"),
+              payload: [{ windowStart: "08:00", windowEnd: "10:00" }],
+              source: "MANUAL",
+              supersededByRevisionId: null,
+              createdAt: new Date("2026-05-02T00:00:01.000Z"),
+            },
+          ],
+          // One pinned efficacy target, on the lab arm. The biomarker rides
+          // as a NAME, the way a lab result's cross-reference does.
+          efficacyTargets: [
+            {
+              id: "target-canonical",
+              measurementType: null,
+              biomarker: { name: "Ferritin" },
+              primary: true,
+              createdAt: new Date("2026-07-01T08:00:00.000Z"),
+              updatedAt: new Date("2026-07-01T08:00:00.000Z"),
+            },
+          ],
           inventoryEvents: [
             {
               id: "stock-in",
@@ -373,6 +408,10 @@ function makePrisma() {
     // Empty for the same reason as the sections above.
     documentConditionLink: { findMany: vi.fn().mockResolvedValue([]) },
     extractedFact: { findMany: vi.fn().mockResolvedValue([]) },
+    // The ECG strips. Empty for the same reason as the sections above:
+    // an account whose watch has never taken one is the ordinary case the
+    // builder must still answer for.
+    ecgRecording: { findMany: vi.fn().mockResolvedValue([]) },
     // Left unmocked on purpose: `buildProfileBackupSection` runs for real
     // against these, so the assertions below exercise the builder rather than
     // a stand-in that would agree with whatever the payload happened to do.

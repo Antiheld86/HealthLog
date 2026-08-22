@@ -29,7 +29,12 @@ import {
 } from "./account-sharing";
 import { adminDiagnosticPaths, adminInvitePaths } from "./admin";
 import { allergyPaths } from "./allergies";
+import { analyticsPaths } from "./analytics";
 import { authPaths } from "./auth";
+import { awardsPaths } from "./awards";
+import { environmentPaths } from "./environment";
+import { healthPaths } from "./health";
+import { ingestPaths } from "./ingest";
 import {
   coachFeedbackPaths,
   coachPaths,
@@ -148,6 +153,15 @@ export const openApiPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   // therefore has to be the shared refusal sentence rather than the neighbouring
   // module's local wording (appended, spread order is load-bearing).
   ...recordSettingsPaths,
+  // Routes that existed for releases without ever reaching the registry, so
+  // `openapi:check` saw no drift and reported nothing: it compares the
+  // registry against the committed YAML and has never compared the routes on
+  // disk against the registry. Appended, spread order is load-bearing.
+  ...healthPaths,
+  ...analyticsPaths,
+  ...awardsPaths,
+  ...environmentPaths,
+  ...ingestPaths,
 };
 
 export const openApiComponents: NonNullable<ZodOpenApiObject["components"]> = {

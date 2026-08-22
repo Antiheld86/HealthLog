@@ -63,6 +63,7 @@ vi.mock("@/lib/db", () => ({
     // What a document was filed against, and what was read out of it.
     documentConditionLink: { findMany: vi.fn() },
     extractedFact: { findMany: vi.fn() },
+    ecgRecording: { findMany: vi.fn() },
   },
 }));
 
@@ -174,6 +175,7 @@ beforeEach(() => {
     [] as never,
   );
   vi.mocked(prisma.extractedFact.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.ecgRecording.findMany).mockResolvedValue([] as never);
 });
 
 describe("v1.4.41 W-DELETED-2 — soft-delete invisibility", () => {

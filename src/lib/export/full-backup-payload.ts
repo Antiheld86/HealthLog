@@ -91,6 +91,12 @@ import {
   type EnvironmentBackupSection,
 } from "@/lib/export/environment-backup";
 import {
+  buildEcgBackupSection,
+  countEcgBackupSection,
+  type EcgBackupCounts,
+  type EcgBackupSection,
+} from "@/lib/export/ecg-backup";
+import {
   buildIntradayProfileBackupSection,
   countIntradayProfileBackupSection,
   type IntradayProfileBackupCounts,
@@ -111,7 +117,8 @@ export interface FullBackupCounts
     SensitiveBackupCounts,
     DocumentFilingBackupCounts,
     AwardsBackupCounts,
-    EnvironmentBackupCounts {
+    EnvironmentBackupCounts,
+    EcgBackupCounts {
   measurements: number;
   medications: number;
   intakeEvents: number;
@@ -121,6 +128,8 @@ export interface FullBackupCounts
   medicationInventoryItems: number;
   medicationInventoryEvents: number;
   reminderPhaseConfigs: number;
+  medicationEfficacyTargets: number;
+  medicationScheduleRevisions: number;
   moodEntries: number;
   customMoodTagCategories: number;
   hiddenMoodTags: number;
@@ -341,6 +350,7 @@ export async function buildFullBackupPayload(
     documentFiling,
     awards,
     environment,
+    ecg,
     nutrientDays,
   ] = await Promise.all([
     disasterRecovery
@@ -417,6 +427,26 @@ export async function buildFullBackupPayload(
         inventoryItems: { orderBy: { createdAt: "asc" } },
         inventoryEvents: { orderBy: { occurredAt: "asc" } },
         phaseConfig: true,
+        // The archived schedule eras. Ordered TOTALLY, not just by the column
+        // that reads like the sort key: the position in this list is the
+        // identifier the supersede pointer travels as, so two eras sharing a
+        // `validFrom` must not be free to swap places between two exports of
+        // the same account.
+        scheduleRevisions: {
+          orderBy: [
+            { validFrom: "asc" },
+            { createdAt: "asc" },
+            { id: "asc" },
+          ] as const,
+        },
+        // What the drug was supposed to move. The biomarker is read by NAME
+        // rather than by id, exactly as the lab results beside it are: a
+        // portable restore mints a fresh biomarker id, and `(userId, name)` is
+        // the natural key the catalogue is already unique on.
+        efficacyTargets: {
+          orderBy: { createdAt: "asc" },
+          include: { biomarker: { select: { name: true } } },
+        },
       },
     }),
     prisma.medicationIntakeEvent.findMany({
@@ -549,6 +579,12 @@ export async function buildFullBackupPayload(
     // `src/lib/export/environment-backup.ts`, and the purpose is absent for
     // the same reason as the awards above.
     buildEnvironmentBackupSection(prisma, userId),
+    // The ECG strips, their rhythm verdicts and their traces. Both ends live
+    // in `src/lib/export/ecg-backup.ts` beside each other, the same
+    // arrangement as the sections above and for the same reason.
+    buildEcgBackupSection(prisma, userId, {
+      purpose: disasterRecovery ? "disaster-recovery" : "portable-export",
+    }),
     // Nutrient day totals were absent from every export path, which
     // contradicted the schema's own reason for denormalising the unit column
     // ("rows stay self-describing in exports even if the catalog ever drifts").
@@ -588,6 +624,20 @@ export async function buildFullBackupPayload(
   const documentFilingSection: DocumentFilingBackupSection = documentFiling;
   const awardsSection: AwardsBackupSection = awards;
   const environmentSection: EnvironmentBackupSection = environment;
+  const ecgSection: EcgBackupSection = ecg;
+
+  // Where each archived era sits in its OWN drug's ordered list. Built once
+  // here rather than per row, and scoped per medication because the supersede
+  // pointer never crosses a drug — every route that writes it scopes the
+  // update to the medication it belongs to.
+  const revisionIndexByMedication = new Map(
+    medications.map((m) => [
+      m.id,
+      new Map(
+        m.scheduleRevisions.map((revision, index) => [revision.id, index]),
+      ),
+    ]),
+  );
 
   const payload = {
     schemaVersion: BACKUP_SCHEMA_VERSION,
@@ -782,6 +832,56 @@ export async function buildFullBackupPayload(
         reason: e.reason,
         occurredAt: e.occurredAt.toISOString(),
       })),
+      // How the schedule got to where it is. The drug comes back on today's
+      // plan either way; without these the record of when the dose or the
+      // timing moved is gone, and the era minter reads every past day against
+      // the CURRENT schedule instead of the one that was live then — so a
+      // restored account's own compliance history quietly changes.
+      //
+      // `supersededByRevisionId` travels as a POSITION in this list rather
+      // than as an id. See the restore for the whole argument; the short form
+      // is that a portable restore mints fresh ids, so an id would point at
+      // nothing, and the list this array IS is the only stable thing both ends
+      // agree on. A pointer at a row outside this drug's own list cannot be
+      // expressed and is written as null — the schema allows it, no code path
+      // produces it, and inventing an index for it would be worse than saying
+      // nothing.
+      scheduleRevisions: m.scheduleRevisions.map((r) => ({
+        ...(disasterRecovery ? { id: r.id } : {}),
+        validFrom: r.validFrom.toISOString(),
+        validUntil: r.validUntil.toISOString(),
+        payload: r.payload,
+        source: r.source,
+        supersededByIndex: r.supersededByRevisionId
+          ? (revisionIndexByMedication
+              .get(m.id)
+              ?.get(r.supersededByRevisionId) ?? null)
+          : null,
+        createdAt: r.createdAt.toISOString(),
+      })),
+      // What the drug is FOR, in the person's own words rather than the
+      // resolver's. A row exists only where they overrode the derived
+      // ATC / name inference, so it is the one durable statement of intent
+      // the "Wirkung" view holds — and the drug restores with no statement of
+      // what it was for without it.
+      //
+      // The lab arm travels as a NAME, the way a lab result's does. The id is
+      // fresh on a portable restore, and `Biomarker` is unique on
+      // `(userId, name)`, so the name is the only thing that survives the
+      // trip. It is resolved on the way back against the biomarkers the
+      // restore wrote.
+      efficacyTargets: m.efficacyTargets.map((t) => ({
+        ...(disasterRecovery
+          ? {
+              id: t.id,
+              createdAt: t.createdAt.toISOString(),
+              updatedAt: t.updatedAt.toISOString(),
+            }
+          : {}),
+        measurementType: t.measurementType,
+        biomarkerName: t.biomarker?.name ?? null,
+        primary: t.primary,
+      })),
     })),
     intakeEvents: intakeEvents.map((e) => ({
       ...(disasterRecovery
@@ -946,6 +1046,7 @@ export async function buildFullBackupPayload(
     ...documentFilingSection,
     ...awardsSection,
     ...environmentSection,
+    ...ecgSection,
     nutrientDays: nutrientDays.map((n) => ({
       day: n.day,
       nutrient: n.nutrient,
@@ -982,6 +1083,14 @@ export async function buildFullBackupPayload(
         0,
       ),
       reminderPhaseConfigs: medications.filter((m) => m.phaseConfig).length,
+      medicationEfficacyTargets: medications.reduce(
+        (total, m) => total + m.efficacyTargets.length,
+        0,
+      ),
+      medicationScheduleRevisions: medications.reduce(
+        (total, m) => total + m.scheduleRevisions.length,
+        0,
+      ),
       moodEntries: moodEntries.length,
       customMoodTagCategories: customMoodTagCategories.length,
       hiddenMoodTags: hiddenMoodTags.length,
@@ -1001,6 +1110,7 @@ export async function buildFullBackupPayload(
       ...countDocumentFilingBackupSection(documentFiling),
       ...countAwardsBackupSection(awards),
       ...countEnvironmentBackupSection(environment),
+      ...countEcgBackupSection(ecg),
     },
   };
 }

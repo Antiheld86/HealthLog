@@ -82,17 +82,24 @@ describe("GET /api/personal-records", () => {
     });
   });
 
-  it("drops an unknown metricType silently (loose-typed filter contract)", async () => {
+  // Was "drops an unknown metricType silently (loose-typed filter contract)".
+  // That test pinned the defect rather than the contract: dropping the filter
+  // does not degrade gracefully, it WIDENS the read to every metric, so a
+  // typo returned more of the record than the caller asked for and the 200
+  // said nothing about it.
+  it("refuses an unknown metricType instead of widening the read", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
     const res = await GET(
       req("http://localhost/api/personal-records?metricType=BOGUS"),
     );
-    expect(res.status).toBe(200);
-    expect(prisma.personalRecord.findMany).toHaveBeenCalledWith({
-      where: { userId: "user-1" },
-      orderBy: { achievedAt: "desc" },
-      take: 100,
-    });
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as {
+      meta?: { errorCode?: string };
+      details?: { issues?: Array<{ path: string }> };
+    };
+    expect(body.meta?.errorCode).toBe("personal_records.invalid_query");
+    expect(body.details?.issues?.map((i) => i.path)).toContain("metricType");
+    expect(prisma.personalRecord.findMany).not.toHaveBeenCalled();
   });
 
   it("honours an explicit ?limit param", async () => {
@@ -108,10 +115,10 @@ describe("GET /api/personal-records", () => {
     });
   });
 
-  it("clamps ?limit to the project-wide ceiling of 500", async () => {
+  it("serves the ceiling itself", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
     const res = await GET(
-      req("http://localhost/api/personal-records?limit=999999"),
+      req("http://localhost/api/personal-records?limit=500"),
     );
     expect(res.status).toBe(200);
     expect(prisma.personalRecord.findMany).toHaveBeenCalledWith({
@@ -121,18 +128,35 @@ describe("GET /api/personal-records", () => {
     });
   });
 
-  it("falls back to default on garbage ?limit (defence-in-depth)", async () => {
+  // Was "clamps ?limit to the project-wide ceiling of 500". Silently serving
+  // 500 rows to a caller that asked for 999 999 is the same class of quiet
+  // substitution as the default-fallback below: the answer differs from the
+  // question and nothing says so.
+  it("refuses a ?limit above the ceiling instead of clamping", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
     const res = await GET(
-      req("http://localhost/api/personal-records?limit=abc"),
+      req("http://localhost/api/personal-records?limit=999999"),
     );
-    expect(res.status).toBe(200);
-    expect(prisma.personalRecord.findMany).toHaveBeenCalledWith({
-      where: { userId: "user-1" },
-      orderBy: { achievedAt: "desc" },
-      take: 100,
-    });
+    expect(res.status).toBe(422);
+    expect(prisma.personalRecord.findMany).not.toHaveBeenCalled();
   });
+
+  // Was "falls back to default on garbage ?limit (defence-in-depth)". A
+  // fallback that cannot be observed is not defence, it is a typo the caller
+  // never learns about.
+  it.each(["abc", "-1", "0", "2.5"])(
+    "refuses a garbage ?limit=%s",
+    async (value) => {
+      vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+      const res = await GET(
+        req(`http://localhost/api/personal-records?limit=${value}`),
+      );
+      expect(res.status).toBe(422);
+      const body = (await res.json()) as { meta?: { errorCode?: string } };
+      expect(body.meta?.errorCode).toBe("personal_records.invalid_query");
+      expect(prisma.personalRecord.findMany).not.toHaveBeenCalled();
+    },
+  );
 
   it("seeded record round-trips through the response", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);

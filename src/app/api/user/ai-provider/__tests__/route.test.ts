@@ -178,10 +178,22 @@ describe("PATCH /api/user/ai-provider — v1.22 fields", () => {
     );
   });
 
+  // Was `.rejects.toThrow(/between 10 and 600/)`. The route threw an
+  // HttpError for this one field while every other bad value was skipped in
+  // silence; it runs one Zod parse now, so the refusal is the standard
+  // multi-issue 422 that every sibling route answers with.
   it("rejects an out-of-range response timeout", async () => {
-    await expect(
-      patch(patchRequest({ responseTimeoutSeconds: 5 })),
-    ).rejects.toThrow(/between 10 and 600/);
+    const res = await patch(patchRequest({ responseTimeoutSeconds: 5 }));
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as {
+      meta?: { errorCode?: string };
+      details?: { issues?: Array<{ path: string; message?: string }> };
+    };
+    expect(body.meta?.errorCode).toBe("ai_provider.invalid");
+    const issue = body.details?.issues?.find(
+      (i) => i.path === "responseTimeoutSeconds",
+    );
+    expect(issue?.message).toMatch(/between 10 and 600/);
     expect(vi.mocked(prisma.user.update)).not.toHaveBeenCalled();
   });
 
@@ -265,6 +277,98 @@ describe("PATCH /api/user/ai-provider — the gateway's own columns (#470)", () 
     // one, so there is nothing for a stale value to redirect.
     expect(data.aiBaseUrl).toBeNull();
     expect(data).not.toHaveProperty("aiCompatBaseUrl");
+  });
+});
+
+/**
+ * A wrongly-typed field must be refused, not skipped.
+ *
+ * The route inspected the body key by key with `typeof` guards. A value of
+ * the wrong type failed every guard and simply produced no entry in the
+ * update object, so the write went ahead WITHOUT it and answered 200 — the
+ * caller was told the save succeeded while the field they set was discarded.
+ * A body of nothing but such keys fell through to "No valid fields", naming
+ * none of them, which is the same silence with a worse message.
+ */
+describe("PATCH /api/user/ai-provider — wrongly-typed fields are named", () => {
+  const patch = PATCH as (req: Request) => Promise<Response>;
+
+  it.each([
+    ["model", 42],
+    ["baseUrl", true],
+    ["compatModel", { nested: "object" }],
+    ["anthropicKey", 12345],
+    ["openaiKey", ["array"]],
+    ["responseTimeoutSeconds", "120"],
+  ])("refuses a %s of the wrong type and names its path", async (key, bad) => {
+    const res = await patch(patchRequest({ [key]: bad }));
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as {
+      meta?: { errorCode?: string };
+      details?: { issues?: Array<{ path: string }> };
+    };
+    expect(body.meta?.errorCode).toBe("ai_provider.invalid");
+    expect(body.details?.issues?.map((i) => i.path)).toContain(key);
+    expect(vi.mocked(prisma.user.update)).not.toHaveBeenCalled();
+  });
+
+  it("refuses the whole write when one field of several is wrongly typed", async () => {
+    vi.mocked(isPublicUrl).mockReturnValue(true);
+    const res = await patch(
+      patchRequest({ provider: "OPENAI", model: 42, openaiKey: "sk-real" }),
+    );
+    expect(res.status).toBe(422);
+    // Partial application would have persisted the provider and dropped the
+    // model, leaving the account in a state the caller never asked for.
+    expect(vi.mocked(prisma.user.update)).not.toHaveBeenCalled();
+  });
+
+  it("refuses an unrecognised provider and names its path", async () => {
+    const res = await patch(patchRequest({ provider: "GEMINI" }));
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as {
+      details?: { issues?: Array<{ path: string }> };
+    };
+    expect(body.details?.issues?.map((i) => i.path)).toContain("provider");
+  });
+
+  it("never echoes a rejected credential back in the error body", async () => {
+    const res = await patch(
+      patchRequest({ anthropicKey: 12345, openaiKey: "sk-super-secret" }),
+    );
+    expect(res.status).toBe(422);
+    expect(JSON.stringify(await res.json())).not.toContain("sk-super-secret");
+  });
+
+  it("still answers 'No valid fields' for a body of nothing it knows", async () => {
+    const res = await patch(patchRequest({ somethingElse: "value" }));
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as {
+      error: string;
+      meta?: { errorCode?: string };
+    };
+    expect(body.error).toBe("No valid fields");
+    expect(body.meta?.errorCode).toBe("ai_provider.no_fields");
+    expect(vi.mocked(prisma.user.update)).not.toHaveBeenCalled();
+  });
+
+  it("keeps accepting the three-state contract on a known field", async () => {
+    vi.mocked(isPublicUrl).mockReturnValue(true);
+    await patch(patchRequest({ model: "  gpt-4o  ", anthropicKey: "" }));
+    expect(vi.mocked(prisma.user.update)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          aiModel: "gpt-4o",
+          aiAnthropicKeyEncrypted: null,
+        }),
+      }),
+    );
+    // An omitted key is untouched, not cleared.
+    const data = vi.mocked(prisma.user.update).mock.calls[0][0].data as Record<
+      string,
+      unknown
+    >;
+    expect(data).not.toHaveProperty("aiOpenaiKeyEncrypted");
   });
 });
 

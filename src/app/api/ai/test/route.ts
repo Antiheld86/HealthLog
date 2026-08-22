@@ -1,5 +1,4 @@
 import type { NextRequest } from "next/server";
-import { z } from "zod/v4";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import {
   resolveProviderForTest,
@@ -16,6 +15,7 @@ import {
   reserveBudget,
   resolveDailyCap,
 } from "@/lib/ai/coach/budget";
+import { aiTestOverrideSchema } from "@/lib/validations/ai-provider";
 
 /**
  * Output ceiling of the probe below. Mirrors the `maxTokens` on the completion
@@ -38,32 +38,6 @@ const AI_TEST_DAILY_LIMIT = 50;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 export const dynamic = "force-dynamic";
-
-const overrideSchema = z
-  .object({
-    provider: z
-      .enum([
-        "OPENAI",
-        "ANTHROPIC",
-        "LOCAL",
-        "OPENAI_COMPATIBLE",
-        "CHATGPT_OAUTH",
-      ])
-      .optional()
-      .nullable(),
-    model: z.string().min(1).max(120).optional().nullable(),
-    baseUrl: z.string().url().max(2048).optional().nullable(),
-    anthropicKey: z.string().min(1).max(500).optional().nullable(),
-    localKey: z.string().min(1).max(500).optional().nullable(),
-    openaiKey: z.string().min(1).max(500).optional().nullable(),
-    // v1.33.1 (#470) — the OpenAI-compatible gateway's own fields, kept
-    // separate from `baseUrl` / `openaiKey` so testing an unsaved gateway
-    // config can never reach the pinned OpenAI arm and vice versa.
-    compatBaseUrl: z.string().url().max(2048).optional().nullable(),
-    compatKey: z.string().min(1).max(500).optional().nullable(),
-    compatModel: z.string().min(1).max(120).optional().nullable(),
-  })
-  .strict();
 
 export const POST = apiHandler(async (request: NextRequest) => {
   const { user } = await requireAuth();
@@ -93,7 +67,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
       maxBytes: 64 * 1024,
     });
     if (error) return error;
-    const parsed = overrideSchema.safeParse(data);
+    const parsed = aiTestOverrideSchema.safeParse(data);
     if (!parsed.success) {
       return apiError("Invalid override payload", 422);
     }
