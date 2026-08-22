@@ -92,6 +92,20 @@
  * cannot name.
  *
  * The thirteenth, `checkupClosure`, is not about a restore at all, and it borrows
+ * The tenth, `personalRecordReference`, names the measurement a personal best
+ * was found in. It reads like `coachReference` and is the opposite case in the
+ * one way that matters: `PersonalRecord.sourceMeasurementId` LOOKS like a bare
+ * id column in `prisma/schema.prisma`, which declares no relation for it, but
+ * migration 0054 created it as a real foreign key against `measurements`. So a
+ * dangling value here does not quietly stop meaning something. Postgres
+ * refuses the statement and the whole restore rolls back over one provenance
+ * pointer. What is dropped is therefore the POINTER and not the row: the best
+ * itself is the historical fact, which is why the column was declared
+ * `ON DELETE SET NULL` in the first place. The ordinary way it fails to
+ * resolve is a portable export whose source measurement was soft-deleted, and
+ * a legacy file whose measurements carry no ids at all.
+ *
+ * The eleventh, `checkupClosure`, is not about a restore at all, and it borrows
  * this shape deliberately rather than growing a second reporting mechanism
  * beside it. The situation is the same one: something a write was asked to do
  * could not be done, the record itself survives, and the person is told which
@@ -112,6 +126,7 @@ export type SkippedCatalogue =
   | "documentConditionLink"
   | "extractedFact"
   | "factCommitment"
+  | "personalRecordReference"
   | "checkupClosure";
 
 /** One key this instance does not know, and the links it cost. */

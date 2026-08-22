@@ -6918,7 +6918,8 @@
         "restoreSkippedDocumentConditionLink": "Classificazione del documento",
         "restoreSkippedExtractedFact": "Dato del documento",
         "restoreSkippedFactCommitment": "Registrazione del dato",
-        "docsLink": "Documentazione"
+        "docsLink": "Documentazione",
+        "restoreSkippedPersonalRecordReference": "Provenienza di un primato personale"
       },
       "danger-zone": {
         "title": "Zona pericolosa",

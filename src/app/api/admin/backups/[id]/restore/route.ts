@@ -57,6 +57,8 @@ import {
 } from "@/lib/export/coach-backup";
 import { restoreRemindersData } from "@/lib/export/reminders-backup";
 import { restoreDocumentFilingData } from "@/lib/export/document-filing-backup";
+import { restoreAwardsData } from "@/lib/export/awards-backup";
+import { restoreEnvironmentData } from "@/lib/export/environment-backup";
 import { invalidateUserData } from "@/lib/cache/invalidate";
 
 export const dynamic = "force-dynamic";
@@ -114,6 +116,10 @@ interface RestoreResponse {
     coachReminders: number;
     mentalHealthAssessments: number;
     consentReceipts: number;
+    personalRecords: number;
+    userAchievements: number;
+    environmentContexts: number;
+    environmentTravelLocations: number;
   };
 }
 
@@ -1654,6 +1660,38 @@ const handler = apiHandler(
             payload,
           );
 
+          // The bests and the badges. AFTER the measurements, and this one is
+          // not a preference: `PersonalRecord.sourceMeasurementId` is a real
+          // foreign key against `measurements` (migration 0054) even though
+          // `prisma/schema.prisma` declares no relation for it, so a pointer
+          // resolved before the measurements exist would not drop quietly.
+          // Postgres would refuse the insert and roll the whole restore back
+          // over one provenance column. The id set is the measurements this
+          // transaction actually wrote with a stable id, threaded in rather
+          // than re-queried so the function stays a pure reader of it. Both
+          // ends of this section live in `src/lib/export/awards-backup.ts`.
+          const awardsCleared = await restoreAwardsData(
+            tx,
+            ownerId,
+            payload,
+            new Set(stableRows.map((row) => row.id)),
+            skips,
+          );
+
+          // The per-day readings and the location periods that explain them.
+          // Neither references anything but the account, so this section has
+          // no ordering constraint against any other and sits here beside the
+          // rest. What it does owe is atomicity WITH ITSELF, which is why one
+          // function writes both: readings restored without their periods get
+          // re-resolved to the home location and overwritten by the next
+          // environment refresh. Both ends of this section live in
+          // `src/lib/export/environment-backup.ts`.
+          const environmentCleared = await restoreEnvironmentData(
+            tx,
+            ownerId,
+            payload,
+          );
+
           const cleared = {
             measurements: measurements.count,
             medications: meds.count,
@@ -1699,6 +1737,11 @@ const handler = apiHandler(
             coachReminders: coachMemoryCleared.coachReminders,
             mentalHealthAssessments: sensitiveCleared.mentalHealthAssessments,
             consentReceipts: sensitiveCleared.consentReceipts,
+            personalRecords: awardsCleared.personalRecords,
+            userAchievements: awardsCleared.userAchievements,
+            environmentContexts: environmentCleared.environmentContexts,
+            environmentTravelLocations:
+              environmentCleared.environmentTravelLocations,
           };
           return { cleared, skipped: summarizeRestoreSkips(skips) };
         },

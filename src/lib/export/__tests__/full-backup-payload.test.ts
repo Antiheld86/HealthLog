@@ -352,6 +352,12 @@ function makePrisma() {
     // same reason as the visit tables above.
     measurementReminder: { findMany: vi.fn().mockResolvedValue([]) },
     measurementReminderEvent: { findMany: vi.fn().mockResolvedValue([]) },
+    // The bests, the badges, and the environmental history with the location
+    // periods that explain it. Empty for the same reason as the tables above.
+    personalRecord: { findMany: vi.fn().mockResolvedValue([]) },
+    userAchievement: { findMany: vi.fn().mockResolvedValue([]) },
+    environmentContext: { findMany: vi.fn().mockResolvedValue([]) },
+    environmentTravelLocation: { findMany: vi.fn().mockResolvedValue([]) },
     // The Coach transcript. Deliberately NOT `?? []` at the call site, so a
     // future `include` that forgets the relation fails here loudly instead of
     // exporting an account whose Coach never spoke.

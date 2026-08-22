@@ -230,6 +230,12 @@ export const BACKUP_WRITER_FILES: readonly string[] = [
   // documents themselves are read by `records-backup.ts`; these two read
   // through their OWN delegates here, for the reason the visits comment gives.
   "src/lib/export/document-filing-backup.ts",
+  // The bests and the badges, and the environmental history with the location
+  // periods that explain it. Two files rather than one because they are two
+  // unrelated parts of the record, both with their ends beside each other for
+  // the reason the visits comment gives.
+  "src/lib/export/awards-backup.ts",
+  "src/lib/export/environment-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 
@@ -244,6 +250,8 @@ export const BACKUP_RESTORE_FILES: readonly string[] = [
   "src/lib/export/coach-backup.ts",
   "src/lib/export/sensitive-backup.ts",
   "src/lib/export/document-filing-backup.ts",
+  "src/lib/export/awards-backup.ts",
+  "src/lib/export/environment-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 
@@ -412,6 +420,34 @@ export const TWO_ENDED_MODELS = [
   // nulled together with its type when it resolves to nothing.
   "DocumentConditionLink",
   "ExtractedFact",
+  // What the account earned. The register called the bests "recomputable in
+  // principle", which is true and does not help: nothing recomputes them, and
+  // a recomputation over a restored history would not find the same rows:
+  // sample series and GPS routes never travel, a portable file omits deleted
+  // readings, and a best found in a reading that has since been corrected is
+  // not findable twice. The badge's unlock date is worse than that. The
+  // evaluator prefers a persisted date over a derived one, and several of the
+  // dates it can derive come from counters this backup deliberately excludes,
+  // so a dropped row does not relock the badge, it re-earns it today.
+  //
+  // `PersonalRecord.sourceMeasurementId` is the reference that needs care, and
+  // it is the dangerous kind: the schema declares no relation, but migration
+  // 0054 created the column as a real foreign key against `measurements`. The
+  // restore therefore runs after the measurements and nulls what it cannot
+  // resolve, because the alternative is not a dangling pointer, it is Postgres
+  // refusing the file and handing back an empty account.
+  "PersonalRecord",
+  "UserAchievement",
+  // The per-day readings and the location periods, which travel as a pair
+  // because the register's own two lines say why: the readings are "joined to
+  // the record", and the periods are "what makes the environmental readings
+  // mean anything". Measured, the pairing is stronger than context. Carrying
+  // the readings alone would let the nightly seven-day refresh re-resolve every
+  // trip day to the home location and UPSERT over it, so an account would come
+  // back with a fortnight abroad and then quietly have it rewritten as a
+  // fortnight at home, days after a restore that reported success.
+  "EnvironmentContext",
+  "EnvironmentTravelLocation",
 ] as const;
 
 /** One model claimed to travel both ways. */
@@ -458,14 +494,6 @@ export const COVERAGE_PENDING: Readonly<Record<string, string>> = {
     "GPS traces. Deliberately absent from the payload today and DISCLOSED as absent in the file's own manifest, which is why this is a documented exclusion rather than a silent one — but it is still a loss for a self-hoster with no other copy.",
   WorkoutSamples:
     "Per-sample heart-rate and pace series behind a workout summary. Same disclosed-exclusion status as the routes above, same cost.",
-  PersonalRecord:
-    "Bests the account accumulated. Recomputable in principle from measurements and workouts, but nothing recomputes them today, so in practice they are lost.",
-  UserAchievement:
-    "Milestones the account earned, with the date each was reached. The date is the part that cannot be recovered.",
-  EnvironmentContext:
-    "Per-day environmental readings joined to the record. Re-fetchable for recent days only; older history is gone once the provider window closes.",
-  EnvironmentTravelLocation:
-    "Where the person was on a given day, which is what makes the environmental readings mean anything. Never re-derivable.",
 };
 
 /**
