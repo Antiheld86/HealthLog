@@ -13,9 +13,14 @@
 import { z } from "zod/v4";
 import type { ZodOpenApiObject } from "zod-openapi";
 import {
+  changePasswordSchema,
   loginPasswordSchema,
   passkeyRenameSchema,
+  registerSchema,
 } from "@/lib/validations/auth";
+// `PUT /api/auth/profile` and `PATCH /api/user/profile` are two doors onto one
+// `applyProfileUpdate` call, so they take one body and publish one component.
+import { profileUpdateRequest } from "./profile";
 import {
   mfaVerifySchema,
   totpConfirmSchema,
@@ -439,6 +444,153 @@ const apiTokenInfo = z
 const apiTokenListResponse = z
   .array(apiTokenInfo)
   .meta({ id: "ApiTokenListResponse" });
+
+// ── Registration, credential rotation, Codex device-auth ─────────────
+
+const registerRequest = registerSchema.meta({
+  id: "RegisterRequest",
+  description:
+    "Account creation. `timezone` is a hint, not a requirement — an unknown zone is replaced with the operator default rather than refused. `inviteToken` is consulted whenever it is present, and is the admission requirement only while self-registration is closed.",
+});
+
+const changePasswordRequest = changePasswordSchema.meta({
+  id: "ChangePasswordRequest",
+  description:
+    "Password rotation. `newPassword` and `confirmPassword` must match, and `newPassword` must differ from the current one. The strength floor is 12 characters plus a scored check against the account's own username and email.",
+});
+
+const passkeyReauthRequest = z
+  .object({
+    method: z
+      .enum(["passkey", "webauthn"])
+      .describe(
+        "Which credential store to assert against: the account's primary passkeys, or its second-factor security keys.",
+      ),
+  })
+  .meta({
+    id: "PasskeyReauthRequest",
+    description:
+      "The re-proof arm of register-options. Recognised ONLY when `method` is the body's single key — adding any other property routes the request to the enrollment arm, where it will be read as a factor proof and almost certainly refused.",
+  });
+
+const passkeyRegisterVerifyRequest = z
+  .object({
+    challengeId: z
+      .string()
+      .describe("The challenge id returned by register-options."),
+    credential: z
+      .record(z.string(), z.unknown())
+      .describe(
+        "SimpleWebAuthn attestation response. `response.transports`, when the authenticator reports it, is stored as sent.",
+      ),
+  })
+  .meta({
+    id: "PasskeyRegisterVerifyRequest",
+    description:
+      "Finish a passkey enrollment. The handler reads these two fields directly rather than through a Zod schema; a missing one is a 422.",
+  });
+
+const registeredUserResponse = z
+  .object({
+    user: z.object({
+      id: z.string(),
+      username: z.string(),
+      email: z.string().nullable(),
+    }),
+  })
+  .meta({
+    id: "RegisteredUserResponse",
+    description:
+      "The account that was created. No credential rides this response — the session arrives as a cookie, and a native client signs in afterwards through /api/auth/login.",
+  });
+
+const passwordChangedResponse = z
+  .object({ changed: z.literal(true) })
+  .meta({ id: "PasswordChangedResponse" });
+
+const authProfileUpdateResponse = z
+  .object({
+    id: z.string(),
+    username: z.string(),
+    email: z.string().nullable(),
+    role: z.string(),
+    heightCm: z.number().nullable(),
+    dateOfBirth: z.string().nullable(),
+    gender: z.string().nullable(),
+    timezone: z.string().nullable(),
+    fullName: z.string().nullable(),
+    insurerName: z.string().nullable(),
+    insurerIkNumber: z.string().nullable(),
+    hasInsuranceNumber: z
+      .boolean()
+      .describe(
+        "Whether an insurance number is stored. The number itself is encrypted at rest and is never returned — only its presence.",
+      ),
+    rejectedFields: z
+      .array(
+        z.object({
+          path: z.string(),
+          code: z.string(),
+          message: z.string(),
+        }),
+      )
+      .optional()
+      .describe(
+        "Present only on a PARTIAL success: the fields that failed validation and were skipped while the rest of the patch was written. A 200 carrying this key means the save was incomplete — surface it, do not treat the response as a clean save.",
+      ),
+  })
+  .meta({
+    id: "AuthProfileUpdateResponse",
+    description:
+      "The profile after the patch, as THIS path projects it. Deliberately named apart from `ProfileUpdateResponse`: PATCH /api/user/profile runs the same handler and answers a different field set — this one carries `id` and `role`, that one carries `displayName`, `locale`, `timeFormat`, `dateFormat` and `moodReminderEnabled`. Neither is a superset of the other. Field-by-field either way: a bad field is dropped and reported in `rejectedFields` rather than failing the whole request, unless EVERY supplied field was rejected.",
+  });
+
+const passkeyReauthOptionsResponse = z
+  .object({
+    options: z
+      .record(z.string(), z.unknown())
+      .describe("SimpleWebAuthn assertion options for the re-proof ceremony."),
+    challengeId: z.string(),
+    reauth: z
+      .literal(true)
+      .describe(
+        "Marks this as the re-proof arm rather than the enrollment arm. Present only here.",
+      ),
+  })
+  .meta({ id: "PasskeyReauthOptionsResponse" });
+
+const codexDeviceStartResponse = z
+  .object({
+    userCode: z
+      .string()
+      .describe("Short code the person types on the verification page."),
+    verificationUrl: z
+      .url()
+      .describe(
+        "Where to type it — an OpenAI-hosted page, not a HealthLog one.",
+      ),
+    intervalSeconds: z
+      .number()
+      .int()
+      .describe(
+        "How often to call the poll endpoint. Honour it: the poll surface is limited to 60 calls per minute per user.",
+      ),
+  })
+  .meta({
+    id: "CodexDeviceStartResponse",
+    description:
+      "The user-facing half of a device-code grant. The device-auth id that pairs with it is NOT here — it is sealed into an encrypted, httpOnly, 15-minute cookie, so the poll can only be completed by the browser that started the flow.",
+  });
+
+const codexDevicePollResponse = z
+  .object({
+    status: z
+      .enum(["pending", "connected"])
+      .describe(
+        "`pending` while the person has not approved yet — keep polling. `connected` once the credentials are stored; stop polling, the cookie is gone.",
+      ),
+  })
+  .meta({ id: "CodexDevicePollResponse" });
 
 export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   "/api/auth/check-user": {
@@ -1421,6 +1573,336 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "404": {
           description: "Token not found or not owned by the caller.",
           content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  // ── Appended: registration, credential rotation, the OIDC entry point and
+  // the Codex device-auth flow.
+  "/api/auth/register": {
+    post: {
+      tags: ["Auth"],
+      summary: "Create an account",
+      description:
+        "Anonymous. Creates the account, issues a browser session cookie, and returns the new account's identity. No token is minted here even for a native caller — an app registers and then signs in through /api/auth/login.\n\n" +
+        "Admission has three gates and a bootstrap. `OIDC_ONLY=true` refuses outright. Otherwise the surface is rate-limited to 5 attempts per 15 minutes; on a misconfigured proxy trust chain every anonymous caller collapses into ONE bucket rather than falling open. When the operator has closed self-registration a valid invite token still admits the signup, and a token is consumed whenever one is sent — even under open registration, so the issuer's ledger stays complete. The bootstrap: on an instance with zero users registration is always allowed and the first account is minted ADMIN, decided under an advisory lock so two racing signups cannot both become one.\n\n" +
+        "The password is checked for strength against the chosen username and email, and against a breach corpus over k-anonymity. The breach check fails OPEN — an unreachable corpus never blocks a signup. A supplied `timezone` is validated against the runtime IANA list and silently replaced with the operator default when it is not one; it is never a reason to refuse.\n\n" +
+        "Existence is not disclosed: a taken email and a taken username return the same 409 with the same prose.",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: registerRequest } },
+      },
+      responses: {
+        "201": {
+          description: "Account created; the session cookie is set.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(registeredUserResponse, "RegisterEnvelope"),
+            },
+          },
+        },
+        "403": {
+          description:
+            "Refused before any work. Either the operator runs `OIDC_ONLY=true` (`meta.errorCode` = `oidc_only`), or self-registration is closed and the request carried no invite, or the invite it carried was invalid, expired or exhausted. The three are distinguishable by prose but not by code.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "409": {
+          description:
+            "The email or the username is taken. Deliberately one message for both, so this is not an account-existence oracle. Also the answer when two concurrent signups race past the pre-check and the database unique index catches the second.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/password": {
+    post: {
+      tags: ["Auth"],
+      summary: "Change the account password",
+      description:
+        "A change, not a reset: it is authenticated, and it re-proves the CURRENT password in the body. There is no anonymous forgot-password flow on this surface.\n\n" +
+        "For an account with a second factor enrolled it additionally requires a fresh factor proof, which is cookie-only by construction — a Bearer transport carries no `mfaVerifiedAt` and cannot satisfy it at any scope. Accounts with no second factor keep the current-password-only contract on either transport.\n\n" +
+        "On success the blast radius is deliberate and wide: every step-up elevation the account holds is revoked, every session is destroyed, and a fresh session is issued to THIS caller. Other browsers and other devices are signed out. The new password is strength-checked and screened against a breach corpus (fail-open on an unreachable corpus). Rate-limited 5 per 15 minutes per user.",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: changePasswordRequest } },
+      },
+      responses: {
+        "200": {
+          description:
+            "Password rotated. Every other session is gone and this caller holds a new one.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                passwordChangedResponse,
+                "PasswordChangeEnvelope",
+              ),
+            },
+          },
+        },
+        "400": {
+          description:
+            "The account has no password to change — it was provisioned through SSO. There is no set-a-first-password arm on this route.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+        "401": {
+          description:
+            "Not authenticated, the current password is wrong, or the account has a second factor and the session carries no proof of it fresh enough (`meta.errorCode` = `auth.stepup.required`). A wrong current password is 401 rather than 422 — it is a failed credential check, not a malformed body.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+  },
+  "/api/auth/profile": {
+    put: {
+      tags: ["Auth"],
+      summary: "Patch the account profile",
+      description:
+        "Partial and field-by-field: only the keys present in the body are considered, and a key that fails validation is SKIPPED rather than failing its siblings. The response still carries 200 and lists what was dropped in `rejectedFields` — so a client that treats any 200 as a clean save will silently discard the user's correction. Read the key.\n\n" +
+        "Two cases do fail the whole request: a body that is not an object at all, and a body in which every supplied field was rejected (`meta.errorCode` = `profile.update.nothingSaved`) — because reporting a partial success that saved nothing would be a lie.\n\n" +
+        'The insurance number is validated with its check digit, normalised, and stored encrypted; it is never returned. `hasInsuranceNumber` reports presence only. A null or empty string clears a nullable field rather than being refused, so a form that renders “no answer” as `""` does not 422 the whole patch.',
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: profileUpdateRequest } },
+      },
+      responses: {
+        "200": {
+          description:
+            "The profile after the patch. A `rejectedFields` key means the save was PARTIAL.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                authProfileUpdateResponse,
+                "AuthProfileUpdateEnvelope",
+              ),
+            },
+          },
+        },
+        "409": {
+          description:
+            "The requested email belongs to another account (`meta.errorCode` = `profile.update.emailInUse`). Nothing was written.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+        "422": {
+          description:
+            "Either the body was not a usable object (`meta.errorCode` = `profile.update.invalidBody`) or every supplied field was rejected (`profile.update.nothingSaved`). Both carry the per-field issue list. A body where SOME fields validate never reaches this response — it succeeds with `rejectedFields`.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+  },
+  "/api/auth/oidc/login": {
+    get: {
+      tags: ["Auth"],
+      summary: "Start an SSO sign-in (browser redirect, or the native leg)",
+      description:
+        "A full-page navigation, never a fetch: every outcome is a 302, and no branch returns the JSON envelope. Anonymous by definition — it is what authenticates the caller. Rate-limited 10 per 15 minutes on the anonymous auth-surface bucket.\n\n" +
+        "**Browser arm.** No parameters, or `next=<path>` to return somewhere specific afterwards (sanitised to an in-app path — an absolute URL is discarded, not honoured). Redirects to the provider's authorization endpoint. Every failure redirects to `/auth/login?error=<reason>`.\n\n" +
+        "**Native arm.** The iOS app opens this URL inside an `ASWebAuthenticationSession` with `client=native` and its own PKCE `code_challenge`. The challenge is mandatory on this arm and must be S256, 43–128 characters; `plain` is structurally unsupported because the exchange only ever verifies S256. `next` is ignored and pinned to `/` — a post-login web path means nothing to the app. Every failure redirects to `healthlog://oidc-callback?error=<reason>`, and an error redirect carries no code, no ticket and no session, which is why it is safe that `client` is caller-supplied.\n\n" +
+        "**What comes back.** The provider returns to the server's own callback, not to the app. On success the callback redirects to the compiled-in `healthlog://oidc-callback` with a one-time `code=hlh_…`, which the app exchanges at POST /api/auth/oidc/native/token. When the account has a second factor the callback instead returns `mfa_ticket=…`, which the app completes at /api/auth/mfa/verify to obtain the same bundle. The token pair NEVER rides a URL — only the opaque code or ticket does. There is no `redirect_uri` parameter and no allowlist to configure: the scheme is a compile-time constant, so the open-redirect class is removed by construction.\n\n" +
+        "Two PKCE exchanges run here and must not be confused: the server↔provider verifier the server generates for itself, and the app↔server challenge supplied above. The native flag and the app's challenge travel only inside an AES-256-GCM state cookie, so the callback branches on tamper-authenticated state rather than on anything the provider or a network attacker can flip.",
+      requestParams: {
+        query: z.object({
+          client: z
+            .literal("native")
+            .optional()
+            .describe(
+              "Send `native` to start the app leg. Anything else (including absence) is the browser leg.",
+            ),
+          code_challenge: z
+            .string()
+            .min(43)
+            .max(128)
+            .optional()
+            .describe(
+              "The app's PKCE S256 challenge (RFC 7636). REQUIRED when `client=native`; ignored otherwise.",
+            ),
+          next: z
+            .string()
+            .optional()
+            .describe(
+              "Browser leg only: where to land after login. Sanitised to an in-app path; ignored entirely on the native leg.",
+            ),
+        }),
+      },
+      responses: {
+        "302": {
+          description:
+            "Always a redirect. To the provider on success. On failure to `/auth/login?error=<reason>` (browser) or `healthlog://oidc-callback?error=<reason>` (native), where reason is one of `oidc_disabled`, `oidc_rate_limited`, `oidc_invalid_request`, `oidc_failed`.",
+        },
+      },
+    },
+  },
+  "/api/auth/passkey/register-options": {
+    post: {
+      tags: ["Auth"],
+      summary: "Begin registering a passkey (existing-factor proof required)",
+      description:
+        "Cookie-only — a Bearer token cannot enroll a sign-in credential on this surface at any scope. The route has TWO arms and the body decides which.\n\n" +
+        '**Re-proof arm.** A body of exactly `{ method: "passkey" }` or `{ method: "webauthn" }` begins an assertion ceremony WITHOUT beginning enrollment, and answers with `reauth: true` alongside the options. Use it to obtain the assertion the second arm needs.\n\n' +
+        "**Enrollment arm.** Any other body must be a full factor proof (the same shape POST /api/auth/step-up takes): a password, a TOTP code, or a completed passkey / security-key assertion. Only then are registration options issued.\n\n" +
+        "Which factor you prove changes the session, and the direction is not the obvious one: a strong proof stamps the session second-factor-verified, while a PASSWORD proof deliberately CLEARS that stamp. Registering with a password is authorised by the single-use, session-bound challenge alone and must not silently upgrade password-only authentication into something the rest of the app reads as a second factor.\n\n" +
+        "Every refusal on the proof path is the same 401 with the same prose — a missing content type, an unparseable body, a body that is not a valid proof shape, and a wrong password are indistinguishable to the caller.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: z.union([passkeyReauthRequest, stepUpMintSchema]),
+          },
+        },
+      },
+      responses: {
+        "200": {
+          description:
+            "Options issued. Carries `reauth: true` on the re-proof arm and not on the enrollment arm.",
+          content: {
+            "application/json": {
+              schema: z.union([
+                dataEnvelope(
+                  passkeyReauthOptionsResponse,
+                  "PasskeyReauthOptionsEnvelope",
+                ),
+                dataEnvelope(
+                  webauthnOptionsResponse,
+                  "PasskeyRegisterOptionsEnvelope",
+                ),
+              ]),
+            },
+          },
+        },
+        "409": {
+          description:
+            "The re-proof arm asked for a method the account has no credential for — fall back to another factor.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+        "401": {
+          description:
+            "No cookie session, or no acceptable existing-factor proof. One message covers every proof failure so the response cannot be used to probe which part was wrong.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+  },
+  "/api/auth/passkey/register-verify": {
+    post: {
+      tags: ["Auth"],
+      summary: "Finish registering a passkey",
+      description:
+        "Cookie-only. Verifies the attestation against the challenge minted by register-options and stores the credential as a PRIMARY sign-in credential — a different store from the second-factor security keys under /api/auth/me/mfa/webauthn.\n\n" +
+        "The freshness stamp is re-read from the live session row rather than trusted from the earlier request, so an elevation downgraded or revoked between the two calls cannot be carried through the ceremony. The challenge is bound to the user AND the session that created it: presenting one from another context is refused as a missing proof rather than as a bad challenge.\n\n" +
+        "The transports the authenticator reports are stored as sent. Nothing about the credential is echoed back — the response is a bare confirmation, and the new row is read through GET /api/auth/passkeys.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: passkeyRegisterVerifyRequest },
+        },
+      },
+      responses: {
+        "200": {
+          description: "Passkey registered.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ verified: z.literal(true) }),
+                "PasskeyRegisterVerifyEnvelope",
+              ),
+            },
+          },
+        },
+        "400": {
+          description:
+            "The attestation did not verify, or the registration challenge is unknown or expired. One prose message covers a malformed credential and a failed signature.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+        "401": {
+          description:
+            "No cookie session; or the session's factor proof has aged past five minutes; or the challenge belongs to another session. Restart at register-options.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+  },
+  "/api/auth/codex/device-start": {
+    post: {
+      tags: ["Auth"],
+      summary: "Begin connecting a ChatGPT account by device code",
+      description:
+        "Starts an OAuth device-code grant against the provider and returns the short code plus the page to type it on. Takes no body. Rate-limited 5 per minute per user.\n\n" +
+        "The device-auth id that the poll needs is NOT in the response. It is sealed with the rest of the flow state into an encrypted, httpOnly, 15-minute cookie, which means the poll can only be completed by the browser that started the flow and a native client cannot drive this pair at all.\n\n" +
+        "Device-code rather than a redirect because the provider only allow-lists localhost callbacks for the public client id, so a hosted deployment has no usable redirect target.",
+      responses: {
+        "200": {
+          description: "Device code issued; the state cookie is set.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                codexDeviceStartResponse,
+                "CodexDeviceStartEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/codex/device-poll": {
+    post: {
+      tags: ["Auth"],
+      summary: "Poll a device-code connection to completion",
+      description:
+        "Called every `intervalSeconds` until it answers `connected`. Takes no body — the flow state comes from the cookie device-start set. Rate-limited 60 per minute per user.\n\n" +
+        "On success the credentials are exchanged server-side and stored encrypted on the account, the state cookie is deleted, and any cached insight text is dropped so the next generation runs on the new provider. Stop polling at that point: a further call has no cookie and answers 400.",
+      responses: {
+        "200": {
+          description:
+            "Either still waiting for the person to approve, or connected.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                codexDevicePollResponse,
+                "CodexDevicePollEnvelope",
+              ),
+            },
+          },
+        },
+        "400": {
+          description:
+            "No device-auth attempt is in progress, or the state cookie could not be read. Both mean the same thing to a client: start again at device-start. An unreadable cookie is deleted on the way out.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "502": {
+          description:
+            "The provider's device endpoint failed or answered unusably. The underlying message is recorded server-side and deliberately not echoed. Restart the flow.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/codex/disconnect": {
+    delete: {
+      tags: ["Auth"],
+      summary: "Disconnect the ChatGPT account",
+      description:
+        "Clears the stored credentials and marks the connection disconnected, and drops the cached insight text with them so nothing generated through that account is served afterwards. Idempotent: disconnecting an account that was never connected succeeds. Rate-limited 5 per minute per user. Takes no body.\n\n" +
+        "Local only — this revokes HealthLog's copy of the credentials. It does not tell the provider to forget the grant; that is done in the provider's own account settings.",
+      responses: {
+        "200": {
+          description: "Disconnected.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ disconnected: z.boolean() }),
+                "CodexDisconnectEnvelope",
+              ),
+            },
+          },
         },
         ...stdResponses,
       },

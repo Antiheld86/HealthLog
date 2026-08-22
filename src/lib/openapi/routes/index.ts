@@ -67,6 +67,7 @@ import {
 } from "./medications";
 import { metaPaths } from "./meta";
 import { moodPaths } from "./mood";
+import { notificationTransportPaths } from "./notifications-transport";
 import { nutrientPaths } from "./nutrients";
 import { onboardingPaths } from "./onboarding";
 import { profilePaths } from "./profile";
@@ -128,6 +129,10 @@ export const openApiPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   // v1.36.0 — account sharing: the grant lifecycle and the switch endpoint
   // (appended, spread order is load-bearing).
   ...accountSharingPaths,
+  // Notification transport — the VAPID key, the Web Push subscription
+  // lifecycle and the per-channel self-tests (appended, spread order is
+  // load-bearing).
+  ...notificationTransportPaths,
 };
 
 export const openApiComponents: NonNullable<ZodOpenApiObject["components"]> = {

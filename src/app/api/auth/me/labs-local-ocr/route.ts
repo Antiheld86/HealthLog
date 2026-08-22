@@ -16,8 +16,6 @@
  * field-by-field write (no mass assignment). Idempotent — always returns the
  * resolved next state so the client can hard-set the optimistic update.
  */
-import { z } from "zod";
-
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import {
   apiError,
@@ -30,10 +28,7 @@ import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
-
-const patchBodySchema = z.object({
-  labsLocalOcrEnabled: z.boolean(),
-});
+import { labsLocalOcrPatchSchema } from "@/lib/validations/user-prefs";
 
 export const dynamic = "force-dynamic";
 
@@ -81,7 +76,7 @@ export const PATCH = apiHandler(async (req: Request) => {
   });
   if (jsonError) return jsonError;
 
-  const parsed = patchBodySchema.safeParse(body);
+  const parsed = labsLocalOcrPatchSchema.safeParse(body);
   if (!parsed.success) {
     annotate({ action: { name: "auth.me.labsLocalOcr.patch.invalid_shape" } });
     return returnAllZodIssues(parsed.error, 422);

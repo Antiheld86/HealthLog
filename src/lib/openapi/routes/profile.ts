@@ -15,6 +15,8 @@ import { MODULE_KEYS } from "@/lib/modules/registry";
 import { SCORE_PILLAR_IDS } from "@/lib/analytics/score/types";
 import { savedReportProfileSchema } from "@/lib/report-selection/profile-shape";
 import { injectionSiteEnum } from "@/lib/validations/medication";
+import { deviceDeliverySchema } from "@/lib/validations/notification-prefs";
+import { locales } from "@/lib/i18n/config";
 import {
   thresholdsUpdateSchema,
   ALL_METRICS,
@@ -23,7 +25,9 @@ import type { ThresholdMetric } from "@/lib/analytics/effective-range";
 import {
   documentsAutoAiReadPatchSchema,
   injectionSitePrefsPatchSchema,
+  labsLocalOcrPatchSchema,
   unitPreferencePatchSchema,
+  useCentralCodexPatchSchema,
 } from "@/lib/validations/user-prefs";
 import {
   dataEnvelope,
@@ -313,7 +317,11 @@ const reportSelectionPutResponse = z
 // without those transforms so the spec stays a clean nullable-field
 // document. `insurerIkNumber` is the new v1.8.6 field: optional, 9-digit
 // German IKNR, surfaced on the FHIR `Coverage` payor.
-const profileUpdateRequest = z
+// Shared with `PUT /api/auth/profile`, which is served by the same
+// `applyProfileUpdate` helper and therefore accepts the identical body.
+// Exported rather than restated so the two paths cannot drift into two
+// contracts for one validator; `auth.ts` imports it.
+export const profileUpdateRequest = z
   .object({
     email: z.email().nullable().optional(),
     heightCm: z.number().min(50).max(300).nullable().optional(),
@@ -440,7 +448,7 @@ const profileUpdateResponse = z
   .meta({
     id: "ProfileUpdateResponse",
     description:
-      "Profile echo returned by the PATCH/PUT update path. Reports KVNR presence as a boolean rather than re-emitting the decrypted value.",
+      "Profile echo returned by PATCH /api/user/profile. Reports KVNR presence as a boolean rather than re-emitting the decrypted value. NOT the shape `PUT /api/auth/profile` returns — the two share a handler but project it differently (see `AuthProfileUpdateResponse`), which is why this is no longer described as covering both.",
   });
 
 // v1.16.16 — AI-provider read surface. iOS gates Coach visibility off
@@ -640,6 +648,109 @@ const thresholdsUpdateRequest = thresholdsUpdateSchema.meta({
   description:
     "A partial map of `ThresholdMetric` to `{ min, max }`. Only the metrics named are written; the rest keep their existing override. Strict — an unknown key is a 422, not a silent drop. Each range must sit inside that metric's physiological bounds with `min` strictly below `max`.",
 });
+
+// ── Devices, the remaining scalar prefs, locale and timezone ─────────
+
+const deviceInfo = z
+  .object({
+    id: z.string(),
+    label: z
+      .string()
+      .describe(
+        "Best available name: the reported model, falling back to the bundle id, falling back to the bare platform string. Never blank.",
+      ),
+    platform: z.string(),
+    appVersion: z.string().nullable(),
+    locale: z.string().nullable(),
+    channels: z
+      .array(z.enum(["web_push", "apns"]))
+      .describe(
+        "Which push transports this device row can currently be reached on. Derived from which token columns are populated, not from a stored list.",
+      ),
+    lastSeenAt: z.iso.datetime({ offset: true }),
+    createdAt: z.iso.datetime({ offset: true }),
+    isCurrent: z
+      .boolean()
+      .describe(
+        "True only when the caller sent `X-Device-Id` AND that device still holds an unrevoked refresh token for this account. A browser session has no such anchor, so a cookie caller sees false on every row — that is correct, not a bug to work around.",
+      ),
+  })
+  .meta({
+    id: "DeviceInfo",
+    description:
+      "A registered device, as the security surface renders it. Identifying metadata only — no push tokens, no APNs identifiers, no IP addresses.",
+  });
+
+const deviceListResponse = z
+  .object({ devices: z.array(deviceInfo) })
+  .meta({ id: "DeviceListResponse" });
+
+const devicePatchRequest = z
+  .object({ medicationDelivery: deviceDeliverySchema })
+  .meta({
+    id: "DevicePatchRequest",
+    description:
+      "Per-device medication-reminder delivery override. `server` forces server-side dispatch to this device, `client` leaves it to the app's own local reminders, and `null` CLEARS the override so the device inherits the account default.",
+  });
+
+const deviceRevokeResponse = z
+  .object({
+    id: z.string(),
+    revoked: z.literal(true),
+    refreshTokensRevoked: z.number().int(),
+    accessTokensRevoked: z.number().int(),
+  })
+  .meta({
+    id: "DeviceRevokeResponse",
+    description:
+      "What the revocation cascade actually removed. The counts are the point: a client can tell the person how many credentials were killed rather than saying only that something happened.",
+  });
+
+const labsLocalOcrPatchRequest = labsLocalOcrPatchSchema.meta({
+  id: "LabsLocalOcrPatchRequest",
+  description:
+    "Turn browser-side OCR on or off for lab-report scanning. When on, a text-only provider can still read a paper report because the image is transcribed on the device and only the TEXT is sent.",
+});
+
+const labsLocalOcrResponse = z
+  .object({ labsLocalOcrEnabled: z.boolean() })
+  .meta({ id: "LabsLocalOcrResponse" });
+
+const useCentralCodexPatchRequest = useCentralCodexPatchSchema.meta({
+  id: "UseCentralCodexPatchRequest",
+  description:
+    "Opt in or out of the operator's shared ChatGPT subscription as a trailing entry in this account's provider chain.",
+});
+
+const useCentralCodexResponse = z
+  .object({ useCentralCodex: z.boolean() })
+  .meta({ id: "UseCentralCodexResponse" });
+
+const localePutRequest = z
+  .object({
+    locale: z
+      .enum(locales)
+      .describe("One of the interface locales this build ships."),
+  })
+  .meta({
+    id: "LocalePutRequest",
+    description:
+      "The interface language. Validated against the supported set at the surface so the column can never hold a value the resolver would later have to defend against. The handler checks membership directly rather than through a Zod schema; the effect is the same.",
+  });
+
+const timezonePutRequest = z
+  .object({
+    timezone: z
+      .string()
+      .describe(
+        "An IANA zone name. Accepted when the running engine's `Intl.DateTimeFormat` accepts it, which is the whole IANA set the deployment knows — not a fixed list this contract could enumerate.",
+      ),
+  })
+  .meta({
+    id: "TimezonePutRequest",
+    description:
+      "The account's timezone. The handler reads and trims the field directly rather than through a Zod schema.",
+  });
 
 export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
   "/api/user/ai-provider": {
@@ -1437,6 +1548,275 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
           description:
             "`metric` was present but is not a known threshold metric. Nothing was reset.",
           content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+
+  // ── Appended: registered devices, the last two scalar prefs, and the
+  // locale / timezone setters.
+  "/api/auth/me/devices": {
+    get: {
+      tags: ["Auth"],
+      summary: "List the account's registered devices",
+      description:
+        "The devices this account has registered for push, newest activity first. Identifying metadata only: no push tokens, no APNs identifiers, no IP addresses — nothing here can be replayed to send a notification.\n\n" +
+        "`isCurrent` is not taken on trust. A caller may send `X-Device-Id`, but the badge is only set when that device also holds an unrevoked refresh token for this account, so a forged header cannot move it. A cookie caller has no such anchor and correctly sees `false` on every row.",
+      responses: {
+        "200": {
+          description: "Registered devices, most recently seen first.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(deviceListResponse, "DeviceListEnvelope"),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/me/devices/{id}": {
+    patch: {
+      tags: ["Auth"],
+      summary: "Set a device's medication-reminder delivery override",
+      description:
+        "Chooses where this one device's medication reminders come from: `server` for server-side dispatch, `client` to leave it to the app's own local reminders, or `null` to clear the override and inherit the account default. Scoped to the caller — a foreign id is 404, never another account's row.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: devicePatchRequest } },
+      },
+      responses: {
+        "200": {
+          description: "The device's resolved override.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({
+                  id: z.string(),
+                  medicationDelivery: deviceDeliverySchema,
+                }),
+                "DevicePatchEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description: "No such device for this account.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+    delete: {
+      tags: ["Auth"],
+      summary: "Revoke a device and every credential bound to it",
+      description:
+        "Deletes the device row and, in the same transaction, revokes every unrevoked refresh token bound to it plus the access tokens those refresh rows pair with. The counts come back so a client can say what was actually killed. One transaction on purpose: a partial cascade would leave a live device row whose tokens are all dead.\n\n" +
+        "This does NOT touch browser sessions. A session lives on its own row, not on a device, so signing a browser out is /api/auth/logout or the session list — the two surfaces cover different blast radii. Re-pairing later creates a fresh device row rather than reviving this one.\n\n" +
+        "Scoped to the caller: a foreign id answers 404 rather than confirming the id exists.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      responses: {
+        "200": {
+          description: "Device removed and its credentials revoked.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                deviceRevokeResponse,
+                "DeviceRevokeEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description: "No such device for this account.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/me/labs-local-ocr": {
+    get: {
+      tags: ["Auth"],
+      summary: "Read the browser-side OCR opt-in",
+      description:
+        "Whether a lab-report scan should be transcribed on the device before anything is sent. It exists for the provider chains that cannot read an image at all — a text-only model, or the ChatGPT-OAuth path — so a person on one of those can still scan a paper report. The raw image never leaves the device in this mode; only the extracted text does. Less accurate than native vision, which is why the review screen stays mandatory either way.",
+      responses: {
+        "200": {
+          description: "The current flag.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                labsLocalOcrResponse,
+                "GetLabsLocalOcrEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+    patch: {
+      tags: ["Auth"],
+      summary: "Set the browser-side OCR opt-in",
+      description:
+        "Hard-set, idempotent, audit-logged. Rate-limited 60 / min per user; body capped at 1 KB.",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: labsLocalOcrPatchRequest } },
+      },
+      responses: {
+        "200": {
+          description: "The resolved next flag.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                labsLocalOcrResponse,
+                "PatchLabsLocalOcrEnvelope",
+              ),
+            },
+          },
+        },
+        "413": {
+          description: "Request body exceeds 1024 bytes. Nothing was written.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/me/use-central-codex": {
+    get: {
+      tags: ["Auth"],
+      summary: "Read the shared-Codex opt-in",
+      description:
+        "Whether this account's provider chain gains a trailing entry for the operator's own ChatGPT subscription. OFF by default.",
+      responses: {
+        "200": {
+          description: "The current flag.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                useCentralCodexResponse,
+                "GetUseCentralCodexEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+    patch: {
+      tags: ["Auth"],
+      summary: "Set the shared-Codex opt-in",
+      description:
+        "Hard-set, idempotent, audit-logged. Rate-limited 60 / min per user; body capped at 1 KB.\n\n" +
+        "Worth being plain about what turning it on does and does not do. The shared account is external, shared with every other user who opts in, bound by the operator's rate limits, and trains on its input by default. But the entry is server-managed, so the AI consent gate still applies: flipping this ON egresses nothing by itself, and without an active consent receipt nothing will leave for it.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: useCentralCodexPatchRequest },
+        },
+      },
+      responses: {
+        "200": {
+          description: "The resolved next flag.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                useCentralCodexResponse,
+                "PatchUseCentralCodexEnvelope",
+              ),
+            },
+          },
+        },
+        "413": {
+          description: "Request body exceeds 1024 bytes. Nothing was written.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/me/locale": {
+    put: {
+      tags: ["Auth"],
+      summary: "Set the interface language",
+      description:
+        "Writes the account's UI language and mirrors it into the locale cookie via `Set-Cookie`. Both halves matter: the column is what server-side work reads when there is no request to take a cookie from — a scheduled nudge, a Telegram message — and without it those went out in English however the person reads the app. The server-set cookie outlives the client-written one, which some browsers cap at seven days.\n\n" +
+        "An ACTOR surface, and the clearest case for that mode existing: the interface language belongs to the person reading the screen, never to the record on it. Under a record scope this would write a delegate's choice onto the owner's row and then mail the owner in a language they may not read. A request that attaches the per-request account selector (the `AccountSelector` header parameter) is refused with 403 `sharing.not_permitted`. It keeps answering while a switch is on rather than merely refusing safely, because the language switcher fires a mount-time backfill on every page load.\n\n" +
+        "Idempotent: when the column already matches, the write is skipped and only the cookie is refreshed. Body capped at 4 KB.",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: localePutRequest } },
+      },
+      responses: {
+        "200": {
+          description: "The accepted locale.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ locale: z.enum(locales) }),
+                "LocalePutEnvelope",
+              ),
+            },
+          },
+        },
+        "403": {
+          description:
+            "A selector header was attached to an actor surface (`meta.errorCode` = `sharing.not_permitted`).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/me/timezone": {
+    put: {
+      tags: ["Auth"],
+      summary: "Set the account timezone",
+      description:
+        "Lifted out of the profile patch so the picker can send one field without round-tripping the rest. Accepts any zone the running engine's `Intl` knows; anything else is 422 rather than stored, so the resolver never has to defend against a poisoned column. Audit-logged with the old and new zone.\n\n" +
+        "A change is not only a display preference. The medication-compliance rollup keys its rows by the LOCAL day a dose fell on, minted under whatever zone was in force at write time, so moving the zone re-buckets that history and the stored keys go stale — and the coverage probe compares counts rather than keys, so it cannot notice. The route therefore enqueues a re-fold of the trailing window whenever the zone actually changes. Best-effort and de-duplicated, so rapid re-picks collapse into one.",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: timezonePutRequest } },
+      },
+      responses: {
+        "200": {
+          description: "The accepted timezone.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ timezone: z.string() }),
+                "TimezonePutEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/me/passkey-nudge/dismiss": {
+    post: {
+      tags: ["Auth"],
+      summary: "Dismiss the add-a-passkey nudge",
+      description:
+        "Permanently hides the prompt that suggests adding a passkey. Cookie-only, takes no body, idempotent — dismissing twice is a success. The flag is also readable as `passkeyNudgeDismissed` on GET /api/auth/me/mfa.",
+      responses: {
+        "200": {
+          description: "Nudge dismissed.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ dismissed: z.literal(true) }),
+                "PasskeyNudgeDismissEnvelope",
+              ),
+            },
+          },
         },
         ...stdResponses,
       },

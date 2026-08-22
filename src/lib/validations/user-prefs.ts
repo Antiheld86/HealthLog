@@ -4,7 +4,7 @@
  * OpenAPI registry (`src/lib/openapi/routes/profile.ts`) describe the identical
  * wire contract — the same reason `mfa.ts` exists next door.
  *
- * All three follow the same shape: a one-field PATCH that hard-sets the value
+ * They all follow the same shape: a one-field PATCH that hard-sets the value
  * and answers with the resolved next state, so a client can replace its
  * optimistic update rather than re-read.
  */
@@ -23,6 +23,16 @@ export const unitPreferencePatchSchema = z.object({
 /** `PATCH /api/auth/me/documents-auto-ai-read` — the auto-read opt-in. */
 export const documentsAutoAiReadPatchSchema = z.object({
   documentsAutoAiRead: z.boolean(),
+});
+
+/** `PATCH /api/auth/me/labs-local-ocr` — browser-side OCR opt-in. */
+export const labsLocalOcrPatchSchema = z.object({
+  labsLocalOcrEnabled: z.boolean(),
+});
+
+/** `PATCH /api/auth/me/use-central-codex` — the operator's shared Codex. */
+export const useCentralCodexPatchSchema = z.object({
+  useCentralCodex: z.boolean(),
 });
 
 /** `PATCH /api/auth/me/injection-site-prefs` — the user-level deny-list. */

@@ -250,6 +250,47 @@ const assistantFlagsResponse = z
       "The operator's assistant visibility matrix, resolved. Gates the server-routed AND the on-device assistant surfaces, so a client hides the surface end-to-end rather than degrading it.",
   });
 
+// ── Update check ─────────────────────────────────────────────────────
+
+const updateCheckResponse = z
+  .object({
+    status: z
+      .enum(["up_to_date", "newer_available", "unknown"])
+      .describe(
+        "`unknown` is a normal outcome, not an error — it means the release feed could not be reached or read.",
+      ),
+    current: z.string().describe("The version this instance is running."),
+    latest_tag: z
+      .string()
+      .optional()
+      .describe("The newest published release tag. Absent when `unknown`."),
+    html_url: z
+      .url()
+      .nullable()
+      .optional()
+      .describe("Release page to deep-link to. Only on `newer_available`."),
+    published_at: z.iso
+      .datetime({ offset: true })
+      .nullable()
+      .optional()
+      .describe("When that release was published. Only on `newer_available`."),
+    checked_at: z.iso
+      .datetime({ offset: true })
+      .optional()
+      .describe("When the check ran. Absent when `unknown`."),
+    reason: z
+      .string()
+      .optional()
+      .describe(
+        "Only on `unknown`: `network_error`, or `github_status_<code>` when the feed answered but not with a success.",
+      ),
+  })
+  .meta({
+    id: "UpdateCheckResponse",
+    description:
+      "Whether a newer release exists. The three states are carried in `status`; which of the optional fields are present follows from it.",
+  });
+
 export const metaPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   "/api/measurement-categories": {
     get: {
@@ -338,6 +379,34 @@ export const metaPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "403": {
           description:
             "A selector header was attached to an actor surface (`meta.errorCode` = `sharing.not_permitted`).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+
+  "/api/version/check-updates": {
+    get: {
+      tags: ["Meta"],
+      summary: "Check whether a newer release exists",
+      description:
+        "A server-side proxy for the project's public release feed. It exists because the production CSP allows almost nothing on `connect-src`, so a browser calling the feed directly is silently blocked — which is exactly how the first version of the “check for updates” button appeared to do nothing.\n\n" +
+        "Authenticated (cookie or a wildcard Bearer token): there is no reason an anonymous caller should poll a third-party API through this instance. No credential is forwarded to the feed, so the request runs under the host's anonymous quota — roughly sixty an hour per address, shared by everyone on the instance.\n\n" +
+        'It is deliberately hard to fail. A network error, an outage, or a rate-limited feed all return 200 with `status: "unknown"` and a machine-readable `reason`, so the UI can offer a retry instead of a red banner nobody can act on. The one genuine error is a feed that answers successfully with no version tag in it. Nothing is cached server-side; the client is expected to hold the result.',
+      responses: {
+        "200": {
+          description:
+            "Up to date, an update is available, or the check could not be completed.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(updateCheckResponse, "UpdateCheckEnvelope"),
+            },
+          },
+        },
+        "502": {
+          description:
+            'The release feed answered but carried no version tag. Distinct from `status: "unknown"`, which covers not reaching it at all.',
           content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
