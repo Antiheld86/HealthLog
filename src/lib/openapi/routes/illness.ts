@@ -22,8 +22,6 @@ import {
   illnessEpisodeResolveSchema,
   illnessEpisodeListQuerySchema,
   illnessDayLogInputSchema,
-  illnessDayLogQuerySchema,
-  illnessDayLogListQuerySchema,
   illnessInsightsQuerySchema,
   illnessTypeEnum,
   illnessLifecycleEnum,
@@ -38,46 +36,37 @@ import {
   stdResponses,
 } from "./shared";
 
-illnessEpisodeCreateSchema.meta({
+// Zod 4's `.meta()` returns a NEW instance carrying the id rather than
+// annotating in place, so each annotated schema is bound to a const and the
+// route table below references that const — a bare call would register nothing.
+const createIllnessEpisodeRequest = illnessEpisodeCreateSchema.meta({
   id: "CreateIllnessEpisodeRequest",
   description:
     "Open an illness/condition episode. `label` is the user-facing name; `type` + `lifecycle` classify it. `onsetAt` defaults to 'now' server-side when omitted. `parentConditionId` threads a FLARE/RECURRING bout under a parent condition (must be an owned, live episode). The optional `note` is encrypted at rest.",
 });
 
-illnessEpisodeUpdateSchema.meta({
+const updateIllnessEpisodeRequest = illnessEpisodeUpdateSchema.meta({
   id: "UpdateIllnessEpisodeRequest",
   description:
     "Partial edit of an episode; an omitted key leaves the column untouched. A `null` `resolvedAt` re-opens a resolved episode; a `null` `parentConditionId` detaches it from its parent. Rejects unknown keys.",
 });
 
-illnessEpisodeResolveSchema.meta({
+const resolveIllnessEpisodeRequest = illnessEpisodeResolveSchema.meta({
   id: "ResolveIllnessEpisodeRequest",
   description:
     "Mark an episode recovered. `resolvedAt` defaults to 'now' when omitted, so the one-tap 'mark recovered' affordance can send an empty body. A CHRONIC_ONGOING episode has no recovery date by design and 422s.",
 });
 
-illnessEpisodeListQuerySchema.meta({
+const listIllnessEpisodesQuery = illnessEpisodeListQuerySchema.meta({
   id: "ListIllnessEpisodesQuery",
   description:
     "Query params for the episode history: optional `limit` (1–100, default 50) and `includeResolved` ('true' | 'false'); 'false' hides episodes that already carry a `resolvedAt`. Newest-first by `onsetAt`.",
 });
 
-illnessDayLogInputSchema.meta({
+const upsertIllnessDayLogRequest = illnessDayLogInputSchema.meta({
   id: "UpsertIllnessDayLogRequest",
   description:
     "Upsert one day's symptom / functional-impact / fever row for an episode (keyed on `(episodeId, date)`). `date` is a `YYYY-MM-DD` tz-anchored day. `functionalImpact` (0–3) + `feverC` are queryable plaintext; `symptoms` carry an optional 0–3 Jackson/WURSS severity per link; the optional `note` is encrypted at rest.",
-});
-
-illnessDayLogQuerySchema.meta({
-  id: "GetIllnessDayLogQuery",
-  description:
-    "Single-day read query: `date` is a `YYYY-MM-DD` day. Returns the matching day-log or `null` when nothing is logged for that day.",
-});
-
-illnessDayLogListQuerySchema.meta({
-  id: "ListIllnessDayLogsQuery",
-  description:
-    "Date-less LIST query (v1.18.3): omit `date` to page the episode's whole day-log history. `limit` (1–200, default 60) + `offset` (default 0) + `sortDir` ('asc' | 'desc', default 'desc') with `meta.total`. Mutually exclusive with the single-day `date` read — presence of `date` selects the single-day mode.",
 });
 
 /**
@@ -97,7 +86,7 @@ const illnessDayLogGetQuery = z
   })
   .meta({ id: "GetIllnessDayLogsQuery" });
 
-illnessInsightsQuerySchema.meta({
+const illnessInsightsQuery = illnessInsightsQuerySchema.meta({
   id: "IllnessInsightsQuery",
   description:
     "Cross-episode retrospective window query: optional `windowDays` (30–1095, default 365) and optional `includeRecoveryGap` (default false). With `includeRecoveryGap` off the response carries the count breakdown and a null typical recovery gap on a single fast query; set it true to pay for the per-episode correlation that computes the recovery gap. Retrospective only — the engine summarises past episodes, never forecasts.",
@@ -298,7 +287,7 @@ export const illnessPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "List illness episodes (v1.18.1)",
       description:
         "Returns the caller's live (non-deleted) illness/condition episodes, newest-first by onset. `includeResolved=false` hides episodes that already carry a `resolvedAt`. Born-gated.",
-      requestParams: { query: illnessEpisodeListQuerySchema },
+      requestParams: { query: listIllnessEpisodesQuery },
       responses: {
         ...recordRefusal(),
         "200": {
@@ -324,7 +313,7 @@ export const illnessPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestBody: {
         required: true,
         content: {
-          "application/json": { schema: illnessEpisodeCreateSchema },
+          "application/json": { schema: createIllnessEpisodeRequest },
         },
       },
       responses: {
@@ -375,7 +364,7 @@ export const illnessPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestBody: {
         required: true,
         content: {
-          "application/json": { schema: illnessEpisodeUpdateSchema },
+          "application/json": { schema: updateIllnessEpisodeRequest },
         },
       },
       responses: {
@@ -456,7 +445,7 @@ export const illnessPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestBody: {
         required: false,
         content: {
-          "application/json": { schema: illnessEpisodeResolveSchema },
+          "application/json": { schema: resolveIllnessEpisodeRequest },
         },
       },
       responses: {
@@ -514,7 +503,7 @@ export const illnessPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestBody: {
         required: true,
         content: {
-          "application/json": { schema: illnessDayLogInputSchema },
+          "application/json": { schema: upsertIllnessDayLogRequest },
         },
       },
       responses: {
@@ -576,7 +565,7 @@ export const illnessPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Cross-episode retrospective insights (v1.18.1)",
       description:
         "Returns the cross-episode retrospective summary over a trailing window: 'sick N times · typical recovery gap X days', a recurrence-by-month tally, and a per-type breakdown. The typical gap is withheld (null) below the min-sample floor (asserts nothing thin). Retrospective ONLY — the recurrence figure is a count of the past, never a forecast. Born-gated + owner-scoped.",
-      requestParams: { query: illnessInsightsQuerySchema },
+      requestParams: { query: illnessInsightsQuery },
       responses: {
         "200": {
           description: "The cross-episode retrospective summary.",

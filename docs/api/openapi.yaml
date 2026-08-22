@@ -6554,96 +6554,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                clear:
-                  type: boolean
-                measurementType:
-                  type: string
-                  enum:
-                    - WEIGHT
-                    - BLOOD_PRESSURE_SYS
-                    - BLOOD_PRESSURE_DIA
-                    - PULSE
-                    - BODY_FAT
-                    - SLEEP_DURATION
-                    - ACTIVITY_STEPS
-                    - BLOOD_GLUCOSE
-                    - TOTAL_BODY_WATER
-                    - BONE_MASS
-                    - OXYGEN_SATURATION
-                    - HEART_RATE_VARIABILITY
-                    - RESTING_HEART_RATE
-                    - ACTIVE_ENERGY_BURNED
-                    - FLIGHTS_CLIMBED
-                    - WALKING_RUNNING_DISTANCE
-                    - VO2_MAX
-                    - BODY_TEMPERATURE
-                    - FAT_FREE_MASS
-                    - FAT_MASS
-                    - MUSCLE_MASS
-                    - SKIN_TEMPERATURE
-                    - PULSE_WAVE_VELOCITY
-                    - VASCULAR_AGE
-                    - VISCERAL_FAT
-                    - AUDIO_EXPOSURE_ENV
-                    - AUDIO_EXPOSURE_HEADPHONE
-                    - TIME_IN_DAYLIGHT
-                    - WALKING_STEADINESS
-                    - AUDIO_EXPOSURE_EVENT
-                    - RESPIRATORY_RATE
-                    - BODY_MASS_INDEX
-                    - LEAN_BODY_MASS
-                    - WALKING_HEART_RATE_AVERAGE
-                    - WALKING_ASYMMETRY
-                    - WALKING_DOUBLE_SUPPORT
-                    - WALKING_STEP_LENGTH
-                    - WALKING_SPEED
-                    - CARDIO_RECOVERY
-                    - WRIST_TEMPERATURE
-                    - FALL_COUNT
-                    - SIX_MINUTE_WALK_DISTANCE
-                    - STAIR_ASCENT_SPEED
-                    - STAIR_DESCENT_SPEED
-                    - BREATHING_DISTURBANCES
-                    - IRREGULAR_RHYTHM_NOTIFICATION
-                    - HIGH_HEART_RATE_EVENT
-                    - LOW_HEART_RATE_EVENT
-                    - WALKING_STEADINESS_EVENT
-                    - BREATHING_DISTURBANCE_EVENT
-                    - RECOVERY_SCORE
-                    - STRESS_SCORE
-                    - STRAIN_SCORE
-                    - HRV_RMSSD
-                    - DAY_STRAIN
-                    - WORKOUT_STRAIN
-                    - SLEEP_PERFORMANCE
-                    - SLEEP_EFFICIENCY
-                    - SLEEP_CONSISTENCY
-                    - SLEEP_NEED
-                    - ENERGY_EXPENDITURE_KJ
-                    - AVERAGE_HEART_RATE
-                    - MAX_HEART_RATE
-                    - SLEEP_DISTURBANCE_COUNT
-                    - ANS_CHARGE
-                    - CARDIO_LOAD
-                    - SLEEP_SCORE
-                    - BODY_TEMPERATURE_DEVIATION
-                    - RESILIENCE
-                    - PHQ9_SCORE
-                    - GAD7_SCORE
-                    - GRIP_STRENGTH
-                    - PAIN_NRS
-                    - WAIST_CIRCUMFERENCE
-                    - WAIST_TO_HEIGHT
-                    - WHO5_SCORE
-                    - SCI_SCORE
-                biomarkerId:
-                  type: string
-                  minLength: 1
-                  maxLength: 64
-                primary:
-                  type: boolean
+              $ref: "#/components/schemas/SetMedicationEfficacyTargetRequest"
       responses:
         "200":
           description: Override set or cleared.
@@ -12265,22 +12176,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                label:
-                  type: string
-                  minLength: 1
-                  maxLength: 40
-                icon:
-                  anyOf:
-                    - type: string
-                    - type: "null"
-                categoryKey:
-                  type: string
-                  minLength: 1
-                  maxLength: 80
-              required:
-                - label
+              $ref: "#/components/schemas/CreateMoodTagRequest"
       responses:
         "201":
           description: Custom tag created.
@@ -12309,22 +12205,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                label:
-                  type: string
-                  minLength: 1
-                  maxLength: 40
-                icon:
-                  anyOf:
-                    - type: string
-                    - type: "null"
-                isActive:
-                  type: boolean
-                categoryKey:
-                  type: string
-                  minLength: 1
-                  maxLength: 80
+              $ref: "#/components/schemas/UpdateMoodTagRequest"
       responses:
         "200":
           description: Custom tag updated.
@@ -12389,12 +12270,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                hidden:
-                  type: boolean
-              required:
-                - hidden
+              $ref: "#/components/schemas/HideMoodTagRequest"
       responses:
         "200":
           description: Visibility updated.
@@ -12424,18 +12300,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                label:
-                  type: string
-                  minLength: 1
-                  maxLength: 40
-                icon:
-                  anyOf:
-                    - type: string
-                    - type: "null"
-              required:
-                - label
+              $ref: "#/components/schemas/CreateMoodTagGroupRequest"
       responses:
         "201":
           description: Custom group created.
@@ -12464,18 +12329,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                label:
-                  type: string
-                  minLength: 1
-                  maxLength: 40
-                icon:
-                  anyOf:
-                    - type: string
-                    - type: "null"
-                isActive:
-                  type: boolean
+              $ref: "#/components/schemas/UpdateMoodTagGroupRequest"
       responses:
         "200":
           description: Custom group updated.
@@ -14144,68 +13998,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                biomarkerId:
-                  type: string
-                  minLength: 1
-                  maxLength: 64
-                panel:
-                  anyOf:
-                    - type: string
-                      minLength: 1
-                      maxLength: 120
-                    - type: string
-                      const: ""
-                analyte:
-                  type: string
-                  minLength: 1
-                  maxLength: 120
-                value:
-                  type: number
-                valueText:
-                  type: string
-                  minLength: 1
-                  maxLength: 120
-                unit:
-                  type: string
-                  minLength: 1
-                  maxLength: 40
-                referenceLow:
-                  type: number
-                referenceHigh:
-                  type: number
-                sourceReferenceLow:
-                  type: number
-                sourceReferenceHigh:
-                  type: number
-                sourceReferenceText:
-                  anyOf:
-                    - type: string
-                      maxLength: 120
-                    - type: string
-                      const: ""
-                takenAt:
-                  type: string
-                  format: date-time
-                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
-                note:
-                  anyOf:
-                    - type: string
-                      maxLength: 2000
-                    - type: string
-                      const: ""
-                source:
-                  type: string
-                  enum:
-                    - MANUAL
-                    - OCR
-                encounterId:
-                  type: string
-                  minLength: 1
-                  maxLength: 40
-              required:
-                - takenAt
+              $ref: "#/components/schemas/CreateLabResultRequest"
       responses:
         "201":
           description: Created lab result.
@@ -14264,67 +14057,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                panel:
-                  anyOf:
-                    - anyOf:
-                        - type: string
-                          minLength: 1
-                          maxLength: 120
-                        - type: string
-                          const: ""
-                    - type: "null"
-                analyte:
-                  type: string
-                  minLength: 1
-                  maxLength: 120
-                value:
-                  type: number
-                valueText:
-                  type: string
-                  minLength: 1
-                  maxLength: 120
-                unit:
-                  type: string
-                  minLength: 1
-                  maxLength: 40
-                referenceLow:
-                  anyOf:
-                    - type: number
-                    - type: "null"
-                referenceHigh:
-                  anyOf:
-                    - type: number
-                    - type: "null"
-                sourceReferenceLow:
-                  anyOf:
-                    - type: number
-                    - type: "null"
-                sourceReferenceHigh:
-                  anyOf:
-                    - type: number
-                    - type: "null"
-                sourceReferenceText:
-                  anyOf:
-                    - anyOf:
-                        - type: string
-                          maxLength: 120
-                        - type: string
-                          const: ""
-                    - type: "null"
-                takenAt:
-                  type: string
-                  format: date-time
-                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
-                note:
-                  anyOf:
-                    - anyOf:
-                        - type: string
-                          maxLength: 2000
-                        - type: string
-                          const: ""
-                    - type: "null"
+              $ref: "#/components/schemas/UpdateLabResultRequest"
       responses:
         "200":
           description: Updated lab result.
@@ -15463,81 +15196,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                occurredAt:
-                  type: string
-                  format: date-time
-                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                antigenSlug:
-                  anyOf:
-                    - type: string
-                      minLength: 1
-                      maxLength: 64
-                    - type: "null"
-                vaccineName:
-                  anyOf:
-                    - type: string
-                      minLength: 1
-                      maxLength: 200
-                    - type: "null"
-                doseNumber:
-                  anyOf:
-                    - type: integer
-                      minimum: 1
-                      maximum: 20
-                    - type: "null"
-                seriesDoses:
-                  anyOf:
-                    - type: integer
-                      minimum: 1
-                      maximum: 10
-                    - type: "null"
-                lotNumber:
-                  anyOf:
-                    - type: string
-                      minLength: 1
-                      maxLength: 64
-                    - type: "null"
-                site:
-                  anyOf:
-                    - type: string
-                      enum:
-                        - LEFT_ARM
-                        - RIGHT_ARM
-                        - LEFT_THIGH
-                        - RIGHT_THIGH
-                        - ORAL
-                        - NASAL
-                        - OTHER
-                    - type: "null"
-                practitionerId:
-                  anyOf:
-                    - type: string
-                      minLength: 1
-                      maxLength: 40
-                    - type: "null"
-                encounterId:
-                  anyOf:
-                    - type: string
-                      minLength: 1
-                      maxLength: 40
-                    - type: "null"
-                note:
-                  anyOf:
-                    - type: string
-                      maxLength: 2000
-                    - type: "null"
-                documentIds:
-                  maxItems: 100
-                  type: array
-                  items:
-                    type: string
-                    minLength: 1
-                    maxLength: 40
-              required:
-                - occurredAt
-              additionalProperties: false
+              $ref: "#/components/schemas/CreateVaccinationRequest"
       responses:
         "201":
           description: Dose logged.
@@ -15596,79 +15255,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                occurredAt:
-                  type: string
-                  format: date-time
-                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                antigenSlug:
-                  anyOf:
-                    - type: string
-                      minLength: 1
-                      maxLength: 64
-                    - type: "null"
-                vaccineName:
-                  anyOf:
-                    - type: string
-                      minLength: 1
-                      maxLength: 200
-                    - type: "null"
-                doseNumber:
-                  anyOf:
-                    - type: integer
-                      minimum: 1
-                      maximum: 20
-                    - type: "null"
-                seriesDoses:
-                  anyOf:
-                    - type: integer
-                      minimum: 1
-                      maximum: 10
-                    - type: "null"
-                lotNumber:
-                  anyOf:
-                    - type: string
-                      minLength: 1
-                      maxLength: 64
-                    - type: "null"
-                site:
-                  anyOf:
-                    - type: string
-                      enum:
-                        - LEFT_ARM
-                        - RIGHT_ARM
-                        - LEFT_THIGH
-                        - RIGHT_THIGH
-                        - ORAL
-                        - NASAL
-                        - OTHER
-                    - type: "null"
-                practitionerId:
-                  anyOf:
-                    - type: string
-                      minLength: 1
-                      maxLength: 40
-                    - type: "null"
-                encounterId:
-                  anyOf:
-                    - type: string
-                      minLength: 1
-                      maxLength: 40
-                    - type: "null"
-                note:
-                  anyOf:
-                    - type: string
-                      maxLength: 2000
-                    - type: "null"
-                documentIds:
-                  maxItems: 100
-                  type: array
-                  items:
-                    type: string
-                    minLength: 1
-                    maxLength: 40
-              additionalProperties: false
+              $ref: "#/components/schemas/UpdateVaccinationRequest"
       responses:
         "200":
           description: Dose updated.
@@ -15753,24 +15340,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                intervalMonths:
-                  type: integer
-                  minimum: 1
-                  maximum: 600
-                label:
-                  type: string
-                  minLength: 1
-                  maxLength: 120
-                notifyHour:
-                  type: integer
-                  minimum: 0
-                  maximum: 23
-              required:
-                - intervalMonths
-                - label
-              additionalProperties: false
+              $ref: "#/components/schemas/VaccinationBoosterRequest"
       responses:
         "200":
           description: Existing booster reminder re-anchored.
@@ -15835,24 +15405,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                targetKind:
-                  type: string
-                  enum:
-                    - document
-                targetIds:
-                  minItems: 1
-                  maxItems: 100
-                  type: array
-                  items:
-                    type: string
-                    minLength: 1
-                    maxLength: 40
-              required:
-                - targetKind
-                - targetIds
-              additionalProperties: false
+              $ref: "#/components/schemas/VaccinationLinkRequest"
       responses:
         "200":
           description: The dose's linked pages after the change.
@@ -15881,24 +15434,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                targetKind:
-                  type: string
-                  enum:
-                    - document
-                targetIds:
-                  minItems: 1
-                  maxItems: 100
-                  type: array
-                  items:
-                    type: string
-                    minLength: 1
-                    maxLength: 40
-              required:
-                - targetKind
-                - targetIds
-              additionalProperties: false
+              $ref: "#/components/schemas/VaccinationLinkRequest"
       responses:
         "200":
           description: The dose's linked pages after the change.
@@ -15957,54 +15493,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                label:
-                  type: string
-                  minLength: 1
-                  maxLength: 120
-                type:
-                  type: string
-                  enum:
-                    - INFECTION
-                    - ALLERGY
-                    - INJURY
-                    - MENTAL_HEALTH
-                    - AUTOIMMUNE
-                    - CHRONIC
-                    - OTHER
-                lifecycle:
-                  default: ACUTE
-                  type: string
-                  enum:
-                    - ACUTE
-                    - CHRONIC_ONGOING
-                    - RECURRING
-                    - FLARE
-                onsetAt:
-                  type: string
-                  format: date-time
-                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                resolvedAt:
-                  anyOf:
-                    - type: string
-                      format: date-time
-                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                    - type: "null"
-                parentConditionId:
-                  anyOf:
-                    - type: string
-                      minLength: 1
-                      maxLength: 40
-                    - type: "null"
-                note:
-                  anyOf:
-                    - type: string
-                      maxLength: 2000
-                    - type: "null"
-              required:
-                - label
-                - type
+              $ref: "#/components/schemas/CreateIllnessEpisodeRequest"
       responses:
         "201":
           description: Episode created.
@@ -16063,51 +15552,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                label:
-                  type: string
-                  minLength: 1
-                  maxLength: 120
-                type:
-                  type: string
-                  enum:
-                    - INFECTION
-                    - ALLERGY
-                    - INJURY
-                    - MENTAL_HEALTH
-                    - AUTOIMMUNE
-                    - CHRONIC
-                    - OTHER
-                lifecycle:
-                  type: string
-                  enum:
-                    - ACUTE
-                    - CHRONIC_ONGOING
-                    - RECURRING
-                    - FLARE
-                onsetAt:
-                  type: string
-                  format: date-time
-                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                resolvedAt:
-                  anyOf:
-                    - type: string
-                      format: date-time
-                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-                    - type: "null"
-                parentConditionId:
-                  anyOf:
-                    - type: string
-                      minLength: 1
-                      maxLength: 40
-                    - type: "null"
-                note:
-                  anyOf:
-                    - type: string
-                      maxLength: 2000
-                    - type: "null"
-              additionalProperties: false
+              $ref: "#/components/schemas/UpdateIllnessEpisodeRequest"
       responses:
         "200":
           description: Episode updated.
@@ -16192,12 +15637,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                resolvedAt:
-                  type: string
-                  format: date-time
-                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+              $ref: "#/components/schemas/ResolveIllnessEpisodeRequest"
       responses:
         "200":
           description: Episode resolved.
@@ -16279,50 +15719,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                date:
-                  type: string
-                  pattern: ^\d{4}-\d{2}-\d{2}$
-                functionalImpact:
-                  anyOf:
-                    - type: integer
-                      minimum: 0
-                      maximum: 3
-                    - type: "null"
-                feverC:
-                  anyOf:
-                    - type: number
-                      minimum: 30
-                      maximum: 45
-                    - type: "null"
-                symptoms:
-                  maxItems: 40
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      key:
-                        type: string
-                        minLength: 1
-                        maxLength: 80
-                      severity:
-                        type: integer
-                        minimum: 1
-                        maximum: 3
-                    required:
-                      - key
-                note:
-                  anyOf:
-                    - type: string
-                      maxLength: 2000
-                    - type: "null"
-                loggedAt:
-                  type: string
-                  format: date-time
-                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-              required:
-                - date
+              $ref: "#/components/schemas/UpsertIllnessDayLogRequest"
       responses:
         "200":
           description: Existing day-log updated.
@@ -16455,50 +15852,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                instrument:
-                  type: string
-                  enum:
-                    - PHQ9
-                    - GAD7
-                    - WHO5
-                    - SCI
-                items:
-                  minItems: 1
-                  maxItems: 12
-                  type: array
-                  items:
-                    type: integer
-                    minimum: 0
-                    maximum: 5
-                functionalDifficulty:
-                  type: integer
-                  minimum: 0
-                  maximum: 3
-                takenAt:
-                  type: string
-                  format: date-time
-                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
-                tz:
-                  type: string
-                  maxLength: 64
-                locale:
-                  type: string
-                  maxLength: 16
-                source:
-                  default: WEB
-                  type: string
-                  enum:
-                    - WEB
-                    - IOS
-                externalId:
-                  type: string
-                  minLength: 1
-                  maxLength: 120
-              required:
-                - instrument
-                - items
+              $ref: "#/components/schemas/CreateMentalHealthAssessmentRequest"
       responses:
         "201":
           description: Assessment recorded.
@@ -16817,44 +16171,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                relationship:
-                  type: string
-                  enum:
-                    - MOTHER
-                    - FATHER
-                    - SISTER
-                    - BROTHER
-                    - DAUGHTER
-                    - SON
-                    - GRANDMOTHER_MATERNAL
-                    - GRANDFATHER_MATERNAL
-                    - GRANDMOTHER_PATERNAL
-                    - GRANDFATHER_PATERNAL
-                    - AUNT
-                    - UNCLE
-                    - COUSIN
-                    - HALF_SIBLING
-                    - OTHER
-                condition:
-                  type: string
-                  minLength: 1
-                  maxLength: 160
-                ageAtOnset:
-                  anyOf:
-                    - type: integer
-                      minimum: 0
-                      maximum: 120
-                    - type: "null"
-                note:
-                  anyOf:
-                    - type: string
-                      maxLength: 2000
-                    - type: "null"
-              required:
-                - relationship
-                - condition
+              $ref: "#/components/schemas/CreateFamilyHistoryRequest"
       responses:
         "201":
           description: Entry created.
@@ -16912,42 +16229,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                relationship:
-                  type: string
-                  enum:
-                    - MOTHER
-                    - FATHER
-                    - SISTER
-                    - BROTHER
-                    - DAUGHTER
-                    - SON
-                    - GRANDMOTHER_MATERNAL
-                    - GRANDFATHER_MATERNAL
-                    - GRANDMOTHER_PATERNAL
-                    - GRANDFATHER_PATERNAL
-                    - AUNT
-                    - UNCLE
-                    - COUSIN
-                    - HALF_SIBLING
-                    - OTHER
-                condition:
-                  type: string
-                  minLength: 1
-                  maxLength: 160
-                ageAtOnset:
-                  anyOf:
-                    - type: integer
-                      minimum: 0
-                      maximum: 120
-                    - type: "null"
-                note:
-                  anyOf:
-                    - type: string
-                      maxLength: 2000
-                    - type: "null"
-              additionalProperties: false
+              $ref: "#/components/schemas/UpdateFamilyHistoryRequest"
       responses:
         "200":
           description: Entry updated.
@@ -17245,49 +16527,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                ids:
-                  minItems: 1
-                  maxItems: 100
-                  type: array
-                  items:
-                    type: string
-                    minLength: 1
-                    maxLength: 40
-                action:
-                  type: string
-                  enum:
-                    - setKind
-                    - linkEpisode
-                    - unlinkEpisode
-                    - linkEncounter
-                    - unlinkEncounter
-                    - delete
-                    - restore
-                kind:
-                  type: string
-                  enum:
-                    - DOCTOR_REPORT
-                    - DISCHARGE_LETTER
-                    - LAB_RESULT
-                    - IMAGING
-                    - PRESCRIPTION
-                    - REFERRAL
-                    - INSURANCE
-                    - VACCINATION
-                    - OTHER
-                episodeId:
-                  type: string
-                  minLength: 1
-                  maxLength: 40
-                encounterId:
-                  type: string
-                  minLength: 1
-                  maxLength: 40
-              required:
-                - ids
-                - action
+              $ref: "#/components/schemas/DocumentBulkRequest"
       responses:
         "200":
           description: Per-id outcomes.
@@ -17338,44 +16578,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                title:
-                  anyOf:
-                    - type: string
-                      maxLength: 200
-                    - type: "null"
-                kind:
-                  type: string
-                  enum:
-                    - DOCTOR_REPORT
-                    - DISCHARGE_LETTER
-                    - LAB_RESULT
-                    - IMAGING
-                    - PRESCRIPTION
-                    - REFERRAL
-                    - INSURANCE
-                    - VACCINATION
-                    - OTHER
-                documentDate:
-                  anyOf:
-                    - type: string
-                      pattern: ^\d{4}-\d{2}-\d{2}$
-                    - type: "null"
-                episodeIds:
-                  maxItems: 20
-                  type: array
-                  items:
-                    type: string
-                    minLength: 1
-                    maxLength: 40
-                encounterIds:
-                  maxItems: 20
-                  type: array
-                  items:
-                    type: string
-                    minLength: 1
-                    maxLength: 40
+              $ref: "#/components/schemas/DocumentUpdateRequest"
       responses:
         "200":
           description: The updated document.
@@ -17871,146 +17074,7 @@ paths:
         content:
           application/json:
             schema:
-              oneOf:
-                - type: object
-                  properties:
-                    factType:
-                      type: string
-                      const: CONDITION
-                    label:
-                      type: string
-                      minLength: 1
-                      maxLength: 300
-                    code:
-                      anyOf:
-                        - type: string
-                          maxLength: 64
-                        - type: "null"
-                    codeSystem:
-                      anyOf:
-                        - type: string
-                          enum:
-                            - SNOMED
-                            - ICD10
-                            - LOINC
-                            - RXNORM
-                            - ATC
-                        - type: "null"
-                    clinicalStatus:
-                      anyOf:
-                        - type: string
-                          maxLength: 64
-                        - type: "null"
-                    verificationStatus:
-                      anyOf:
-                        - type: string
-                          maxLength: 64
-                        - type: "null"
-                    onsetDate:
-                      anyOf:
-                        - type: string
-                          pattern: ^\d{4}-\d{2}-\d{2}$
-                        - type: "null"
-                  required:
-                    - factType
-                    - label
-                - type: object
-                  properties:
-                    factType:
-                      type: string
-                      const: OBSERVATION
-                    label:
-                      type: string
-                      minLength: 1
-                      maxLength: 300
-                    code:
-                      anyOf:
-                        - type: string
-                          maxLength: 64
-                        - type: "null"
-                    codeSystem:
-                      anyOf:
-                        - type: string
-                          enum:
-                            - SNOMED
-                            - ICD10
-                            - LOINC
-                            - RXNORM
-                            - ATC
-                        - type: "null"
-                    value:
-                      anyOf:
-                        - type: number
-                        - type: "null"
-                    valueText:
-                      anyOf:
-                        - type: string
-                          maxLength: 300
-                        - type: "null"
-                    unit:
-                      anyOf:
-                        - type: string
-                          maxLength: 80
-                        - type: "null"
-                    referenceLow:
-                      anyOf:
-                        - type: number
-                        - type: "null"
-                    referenceHigh:
-                      anyOf:
-                        - type: number
-                        - type: "null"
-                    referenceText:
-                      anyOf:
-                        - type: string
-                          maxLength: 120
-                        - type: "null"
-                    effectiveDate:
-                      anyOf:
-                        - type: string
-                          pattern: ^\d{4}-\d{2}-\d{2}$
-                        - type: "null"
-                  required:
-                    - factType
-                    - label
-                - type: object
-                  properties:
-                    factType:
-                      type: string
-                      const: MEDICATION_STATEMENT
-                    name:
-                      type: string
-                      minLength: 1
-                      maxLength: 200
-                    dose:
-                      anyOf:
-                        - type: string
-                          maxLength: 120
-                        - type: "null"
-                    rxNormCode:
-                      anyOf:
-                        - type: string
-                          maxLength: 20
-                        - type: "null"
-                    atcCode:
-                      anyOf:
-                        - type: string
-                          maxLength: 16
-                        - type: "null"
-                    statusStated:
-                      anyOf:
-                        - type: string
-                          maxLength: 64
-                        - type: "null"
-                    effectiveDate:
-                      anyOf:
-                        - type: string
-                          pattern: ^\d{4}-\d{2}-\d{2}$
-                        - type: "null"
-                  required:
-                    - factType
-                    - name
-              type: object
+              $ref: "#/components/schemas/InboundFactEditRequest"
       responses:
         "200":
           description: The updated fact.
@@ -18041,29 +17105,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                decisions:
-                  minItems: 1
-                  maxItems: 120
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      factId:
-                        type: string
-                        minLength: 1
-                        maxLength: 40
-                      action:
-                        type: string
-                        enum:
-                          - approve
-                          - reject
-                    required:
-                      - factId
-                      - action
-              required:
-                - decisions
+              $ref: "#/components/schemas/InboundConfirmRequest"
       responses:
         "200":
           description: Per-decision outcome.
@@ -18106,33 +17148,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                name:
-                  type: string
-                  minLength: 1
-                  maxLength: 120
-                unit:
-                  type: string
-                  minLength: 1
-                  maxLength: 40
-                targetLow:
-                  type: number
-                targetHigh:
-                  type: number
-                decimals:
-                  type: integer
-                  minimum: 0
-                  maximum: 6
-                description:
-                  type: string
-                  maxLength: 2000
-                correlationEnabled:
-                  default: false
-                  type: boolean
-              required:
-                - name
-                - unit
+              $ref: "#/components/schemas/CreateCustomMetricRequest"
       responses:
         "201":
           description: Created custom metric.
@@ -18195,37 +17211,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                name:
-                  type: string
-                  minLength: 1
-                  maxLength: 120
-                unit:
-                  type: string
-                  minLength: 1
-                  maxLength: 40
-                targetLow:
-                  anyOf:
-                    - type: number
-                    - type: "null"
-                targetHigh:
-                  anyOf:
-                    - type: number
-                    - type: "null"
-                decimals:
-                  anyOf:
-                    - type: integer
-                      minimum: 0
-                      maximum: 6
-                    - type: "null"
-                description:
-                  anyOf:
-                    - type: string
-                      maxLength: 2000
-                    - type: "null"
-                correlationEnabled:
-                  type: boolean
+              $ref: "#/components/schemas/UpdateCustomMetricRequest"
       responses:
         "200":
           description: Updated custom metric.
@@ -18322,23 +17308,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                value:
-                  type: number
-                measuredAt:
-                  type: string
-                  format: date-time
-                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
-                note:
-                  anyOf:
-                    - type: string
-                      maxLength: 2000
-                    - type: string
-                      const: ""
-              required:
-                - value
-                - measuredAt
+              $ref: "#/components/schemas/CreateCustomMetricEntryRequest"
       responses:
         "201":
           description: Created value.
@@ -18374,22 +17344,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                value:
-                  type: number
-                measuredAt:
-                  type: string
-                  format: date-time
-                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
-                note:
-                  anyOf:
-                    - anyOf:
-                        - type: string
-                          maxLength: 2000
-                        - type: string
-                          const: ""
-                    - type: "null"
+              $ref: "#/components/schemas/UpdateCustomMetricEntryRequest"
       responses:
         "200":
           description: Updated value.
@@ -23891,6 +22846,101 @@ components:
       description: Free-text medication description payload. The route runs the text through the Coach provider chain and
         returns a partial structured payload the wizard merges. Rate-limited 10 requests / 5 minutes / user;
         budget-gated against the daily Coach token ceiling.
+    SetMedicationEfficacyTargetRequest:
+      type: object
+      properties:
+        clear:
+          type: boolean
+        measurementType:
+          type: string
+          enum:
+            - WEIGHT
+            - BLOOD_PRESSURE_SYS
+            - BLOOD_PRESSURE_DIA
+            - PULSE
+            - BODY_FAT
+            - SLEEP_DURATION
+            - ACTIVITY_STEPS
+            - BLOOD_GLUCOSE
+            - TOTAL_BODY_WATER
+            - BONE_MASS
+            - OXYGEN_SATURATION
+            - HEART_RATE_VARIABILITY
+            - RESTING_HEART_RATE
+            - ACTIVE_ENERGY_BURNED
+            - FLIGHTS_CLIMBED
+            - WALKING_RUNNING_DISTANCE
+            - VO2_MAX
+            - BODY_TEMPERATURE
+            - FAT_FREE_MASS
+            - FAT_MASS
+            - MUSCLE_MASS
+            - SKIN_TEMPERATURE
+            - PULSE_WAVE_VELOCITY
+            - VASCULAR_AGE
+            - VISCERAL_FAT
+            - AUDIO_EXPOSURE_ENV
+            - AUDIO_EXPOSURE_HEADPHONE
+            - TIME_IN_DAYLIGHT
+            - WALKING_STEADINESS
+            - AUDIO_EXPOSURE_EVENT
+            - RESPIRATORY_RATE
+            - BODY_MASS_INDEX
+            - LEAN_BODY_MASS
+            - WALKING_HEART_RATE_AVERAGE
+            - WALKING_ASYMMETRY
+            - WALKING_DOUBLE_SUPPORT
+            - WALKING_STEP_LENGTH
+            - WALKING_SPEED
+            - CARDIO_RECOVERY
+            - WRIST_TEMPERATURE
+            - FALL_COUNT
+            - SIX_MINUTE_WALK_DISTANCE
+            - STAIR_ASCENT_SPEED
+            - STAIR_DESCENT_SPEED
+            - BREATHING_DISTURBANCES
+            - IRREGULAR_RHYTHM_NOTIFICATION
+            - HIGH_HEART_RATE_EVENT
+            - LOW_HEART_RATE_EVENT
+            - WALKING_STEADINESS_EVENT
+            - BREATHING_DISTURBANCE_EVENT
+            - RECOVERY_SCORE
+            - STRESS_SCORE
+            - STRAIN_SCORE
+            - HRV_RMSSD
+            - DAY_STRAIN
+            - WORKOUT_STRAIN
+            - SLEEP_PERFORMANCE
+            - SLEEP_EFFICIENCY
+            - SLEEP_CONSISTENCY
+            - SLEEP_NEED
+            - ENERGY_EXPENDITURE_KJ
+            - AVERAGE_HEART_RATE
+            - MAX_HEART_RATE
+            - SLEEP_DISTURBANCE_COUNT
+            - ANS_CHARGE
+            - CARDIO_LOAD
+            - SLEEP_SCORE
+            - BODY_TEMPERATURE_DEVIATION
+            - RESILIENCE
+            - PHQ9_SCORE
+            - GAD7_SCORE
+            - GRIP_STRENGTH
+            - PAIN_NRS
+            - WAIST_CIRCUMFERENCE
+            - WAIST_TO_HEIGHT
+            - WHO5_SCORE
+            - SCI_SCORE
+        biomarkerId:
+          type: string
+          minLength: 1
+          maxLength: 64
+        primary:
+          type: boolean
+      description: Set or clear the user's explicit efficacy-target override for a medication. `clear:true` removes the
+        override so the resolver reverts to the derived (ATC class prefix → name inference) target; otherwise pin
+        exactly ONE of `measurementType` (a metric series) / `biomarkerId` (a lab analyte). `userId` is never a field —
+        ownership is narrowed through the medication (and the biomarker for a lab target).
     CreateScheduleRevisionRequest:
       type: object
       properties:
@@ -25467,6 +24517,85 @@ components:
       description: "The day around a mood entry: work, contacts, leisure and one notable event. Every field optional. Sleep,
         activity, vitals and body symptoms are deliberately ABSENT — they are owned by their own modules and are read
         from there, never captured a second time here."
+    CreateMoodTagRequest:
+      type: object
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 40
+        icon:
+          anyOf:
+            - type: string
+            - type: "null"
+        categoryKey:
+          type: string
+          minLength: 1
+          maxLength: 80
+      required:
+        - label
+      description: Create a per-user custom mood tag (BINARY only). `label` is encrypted at rest. `icon` must come from the
+        curated allowlist (unknown name → 422). `categoryKey` picks the home group — any seeded category key or one of
+        the caller's own `customcat:` group keys; omitted → the seeded `custom` category. Capped at 50 active custom
+        tags per user (422).
+    UpdateMoodTagRequest:
+      type: object
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 40
+        icon:
+          anyOf:
+            - type: string
+            - type: "null"
+        isActive:
+          type: boolean
+        categoryKey:
+          type: string
+          minLength: 1
+          maxLength: 80
+      description: Partial custom-tag edit; at least one field required. `isActive:false` archives (history intact),
+        `isActive:true` restores. `categoryKey` moves the tag to another group (a real categoryId move).
+    HideMoodTagRequest:
+      type: object
+      properties:
+        hidden:
+          type: boolean
+      required:
+        - hidden
+      description: Hide / show a CATALOGUE tag for the calling user. Custom tags are hidden via their own `isActive` flag on
+        the custom PATCH instead (this route 400s a `custom:` key).
+    CreateMoodTagGroupRequest:
+      type: object
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 40
+        icon:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - label
+      description: Create a per-user custom mood-tag group. `label` is encrypted at rest; `icon` must come from the curated
+        allowlist. Capped at 12 active custom groups per user (422).
+    UpdateMoodTagGroupRequest:
+      type: object
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 40
+        icon:
+          anyOf:
+            - type: string
+            - type: "null"
+        isActive:
+          type: boolean
+      description: Partial custom-group edit; at least one field required. `isActive:false` retires the group without touching
+        its tags.
     MoodTagLayoutPutRequest:
       type: object
       properties:
@@ -26467,6 +25596,143 @@ components:
         reminder's notifyHour in the profile timezone. Must be at least tomorrow and at most five years out. The regular
         cadence is untouched: lastSatisfiedAt and the anchor stay where they are, and the reminder resumes its normal
         interval after the snoozed cycle."
+    CreateLabResultRequest:
+      type: object
+      properties:
+        biomarkerId:
+          type: string
+          minLength: 1
+          maxLength: 64
+        panel:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 120
+            - type: string
+              const: ""
+        analyte:
+          type: string
+          minLength: 1
+          maxLength: 120
+        value:
+          type: number
+        valueText:
+          type: string
+          minLength: 1
+          maxLength: 120
+        unit:
+          type: string
+          minLength: 1
+          maxLength: 40
+        referenceLow:
+          type: number
+        referenceHigh:
+          type: number
+        sourceReferenceLow:
+          type: number
+        sourceReferenceHigh:
+          type: number
+        sourceReferenceText:
+          anyOf:
+            - type: string
+              maxLength: 120
+            - type: string
+              const: ""
+        takenAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+        note:
+          anyOf:
+            - type: string
+              maxLength: 2000
+            - type: string
+              const: ""
+        source:
+          type: string
+          enum:
+            - MANUAL
+            - OCR
+        encounterId:
+          type: string
+          minLength: 1
+          maxLength: 40
+      required:
+        - takenAt
+      description: 'Record a single biomarker reading (HbA1c, LDL, ferritin, TSH, …). A reading is EITHER numeric (`value` +
+        `unit`, optional reference bounds) OR qualitative (`valueText`, e.g. "negativ" / "positiv") — exactly one, never
+        both, never neither. `analyte` + `unit` are free-form (a lab prints its own naming); a qualitative reading needs
+        no unit / bounds. When both numeric bounds are present `referenceLow` must not exceed `referenceHigh`. `takenAt`
+        is a backdatable ISO instant (no future, ≤ 50 years past). The optional `note` is encrypted at rest. The
+        optional `source` records provenance: `"OCR"` for an on-device-OCR capture (the raw image never reaches the
+        server on this path), defaulting to `"MANUAL"` when omitted. The optional `encounterId` files the reading
+        against a visit the caller owns — always optional, and a link that could not be made never fails the reading.'
+    UpdateLabResultRequest:
+      type: object
+      properties:
+        panel:
+          anyOf:
+            - anyOf:
+                - type: string
+                  minLength: 1
+                  maxLength: 120
+                - type: string
+                  const: ""
+            - type: "null"
+        analyte:
+          type: string
+          minLength: 1
+          maxLength: 120
+        value:
+          type: number
+        valueText:
+          type: string
+          minLength: 1
+          maxLength: 120
+        unit:
+          type: string
+          minLength: 1
+          maxLength: 40
+        referenceLow:
+          anyOf:
+            - type: number
+            - type: "null"
+        referenceHigh:
+          anyOf:
+            - type: number
+            - type: "null"
+        sourceReferenceLow:
+          anyOf:
+            - type: number
+            - type: "null"
+        sourceReferenceHigh:
+          anyOf:
+            - type: number
+            - type: "null"
+        sourceReferenceText:
+          anyOf:
+            - anyOf:
+                - type: string
+                  maxLength: 120
+                - type: string
+                  const: ""
+            - type: "null"
+        takenAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+        note:
+          anyOf:
+            - anyOf:
+                - type: string
+                  maxLength: 2000
+                - type: string
+                  const: ""
+            - type: "null"
+      description: Partial edit of a lab result. An omitted key leaves the column untouched; an explicit `null` on `panel` /
+        `note` / a reference bound clears it. Edit the matching value field for the row's type — `value` for a numeric
+        row, `valueText` for a qualitative one; a request must not carry both, and a cross-type edit (the wrong field
+        for the row) is rejected.
     RestoreLabResultsRequest:
       type: object
       properties:
@@ -26490,6 +25756,593 @@ components:
       required:
         - mode
         - text
+    CreateVaccinationRequest:
+      type: object
+      properties:
+        occurredAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        antigenSlug:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 64
+            - type: "null"
+        vaccineName:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 200
+            - type: "null"
+        doseNumber:
+          anyOf:
+            - type: integer
+              minimum: 1
+              maximum: 20
+            - type: "null"
+        seriesDoses:
+          anyOf:
+            - type: integer
+              minimum: 1
+              maximum: 10
+            - type: "null"
+        lotNumber:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 64
+            - type: "null"
+        site:
+          anyOf:
+            - type: string
+              enum:
+                - LEFT_ARM
+                - RIGHT_ARM
+                - LEFT_THIGH
+                - RIGHT_THIGH
+                - ORAL
+                - NASAL
+                - OTHER
+            - type: "null"
+        practitionerId:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 40
+            - type: "null"
+        encounterId:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 40
+            - type: "null"
+        note:
+          anyOf:
+            - type: string
+              maxLength: 2000
+            - type: "null"
+        documentIds:
+          maxItems: 100
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 40
+      required:
+        - occurredAt
+      additionalProperties: false
+      description: "Log one administered dose. `occurredAt` is required and must not be in the future — a vaccination is
+        recorded after the fact, and a planned booster is a reminder rather than a record. Exactly one identity arm is
+        required: either `antigenSlug` (a slug the catalogue offers) or `vaccineName` (whatever the person's own record
+        says, verbatim, which may be a trade name). Everything else is optional, so a decades-old paper entry with
+        nothing but a date and a name is loggable. `note` is encrypted at rest. `documentIds` pre-links the scanned
+        pages; an id naming nothing the caller owns is dropped rather than refused, so a link never blocks a save.
+        Logging a dose satisfies any booster reminder keyed to one of its component antigens."
+    UpdateVaccinationRequest:
+      type: object
+      properties:
+        occurredAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        antigenSlug:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 64
+            - type: "null"
+        vaccineName:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 200
+            - type: "null"
+        doseNumber:
+          anyOf:
+            - type: integer
+              minimum: 1
+              maximum: 20
+            - type: "null"
+        seriesDoses:
+          anyOf:
+            - type: integer
+              minimum: 1
+              maximum: 10
+            - type: "null"
+        lotNumber:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 64
+            - type: "null"
+        site:
+          anyOf:
+            - type: string
+              enum:
+                - LEFT_ARM
+                - RIGHT_ARM
+                - LEFT_THIGH
+                - RIGHT_THIGH
+                - ORAL
+                - NASAL
+                - OTHER
+            - type: "null"
+        practitionerId:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 40
+            - type: "null"
+        encounterId:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 40
+            - type: "null"
+        note:
+          anyOf:
+            - type: string
+              maxLength: 2000
+            - type: "null"
+        documentIds:
+          maxItems: 100
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 40
+      additionalProperties: false
+      description: Partial edit of a dose; an omitted key leaves the column untouched, and a body naming nothing is a 422.
+        `occurredAt` is editable because a transcription typo is the common case — and editing it deliberately does NOT
+        re-run the booster satisfaction, so correcting a date can never move a reminder's due date. An edit that would
+        leave the record with neither identity arm is refused. A present `documentIds` array replaces the links, empty
+        array included.
+    VaccinationBoosterRequest:
+      type: object
+      properties:
+        intervalMonths:
+          type: integer
+          minimum: 1
+          maximum: 600
+        label:
+          type: string
+          minLength: 1
+          maxLength: 120
+        notifyHour:
+          type: integer
+          minimum: 0
+          maximum: 23
+      required:
+        - intervalMonths
+        - label
+      additionalProperties: false
+      description: "The confirm body for a booster reminder — the person's own values, accepted or edited from the catalogue's
+        prefill. `intervalMonths` is bounded at 600 (a decade booster is 120); `label` is composed client-side so its
+        locale is the person's own. There is no antigen field: the server reads the antigen from the dose's catalogue
+        entry, never from the request, so a client cannot key a reminder onto an antigen the dose does not contain."
+    VaccinationLinkRequest:
+      type: object
+      properties:
+        targetKind:
+          type: string
+          enum:
+            - document
+        targetIds:
+          minItems: 1
+          maxItems: 100
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 40
+      required:
+        - targetKind
+        - targetIds
+      additionalProperties: false
+      description: Documents to file against, or unfile from, a dose. Idempotent in both directions and capped at 100 ids. Ids
+        naming nothing the caller owns come back in `unknown` rather than failing the request.
+    CreateIllnessEpisodeRequest:
+      type: object
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 120
+        type:
+          type: string
+          enum:
+            - INFECTION
+            - ALLERGY
+            - INJURY
+            - MENTAL_HEALTH
+            - AUTOIMMUNE
+            - CHRONIC
+            - OTHER
+        lifecycle:
+          default: ACUTE
+          type: string
+          enum:
+            - ACUTE
+            - CHRONIC_ONGOING
+            - RECURRING
+            - FLARE
+        onsetAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        resolvedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
+        parentConditionId:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 40
+            - type: "null"
+        note:
+          anyOf:
+            - type: string
+              maxLength: 2000
+            - type: "null"
+      required:
+        - label
+        - type
+      description: Open an illness/condition episode. `label` is the user-facing name; `type` + `lifecycle` classify it.
+        `onsetAt` defaults to 'now' server-side when omitted. `parentConditionId` threads a FLARE/RECURRING bout under a
+        parent condition (must be an owned, live episode). The optional `note` is encrypted at rest.
+    UpdateIllnessEpisodeRequest:
+      type: object
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 120
+        type:
+          type: string
+          enum:
+            - INFECTION
+            - ALLERGY
+            - INJURY
+            - MENTAL_HEALTH
+            - AUTOIMMUNE
+            - CHRONIC
+            - OTHER
+        lifecycle:
+          type: string
+          enum:
+            - ACUTE
+            - CHRONIC_ONGOING
+            - RECURRING
+            - FLARE
+        onsetAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+        resolvedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+            - type: "null"
+        parentConditionId:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 40
+            - type: "null"
+        note:
+          anyOf:
+            - type: string
+              maxLength: 2000
+            - type: "null"
+      additionalProperties: false
+      description: Partial edit of an episode; an omitted key leaves the column untouched. A `null` `resolvedAt` re-opens a
+        resolved episode; a `null` `parentConditionId` detaches it from its parent. Rejects unknown keys.
+    ResolveIllnessEpisodeRequest:
+      type: object
+      properties:
+        resolvedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+      description: Mark an episode recovered. `resolvedAt` defaults to 'now' when omitted, so the one-tap 'mark recovered'
+        affordance can send an empty body. A CHRONIC_ONGOING episode has no recovery date by design and 422s.
+    UpsertIllnessDayLogRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+        functionalImpact:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 3
+            - type: "null"
+        feverC:
+          anyOf:
+            - type: number
+              minimum: 30
+              maximum: 45
+            - type: "null"
+        symptoms:
+          maxItems: 40
+          type: array
+          items:
+            type: object
+            properties:
+              key:
+                type: string
+                minLength: 1
+                maxLength: 80
+              severity:
+                type: integer
+                minimum: 1
+                maximum: 3
+            required:
+              - key
+        note:
+          anyOf:
+            - type: string
+              maxLength: 2000
+            - type: "null"
+        loggedAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+      required:
+        - date
+      description: Upsert one day's symptom / functional-impact / fever row for an episode (keyed on `(episodeId, date)`).
+        `date` is a `YYYY-MM-DD` tz-anchored day. `functionalImpact` (0–3) + `feverC` are queryable plaintext;
+        `symptoms` carry an optional 0–3 Jackson/WURSS severity per link; the optional `note` is encrypted at rest.
+    CreateMentalHealthAssessmentRequest:
+      type: object
+      properties:
+        instrument:
+          type: string
+          enum:
+            - PHQ9
+            - GAD7
+            - WHO5
+            - SCI
+        items:
+          minItems: 1
+          maxItems: 12
+          type: array
+          items:
+            type: integer
+            minimum: 0
+            maximum: 5
+        functionalDifficulty:
+          type: integer
+          minimum: 0
+          maximum: 3
+        takenAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+        tz:
+          type: string
+          maxLength: 64
+        locale:
+          type: string
+          maxLength: 16
+        source:
+          default: WEB
+          type: string
+          enum:
+            - WEB
+            - IOS
+        externalId:
+          type: string
+          minLength: 1
+          maxLength: 120
+      required:
+        - instrument
+        - items
+      description: "Record one completed screener administration: PHQ-9 (9 items, 0–3), GAD-7 (7 items, 0–3), WHO-5 (5 items,
+        0–5) or SCI (8 items, 0–4). The array length and per-item ceiling must match the instrument. The item answers
+        are encrypted at rest and never returned. The server computes the total (WHO-5 reports raw-sum × 4 as 0–100) +
+        severity band + item-9 safety flag. Opt-in, beside mood tracking — this is a screening surface, not a
+        diagnosis."
+    CreateFamilyHistoryRequest:
+      type: object
+      properties:
+        relationship:
+          type: string
+          enum:
+            - MOTHER
+            - FATHER
+            - SISTER
+            - BROTHER
+            - DAUGHTER
+            - SON
+            - GRANDMOTHER_MATERNAL
+            - GRANDFATHER_MATERNAL
+            - GRANDMOTHER_PATERNAL
+            - GRANDFATHER_PATERNAL
+            - AUNT
+            - UNCLE
+            - COUSIN
+            - HALF_SIBLING
+            - OTHER
+        condition:
+          type: string
+          minLength: 1
+          maxLength: 160
+        ageAtOnset:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 120
+            - type: "null"
+        note:
+          anyOf:
+            - type: string
+              maxLength: 2000
+            - type: "null"
+      required:
+        - relationship
+        - condition
+      description: Record one condition for one relative (a FHIR FamilyMemberHistory with a single condition). `condition` is
+        the user-facing label (the `condition.code.text` anchor — never a machine-guessed code); `ageAtOnset` is the
+        relative's age (years) when it began. The free-text `note` is encrypted at rest. Patient-reported.
+    UpdateFamilyHistoryRequest:
+      type: object
+      properties:
+        relationship:
+          type: string
+          enum:
+            - MOTHER
+            - FATHER
+            - SISTER
+            - BROTHER
+            - DAUGHTER
+            - SON
+            - GRANDMOTHER_MATERNAL
+            - GRANDFATHER_MATERNAL
+            - GRANDMOTHER_PATERNAL
+            - GRANDFATHER_PATERNAL
+            - AUNT
+            - UNCLE
+            - COUSIN
+            - HALF_SIBLING
+            - OTHER
+        condition:
+          type: string
+          minLength: 1
+          maxLength: 160
+        ageAtOnset:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 120
+            - type: "null"
+        note:
+          anyOf:
+            - type: string
+              maxLength: 2000
+            - type: "null"
+      additionalProperties: false
+      description: Partial edit of a family-history entry; an omitted key leaves the column untouched. A `null`
+        `ageAtOnset`/`note` clears that field. Rejects unknown keys.
+    DocumentBulkRequest:
+      type: object
+      properties:
+        ids:
+          minItems: 1
+          maxItems: 100
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 40
+        action:
+          type: string
+          enum:
+            - setKind
+            - linkEpisode
+            - unlinkEpisode
+            - linkEncounter
+            - unlinkEncounter
+            - delete
+            - restore
+        kind:
+          type: string
+          enum:
+            - DOCTOR_REPORT
+            - DISCHARGE_LETTER
+            - LAB_RESULT
+            - IMAGING
+            - PRESCRIPTION
+            - REFERRAL
+            - INSURANCE
+            - VACCINATION
+            - OTHER
+        episodeId:
+          type: string
+          minLength: 1
+          maxLength: 40
+        encounterId:
+          type: string
+          minLength: 1
+          maxLength: 40
+      required:
+        - ids
+        - action
+      description: "One bulk action over up to 100 owner-scoped documents: `setKind` (requires `kind`), `linkEpisode` /
+        `unlinkEpisode` (require `episodeId`), `linkEncounter` / `unlinkEncounter` (require `encounterId`), `delete`
+        (tombstone, undo-able for 30 days), `restore` (clear tombstone). Partial failures never abort the batch — see
+        the per-id result array."
+    DocumentUpdateRequest:
+      type: object
+      properties:
+        title:
+          anyOf:
+            - type: string
+              maxLength: 200
+            - type: "null"
+        kind:
+          type: string
+          enum:
+            - DOCTOR_REPORT
+            - DISCHARGE_LETTER
+            - LAB_RESULT
+            - IMAGING
+            - PRESCRIPTION
+            - REFERRAL
+            - INSURANCE
+            - VACCINATION
+            - OTHER
+        documentDate:
+          anyOf:
+            - type: string
+              pattern: ^\d{4}-\d{2}-\d{2}$
+            - type: "null"
+        episodeIds:
+          maxItems: 20
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 40
+        encounterIds:
+          maxItems: 20
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 40
+      description: "Metadata edit for a stored document: `title` (user label; null clears it), `kind` (category),
+        `documentDate` (user filing date, YYYY-MM-DD; null clears it), `episodeIds` (REPLACE-SET of condition links —
+        the document's links become exactly this set; an empty array unlinks everything; every id must be a live episode
+        of the caller or the whole request answers 404), `encounterIds` (the same replace-set semantics over the
+        caller's visits). At least one field required. No `userId` field — narrowed from the session and fed to the
+        Prisma `where` with the row id."
     InboundExtractRequest:
       anyOf:
         - type: object
@@ -26539,6 +26392,285 @@ components:
             - de
       required:
         - message
+    InboundFactEditRequest:
+      oneOf:
+        - type: object
+          properties:
+            factType:
+              type: string
+              const: CONDITION
+            label:
+              type: string
+              minLength: 1
+              maxLength: 300
+            code:
+              anyOf:
+                - type: string
+                  maxLength: 64
+                - type: "null"
+            codeSystem:
+              anyOf:
+                - type: string
+                  enum:
+                    - SNOMED
+                    - ICD10
+                    - LOINC
+                    - RXNORM
+                    - ATC
+                - type: "null"
+            clinicalStatus:
+              anyOf:
+                - type: string
+                  maxLength: 64
+                - type: "null"
+            verificationStatus:
+              anyOf:
+                - type: string
+                  maxLength: 64
+                - type: "null"
+            onsetDate:
+              anyOf:
+                - type: string
+                  pattern: ^\d{4}-\d{2}-\d{2}$
+                - type: "null"
+          required:
+            - factType
+            - label
+        - type: object
+          properties:
+            factType:
+              type: string
+              const: OBSERVATION
+            label:
+              type: string
+              minLength: 1
+              maxLength: 300
+            code:
+              anyOf:
+                - type: string
+                  maxLength: 64
+                - type: "null"
+            codeSystem:
+              anyOf:
+                - type: string
+                  enum:
+                    - SNOMED
+                    - ICD10
+                    - LOINC
+                    - RXNORM
+                    - ATC
+                - type: "null"
+            value:
+              anyOf:
+                - type: number
+                - type: "null"
+            valueText:
+              anyOf:
+                - type: string
+                  maxLength: 300
+                - type: "null"
+            unit:
+              anyOf:
+                - type: string
+                  maxLength: 80
+                - type: "null"
+            referenceLow:
+              anyOf:
+                - type: number
+                - type: "null"
+            referenceHigh:
+              anyOf:
+                - type: number
+                - type: "null"
+            referenceText:
+              anyOf:
+                - type: string
+                  maxLength: 120
+                - type: "null"
+            effectiveDate:
+              anyOf:
+                - type: string
+                  pattern: ^\d{4}-\d{2}-\d{2}$
+                - type: "null"
+          required:
+            - factType
+            - label
+        - type: object
+          properties:
+            factType:
+              type: string
+              const: MEDICATION_STATEMENT
+            name:
+              type: string
+              minLength: 1
+              maxLength: 200
+            dose:
+              anyOf:
+                - type: string
+                  maxLength: 120
+                - type: "null"
+            rxNormCode:
+              anyOf:
+                - type: string
+                  maxLength: 20
+                - type: "null"
+            atcCode:
+              anyOf:
+                - type: string
+                  maxLength: 16
+                - type: "null"
+            statusStated:
+              anyOf:
+                - type: string
+                  maxLength: 64
+                - type: "null"
+            effectiveDate:
+              anyOf:
+                - type: string
+                  pattern: ^\d{4}-\d{2}-\d{2}$
+                - type: "null"
+          required:
+            - factType
+            - name
+      description: A correction to a staged fact before approval (fixes OCR / units / dates / codes). Discriminated by
+        `factType` so the edit cannot change the fact's resource type. A successful edit clears `needsReview` — the
+        values become user-asserted.
+      type: object
+    InboundConfirmRequest:
+      type: object
+      properties:
+        decisions:
+          minItems: 1
+          maxItems: 120
+          type: array
+          items:
+            type: object
+            properties:
+              factId:
+                type: string
+                minLength: 1
+                maxLength: 40
+              action:
+                type: string
+                enum:
+                  - approve
+                  - reject
+            required:
+              - factId
+              - action
+      required:
+        - decisions
+      description: The approve/reject decisions a human made on the review screen. Each names a staged fact by id. Approved
+        facts are committed to the structured stores (labs / conditions / medications) through their normal create
+        paths; rejected facts are discarded. A fact still flagged `needsReview` (below the confidence floor, never
+        edited) cannot be approved — it is reported back as `needsReview`. No `userId` field — it is narrowed from the
+        session; every fact id is re-scoped to the document + caller.
+    CreateCustomMetricRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        unit:
+          type: string
+          minLength: 1
+          maxLength: 40
+        targetLow:
+          type: number
+        targetHigh:
+          type: number
+        decimals:
+          type: integer
+          minimum: 0
+          maximum: 6
+        description:
+          type: string
+          maxLength: 2000
+        correlationEnabled:
+          default: false
+          type: boolean
+      required:
+        - name
+        - unit
+      description: "Define a user-scoped custom metric ONCE: free-text `name` + `unit`, an optional target window (`targetLow`
+        / `targetHigh`; when both present `targetLow` must not exceed `targetHigh`), optional display `decimals`, an
+        optional `description`, and explicit `correlationEnabled` opt-in. The name is unique per user. Logging a value
+        later snapshots its unit."
+    UpdateCustomMetricRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        unit:
+          type: string
+          minLength: 1
+          maxLength: 40
+        targetLow:
+          anyOf:
+            - type: number
+            - type: "null"
+        targetHigh:
+          anyOf:
+            - type: number
+            - type: "null"
+        decimals:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 6
+            - type: "null"
+        description:
+          anyOf:
+            - type: string
+              maxLength: 2000
+            - type: "null"
+        correlationEnabled:
+          type: boolean
+      description: Partial edit of a custom metric. An omitted key leaves the column untouched; an explicit `null` on a target
+        bound / `decimals` / `description` clears it. `correlationEnabled` explicitly controls use as a bounded
+        behaviour channel. A conflicting rename is rejected 409.
+    CreateCustomMetricEntryRequest:
+      type: object
+      properties:
+        value:
+          type: number
+        measuredAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+        note:
+          anyOf:
+            - type: string
+              maxLength: 2000
+            - type: string
+              const: ""
+      required:
+        - value
+        - measuredAt
+      description: "Log a value against a custom metric: numeric `value`, ISO 8601 `measuredAt`, optional free-text `note`.
+        The metric's current unit is snapshotted onto the entry server-side."
+    UpdateCustomMetricEntryRequest:
+      type: object
+      properties:
+        value:
+          type: number
+        measuredAt:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+        note:
+          anyOf:
+            - anyOf:
+                - type: string
+                  maxLength: 2000
+                - type: string
+                  const: ""
+            - type: "null"
+      description: Partial edit of a logged value. An omitted key leaves the column untouched; an explicit `null` on `note`
+        clears it.
     RestoreCustomMetricEntriesRequest:
       type: object
       properties:
@@ -41296,89 +41428,7 @@ components:
       type: object
       properties:
         data:
-          type: object
-          properties:
-            name:
-              type: string
-              minLength: 1
-              maxLength: 100
-            dose:
-              type: string
-              minLength: 1
-              maxLength: 50
-            doseUnit:
-              type: string
-              enum:
-                - mg
-                - ml
-                - iu
-                - tablets
-                - drops
-                - puffs
-                - sprays
-            cadenceKind:
-              type: string
-              enum:
-                - daily
-                - weekdays
-                - everyNWeeks
-                - monthly
-                - everyNMonths
-                - yearly
-                - rolling
-                - oneShot
-            weekdays:
-              maxItems: 7
-              type: array
-              items:
-                type: string
-                enum:
-                  - MO
-                  - TU
-                  - WE
-                  - TH
-                  - FR
-                  - SA
-                  - SU
-            intervalWeeks:
-              type: integer
-              minimum: 1
-              maximum: 52
-            intervalMonths:
-              type: integer
-              minimum: 1
-              maximum: 12
-            dayOfMonth:
-              type: integer
-              minimum: 1
-              maximum: 31
-            rollingIntervalDays:
-              type: integer
-              minimum: 1
-              maximum: 365
-            timesOfDay:
-              maxItems: 12
-              type: array
-              items:
-                type: string
-                pattern: ^([01]\d|2[0-3]):[0-5]\d$
-            startsOn:
-              type: string
-              pattern: ^\d{4}-\d{2}-\d{2}$
-            endsOn:
-              type: string
-              pattern: ^\d{4}-\d{2}-\d{2}$
-            oneShot:
-              type: boolean
-            confidence:
-              type: object
-              propertyNames:
-                type: string
-              additionalProperties:
-                type: number
-                minimum: 0
-                maximum: 1
-          additionalProperties: false
+          $ref: "#/components/schemas/MedicationExtractionResult"
         error:
           type: "null"
         meta:
@@ -41391,6 +41441,95 @@ components:
         - data
         - error
       additionalProperties: false
+    MedicationExtractionResult:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        dose:
+          type: string
+          minLength: 1
+          maxLength: 50
+        doseUnit:
+          type: string
+          enum:
+            - mg
+            - ml
+            - iu
+            - tablets
+            - drops
+            - puffs
+            - sprays
+        cadenceKind:
+          type: string
+          enum:
+            - daily
+            - weekdays
+            - everyNWeeks
+            - monthly
+            - everyNMonths
+            - yearly
+            - rolling
+            - oneShot
+        weekdays:
+          maxItems: 7
+          type: array
+          items:
+            type: string
+            enum:
+              - MO
+              - TU
+              - WE
+              - TH
+              - FR
+              - SA
+              - SU
+        intervalWeeks:
+          type: integer
+          minimum: 1
+          maximum: 52
+        intervalMonths:
+          type: integer
+          minimum: 1
+          maximum: 12
+        dayOfMonth:
+          type: integer
+          minimum: 1
+          maximum: 31
+        rollingIntervalDays:
+          type: integer
+          minimum: 1
+          maximum: 365
+        timesOfDay:
+          maxItems: 12
+          type: array
+          items:
+            type: string
+            pattern: ^([01]\d|2[0-3]):[0-5]\d$
+        startsOn:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+        endsOn:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+        oneShot:
+          type: boolean
+        confidence:
+          type: object
+          propertyNames:
+            type: string
+          additionalProperties:
+            type: number
+            minimum: 0
+            maximum: 1
+      additionalProperties: false
+      description: Citation-guarded partial extraction of medication scheduling fields. Every field is optional; the wizard
+        merges what is present onto the form state and leaves the rest blank. `name` and `dose` are post-validated
+        against the original free-text and dropped when not substring-matched, so the wizard cannot silently land a
+        hallucinated brand or dose. `cadenceKind` / `doseUnit` / `weekdays` are closed enums; numeric fields are clamped
+        to the wizard's wire bounds.
     GetMedicationCadenceResponse:
       type: object
       properties:
@@ -41877,315 +42016,7 @@ components:
       type: object
       properties:
         data:
-          type: object
-          properties:
-            medicationId:
-              type: string
-            medicationName:
-              type: string
-            eligible:
-              type: boolean
-            reason:
-              type: string
-              enum:
-                - one_shot
-                - no_target
-            startsOn:
-              anyOf:
-                - type: string
-                - type: "null"
-            resolution:
-              type: object
-              properties:
-                tier:
-                  type: string
-                  enum:
-                    - override
-                    - atc
-                    - name
-                    - none
-                cls:
-                  anyOf:
-                    - type: string
-                    - type: "null"
-              required:
-                - tier
-                - cls
-              additionalProperties: false
-            windowDays:
-              type: integer
-              minimum: -9007199254740991
-              maximum: 9007199254740991
-            minWeeksPerSide:
-              type: integer
-              minimum: -9007199254740991
-              maximum: 9007199254740991
-            markers:
-              type: object
-              properties:
-                start:
-                  anyOf:
-                    - type: string
-                    - type: "null"
-                startSource:
-                  anyOf:
-                    - type: string
-                      enum:
-                        - startsOn
-                        - firstReading
-                    - type: "null"
-                doseChanges:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      at:
-                        type: string
-                      label:
-                        type: string
-                    required:
-                      - at
-                      - label
-                    additionalProperties: false
-                pauses:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      from:
-                        type: string
-                      to:
-                        anyOf:
-                          - type: string
-                          - type: "null"
-                    required:
-                      - from
-                      - to
-                    additionalProperties: false
-              required:
-                - start
-                - startSource
-                - doseChanges
-                - pauses
-              additionalProperties: false
-            targets:
-              type: array
-              items:
-                type: object
-                properties:
-                  kind:
-                    type: string
-                    enum:
-                      - metric
-                      - lab
-                  key:
-                    type: string
-                  label:
-                    type: string
-                  unit:
-                    anyOf:
-                      - type: string
-                      - type: "null"
-                  primary:
-                    type: boolean
-                  referenceBand:
-                    anyOf:
-                      - type: object
-                        properties:
-                          low:
-                            type: number
-                          high:
-                            type: number
-                        required:
-                          - low
-                          - high
-                        additionalProperties: false
-                      - type: "null"
-                  series:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        t:
-                          type: string
-                        value:
-                          type: number
-                        status:
-                          type: string
-                          enum:
-                            - in-range
-                            - below
-                            - above
-                            - unknown
-                      required:
-                        - t
-                        - value
-                      additionalProperties: false
-                  beforeAfter:
-                    type: object
-                    properties:
-                      present:
-                        type: boolean
-                      reason:
-                        type: string
-                        enum:
-                          - insufficient_before
-                          - insufficient_after
-                          - no_start
-                          - no_data
-                      before:
-                        type: object
-                        properties:
-                          mean:
-                            type: number
-                          count:
-                            type: integer
-                            minimum: -9007199254740991
-                            maximum: 9007199254740991
-                          from:
-                            type: string
-                          to:
-                            type: string
-                        required:
-                          - mean
-                          - count
-                          - from
-                          - to
-                        additionalProperties: false
-                      after:
-                        type: object
-                        properties:
-                          mean:
-                            type: number
-                          count:
-                            type: integer
-                            minimum: -9007199254740991
-                            maximum: 9007199254740991
-                          from:
-                            type: string
-                          to:
-                            type: string
-                        required:
-                          - mean
-                          - count
-                          - from
-                          - to
-                        additionalProperties: false
-                      delta:
-                        anyOf:
-                          - type: object
-                            properties:
-                              mean:
-                                type: number
-                              pct:
-                                anyOf:
-                                  - type: number
-                                  - type: "null"
-                            required:
-                              - mean
-                              - pct
-                            additionalProperties: false
-                          - type: "null"
-                    required:
-                      - present
-                    additionalProperties: false
-                  levelShift:
-                    anyOf:
-                      - type: object
-                        properties:
-                          present:
-                            type: boolean
-                          at:
-                            type: string
-                          nearStart:
-                            type: boolean
-                        required:
-                          - present
-                        additionalProperties: false
-                      - type: "null"
-                required:
-                  - kind
-                  - key
-                  - label
-                  - unit
-                  - primary
-                  - referenceBand
-                  - series
-                  - beforeAfter
-                  - levelShift
-                additionalProperties: false
-            adherence:
-              type: array
-              items:
-                type: object
-                properties:
-                  date:
-                    type: string
-                  rate:
-                    type: number
-                  taken:
-                    type: integer
-                    minimum: -9007199254740991
-                    maximum: 9007199254740991
-                  missed:
-                    type: integer
-                    minimum: -9007199254740991
-                    maximum: 9007199254740991
-                required:
-                  - date
-                  - rate
-                  - taken
-                  - missed
-                additionalProperties: false
-            overrideOptions:
-              type: object
-              properties:
-                metrics:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      key:
-                        type: string
-                      label:
-                        type: string
-                    required:
-                      - key
-                      - label
-                    additionalProperties: false
-                biomarkers:
-                  type: array
-                  items:
-                    type: object
-                    properties:
-                      id:
-                        type: string
-                      label:
-                        type: string
-                      unit:
-                        type: string
-                    required:
-                      - id
-                      - label
-                      - unit
-                    additionalProperties: false
-              required:
-                - metrics
-                - biomarkers
-              additionalProperties: false
-          required:
-            - medicationId
-            - medicationName
-            - eligible
-            - startsOn
-            - resolution
-            - windowDays
-            - minWeeksPerSide
-            - markers
-            - targets
-            - adherence
-            - overrideOptions
-          additionalProperties: false
+          $ref: "#/components/schemas/MedicationEfficacyResponse"
         error:
           type: "null"
         meta:
@@ -42198,6 +42029,322 @@ components:
         - data
         - error
       additionalProperties: false
+    MedicationEfficacyResponse:
+      type: object
+      properties:
+        medicationId:
+          type: string
+        medicationName:
+          type: string
+        eligible:
+          type: boolean
+        reason:
+          type: string
+          enum:
+            - one_shot
+            - no_target
+        startsOn:
+          anyOf:
+            - type: string
+            - type: "null"
+        resolution:
+          type: object
+          properties:
+            tier:
+              type: string
+              enum:
+                - override
+                - atc
+                - name
+                - none
+            cls:
+              anyOf:
+                - type: string
+                - type: "null"
+          required:
+            - tier
+            - cls
+          additionalProperties: false
+        windowDays:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+        minWeeksPerSide:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+        markers:
+          type: object
+          properties:
+            start:
+              anyOf:
+                - type: string
+                - type: "null"
+            startSource:
+              anyOf:
+                - type: string
+                  enum:
+                    - startsOn
+                    - firstReading
+                - type: "null"
+            doseChanges:
+              type: array
+              items:
+                type: object
+                properties:
+                  at:
+                    type: string
+                  label:
+                    type: string
+                required:
+                  - at
+                  - label
+                additionalProperties: false
+            pauses:
+              type: array
+              items:
+                type: object
+                properties:
+                  from:
+                    type: string
+                  to:
+                    anyOf:
+                      - type: string
+                      - type: "null"
+                required:
+                  - from
+                  - to
+                additionalProperties: false
+          required:
+            - start
+            - startSource
+            - doseChanges
+            - pauses
+          additionalProperties: false
+        targets:
+          type: array
+          items:
+            type: object
+            properties:
+              kind:
+                type: string
+                enum:
+                  - metric
+                  - lab
+              key:
+                type: string
+              label:
+                type: string
+              unit:
+                anyOf:
+                  - type: string
+                  - type: "null"
+              primary:
+                type: boolean
+              referenceBand:
+                anyOf:
+                  - type: object
+                    properties:
+                      low:
+                        type: number
+                      high:
+                        type: number
+                    required:
+                      - low
+                      - high
+                    additionalProperties: false
+                  - type: "null"
+              series:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    t:
+                      type: string
+                    value:
+                      type: number
+                    status:
+                      type: string
+                      enum:
+                        - in-range
+                        - below
+                        - above
+                        - unknown
+                  required:
+                    - t
+                    - value
+                  additionalProperties: false
+              beforeAfter:
+                type: object
+                properties:
+                  present:
+                    type: boolean
+                  reason:
+                    type: string
+                    enum:
+                      - insufficient_before
+                      - insufficient_after
+                      - no_start
+                      - no_data
+                  before:
+                    type: object
+                    properties:
+                      mean:
+                        type: number
+                      count:
+                        type: integer
+                        minimum: -9007199254740991
+                        maximum: 9007199254740991
+                      from:
+                        type: string
+                      to:
+                        type: string
+                    required:
+                      - mean
+                      - count
+                      - from
+                      - to
+                    additionalProperties: false
+                  after:
+                    type: object
+                    properties:
+                      mean:
+                        type: number
+                      count:
+                        type: integer
+                        minimum: -9007199254740991
+                        maximum: 9007199254740991
+                      from:
+                        type: string
+                      to:
+                        type: string
+                    required:
+                      - mean
+                      - count
+                      - from
+                      - to
+                    additionalProperties: false
+                  delta:
+                    anyOf:
+                      - type: object
+                        properties:
+                          mean:
+                            type: number
+                          pct:
+                            anyOf:
+                              - type: number
+                              - type: "null"
+                        required:
+                          - mean
+                          - pct
+                        additionalProperties: false
+                      - type: "null"
+                required:
+                  - present
+                additionalProperties: false
+              levelShift:
+                anyOf:
+                  - type: object
+                    properties:
+                      present:
+                        type: boolean
+                      at:
+                        type: string
+                      nearStart:
+                        type: boolean
+                    required:
+                      - present
+                    additionalProperties: false
+                  - type: "null"
+            required:
+              - kind
+              - key
+              - label
+              - unit
+              - primary
+              - referenceBand
+              - series
+              - beforeAfter
+              - levelShift
+            additionalProperties: false
+        adherence:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+              rate:
+                type: number
+              taken:
+                type: integer
+                minimum: -9007199254740991
+                maximum: 9007199254740991
+              missed:
+                type: integer
+                minimum: -9007199254740991
+                maximum: 9007199254740991
+            required:
+              - date
+              - rate
+              - taken
+              - missed
+            additionalProperties: false
+        overrideOptions:
+          type: object
+          properties:
+            metrics:
+              type: array
+              items:
+                type: object
+                properties:
+                  key:
+                    type: string
+                  label:
+                    type: string
+                required:
+                  - key
+                  - label
+                additionalProperties: false
+            biomarkers:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  label:
+                    type: string
+                  unit:
+                    type: string
+                required:
+                  - id
+                  - label
+                  - unit
+                additionalProperties: false
+          required:
+            - metrics
+            - biomarkers
+          additionalProperties: false
+      required:
+        - medicationId
+        - medicationName
+        - eligible
+        - startsOn
+        - resolution
+        - windowDays
+        - minWeeksPerSide
+        - markers
+        - targets
+        - adherence
+        - overrideOptions
+      additionalProperties: false
+      description: Server-authoritative, strictly-descriptive efficacy view relating a medication to the outcome
+        metric(s)/lab(s) its class is prescribed to move, around its start. Carries the resolved target(s) with their
+        series, the start/dose-change/pause markers, a before/after-start comparison (honest `{present:false}` below the
+        per-side data floor), an adherence lane (cadence-aware per-day rate, never recomputed), an optional conservative
+        level-shift note, and the retarget options. There is NO verdict / score / assessment field by construction — the
+        client renders numbers and neutral connective phrasing only, never a causal or dose-advice claim.
     SetMedicationEfficacyTargetResponse:
       type: object
       properties:
