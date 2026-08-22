@@ -27,7 +27,7 @@ import {
   derivedProvenance,
   glucoseClinicalSchema,
 } from "./insights/schemas";
-import { dataEnvelope, stdResponses } from "./shared";
+import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
 
 // ── The per-type summary the tile strip renders ──────────────────────
 
@@ -512,7 +512,7 @@ export const analyticsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Analytics"],
       summary: "The dashboard analytics aggregate",
       description:
-        "The web dashboard's aggregate read, in two shapes chosen by `?slice=`.\n\n`?slice=summaries` returns the slim tile-strip body from two SQL passes. ANY other value — including an absent, empty or misspelt one — returns the thick default body; the parameter is matched for the exact string `summaries` and is never rejected, so `?slice=summary` silently gets the expensive path.\n\nBoth shapes are served through a stale-while-revalidate cache. A cached body can be up to a minute old, and the default slice's cache key includes the reader's locale because the correlation `interpretation` sentences are narrated per reader. `Cache-Control: private, max-age=0, must-revalidate` on both — bfcache-friendly rather than the framework's stock `no-store`.\n\nThis GET is not free of side effects, and a caller polling it should know: it records a Health Score row for the scored instant, syncs accepted correlation hypotheses into the pattern ledger (which is what mints the `patternId` the dismissal endpoint takes), and kicks a background rollup-freshness refresh. The refresh is fire-and-forget by design — awaiting it stalled the event loop for tens of seconds on large accounts — so a value can be up to about a minute behind a measurement that just landed, and the next read has it.\n\nAuth is a cookie session or a wildcard (`*`) Bearer token; a narrow-scope token is refused. NOT delegable: it resolves the caller's own record, so a switched session still reads its own analytics.",
+        "The web dashboard's aggregate read, in two shapes chosen by `?slice=`.\n\n`?slice=summaries` returns the slim tile-strip body from two SQL passes; omitting the parameter returns the thick default body. Any OTHER value is refused with 422 (`meta.errorCode` = `analytics.invalid_query`). It used to fall through to the default instead, which made `?slice=summary` answer 200 after running the heaviest chain on the surface — the typo was invisible and expensive at the same time.\n\nBoth shapes are served through a stale-while-revalidate cache. A cached body can be up to a minute old, and the default slice's cache key includes the reader's locale because the correlation `interpretation` sentences are narrated per reader. `Cache-Control: private, max-age=0, must-revalidate` on both — bfcache-friendly rather than the framework's stock `no-store`.\n\nThis GET is not free of side effects, and a caller polling it should know: it records a Health Score row for the scored instant, syncs accepted correlation hypotheses into the pattern ledger (which is what mints the `patternId` the dismissal endpoint takes), and kicks a background rollup-freshness refresh. The refresh is fire-and-forget by design — awaiting it stalled the event loop for tens of seconds on large accounts — so a value can be up to about a minute behind a measurement that just landed, and the next read has it.\n\nAuth is a cookie session or a wildcard (`*`) Bearer token; a narrow-scope token is refused. NOT delegable: it resolves the caller's own record, so a switched session still reads its own analytics.",
       parameters: [
         {
           name: "slice",
@@ -520,7 +520,7 @@ export const analyticsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           required: false,
           schema: { type: "string", enum: ["summaries"] },
           description:
-            "`summaries` selects the slim tile-strip body. Any other value falls through to the default body rather than erroring.",
+            "`summaries` selects the slim tile-strip body. Omit it for the default body. Any other value is a 422 — it is not treated as an omission.",
         },
       ],
       responses: {
@@ -537,6 +537,11 @@ export const analyticsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           },
         },
         ...stdResponses,
+        "422": {
+          description:
+            "`slice` carried a value outside the closed set. `meta.errorCode` = `analytics.invalid_query`, with the offending path under `details.issues`.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
       },
     },
   },

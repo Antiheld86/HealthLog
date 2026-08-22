@@ -19,6 +19,7 @@ import {
 import {
   MODULE_DISABLED_DESCRIPTION,
   dataEnvelope,
+  errorEnvelope,
   recordRefusal,
   stdResponses,
 } from "./shared";
@@ -158,7 +159,7 @@ export const awardsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Awards"],
       summary: "List detected personal bests",
       description:
-        "The record's personal bests, newest achievement first. Read-only — rows come from the detection worker and no endpoint creates or edits one.\n\nBoth query parameters are parsed defensively and NEVER 422: an unrecognised `metricType` is dropped (the response is then unfiltered rather than empty), and a `limit` that is not a positive integer falls back to the default rather than being rejected. A caller cannot tell a typo from a deliberate omission, so validate on your side.\n\nDelegable on a `measurements` grant.",
+        "The record's personal bests, newest achievement first. Read-only — rows come from the detection worker and no endpoint creates or edits one.\n\nBoth query parameters are validated and a bad value is a 422. They were forgiving until this release, and in one direction that was worse than merely quiet: dropping an unrecognised `metricType` WIDENED the read to every metric, so a typo returned more rows than the caller asked for. The `limit` ceiling refuses rather than clamps for the same reason.\n\nDelegable on a `measurements` grant.",
       parameters: [
         {
           name: "metricType",
@@ -166,7 +167,7 @@ export const awardsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           required: false,
           schema: { type: "string" },
           description:
-            "A `MeasurementType` to filter to. A value outside the enum is IGNORED, not refused.",
+            "A `MeasurementType` to filter to. A value outside the enum is refused with 422 — it is not dropped, because dropping it would widen the read rather than narrow it.",
         },
         {
           name: "limit",
@@ -174,7 +175,7 @@ export const awardsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           required: false,
           schema: { type: "integer", minimum: 1, maximum: 500, default: 100 },
           description:
-            "Page cap, default 100, clamped at 500. A non-integer, zero or negative value silently reverts to 100; a value above 500 clamps down.",
+            "Page cap, default 100, ceiling 500. A non-integer, a zero, a negative value or anything above 500 is refused with 422 rather than corrected — serving a different number of rows than were asked for is another difference nobody is told about.",
         },
       ],
       responses: {
@@ -191,6 +192,11 @@ export const awardsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           },
         },
         ...stdResponses,
+        "422": {
+          description:
+            "`metricType` or `limit` carried an unacceptable value. `meta.errorCode` = `personal_records.invalid_query`, with the offending path under `details.issues`.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
       },
     },
   },

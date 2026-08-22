@@ -725,6 +725,25 @@ export const updateMeasurementSchema = z.object({
     .optional(),
 });
 
+/**
+ * Query params for `GET /api/personal-records`.
+ *
+ * Both fields used to be parsed defensively at the route: an unrecognised
+ * `metricType` was dropped (which WIDENED the read to every metric rather
+ * than narrowing it, so a typo returned more data than asked for) and a
+ * garbage `limit` reverted to the default. Neither told the caller anything,
+ * so a typo was indistinguishable from an omission. Both are refused now.
+ *
+ * The 500 ceiling matches every other paginated read on the surface, and it
+ * refuses rather than clamps for the same reason: silently serving 500 rows
+ * to a caller that asked for 999 999 is another difference nobody is told
+ * about.
+ */
+export const listPersonalRecordsSchema = z.object({
+  metricType: measurementTypeEnum.optional(),
+  limit: z.coerce.number().int().min(1).max(500).optional().default(100),
+});
+
 export const listMeasurementsSchema = z
   .object({
     type: measurementTypeEnum.optional(),

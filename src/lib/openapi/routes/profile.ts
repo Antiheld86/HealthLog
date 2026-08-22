@@ -15,7 +15,7 @@ import { MODULE_KEYS } from "@/lib/modules/registry";
 import { SCORE_PILLAR_IDS } from "@/lib/analytics/score/types";
 import { savedReportProfileSchema } from "@/lib/report-selection/profile-shape";
 import {
-  AI_PROVIDER_KINDS,
+  aiProviderPatchSchema,
   aiTestOverrideSchema,
 } from "@/lib/validations/ai-provider";
 import {
@@ -518,81 +518,15 @@ const aiProviderResponse = z
       "The calling user's AI-provider configuration plus the effective availability (`aiAvailable` + `managedBy`). Reports key presence + a masked preview only — never a plaintext key.",
   });
 
-// The PATCH body is documented here rather than imported from a validations
-// module because there is nothing to import: the route hand-rolls its parse
-// field by field instead of running a Zod `safeParse`, so the shape below is
-// read off that code. Two consequences a client needs to be told, because no
-// generated schema would carry them: a key of the wrong TYPE (a number
-// `model`, a boolean `baseUrl`) is silently ignored rather than refused, and
-// a body containing only such keys fails as "No valid fields" rather than
-// naming the offender.
-const aiProviderPatchRequest = z
-  .object({
-    provider: z
-      .enum(AI_PROVIDER_KINDS)
-      .nullable()
-      .optional()
-      .describe(
-        'The provider to select. `null` or `""` clears it. Any other unrecognised value is a 422 — this is the one field whose bad value is refused rather than skipped.',
-      ),
-    model: z
-      .string()
-      .nullable()
-      .optional()
-      .describe('Trimmed; `null`, `""` or whitespace-only clears it.'),
-    baseUrl: z
-      .string()
-      .nullable()
-      .optional()
-      .describe(
-        'Custom base URL for the LOCAL provider. `null` or `""` clears it. A non-empty value runs the SSRF floor: a private or internal host is refused with 422 unless the operator allowlisted that exact host. NOTE this column is shared — switching `provider` away from LOCAL in the same request clears it automatically, so a stored cloud key can never be sent to a host configured for something else.',
-      ),
-    compatBaseUrl: z
-      .string()
-      .nullable()
-      .optional()
-      .describe(
-        "Base URL of the OpenAI-compatible gateway. Its own column, deliberately not shared with `baseUrl`. Same SSRF floor.",
-      ),
-    compatModel: z.string().nullable().optional(),
-    compatKey: z
-      .string()
-      .nullable()
-      .optional()
-      .describe(
-        'Bearer for the gateway; encrypted at rest. `null` or `""` clears it. Never echoed back — the read reports presence only.',
-      ),
-    anthropicKey: z
-      .string()
-      .nullable()
-      .optional()
-      .describe('Encrypted at rest. `null` or `""` clears it.'),
-    localKey: z
-      .string()
-      .nullable()
-      .optional()
-      .describe('Encrypted at rest. `null` or `""` clears it.'),
-    openaiKey: z
-      .string()
-      .nullable()
-      .optional()
-      .describe('Encrypted at rest. `null` or `""` clears it.'),
-    responseTimeoutSeconds: z
-      .number()
-      .int()
-      .min(10)
-      .max(600)
-      .nullable()
-      .optional()
-      .describe(
-        "Per-user AI response timeout in seconds, 10–600. `null` restores the built-in default (~120 s). A number outside the range, or a non-integer, is a 422.",
-      ),
-  })
-  .meta({
-    id: "AiProviderPatchRequest",
-    description:
-      "Partial update of the calling user's AI-provider configuration. An omitted key is untouched; an explicit `null` (or empty string, on the string fields) clears the column. At least one recognised key must be present. Key material is write-only: it is encrypted on the way in and never returned.",
-  });
+// The PATCH body is the runtime validator, imported rather than restated.
+// It used to be described here instead, because the route hand-rolled its
+// parse field by field and there was nothing to import; the route runs
+// `safeParse` now, so the published shape and the parse are one object.
+const aiProviderPatchRequest = aiProviderPatchSchema.meta({
+  id: "AiProviderPatchRequest",
+  description:
+    "Partial update of the calling user's AI-provider configuration. An omitted key is left untouched; `null` (or an empty string, on the string fields) clears the column. At least one recognised key must be present, or the write is refused. Key material is write-only: it is encrypted on the way in and never returned. Unknown keys are ignored rather than refused — the object is deliberately not strict, so a client sending a field this server does not know yet is not broken by it.",
+});
 
 const aiTestRequest = aiTestOverrideSchema.meta({
   id: "AiTestRequest",
@@ -767,7 +701,7 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Auth"],
       summary: "Update the calling user's AI-provider configuration",
       description:
-        "Partial update — an omitted key is left untouched, an explicit `null` (or an empty string, on the string fields) clears the column. Key material is write-only: it is encrypted at rest on the way in and the read never gives it back, only presence plus a four-character preview.\n\nOne implicit write is worth knowing about: switching `provider` to anything other than LOCAL, without naming `baseUrl` in the same request, CLEARS the stored base URL. The column is shared across providers, so leaving it would send a cloud key to a host that was configured for a self-hosted backend.\n\nA base URL — for LOCAL or for the OpenAI-compatible gateway — runs the SSRF floor: a private or internal host is refused unless the operator allowlisted that exact hostname on this instance.\n\nThe response is a bare `{ updated: true }` acknowledgement. It does not echo the resolved configuration, so a client that needs the new state re-reads the GET.\n\nUnlike its neighbours this route does not run a Zod parse: it inspects the body field by field, so a key of the WRONG TYPE is skipped in silence rather than refused, and a body of nothing but such keys comes back as 422 'No valid fields' without naming any of them.",
+        "Partial update — an omitted key is left untouched, an explicit `null` (or an empty string, on the string fields) clears the column. Key material is write-only: it is encrypted at rest on the way in and the read never gives it back, only presence plus a four-character preview.\n\nOne implicit write is worth knowing about: switching `provider` to anything other than LOCAL, without naming `baseUrl` in the same request, CLEARS the stored base URL. The column is shared across providers, so leaving it would send a cloud key to a host that was configured for a self-hosted backend.\n\nA base URL — for LOCAL or for the OpenAI-compatible gateway — runs the SSRF floor: a private or internal host is refused unless the operator allowlisted that exact hostname on this instance.\n\nThe response is a bare `{ updated: true }` acknowledgement. It does not echo the resolved configuration, so a client that needs the new state re-reads the GET.\n\nA wrongly-typed value is refused, not skipped. Until this release the route inspected the body field by field with `typeof` guards, so a numeric `model` or a boolean `baseUrl` was dropped in silence and the write went ahead without it; a body of nothing but such keys came back as 'No valid fields' naming none of them. It runs the standard Zod parse now and answers the multi-issue 422 with the offending path.",
       requestBody: {
         required: true,
         content: { "application/json": { schema: aiProviderPatchRequest } },
@@ -796,7 +730,7 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
         ...stdResponses,
         "422": {
           description:
-            "Nothing was written. Either no recognised field was present ('No valid fields'), or `provider` named a value outside the five, or `responseTimeoutSeconds` was not an integer in 10–600, or a base URL pointed at an internal or private host the operator has not allowlisted. Single-message — there is no per-issue list on this route.",
+            "Nothing was written. A body that failed validation carries the multi-issue list under `details.issues` with `meta.errorCode` = `ai_provider.invalid` — a wrongly-typed field, a `provider` outside the five, or a `responseTimeoutSeconds` that is not an integer in 10–600 all land there and name their path. Two single-message cases stay outside that list because they are not shape failures: no recognised field was present at all (`meta.errorCode` = `ai_provider.no_fields`), and a base URL pointing at an internal or private host the operator has not allowlisted.",
           content: { "application/json": { schema: errorEnvelope } },
         },
       },

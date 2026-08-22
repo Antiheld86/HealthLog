@@ -32,6 +32,7 @@ vi.mock("@/lib/auth/audit", () => ({
 vi.mock("@/lib/auth/hmac", () => ({ hashToken: (s: string) => `hash(${s})` }));
 vi.mock("@/lib/rate-limit", () => ({
   checkRateLimit: vi.fn(),
+  checkAuthSurfaceRateLimit: vi.fn(),
   rateLimitHeaders: () => ({}),
 }));
 vi.mock("@/lib/app-settings", () => ({
@@ -62,16 +63,19 @@ vi.mock("next/headers", () => ({
 
 import { POST } from "../route";
 import { prisma } from "@/lib/db";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { checkAuthSurfaceRateLimit, checkRateLimit } from "@/lib/rate-limit";
 import { isApiGloballyEnabled } from "@/lib/app-settings";
 import { invalidateUserMedications } from "@/lib/cache/invalidate";
 
-function postReq(body: unknown): NextRequest {
+function postReq(
+  body: unknown,
+  bearer: string | null = "hlk_test_token",
+): NextRequest {
   return new NextRequest("http://localhost/api/ingest/medication", {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: "Bearer hlk_test_token",
+      ...(bearer === null ? {} : { authorization: `Bearer ${bearer}` }),
     },
     body: JSON.stringify(body),
   });
@@ -80,6 +84,10 @@ function postReq(body: unknown): NextRequest {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(checkRateLimit).mockResolvedValue({ allowed: true } as never);
+  vi.mocked(checkAuthSurfaceRateLimit).mockResolvedValue({
+    allowed: true,
+    ip: "203.0.113.7",
+  } as never);
   vi.mocked(isApiGloballyEnabled).mockResolvedValue(true);
   vi.mocked(prisma.apiToken.findUnique).mockResolvedValue({
     id: "tok-1",
@@ -190,6 +198,10 @@ describe("POST /api/ingest/medication — slot attribution + convergence (v1.16.
 
   function wireHappyPath() {
     vi.mocked(checkRateLimit).mockResolvedValue({ allowed: true } as never);
+    vi.mocked(checkAuthSurfaceRateLimit).mockResolvedValue({
+      allowed: true,
+      ip: "203.0.113.7",
+    } as never);
     vi.mocked(isApiGloballyEnabled).mockResolvedValue(true);
     vi.mocked(prisma.apiToken.findUnique).mockResolvedValue({
       id: "tok-1",
@@ -431,5 +443,138 @@ describe("POST /api/ingest/medication — idempotency-key stability floor", () =
     );
     expect(res.status).toBe(201);
     expect(prisma.medicationIntakeEvent.create).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * A bridge is identified by its TOKEN, not by the address it dials from.
+ *
+ * The bucket used to be `ingest:${ip}`, so a household running a chat bridge,
+ * a button and a home-automation rule — the normal deployment for this route,
+ * not an edge case — put all three in one 60/min cell and let the chattiest
+ * of them starve the other two. What makes it a defect rather than a
+ * trade-off is that the route already resolves a per-caller identity two
+ * lines further down and threw it away.
+ *
+ * The fallback matters as much as the fix: a request that resolves no token
+ * has no identity but its address, and must stay capped on it. Keying the
+ * failure path on anything shared — or on nothing — would hand an
+ * unauthenticated flood a free pass, or collapse every anonymous caller in
+ * the world into one cell, which is worse than what it replaces.
+ */
+describe("POST /api/ingest/medication — the rate-limit bucket", () => {
+  it("keys the bucket on the token, not on the client IP", async () => {
+    vi.mocked(prisma.medication.findFirst).mockResolvedValue(null as never);
+    await POST(
+      postReq({ medicationName: "Metformin", idempotencyKey: "k-stable-001" }),
+    );
+
+    expect(vi.mocked(checkRateLimit)).toHaveBeenCalledTimes(1);
+    const [key, limit, windowMs] = vi.mocked(checkRateLimit).mock.calls[0];
+    expect(key).toBe("ingest:token:tok-1");
+    expect(limit).toBe(60);
+    expect(windowMs).toBe(60_000);
+    // The address must not appear in the key at all — that is the whole
+    // point. A NAT'd sibling on the same address gets its own cell.
+    expect(key).not.toContain("203.0.113");
+  });
+
+  it("gives two tokens on one address two independent buckets", async () => {
+    vi.mocked(prisma.medication.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.apiToken.findUnique)
+      .mockResolvedValueOnce({
+        id: "tok-bridge",
+        userId: "user-1",
+        permissions: ["*"],
+        revoked: false,
+        expiresAt: null,
+        lastUsedAt: null,
+      } as never)
+      .mockResolvedValueOnce({
+        id: "tok-button",
+        userId: "user-1",
+        permissions: ["*"],
+        revoked: false,
+        expiresAt: null,
+        lastUsedAt: null,
+      } as never);
+
+    await POST(postReq({ medicationName: "A", idempotencyKey: "k-aaaa-001" }));
+    await POST(postReq({ medicationName: "B", idempotencyKey: "k-bbbb-001" }));
+
+    const keys = vi.mocked(checkRateLimit).mock.calls.map(([k]) => k);
+    expect(keys).toEqual([
+      "ingest:token:tok-bridge",
+      "ingest:token:tok-button",
+    ]);
+    expect(new Set(keys).size).toBe(2);
+  });
+
+  it("refuses an exhausted token bucket with the standard envelope", async () => {
+    vi.mocked(checkRateLimit).mockResolvedValue({
+      allowed: false,
+      remaining: 0,
+      resetAt: Date.now() + 30_000,
+    } as never);
+
+    const res = await POST(
+      postReq({ medicationName: "Metformin", idempotencyKey: "k-stable-002" }),
+    );
+    expect(res.status).toBe(429);
+    const body = (await res.json()) as {
+      data: null;
+      error: string;
+      meta?: { errorCode?: string };
+    };
+    expect(body.data).toBeNull();
+    // The 429 was hand-rolled through `NextResponse.json` and carried no
+    // `meta`, so a client branching on `errorCode` could not see it.
+    expect(body.meta?.errorCode).toBe("ingest.rate_limited");
+    expect(prisma.medication.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the per-IP bucket when no token is presented", async () => {
+    const res = await POST(
+      postReq(
+        { medicationName: "Metformin", idempotencyKey: "k-anon-0001" },
+        null,
+      ),
+    );
+    expect(res.status).toBe(401);
+    // The anonymous path must still be capped, and on the address — the only
+    // identity such a request has.
+    expect(vi.mocked(checkAuthSurfaceRateLimit)).toHaveBeenCalledTimes(1);
+    const [, prefix, limit, windowMs] = vi.mocked(checkAuthSurfaceRateLimit)
+      .mock.calls[0];
+    expect(prefix).toBe("ingest:ip");
+    expect(limit).toBe(60);
+    expect(windowMs).toBe(60_000);
+    // No token resolved, so no token bucket was charged.
+    expect(vi.mocked(checkRateLimit)).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the per-IP bucket when the token does not resolve", async () => {
+    vi.mocked(prisma.apiToken.findUnique).mockResolvedValue(null as never);
+    const res = await POST(
+      postReq({ medicationName: "Metformin", idempotencyKey: "k-bogus-001" }),
+    );
+    expect(res.status).toBe(401);
+    expect(vi.mocked(checkAuthSurfaceRateLimit)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(checkRateLimit)).not.toHaveBeenCalled();
+  });
+
+  it("caps an invalid-token flood before it can answer 401 forever", async () => {
+    vi.mocked(prisma.apiToken.findUnique).mockResolvedValue(null as never);
+    vi.mocked(checkAuthSurfaceRateLimit).mockResolvedValue({
+      allowed: false,
+      remaining: 0,
+      resetAt: Date.now() + 30_000,
+      ip: "203.0.113.7",
+    } as never);
+
+    const res = await POST(
+      postReq({ medicationName: "Metformin", idempotencyKey: "k-flood-001" }),
+    );
+    expect(res.status).toBe(429);
   });
 });

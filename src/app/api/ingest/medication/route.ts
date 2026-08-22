@@ -11,7 +11,12 @@ import {
   sanitiseZodIssues,
 } from "@/lib/api-response";
 import { hashToken } from "@/lib/auth/hmac";
-import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
+import {
+  checkAuthSurfaceRateLimit,
+  checkRateLimit,
+  rateLimitHeaders,
+  type RateLimitResult,
+} from "@/lib/rate-limit";
 import { externalIntakeSchema } from "@/lib/validations/medication";
 import {
   unstableExternalIdMeta,
@@ -26,13 +31,49 @@ import {
 import { consumeForIntake } from "@/lib/medications/inventory/consumption";
 import { invalidateUserMedications } from "@/lib/cache/invalidate";
 import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+
+const RATE_LIMIT = 60;
+const RATE_WINDOW_MS = 60 * 1000;
+
+/** The 429, with the standard headers and the standard error envelope. */
+function tooManyRequests(rl: RateLimitResult) {
+  const response = apiError("Rate limit exceeded", 429, {
+    errorCode: "ingest.rate_limited",
+  });
+  for (const [key, value] of Object.entries(rateLimitHeaders(rl))) {
+    response.headers.set(key, value);
+  }
+  return response;
+}
+
+/**
+ * Refuse a caller that presented no usable token, capped on the way out.
+ *
+ * The bucket is the caller's ADDRESS, because that is the only identity an
+ * unauthenticated request has. `checkAuthSurfaceRateLimit` is the shared
+ * helper for exactly this shape: it keys on the trusted-proxy IP normally,
+ * and when the proxy chain does not match the configured hop count it routes
+ * every anonymous caller into one tight global bucket instead of the
+ * free-for-all that a shared `"unknown"` cell would be.
+ */
+async function refuseUnauthenticated(request: NextRequest, message: string) {
+  const rl = await checkAuthSurfaceRateLimit(
+    request,
+    "ingest:ip",
+    RATE_LIMIT,
+    RATE_WINDOW_MS,
+  );
+  if (!rl.allowed) return tooManyRequests(rl);
+  return apiError(message, 401);
+}
 
 /**
  * External medication ingest endpoint.
  * Auth: Bearer token (hashed and looked up in api_tokens table).
  * Idempotent via idempotencyKey.
- * Rate limit: 60 requests per minute per IP.
+ * Rate limit: 60 requests per minute per TOKEN (per client IP for a request
+ * that presents no valid one).
  */
 export const POST = apiHandler(async (request: NextRequest) => {
   annotate({ action: { name: "ingest.medication" } });
@@ -43,19 +84,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   const ip = getClientIp(request);
 
-  // Rate limiting: 60 requests per minute per IP
-  const rl = await checkRateLimit(`ingest:${ip}`, 60, 60 * 1000);
-  if (!rl.allowed) {
-    return NextResponse.json(
-      { data: null, error: "Rate limit exceeded" },
-      { status: 429, headers: rateLimitHeaders(rl) },
-    );
-  }
-
   // Extract bearer token
   const authHeader = request.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) {
-    return apiError("Authorization header required", 401);
+    return refuseUnauthenticated(request, "Authorization header required");
   }
 
   const token = authHeader.slice(7);
@@ -74,12 +106,30 @@ export const POST = apiHandler(async (request: NextRequest) => {
   });
 
   if (!apiToken || apiToken.revoked) {
-    return apiError("Invalid or revoked token", 401);
+    return refuseUnauthenticated(request, "Invalid or revoked token");
   }
 
   if (apiToken.expiresAt && apiToken.expiresAt < new Date()) {
-    return apiError("Token expired", 401);
+    return refuseUnauthenticated(request, "Token expired");
   }
+
+  // A bridge is identified by its TOKEN, not by the address it dials from.
+  // The bucket used to be `ingest:${ip}`, so every integration behind one
+  // NAT shared a single 60/min cell and one chatty bridge starved the rest —
+  // and a household running a chat bridge, a button and a home-automation
+  // rule is the normal deployment here, not an edge case.
+  //
+  // The identity is only known after the lookup, so the lookup now runs
+  // before the limiter: one indexed single-row read ahead of what was
+  // already an upsert against `rate_limits`. A caller whose token does not
+  // resolve is still capped on the per-IP bucket it was always capped on,
+  // one step earlier than it reaches anything expensive.
+  const rl = await checkRateLimit(
+    `ingest:token:${apiToken.id}`,
+    RATE_LIMIT,
+    RATE_WINDOW_MS,
+  );
+  if (!rl.allowed) return tooManyRequests(rl);
 
   if (
     !apiToken.permissions.includes("*") &&
