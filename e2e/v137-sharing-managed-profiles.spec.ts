@@ -291,15 +291,32 @@ test.describe.serial("scoped sharing browser journeys", () => {
 
     let corruptAuthPayload = true;
     await page.route("**/api/auth/me", async (route) => {
-      const response = await route.fetch();
-      if (!corruptAuthPayload) {
-        await route.fulfill({ response });
+      // The switch this test drives ends in a full reload, and the reload
+      // cancels whatever `/api/auth/me` call is in flight. Playwright then
+      // considers the route handled, and the `fulfill` below lands on it with
+      // "Route is already handled!" — a failure of the teardown, not of the
+      // thing under test, and one that turns the whole shard red under
+      // `failOnFlakyTests`.
+      //
+      // Same guard as `v137-record-session-fence.spec.ts` and the a11y sibling
+      // of this file. The fetch is guarded too: a request cancelled mid-flight
+      // rejects there rather than at the fulfill.
+      let response;
+      try {
+        response = await route.fetch();
+      } catch {
         return;
       }
-      await route.fulfill({
-        response,
-        json: withDivergentActiveAccountAccess(await response.json()),
-      });
+      if (!corruptAuthPayload) {
+        await route.fulfill({ response }).catch(() => {});
+        return;
+      }
+      await route
+        .fulfill({
+          response,
+          json: withDivergentActiveAccountAccess(await response.json()),
+        })
+        .catch(() => {});
     });
 
     const ownerOnlyReads: string[] = [];
