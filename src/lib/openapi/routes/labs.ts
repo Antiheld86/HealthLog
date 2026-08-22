@@ -25,19 +25,22 @@ import {
   stdResponses,
 } from "./shared";
 
-createLabResultSchema.meta({
+// Zod 4's `.meta()` returns a NEW instance carrying the id rather than
+// annotating in place, so each annotated schema is bound to a const and the
+// route table below references that const — a bare call would register nothing.
+const createLabResultRequest = createLabResultSchema.meta({
   id: "CreateLabResultRequest",
   description:
     'Record a single biomarker reading (HbA1c, LDL, ferritin, TSH, …). A reading is EITHER numeric (`value` + `unit`, optional reference bounds) OR qualitative (`valueText`, e.g. "negativ" / "positiv") — exactly one, never both, never neither. `analyte` + `unit` are free-form (a lab prints its own naming); a qualitative reading needs no unit / bounds. When both numeric bounds are present `referenceLow` must not exceed `referenceHigh`. `takenAt` is a backdatable ISO instant (no future, ≤ 50 years past). The optional `note` is encrypted at rest. The optional `source` records provenance: `"OCR"` for an on-device-OCR capture (the raw image never reaches the server on this path), defaulting to `"MANUAL"` when omitted. The optional `encounterId` files the reading against a visit the caller owns — always optional, and a link that could not be made never fails the reading.',
 });
 
-updateLabResultSchema.meta({
+const updateLabResultRequest = updateLabResultSchema.meta({
   id: "UpdateLabResultRequest",
   description:
     "Partial edit of a lab result. An omitted key leaves the column untouched; an explicit `null` on `panel` / `note` / a reference bound clears it. Edit the matching value field for the row's type — `value` for a numeric row, `valueText` for a qualitative one; a request must not carry both, and a cross-type edit (the wrong field for the row) is rejected.",
 });
 
-listLabResultsSchema.meta({
+const listLabResultsQuery = listLabResultsSchema.meta({
   id: "ListLabResultsQuery",
   description:
     "Query params for the lab-result list: optional `analyte` (exact) + `panel` filters, an inclusive `from`/`to` date range, and `limit` (≤ 500) / `offset` pagination. Defaults to `takenAt` DESC.",
@@ -122,7 +125,7 @@ export const labsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "List the caller's lab results",
       description:
         "Returns the caller's live (non-deleted) lab results, newest first, with optional analyte / panel / date-range filters. Each row carries a server-computed neutral `rangeStatus` and a `hasNote` flag (the encrypted note itself is not echoed).",
-      requestParams: { query: listLabResultsSchema },
+      requestParams: { query: listLabResultsQuery },
       responses: {
         ...recordRefusal(),
         "200": {
@@ -144,7 +147,7 @@ export const labsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       parameters: [idempotencyKeyParameter],
       requestBody: {
         required: true,
-        content: { "application/json": { schema: createLabResultSchema } },
+        content: { "application/json": { schema: createLabResultRequest } },
       },
       responses: {
         ...idempotentWrite(),
@@ -190,7 +193,7 @@ export const labsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestParams: { path: z.object({ id: z.string() }) },
       requestBody: {
         required: true,
-        content: { "application/json": { schema: updateLabResultSchema } },
+        content: { "application/json": { schema: updateLabResultRequest } },
       },
       responses: {
         ...recordRefusal(),

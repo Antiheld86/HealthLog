@@ -19,7 +19,6 @@ import {
   bulkDeleteIntakeEventsSchema,
   updateIntakeEventSchema,
 } from "@/lib/validations/medication";
-import { medicationExtractionSchema } from "@/lib/ai/coach/medication-extract-prompt";
 import {
   scheduleRevisionCreateSchema,
   scheduleRevisionUpdateSchema,
@@ -39,13 +38,16 @@ import {
   stdResponses,
 } from "../shared";
 
-efficacyTargetOverrideSchema.meta({
+// Zod 4's `.meta()` returns a NEW instance carrying the id rather than
+// annotating in place, so each annotated schema is bound to a const and the
+// route table below references that const — a bare call would register nothing.
+const setMedicationEfficacyTargetRequest = efficacyTargetOverrideSchema.meta({
   id: "SetMedicationEfficacyTargetRequest",
   description:
     "Set or clear the user's explicit efficacy-target override for a medication. `clear:true` removes the override so the resolver reverts to the derived (ATC class prefix → name inference) target; otherwise pin exactly ONE of `measurementType` (a metric series) / `biomarkerId` (a lab analyte). `userId` is never a field — ownership is narrowed through the medication (and the biomarker for a lab target).",
 });
 
-medicationEfficacyResponseSchema.meta({
+const medicationEfficacyResponse = medicationEfficacyResponseSchema.meta({
   id: "MedicationEfficacyResponse",
   description:
     "Server-authoritative, strictly-descriptive efficacy view relating a medication to the outcome metric(s)/lab(s) its class is prescribed to move, around its start. Carries the resolved target(s) with their series, the start/dose-change/pause markers, a before/after-start comparison (honest `{present:false}` below the per-side data floor), an adherence lane (cadence-aware per-day rate, never recomputed), an optional conservative level-shift note, and the retarget options. There is NO verdict / score / assessment field by construction — the client renders numbers and neutral connective phrasing only, never a causal or dose-advice claim.",
@@ -62,6 +64,7 @@ import {
   scheduleRevisionResource,
   scheduleRevisionListResponse,
   medicationExtractRequest,
+  medicationExtractionResult,
   medicationListLayoutPutBody,
   medicationListLayoutResult,
   doseHistoryQuery,
@@ -1336,7 +1339,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: {
             "application/json": {
               schema: dataEnvelope(
-                medicationExtractionSchema,
+                medicationExtractionResult,
                 "MedicationExtractResponse",
               ),
             },
@@ -1462,7 +1465,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: {
             "application/json": {
               schema: dataEnvelope(
-                medicationEfficacyResponseSchema,
+                medicationEfficacyResponse,
                 "GetMedicationEfficacyResponse",
               ),
             },
@@ -1488,7 +1491,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestBody: {
         required: true,
         content: {
-          "application/json": { schema: efficacyTargetOverrideSchema },
+          "application/json": { schema: setMedicationEfficacyTargetRequest },
         },
       },
       responses: {
