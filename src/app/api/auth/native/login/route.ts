@@ -14,6 +14,7 @@
  * carries no code or session, so it leaks nothing.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { relativeRedirect } from "@/lib/http/relative-redirect";
 import { apiHandler } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { checkAuthSurfaceRateLimit } from "@/lib/rate-limit";
@@ -58,9 +59,7 @@ export const GET = apiHandler(async (req: NextRequest) => {
   // `Session.createdAt` (also DB-side) at completion, with no app/DB skew.
   const startedAt = await nativeHandoffDbNow();
 
-  const response = NextResponse.redirect(
-    new URL("/auth/login?flow=native", req.url),
-  );
+  const response = relativeRedirect("/auth/login?flow=native");
   response.cookies.set(
     NATIVE_HANDOFF_STATE_COOKIE,
     encodeNativeHandoffState({
