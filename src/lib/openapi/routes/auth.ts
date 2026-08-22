@@ -1,13 +1,21 @@
 /**
  * OpenAPI route table — auth surface (login, passkey verify, token refresh).
  *
+ * Also the home of `/api/tokens` and `/api/tokens/{id}`: they sit outside the
+ * `/api/auth` prefix but a Bearer token is a sign-in credential like a passkey
+ * or a session, and splitting the credential lifecycle across two modules is
+ * how one half of it stops being maintained.
+ *
  * Part of the OpenAPI route table; aggregated in `./index.ts`.
  * Schemas come from `src/lib/validations/*` where shared with the
  * runtime request parsing, so the wire contract stays single-source.
  */
 import { z } from "zod/v4";
 import type { ZodOpenApiObject } from "zod-openapi";
-import { loginPasswordSchema } from "@/lib/validations/auth";
+import {
+  loginPasswordSchema,
+  passkeyRenameSchema,
+} from "@/lib/validations/auth";
 import {
   mfaVerifySchema,
   totpConfirmSchema,
@@ -360,6 +368,77 @@ const stepUpMintResponse = z
       ),
   })
   .meta({ id: "StepUpMintResponse" });
+
+// ── Sign-out, pre-session discovery, API tokens ──────────────────────
+// Seven operations that shipped without ever entering the registry. The drift
+// gate compares the registry against the YAML and never the ROUTES against the
+// registry, so a route that was simply never registered stayed invisible to it.
+
+const logoutResponse = z
+  .object({
+    loggedOut: z
+      .literal(true)
+      .describe(
+        "Always true. The endpoint has no failure the caller acts on: it answers the same whether a cookie was cleared, a token was revoked, or neither was there.",
+      ),
+  })
+  .meta({ id: "LogoutResponse" });
+
+const oidcStatusResponse = z
+  .object({
+    enabled: z
+      .boolean()
+      .describe("An OIDC provider is configured on this instance."),
+    buttonLabel: z
+      .string()
+      .nullable()
+      .describe(
+        "Operator-set label for the SSO button (`OIDC_BUTTON_LABEL`, defaulting to “Single Sign-On”). Null when no provider is configured.",
+      ),
+    only: z
+      .boolean()
+      .describe(
+        "`OIDC_ONLY=true` — password and passkey login are refused with 403 `oidc_only`. A client that offers those controls anyway strands the user.",
+      ),
+  })
+  .meta({ id: "OidcStatusResponse" });
+
+const registrationStatusResponse = z
+  .object({
+    registrationEnabled: z
+      .boolean()
+      .describe(
+        "Whether open self-registration is on. An operator who turned it off can still admit a signup through an invite token.",
+      ),
+  })
+  .meta({ id: "RegistrationStatusResponse" });
+
+const apiTokenInfo = z
+  .object({
+    id: z.string().describe("Row id; the handle for DELETE."),
+    name: z.string(),
+    permissions: z
+      .array(z.string())
+      .describe(
+        'The token\'s scope list. `["*"]` is cookie-equivalent (what a native login mints); anything else is narrow and reaches only the routes that name it. Admin endpoints are cookie-only and are reachable by no token at any scope.',
+      ),
+    lastUsedAt: z.iso
+      .datetime({ offset: true })
+      .nullable()
+      .describe("Stamped fire-and-forget on use; null for an unused token."),
+    expiresAt: z.iso.datetime({ offset: true }).nullable(),
+    createdAt: z.iso.datetime({ offset: true }),
+    revoked: z
+      .boolean()
+      .describe(
+        "Revoked tokens stay in the list rather than disappearing, so a client must filter on this rather than treat presence as validity.",
+      ),
+  })
+  .meta({ id: "ApiTokenInfo" });
+
+const apiTokenListResponse = z
+  .array(apiTokenInfo)
+  .meta({ id: "ApiTokenListResponse" });
 
 export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   "/api/auth/check-user": {
@@ -1138,6 +1217,215 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
               ),
             },
           },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  // ── Appended: routes the iOS client calls that the registry never carried.
+  "/api/auth/logout": {
+    post: {
+      tags: ["Auth"],
+      summary: "End the calling session, and the calling token with it",
+      description:
+        "Clears the browser session cookie. When the request ALSO carries `Authorization: Bearer hlk_…` it revokes that access token and the refresh sibling paired with it, so a native client signs out in one call rather than through the refresh endpoint's `revoke: true` arm.\n\n" +
+        "Takes no body and needs no credential: an unauthenticated call answers 200 exactly like an authenticated one. Whether the Bearer revocation actually found a row is recorded server-side and is deliberately absent from the response — a caller that could read it would learn whether a token it presented was live.",
+      responses: {
+        "200": {
+          description:
+            "Sign-out performed as far as the presented credentials allowed.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(logoutResponse, "LogoutEnvelope"),
+            },
+          },
+        },
+      },
+    },
+  },
+  "/api/auth/oidc/status": {
+    get: {
+      tags: ["Auth"],
+      summary: "Whether SSO is configured, and whether it is the only way in",
+      description:
+        "Public and pre-session: the login surface reads it to decide whether to render the SSO button and whether to hide the password / passkey controls. Pure environment reads, no database, so it has no failure mode — it answers 200 on every call.",
+      responses: {
+        "200": {
+          description: "The SSO posture of this instance.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(oidcStatusResponse, "OidcStatusEnvelope"),
+            },
+          },
+        },
+      },
+    },
+  },
+  "/api/auth/registration-status": {
+    get: {
+      tags: ["Auth"],
+      summary: "Whether self-registration is open",
+      description:
+        "Public and pre-session: the sign-up surface reads it before offering a registration form. Fails CLOSED — when the settings read throws, the response is a well-formed 200 carrying `registrationEnabled: false` rather than an error, so a client cannot tell a genuinely closed instance from a database blip and must treat both as closed.",
+      responses: {
+        "200": {
+          description:
+            "Registration posture. Also the shape returned when the settings read failed.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                registrationStatusResponse,
+                "RegistrationStatusEnvelope",
+              ),
+            },
+          },
+        },
+      },
+    },
+  },
+  "/api/auth/passkey/login-options": {
+    post: {
+      tags: ["Auth"],
+      summary: "Begin a passkey sign-in (discoverable credentials)",
+      description:
+        "Returns SimpleWebAuthn assertion options plus a server-issued challenge id to present at POST /api/auth/passkey/login-verify. Anonymous, takes no body, and scopes the assertion to no account — the options carry no `allowCredentials`, so the authenticator picks the credential and the endpoint is not an account-existence oracle. Rate-limited 10 / 15 min through the anonymous auth-surface bucket, which collapses every caller into one bucket if the proxy trust chain is misconfigured rather than falling open.",
+      responses: {
+        "200": {
+          description: "Assertion options issued.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                webauthnOptionsResponse,
+                "PasskeyLoginOptionsEnvelope",
+              ),
+            },
+          },
+        },
+        "403": {
+          description:
+            "Passkey login is disabled — the operator runs `OIDC_ONLY=true`. `meta.errorCode` = `oidc_only`. Checked BEFORE the rate limit, so an instance in this mode answers 403 rather than 429 however hard it is polled.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "429": stdResponses["429"],
+      },
+    },
+  },
+  "/api/auth/passkeys/{id}": {
+    patch: {
+      tags: ["Auth"],
+      summary: "Rename a registered passkey",
+      description:
+        "Relabels one primary sign-in credential, scoped to the authenticated user. Returns the full passkey row, so the client can replace its list entry rather than re-read.\n\n" +
+        'Unlike the rest of this surface the 422 carries a single flat message rather than the multi-issue envelope `returnAllZodIssues` produces — the handler answers `apiError("Invalid request", 422)` and discards the Zod issues, so a client cannot tell an empty name from an over-long one.',
+      requestParams: { path: z.object({ id: z.string() }) },
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: passkeyRenameSchema } },
+      },
+      responses: {
+        "200": {
+          description: "Passkey renamed.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(passkeyInfo, "PasskeyRenameEnvelope"),
+            },
+          },
+        },
+        "404": {
+          description: "No such passkey for this account.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+    delete: {
+      tags: ["Auth"],
+      summary: "Remove a registered passkey",
+      description:
+        "Deletes one primary sign-in credential, scoped to the authenticated user. Refuses to remove the LAST one when the account has no password — an account must keep at least one way in.\n\n" +
+        "No step-up: this endpoint takes a plain cookie session or a wildcard Bearer token, where removing a second-factor security key (DELETE /api/auth/me/mfa/webauthn/{id}) requires a fresh factor proof. The asymmetry is in the code as it stands, not a description of intent.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      responses: {
+        "200": {
+          description: "Passkey removed.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                successFlagResponse,
+                "PasskeyRemoveEnvelope",
+              ),
+            },
+          },
+        },
+        "400": {
+          description:
+            "This is the account's only passkey and it has no password — at least one authentication method must remain. Set a password, or register a second passkey, before retrying.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "404": {
+          description: "No such passkey for this account.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/tokens": {
+    get: {
+      tags: ["Auth"],
+      summary: "List the caller's API tokens",
+      description:
+        "Every `ApiToken` row belonging to the caller, newest first, revoked ones included — presence in this list is not validity, `revoked` is. The hash is never returned and there is no path that re-reveals a token's plaintext.\n\n" +
+        'Two things the name understates. The list is not limited to tokens a person minted from the settings surface: a native login mints a wildcard access token as an `ApiToken` row, so a signed-in phone shows up here too. And there is no mint on this path any more — the generic POST that issued `["medication:ingest"]` was removed, because that scope reached no ingest route while the pre-fail-closed default let it reach everything else. The working credential comes from the per-medication API-endpoint toggle.',
+      responses: {
+        "200": {
+          description: "The caller's tokens, newest first.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                apiTokenListResponse,
+                "ApiTokenListEnvelope",
+              ),
+            },
+          },
+        },
+        "403": {
+          description:
+            "The operator has switched the API off instance-wide (`AppSettings.apiGlobal`). Checked after authentication, carries no `meta.errorCode`, and applies to the read as well as the revoke — a user cannot inspect their own tokens while the switch is off.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/tokens/{id}": {
+    delete: {
+      tags: ["Auth"],
+      summary: "Revoke an API token",
+      description:
+        "Marks one token revoked, scoped to the authenticated user (a foreign id returns 404, never another user's row). The row is kept rather than deleted so it stays visible in the list with `revoked: true`.\n\n" +
+        "Nothing exempts the caller's own credential: a Bearer client that revokes the token it is presenting completes the call and is unauthenticated from the next one onwards.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      responses: {
+        "200": {
+          description: "Token revoked.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ revoked: z.boolean() }),
+                "ApiTokenRevokeEnvelope",
+              ),
+            },
+          },
+        },
+        "403": {
+          description:
+            "The operator has switched the API off instance-wide (`AppSettings.apiGlobal`). No `meta.errorCode`; nothing was revoked.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "404": {
+          description: "Token not found or not owned by the caller.",
+          content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
       },

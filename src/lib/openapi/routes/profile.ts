@@ -14,6 +14,17 @@ import { modulePrefsPatchSchema } from "@/lib/validations/modules";
 import { MODULE_KEYS } from "@/lib/modules/registry";
 import { SCORE_PILLAR_IDS } from "@/lib/analytics/score/types";
 import { savedReportProfileSchema } from "@/lib/report-selection/profile-shape";
+import { injectionSiteEnum } from "@/lib/validations/medication";
+import {
+  thresholdsUpdateSchema,
+  ALL_METRICS,
+} from "@/lib/validations/thresholds";
+import type { ThresholdMetric } from "@/lib/analytics/effective-range";
+import {
+  documentsAutoAiReadPatchSchema,
+  injectionSitePrefsPatchSchema,
+  unitPreferencePatchSchema,
+} from "@/lib/validations/user-prefs";
 import {
   dataEnvelope,
   errorEnvelope,
@@ -508,6 +519,127 @@ const aiProviderResponse = z
     description:
       "The calling user's AI-provider configuration plus the effective availability (`aiAvailable` + `managedBy`). Reports key presence + a masked preview only — never a plaintext key.",
   });
+
+// ── Per-user preference scalars + threshold overrides ────────────────
+// Four surfaces the iOS client has called since they shipped and that the
+// registry never carried. The request bodies come from the validation modules
+// the handlers themselves parse with, so the published wire cannot drift from
+// the runtime one; the responses are shapes the handlers assemble by hand and
+// are therefore described here.
+
+const unitPreferencePatchRequest = unitPreferencePatchSchema.meta({
+  id: "UnitPreferencePatchRequest",
+  description:
+    "Which display-unit branch to render. Presentation only — the stored measurement rows stay SI either way.",
+});
+
+const unitPreferenceResponse = z
+  .object({ unitPreference: z.enum(["metric", "imperial"]) })
+  .meta({ id: "UnitPreferenceResponse" });
+
+const documentsAutoAiReadPatchRequest = documentsAutoAiReadPatchSchema.meta({
+  id: "DocumentsAutoAiReadPatchRequest",
+  description:
+    "Turn automatic AI reading of newly uploaded documents on or off. Turning it on also mints an `ai_full` consent receipt and schedules a catch-up over the existing vault.",
+});
+
+const documentsAutoAiReadResponse = z
+  .object({ documentsAutoAiRead: z.boolean() })
+  .meta({ id: "DocumentsAutoAiReadResponse" });
+
+const injectionSitePrefsPatchRequest = injectionSitePrefsPatchSchema.meta({
+  id: "InjectionSitePrefsPatchRequest",
+  description:
+    "Replace the user-level injection-site deny-list. An empty array clears it.",
+});
+
+const injectionSitePrefsResponse = z
+  .object({
+    globalExcludedInjectionSites: z
+      .array(injectionSiteEnum)
+      .describe(
+        "The stored deny-list, deduplicated and in canonical enum order.",
+      ),
+  })
+  .meta({ id: "InjectionSitePrefsResponse" });
+
+/**
+ * The `?metric=` query enum, derived from the canonical metric list rather than
+ * restated — `ALL_METRICS` is what the handler checks the parameter against, so
+ * a metric added there cannot go missing from the published parameter.
+ */
+const thresholdMetricEnum = z
+  .enum(ALL_METRICS as [ThresholdMetric, ...ThresholdMetric[]])
+  .meta({ id: "ThresholdMetric" });
+
+const trafficRange = z
+  .object({
+    greenMin: z.number(),
+    greenMax: z.number(),
+    orangeMin: z.number(),
+    orangeMax: z.number(),
+  })
+  .meta({
+    id: "TrafficRange",
+    description:
+      "A traffic-light band: green is the target window, the orange wings stretch either side of it and are clamped to the metric's physiological bounds.",
+  });
+
+const effectiveRange = z
+  .object({
+    range: trafficRange
+      .nullable()
+      .describe(
+        "The band in force — the override when one is set, otherwise the computed default. Null when the default needs profile data the account has not supplied.",
+      ),
+    isOverride: z
+      .boolean()
+      .describe("Whether `range` came from a stored override."),
+    default: trafficRange
+      .nullable()
+      .describe(
+        "The unmodified computed default, so a client can render current-versus-default without recomputing it.",
+      ),
+    bounds: z
+      .object({
+        min: z.number(),
+        max: z.number(),
+        unit: z.string().describe("Canonical unit, e.g. `mmHg`, `kg`, `%`."),
+      })
+      .describe(
+        "Outer physiological guardrails for this metric — the range an override must sit inside. Not a default.",
+      ),
+  })
+  .meta({ id: "EffectiveRange" });
+
+const thresholdOverrideMap = z
+  .record(z.string(), z.object({ min: z.number(), max: z.number() }))
+  .meta({
+    id: "ThresholdOverrides",
+    description:
+      "Stored overrides, keyed by `ThresholdMetric`. Partial by construction — a metric absent from the map is on its computed default. `{}` means no override anywhere.",
+  });
+
+const thresholdsGetResponse = z
+  .object({
+    effective: z
+      .record(z.string(), effectiveRange)
+      .describe(
+        "Every `ThresholdMetric`, resolved. Exhaustive: a metric with no override and no derivable default is present with a null `range`, not missing.",
+      ),
+    overrides: thresholdOverrideMap,
+  })
+  .meta({ id: "ThresholdsResponse" });
+
+const thresholdsOverridesResponse = z
+  .object({ overrides: thresholdOverrideMap })
+  .meta({ id: "ThresholdsOverridesResponse" });
+
+const thresholdsUpdateRequest = thresholdsUpdateSchema.meta({
+  id: "ThresholdsUpdateRequest",
+  description:
+    "A partial map of `ThresholdMetric` to `{ min, max }`. Only the metrics named are written; the rest keep their existing override. Strict — an unknown key is a 422, not a silent drop. Each range must sit inside that metric's physiological bounds with `min` strictly below `max`.",
+});
 
 export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
   "/api/user/ai-provider": {
@@ -1054,6 +1186,253 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
               ),
             },
           },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  // ── Appended: preference surfaces the iOS client calls that the registry
+  // never carried. All four take a cookie session or a wildcard Bearer token
+  // (`requireAuth()` with no declared scope), none are delegable — a request
+  // that attaches an account selector is refused before the handler runs — and
+  // every PATCH/PUT is a hard-set that answers with the resolved next state, so
+  // a client replaces its optimistic value rather than re-reading.
+  "/api/auth/me/unit-preference": {
+    get: {
+      tags: ["Auth"],
+      summary: "Read the metric/imperial display preference",
+      description:
+        "Which branch of the display-time transform registry the client should render (km/h vs mph, km vs mi). Canonical storage stays SI on every measurement row — this changes presentation only, and never what was written. Any stored value other than `imperial` resolves to `metric`, including a null on an account that predates the column.",
+      responses: {
+        "200": {
+          description: "The resolved preference.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                unitPreferenceResponse,
+                "GetUnitPreferenceEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+    patch: {
+      tags: ["Auth"],
+      summary: "Set the metric/imperial display preference",
+      description:
+        "Hard-set, idempotent, audit-logged. Rate-limited 60 / min per user.\n\n" +
+        "The only endpoint in this group that reads its body with a bare `request.json()` rather than the capped `safeJson` helper, so it applies no body-size limit and answers a malformed body with 422 where its siblings answer 400. Both are the code as it stands.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: unitPreferencePatchRequest },
+        },
+      },
+      responses: {
+        "200": {
+          description: "The resolved next preference.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                unitPreferenceResponse,
+                "PatchUnitPreferenceEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/me/documents-auto-ai-read": {
+    get: {
+      tags: ["Auth"],
+      summary: "Read the automatic document-reading opt-in",
+      description:
+        "Whether the auto-index-on-upload job may read a freshly uploaded document through the account's configured external provider with no per-document tap. OFF by default and off for any account that has never set it: the vault is local-first and every egress otherwise needs an explicit action plus an active consent receipt.",
+      responses: {
+        "200": {
+          description: "The current flag.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                documentsAutoAiReadResponse,
+                "GetDocumentsAutoAiReadEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+    patch: {
+      tags: ["Auth"],
+      summary: "Set the automatic document-reading opt-in",
+      description:
+        "Hard-set, idempotent, audit-logged. Rate-limited 60 / min per user.\n\n" +
+        "Turning it ON does two further things a caller should expect. It is itself the standing consent act, so the write appends an `ai_full` `ConsentReceipt` — the same receipt POST /api/consent/ai/web mints, and one DELETE /api/consent/ai/latest revokes without touching this flag. And a genuine OFF→ON flip schedules a bounded catch-up over the documents already in the vault, because the summary job is enqueued at upload time and would otherwise only ever apply to future uploads. The catch-up is fire-and-forget and re-runs every consent and budget gate per document.\n\n" +
+        "The body cap here is 1 KB, far tighter than the 64 KB its siblings allow — a payload above it is refused with 413 rather than parsed.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: documentsAutoAiReadPatchRequest },
+        },
+      },
+      responses: {
+        "200": {
+          description: "The resolved next flag.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                documentsAutoAiReadResponse,
+                "PatchDocumentsAutoAiReadEnvelope",
+              ),
+            },
+          },
+        },
+        "413": {
+          description: "Request body exceeds 1024 bytes. Nothing was written.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/me/injection-site-prefs": {
+    get: {
+      tags: ["Auth"],
+      summary: "Read the user-level injection-site deny-list",
+      description:
+        "Sites the account never wants offered. The list is a DENY, and deny wins everywhere: a site here is dropped from every medication's injection-site picker and refused at intake with 422, even when that medication names it among its preferred sites.",
+      responses: {
+        "200": {
+          description: "The current deny-list.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                injectionSitePrefsResponse,
+                "GetInjectionSitePrefsEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+    patch: {
+      tags: ["Auth"],
+      summary: "Replace the user-level injection-site deny-list",
+      description:
+        "Replace, not merge — the body states the whole list, and an empty array clears the exclusion. Hard-set, idempotent, audit-logged. Rate-limited 60 / min per user.\n\n" +
+        "The stored list is deduplicated and re-ordered into the canonical enum order before it is written, so the response can differ from the body that produced it while describing the same set. Take the response as the state.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: injectionSitePrefsPatchRequest },
+        },
+      },
+      responses: {
+        "200": {
+          description:
+            "The resolved next deny-list, deduplicated and in canonical order.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                injectionSitePrefsResponse,
+                "PatchInjectionSitePrefsEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/user/thresholds": {
+    get: {
+      tags: ["Analytics"],
+      summary: "Read the effective metric ranges and the caller's overrides",
+      description:
+        "Every threshold metric with its resolved traffic-light band, whether that band came from an override, the unmodified computed default beside it, and the metric's physiological bounds — so a settings surface can show current-versus-default and validate an edit without a second call.\n\n" +
+        "`range` and `default` are nullable: a metric whose default is derived from profile data the account has not supplied (height for weight, date of birth and gender for body fat) has no band to resolve until that data exists.",
+      responses: {
+        "200": {
+          description: "Effective ranges plus the stored overrides.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                thresholdsGetResponse,
+                "GetThresholdsEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description:
+            "The authenticated user row could not be loaded. In practice unreachable — the session that resolved the caller was validated against that row.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+    put: {
+      tags: ["Analytics"],
+      summary: "Set threshold overrides for one or more metrics",
+      description:
+        "MERGE, not replace, and it is the one write on this surface that behaves that way: the body is a partial map and only the metrics it names are touched. A metric omitted keeps whatever override it already had. To remove one, use DELETE with `?metric=` — sending it back as an absent key does nothing.\n\n" +
+        "Each range must sit inside that metric's physiological bounds with `min` strictly below `max`, and an unknown metric key is refused rather than ignored (the schema is strict). Rate-limited 30 / 5 min per user; audit-logged with the before and after maps. The response carries the merged override map, not the recomputed effective ranges — re-read the GET for those.",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: thresholdsUpdateRequest } },
+      },
+      responses: {
+        "200": {
+          description: "The merged override map.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                thresholdsOverridesResponse,
+                "PutThresholdsEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+    delete: {
+      tags: ["Analytics"],
+      summary: "Reset one threshold override, or all of them",
+      description:
+        "With `?metric=` it drops that metric's override; WITHOUT the parameter it drops EVERY override on the account. There is no confirmation step and no dry run, so a client that means to reset one metric must send the parameter.\n\n" +
+        "Audit-logged with the before and after maps. Unlike the PUT this path runs no rate limit of its own.",
+      requestParams: {
+        query: z.object({
+          metric: thresholdMetricEnum
+            .optional()
+            .describe(
+              "The single metric to reset. Omit to reset every override on the account.",
+            ),
+        }),
+      },
+      responses: {
+        "200": {
+          description: "The remaining override map.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                thresholdsOverridesResponse,
+                "DeleteThresholdsEnvelope",
+              ),
+            },
+          },
+        },
+        "400": {
+          description:
+            "`metric` was present but is not a known threshold metric. Nothing was reset.",
+          content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
       },

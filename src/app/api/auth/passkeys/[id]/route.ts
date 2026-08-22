@@ -9,10 +9,7 @@ import {
 import { NextRequest } from "next/server";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
-import { webauthnKeyNameSchema } from "@/lib/validations/mfa";
-import { z } from "zod/v4";
-
-const passkeyRenameSchema = z.object({ name: webauthnKeyNameSchema });
+import { passkeyRenameSchema } from "@/lib/validations/auth";
 
 export const PATCH = apiHandler(
   async (

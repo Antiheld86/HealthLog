@@ -16,8 +16,6 @@
  * limit, Zod safeParse → 422 via `returnAllZodIssues`, audit-log row,
  * field-by-field write (no mass assignment).
  */
-import { z } from "zod";
-
 import { apiHandler, requireAuth, HttpError } from "@/lib/api-handler";
 import {
   apiError,
@@ -30,10 +28,7 @@ import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { DEFAULT_UNIT_PREFERENCE } from "@/lib/measurements/display-transform";
-
-const patchBodySchema = z.object({
-  unitPreference: z.enum(["metric", "imperial"]),
-});
+import { unitPreferencePatchSchema } from "@/lib/validations/user-prefs";
 
 export const dynamic = "force-dynamic";
 
@@ -85,7 +80,7 @@ export const PATCH = apiHandler(async (req: Request) => {
     throw new HttpError(422, "unit-preference.body.invalid_json");
   }
 
-  const parsed = patchBodySchema.safeParse(body);
+  const parsed = unitPreferencePatchSchema.safeParse(body);
   if (!parsed.success) {
     annotate({
       action: { name: "auth.me.unit-preference.patch.invalid_shape" },
