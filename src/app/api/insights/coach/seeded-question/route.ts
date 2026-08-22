@@ -9,9 +9,11 @@
  * keeps its neutral greeting — never a fabricated opener.
  *
  * The signal is selected SERVER-SIDE; the client renders the resolved DTO
- * and never recomputes it (server-authoritative parity). This is an
- * INTERNAL same-origin route — it is deliberately NOT registered in the
- * OpenAPI contract the iOS client consumes.
+ * and never recomputes it (server-authoritative parity). It IS registered in
+ * the OpenAPI contract. This comment said the opposite until the route was
+ * published — it shipped as a same-origin web surface and the sentence was
+ * never revisited. A comment that contradicts the registry is worse than no
+ * comment, because the next reader believes it instead of checking.
  *
  * Mirrors the sibling derived routes: `apiHandler` wrapper, `requireAuth`
  * (userId narrowed from the session/Bearer, never a body/query field),

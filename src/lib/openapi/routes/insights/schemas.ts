@@ -17,6 +17,11 @@ import {
   SAME_TIME_BASELINE_TYPES,
 } from "@/lib/insights/derived/registry";
 import { ANALYTICS_RANGES } from "@/lib/analytics/range-delta";
+import { PROVIDER_CHAIN_TYPES } from "@/lib/ai/provider-chain";
+import { PERIOD_DAYS } from "@/lib/insights/narrative/period-narrative";
+
+/** The retrospective periods the narrative route accepts, read off the engine. */
+const NARRATIVE_PERIOD_VALUES = Object.keys(PERIOD_DAYS);
 
 export const insightsComprehensiveResponse = z
   .object({
@@ -2243,4 +2248,457 @@ export const targetsResponse = z
     id: "TargetsResponse",
     description:
       "Per-metric target tiles with their consistency strips, the page-level summary, the diastolic companion figures and the profile facts every band was resolved from. Pure compute over the record's own data; no provider anywhere on the path.",
+  });
+
+// ── The AI-provider chain (`/api/insights/provider-chain`) ────────────
+//
+// Nothing on either wire carries a key, a token or an account id. The GET
+// answers provider TYPES and boolean state; the PUT accepts the same. Worth
+// stating explicitly because the surface sits next to the credential settings
+// and the obvious assumption about it is wrong.
+
+export const providerChainResponse = z
+  .object({
+    activeProvider: z
+      .string()
+      .nullable()
+      .describe(
+        "The provider type the runner would reach first — the head of the RESOLVED chain, which drops disabled entries. Null when the account has none configured.",
+      ),
+    cachedActiveProvider: z
+      .string()
+      .nullable()
+      .describe(
+        "The last provider that actually worked, from the in-process cache. Present when the runner has rerouted to a fallback, so the settings surface can say `active: codex (cached: openai)` instead of leaving the reroute in the logs. In-process, so it resets on restart and can differ between instances.",
+      ),
+    configuredChain: z
+      .array(
+        z.object({
+          providerType: z.string(),
+          enabled: z
+            .boolean()
+            .describe("Whether the runner may reach this entry."),
+          available: z
+            .boolean()
+            .describe(
+              "Always `true` today. Reserved for rendering an unconfigured slot with a needs-setup pill; do not branch on it as if it reported credential presence.",
+            ),
+        }),
+      )
+      .describe(
+        "The PERSISTED chain in priority order, disabled entries INCLUDED — that is the difference from `activeProvider`, and it is deliberate: reading the resolved list here once made a disabled entry vanish from the settings list along with its toggle position.",
+      ),
+  })
+  .meta({
+    id: "ProviderChainResponse",
+    description:
+      "The account's AI-provider chain as the settings surface reads it. Provider TYPES and boolean state only — no key, token or account id is ever on this wire.",
+  });
+
+export const providerChainPutRequest = z
+  .object({
+    chain: z
+      .array(
+        z.object({
+          providerType: z
+            .enum(PROVIDER_CHAIN_TYPES as unknown as [string, ...string[]])
+            .describe(
+              "Closed allow-list. The mock provider is excluded from it structurally, which is what keeps production from reaching one.",
+            ),
+          priority: z
+            .number()
+            .int()
+            .optional()
+            .describe(
+              "ACCEPTED AND IGNORED. Priority is recomputed from the array's insertion order, so a stale client cannot persist a chain whose displayed order disagrees with its stored one. Send the order you want as the order of the array.",
+            ),
+          enabled: z.boolean(),
+        }),
+      )
+      .min(1)
+      .describe(
+        "The whole chain, in the order it should be walked. At least one entry and at most one per known provider type; a repeated type is refused.",
+      ),
+  })
+  .meta({
+    id: "ProviderChainPutRequest",
+    description:
+      "Replaces the account's provider chain wholesale. No credential is written or read here — only which provider types exist, in what order, and which are enabled.",
+  });
+
+// ── Read-only advisor + generation (`/api/insights/generate`) ─────────
+
+export const insightsGenerateReadResponse = z
+  .object({
+    insights: z
+      .record(z.string(), z.unknown())
+      .nullable()
+      .describe(
+        "The cached insight payload, verbatim from the account's cache row. Null when nothing is cached or the stored row failed to parse — the two are indistinguishable here, and the second also silently enqueues a repair.",
+      ),
+    cached: z
+      .boolean()
+      .describe("True when a payload was served from the cache."),
+    cachedAt: z.iso
+      .datetime({ offset: true })
+      .nullable()
+      .optional()
+      .describe(
+        "When that payload was written. Present only on the cached branch — the empty branch omits the key rather than sending null.",
+      ),
+    legacyPayload: z
+      .boolean()
+      .describe(
+        "True when the cached payload predates the rationale fields, so the client can offer a regenerate. Never auto-regenerated: that would burn a rate-limit token on a cache hit without the user asking.",
+      ),
+    revalidating: z
+      .boolean()
+      .describe(
+        "True when this read enqueued an out-of-band warm because the cache was stale or missing AND a provider exists. Poll (bounded) until it clears rather than sitting on the stale payload.",
+      ),
+    hasProvider: z
+      .boolean()
+      .describe(
+        "False when no AI provider is configured anywhere. The served briefing can then NEVER refresh — no warm pass will fill it — so pair its age with a connect-a-provider affordance and stop polling.",
+      ),
+    generationFailed: z
+      .boolean()
+      .describe(
+        "True when the most recent generation attempt failed after the last successful one. The last good text is still served, so this is the only honest signal that what is shown is held rather than fresh.",
+      ),
+    generationFailureClass: z
+      .string()
+      .nullable()
+      .describe(
+        "Coarse class of that failure, so the empty state can point at the right lever (raise the response timeout versus re-check the provider). Null when the last attempt succeeded.",
+      ),
+    briefingOmittedReason: z
+      .literal("ungrounded")
+      .nullable()
+      .describe(
+        "Non-null when a generation SUCCEEDED but the grounding gate withheld the briefing — a different state from `generationFailed`, and the reason the card can say 'withheld' instead of showing a silent empty tile.",
+      ),
+  })
+  .meta({
+    id: "InsightsGenerateReadResponse",
+    description:
+      "The read-only advisor payload. This route NEVER calls a provider: it serves the cache and, when the cache is stale and a provider exists, enqueues a warm out of band.",
+  });
+
+export const insightsGeneratePostRequest = z
+  .object({
+    force: z
+      .boolean()
+      .optional()
+      .describe(
+        'Send `true` to bypass the 24-hour cache and generate now. Anything other than the boolean `true` — including the string `"true"` — is treated as absent. Forcing also means an exhausted hourly quota answers an honest 429 instead of degrading to the cached payload.',
+      ),
+  })
+  .meta({
+    id: "InsightsGeneratePostRequest",
+    description:
+      "Optional body for the generating POST. Capped at 16 KiB. `userId` is taken from the session or the Bearer token and is never a body field.",
+  });
+
+export const insightsGeneratePostResponse = z
+  .object({
+    insights: z
+      .record(z.string(), z.unknown())
+      .describe("The insight payload, fresh or cached depending on `cached`."),
+    cached: z.boolean(),
+    cachedAt: z.iso
+      .datetime({ offset: true })
+      .optional()
+      .describe("Present on the cached branch only."),
+    legacyPayload: z.boolean(),
+    briefingOmittedReason: z
+      .literal("ungrounded")
+      .nullable()
+      .optional()
+      .describe(
+        "Non-null when the grounding gate stripped the briefing from THIS generation. Present on the freshly-generated branch.",
+      ),
+  })
+  .meta({
+    id: "InsightsGeneratePostResponse",
+    description:
+      "The generating POST's answer. A 200 does not mean a provider was called — a cache hit inside the 24-hour window, and an exhausted hourly quota on a briefingless cache, both answer 200 with `cached: true`.",
+  });
+
+// ── Coach read strip (`/api/insights/coach-read`) ─────────────────────
+
+export const coachReadQuery = z
+  .object({
+    metric: measurementTypeEnum.describe(
+      "The metric the strip is about. Closed enum: an unknown value 422s.",
+    ),
+  })
+  .meta({ id: "CoachReadQuery" });
+
+export const coachReadStripResponse = z
+  .object({
+    baseline: z
+      .object({
+        low: z.number().describe("Robust lower edge of the personal range."),
+        high: z.number().describe("Robust upper edge."),
+        latest: z.number().describe("Today's latest reading, same units."),
+        placement: z.enum(["within", "above", "below"]),
+        sampleDays: z
+          .number()
+          .int()
+          .describe("Distinct days behind the band, for transparency."),
+      })
+      .nullable()
+      .describe(
+        "Line one. Null when the band could not be established or there is no reading to place — and then `learning` is true. Mutually exclusive with it.",
+      ),
+    learning: z
+      .boolean()
+      .describe(
+        "True when history is below the engine's seven-day floor or there are no readings. Render 'still learning your range' rather than inventing one.",
+      ),
+    driver: z
+      .object({
+        note: z
+          .string()
+          .describe(
+            "An already-localised, conservative, descriptive sentence the client prints VERBATIM. Never causal. Written in the reader's language server-side, which is why it is not a key.",
+          ),
+        behaviour: z.string().describe("Lower-cased behaviour label."),
+        outcome: z.string().describe("Lower-cased outcome label."),
+      })
+      .nullable()
+      .describe(
+        "Line two: the single strongest lagged association whose outcome is this metric. Null when none clears the effect-size floor, and null when the correlation read failed — the failure is deliberately swallowed so a hiccup there never sinks line one.",
+      ),
+  })
+  .meta({
+    id: "CoachReadStrip",
+    description:
+      "The two server-authoritative lines a metric sub-page renders above its chart. Pure compute over the baseline and correlation engines — no provider call, no cache table — so web and native decode the same resolved DTO.",
+  });
+
+// ── Coach seeded opener (`/api/insights/coach/seeded-question`) ───────
+
+export const coachSeededQuestionResponse = z
+  .object({
+    signal: z
+      .object({
+        sourceMetric: z
+          .string()
+          .describe(
+            "Sentinel id the client keys its localised copy on (`readiness` / `recovery`).",
+          ),
+        score: z.number().describe("The latest 0..100 score."),
+        band: z
+          .string()
+          .describe(
+            "`yellow` or `red`. Green never surfaces — a good day is not notable.",
+          ),
+      })
+      .nullable()
+      .describe(
+        "Null whenever nothing crossed the detector's confidence and notability gate, AND whenever the account has turned proactive suggestions off — the two are indistinguishable on the wire, and both mean the hero keeps its neutral greeting rather than showing a fabricated opener.",
+      ),
+  })
+  .meta({
+    id: "CoachSeededQuestion",
+    description:
+      "Today's single most notable derived wellness signal, resolved server-side into a tappable opener for the Coach's blank-chat hero. The client renders the resolved DTO and never recomputes the selection.",
+  });
+
+// ── Period narrative (`/api/insights/narrative`) ──────────────────────
+
+export const narrativeQuery = z
+  .object({
+    period: z
+      .enum(NARRATIVE_PERIOD_VALUES as [string, ...string[]])
+      .describe("Which retrospective to read. Closed enum: unknown 422s."),
+    locale: z
+      .string()
+      .optional()
+      .describe(
+        "Override the reader's resolved locale. The narrative row is keyed per locale, so this selects a different stored row rather than translating one; an unrecognised value falls back to the app default instead of 422-ing.",
+      ),
+  })
+  .meta({ id: "NarrativeQuery" });
+
+export const narrativeResponse = z
+  .object({
+    period: z.string().describe("Echoes the requested period."),
+    locale: z.string().describe("The locale the row was read for."),
+    narrative: z
+      .object({
+        text: z.string().describe("The retrospective prose, rendered as-is."),
+        provenance: z
+          .string()
+          .describe(
+            "Where the text came from — provider prose or the deterministic non-causal fallback a provider-less account gets.",
+          ),
+        updatedAt: z.iso.datetime({ offset: true }),
+      })
+      .nullable()
+      .describe("Null when no row exists for this period and locale yet."),
+    revalidating: z
+      .boolean()
+      .describe(
+        "True when this read enqueued a warm. Always FALSE on a delegated request even when the row is stale: this route warms unconditionally rather than on a miss, so a manager's first navigation here would otherwise be an egress of the owner's record the owner never asked for. The stale row is still served; only the warm is withheld.",
+      ),
+  })
+  .meta({
+    id: "NarrativeResponse",
+    description:
+      "The latest generated period retrospective. Read-only by construction — it never blocks on a provider, serves the last good row immediately, and warms out of band.",
+  });
+
+// ── GLP-1 therapy timeline (`/api/insights/glp1-timeline`) ────────────
+
+export const glp1TimelineQuery = z
+  .object({
+    limit: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(200)
+      .optional()
+      .default(60)
+      .describe(
+        "Entry cap, 1..200, default 60. A non-integer, out-of-range or non-numeric value falls back to the default rather than 422-ing.",
+      ),
+  })
+  .meta({ id: "Glp1TimelineQuery" });
+
+export const glp1TimelineResponse = z
+  .object({
+    hasGlp1: z
+      .boolean()
+      .describe(
+        "False when the record holds no medication classified GLP-1. `entries` is then empty and the surface hides cleanly.",
+      ),
+    entries: z
+      .array(
+        z.object({
+          date: z.iso
+            .datetime({ offset: true })
+            .describe(
+              "When it happened. A `side-effect` entry is a DAY rather than an instant, and is stamped at 12:00 UTC of that day so it sorts — do not read it as a capture time.",
+            ),
+          kind: z.enum([
+            "dose-change",
+            "injection",
+            "inventory",
+            "side-effect",
+          ]),
+          medicationName: z
+            .string()
+            .optional()
+            .describe("Absent on a `side-effect` entry."),
+          doseValue: z.number().optional(),
+          doseUnit: z.string().optional(),
+          doseDelta: z
+            .enum(["up", "down"])
+            .nullable()
+            .optional()
+            .describe("Titration direction against the previous step."),
+          note: z
+            .string()
+            .nullable()
+            .optional()
+            .describe("The titration note, decrypted."),
+          injectionSite: z.string().nullable().optional(),
+          inventoryDelta: z.number().int().optional(),
+          reason: z.string().optional(),
+          tags: z
+            .array(z.string())
+            .optional()
+            .describe(
+              "The recognised side-effect tags picked up that day. Matched against a FIXED bilingual list of English and German tag strings, so a tag written in any other language — or spelled differently — does not appear here at all.",
+            ),
+        }),
+      )
+      .describe(
+        "Newest first, capped at `limit`. A heterogeneous union: which optional keys are present depends on `kind`, and no entry carries all of them.",
+      ),
+  })
+  .meta({
+    id: "Glp1TimelineResponse",
+    description:
+      "A chronological merge of the GLP-1-relevant events the record holds: titration steps, injections with their sites, legacy stock-ledger movements, and side-effect-tagged mood days from the trailing 90 days. Inventory entries come from the legacy running-sum ledger only, so a medication tracked with per-container inventory shows none.",
+  });
+
+// ── Intraday pulse (`/api/insights/pulse/intraday`) ───────────────────
+
+export const intradayPulseQuery = z
+  .object({
+    date: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .describe(
+        "The local day to read. Defaults to the record's local today. Anything but a `YYYY-MM-DD` literal is a 422 — this parameter is strict where most of the surface's date filters are forgiving.",
+      ),
+  })
+  .meta({ id: "IntradayPulseQuery" });
+
+export const intradayPulseResponse = z
+  .object({
+    dateKey: z.string().describe("The local day that was read."),
+    timezone: z.string().describe("The zone the day was anchored to."),
+    bucketMinutes: z.number().int().describe("Width of one bucket."),
+    series: z
+      .array(
+        z.object({
+          startMinute: z
+            .number()
+            .int()
+            .describe("Minutes since local midnight at the bucket start."),
+          mean: z.number(),
+          count: z
+            .number()
+            .int()
+            .describe(
+              "Raw samples behind the mean. A bucket below the density floor is a GAP that breaks a candidate tension run, not a thin data point — a lone reading is a point, not a bucket.",
+            ),
+          min: z
+            .number()
+            .optional()
+            .describe("Bucket low, when the source carries a spread."),
+          max: z.number().optional().describe("Bucket high, same condition."),
+        }),
+      )
+      .describe("The day's shape, ascending."),
+    baseline: z
+      .number()
+      .nullable()
+      .describe("The resting baseline the day was judged against."),
+    baselineSource: z
+      .enum(["resting", "proxy", "none"])
+      .describe(
+        "`resting` from recorded resting heart rate, `proxy` when those rows are stale or absent and the pulse history stood in, `none` when no baseline could be formed.",
+      ),
+    tension: z
+      .object({
+        startMinute: z.number().int(),
+        endMinute: z.number().int(),
+        partOfDay: z.enum(["morning", "afternoon", "evening", "night"]),
+        meanHr: z.number(),
+        baseline: z.number(),
+        hrvConfirmed: z
+          .boolean()
+          .describe("True when intraday HRV independently confirmed it."),
+      })
+      .nullable()
+      .describe(
+        "At most ONE cautious elevated-at-rest window, and only when every confidence gate holds — the bar is set high and under-flagging is the intended failure mode. ALWAYS null on an `hourly` day, because a tension read needs per-sample resolution.",
+      ),
+    resolution: z
+      .enum(["tenMin", "hourly"])
+      .describe(
+        "`tenMin` when the series was folded from live raw samples, `hourly` when the day fell outside the dense-retention window and the coarser folded tier answered instead. An older day reads back coarser rather than empty.",
+      ),
+  })
+  .meta({
+    id: "IntradayPulseResponse",
+    description:
+      "One local day's intraday heart-rate shape, plus at most one cautious elevated-at-rest window. Computed from raw samples through the read-swap pattern rather than persisted as ten-minute rollups for all history. Awareness only, never a diagnosis.",
   });

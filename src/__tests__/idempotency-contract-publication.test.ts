@@ -107,20 +107,24 @@ function idempotentOperationsFromContract(): Set<string> {
  * Idempotent operations that cannot be published, because the PATH is not in
  * the document at all. A header cannot hang on a path that does not exist.
  *
- * Two entries, and the list was four until the test below refused it. The first
+ * One entry, and the list was four until the test below refused it. The first
  * draft claimed the whole `/api/medications` family was missing, on the
  * strength of a grep for path literals in `src/lib/openapi/routes/` that came
  * back empty. It came back empty because those paths are not written as
- * searchable literals there — the emitted document carries 19 of them,
- * including every one the iOS client actually argues about. Measure the
- * artefact, not the source that builds it.
+ * searchable literals there — the emitted document carries them, including
+ * every one the iOS client actually argues about. Measure the artefact, not
+ * the source that builds it.
+ *
+ * `/api/insights/feedback` left this list when the route joined the route
+ * table, and the leg below is what made that a diff rather than a permanent
+ * exemption: the moment the path appeared in the document, the entry claiming
+ * it could not be published became false and the run went red. An exemption
+ * nobody removes is how a gap becomes furniture.
  *
  * Listed rather than filtered silently, so the exclusion stays visible in the
  * file that would otherwise claim full coverage.
  */
 const UNPUBLISHED_PATHS: Readonly<Record<string, string>> = {
-  "/api/insights/feedback":
-    "Coach feedback write; never added to the route table. A real gap, small.",
   "/api/admin/backups/{id}/restore":
     "Admin surface: cookie-only by construction, so arguably out of scope for a client contract.",
 };

@@ -1163,7 +1163,81 @@ const moodAggregatesResponse = z
       "The pre-computed Mood Insights bundle: headline summary, heatmap, distribution, per-dimension summaries, weekday and time-of-day patterns, stability, tag boards, context and crosstab comparisons, narratives and cross-metric correlations. Everything is observational — comparisons and correlations, never a cause and never a verdict. Served through a 60 s stale-while-revalidate cache; a mood write marks the cell so the account's own entry lands on the next read.",
   });
 
+const moodDailySeriesResponse = z
+  .object({
+    entries: z
+      .array(
+        z.object({
+          date: z.string().describe("`YYYY-MM-DD` day key."),
+          score: z
+            .number()
+            .describe("The day's mean pleasantness on the 1..5 scale."),
+          samples: z.number().int().describe("Entries behind the mean."),
+        }),
+      )
+      .describe("One entry per day that carries a mood, oldest first."),
+    summary: z
+      .object({
+        count: z.number().int(),
+        latest: z.number().nullable(),
+        min: z.number().nullable(),
+        max: z.number().nullable(),
+        mean: z.number().nullable(),
+        median: z.number().nullable(),
+        avg7: z.number().nullable(),
+        avg30: z.number().nullable(),
+        slope7: z
+          .object({
+            slope: z.number(),
+            direction: z.enum(["up", "down", "stable"]),
+            confidence: z.number(),
+          })
+          .nullable(),
+        slope30: z
+          .object({
+            slope: z.number(),
+            direction: z.enum(["up", "down", "stable"]),
+            confidence: z.number(),
+          })
+          .nullable(),
+        anomalyCount: z.number().int().optional(),
+        avg30LastMonth: z.number().nullable().optional(),
+        avg30LastYear: z.number().nullable().optional(),
+      })
+      .describe(
+        "The shared summary shape computed over the DAILY MEANS, not over the raw entries — so `count` is the number of days with a mood, not the number of moods logged. Every statistic is null on an empty series rather than 0.",
+      ),
+  })
+  .meta({
+    id: "MoodDailySeries",
+    description:
+      "The canonical daily mood series. `entryCount` and the rollup-versus-live `source` the builder also resolves are annotated for observability and deliberately NOT on this wire — the two keys below are the whole payload.",
+  });
+
 export const moodPaths: NonNullable<ZodOpenApiObject["paths"]> = {
+  "/api/mood/analytics": {
+    get: {
+      tags: ["Mood"],
+      summary: "The canonical daily mood series",
+      description:
+        "One series, read by the mood page sparkline, the dashboard tile and the native client alike, so all three render the same number — the dashboard snapshot resolves it through the same builder rather than aggregating again. Answered from the mood rollup tier with a live fallback on a coverage miss; which tier answered is annotated for operators and is not on the wire. Plain read-through cache (NOT stale-while-revalidate, unlike the insights sibling). Module-gated on `mood`; a disabled module answers 403 `module.disabled` even for a valid Bearer token. Cookie or Bearer auth; the caller is always resolved as themselves, so this read cannot be delegated to a shared record.",
+      responses: {
+        "200": {
+          description: "The daily series and its summary.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                moodDailySeriesResponse,
+                "MoodDailySeriesEnvelope",
+              ),
+            },
+          },
+        },
+        ...moduleDisabledResponse,
+        ...stdResponses,
+      },
+    },
+  },
   "/api/mood/insights": {
     get: {
       tags: ["Mood"],

@@ -1438,3 +1438,123 @@ export const glp1InventoryEvent = z
     description:
       "A row of the DEPRECATED running-sum inventory ledger. Register containers through the inventory endpoints instead; reads fall back to this ledger only while a medication has no containers at all.",
   });
+
+// ── Per-medication ingest endpoint (`/api/medications/{id}/api-endpoint`) ──
+//
+// The one place in this module where a raw credential can leave the server,
+// and it leaves EXACTLY once: on the PUT that mints it. The GET answers
+// presence and a count and nothing else, and a re-enable of an already-enabled
+// endpoint answers `token: null` rather than re-issuing — the plaintext is
+// hashed at rest and cannot be recovered, so a lost token means minting a new
+// one by disabling and enabling again.
+
+export const medicationApiEndpointState = z
+  .object({
+    enabled: z
+      .boolean()
+      .describe("True when at least one live token carries this scope."),
+    activeTokenCount: z
+      .number()
+      .int()
+      .describe(
+        "Live, unrevoked, unexpired tokens scoped to this medication. Normally 0 or 1.",
+      ),
+  })
+  .meta({
+    id: "MedicationApiEndpointState",
+    description:
+      "Presence only. No token, hash or prefix is on this wire — the stored value is an HMAC and there is no path back to the plaintext.",
+  });
+
+export const medicationApiEndpointEnabled = z
+  .object({
+    enabled: z.literal(true),
+    activeTokenCount: z.number().int(),
+    token: z
+      .string()
+      .nullable()
+      .describe(
+        "The raw `hlk_<64 hex>` token, and the ONLY time it is ever returned. Null when the endpoint was already enabled and nothing was minted — check `created` rather than inferring from this. Store it on receipt; it is hashed at rest and cannot be shown again.",
+      ),
+    created: z
+      .boolean()
+      .describe("True when this call minted a token, false when one existed."),
+  })
+  .meta({
+    id: "MedicationApiEndpointEnabled",
+    description:
+      "The answer to enabling the endpoint. A fresh mint is 201 with the token; an already-enabled endpoint is 200 with `token: null` and `created: false`.",
+  });
+
+export const medicationApiEndpointDisabled = z
+  .object({
+    enabled: z.literal(false),
+    revokedTokenCount: z
+      .number()
+      .int()
+      .describe("How many live tokens this call revoked."),
+  })
+  .meta({
+    id: "MedicationApiEndpointDisabled",
+    description:
+      "The answer to disabling. Note the asymmetry: this shape carries `revokedTokenCount` and NOT `activeTokenCount`, so a client decoding one shape for both PUT outcomes will find the key missing.",
+  });
+
+// ── Reminder phase config (`/api/medications/{id}/phase-config`) ──────
+
+export const reminderPhaseConfig = z
+  .object({
+    id: z
+      .string()
+      .optional()
+      .describe(
+        "Row id. ABSENT when the read fell through to defaults, because no row exists — which is how a client tells a stored configuration from the fallback.",
+      ),
+    medicationId: z.string().optional().describe("Absent on the defaults."),
+    greenValue: z.number().int(),
+    greenMode: z.enum(["MINUTES", "PERCENT"]),
+    yellowValue: z.number().int(),
+    yellowMode: z.enum(["MINUTES", "PERCENT"]),
+    orangeValue: z.number().int(),
+    orangeMode: z.enum(["MINUTES", "PERCENT"]),
+    redValue: z.number().int(),
+    redMode: z.enum(["MINUTES", "PERCENT"]),
+  })
+  .meta({
+    id: "ReminderPhaseConfig",
+    description:
+      "How long each reminder phase runs for one medication. `MINUTES` is an absolute offset; `PERCENT` is a share of the dose window. Values are 0..1440.",
+  });
+
+// ── Side effects (`/api/medications/{id}/side-effects`) ───────────────
+
+export const medicationSideEffect = z
+  .object({
+    id: z.string(),
+    userId: z
+      .string()
+      .describe(
+        "The RECORD owner, which is not the actor on a delegated write.",
+      ),
+    medicationId: z.string(),
+    occurredAt: z.iso.datetime({ offset: true }),
+    category: z
+      .string()
+      .describe(
+        "Derived SERVER-side from `entry` through the authoritative taxonomy. Never accepted from a client — a category sent on the wire is dropped, so a row cannot be stamped with one that contradicts its entry.",
+      ),
+    entry: z.string().describe("The catalogue entry. Closed Prisma enum."),
+    severity: z.number().int().min(1).max(5),
+    notes: z
+      .string()
+      .nullable()
+      .describe(
+        "The free-text note, decrypted on read. Stored encrypted; the ciphertext column is stripped before the row leaves the server.",
+      ),
+    createdAt: z.iso.datetime({ offset: true }),
+  })
+  .meta({
+    id: "MedicationSideEffect",
+    description:
+      "One logged side effect. Not a clinical record — the account owns it, and it stays deletable at any time rather than locking after a retraction window.",
+  });

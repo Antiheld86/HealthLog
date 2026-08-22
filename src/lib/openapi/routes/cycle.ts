@@ -24,7 +24,10 @@ import {
   cyclePeriodSchema,
   cyclePrefsSchema,
 } from "@/lib/validations/cycle";
-import { createCustomSymptomSchema } from "@/lib/cycle/custom-symptoms-shared";
+import {
+  createCustomSymptomSchema,
+  updateCustomSymptomSchema,
+} from "@/lib/cycle/custom-symptoms-shared";
 import {
   dataEnvelope,
   errorEnvelope,
@@ -441,10 +444,20 @@ const cycleDisabledOnADelegableRoute = recordRefusal(
 // rest and never reaches a wide event or an audit excerpt — only the icon and
 // the minted key do.
 
-createCustomSymptomSchema.meta({
+// `.meta()` RETURNS a new schema in Zod 4 rather than annotating in place, so
+// the result has to be captured and referenced. A bare `schema.meta({...})`
+// statement registers nothing, and the component id it names never reaches
+// the document.
+const createCycleCustomSymptomRequest = createCustomSymptomSchema.meta({
   id: "CreateCycleCustomSymptomRequest",
   description:
     "Create-a-custom-symptom body. `label` is trimmed and must be 1..40 characters. `icon` is optional and must name one of the twenty allow-listed Lucide icons (unknown names 422 rather than falling back). `categoryKey` is reserved for a future per-symptom category choice and today accepts only the literal `custom`. The minted key, the sort order and the owning record all come from the server.",
+});
+
+const updateCycleCustomSymptomRequest = updateCustomSymptomSchema.meta({
+  id: "UpdateCycleCustomSymptomRequest",
+  description:
+    "Partial custom-symptom edit; at least one of `label` / `icon` / `isActive` is required. `isActive: false` hides the symptom while every day log that references it stays intact; `isActive: true` brings it back, and the per-record cap is re-checked on the way in so hiding and re-enabling cannot be used to exceed it.",
 });
 
 const cycleCustomSymptom = z
@@ -509,7 +522,7 @@ export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       requestBody: {
         required: true,
         content: {
-          "application/json": { schema: createCustomSymptomSchema },
+          "application/json": { schema: createCycleCustomSymptomRequest },
         },
       },
       responses: {
@@ -534,6 +547,105 @@ export const cyclePaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "429": {
           description:
             "More than 30 creates in the trailing minute for this ACTOR (`cycle:symptom:custom:<actorId>`).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+  },
+  "/api/cycle/symptoms/custom/{key}": {
+    patch: {
+      tags: ["Cycle"],
+      summary: "Rename, re-icon or hide a custom cycle symptom (v1.15.1)",
+      description:
+        "Edits one custom symptom the CALLER owns. The key must carry the `custom:` prefix — a catalogue key is refused as not-found before anything is read — and it is resolved against the caller's own rows only, so another account's key is a 404 and never a 403. A re-activation re-checks the 50-symptom cap, because a hidden row does not count toward it and skipping the check would make hide-then-enable a way around the limit. The audit row records which FIELDS the write touched and the resulting active state, never the decrypted label. Rate-limited 30/min. Gated: `cycle.disabled` 403 when cycle tracking is off. NOT delegable — unlike the collection this hangs off, both verbs here resolve the caller as themselves, so a delegate can create a symptom in a shared record and cannot then rename or hide it. Cookie or Bearer auth.",
+      requestParams: {
+        path: z.object({
+          key: z
+            .string()
+            .describe("The `custom:<uuid>` key. A catalogue key 404s."),
+        }),
+      },
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: updateCycleCustomSymptomRequest },
+        },
+      },
+      responses: {
+        "200": {
+          description:
+            "The edited symptom, with the stored label decrypted and the resulting `isActive` — a field the create response does not carry.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                cycleCustomSymptom.extend({ isActive: z.boolean() }),
+                "CycleCustomSymptomUpdatedEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description:
+            "The key is not a `custom:` key, or names no symptom this account owns. The two are indistinguishable.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...cycleDisabledResponse,
+        ...stdResponses,
+        "422": {
+          description:
+            "Either the body failed validation — the multi-issue envelope with `meta.errorCode` = `cycle.symptom.custom.invalid` — or re-activating would exceed the 50 active custom symptoms, in which case `meta.errorCode` = `cycle.symptom.custom.limit` and there is no issue list.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "429": {
+          description:
+            "More than 30 edits or deletes in the trailing minute for this account (`cycle:symptom:custom:<userId>`, shared with the DELETE below — and note this bucket keys on the USER, where the create on the collection keys on the ACTOR).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+      },
+    },
+    delete: {
+      tags: ["Cycle"],
+      summary: "Hide or purge a custom cycle symptom (v1.15.1)",
+      description:
+        "Two different operations behind one verb, chosen by `purge`. By DEFAULT this is not a delete at all: the row is deactivated, so it leaves the chip grid while every day log that recorded it keeps its reference and its history reads unchanged. With `purge=true` the row is HARD-deleted and the foreign-key cascade takes every `cycle_symptom_link` with it — the days that recorded the symptom lose that fact, and nothing reconstructs it. There is no confirmation step on the wire and no undo. The response reports which of the two happened in `purged`. The key must carry the `custom:` prefix and resolves against the caller's own rows only. The audit row records the mode and nothing else — never the decrypted label. Rate-limited 30/min. Gated: `cycle.disabled` 403. NOT delegable. Cookie or Bearer auth.",
+      requestParams: {
+        path: z.object({
+          key: z
+            .string()
+            .describe("The `custom:<uuid>` key. A catalogue key 404s."),
+        }),
+        query: z.object({
+          purge: z
+            .literal("true")
+            .optional()
+            .describe(
+              "Send exactly `true` for the hard delete with its cascade. Any other value, and omitting it, deactivates instead — the test is an equality against the string, not a boolean parse.",
+            ),
+        }),
+      },
+      responses: {
+        "200": {
+          description:
+            "Done. `purged: true` means the row and its day-log links are gone; `false` means it was deactivated and its history is intact.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ key: z.string(), purged: z.boolean() }),
+                "CycleCustomSymptomDeletedEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description:
+            "The key is not a `custom:` key, or names no symptom this account owns.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...cycleDisabledResponse,
+        ...stdResponses,
+        "429": {
+          description:
+            "More than 30 edits or deletes in the trailing minute for this account.",
           content: { "application/json": { schema: errorEnvelope } },
         },
       },

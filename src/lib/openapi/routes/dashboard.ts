@@ -283,7 +283,67 @@ const dashboardSummaryResponse = z
       "The native client's dashboard aggregator: greeting, logging streak, today's dose tally, the per-metric tiles, and the sleep-rhythm DTO. Served through a 60 s fresh / 1 h stale read-through cache, so `greeting.date` and `lastUpdated` can be up to an hour old on a stale-window serve; writes mark the bucket so the account's own action lands on the very next read. No LLM is reachable from this path.",
   });
 
+const chartOverlayPrefsPutBody = z
+  .object({
+    chartKey: z
+      .enum(CHART_OVERLAY_KEYS)
+      .describe("Which chart's overlays are being written. Closed enum."),
+    prefs: z
+      .object({
+        showTrendIndicator: z.boolean(),
+        showTrendArrow: z.boolean(),
+        showTargetRange: z.boolean(),
+        comparisonBaseline: z
+          .enum(["none", "lastMonth", "lastYear"])
+          .optional()
+          .describe("Defaults to `none` when omitted."),
+        rangePoints: z
+          .union([z.literal(0), z.literal(7), z.literal(30), z.literal(90)])
+          .optional()
+          .describe(
+            "Persisted range-tab selection. Optional so a client on an older bundle that never sends it does not 422; omitting it stores the slot WITHOUT the field rather than storing a default.",
+          ),
+      })
+      .describe(
+        "The complete overlay state for that chart. The three booleans are REQUIRED — this replaces the chart's slot wholesale rather than merging into it, so a body that names only the toggle being flipped silently clears the other two.",
+      ),
+  })
+  .meta({
+    id: "ChartOverlayPrefsPutBody",
+    description:
+      "One chart's overlay preferences. Partial across CHARTS (only the named `chartKey` is touched, every other chart's slot is preserved) and total WITHIN a chart (the named slot is replaced).",
+  });
+
 export const dashboardWidgetPaths: NonNullable<ZodOpenApiObject["paths"]> = {
+  "/api/dashboard/chart-overlay-prefs": {
+    put: {
+      tags: ["Dashboard"],
+      summary: "Save one chart's overlay preferences",
+      description:
+        "Writes the overlay toggles for a single chart into the same `dashboardWidgetsJson` blob `GET /api/dashboard/widgets` reads, without the client having to round-trip the whole layout — which is what it exists for: a chart wrapper knows the chart it is flipping and nothing else, and making it re-send the entire widget array would be both wasteful and racy across several charts at once. The read-modify-write runs inside a SERIALIZABLE transaction, so two tabs toggling different charts cannot clobber one another. Note the granularity: partial across charts, TOTAL within one — the named slot is replaced, so a body carrying only the toggle being changed clears the other two. This route accepts NO optimistic-concurrency token, unlike its `/api/dashboard/widgets` sibling; the transaction is what protects it instead. A malformed body is refused with the multi-issue 422 and an audit breadcrumb (`dashboard.chart-overlay.validation-failed`, deduplicated to one row per account per minute so a looping client cannot flood the ledger). Body capped at 64 KiB. Cookie or Bearer auth; the caller is always resolved as themselves, so these are never another record's preferences — the same choice the sibling PUT and DELETE make.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: chartOverlayPrefsPutBody },
+        },
+      },
+      responses: {
+        "200": {
+          description:
+            "Saved. The response confirms the write and does NOT echo the resolved layout — re-read the widget layout if the new state is needed.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ saved: z.literal(true) }),
+                "ChartOverlayPrefsSavedEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+  },
   "/api/dashboard/summary": {
     get: {
       tags: ["Dashboard"],

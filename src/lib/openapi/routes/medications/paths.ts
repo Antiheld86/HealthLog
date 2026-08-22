@@ -16,6 +16,8 @@ import {
   intakeAggregateQuerySchema,
   intakeStatusUpdateSchema,
   glp1PostBodySchema,
+  bulkDeleteIntakeEventsSchema,
+  updateIntakeEventSchema,
 } from "@/lib/validations/medication";
 import { medicationExtractionSchema } from "@/lib/ai/coach/medication-extract-prompt";
 import {
@@ -71,7 +73,41 @@ import {
   glp1DetailResponse,
   glp1DoseChange,
   glp1InventoryEvent,
+  medicationApiEndpointState,
+  medicationApiEndpointEnabled,
+  medicationApiEndpointDisabled,
+  reminderPhaseConfig,
+  medicationSideEffect,
 } from "./schemas";
+import { phaseConfigSchema } from "@/lib/validations/phase-config";
+import {
+  createSideEffectSchema,
+  listSideEffectsSchema,
+} from "@/lib/medications/side-effects/validators";
+
+const phaseConfigPutRequest = phaseConfigSchema.meta({
+  id: "ReminderPhaseConfigPutRequest",
+  description:
+    "The complete phase configuration; every field is required, so this replaces rather than merges. Values are 0..1440 and each carries its own mode.",
+});
+
+const createSideEffectRequest = createSideEffectSchema.meta({
+  id: "CreateMedicationSideEffectRequest",
+  description:
+    "Log one side effect. `category` is NOT a field — the server derives it from `entry` through the authoritative taxonomy, and a category sent anyway is dropped rather than refused, so an older client cannot stamp a row with one that contradicts its entry. `occurredAt` defaults to now. `notes` is capped at 280 characters and is encrypted at rest.",
+});
+
+const listSideEffectsQuery = listSideEffectsSchema.meta({
+  id: "ListMedicationSideEffectsQuery",
+  description:
+    "Window and cap for the side-effect list. `from` is inclusive and `to` is EXCLUSIVE — an asymmetry worth reading before paging on it. `limit` is 1..200, default 50.",
+});
+
+const bulkDeleteIntakeRequest = bulkDeleteIntakeEventsSchema.meta({
+  id: "BulkDeleteMedicationIntakeRequest",
+  description:
+    "The intake events to tombstone, 1..500 ids. Ids that do not belong to this medication AND this record are silently DROPPED rather than refused, so a partial match succeeds with a lower `deleted` count than the ids sent.",
+});
 
 // ── Bulk intake backfill (iOS SyncMode) — mirrors the route's
 // `bulkPayloadSchema` / `bulkEntrySchema` and the batch-envelope response.
@@ -313,6 +349,512 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
+      },
+    },
+  },
+  "/api/medications/{id}/api-endpoint": {
+    get: {
+      tags: ["Medications"],
+      summary: "Is the per-medication ingest endpoint enabled?",
+      description:
+        "Presence only: whether any live token carries this medication's ingest scope, and how many. No token, hash or prefix is on this wire — tokens are stored as an HMAC and there is no path back to the plaintext. Refused with 403 when the operator has switched the API off globally, which is checked BEFORE ownership, so that refusal is visible even for a medication the caller does not hold. NOT delegable: the caller is always resolved as themselves, which is right for a credential surface. Cookie or Bearer auth.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      responses: {
+        "200": {
+          description: "Whether the endpoint is on.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                medicationApiEndpointState,
+                "MedicationApiEndpointStateEnvelope",
+              ),
+            },
+          },
+        },
+        "403": {
+          description: "The operator has disabled the API globally.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "404": {
+          description: "Medication not found (or owned by another account).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+    put: {
+      tags: ["Medications"],
+      summary: "Enable or disable the per-medication ingest endpoint",
+      description:
+        "Enabling mints an API token scoped to `medication:<id>:ingest` and returns the RAW token — the one and only time it is ever returned, because the stored value is an HMAC and cannot be reversed. Read `created` rather than inferring from the token: enabling an already-enabled endpoint answers 200 with `token: null` and `created: false` and mints nothing, so a lost token is recovered by disabling and enabling again, not by re-reading. Disabling revokes every live token carrying the scope and answers a DIFFERENT shape — `revokedTokenCount` instead of `activeTokenCount` — so one decoder for both outcomes will find the key missing. The body is read by hand rather than parsed: `enabled` is true only for the literal boolean, so any other value disables. Minted tokens carry no expiry. Both branches audit. Refused with 403 when the operator has switched the API off globally. NOT delegable. Cookie or Bearer auth.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: z
+              .object({
+                enabled: z
+                  .boolean()
+                  .describe(
+                    '`true` — and only the literal boolean true — enables. Anything else, including the string `"true"` and an absent key, disables.',
+                  ),
+              })
+              .meta({ id: "MedicationApiEndpointPutRequest" }),
+          },
+        },
+      },
+      responses: {
+        "200": {
+          description:
+            "Either the endpoint was disabled (`MedicationApiEndpointDisabled`), or it was already enabled and nothing was minted (`MedicationApiEndpointEnabled` with `token: null`).",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.union([
+                  medicationApiEndpointDisabled,
+                  medicationApiEndpointEnabled,
+                ]),
+                "MedicationApiEndpointPutEnvelope",
+              ),
+            },
+          },
+        },
+        "201": {
+          description:
+            "A token was minted. `token` carries the raw `hlk_` value — store it now, it is never shown again.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                medicationApiEndpointEnabled,
+                "MedicationApiEndpointCreatedEnvelope",
+              ),
+            },
+          },
+        },
+        "403": {
+          description: "The operator has disabled the API globally.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "404": {
+          description: "Medication not found (or owned by another account).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "413": {
+          description: "Request body exceeds 64 KiB.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "422": {
+          description:
+            "The body was not valid JSON. A single-message envelope with no issue list.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "401": stdResponses["401"],
+        "429": stdResponses["429"],
+      },
+    },
+  },
+  "/api/medications/{id}/phase-config": {
+    get: {
+      tags: ["Medications"],
+      summary: "Read a medication's reminder phase configuration",
+      description:
+        "How long each reminder phase runs for this medication. When no row is stored the DEFAULTS are returned rather than a 404 or a null — and the way to tell the two apart is that the defaults carry no `id` and no `medicationId`. Delegable at READ level over the `medications` section. Cookie or Bearer auth.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      responses: {
+        ...recordRefusal(),
+        "200": {
+          description: "The stored configuration, or the defaults.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                reminderPhaseConfig,
+                "ReminderPhaseConfigEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description: "Medication not found (or owned by another account).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+    put: {
+      tags: ["Medications"],
+      summary: "Replace a medication's reminder phase configuration",
+      description:
+        "Upserts the whole configuration — every field is required, so this replaces rather than merges. The stored row is built field by field from the parsed body rather than spread, so a future schema field cannot land here unnoticed. NOT delegable, unlike the GET beside it: the write resolves the caller as themselves, so a manager can read a shared record's phase configuration and cannot change it. Body capped at 64 KiB. Cookie or Bearer auth.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: phaseConfigPutRequest } },
+      },
+      responses: {
+        "200": {
+          description: "The stored configuration, with its row id.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                reminderPhaseConfig,
+                "ReminderPhaseConfigSavedEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description: "Medication not found (or owned by another account).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+    delete: {
+      tags: ["Medications"],
+      summary: "Reset a medication's reminder phases to the defaults",
+      description:
+        "Drops the stored row so the GET falls back to the defaults. Idempotent — resetting a medication that has no row succeeds and reports the same thing. NOT delegable, matching the PUT. Cookie or Bearer auth.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      responses: {
+        "200": {
+          description:
+            "Reset. The response confirms the write and does not echo the defaults.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ reset: z.literal(true) }),
+                "ReminderPhaseConfigResetEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description: "Medication not found (or owned by another account).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/medications/{id}/side-effects": {
+    get: {
+      tags: ["Medications"],
+      summary: "List a medication's side-effect log",
+      description:
+        "The record's side-effect entries for this medication, newest first, optionally bounded by a window. `from` is inclusive and `to` is EXCLUSIVE. Notes are decrypted on read and the ciphertext column never leaves the server. Delegable at READ level over the `medications` section. Cookie or Bearer auth.",
+      requestParams: {
+        path: z.object({ id: z.string() }),
+        query: listSideEffectsQuery,
+      },
+      responses: {
+        ...recordRefusal(),
+        "200": {
+          description:
+            "The entries, plus a `meta.total` that counts THIS PAGE rather than the whole log — it is the returned array's length, so it can never exceed `limit`.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({
+                  items: z.array(medicationSideEffect),
+                  meta: z.object({ total: z.number().int().nonnegative() }),
+                }),
+                "ListMedicationSideEffectsEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description: "Medication not found (or owned by another account).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+    post: {
+      tags: ["Medications"],
+      summary: "Log a side effect",
+      description:
+        "Records one entry against the medication. The category is derived server-side from `entry`, so a client cannot stamp a row with one that contradicts it. The note is encrypted at rest. Rate-limited 30/min keyed on the ACTOR, which is the condition this verb was admitted for delegation on: a delegate burns their own allowance rather than locking the owner out of their own log, and cannot collect a fresh one by switching records. Delegable at WRITE level over the `medications` section. Body capped at 64 KiB. Cookie or Bearer auth.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: createSideEffectRequest } },
+      },
+      responses: {
+        ...recordRefusal(),
+        "201": {
+          description: "The created entry, with its note decrypted.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                medicationSideEffect,
+                "CreateMedicationSideEffectEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description: "Medication not found (or owned by another account).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "429": {
+          description:
+            "More than 30 side-effect writes in the trailing minute for this ACTOR.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "401": stdResponses["401"],
+        "422": stdResponses["422"],
+      },
+    },
+  },
+  "/api/medications/{id}/side-effects/{logId}": {
+    delete: {
+      tags: ["Medications"],
+      summary: "Remove one side-effect entry",
+      description:
+        "A HARD delete — the row is removed, not tombstoned, and nothing on the sync feed carries the removal. It is allowed at any time rather than inside a retraction window, deliberately: a side-effect entry is not a clinical record, the account owns it, and a stale mis-entry should never be undeletable. What survives is the audit row, which carries the entry, the severity and the date it happened, so the deletion is reconstructable from the trail even though the row is gone. Delegable at MANAGE level over the `medications` section. Cookie or Bearer auth.",
+      requestParams: {
+        path: z.object({ id: z.string(), logId: z.string() }),
+      },
+      responses: {
+        ...recordRefusal(),
+        "200": {
+          description: "The entry was deleted.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ id: z.string(), deleted: z.literal(true) }),
+                "DeleteMedicationSideEffectEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description:
+            "No such entry for this medication and this record. An unknown id, another medication's entry and another record's entry are indistinguishable.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/medications/{id}/intake/{eventId}": {
+    put: {
+      tags: ["Medications"],
+      summary: "Correct one dose",
+      description:
+        "Edits a single intake event. Whenever `takenAt` or `skipped` changes, slot attribution is re-run and `scheduledFor` snaps to the matched window — or to the take's own time when it falls in none. `forceSlotInstant` overrides that with a named real slot of this medication; an explicit `null` UNPINS and re-attributes by band, resetting the binding provenance to automatic. A correction that lands on a DIFFERENT slot is not an in-place edit: the original row is tombstoned and the dose is re-created on the corrected slot, so the row id in the response can differ from the `eventId` in the path, and the tombstone rides the sync feed. A `takenAt` before the medication's start date is refused. Tombstoned events 404 rather than resurrect. Delegable at MANAGE level over the `medications` section. Body capped at 64 KiB. Cookie or Bearer auth.",
+      requestParams: {
+        path: z.object({ id: z.string(), eventId: z.string() }),
+      },
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: updateIntakeEventSchema } },
+      },
+      responses: {
+        ...recordRefusal(),
+        "200": {
+          description:
+            "The corrected event. On a slot move this is the RE-CREATED row, whose id differs from the one in the path.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                medicationIntakeEventResource,
+                "UpdateMedicationIntakeEventEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description:
+            "No live event with that id under this medication and record. An unknown id and an already-tombstoned one are indistinguishable.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "422": {
+          description:
+            "Body validation failed (multi-issue), or one of three coded refusals: `medications.intake.taken_at.before_start` when the edited take predates the medication's start day in the record's timezone, `medications.intake.force_slot.invalid` when the pinned instant is not a real slot, and `medications.intake.force_slot.occupied` when it is a real slot that another live dose already holds.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "401": stdResponses["401"],
+        "429": stdResponses["429"],
+      },
+    },
+    delete: {
+      tags: ["Medications"],
+      summary: "Undo one dose",
+      description:
+        "A SOFT delete: the row stays, `deletedAt` is stamped and the sync counter bumps, so a client that was offline when it happened receives a tombstone keyed on the server id rather than silently keeping the dose forever. Every today, compliance and list read filters tombstones out, so it is invisible from here on. The inventory stamp is REFUNDED — undoing a dose puts the units back in the container — and the day's compliance rollup is recomputed, dropping the row entirely when the day now holds nothing. Undoing the single live dose of a one-shot medication reactivates that medication so the lists and the worker pick it back up. Re-deleting is harmless. Delegable at MANAGE level over the `medications` section. Cookie or Bearer auth.",
+      requestParams: {
+        path: z.object({ id: z.string(), eventId: z.string() }),
+      },
+      responses: {
+        ...recordRefusal(),
+        "200": {
+          description: "The dose was tombstoned and its inventory refunded.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ deleted: z.literal(true) }),
+                "DeleteMedicationIntakeEventEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description:
+            "No event with that id under this medication and record.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/medications/{id}/intake/bulk-delete": {
+    post: {
+      tags: ["Medications"],
+      summary: "Undo several doses at once",
+      description:
+        "Tombstones up to 500 named intake events in one call, so a multi-select in the history preview does not fire N concurrent deletes. Ids are matched against THIS medication and THIS record; anything else is silently dropped rather than refused, so a partial match succeeds with a lower `deleted` count than the number of ids sent, and an id leaked from another medication's history deletes nothing. Every stamped row's inventory consumption is refunded before the sweep, and the compliance rollup is recomputed once per affected day rather than once per event. A POST rather than a DELETE because the ids ride a body. Re-posting already-tombstoned ids counts zero. Rate-limited 30/min keyed on the ACTOR. Delegable at MANAGE level over the `medications` section. Body capped at 256 KiB. Cookie or Bearer auth.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: bulkDeleteIntakeRequest } },
+      },
+      responses: {
+        ...recordRefusal(),
+        "200": {
+          description:
+            "`deleted` is the REAL tombstone count, which can be lower than the ids sent — and is 0 when none matched, which is a success rather than a 404.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ deleted: z.number().int().nonnegative() }),
+                "BulkDeleteMedicationIntakeEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description: "Medication not found (or owned by another account).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "429": {
+          description:
+            "More than 30 bulk deletes in the trailing minute for this ACTOR.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "401": stdResponses["401"],
+        "422": stdResponses["422"],
+      },
+    },
+  },
+  "/api/medications/{id}/intake/purge": {
+    delete: {
+      tags: ["Medications"],
+      summary: "Clear a medication's whole intake history",
+      description:
+        "Tombstones EVERY live intake event for this medication in one call, and deletes its compliance rollup rows outright. The rollups are the only hard deletion and they are recomputable, so nothing that cannot be rebuilt is destroyed: the intake rows stay with `deletedAt` set, which is what lets the sync feed emit a tombstone per row to a client that was offline. That was not always true — this was the one destructive verb in the family with nothing to reconstruct from, and a purge fired by mistake was final and invisible to sync. Deliberately does NOT refund inventory, unlike the single and bulk deletes: those mean `I did not take that dose` and put the units back, while a purge wipes a history as bookkeeping, and refunding every dose ever taken would inflate the current container count instead. A second purge counts zero. There is no confirmation step on the wire. Delegable at MANAGE level over the `medications` section. Cookie or Bearer auth.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      responses: {
+        ...recordRefusal(),
+        "200": {
+          description: "`count` is how many live events were tombstoned.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({
+                  purged: z.literal(true),
+                  count: z.number().int().nonnegative(),
+                }),
+                "PurgeMedicationIntakeEnvelope",
+              ),
+            },
+          },
+        },
+        "404": {
+          description: "Medication not found (or owned by another account).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/medications/{id}/intake/import": {
+    post: {
+      tags: ["Medications"],
+      summary: "Import a dose history for one medication",
+      description:
+        "Accepts 1..1000 `{ datum, uhrzeit }` rows and enqueues a background import, answering 202 with a job id and the URL to poll. The body may be the bare array or an object carrying one — the first array-valued property is taken. Identity comes from the INSTANT, which is also the grain the database enforces, so a re-import of the same file dedups. It did not always: an optional third field decided the replay key while presenting itself as a quantity, and a file that repeated one value down that column collapsed a month of history onto a single key. The field is gone from the contract rather than accepted-and-ignored, and a payload still carrying it imports unchanged. Timestamps are bounded on the FUTURE side only — importing years of history is the point, so the past side is open back to 1900. Only one import may run per medication at a time. Rate-limited 60/min keyed on the ACTOR. Delegable at MANAGE level over the `medications` section: the import is additive with duplicates skipped, every written row tombstones, and the `IMPORT` provenance it stamps stays true under delegation because it describes where the data came from and not who typed it. Body capped at 1 MiB. Cookie or Bearer auth.",
+      requestParams: { path: z.object({ id: z.string() }) },
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: z
+              .array(
+                z.object({
+                  datum: z
+                    .string()
+                    .describe("`YYYY-MM-DD`. Strict; no other form parses."),
+                  uhrzeit: z
+                    .string()
+                    .describe("`HH:MM:SS`. Strict; no other form parses."),
+                }),
+              )
+              .min(1)
+              .max(1000)
+              .meta({
+                id: "MedicationIntakeImportRequest",
+                description:
+                  "The rows to import. May also be sent wrapped in an object, in which case the first array-valued property is used. Unrecognised per-row keys are dropped rather than refused. The pair must be a real calendar instant — 31 February is refused — and must not be in the future.",
+              }),
+          },
+        },
+      },
+      responses: {
+        ...recordRefusal(),
+        "202": {
+          description:
+            "Accepted and enqueued. Nothing is imported yet: poll `statusUrl` for progress and the per-row skip reasons.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({
+                  jobId: z.string(),
+                  status: z.literal("queued"),
+                  statusUrl: z.string(),
+                }),
+                "MedicationIntakeImportAcceptedEnvelope",
+              ),
+            },
+          },
+        },
+        "409": {
+          description:
+            "An import for this medication is already running. Wait for it rather than retrying.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "422": {
+          description:
+            "The payload did not parse. Multi-issue envelope with `meta.errorCode` = `medication.intake.import.invalid_format`.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "429": {
+          description:
+            "More than 60 import submissions in the trailing minute for this ACTOR.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "503": {
+          description:
+            "The background worker is not available, so nothing was enqueued. Retry later.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "404": {
+          description: "Medication not found (or owned by another account).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "401": stdResponses["401"],
       },
     },
   },
