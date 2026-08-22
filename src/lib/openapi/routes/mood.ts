@@ -114,7 +114,15 @@ const listMoodEntriesQuery = listMoodEntriesSchema.meta({
     "Filters + paging for the mood-entry list. `from` / `to` bound the local-day `date` label (YYYY-MM-DD, inclusive). `limit` capped at 500.",
 });
 
-const moodTagLayout = moodTagLayoutSchema.meta({
+/**
+ * Exported for the forced registration in `./index.ts`.
+ *
+ * Both consumers are an `.extend()` of this base, and `.extend()` builds a new
+ * object rather than a reference, so the name never carries forward on its own
+ * even though the annotation is in the assigning form. Same shape as
+ * `CoachPrefs` and `Medication`, and the same remedy.
+ */
+export const moodTagLayout = moodTagLayoutSchema.meta({
   id: "MoodTagLayout",
   description:
     "Per-user mood-tag presentation blob. `groupOrder`: category keys in display order (unknown dropped, missing appended in seeded order). `placements`: categoryKey → ordered tag keys; a placed tag renders in that group at that index, un-placed tags follow in their home category. Display-only — placements referencing hidden/archived/unknown keys are silently dropped at read time. Both fields optional: PUT merges preserve-when-absent.",

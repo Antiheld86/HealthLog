@@ -68573,6 +68573,34 @@ components:
         - showEvidenceByDefault
         - defaultWindow
       additionalProperties: false
+    MoodTagLayout:
+      type: object
+      properties:
+        groupOrder:
+          maxItems: 50
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 80
+        placements:
+          type: object
+          propertyNames:
+            type: string
+            minLength: 1
+            maxLength: 80
+          additionalProperties:
+            type: array
+            items:
+              type: string
+              minLength: 1
+              maxLength: 80
+      additionalProperties: false
+      description: "Per-user mood-tag presentation blob. `groupOrder`: category keys in display order (unknown dropped,
+        missing appended in seeded order). `placements`: categoryKey → ordered tag keys; a placed tag renders in that
+        group at that index, un-placed tags follow in their home category. Display-only — placements referencing
+        hidden/archived/unknown keys are silently dropped at read time. Both fields optional: PUT merges
+        preserve-when-absent."
   parameters:
     AccountSelector:
       name: X-HealthLog-Account

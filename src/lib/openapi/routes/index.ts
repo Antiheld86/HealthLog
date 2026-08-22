@@ -72,7 +72,7 @@ import {
 } from "./medications";
 import { mcpPaths } from "./mcp";
 import { metaPaths } from "./meta";
-import { moodPaths } from "./mood";
+import { moodPaths, moodTagLayout } from "./mood";
 import { notificationTransportPaths } from "./notifications-transport";
 import { notificationChannelPaths } from "./notifications";
 import { nutrientPaths } from "./nutrients";
@@ -183,6 +183,11 @@ export const openApiComponents: NonNullable<ZodOpenApiObject["components"]> = {
   // this forced registration the schema the description points to would be
   // silently absent from the published spec.
   //
+  // `MoodTagLayout` joins them for exactly the same reason: its annotation is
+  // in the assigning form and correct, but both consumers `.extend()` it, so
+  // the base name is never referenced and the description the mood surface
+  // relies on would go unpublished.
+  //
   // `CoachPrefs` is the same shape: the PUT `/api/auth/me/coach-prefs`
   // description tells the reader "Body is validated against `CoachPrefs`",
   // but every actual consumer is a `.extend()` of it (`PutCoachPrefsRequest`,
@@ -193,6 +198,7 @@ export const openApiComponents: NonNullable<ZodOpenApiObject["components"]> = {
     MedicationDoseHistoryImportFatalReason:
       medicationDoseHistoryImportFatalReasonEnum,
     CoachPrefs: coachPrefsSchema,
+    MoodTagLayout: moodTagLayout,
   },
   // v1.36.0 — the per-request account selector, defined in the sharing route
   // module so that `src/__tests__/acting-account-boundary-guard.test.ts` keeps
