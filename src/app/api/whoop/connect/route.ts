@@ -13,6 +13,7 @@ import {
 } from "@/lib/whoop/oauth-state";
 import { validateReturnScheme } from "@/lib/whoop/return-scheme";
 import { NextRequest, NextResponse } from "next/server";
+import { relativeRedirect } from "@/lib/http/relative-redirect";
 import { shouldEmitSecureCookie } from "@/lib/auth/secure-cookie";
 
 /**
@@ -93,8 +94,8 @@ export const GET = apiHandler(async (req: NextRequest) => {
   const creds = await getUserWhoopCredentials(userId);
   if (!creds) {
     annotate({ action: { name: "whoop.connect.no_credentials" } });
-    return NextResponse.redirect(
-      new URL("/settings/integrations?whoop=error&reason=nocreds", req.url),
+    return relativeRedirect(
+      "/settings/integrations?whoop=error&reason=nocreds",
     );
   }
 
@@ -116,8 +117,8 @@ export const GET = apiHandler(async (req: NextRequest) => {
   } catch (err) {
     getEvent()?.setError(err);
     annotate({ action: { name: "whoop.connect.create_failed" } });
-    return NextResponse.redirect(
-      new URL("/settings/integrations?whoop=error&reason=connect", req.url),
+    return relativeRedirect(
+      "/settings/integrations?whoop=error&reason=connect",
     );
   }
 

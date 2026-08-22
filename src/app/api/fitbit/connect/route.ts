@@ -10,6 +10,7 @@ import {
   mintFitbitOAuthStateNonce,
 } from "@/lib/fitbit/oauth-state";
 import { NextRequest, NextResponse } from "next/server";
+import { relativeRedirect } from "@/lib/http/relative-redirect";
 import { shouldEmitSecureCookie } from "@/lib/auth/secure-cookie";
 
 /**
@@ -59,8 +60,8 @@ export const GET = apiHandler(async (req: NextRequest) => {
   const creds = await getUserFitbitCredentials(user.id);
   if (!creds) {
     annotate({ action: { name: "fitbit.connect.no_credentials" } });
-    return NextResponse.redirect(
-      new URL("/settings/integrations?fitbit=error&reason=nocreds", req.url),
+    return relativeRedirect(
+      "/settings/integrations?fitbit=error&reason=nocreds",
     );
   }
 
@@ -78,8 +79,8 @@ export const GET = apiHandler(async (req: NextRequest) => {
   } catch (err) {
     getEvent()?.setError(err);
     annotate({ action: { name: "fitbit.connect.create_failed" } });
-    return NextResponse.redirect(
-      new URL("/settings/integrations?fitbit=error&reason=connect", req.url),
+    return relativeRedirect(
+      "/settings/integrations?fitbit=error&reason=connect",
     );
   }
 

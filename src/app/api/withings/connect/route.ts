@@ -10,6 +10,7 @@ import {
   mintWithingsOAuthStateNonce,
 } from "@/lib/withings/oauth-state";
 import { NextRequest, NextResponse } from "next/server";
+import { relativeRedirect } from "@/lib/http/relative-redirect";
 import { shouldEmitSecureCookie } from "@/lib/auth/secure-cookie";
 
 /**
@@ -64,8 +65,8 @@ export const GET = apiHandler(async (req: NextRequest) => {
   const creds = await getUserWithingsCredentials(user.id);
   if (!creds) {
     annotate({ action: { name: "withings.connect.no_credentials" } });
-    return NextResponse.redirect(
-      new URL("/settings/integrations?withings=error&reason=nocreds", req.url),
+    return relativeRedirect(
+      "/settings/integrations?withings=error&reason=nocreds",
     );
   }
 
@@ -81,8 +82,8 @@ export const GET = apiHandler(async (req: NextRequest) => {
   } catch (err) {
     getEvent()?.setError(err);
     annotate({ action: { name: "withings.connect.create_failed" } });
-    return NextResponse.redirect(
-      new URL("/settings/integrations?withings=error&reason=connect", req.url),
+    return relativeRedirect(
+      "/settings/integrations?withings=error&reason=connect",
     );
   }
 

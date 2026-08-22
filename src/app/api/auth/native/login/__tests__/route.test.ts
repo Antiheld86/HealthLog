@@ -49,7 +49,11 @@ describe("GET /api/auth/native/login", () => {
   it("valid challenge → 302 to the web login page with flow=native + state cookie", async () => {
     const res = await GET(req());
     const location = res.headers.get("location")!;
-    expect(location).toContain("/auth/login?flow=native");
+    // Exact, not `toContain`. The looser form was what let iOS #96 ship: it is
+    // satisfied by "http://0.0.0.0:3000/auth/login?flow=native" just as
+    // happily, so it asserted the path was in there rather than that a host
+    // was not.
+    expect(location).toBe("/auth/login?flow=native");
     // No custom scheme on the success path.
     expect(location.startsWith("healthlog://")).toBe(false);
 
@@ -79,6 +83,35 @@ describe("GET /api/auth/native/login", () => {
     expect(res.headers.get("location")).toBe(
       "healthlog://login-callback?error=invalid_request",
     );
+  });
+
+  it("behind a proxy that drops Host, the redirect still points at the caller's origin", async () => {
+    // What a proxy hop looks like from inside the handler: the request the
+    // route sees names the address the Node process bound to, because the
+    // public Host header never made it through. Building the redirect out of
+    // that URL is how iOS #96 happened, and `ASWebAuthenticationSession`
+    // refuses the resulting address outright.
+    //
+    // Every other test in this file builds `http://localhost/...`, where the
+    // host is harmless and the absolute URL looked correct. That is why the
+    // route shipped broken.
+    const res = await GET(
+      new NextRequest(
+        `http://0.0.0.0:3000/api/auth/native/login?code_challenge=${VALID_CHALLENGE}`,
+      ),
+    );
+
+    const location = res.headers.get("location")!;
+    expect(location).toBe("/auth/login?flow=native");
+    expect(
+      location,
+      "a relative Location resolves against the address the client actually called",
+    ).not.toMatch(/^https?:\/\//);
+    expect(location).not.toContain("0.0.0.0");
+
+    // The state cookie still rides the refusal-free path, since the whole
+    // point is that the success branch keeps working behind a proxy.
+    expect(res.cookies.get(NATIVE_HANDOFF_STATE_COOKIE)?.value).toBeTruthy();
   });
 
   it("rate-limited → scheme error, no state cookie, no DB write", async () => {
