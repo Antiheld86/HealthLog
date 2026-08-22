@@ -27,6 +27,7 @@ import {
   ACCEPTED_INSIGHTS_TILE_IDS,
   INSIGHTS_SECTION_IDS,
 } from "@/lib/insights-layout";
+import { COACH_CONVERSATION_TITLE_MAX } from "@/lib/ai/coach/types";
 import { COACH_FACT_CATEGORIES } from "@/lib/ai/coach/facts";
 import { COACH_PLAN_STATUSES } from "@/lib/ai/coach/plans";
 import {
@@ -691,6 +692,22 @@ const coachConversationDetailSchema = z
       "Full conversation with every message decrypted server-side. The client renders the bodies directly; no decryption key is involved.",
   });
 
+const renameCoachConversationRequest = z
+  .object({
+    title: z
+      .string()
+      .min(1)
+      .max(COACH_CONVERSATION_TITLE_MAX)
+      .describe(
+        "The new title. Trimmed before validation, so whitespace alone is refused as empty. 1..80 characters.",
+      ),
+  })
+  .meta({
+    id: "RenameCoachConversationRequest",
+    description:
+      "Rename body. Strict — an unrecognised key is refused rather than dropped, which is not how most partial updates on this surface behave.",
+  });
+
 const coachConversationDeletedResponse = z.object({
   deleted: z
     .literal(true)
@@ -849,6 +866,52 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
+      },
+    },
+    patch: {
+      tags: ["Insights"],
+      summary: "Rename one Coach conversation",
+      description:
+        "Sets the conversation's title. The only field this verb writes — the body is `.strict()`, so an unrecognised key is REFUSED rather than ignored, unlike most partial updates on this surface. The title is trimmed and must be 1..80 characters after trimming. A foreign or unknown id maps to 404 (never 403), so the existence channel does not leak across accounts. Coach-gated. Auth via cookie or Bearer; the caller is always resolved as themselves, so a conversation in a shared record is not reachable here.",
+      parameters: [
+        {
+          name: "id",
+          in: "path",
+          required: true,
+          schema: { type: "string" },
+          description: "Conversation id.",
+        },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: renameCoachConversationRequest },
+        },
+      },
+      responses: {
+        "200": {
+          description:
+            "The new id and title. Deliberately NOT the full conversation — nothing else changed, and re-sending the messages on a rename would be a large body for no new information.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                z.object({ id: z.string(), title: z.string() }),
+                "CoachConversationRenamed",
+              ),
+            },
+          },
+        },
+        "404": {
+          description: "Conversation not found or not owned by the caller.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "422": {
+          description:
+            "The body failed validation — an empty or over-long title, or an unrecognised key. Multi-issue envelope with `meta.errorCode` = `coach.conversation.invalidTitle`.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "401": stdResponses["401"],
+        "429": stdResponses["429"],
       },
     },
     delete: {

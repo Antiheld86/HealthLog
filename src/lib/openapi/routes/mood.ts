@@ -54,6 +54,7 @@ import {
   idempotencyKeyParameter,
   idempotentWrite,
   invalidBaseTokenResponse,
+  moduleDisabledResponse,
   recordRefusal,
   stdResponses,
   updatedAtTokenField,
@@ -736,7 +737,530 @@ const moodPrognosisResponse = z
       "Two separate readings of one day: what the person recorded, and what a comparison with their own past days would have expected. They are never merged — the distance between them is the finding, and a single blended figure destroys it. The comparison is a regularised regression over the account's own history: observational only, never causal. Any copy built on it must state the value as a counterfactual (a value around X would have been expected), must carry `n`, and must not say that anything caused anything.",
   });
 
+// ── Mood insights aggregates (v1.8.5) ────────────────────────────────
+//
+// `GET /api/mood/insights` is the pre-computed aggregate bundle behind the
+// Mood Insights page. The browser never receives raw mood rows from it — the
+// compute runs server-side and only pre-shaped blocks leave. Every block is
+// observational: with-versus-without comparisons and correlations, never a
+// cause and never a verdict.
+
+const moodInfluenceConfidence = z
+  .enum(["low", "medium", "high"])
+  .meta({ id: "MoodInfluenceConfidence" });
+
+const moodPairingMode = z
+  .enum(["sameDay", "nextDay"])
+  .describe(
+    "Pairing lag the row was computed at. `nextDay` is the D → D+1 join used for overnight-recovery channels; caption it, because a next-day row says something different from a same-day one.",
+  );
+
+const moodDailyCell = z.object({
+  date: z.string().describe("`YYYY-MM-DD` day key."),
+  score: z.number().describe("Daily mean pleasantness for the day."),
+  samples: z.number().int().describe("Entries that fed the mean."),
+});
+
+const moodDimensionSummary = z
+  .object({
+    key: z
+      .enum(["a1", "a2", "a3", "a4", "a5"])
+      .describe("Level-A dimension key."),
+    present: z
+      .boolean()
+      .describe(
+        "False when nobody answered this dimension in the window. The series is then empty and the surface says so rather than drawing a line through the middle of the scale.",
+      ),
+    inverse: z
+      .boolean()
+      .describe(
+        "True when higher is worse for this dimension. The analytics layer flips through this flag rather than inline, so a client must read it before comparing dimensions.",
+      ),
+    min: z.number().describe("Scale floor for the dimension."),
+    max: z.number().describe("Scale ceiling for the dimension."),
+    count: z.number().int().describe("Entries carrying a value."),
+    avg7: z.number().nullable(),
+    avg30: z.number().nullable(),
+    avg90: z
+      .number()
+      .nullable()
+      .describe("Trailing-window means; null when that window is empty."),
+    latest: z.number().nullable(),
+    latestDate: z.string().nullable().describe("`YYYY-MM-DD` of `latest`."),
+    newestDaysAgo: z.number().int().nullable(),
+    series: z
+      .array(
+        z.object({
+          date: z.string(),
+          value: z.number(),
+          samples: z.number().int(),
+        }),
+      )
+      .describe("Daily means, oldest first, over the longest window."),
+  })
+  .meta({ id: "MoodDimensionSummary" });
+
+const moodTagInfluenceRow = z
+  .object({
+    tag: z
+      .string()
+      .describe("Stable tag key. For a flat tag this is the free text itself."),
+    labelKey: z
+      .string()
+      .nullable()
+      .describe("i18n label key for a structured tag; null for a flat one."),
+    label: z
+      .string()
+      .nullable()
+      .optional()
+      .describe(
+        "Decrypted custom-tag label. Absent for catalogue and flat tags — the key is absent, not null.",
+      ),
+    categoryKey: z.string().nullable(),
+    icon: z.string().nullable(),
+    withDays: z.number().int(),
+    withoutDays: z.number().int(),
+    withAvg: z.number().describe("Mean of daily means on tagged days."),
+    withoutAvg: z
+      .number()
+      .describe("Mean of daily means on the other days (the counterfactual)."),
+    delta: z
+      .number()
+      .describe("`withAvg − withoutAvg`, rounded. Signed, never causal."),
+    pooledSd: z
+      .number()
+      .nullable()
+      .describe(
+        "Pooled mood SD across the two groups (the Cohen's-d denominator); null when neither group has testable spread. Ranking input only — not rendered.",
+      ),
+    pValue: z.number().describe("Welch two-sided p-value."),
+    confidence: moodInfluenceConfidence,
+  })
+  .meta({ id: "MoodTagInfluenceRow" });
+
+const moodAggregatesResponse = z
+  .object({
+    summary: z
+      .object({
+        points: z.number().int().describe("Daily points behind the figures."),
+        mean: z.number().nullable(),
+        min: z.number().nullable(),
+        max: z.number().nullable(),
+        latest: z.number().nullable(),
+        delta: z
+          .number()
+          .nullable()
+          .describe("Latest daily mean minus the previous daily mean."),
+        inTargetPct: z.number().nullable(),
+        totalEntries: z.number().int(),
+        totalSpanDays: z.number().int(),
+        newestEntryDaysAgo: z.number().int().nullable(),
+      })
+      .describe(
+        "Headline figures. Every statistic is null on an empty window.",
+      ),
+    heatmap: z.object({
+      windowDays: z
+        .union([z.literal(30), z.literal(90), z.literal(365)])
+        .describe("Adaptive window the cells were cut to."),
+      cells: z.array(moodDailyCell),
+    }),
+    distribution: z
+      .array(
+        z.object({
+          score: z.number().describe("Rounded mood level, 1..5."),
+          count: z.number().int(),
+        }),
+      )
+      .describe("Entry counts per rounded level."),
+    dimensions: z
+      .array(moodDimensionSummary)
+      .describe(
+        "One summary per level-A dimension. A dimension nobody answered is still listed, with `present: false`.",
+      ),
+    weekday: z
+      .array(
+        z.object({
+          weekday: z.number().int().describe("0 = Monday … 6 = Sunday."),
+          avgScore: z.number().nullable(),
+          count: z.number().int(),
+        }),
+      )
+      .describe("Per-weekday means; an unlogged weekday carries a null mean."),
+    timeOfDay: z
+      .object({
+        buckets: z.array(
+          z.object({
+            bucket: z.enum(["morning", "afternoon", "evening", "night"]),
+            avgScore: z.number().nullable(),
+            count: z.number().int(),
+          }),
+        ),
+        reliable: z
+          .boolean()
+          .describe(
+            "False for the once-a-day logger (everything in one bucket) or a sparse history. Do not chart or narrate the pattern when this is false.",
+          ),
+        best: z
+          .enum(["morning", "afternoon", "evening", "night"])
+          .nullable()
+          .describe("Null unless `reliable`."),
+        worst: z
+          .enum(["morning", "afternoon", "evening", "night"])
+          .nullable()
+          .describe("Null unless `reliable`."),
+      })
+      .describe(
+        "Average pleasantness per part of day, bucketed in each entry's OWN timezone. All four buckets are always listed, in canonical order.",
+      ),
+    stability: z
+      .object({
+        score: z.number().describe("0..100; higher means steadier day-to-day."),
+        stdDev: z.number().describe("Population SD of the daily means."),
+        band: z.enum(["verySteady", "steady", "variable", "veryVariable"]),
+        days: z.number().int(),
+      })
+      .nullable()
+      .describe("Null for a sparse logger below the day floor."),
+    tags: z
+      .array(
+        z.object({
+          tag: z.string(),
+          count: z.number().int(),
+          avgScore: z.number(),
+        }),
+      )
+      .describe("Flat free-text tag counts with their mean mood."),
+    contextComparison: z
+      .array(
+        z.object({
+          field: z.string().describe("Context field, e.g. `workStatus`."),
+          value: z.string().describe("The value inside that field."),
+          withDays: z.number().int(),
+          withoutDays: z.number().int(),
+          withAvg: z.number(),
+          withoutAvg: z.number(),
+          delta: z
+            .number()
+            .describe("`withAvg − withoutAvg`. Signed, and never an effect."),
+          pValue: z.number(),
+          qValue: z.number().describe("Benjamini-Hochberg adjusted p-value."),
+        }),
+      )
+      .describe(
+        "How the day's pleasantness sat on days carrying each context value against the days that did not. Every row carries the two counts it was computed from so a reader can weigh it.",
+      ),
+    structuredTags: z
+      .array(
+        z.object({
+          key: z.string(),
+          categoryKey: z.string(),
+          labelKey: z.string(),
+          label: z
+            .string()
+            .nullable()
+            .optional()
+            .describe("Decrypted custom-tag label; absent for catalogue tags."),
+          icon: z.string().nullable(),
+          count: z.number().int(),
+          avgScore: z.number(),
+        }),
+      )
+      .describe("Taxonomy-tag counts with their mean mood."),
+    tagInfluence: z
+      .object({
+        flat: z.array(moodTagInfluenceRow),
+        structured: z.array(moodTagInfluenceRow),
+      })
+      .describe(
+        "With-versus-without daily-mean delta plus a Welch confidence band per frequent tag, ranked by |delta| descending.",
+      ),
+    betterDays: z
+      .array(
+        z.object({
+          source: z.enum(["tag", "metric"]),
+          key: z
+            .string()
+            .describe("Tag key, or the correlation channel key for a metric."),
+          labelKey: z.string().nullable(),
+          label: z.string().nullable().optional(),
+          categoryKey: z.string().nullable(),
+          icon: z.string().nullable(),
+          direction: z
+            .enum(["up", "down"])
+            .describe("Associated with higher / lower mood."),
+          n: z.number().int(),
+          confidence: moodInfluenceConfidence,
+          effectSize: z
+            .number()
+            .describe(
+              "Unified 0..1 ranking strength (|r| for a metric, min(1, |delta| / 2) for a tag). Ranking only — surface `delta` or `r`, not this.",
+            ),
+          delta: z
+            .number()
+            .nullable()
+            .describe(
+              "Raw mood-point delta for a tag row; null for a metric row.",
+            ),
+          r: z
+            .number()
+            .nullable()
+            .describe("Raw Pearson r for a metric row; null for a tag row."),
+        }),
+      )
+      .describe(
+        "The effect-size-ranked, confidence-gated board folding the tag deltas and the mood x metric correlations into one observational list.",
+      ),
+    tagMetricCrosstab: z
+      .array(
+        z.object({
+          tag: z.string(),
+          labelKey: z
+            .string()
+            .describe(
+              "Structured tags only — this board never carries a flat tag.",
+            ),
+          label: z.string().nullable().optional(),
+          categoryKey: z.string(),
+          icon: z.string().nullable(),
+          metricKey: z
+            .string()
+            .describe(
+              "Metric channel. Currently `activeEnergy`, `sleepDuration`, `nextDayRecovery`, `nextDayRestingHeartRate` or `nextDayHeartRateVariability`; the registry is a plain map, so treat this as an open token set rather than a closed enum.",
+            ),
+          display: z
+            .string()
+            .describe(
+              "Display-unit hint for the client formatter (`hours` / `kcal` / `score` / `bpm` / `ms`). The values are ALREADY in that unit.",
+            ),
+          mode: moodPairingMode,
+          withDays: z.number().int(),
+          withoutDays: z.number().int(),
+          withAvg: z.number(),
+          withoutAvg: z.number(),
+          delta: z.number().describe("`withAvg − withoutAvg`, display unit."),
+          pValue: z.number(),
+          qValue: z.number(),
+          confidence: moodInfluenceConfidence,
+          patternId: z
+            .string()
+            .optional()
+            .describe(
+              "Persisted pattern id; absent when the row is not persisted.",
+            ),
+          canonicalKey: z.string().optional(),
+          dismissed: z
+            .boolean()
+            .optional()
+            .describe("Whether the user dismissed the persisted pattern."),
+        }),
+      )
+      .describe(
+        "Per structured tag x health metric: the metric's mean on tag-present versus tag-absent days, Welch-tested and BH-corrected. Association, never cause.",
+      ),
+    factorCrosstab: z
+      .array(
+        z.object({
+          factor: z.string().describe("Stable RATED-factor key."),
+          labelKey: z.string(),
+          categoryKey: z.string(),
+          icon: z.string().nullable(),
+          inverse: z
+            .boolean()
+            .describe(
+              "True for an inverse-scaled factor (stress, conflict). The split already runs on the flipped series, so a `low` row always means a worse day; the flag only changes the phrasing.",
+            ),
+          metricKey: z
+            .string()
+            .describe(
+              "Metric channel. Currently `sleepDuration`, `steps`, `restingHeartRate`, `heartRateVariability`, `weight` or `bloodPressureSystolic`; an open token set, as above.",
+            ),
+          display: z
+            .string()
+            .describe(
+              "Display-unit hint (`hours` / `score` / `steps` / `bpm` / `ms` / `kg` / `mmHg`).",
+            ),
+          mode: moodPairingMode,
+          lowDays: z.number().int(),
+          highDays: z.number().int(),
+          lowAvg: z.number(),
+          highAvg: z.number(),
+          delta: z
+            .number()
+            .describe(
+              "`lowAvg − highAvg`, display unit. Negative means the vital runs lower on low-factor days.",
+            ),
+          pValue: z.number(),
+          qValue: z.number(),
+          confidence: moodInfluenceConfidence,
+          patternId: z.string().optional(),
+          canonicalKey: z.string().optional(),
+          dismissed: z.boolean().optional(),
+        }),
+      )
+      .describe(
+        "The cross-domain bridge: per rated factor x health metric, the vital's mean on the days the factor was rated LOW versus HIGH (median split), Welch-tested and BH-corrected. Association, never cause.",
+      ),
+    narratives: z
+      .array(
+        z.object({
+          kind: z.enum([
+            "weekday-dip",
+            "weekday-peak",
+            "trend",
+            "weekend",
+            "tag-lift",
+            "tag-drop",
+            "in-target",
+            "streak",
+            "time-of-day",
+          ]),
+          messageKey: z
+            .string()
+            .describe("i18n template key the client resolves."),
+          vars: z
+            .record(z.string(), z.string())
+            .describe(
+              "Interpolation values, all stringified so they survive transport unchanged.",
+            ),
+          strength: z
+            .number()
+            .describe("Normalised ranking weight; higher is stronger."),
+        }),
+      )
+      .describe(
+        "Ranked, threshold-gated takeaways — the read-this-first layer above the charts. The same array feeds the LLM snapshot so prose and feed cannot drift.",
+      ),
+    correlations: z
+      .record(
+        z.string(),
+        z.object({
+          result: z
+            .object({
+              r: z.number(),
+              strength: z
+                .enum(["stark", "moderat", "schwach", "keine"])
+                .describe(
+                  "Strength bucket. The tokens are GERMAN on the wire — a legacy of where the helper was written; treat them as opaque identifiers and localise client-side rather than displaying them.",
+                ),
+              n: z.number().int(),
+            })
+            .nullable()
+            .describe("Null when the pairing produced no testable series."),
+          points: z
+            .array(z.object({ x: z.number(), y: z.number() }))
+            .describe("Mood (x) versus metric (y), paired by day."),
+          n: z.number().int().describe("Paired-day count."),
+        }),
+      )
+      .describe(
+        "Mood against five health channels, keyed `sleep`, `steps`, `pulse`, `weight`, `bloodPressureSystolic`. Every key is always present; an empty channel carries `result: null` with no points.",
+      ),
+  })
+  .meta({
+    id: "MoodAggregates",
+    description:
+      "The pre-computed Mood Insights bundle: headline summary, heatmap, distribution, per-dimension summaries, weekday and time-of-day patterns, stability, tag boards, context and crosstab comparisons, narratives and cross-metric correlations. Everything is observational — comparisons and correlations, never a cause and never a verdict. Served through a 60 s stale-while-revalidate cache; a mood write marks the cell so the account's own entry lands on the next read.",
+  });
+
+const moodDailySeriesResponse = z
+  .object({
+    entries: z
+      .array(
+        z.object({
+          date: z.string().describe("`YYYY-MM-DD` day key."),
+          score: z
+            .number()
+            .describe("The day's mean pleasantness on the 1..5 scale."),
+          samples: z.number().int().describe("Entries behind the mean."),
+        }),
+      )
+      .describe("One entry per day that carries a mood, oldest first."),
+    summary: z
+      .object({
+        count: z.number().int(),
+        latest: z.number().nullable(),
+        min: z.number().nullable(),
+        max: z.number().nullable(),
+        mean: z.number().nullable(),
+        median: z.number().nullable(),
+        avg7: z.number().nullable(),
+        avg30: z.number().nullable(),
+        slope7: z
+          .object({
+            slope: z.number(),
+            direction: z.enum(["up", "down", "stable"]),
+            confidence: z.number(),
+          })
+          .nullable(),
+        slope30: z
+          .object({
+            slope: z.number(),
+            direction: z.enum(["up", "down", "stable"]),
+            confidence: z.number(),
+          })
+          .nullable(),
+        anomalyCount: z.number().int().optional(),
+        avg30LastMonth: z.number().nullable().optional(),
+        avg30LastYear: z.number().nullable().optional(),
+      })
+      .describe(
+        "The shared summary shape computed over the DAILY MEANS, not over the raw entries — so `count` is the number of days with a mood, not the number of moods logged. Every statistic is null on an empty series rather than 0.",
+      ),
+  })
+  .meta({
+    id: "MoodDailySeries",
+    description:
+      "The canonical daily mood series. `entryCount` and the rollup-versus-live `source` the builder also resolves are annotated for observability and deliberately NOT on this wire — the two keys below are the whole payload.",
+  });
+
 export const moodPaths: NonNullable<ZodOpenApiObject["paths"]> = {
+  "/api/mood/analytics": {
+    get: {
+      tags: ["Mood"],
+      summary: "The canonical daily mood series",
+      description:
+        "One series, read by the mood page sparkline, the dashboard tile and the native client alike, so all three render the same number — the dashboard snapshot resolves it through the same builder rather than aggregating again. Answered from the mood rollup tier with a live fallback on a coverage miss; which tier answered is annotated for operators and is not on the wire. Plain read-through cache (NOT stale-while-revalidate, unlike the insights sibling). Module-gated on `mood`; a disabled module answers 403 `module.disabled` even for a valid Bearer token. Cookie or Bearer auth; the caller is always resolved as themselves, so this read cannot be delegated to a shared record.",
+      responses: {
+        "200": {
+          description: "The daily series and its summary.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                moodDailySeriesResponse,
+                "MoodDailySeriesEnvelope",
+              ),
+            },
+          },
+        },
+        ...moduleDisabledResponse,
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/mood/insights": {
+    get: {
+      tags: ["Mood"],
+      summary: "Pre-computed mood aggregates (v1.8.5)",
+      description:
+        "The whole Mood Insights page in one read. The compute runs server-side and only pre-shaped blocks leave — no raw mood row is on this wire, and no LLM is reachable from this path. Stale-while-revalidate: past the fresh window the prior aggregate is served immediately while one background recompute warms a new one, so an active logger never re-pays the cold compute. Module-gated on `mood`; a disabled module answers 403 `module.disabled` even for a valid Bearer token. Cookie or Bearer auth; the caller is always resolved as themselves, so this read cannot be delegated to a shared record — which makes it the one mood surface a delegate cannot reach.",
+      responses: {
+        "200": {
+          description: "The aggregate bundle.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                moodAggregatesResponse,
+                "MoodAggregatesEnvelope",
+              ),
+            },
+          },
+        },
+        ...moduleDisabledResponse,
+        ...stdResponses,
+      },
+    },
+  },
   "/api/mood/prognosis": {
     get: {
       tags: ["Mood"],

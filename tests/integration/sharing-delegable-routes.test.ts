@@ -1560,6 +1560,112 @@ describe("GET /api/medications/intake", () => {
   });
 });
 
+/**
+ * The GLP-1 read, against the section that opens it.
+ *
+ * Its own block because the asymmetry it closes was invisible to every other
+ * leg in this file: the POST on this path has resolved the record since
+ * v1.37.0 and the GET beside it resolved the CALLER, so a manager could add a
+ * titration step to a medication whose history the same request path refused
+ * them. May write, may not read — a shape no reading of the sharing model
+ * produces, and one nothing here would have caught, because a route that
+ * refuses every switched caller looks exactly like a route nobody classified.
+ *
+ * Both legs are evidence rather than verdict. The positive one asserts the
+ * OWNER's dose value comes back and the delegate's own does not, so a handler
+ * that returned everybody's rows fails it; the negative one asserts the
+ * refusal code and not merely a 403, so the pre-fix `sharing.not_permitted`
+ * (which is also a 403) fails it too.
+ */
+describe("GET /api/medications/[id]/glp1 — the read follows the section", () => {
+  /** A live accepted grant scoped to the named sections, minted the shipped way. */
+  async function switchIntoScoped(
+    ownerId: string,
+    delegateId: string,
+    scope: ("medications" | "labs")[],
+  ) {
+    const { inviteGrant, acceptGrant } = await import("@/lib/sharing/grants");
+    const invited = await inviteGrant({
+      grantorId: ownerId,
+      granteeId: delegateId,
+      access: "READ",
+      scope,
+    });
+    await acceptGrant({ grantId: invited.id, granteeId: delegateId });
+    const session = await signIn(delegateId);
+    await switchSessionTo(session.id, ownerId);
+  }
+
+  async function seedTitration(userId: string, doseValue: number) {
+    const medication = await getPrismaClient().medication.create({
+      data: { userId, name: `glp1-${doseValue}`, dose: `${doseValue}mg` },
+    });
+    await getPrismaClient().medicationDoseChange.create({
+      data: {
+        medicationId: medication.id,
+        effectiveFrom: new Date("2026-07-14T00:00:00Z"),
+        doseValue,
+        doseUnit: "mg",
+      },
+    });
+    return medication;
+  }
+
+  async function readGlp1(medicationId: string) {
+    const { GET } = await import("@/app/api/medications/[id]/glp1/route");
+    return call(GET as Handler, `/api/medications/${medicationId}/glp1`, {
+      id: medicationId,
+    });
+  }
+
+  it("serves the owner's titration history to a delegate scoped to medications", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    const ownerMed = await seedTitration(owner.id, 1.5);
+    const delegateMed = await seedTitration(delegate.id, 7.5);
+
+    await switchIntoScoped(owner.id, delegate.id, ["medications"]);
+
+    const response = await readGlp1(ownerMed.id);
+    expect(response.status).toBe(200);
+    const payload = (await body(response)).data as {
+      doseChanges: { doseValue: number }[];
+    };
+    expect(payload.doseChanges.map((c) => c.doseValue)).toEqual([1.5]);
+
+    // The delegate's own medication is seeded and must stay out of reach:
+    // the ownership guard resolves against the RECORD, not the caller, so
+    // their own row is the one that 404s while they are switched in.
+    expect((await readGlp1(delegateMed.id)).status).toBe(404);
+  });
+
+  it("refuses the same delegate when the grant does not name medications", async () => {
+    const owner = await makeUser("owner");
+    const delegate = await makeUser("delegate");
+    const ownerMed = await seedTitration(owner.id, 1.5);
+
+    await switchIntoScoped(owner.id, delegate.id, ["labs"]);
+
+    // The code, not the status: before the read resolved the record it also
+    // answered 403 here, with `sharing.not_permitted`, and a status-only
+    // assertion would have passed against the defect.
+    await expectDenied(await readGlp1(ownerMed.id));
+  });
+
+  it("is unchanged for a caller who has not switched", async () => {
+    const plain = await makeUser("plain");
+    const med = await seedTitration(plain.id, 2.5);
+    await signIn(plain.id);
+
+    const response = await readGlp1(med.id);
+    expect(response.status).toBe(200);
+    const payload = (await body(response)).data as {
+      doseChanges: { doseValue: number }[];
+    };
+    expect(payload.doseChanges.map((c) => c.doseValue)).toEqual([2.5]);
+  });
+});
+
 describe("the per-medication reads", () => {
   it("resolve the ownership guard against the record", async () => {
     const owner = await makeUser("owner");
@@ -1584,6 +1690,7 @@ describe("the per-medication reads", () => {
     const phaseConfig =
       await import("@/app/api/medications/[id]/phase-config/route");
     const intake = await import("@/app/api/medications/[id]/intake/route");
+    const glp1 = await import("@/app/api/medications/[id]/glp1/route");
 
     const { grant } = await switchInto(owner.id, delegate.id);
 
@@ -1603,6 +1710,7 @@ describe("the per-medication reads", () => {
       inventory.GET,
       phaseConfig.GET,
       intake.GET,
+      glp1.GET,
     ]) {
       const response = await call(
         route as Handler,
@@ -1622,6 +1730,7 @@ describe("the per-medication reads", () => {
       inventory.GET,
       phaseConfig.GET,
       intake.GET,
+      glp1.GET,
     ]) {
       const response = await call(
         route as Handler,
@@ -1632,7 +1741,7 @@ describe("the per-medication reads", () => {
     }
 
     await revokeGrant(grant.id);
-    for (const route of [detail.GET, cadence.GET, intake.GET]) {
+    for (const route of [detail.GET, cadence.GET, intake.GET, glp1.GET]) {
       await expectDenied(
         await call(route as Handler, `/api/medications/${ownerMed.id}/sub`, {
           id: ownerMed.id,

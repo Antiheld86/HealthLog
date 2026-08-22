@@ -1214,7 +1214,7 @@ const DELEGABLE_ROUTES: Record<string, DelegableEntry> = {
   },
   "app/api/medications/[id]/glp1/route.ts": {
     domain: "medications",
-    why: "Recording a titration step. Reached only through this module's MANAGE arm; the argument for admitting it is the manage literal's reason line, and the entry here is what leg (a) freezes and leg (f) checks the section against.",
+    why: "Reading the titration history, the recent injections and the supply math, and recording a titration step. The READ arm joined the MANAGE one when the route was published: the write had resolved the record since v1.37.0 while the read still resolved the caller, so a manager could add a dose the history refused them — may write, may not read, which the model does not produce. The read is at the level `/inventory`, `/side-effects` and `/cadence` use for the same medication's data and is strictly narrower than the write already admitted; the argument for the write is the manage literal's reason line.",
   },
   "app/api/medications/[id]/intake/[eventId]/route.ts": {
     domain: "medications",

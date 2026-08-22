@@ -15,7 +15,7 @@
  */
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
+import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { auditLog } from "@/lib/auth/audit";
 import { annotate } from "@/lib/logging/context";
 import {
@@ -53,7 +53,16 @@ const POST_WINDOW_MS = 60_000;
 
 export const GET = apiHandler(
   async (_request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireAuth();
+    // The read resolves the RECORD, at the level its siblings use. It did not
+    // until the route was published, and the asymmetry that produced is the
+    // reason it is written down here: the POST below has resolved the record
+    // since v1.37.0, so a manager could add a titration step to a medication
+    // whose history the GET refused them — may write, may not read, which is
+    // not a shape any reading of the sharing model produces. `read` rather
+    // than the POST's `manage` because that is what `/inventory`,
+    // `/side-effects` and `/cadence` ask for the same medication's data, and
+    // this read is strictly narrower than the write already permitted.
+    const { user } = await requireRecordAuth("read", "medications");
     const { id } = await params;
 
     // v1.5.5 F-1 C-4 — close the §10 invariant 24 gap. The destructive

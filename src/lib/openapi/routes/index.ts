@@ -162,6 +162,8 @@ export const openApiPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   ...awardsPaths,
   ...environmentPaths,
   ...ingestPaths,
+  // The environmental-context overview. Its own module because nothing else
+  // owns the surface (appended, spread order is load-bearing).
 };
 
 export const openApiComponents: NonNullable<ZodOpenApiObject["components"]> = {
