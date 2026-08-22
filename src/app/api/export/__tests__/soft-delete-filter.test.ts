@@ -60,6 +60,9 @@ vi.mock("@/lib/db", () => ({
     familyHistoryEntry: { findMany: vi.fn() },
     workout: { findMany: vi.fn() },
     inboundDocument: { findMany: vi.fn() },
+    // What a document was filed against, and what was read out of it.
+    documentConditionLink: { findMany: vi.fn() },
+    extractedFact: { findMany: vi.fn() },
   },
 }));
 
@@ -167,6 +170,10 @@ beforeEach(() => {
   vi.mocked(prisma.familyHistoryEntry.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.workout.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.inboundDocument.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.documentConditionLink.findMany).mockResolvedValue(
+    [] as never,
+  );
+  vi.mocked(prisma.extractedFact.findMany).mockResolvedValue([] as never);
 });
 
 describe("v1.4.41 W-DELETED-2 — soft-delete invisibility", () => {

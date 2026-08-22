@@ -73,6 +73,12 @@ import {
   type CoachMemoryBackupSection,
 } from "@/lib/export/coach-backup";
 import {
+  buildDocumentFilingBackupSection,
+  countDocumentFilingBackupSection,
+  type DocumentFilingBackupCounts,
+  type DocumentFilingBackupSection,
+} from "@/lib/export/document-filing-backup";
+import {
   buildIntradayProfileBackupSection,
   countIntradayProfileBackupSection,
   type IntradayProfileBackupCounts,
@@ -90,7 +96,8 @@ export interface FullBackupCounts
     RemindersBackupCounts,
     CoachBackupCounts,
     CoachMemoryBackupCounts,
-    SensitiveBackupCounts {
+    SensitiveBackupCounts,
+    DocumentFilingBackupCounts {
   measurements: number;
   medications: number;
   intakeEvents: number;
@@ -317,6 +324,7 @@ export async function buildFullBackupPayload(
     coach,
     coachMemory,
     sensitive,
+    documentFiling,
     nutrientDays,
   ] = await Promise.all([
     disasterRecovery
@@ -506,6 +514,15 @@ export async function buildFullBackupPayload(
     buildSensitiveBackupSection(prisma, userId, {
       purpose: disasterRecovery ? "disaster-recovery" : "portable-export",
     }),
+    // Which conditions a document was filed against, and what the extraction
+    // pass read out of it. Both ends live in
+    // `src/lib/export/document-filing-backup.ts` beside each other, the same
+    // arrangement as the sections above and for the same reason. The documents
+    // themselves ride in `records-backup.ts`; these two say what was done with
+    // them, which a restored vault otherwise loses in silence.
+    buildDocumentFilingBackupSection(prisma, userId, {
+      purpose: disasterRecovery ? "disaster-recovery" : "portable-export",
+    }),
     // Nutrient day totals were absent from every export path, which
     // contradicted the schema's own reason for denormalising the unit column
     // ("rows stay self-describing in exports even if the catalog ever drifts").
@@ -542,6 +559,7 @@ export async function buildFullBackupPayload(
     consentReceipts: sensitive.consentReceipts,
   };
   const sensitiveManifest: SensitiveBackupManifest = sensitive.manifest;
+  const documentFilingSection: DocumentFilingBackupSection = documentFiling;
 
   const payload = {
     schemaVersion: BACKUP_SCHEMA_VERSION,
@@ -897,6 +915,7 @@ export async function buildFullBackupPayload(
     // `manifest` key, and two of them would silently shadow each other
     // depending on spread order.
     manifest: { ...recordsSection.manifest, ...sensitiveManifest },
+    ...documentFilingSection,
     nutrientDays: nutrientDays.map((n) => ({
       day: n.day,
       nutrient: n.nutrient,
@@ -949,6 +968,7 @@ export async function buildFullBackupPayload(
       ...countCoachBackupSection(coach),
       ...countCoachMemoryBackupSection(coachMemory),
       ...countSensitiveBackupSection(sensitive),
+      ...countDocumentFilingBackupSection(documentFiling),
     },
   };
 }

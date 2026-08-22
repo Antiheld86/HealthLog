@@ -58,15 +58,20 @@ const LINK_CALL_RE = new RegExp(
 const MODULE_DIR = "lib/links/";
 
 /**
- * The two files exempt by the same standing rule the wipe and key-rotation
- * writers hold: a backup RESTORE rebuilds an account rather than filing
- * something in one, so it preserves ids and creation instants and writes the
- * link tables directly. It is the only exemption, and it is frozen here so a
- * third arrives as a diff a human reviewed rather than as a quiet spread.
+ * The files exempt by the same standing rule the wipe and key-rotation writers
+ * hold: a backup RESTORE rebuilds an account rather than filing something in
+ * one, so it preserves ids and creation instants and writes the link tables
+ * directly. The set is frozen here so the next one arrives as a diff a human
+ * reviewed rather than as a quiet spread.
  */
 const RESTORE_EXEMPTIONS = [
   "lib/export/visits-backup.ts",
   "lib/export/vaccinations-backup.ts",
+  // The document↔condition filing, carried and restored from the release that
+  // takes it off the backup debt register. Same standing rule as the two
+  // above: it re-creates the link with the instant it was originally filed at,
+  // which the service's filing signature has no way to express.
+  "lib/export/document-filing-backup.ts",
 ].sort();
 
 /** Every non-test, non-generated source file under `src/`, relative to `src/`. */
@@ -123,14 +128,15 @@ describe("link-surface guard — the tables have one gateway", () => {
     }
   });
 
-  it("the restore exemption set is exactly the two backup writers", () => {
+  it("the restore exemption set is exactly the three backup writers", () => {
     // Freeze the exemption list so widening it is a reviewed diff, not a quiet
-    // addition. Both files must exist and must actually write a link table.
+    // addition. Every file must exist and must actually write a link table.
     for (const rel of RESTORE_EXEMPTIONS) {
       expect(matchedDelegates(read(rel)).length).toBeGreaterThan(0);
     }
     expect(RESTORE_EXEMPTIONS).toEqual(
       [
+        "lib/export/document-filing-backup.ts",
         "lib/export/vaccinations-backup.ts",
         "lib/export/visits-backup.ts",
       ].sort(),

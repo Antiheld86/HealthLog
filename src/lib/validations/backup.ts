@@ -34,6 +34,8 @@ import {
   DocumentSummaryState,
   EncounterKind,
   EncounterStatus,
+  ExtractedFactStatus,
+  ExtractedFactType,
   FamilyRelationship,
   FlowLevel,
   GlucoseContext,
@@ -1215,6 +1217,49 @@ const coachReminderBackupSchema = z
   })
   .passthrough();
 
+/** One document filed against one condition episode. */
+const documentConditionLinkBackupSchema = z
+  .object({
+    documentId: z.string().min(1),
+    episodeId: z.string().min(1),
+    createdAt: isoDateTime,
+  })
+  .passthrough();
+
+/**
+ * One fact the extraction pass staged against a document.
+ *
+ * `status`, `confidence` and `needsReview` are REQUIRED rather than defaulted,
+ * unlike most optional-looking fields in this file. Each has a schema default
+ * that means "nobody has looked at this yet", and the confirm endpoint acts on
+ * a PENDING fact by committing it into the structured store — so a file that
+ * does not state the review decision must fail to parse rather than have one
+ * invented for it and let an already-committed reading be approved twice.
+ *
+ * `dataEncrypted` / `data` and their provenance siblings are the two ends of
+ * the same contract, so all four are optional and exactly one pair arrives: a
+ * disaster-recovery file carries the ciphertext, a portable file carries the
+ * decrypted JSON.
+ */
+const extractedFactBackupSchema = z
+  .object({
+    id: z.string().min(1),
+    documentId: z.string().min(1),
+    factType: z.enum(ExtractedFactType),
+    status: z.enum(ExtractedFactStatus),
+    confidence: z.number(),
+    needsReview: z.boolean(),
+    committedRecordId: z.string().nullable().optional(),
+    committedRecordType: z.string().nullable().optional(),
+    dataEncrypted: base64BytesSchema.optional(),
+    provenanceEncrypted: base64BytesSchema.optional(),
+    data: z.json().optional(),
+    provenance: z.json().optional(),
+    createdAt: isoDateTime,
+    updatedAt: isoDateTime,
+  })
+  .passthrough();
+
 /**
  * A grouping the account created for its own mood factors. `id` is REQUIRED,
  * unlike everywhere else in this file, because a custom tag addresses its
@@ -1414,6 +1459,13 @@ export const backupPayloadSchema = z
     familyHistory: z.array(familyHistoryBackupSchema).default([]),
     workouts: z.array(workoutBackupSchema).default([]),
     documents: z.array(documentBackupSchema).default([]),
+    // What a document was filed against, and what was read out of it. Defaulted
+    // for the same reason as the sections below: a file written before the
+    // vault filing travelled carries no key, and an unsorted vault writes [].
+    documentConditionLinks: z
+      .array(documentConditionLinkBackupSchema)
+      .default([]),
+    extractedFacts: z.array(extractedFactBackupSchema).default([]),
     nutrientDays: z.array(nutrientDaySchema).default([]),
     // Durable self-context and user-defined series. Defaulted so files written
     // before either rode the wire still parse; an account with neither writes
@@ -1518,6 +1570,10 @@ export interface BackupSummary {
   workouts: number;
   /** Document records (ciphertext included in canonical DR payloads). */
   documents: number;
+  /** Which documents were filed against which condition. */
+  documentConditionLinks: number;
+  /** Facts staged out of a document, with their review decision. */
+  extractedFacts: number;
   /** 1 when the account's durable self-context rides the file, 0 otherwise. */
   healthProfile: number;
   /** Effective-dated structured health-profile revisions. */
@@ -1587,6 +1643,11 @@ export function summarizeBackup(payload: BackupPayload): BackupSummary {
     familyHistory: payload.familyHistory.length,
     workouts: payload.workouts.length,
     documents: payload.documents.length,
+    // Counted from the release that carries them, so the admin's "what did I
+    // just restore" answer never under-counts a filed vault the way it once
+    // did for visits.
+    documentConditionLinks: payload.documentConditionLinks.length,
+    extractedFacts: payload.extractedFacts.length,
     healthProfile: payload.healthProfile ? 1 : 0,
     healthProfileFactRevisions: payload.healthProfileFacts.length,
     customMetrics: payload.customMetrics.length,

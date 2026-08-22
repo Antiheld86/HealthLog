@@ -363,6 +363,10 @@ function makePrisma() {
     coachFact: { findMany: vi.fn().mockResolvedValue([]) },
     coachPlan: { findMany: vi.fn().mockResolvedValue([]) },
     coachReminder: { findMany: vi.fn().mockResolvedValue([]) },
+    // What a document was filed against, and what was read out of it.
+    // Empty for the same reason as the sections above.
+    documentConditionLink: { findMany: vi.fn().mockResolvedValue([]) },
+    extractedFact: { findMany: vi.fn().mockResolvedValue([]) },
     // Left unmocked on purpose: `buildProfileBackupSection` runs for real
     // against these, so the assertions below exercise the builder rather than
     // a stand-in that would agree with whatever the payload happened to do.

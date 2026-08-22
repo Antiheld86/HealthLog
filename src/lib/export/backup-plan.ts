@@ -226,6 +226,10 @@ export const BACKUP_WRITER_FILES: readonly string[] = [
   // The screener history and the consent record, disaster-recovery only. The
   // reasons for that live in the module itself.
   "src/lib/export/sensitive-backup.ts",
+  // What a document was filed against and what was read out of it. The
+  // documents themselves are read by `records-backup.ts`; these two read
+  // through their OWN delegates here, for the reason the visits comment gives.
+  "src/lib/export/document-filing-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 
@@ -239,6 +243,7 @@ export const BACKUP_RESTORE_FILES: readonly string[] = [
   "src/lib/export/reminders-backup.ts",
   "src/lib/export/coach-backup.ts",
   "src/lib/export/sensitive-backup.ts",
+  "src/lib/export/document-filing-backup.ts",
   "src/lib/cycle/backup.ts",
 ];
 
@@ -304,12 +309,13 @@ export const TWO_ENDED_MODELS = [
   "EncounterLabLink",
   "EncounterConditionLink",
   // Doses travel both ways from the release that introduces them, and the
-  // link with them. `DocumentConditionLink` one list down says what the
-  // alternative costs — documents and conditions both restore, the filing
-  // between them does not. Repeating that here would return a restored
-  // Impfpass scan and a restored dose with nothing between them, which is the
-  // same regret against a record a person cannot reconstruct from anywhere
-  // else.
+  // link with them. `DocumentConditionLink` was the register entry that said
+  // what the alternative costs — documents and conditions both restore, the
+  // filing between them does not — and it has since landed carried itself, at
+  // the bottom of this list. Repeating that debt here would have returned a
+  // restored Impfpass scan and a restored dose with nothing between them,
+  // which is the same regret against a record a person cannot reconstruct
+  // from anywhere else.
   "VaccinationRecord",
   "VaccinationDocumentLink",
   // The Vorsorge reminders, off the debt register at last (v1.37.20, #223 /
@@ -388,6 +394,24 @@ export const TWO_ENDED_MODELS = [
   // neither.
   "MentalHealthAssessment",
   "ConsentReceipt",
+  // What the vault was sorted into, and what was read out of it. The register
+  // called the first "a restored vault is unsorted" and the second
+  // "re-derivable only by re-running the extraction against a provider, at the
+  // operator's cost". The second understated it: what a re-run cannot produce
+  // is the REVIEW DECISION on each fact, and every column holding one defaults
+  // to "nobody has looked at this yet". The confirm endpoint acts on a PENDING
+  // fact by committing it into the structured store, so a restore that
+  // defaulted them would offer an already-committed reading for approval a
+  // second time and write a second lab result behind it.
+  //
+  // Both references are real foreign keys, unlike the Coach's, so the failure
+  // they guard against is not a dead pointer but an aborted transaction: the
+  // builder carries a filing or a fact only when both of its ends are carried,
+  // and the restore drops and names what a hand-edited file still cannot
+  // place. `committedRecordId` is the one bare id column here, and it is
+  // nulled together with its type when it resolves to nothing.
+  "DocumentConditionLink",
+  "ExtractedFact",
 ] as const;
 
 /** One model claimed to travel both ways. */
@@ -442,10 +466,6 @@ export const COVERAGE_PENDING: Readonly<Record<string, string>> = {
     "Per-day environmental readings joined to the record. Re-fetchable for recent days only; older history is gone once the provider window closes.",
   EnvironmentTravelLocation:
     "Where the person was on a given day, which is what makes the environmental readings mean anything. Never re-derivable.",
-  DocumentConditionLink:
-    "Which documents were filed against which condition. Documents and conditions both restore; the filing between them does not, so a restored vault is unsorted.",
-  ExtractedFact:
-    "Facts read out of a document by the AI pass, with their provenance back to the page. Re-derivable only by re-running the extraction against a provider, at the operator's cost.",
 };
 
 /**

@@ -73,7 +73,25 @@
  * reminder still fires. A portable export omits tombstoned plans, which is the
  * ordinary way a live reminder ends up naming one the file does not carry.
  *
- * The tenth, `checkupClosure`, is not about a restore at all, and it borrows
+ * The tenth and eleventh, `documentConditionLink` and `extractedFact`, name a
+ * vault row whose parent the restore did not put back — the page a filing was
+ * made against, the condition it was filed under, or the document a staged
+ * fact was read out of. All three are real foreign keys, so unlike every kind
+ * above the alternative to dropping the row is not a dangling pointer but an
+ * aborted transaction and no restore at all. The builder carries a filing or a
+ * fact only when both of its ends are carried, so a file this release writes
+ * never trips either — they exist for the hand-edited or truncated file.
+ *
+ * The twelfth, `factCommitment`, is the pointer kind rather than the row kind,
+ * exactly like `coachReference`: `ExtractedFact.committedRecordId` names the
+ * lab result, condition episode or medication an approved fact was committed
+ * to, and it is a bare id column with no relation, so a value pointing at
+ * nothing costs no error and simply stops meaning anything. The fact itself
+ * restores; what it loses is a pointer that was already going nowhere, and its
+ * `committedRecordType` goes with it so the row does not claim a commitment it
+ * cannot name.
+ *
+ * The thirteenth, `checkupClosure`, is not about a restore at all, and it borrows
  * this shape deliberately rather than growing a second reporting mechanism
  * beside it. The situation is the same one: something a write was asked to do
  * could not be done, the record itself survives, and the person is told which
@@ -91,6 +109,9 @@ export type SkippedCatalogue =
   | "reminderReference"
   | "coachAttachment"
   | "coachReference"
+  | "documentConditionLink"
+  | "extractedFact"
+  | "factCommitment"
   | "checkupClosure";
 
 /** One key this instance does not know, and the links it cost. */
