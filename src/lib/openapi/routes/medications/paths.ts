@@ -259,9 +259,10 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Medications"],
       summary: "GLP-1 detail — titration, recent injections, supply",
       description:
-        "Returns the extras the GLP-1 card variant, the dashboard tile and the doctor-report section read: the full dose-change history, the last twelve injections with their sites, and the running supply math carrying the same low-stock verdict the daily notification uses. NOT delegable — unlike the POST on this same path, this read resolves the caller as themselves, so a manager acting inside a shared record is answered 404 here while their write on the same medication succeeds. Cookie or Bearer auth.",
+        "Returns the extras the GLP-1 card variant, the dashboard tile and the doctor-report section read: the full dose-change history, the last twelve injections with their sites, and the running supply math carrying the same low-stock verdict the daily notification uses. Delegable at READ level over the `medications` section, the level `/inventory`, `/side-effects` and `/cadence` ask for the same medication's data — and strictly narrower than the MANAGE-level write the POST on this path already permits. Cookie or Bearer auth.",
       requestParams: { path: z.object({ id: z.string() }) },
       responses: {
+        ...recordRefusal(),
         "200": {
           description: "The GLP-1 detail block.",
           content: {
