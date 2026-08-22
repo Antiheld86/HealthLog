@@ -6918,7 +6918,8 @@
         "restoreSkippedDocumentConditionLink": "Document filing",
         "restoreSkippedExtractedFact": "Document fact",
         "restoreSkippedFactCommitment": "Fact commitment",
-        "docsLink": "Documentation"
+        "docsLink": "Documentation",
+        "restoreSkippedPersonalRecordReference": "Personal best provenance"
       },
       "danger-zone": {
         "title": "Danger Zone",

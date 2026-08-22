@@ -1053,8 +1053,10 @@ model EnvironmentContext {
   lat           Float
   lon           Float
   /// @internal: human-readable label of the resolved location, stored as
-  /// operator/debug provenance beside the coordinates; readers select the
-  /// numeric and weather columns only, never this label.
+  /// operator/debug provenance beside the coordinates; surfaces select the
+  /// numeric and weather columns only, never this label. The backup selects it
+  /// (`src/lib/export/environment-backup.ts`) with the rest of the row: a
+  /// restored reading has to keep saying where it was read.
   locationLabel String                    @map("location_label")
   source        EnvironmentLocationSource
 
@@ -2426,9 +2428,13 @@ model PersonalRecord {
   /// FK to the Measurement row that achieved the record. SET NULL
   /// on delete so the historical fact survives even if the
   /// underlying measurement is later removed.
-  /// @internal: audit-trail provenance written by the PR detection worker;
-  /// no read path selects it — the record row itself carries the surfaced
-  /// value/unit/achievedAt.
+  /// @internal: audit-trail provenance written by the PR detection worker; no
+  /// SURFACE selects it: the record row itself carries the value, unit and
+  /// achievedAt a reader sees. The backup does select it
+  /// (`src/lib/export/awards-backup.ts`), because the column is a real foreign
+  /// key in the database even though no relation is declared here, so a
+  /// restore has to resolve it against the measurements it wrote instead of
+  /// writing it blind and failing the constraint.
   sourceMeasurementId String?                 @map("source_measurement_id")
   source              MeasurementSource       @default(MANUAL)
   externalId          String?                 @map("external_id")

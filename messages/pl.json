@@ -6918,7 +6918,8 @@
         "restoreSkippedDocumentConditionLink": "Przypisanie dokumentu",
         "restoreSkippedExtractedFact": "Fakt z dokumentu",
         "restoreSkippedFactCommitment": "Zapis faktu",
-        "docsLink": "Dokumentacja"
+        "docsLink": "Dokumentacja",
+        "restoreSkippedPersonalRecordReference": "Pochodzenie rekordu osobistego"
       },
       "danger-zone": {
         "title": "Strefa zagrożenia",

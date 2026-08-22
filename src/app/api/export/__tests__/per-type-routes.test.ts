@@ -42,6 +42,12 @@ vi.mock("@/lib/db", () => ({
     // same reason as the visit tables above.
     measurementReminder: { findMany: vi.fn().mockResolvedValue([]) },
     measurementReminderEvent: { findMany: vi.fn().mockResolvedValue([]) },
+    // The bests, the badges, and the environmental history with the location
+    // periods that explain it. Empty for the same reason as the tables above.
+    personalRecord: { findMany: vi.fn().mockResolvedValue([]) },
+    userAchievement: { findMany: vi.fn().mockResolvedValue([]) },
+    environmentContext: { findMany: vi.fn().mockResolvedValue([]) },
+    environmentTravelLocation: { findMany: vi.fn().mockResolvedValue([]) },
     coachConversation: { findMany: vi.fn().mockResolvedValue([]) },
     moodTagCategory: { findMany: vi.fn().mockResolvedValue([]) },
     moodTagHidden: { findMany: vi.fn().mockResolvedValue([]) },
@@ -155,6 +161,12 @@ beforeEach(() => {
     [] as never,
   );
   vi.mocked(prisma.extractedFact.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.personalRecord.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.userAchievement.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.environmentContext.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.environmentTravelLocation.findMany).mockResolvedValue(
+    [] as never,
+  );
 });
 
 afterEach(() => {

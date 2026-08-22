@@ -36,6 +36,7 @@ import {
   EncounterStatus,
   ExtractedFactStatus,
   ExtractedFactType,
+  EnvironmentLocationSource,
   FamilyRelationship,
   FlowLevel,
   GlucoseContext,
@@ -61,6 +62,7 @@ import {
   MedicationSideEffectCategory,
   MedicationSideEffectEntry,
   OvulationTest,
+  PersonalRecordDirection,
   ReminderOrigin,
   RhythmClassification,
   SecondarySymptom,
@@ -1106,6 +1108,106 @@ const measurementReminderEventBackupSchema = z
   .passthrough();
 
 /**
+ * One personal best.
+ *
+ * `direction` is required rather than defaulted: it says whether higher or
+ * lower wins, the read path orders by it, and a best time defaulted to MAX
+ * would present the account's worst time as its record. `sourceMeasurementId`
+ * is the provenance pointer the restore resolves, and a real foreign key in the
+ * database, whatever `prisma/schema.prisma` says, so the restore nulls what it
+ * cannot resolve rather than letting Postgres refuse the whole file.
+ */
+const personalRecordBackupSchema = z
+  .object({
+    metricType: z.enum(MeasurementType),
+    metricSlot: z.string().nullable().optional(),
+    direction: z.enum(PersonalRecordDirection),
+    value: z.number(),
+    unit: z.string().min(1),
+    achievedAt: isoDateTime,
+    sourceMeasurementId: z.string().nullable().optional(),
+    source: z.enum(MeasurementSource).optional(),
+    externalId: z.string().nullable().optional(),
+    createdAt: isoDateTime.optional(),
+  })
+  .passthrough();
+
+/**
+ * One unlocked badge.
+ *
+ * `achievementId` is a free string on purpose: it names a definition in the
+ * code catalogue, which drifts between the release that wrote the file and the
+ * one that reads it, and a row is evidence that a person earned something on a
+ * day rather than a claim about what this build ships.
+ *
+ * `unlockedAt` is REQUIRED, unlike almost every other stamp in this file. It
+ * is the field that cannot be recovered from anywhere else, and a file that
+ * does not state it must fail rather than restore every badge to today.
+ */
+const userAchievementBackupSchema = z
+  .object({
+    achievementId: z.string().min(1),
+    unlockedAt: isoDateTime,
+    createdAt: isoDateTime.optional(),
+  })
+  .passthrough();
+
+/** `YYYY-MM-DD`, the day key both environment tables are addressed by. */
+const environmentDayKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, {
+  message: "Expected a YYYY-MM-DD day key",
+});
+
+/**
+ * One day's environmental reading.
+ *
+ * `source` is required: it is the only record that the day resolved somewhere
+ * other than the home city, and a defaulted value would re-attribute a trip to
+ * home. Every weather column is optional, because the feed is allowed to be partial
+ * and a file written before a column existed says nothing about it.
+ */
+const environmentContextBackupSchema = z
+  .object({
+    date: environmentDayKey,
+    lat: z.number(),
+    lon: z.number(),
+    locationLabel: z.string(),
+    source: z.enum(EnvironmentLocationSource),
+    tempMin: z.number().nullable().optional(),
+    tempMax: z.number().nullable().optional(),
+    tempMean: z.number().nullable().optional(),
+    apparentMean: z.number().nullable().optional(),
+    sunshineSec: z.number().int().nullable().optional(),
+    daylightSec: z.number().int().nullable().optional(),
+    precipSum: z.number().nullable().optional(),
+    pressureMean: z.number().nullable().optional(),
+    pressureDelta: z.number().nullable().optional(),
+    humidityMean: z.number().nullable().optional(),
+    cloudMean: z.number().nullable().optional(),
+    weatherCode: z.number().int().nullable().optional(),
+    fetchedAt: isoDateTime.optional(),
+    createdAt: isoDateTime.optional(),
+    updatedAt: isoDateTime.optional(),
+  })
+  .passthrough();
+
+/**
+ * One declared stretch spent away from home. Both bounds are day keys rather
+ * than instants: the resolver compares them lexicographically against other
+ * day keys, and routing one through a `Date` is how a day key loses a day.
+ */
+const environmentTravelLocationBackupSchema = z
+  .object({
+    startDate: environmentDayKey,
+    endDate: environmentDayKey,
+    lat: z.number(),
+    lon: z.number(),
+    label: z.string(),
+    createdAt: isoDateTime.optional(),
+    updatedAt: isoDateTime.optional(),
+  })
+  .passthrough();
+
+/**
  * One Coach turn.
  *
  * `contentEncrypted` and `content` are the two ends of the same contract, so
@@ -1512,6 +1614,19 @@ export const backupPayloadSchema = z
     measurementReminderEvents: z
       .array(measurementReminderEventBackupSchema)
       .default([]),
+    // The bests and the badges. Defaulted for the same reason as the sections
+    // above: a file written before they travelled carries no key, and an
+    // account that has earned neither writes [].
+    personalRecords: z.array(personalRecordBackupSchema).default([]),
+    userAchievements: z.array(userAchievementBackupSchema).default([]),
+    // The per-day readings and the location periods that explain them. Two
+    // keys rather than one because they are two tables, but they are written
+    // and restored as a pair: readings whose periods are missing get rewritten
+    // to the home location by the next refresh.
+    environmentContexts: z.array(environmentContextBackupSchema).default([]),
+    environmentTravelLocations: z
+      .array(environmentTravelLocationBackupSchema)
+      .default([]),
     manifest: backupManifestSchema.nullable().default(null),
     // v1.37.19 (A6-9) — field paths a PORTABLE export could not decrypt
     // (fail-soft nulls). Disclosed in the file so a nulled field is
@@ -1614,6 +1729,14 @@ export interface BackupSummary {
   mentalHealthAssessments: number;
   /** Consent records. Disaster-recovery payloads only. */
   consentReceipts: number;
+  /** Personal bests across every metric and sport slot. */
+  personalRecords: number;
+  /** Badges the account has unlocked, each with the day it was earned. */
+  userAchievements: number;
+  /** Local days with an environmental reading. */
+  environmentContexts: number;
+  /** Declared stretches spent away from home. */
+  environmentTravelLocations: number;
 }
 
 export function summarizeBackup(payload: BackupPayload): BackupSummary {
@@ -1685,6 +1808,13 @@ export function summarizeBackup(payload: BackupPayload): BackupSummary {
     coachReminders: payload.coachReminders.length,
     mentalHealthAssessments: payload.mentalHealthAssessments.length,
     consentReceipts: payload.consentReceipts.length,
+    // Counted from the release that carries them, so the admin's "what did I
+    // just restore" answer never under-counts a file with bests, badges or an
+    // environmental history the way it once did for visits.
+    personalRecords: payload.personalRecords.length,
+    userAchievements: payload.userAchievements.length,
+    environmentContexts: payload.environmentContexts.length,
+    environmentTravelLocations: payload.environmentTravelLocations.length,
   };
 }
 

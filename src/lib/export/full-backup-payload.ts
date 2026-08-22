@@ -79,6 +79,18 @@ import {
   type DocumentFilingBackupSection,
 } from "@/lib/export/document-filing-backup";
 import {
+  buildAwardsBackupSection,
+  countAwardsBackupSection,
+  type AwardsBackupCounts,
+  type AwardsBackupSection,
+} from "@/lib/export/awards-backup";
+import {
+  buildEnvironmentBackupSection,
+  countEnvironmentBackupSection,
+  type EnvironmentBackupCounts,
+  type EnvironmentBackupSection,
+} from "@/lib/export/environment-backup";
+import {
   buildIntradayProfileBackupSection,
   countIntradayProfileBackupSection,
   type IntradayProfileBackupCounts,
@@ -97,7 +109,9 @@ export interface FullBackupCounts
     CoachBackupCounts,
     CoachMemoryBackupCounts,
     SensitiveBackupCounts,
-    DocumentFilingBackupCounts {
+    DocumentFilingBackupCounts,
+    AwardsBackupCounts,
+    EnvironmentBackupCounts {
   measurements: number;
   medications: number;
   intakeEvents: number;
@@ -325,6 +339,8 @@ export async function buildFullBackupPayload(
     coachMemory,
     sensitive,
     documentFiling,
+    awards,
+    environment,
     nutrientDays,
   ] = await Promise.all([
     disasterRecovery
@@ -523,6 +539,16 @@ export async function buildFullBackupPayload(
     buildDocumentFilingBackupSection(prisma, userId, {
       purpose: disasterRecovery ? "disaster-recovery" : "portable-export",
     }),
+    // The bests and the badges. Both ends live in
+    // `src/lib/export/awards-backup.ts`, the same arrangement as the sections
+    // above. No `purpose`: neither model tombstones and neither holds
+    // ciphertext, so both purposes carry the same bytes.
+    buildAwardsBackupSection(prisma, userId),
+    // The per-day readings and the location periods that explain them, which
+    // is why one section carries both. Both ends live in
+    // `src/lib/export/environment-backup.ts`, and the purpose is absent for
+    // the same reason as the awards above.
+    buildEnvironmentBackupSection(prisma, userId),
     // Nutrient day totals were absent from every export path, which
     // contradicted the schema's own reason for denormalising the unit column
     // ("rows stay self-describing in exports even if the catalog ever drifts").
@@ -560,6 +586,8 @@ export async function buildFullBackupPayload(
   };
   const sensitiveManifest: SensitiveBackupManifest = sensitive.manifest;
   const documentFilingSection: DocumentFilingBackupSection = documentFiling;
+  const awardsSection: AwardsBackupSection = awards;
+  const environmentSection: EnvironmentBackupSection = environment;
 
   const payload = {
     schemaVersion: BACKUP_SCHEMA_VERSION,
@@ -916,6 +944,8 @@ export async function buildFullBackupPayload(
     // depending on spread order.
     manifest: { ...recordsSection.manifest, ...sensitiveManifest },
     ...documentFilingSection,
+    ...awardsSection,
+    ...environmentSection,
     nutrientDays: nutrientDays.map((n) => ({
       day: n.day,
       nutrient: n.nutrient,
@@ -969,6 +999,8 @@ export async function buildFullBackupPayload(
       ...countCoachMemoryBackupSection(coachMemory),
       ...countSensitiveBackupSection(sensitive),
       ...countDocumentFilingBackupSection(documentFiling),
+      ...countAwardsBackupSection(awards),
+      ...countEnvironmentBackupSection(environment),
     },
   };
 }

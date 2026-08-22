@@ -215,6 +215,13 @@ const COUNT_BACK: Record<
   DocumentConditionLink: (p, userId) =>
     p.documentConditionLink.count({ where: { userId } }),
   ExtractedFact: (p, userId) => p.extractedFact.count({ where: { userId } }),
+  PersonalRecord: (p, userId) => p.personalRecord.count({ where: { userId } }),
+  UserAchievement: (p, userId) =>
+    p.userAchievement.count({ where: { userId } }),
+  EnvironmentContext: (p, userId) =>
+    p.environmentContext.count({ where: { userId } }),
+  EnvironmentTravelLocation: (p, userId) =>
+    p.environmentTravelLocation.count({ where: { userId } }),
 };
 
 /**
@@ -227,7 +234,10 @@ const COUNT_BACK: Record<
  * make the link tables look restored when nothing restored them.
  */
 async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
-  await prisma.measurement.create({
+  // Held rather than discarded: the personal best below points at this row
+  // through a column that is a real foreign key in the database, so the
+  // fixture needs the id to build the reference the restore has to resolve.
+  const weightMeasurement = await prisma.measurement.create({
     data: {
       userId: OWNER_ID,
       type: "WEIGHT",
@@ -945,6 +955,140 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       documentId: document.id,
     },
   });
+
+  // Three bests, chosen for what a count cannot see.
+  //
+  // The first points at the measurement it was found in. That column is a
+  // foreign key in the database while the Prisma schema declares no relation
+  // for it, so this row is what proves the pointer resolves against the
+  // measurements the restore wrote, and would prove the opposite loudly, by
+  // failing the constraint and taking the whole restore with it.
+  //
+  // The other two share a metric type AND an instant and differ only in the
+  // sport slot: the same 5 km and 10 km bests a runner has. A restore that
+  // dropped the slot would return two rows describing one record twice, and
+  // the faster time would be presented as the 10 km best.
+  await prisma.personalRecord.create({
+    data: {
+      userId: OWNER_ID,
+      metricType: "WEIGHT",
+      direction: "MIN",
+      value: 74.2,
+      unit: "kg",
+      achievedAt: AT("2026-07-01T07:00:00.000Z"),
+      sourceMeasurementId: weightMeasurement.id,
+      source: "MANUAL",
+    },
+  });
+  await prisma.personalRecord.createMany({
+    data: [
+      {
+        userId: OWNER_ID,
+        metricType: "WALKING_RUNNING_DISTANCE",
+        metricSlot: "running_5km_time",
+        direction: "MIN",
+        value: 1512,
+        unit: "s",
+        achievedAt: AT("2026-05-18T09:20:00.000Z"),
+        source: "APPLE_HEALTH",
+        externalId: "workout-pr-5km",
+      },
+      {
+        userId: OWNER_ID,
+        metricType: "WALKING_RUNNING_DISTANCE",
+        metricSlot: "running_10km_time",
+        direction: "MIN",
+        value: 3184,
+        unit: "s",
+        achievedAt: AT("2026-05-18T09:20:00.000Z"),
+        source: "APPLE_HEALTH",
+        externalId: "workout-pr-10km",
+      },
+    ],
+  });
+
+  // Two badges, both earned long before this fixture runs. The second names a
+  // definition no catalogue in this build ships: a file can be older than the
+  // release reading it, and the restore must carry the row rather than judge
+  // it, exactly as it carries a retired antigen slug.
+  await prisma.userAchievement.createMany({
+    data: [
+      {
+        userId: OWNER_ID,
+        achievementId: "intake-total-10",
+        unlockedAt: AT("2026-02-21T10:15:00.000Z"),
+      },
+      {
+        userId: OWNER_ID,
+        achievementId: "retired-badge-from-an-older-release",
+        unlockedAt: AT("2025-11-05T08:00:00.000Z"),
+      },
+    ],
+  });
+
+  // A fortnight in Barcelona, and one day of it recorded as a reading.
+  //
+  // The pair is the fixture. The home day and the trip day carry different
+  // coordinates and different weather, and the trip day's reading only makes
+  // sense next to the period that explains it: with the period gone, the next
+  // refresh re-resolves 2026-06-15 to Berlin and upserts Berlin's weather over
+  // it. The assertion after the restore reads the two back TOGETHER.
+  await prisma.environmentTravelLocation.create({
+    data: {
+      userId: OWNER_ID,
+      startDate: "2026-06-10",
+      endDate: "2026-06-20",
+      lat: 41.3874,
+      lon: 2.1686,
+      label: "Barcelona",
+    },
+  });
+  await prisma.environmentContext.createMany({
+    data: [
+      {
+        userId: OWNER_ID,
+        date: "2026-06-15",
+        lat: 41.3874,
+        lon: 2.1686,
+        locationLabel: "Barcelona",
+        source: "TRAVEL",
+        tempMin: 19.4,
+        tempMax: 28.1,
+        tempMean: 23.6,
+        apparentMean: 25.2,
+        sunshineSec: 39_600,
+        daylightSec: 52_800,
+        precipSum: 0,
+        pressureMean: 1016.4,
+        pressureDelta: 3.2,
+        humidityMean: 63,
+        cloudMean: 12,
+        weatherCode: 1,
+        fetchedAt: AT("2026-06-16T03:15:00.000Z"),
+      },
+      {
+        userId: OWNER_ID,
+        date: "2026-07-01",
+        lat: 52.52,
+        lon: 13.405,
+        locationLabel: "Berlin",
+        source: "HOME",
+        tempMin: 13.1,
+        tempMax: 22.7,
+        tempMean: 17.9,
+        apparentMean: 17.1,
+        sunshineSec: 28_800,
+        daylightSec: 59_400,
+        precipSum: 4.6,
+        pressureMean: 1008.9,
+        pressureDelta: 7.8,
+        humidityMean: 74,
+        cloudMean: 68,
+        weatherCode: 61,
+        fetchedAt: AT("2026-07-02T03:15:00.000Z"),
+      },
+    ],
+  });
 }
 
 async function createOwner(prisma: PrismaClient) {
@@ -1632,6 +1776,194 @@ describe("every model the plan claims two-ended survives a real restore", () => 
       restoredEncounter.reminderId,
       "the encounter's reminder reference must survive now that the reminder travels",
     ).toBe(restoredReminder.id);
+
+    // The bests, read back column by column.
+    //
+    // Three rows came back, which the count above already said. What it could
+    // not say is that they still describe three different records: the two
+    // running bests share a metric type and an instant, so the slot is the
+    // only thing separating "best 5 km" from "best 10 km", and `direction` is
+    // the only thing that stops a best time being read as a worst one. The
+    // measurement pointer is asserted against the row the RESTORE wrote rather
+    // than against the id the fixture used, because resolving to something
+    // that exists is the property the reference owes.
+    const restoredMeasurement = await prisma.measurement.findFirstOrThrow({
+      where: { userId: OWNER_ID, type: "WEIGHT" },
+    });
+    const bests = await prisma.personalRecord.findMany({
+      where: { userId: OWNER_ID },
+      orderBy: [{ achievedAt: "asc" }, { metricSlot: "asc" }],
+    });
+    expect(
+      bests.map((best) => ({
+        metricType: best.metricType,
+        metricSlot: best.metricSlot,
+        direction: best.direction,
+        value: best.value,
+        unit: best.unit,
+        achievedAt: best.achievedAt.toISOString(),
+        sourceMeasurementId: best.sourceMeasurementId,
+        source: best.source,
+        externalId: best.externalId,
+      })),
+      "each best must come back as its own record, with the direction and the sport slot that make it one",
+    ).toEqual([
+      {
+        metricType: "WALKING_RUNNING_DISTANCE",
+        metricSlot: "running_10km_time",
+        direction: "MIN",
+        value: 3184,
+        unit: "s",
+        achievedAt: "2026-05-18T09:20:00.000Z",
+        sourceMeasurementId: null,
+        source: "APPLE_HEALTH",
+        externalId: "workout-pr-10km",
+      },
+      {
+        metricType: "WALKING_RUNNING_DISTANCE",
+        metricSlot: "running_5km_time",
+        direction: "MIN",
+        value: 1512,
+        unit: "s",
+        achievedAt: "2026-05-18T09:20:00.000Z",
+        sourceMeasurementId: null,
+        source: "APPLE_HEALTH",
+        externalId: "workout-pr-5km",
+      },
+      {
+        metricType: "WEIGHT",
+        metricSlot: null,
+        direction: "MIN",
+        value: 74.2,
+        unit: "kg",
+        achievedAt: "2026-07-01T07:00:00.000Z",
+        // Not `null`: the pointer resolved against a measurement this restore
+        // actually wrote. A restore that nulled it would report the drop, and
+        // one that wrote it before the measurements existed would fail the
+        // foreign key rather than reach this line.
+        sourceMeasurementId: restoredMeasurement.id,
+        source: "MANUAL",
+        externalId: null,
+      },
+    ]);
+
+    // The badges, and the only field on them that matters.
+    //
+    // Both rows would come back from a restore that stamped `unlockedAt` with
+    // the moment of the restore, and every count in this file would still be
+    // green, while the account was handed a wall of badges it had apparently
+    // earned all at once, today. Several of these dates cannot be re-derived
+    // at all: the evaluator prefers a persisted date, and the counters behind
+    // the login and Easter-egg badges are not in any backup.
+    const badges = await prisma.userAchievement.findMany({
+      where: { userId: OWNER_ID },
+      orderBy: { unlockedAt: "asc" },
+    });
+    expect(
+      badges.map((badge) => ({
+        achievementId: badge.achievementId,
+        unlockedAt: badge.unlockedAt.toISOString(),
+      })),
+      "a badge comes back with the day it was earned, and with the id it was earned under",
+    ).toEqual([
+      {
+        // A definition this build does not ship, kept verbatim rather than
+        // judged against the catalogue, the same answer the restore gives a
+        // retired antigen slug.
+        achievementId: "retired-badge-from-an-older-release",
+        unlockedAt: "2025-11-05T08:00:00.000Z",
+      },
+      {
+        achievementId: "intake-total-10",
+        unlockedAt: "2026-02-21T10:15:00.000Z",
+      },
+    ]);
+
+    // The environmental history, read back as a PAIR.
+    //
+    // Counting says two readings and one location period returned. It cannot
+    // say that the trip day still knows it was a trip day, which is the whole
+    // content of these rows: the coordinates, the label and `source` are what
+    // separate a fortnight in Barcelona from a fortnight at home, and the
+    // period is what keeps the next refresh from re-resolving the day and
+    // upserting Berlin's weather over it.
+    const readings = await prisma.environmentContext.findMany({
+      where: { userId: OWNER_ID },
+      orderBy: { date: "asc" },
+    });
+    expect(
+      readings.map((reading) => ({
+        date: reading.date,
+        lat: reading.lat,
+        lon: reading.lon,
+        locationLabel: reading.locationLabel,
+        source: reading.source,
+        tempMean: reading.tempMean,
+        pressureDelta: reading.pressureDelta,
+        daylightSec: reading.daylightSec,
+        weatherCode: reading.weatherCode,
+        // Verbatim, not re-stamped: this says when the feed was read, and a
+        // restore that wrote "now" would claim a two-year-old provisional
+        // reading had just been confirmed.
+        fetchedAt: reading.fetchedAt.toISOString(),
+      })),
+      "each day comes back at the place it was actually read for",
+    ).toEqual([
+      {
+        date: "2026-06-15",
+        lat: 41.3874,
+        lon: 2.1686,
+        locationLabel: "Barcelona",
+        source: "TRAVEL",
+        tempMean: 23.6,
+        pressureDelta: 3.2,
+        daylightSec: 52_800,
+        weatherCode: 1,
+        fetchedAt: "2026-06-16T03:15:00.000Z",
+      },
+      {
+        date: "2026-07-01",
+        lat: 52.52,
+        lon: 13.405,
+        locationLabel: "Berlin",
+        source: "HOME",
+        tempMean: 17.9,
+        pressureDelta: 7.8,
+        daylightSec: 59_400,
+        weatherCode: 61,
+        fetchedAt: "2026-07-02T03:15:00.000Z",
+      },
+    ]);
+
+    // And the join between them, computed from what the restore wrote rather
+    // than from the fixture: the trip day has to fall inside the restored
+    // period and carry its coordinates. Both halves can be individually
+    // non-empty and still disagree: a period whose bounds shifted by a day no
+    // longer covers the reading it explains, and the reading goes back to
+    // being weather from nowhere.
+    const trip = await prisma.environmentTravelLocation.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+    });
+    const travelDay = readings.find((reading) => reading.source === "TRAVEL")!;
+    expect(
+      {
+        startDate: trip.startDate,
+        endDate: trip.endDate,
+        label: trip.label,
+        covers:
+          travelDay.date >= trip.startDate && travelDay.date <= trip.endDate,
+        sameLat: trip.lat === travelDay.lat,
+        sameLon: trip.lon === travelDay.lon,
+      },
+      "the period must still explain the reading it was exported beside",
+    ).toEqual({
+      startDate: "2026-06-10",
+      endDate: "2026-06-20",
+      label: "Barcelona",
+      covers: true,
+      sameLat: true,
+      sameLon: true,
+    });
   });
 
   /**
