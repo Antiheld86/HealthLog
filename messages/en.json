@@ -6919,7 +6919,10 @@
         "restoreSkippedExtractedFact": "Document fact",
         "restoreSkippedFactCommitment": "Fact commitment",
         "docsLink": "Documentation",
-        "restoreSkippedPersonalRecordReference": "Personal best provenance"
+        "restoreSkippedPersonalRecordReference": "Personal best provenance",
+        "restoreSkippedEcgReference": "ECG strip provenance",
+        "restoreSkippedMedicationTarget": "Medication target analyte",
+        "restoreSkippedScheduleRevisionLink": "Schedule era succession"
       },
       "danger-zone": {
         "title": "Danger Zone",

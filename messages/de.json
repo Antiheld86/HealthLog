@@ -6919,7 +6919,10 @@
         "restoreSkippedExtractedFact": "Dokumentbefund",
         "restoreSkippedFactCommitment": "Befundübernahme",
         "docsLink": "Dokumentation",
-        "restoreSkippedPersonalRecordReference": "Herkunft einer Bestleistung"
+        "restoreSkippedPersonalRecordReference": "Herkunft einer Bestleistung",
+        "restoreSkippedEcgReference": "Herkunft eines EKG-Streifens",
+        "restoreSkippedMedicationTarget": "Zielwert-Analyt einer Medikation",
+        "restoreSkippedScheduleRevisionLink": "Abfolge der Schema-Zeiträume"
       },
       "danger-zone": {
         "title": "Gefahrenzone",

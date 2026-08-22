@@ -104,8 +104,35 @@
  * `ON DELETE SET NULL` in the first place. The ordinary way it fails to
  * resolve is a portable export whose source measurement was soft-deleted, and
  * a legacy file whose measurements carry no ids at all.
+ * The tenth, `ecgReference`, names the EVENT measurement an ECG strip was
+ * filed against that the restore did not put back. Unlike `coachReference` it
+ * is a real foreign key, so writing the dangling value would not quietly stop
+ * meaning anything — it would violate the constraint and roll the whole
+ * restore back over one cross-reference. What is dropped is the POINTER: the
+ * strip, its instant and its rhythm verdict all restore. A portable export
+ * omits soft-deleted measurements, which is the ordinary way a live recording
+ * ends up naming one the file does not carry.
  *
- * The eleventh, `checkupClosure`, is not about a restore at all, and it borrows
+ * The eleventh, `medicationTarget`, names the lab analyte a medication's
+ * pinned efficacy target pointed at that the restore did not put back. It is
+ * the one kind here where the ROW is dropped rather than the pointer, and the
+ * reason is what the row is: an override exists only to say "this drug is for
+ * that analyte", so an override with nothing on the far side states nothing.
+ * The resolver already treats a target with neither arm set as "no override",
+ * so writing one back would restore a row that means nothing and still claims
+ * the primary slot. The drug, its schedule and its whole history come back;
+ * what is lost is one statement of intent, and the operator is told which.
+ *
+ * The twelfth, `scheduleRevisionLink`, names a supersede pointer between two
+ * archived schedule eras that the restore could not honour. Its key is a JSON
+ * PATH into the file rather than an id, because the pointer travels as a
+ * position in the drug's own era list and there is no id on either end that
+ * the file and the database both know. Only a hand-edited or truncated file
+ * can trip it: the builder writes a position it has just computed from the
+ * same list. What is lost is the pointer and not the era — the window and the
+ * plan it held still restore.
+ *
+ * The thirteenth, `checkupClosure`, is not about a restore at all, and it borrows
  * this shape deliberately rather than growing a second reporting mechanism
  * beside it. The situation is the same one: something a write was asked to do
  * could not be done, the record itself survives, and the person is told which
@@ -127,6 +154,9 @@ export type SkippedCatalogue =
   | "extractedFact"
   | "factCommitment"
   | "personalRecordReference"
+  | "ecgReference"
+  | "medicationTarget"
+  | "scheduleRevisionLink"
   | "checkupClosure";
 
 /** One key this instance does not know, and the links it cost. */

@@ -59,6 +59,7 @@ import { restoreRemindersData } from "@/lib/export/reminders-backup";
 import { restoreDocumentFilingData } from "@/lib/export/document-filing-backup";
 import { restoreAwardsData } from "@/lib/export/awards-backup";
 import { restoreEnvironmentData } from "@/lib/export/environment-backup";
+import { restoreEcgData } from "@/lib/export/ecg-backup";
 import { invalidateUserData } from "@/lib/cache/invalidate";
 
 export const dynamic = "force-dynamic";
@@ -120,6 +121,7 @@ interface RestoreResponse {
     userAchievements: number;
     environmentContexts: number;
     environmentTravelLocations: number;
+    ecgRecordings: number;
   };
 }
 
@@ -564,6 +566,23 @@ const handler = apiHandler(
 
           const medByName = new Map<string, string>();
           const restoredMedicationIds = new Set<string>();
+          // The efficacy targets cannot ride inside the medication create
+          // beside the schedules and the packs: `biomarkerId` is a foreign key
+          // into a catalogue this transaction has not restored yet. They are
+          // collected here against the id the drug ACTUALLY got and written in
+          // a second pass once the biomarkers exist; the pass itself says why
+          // hoisting the biomarker restore above the medications is the worse
+          // of the two orderings.
+          const pendingEfficacyTargets: Array<{
+            medicationId: string;
+            target: (typeof payload.medications)[number]["efficacyTargets"][number];
+          }> = [];
+          // Supersede pointers the file states and the restore cannot honour.
+          // Reported as JSON paths into the file rather than as ids: the file
+          // is where an operator has to go to see what the position meant, and
+          // an id would be one the restore never wrote.
+          const unresolvedRevisionLinks: string[] = [];
+          let medicationIndex = 0;
           for (const m of payload.medications) {
             const created = await tx.medication.create({
               data: {
@@ -769,7 +788,93 @@ const handler = apiHandler(
             });
             restoredMedicationIds.add(created.id);
             if (!medByName.has(m.name)) medByName.set(m.name, created.id);
+
+            // ── The archived schedule eras, in two passes ────────────────
+            //
+            // An era carries `supersededByRevisionId`, the pointer from a
+            // corrected ARCHIVED row to the MANUAL one that replaced it. The
+            // column has no `@relation`, so a value addressing nothing costs
+            // no error — it just stops meaning anything, which is the more
+            // dangerous shape here, because every era consumer SKIPS a row
+            // that carries the pointer. Lose it and the superseded original
+            // goes live again beside its own correction: two overlapping eras
+            // for one window, and past days minted against a plan the account
+            // had already corrected.
+            //
+            // A portable restore mints fresh ids, so the pointer cannot travel
+            // as one. It travels as a POSITION in this drug's own ordered era
+            // list, because that list is the only thing both ends agree on:
+            // the builder sorts it totally (validFrom, then createdAt, then
+            // id) so two eras sharing an instant cannot swap places between
+            // two exports of the same account, and the pointer never crosses a
+            // drug — every route that writes it scopes the update to one
+            // medication — so the drug's own list is a complete address space.
+            //
+            // Pass one writes every era with the link NULL, because the row a
+            // link addresses is as often written after the row addressing it
+            // as before. Pass two patches the links once every position has an
+            // id.
+            const revisionIds: string[] = [];
+            for (const revision of m.scheduleRevisions) {
+              const row = await tx.medicationScheduleRevision.create({
+                data: {
+                  ...(revision.id ? { id: revision.id } : {}),
+                  medicationId: created.id,
+                  validFrom: new Date(revision.validFrom),
+                  validUntil: new Date(revision.validUntil),
+                  payload: toJson(revision.payload),
+                  source: revision.source ?? "ARCHIVED",
+                  supersededByRevisionId: null,
+                  ...(revision.createdAt
+                    ? { createdAt: new Date(revision.createdAt) }
+                    : {}),
+                },
+                select: { id: true },
+              });
+              revisionIds.push(row.id);
+            }
+            for (const [index, revision] of m.scheduleRevisions.entries()) {
+              const to = revision.supersededByIndex;
+              if (to === null || to === undefined) continue;
+              // A hand-edited file can name a position this drug does not
+              // have, or the era's OWN position — and a row that supersedes
+              // itself is skipped by every consumer, so the era would
+              // disappear from the timeline while still sitting in the table.
+              // Neither can be honoured and neither may be guessed at, so the
+              // link stays NULL and the position is reported. The era still
+              // restores: the window and the plan it held are the history, and
+              // the correction pointer is the smaller loss.
+              if (
+                !Number.isInteger(to) ||
+                to < 0 ||
+                to >= revisionIds.length ||
+                to === index
+              ) {
+                unresolvedRevisionLinks.push(
+                  `medications[${medicationIndex}].scheduleRevisions[${index}].supersededByIndex=${to}`,
+                );
+                continue;
+              }
+              await tx.medicationScheduleRevision.update({
+                where: { id: revisionIds[index] },
+                data: { supersededByRevisionId: revisionIds[to] },
+              });
+            }
+
+            for (const target of m.efficacyTargets) {
+              pendingEfficacyTargets.push({
+                medicationId: created.id,
+                target,
+              });
+            }
+            medicationIndex += 1;
           }
+          recordUnknownKeys(
+            skips,
+            "scheduleRevisionLink",
+            [...new Set(unresolvedRevisionLinks)],
+            unresolvedRevisionLinks,
+          );
 
           if (payload.intakeEvents.length > 0) {
             // An event whose medication did not come back used to be mapped to
@@ -1228,6 +1333,65 @@ const handler = apiHandler(
           // `committedRecordId` names the lab result it was committed to, and
           // that reference is resolved against the rows this loop writes.
           const restoredLabResultIds = new Set<string>();
+          // What each drug was supposed to move, written now that both ends
+          // exist. The drugs came back several hundred lines up and the
+          // analytes only just now, and one of those two had to move for a
+          // target to reach the database at all.
+          //
+          // The second pass wins over hoisting the biomarker restore above the
+          // medications, for two reasons. `biomarkerByName` and
+          // `restoredBiomarkerIds` are read by the lab-result loop directly
+          // below, so moving the block would separate a map from its only
+          // other consumer and leave a future edit free to re-order them back
+          // without anything noticing. And the direction of the dependency
+          // would read backwards: a pinned target is a leaf of the medication
+          // tree, and letting a leaf dictate where the clinical record is
+          // rebuilt inverts what the file is about. A second pass states the
+          // constraint where it applies instead of hiding it in a line order.
+          //
+          // A named analyte the restore did not put back cannot be written:
+          // `biomarkerId` is a real foreign key, so a dangling value would
+          // fail the constraint and roll the entire account back over one
+          // override. The row is dropped and NAMED. Dropping rather than
+          // nulling is deliberate here: the override IS the reference, and a
+          // row with neither arm set is what the resolver already reads as "no
+          // override", so keeping it would restore something that means
+          // nothing while still claiming the primary slot. A target that
+          // carried no name in the first place is a genuine live state (the
+          // analyte was deleted before the export) and comes back as written.
+          const unresolvedTargetAnalytes: string[] = [];
+          const writableTargets = pendingEfficacyTargets.filter((pending) => {
+            const name = pending.target.biomarkerName;
+            if (!name || biomarkerByName.has(name)) return true;
+            unresolvedTargetAnalytes.push(name);
+            return false;
+          });
+          if (writableTargets.length > 0) {
+            await tx.medicationEfficacyTarget.createMany({
+              data: writableTargets.map(({ medicationId, target }) => ({
+                ...(target.id ? { id: target.id } : {}),
+                medicationId,
+                measurementType: target.measurementType ?? null,
+                biomarkerId: target.biomarkerName
+                  ? (biomarkerByName.get(target.biomarkerName) ?? null)
+                  : null,
+                primary: target.primary ?? true,
+                ...(target.createdAt
+                  ? { createdAt: new Date(target.createdAt) }
+                  : {}),
+                ...(target.updatedAt
+                  ? { updatedAt: new Date(target.updatedAt) }
+                  : {}),
+              })),
+            });
+          }
+          recordUnknownKeys(
+            skips,
+            "medicationTarget",
+            [...new Set(unresolvedTargetAnalytes)],
+            unresolvedTargetAnalytes,
+          );
+
           for (const lab of payload.labResults) {
             const biomarkerId =
               lab.biomarkerId !== undefined
@@ -1678,6 +1842,23 @@ const handler = apiHandler(
             skips,
           );
 
+          // The ECG strips. AFTER the measurements on purpose: a recording
+          // carries a `measurementId` that is a real foreign key against the
+          // EVENT row it was filed with, so a reference written before that
+          // row exists does not merely dangle — it violates the constraint
+          // and rolls the whole restore back. The id set is the one the
+          // measurement branch actually wrote, threaded in rather than
+          // re-queried so the function stays a pure reader of this
+          // transaction. Both ends of this section live in
+          // `src/lib/export/ecg-backup.ts`.
+          const ecgCleared = await restoreEcgData(
+            tx,
+            ownerId,
+            payload,
+            new Set(stableRows.map((row) => row.id)),
+            skips,
+          );
+
           // The per-day readings and the location periods that explain them.
           // Neither references anything but the account, so this section has
           // no ordering constraint against any other and sits here beside the
@@ -1742,6 +1923,7 @@ const handler = apiHandler(
             environmentContexts: environmentCleared.environmentContexts,
             environmentTravelLocations:
               environmentCleared.environmentTravelLocations,
+            ecgRecordings: ecgCleared.ecgRecordings,
           };
           return { cleared, skipped: summarizeRestoreSkips(skips) };
         },

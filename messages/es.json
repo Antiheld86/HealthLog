@@ -6919,7 +6919,10 @@
         "restoreSkippedExtractedFact": "Dato del documento",
         "restoreSkippedFactCommitment": "Registro del dato",
         "docsLink": "Documentación",
-        "restoreSkippedPersonalRecordReference": "Procedencia de un récord personal"
+        "restoreSkippedPersonalRecordReference": "Procedencia de un récord personal",
+        "restoreSkippedEcgReference": "Procedencia de un trazado de ECG",
+        "restoreSkippedMedicationTarget": "Analito objetivo de un medicamento",
+        "restoreSkippedScheduleRevisionLink": "Sucesión de periodos de pauta"
       },
       "danger-zone": {
         "title": "Zona de peligro",

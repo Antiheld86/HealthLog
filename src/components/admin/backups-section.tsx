@@ -356,6 +356,15 @@ function catalogueLabel(
   if (catalogue === "personalRecordReference") {
     return t("admin.section.backups.restoreSkippedPersonalRecordReference");
   }
+  if (catalogue === "ecgReference") {
+    return t("admin.section.backups.restoreSkippedEcgReference");
+  }
+  if (catalogue === "medicationTarget") {
+    return t("admin.section.backups.restoreSkippedMedicationTarget");
+  }
+  if (catalogue === "scheduleRevisionLink") {
+    return t("admin.section.backups.restoreSkippedScheduleRevisionLink");
+  }
   // Not a fallback: the chain above is exhaustive and this line is what makes
   // the compiler say so. A catalogue added without a label here now stops the
   // build instead of shipping under a label that belongs to something else,
