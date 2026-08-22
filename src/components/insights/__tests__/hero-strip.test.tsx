@@ -241,10 +241,33 @@ describe("<HeroStrip>", () => {
     );
   });
 
-  it("renders the personal-baseline meta line", () => {
-    const html = render(<HeroStrip briefing={null} now={morningLocal} />);
+  it("renders the personal-baseline meta line under a real briefing", () => {
+    const html = render(
+      <HeroStrip briefing={sampleBriefing} now={morningLocal} />,
+    );
     expect(html).toMatch(/data-slot="insights-hero-strip-baseline"/);
     expect(html).toContain("Based on your last 90 days");
+  });
+
+  /**
+   * Inverted from the previous assertion, which rendered with
+   * `briefing={null}` and still expected the baseline line.
+   *
+   * That pinned the defect. The line claims the subtitle above it was drawn
+   * from the reader's own last 90 days, but with no briefing the subtitle is
+   * `heroFallbackSubtitle` — fixed copy computed from nothing. Both siblings in
+   * the same meta row (the freshness caption, the no-provider hint) already
+   * gate on their own data; this one did not, so an account with no briefing at
+   * all was told its generic sentence rested on a personal baseline.
+   */
+  it("withholds the personal-baseline meta line when there is no briefing", () => {
+    const html = render(<HeroStrip briefing={null} now={morningLocal} />);
+    expect(html).not.toMatch(/data-slot="insights-hero-strip-baseline"/);
+    expect(html).not.toContain("Based on your last 90 days");
+    // The fallback subtitle still renders — only the provenance claim goes.
+    expect(html).toContain(
+      "A daily read of your trends, drawn straight from the numbers you&#x27;ve logged.",
+    );
   });
 
   it("renders the freshness caption when updatedAt is supplied", () => {

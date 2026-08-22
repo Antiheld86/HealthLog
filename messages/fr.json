@@ -2748,8 +2748,8 @@
         "last7days": "7 derniers jours",
         "last30days": "30 derniers jours",
         "last90days": "90 derniers jours",
-        "lastYear": "depuis le début de l'année",
-        "allTime": "Toute la période"
+        "lastYear": "12 derniers mois",
+        "allTime": "toute la période (12 mois en détail)"
       },
       "windowLabel": "Période",
       "settingsAriaLabel": "Paramètres du coach",
@@ -3047,7 +3047,7 @@
       "loadError": "Impossible de charger cette mesure pour le moment.",
       "blutdruckDescription": "Ton évolution systolique/diastolique avec des plages cibles adaptées à l’âge et une évaluation textuelle.",
       "gewichtDescription": "Évolution du poids face à la bande saine dérivée de ta taille, avec évaluation.",
-      "pulsDescription": "Resting pulse vs. the personalised Karvonen target band, plus a written assessment.",
+      "pulsDescription": "Pouls au repos comparé à une plage de référence selon l'âge et le sexe, issue des percentiles de population CDC/NCHS, avec une évaluation rédigée.",
       "stimmungDescription": "Valeurs d’humeur quotidiennes dans le temps, avec une évaluation textuelle.",
       "medikamenteDescription": "Calendrier des prises par médicament, ainsi qu’une évaluation textuelle.",
       "bmiDescription": "IMC dérivé de ton poids et de ta taille, avec évaluation.",
