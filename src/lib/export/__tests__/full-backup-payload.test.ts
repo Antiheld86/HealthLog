@@ -236,6 +236,29 @@ function makePrisma() {
             redValue: 180,
             redMode: "MINUTES",
           },
+          // Two archived eras, the first corrected by the second. The
+          // pointer is what makes this more than two rows: the payload has
+          // to carry it as the SECOND era's position, not as its id.
+          scheduleRevisions: [
+            {
+              id: "era-original",
+              validFrom: new Date("2026-01-01T00:00:00.000Z"),
+              validUntil: new Date("2026-03-01T00:00:00.000Z"),
+              payload: [{ windowStart: "07:00", windowEnd: "09:00" }],
+              source: "ARCHIVED",
+              supersededByRevisionId: "era-correction",
+              createdAt: new Date("2026-03-01T00:00:01.000Z"),
+            },
+            {
+              id: "era-correction",
+              validFrom: new Date("2026-03-01T00:00:00.000Z"),
+              validUntil: new Date("2026-05-01T00:00:00.000Z"),
+              payload: [{ windowStart: "08:00", windowEnd: "10:00" }],
+              source: "MANUAL",
+              supersededByRevisionId: null,
+              createdAt: new Date("2026-05-02T00:00:01.000Z"),
+            },
+          ],
           // One pinned efficacy target, on the lab arm. The biomarker rides
           // as a NAME, the way a lab result's cross-reference does.
           efficacyTargets: [

@@ -265,6 +265,34 @@ const reminderPhaseConfigSchema = z
   .passthrough();
 
 /**
+ * One archived schedule era.
+ *
+ * `supersededByIndex` is the self-reference, and it is a POSITION in the
+ * drug's own `scheduleRevisions` array rather than an id: a portable restore
+ * mints fresh ids, so an id would address nothing. It stays a plain integer
+ * with no range check here on purpose — the file is the wrong place to learn
+ * that a position is out of range, because the array it indexes into is the
+ * array being parsed. The restore does that check, against the rows it
+ * actually wrote, and reports what it cannot resolve.
+ *
+ * `payload` is the snapshot of the superseded schedule rows, carried as
+ * written. Unknown on purpose rather than typed: it is an era's frozen copy of
+ * a shape that has changed several times, and a restore must not refuse a file
+ * because a five-release-old snapshot spells a field the current form does not.
+ */
+const medicationScheduleRevisionSchema = z
+  .object({
+    id: z.string().min(1).optional(),
+    validFrom: isoDateTime,
+    validUntil: isoDateTime,
+    payload: z.unknown(),
+    source: z.string().min(1).optional(),
+    supersededByIndex: z.number().int().nullable().optional(),
+    createdAt: isoDateTime.optional(),
+  })
+  .passthrough();
+
+/**
  * What a medication was supposed to move.
  *
  * The lab arm is a biomarker NAME rather than an id, the way a lab result's
@@ -331,6 +359,9 @@ const medicationSchema = z
     // Same default, same reason: an older file parses, and a drug whose
     // target the resolver derives rather than the person pinning it writes [].
     efficacyTargets: z.array(medicationEfficacyTargetSchema).default([]),
+    // Same default again. A drug whose plan has never been replaced has no
+    // archived era, and a file written before the eras travelled has no key.
+    scheduleRevisions: z.array(medicationScheduleRevisionSchema).default([]),
   })
   .passthrough();
 
@@ -1723,6 +1754,8 @@ export interface BackupSummary {
   medicationSideEffects: number;
   /** Pinned efficacy targets, across every medication. */
   medicationEfficacyTargets: number;
+  /** Archived schedule eras, across every medication. */
+  medicationScheduleRevisions: number;
   moodEntries: number;
   /** v1.15.0 — observed cycle spans in the backup. */
   cycles: number;
@@ -1815,6 +1848,10 @@ export function summarizeBackup(payload: BackupPayload): BackupSummary {
     ),
     medicationEfficacyTargets: payload.medications.reduce(
       (sum, medication) => sum + medication.efficacyTargets.length,
+      0,
+    ),
+    medicationScheduleRevisions: payload.medications.reduce(
+      (sum, medication) => sum + medication.scheduleRevisions.length,
       0,
     ),
     moodEntries: payload.moodEntries.length,

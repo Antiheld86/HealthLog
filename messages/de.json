@@ -6921,7 +6921,8 @@
         "docsLink": "Dokumentation",
         "restoreSkippedPersonalRecordReference": "Herkunft einer Bestleistung",
         "restoreSkippedEcgReference": "Herkunft eines EKG-Streifens",
-        "restoreSkippedMedicationTarget": "Zielwert-Analyt einer Medikation"
+        "restoreSkippedMedicationTarget": "Zielwert-Analyt einer Medikation",
+        "restoreSkippedScheduleRevisionLink": "Abfolge der Schema-Zeiträume"
       },
       "danger-zone": {
         "title": "Gefahrenzone",

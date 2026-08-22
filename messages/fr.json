@@ -6921,7 +6921,8 @@
         "docsLink": "Documentation",
         "restoreSkippedPersonalRecordReference": "Provenance d'un record personnel",
         "restoreSkippedEcgReference": "Provenance d'un tracé ECG",
-        "restoreSkippedMedicationTarget": "Analyte cible d'un médicament"
+        "restoreSkippedMedicationTarget": "Analyte cible d'un médicament",
+        "restoreSkippedScheduleRevisionLink": "Succession des périodes de schéma"
       },
       "danger-zone": {
         "title": "Zone de danger",

@@ -129,6 +129,7 @@ export interface FullBackupCounts
   medicationInventoryEvents: number;
   reminderPhaseConfigs: number;
   medicationEfficacyTargets: number;
+  medicationScheduleRevisions: number;
   moodEntries: number;
   customMoodTagCategories: number;
   hiddenMoodTags: number;
@@ -426,6 +427,18 @@ export async function buildFullBackupPayload(
         inventoryItems: { orderBy: { createdAt: "asc" } },
         inventoryEvents: { orderBy: { occurredAt: "asc" } },
         phaseConfig: true,
+        // The archived schedule eras. Ordered TOTALLY, not just by the column
+        // that reads like the sort key: the position in this list is the
+        // identifier the supersede pointer travels as, so two eras sharing a
+        // `validFrom` must not be free to swap places between two exports of
+        // the same account.
+        scheduleRevisions: {
+          orderBy: [
+            { validFrom: "asc" },
+            { createdAt: "asc" },
+            { id: "asc" },
+          ] as const,
+        },
         // What the drug was supposed to move. The biomarker is read by NAME
         // rather than by id, exactly as the lab results beside it are: a
         // portable restore mints a fresh biomarker id, and `(userId, name)` is
@@ -612,6 +625,19 @@ export async function buildFullBackupPayload(
   const awardsSection: AwardsBackupSection = awards;
   const environmentSection: EnvironmentBackupSection = environment;
   const ecgSection: EcgBackupSection = ecg;
+
+  // Where each archived era sits in its OWN drug's ordered list. Built once
+  // here rather than per row, and scoped per medication because the supersede
+  // pointer never crosses a drug — every route that writes it scopes the
+  // update to the medication it belongs to.
+  const revisionIndexByMedication = new Map(
+    medications.map((m) => [
+      m.id,
+      new Map(
+        m.scheduleRevisions.map((revision, index) => [revision.id, index]),
+      ),
+    ]),
+  );
 
   const payload = {
     schemaVersion: BACKUP_SCHEMA_VERSION,
@@ -805,6 +831,33 @@ export async function buildFullBackupPayload(
         delta: e.delta,
         reason: e.reason,
         occurredAt: e.occurredAt.toISOString(),
+      })),
+      // How the schedule got to where it is. The drug comes back on today's
+      // plan either way; without these the record of when the dose or the
+      // timing moved is gone, and the era minter reads every past day against
+      // the CURRENT schedule instead of the one that was live then — so a
+      // restored account's own compliance history quietly changes.
+      //
+      // `supersededByRevisionId` travels as a POSITION in this list rather
+      // than as an id. See the restore for the whole argument; the short form
+      // is that a portable restore mints fresh ids, so an id would point at
+      // nothing, and the list this array IS is the only stable thing both ends
+      // agree on. A pointer at a row outside this drug's own list cannot be
+      // expressed and is written as null — the schema allows it, no code path
+      // produces it, and inventing an index for it would be worse than saying
+      // nothing.
+      scheduleRevisions: m.scheduleRevisions.map((r) => ({
+        ...(disasterRecovery ? { id: r.id } : {}),
+        validFrom: r.validFrom.toISOString(),
+        validUntil: r.validUntil.toISOString(),
+        payload: r.payload,
+        source: r.source,
+        supersededByIndex: r.supersededByRevisionId
+          ? (revisionIndexByMedication
+              .get(m.id)
+              ?.get(r.supersededByRevisionId) ?? null)
+          : null,
+        createdAt: r.createdAt.toISOString(),
       })),
       // What the drug is FOR, in the person's own words rather than the
       // resolver's. A row exists only where they overrode the derived
@@ -1032,6 +1085,10 @@ export async function buildFullBackupPayload(
       reminderPhaseConfigs: medications.filter((m) => m.phaseConfig).length,
       medicationEfficacyTargets: medications.reduce(
         (total, m) => total + m.efficacyTargets.length,
+        0,
+      ),
+      medicationScheduleRevisions: medications.reduce(
+        (total, m) => total + m.scheduleRevisions.length,
         0,
       ),
       moodEntries: moodEntries.length,

@@ -454,6 +454,21 @@ export const TWO_ENDED_MODELS = [
   // fortnight at home, days after a restore that reported success.
   "EnvironmentContext",
   "EnvironmentTravelLocation",
+  // How a schedule got to where it is. The register said a restored
+  // medication keeps today's schedule and loses the record of when the dose or
+  // the timing moved. Measured, it costs more than a record: the era minter
+  // reads past days against the schedule that was live THEN, so an account
+  // that came back without its eras has its own compliance history rewritten
+  // against a plan it was not on.
+  //
+  // `supersededByRevisionId` is the reference that made this its own problem.
+  // It is a bare id column with no `@relation`, so a dangling value costs no
+  // error and simply stops meaning anything — and every era consumer skips a
+  // row that carries it, which means losing the pointer puts a corrected era
+  // back on the timeline beside its own correction. It travels as a POSITION
+  // in the drug's own ordered era list, because a portable restore mints fresh
+  // ids and the list is the only address space both ends share.
+  "MedicationScheduleRevision",
   // What each drug was supposed to move. The register said the drug comes
   // back with no statement of what it was for, and that is exactly the row:
   // one exists ONLY where the person overrode the derived ATC / name
@@ -516,8 +531,6 @@ export const STRUCTURALLY_UNATTRIBUTABLE: Readonly<Record<string, string>> = {
  * rather than by what is cheapest to write.
  */
 export const COVERAGE_PENDING: Readonly<Record<string, string>> = {
-  MedicationScheduleRevision:
-    "The history of how a schedule changed. Without it a restored medication keeps today's schedule and loses the record of when the dose or timing moved, which is the part a doctor asks about.",
   WorkoutRoute:
     "GPS traces. Deliberately absent from the payload today and DISCLOSED as absent in the file's own manifest, which is why this is a documented exclusion rather than a silent one — but it is still a loss for a self-hoster with no other copy.",
   WorkoutSamples:

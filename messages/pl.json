@@ -6921,7 +6921,8 @@
         "docsLink": "Dokumentacja",
         "restoreSkippedPersonalRecordReference": "Pochodzenie rekordu osobistego",
         "restoreSkippedEcgReference": "Pochodzenie zapisu EKG",
-        "restoreSkippedMedicationTarget": "Analit docelowy leku"
+        "restoreSkippedMedicationTarget": "Analit docelowy leku",
+        "restoreSkippedScheduleRevisionLink": "Następstwo okresów schematu"
       },
       "danger-zone": {
         "title": "Strefa zagrożenia",

@@ -577,6 +577,12 @@ const handler = apiHandler(
             medicationId: string;
             target: (typeof payload.medications)[number]["efficacyTargets"][number];
           }> = [];
+          // Supersede pointers the file states and the restore cannot honour.
+          // Reported as JSON paths into the file rather than as ids: the file
+          // is where an operator has to go to see what the position meant, and
+          // an id would be one the restore never wrote.
+          const unresolvedRevisionLinks: string[] = [];
+          let medicationIndex = 0;
           for (const m of payload.medications) {
             const created = await tx.medication.create({
               data: {
@@ -782,13 +788,93 @@ const handler = apiHandler(
             });
             restoredMedicationIds.add(created.id);
             if (!medByName.has(m.name)) medByName.set(m.name, created.id);
+
+            // ── The archived schedule eras, in two passes ────────────────
+            //
+            // An era carries `supersededByRevisionId`, the pointer from a
+            // corrected ARCHIVED row to the MANUAL one that replaced it. The
+            // column has no `@relation`, so a value addressing nothing costs
+            // no error — it just stops meaning anything, which is the more
+            // dangerous shape here, because every era consumer SKIPS a row
+            // that carries the pointer. Lose it and the superseded original
+            // goes live again beside its own correction: two overlapping eras
+            // for one window, and past days minted against a plan the account
+            // had already corrected.
+            //
+            // A portable restore mints fresh ids, so the pointer cannot travel
+            // as one. It travels as a POSITION in this drug's own ordered era
+            // list, because that list is the only thing both ends agree on:
+            // the builder sorts it totally (validFrom, then createdAt, then
+            // id) so two eras sharing an instant cannot swap places between
+            // two exports of the same account, and the pointer never crosses a
+            // drug — every route that writes it scopes the update to one
+            // medication — so the drug's own list is a complete address space.
+            //
+            // Pass one writes every era with the link NULL, because the row a
+            // link addresses is as often written after the row addressing it
+            // as before. Pass two patches the links once every position has an
+            // id.
+            const revisionIds: string[] = [];
+            for (const revision of m.scheduleRevisions) {
+              const row = await tx.medicationScheduleRevision.create({
+                data: {
+                  ...(revision.id ? { id: revision.id } : {}),
+                  medicationId: created.id,
+                  validFrom: new Date(revision.validFrom),
+                  validUntil: new Date(revision.validUntil),
+                  payload: toJson(revision.payload),
+                  source: revision.source ?? "ARCHIVED",
+                  supersededByRevisionId: null,
+                  ...(revision.createdAt
+                    ? { createdAt: new Date(revision.createdAt) }
+                    : {}),
+                },
+                select: { id: true },
+              });
+              revisionIds.push(row.id);
+            }
+            for (const [index, revision] of m.scheduleRevisions.entries()) {
+              const to = revision.supersededByIndex;
+              if (to === null || to === undefined) continue;
+              // A hand-edited file can name a position this drug does not
+              // have, or the era's OWN position — and a row that supersedes
+              // itself is skipped by every consumer, so the era would
+              // disappear from the timeline while still sitting in the table.
+              // Neither can be honoured and neither may be guessed at, so the
+              // link stays NULL and the position is reported. The era still
+              // restores: the window and the plan it held are the history, and
+              // the correction pointer is the smaller loss.
+              if (
+                !Number.isInteger(to) ||
+                to < 0 ||
+                to >= revisionIds.length ||
+                to === index
+              ) {
+                unresolvedRevisionLinks.push(
+                  `medications[${medicationIndex}].scheduleRevisions[${index}].supersededByIndex=${to}`,
+                );
+                continue;
+              }
+              await tx.medicationScheduleRevision.update({
+                where: { id: revisionIds[index] },
+                data: { supersededByRevisionId: revisionIds[to] },
+              });
+            }
+
             for (const target of m.efficacyTargets) {
               pendingEfficacyTargets.push({
                 medicationId: created.id,
                 target,
               });
             }
+            medicationIndex += 1;
           }
+          recordUnknownKeys(
+            skips,
+            "scheduleRevisionLink",
+            [...new Set(unresolvedRevisionLinks)],
+            unresolvedRevisionLinks,
+          );
 
           if (payload.intakeEvents.length > 0) {
             // An event whose medication did not come back used to be mapped to
