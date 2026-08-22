@@ -1286,6 +1286,30 @@ export const integrationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       },
     },
   },
+  "/api/whoop/disconnect": {
+    post: {
+      tags: ["Integrations"],
+      summary: "Disconnect the caller's WHOOP account",
+      description:
+        "Deletes the connection row, audits the teardown and parks the `whoop` ledger at `disconnected`. There is no per-user unsubscribe to make — WHOOP webhook subscriptions are registered once per developer app, unlike Withings which subscribes per category. The BYO-key credentials are deliberately LEFT IN PLACE so a reconnect does not force the user to re-paste them; use the credentials DELETE to remove those too. No body. Auth via cookie or Bearer.",
+      responses: {
+        "200": {
+          description: "The connection was removed.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(disconnectedAck, "WhoopDisconnectEnvelope"),
+            },
+          },
+        },
+        "404": {
+          description:
+            "No WHOOP connection to remove. NOT an idempotent no-op: a second disconnect answers 404 rather than 200.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
   "/api/withings/status": {
     get: {
       tags: ["Integrations"],
