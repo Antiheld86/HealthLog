@@ -18,6 +18,24 @@
  * Client-safe: no message bundles are imported here, so a client component may
  * use these. Building an index OVER the bundles is a server concern and lives
  * in `./shared-resolve`.
+ *
+ * ## Why there is a second fold, and when to reach for it
+ *
+ * `./localised-label-index` carries `foldLabel`, and the two disagree ON
+ * PURPOSE rather than by accident. That one decomposes with NFKD, maps "ß" to
+ * "ss" and "œ" to "oe", and joins with "_"; this one decomposes with NFD,
+ * leaves "ß" alone, and joins with spaces.
+ *
+ * The difference is who typed the text. Here the other side of the comparison
+ * is a shipped label a person retyped, or prose a lab printed, so tolerating a
+ * DIFFERENT SPELLING would be reaching beyond what the fold can honestly
+ * claim. There, someone is naming a metric to an assistant in their own words,
+ * and "Suessstoff" for "Süßstoff" is the same request; the wider fold earns
+ * its keep because the caller is composing, not reproducing.
+ *
+ * Keep them apart. Whichever you pick, apply it to BOTH sides of the
+ * comparison — a fold on one side only is an exact-string match in a
+ * disguise.
  */
 
 /** Curly, modifier and backtick apostrophes a keyboard or word processor emits. */

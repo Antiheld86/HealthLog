@@ -21,6 +21,8 @@
  * therefore lives server-side in `./glp1-side-effect-tag-match`.
  */
 
+import { foldForMatch } from "@/lib/i18n/fold-for-match";
+
 /**
  * The catalogue, in display order. `key` is the stable machine value that
  * crosses the API and the Coach prompt; `labelKey` is the i18n key the chip
@@ -85,14 +87,7 @@ export const GLP1_SIDE_EFFECT_TAG_LABEL_KEYS: Record<
  * the label the matcher indexes.
  */
 export function normaliseSideEffectTag(raw: string): string {
-  return raw
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[\u2018\u2019\u02bc'`]/g, " ")
-    .replace(/[-_/]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return foldForMatch(raw);
 }
 
 /**
