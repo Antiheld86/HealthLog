@@ -363,8 +363,15 @@ describe("Apple Health HKElectrocardiogram CSV parser", () => {
     // Apple's own "this device does not know this verdict". Deliberately NOT
     // INCONCLUSIVE — the device did not fail to classify the waveform.
     ["Unrecognized", null],
-    // A verdict from a German watch. Still null, and still the open half.
-    ["Sinusrhythmus", null],
+    // A verdict from a German watch. This asserted `null` while the two
+    // halves of the fix lived on separate branches: the classifier gained
+    // Apple's full English set without knowing any German, so a German
+    // verdict was still unreachable. Together they meet — the alias table
+    // translates the wording, the classifier decides the meaning — and the
+    // old expectation was pinning the gap rather than a decision.
+    ["Sinusrhythmus", "NOT_DETECTED"],
+    // Four of the six languages are still unmapped, so this stays true.
+    ["Fibrillation auriculaire", null],
     ["Some verdict this parser has never seen", null],
   ])("passes through device classification %s only", async (raw, expected) => {
     await expect(
