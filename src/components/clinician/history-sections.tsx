@@ -69,6 +69,10 @@ export function LabResultsSection({
         const reading = qualitative
           ? lab.valueText
           : `${fmtNum(lab.value as number)} ${lab.unit}`.trim();
+        const range = (low: number | null, high: number | null) =>
+          formatReferenceRange(low, high, (value) => String(fmtNum(value)), {
+            emptyText: "",
+          });
         // The window the reading was judged against, printed as the source
         // report printed it when that is where it came from, so a clinician
         // comparing against the original reads the same characters.
@@ -76,12 +80,15 @@ export function LabResultsSection({
           ? null
           : lab.referenceOrigin === "source" && lab.sourceReferenceText
             ? lab.sourceReferenceText
-            : formatReferenceRange(
-                lab.referenceLow,
-                lab.referenceHigh,
-                (value) => String(fmtNum(value)),
-                { emptyText: "" },
-              );
+            : range(lab.referenceLow, lab.referenceHigh);
+        // When the report's own window and the saved band disagree about the
+        // same number, both are named. Showing one of two disagreeing windows
+        // is a partial answer, and the PDF's footnote says so; here it fits on
+        // the line rather than under a table.
+        const catalog =
+          !qualitative && lab.referenceDivergesFromCatalog
+            ? range(lab.catalogReferenceLow, lab.catalogReferenceHigh)
+            : "";
         return (
           <StatRow
             key={`${lab.panel ?? ""}-${lab.analyte}`}
@@ -89,7 +96,10 @@ export function LabResultsSection({
             value={compose([
               reading,
               reference
-                ? `${t("doctorReport.labsColReference")} ${reference}`
+                ? `${t("doctorReport.labsColReference")} ${reference}` +
+                  (catalog
+                    ? ` (${t("doctorReport.labsCatalogRangeLabel")} ${catalog})`
+                    : "")
                 : null,
               fmtDate(lab.takenAt),
             ])}
