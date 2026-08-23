@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.37.26] — 2026-08-23
+
+The app is offered in six languages, and in seven places it was reading what you wrote as though there were two.
+
+### Fixed
+
+- Side effects you recorded on a GLP-1 medication contributed nothing to the timeline unless you use English or German. Tapping a chip stores the translated word, so the same symptom is `nausea` on one account and `Nudności` on another, and the timeline compared that against a hand-typed list of the English and German labels. The same list sat behind the Coach and behind the doctor report, where a clinician read an empty side-effect table over a record that had entries.
+- A lab reference range printed as `jusqu'à 5,0` was read as no range at all, so the value was never flagged as normal or out of range. Ranges in all six languages parse now, and one the parser genuinely cannot read is recorded as unreadable instead of quietly looking like a result nobody set a range for.
+- Lab analytes named in French, Spanish, Italian or Polish got no LOINC code on the FHIR export, and a qualitative result of `négatif` or `ujemny` got no SNOMED code. A lab report in one of those languages also failed the check that decides whether a document is a lab report, so it was never offered for automatic staging.
+- Analyte names written with German umlauts never matched either, which is the older half of the same defect and affected the language most people here use. The key normaliser deleted any character outside a to z, so `Hämoglobin` became `hmoglobin` and never met the alias written as `hamoglobin`. It only ever worked for people who left the umlaut off. `Nüchternglukose` and `Harnsäure` were the same.
+- Over the assistant connection, `Fer`, `Żelazo`, `poids` and `Sommeil` resolved to nothing, and asking about `Puls` answered with pulse-wave velocity, because a fallback pass matched English display names by substring. Medication names written as `Metformina` or `Lewotyroksyna` missed the class that connects a dose to a symptom.
+
+### Changed
+
+- A route that has been removed now answers `410 Gone` with a machine-readable code, the version that removed it, and its replacement where there is one, rather than the bare `404` it used to. A `404` is indistinguishable from a broken deployment, which is why a client that met one kept retrying a route that was never coming back. The same list is published in the API document and on the capability endpoint, so a client can learn about a retirement without comparing versions.
+- Removing a route now has two legal answers rather than one, and a test enforces the choice: drop it from the published contract, or register it as retired. Doing neither, which is how a client finds out by rendering an error, no longer passes.
+
 ## [1.37.25] — 2026-08-22
 
 Two things this release is about. The Coach could state a figure your record does not support, in exactly the situation where it was most likely to: when you asked about something you have never recorded. And a backup you cannot fully restore is not a backup, so the register of what a restore left behind went from twenty-seven tables to two.
