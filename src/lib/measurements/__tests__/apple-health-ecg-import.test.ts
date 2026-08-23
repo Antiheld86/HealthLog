@@ -6,6 +6,8 @@ import { Readable } from "node:stream";
 
 import { strToU8, zipSync } from "fflate";
 
+import { classifyEcgRhythm } from "@/lib/apple-health/ecg-csv";
+
 type ArchiveLimits = {
   maxMembers: number;
   maxEcgMembers: number;
@@ -349,11 +351,62 @@ describe("Apple Health HKElectrocardiogram CSV parser", () => {
     ["Sinus Rhythm", "NOT_DETECTED"],
     ["Atrial Fibrillation", "IRREGULAR"],
     ["Inconclusive", "INCONCLUSIVE"],
-    ["Localized or unknown verdict", null],
+    // Observed in real exports, and dropped to null until now.
+    ["Heart Rate Over 120", "INCONCLUSIVE"],
+    ["Heart Rate Under 50", "INCONCLUSIVE"],
+    // The same verdict from a watch with a different threshold.
+    ["Heart Rate Over 150", "INCONCLUSIVE"],
+    // Named in Apple's ECG instructions for use.
+    ["Poor Recording", "INCONCLUSIVE"],
+    ["Atrial Fibrillation - High Heart Rate", "IRREGULAR"],
+    ["High Heart Rate - No Atrial Fibrillation Detected", "NOT_DETECTED"],
+    // Apple's own "this device does not know this verdict". Deliberately NOT
+    // INCONCLUSIVE — the device did not fail to classify the waveform.
+    ["Unrecognized", null],
+    // A verdict from a German watch. Still null, and still the open half.
+    ["Sinusrhythmus", null],
+    ["Some verdict this parser has never seen", null],
   ])("passes through device classification %s only", async (raw, expected) => {
     await expect(
       parse(validCsv({ Classification: raw })),
     ).resolves.toMatchObject({ rhythmClassification: expected });
+  });
+
+  /**
+   * The nullable column has one spelling for four different facts. The
+   * classifier keeps them apart even though the column cannot, so a reader of
+   * this code can see which nulls are honest and which are the unresolved
+   * language half.
+   *
+   * The old table pinned `["Localized or unknown verdict", null]` as a single
+   * row. That assertion is still true, but it fused a localised verdict with an
+   * unknown one and with the two heart-rate verdicts that were being silently
+   * dropped beside them — it read as "everything else is unknown" when two of
+   * those were verdicts Apple documents. It is split apart here.
+   */
+  it.each([
+    ["Sinus Rhythm", "mapped"],
+    ["Heart Rate Under 50", "mapped"],
+    ["", "absent"],
+    [undefined, "absent"],
+    ["Unrecognized", "unrepresentable"],
+    ["Sinusrhythmus", "unknown"],
+    ["Fibrillation auriculaire", "unknown"],
+  ])("classifies %s as %s", (raw, kind) => {
+    expect(classifyEcgRhythm(raw).kind).toBe(kind);
+  });
+
+  it("treats every heart-rate threshold the same way", () => {
+    // The number is the watch generation's, not a value to enumerate.
+    for (const n of [50, 100, 120, 150]) {
+      expect(classifyEcgRhythm(`Heart Rate Over ${n}`)).toEqual({
+        kind: "mapped",
+        value: "INCONCLUSIVE",
+      });
+    }
+    // Not a threshold verdict — no number, so it stays unknown rather than
+    // being swept into INCONCLUSIVE by a loose pattern.
+    expect(classifyEcgRhythm("Heart Rate Over").kind).toBe("unknown");
   });
 
   it.each([

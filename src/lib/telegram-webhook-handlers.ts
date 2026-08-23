@@ -8,6 +8,7 @@ import {
 } from "@/lib/telegram";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 import { locales, type Locale } from "@/lib/i18n/config";
+import { foldForMatch } from "@/lib/i18n/fold-for-match";
 import { recomputeMedicationComplianceForEvent } from "@/lib/rollups/medication-compliance-rollups";
 import {
   applyCanonicalSlotWrite,
@@ -42,6 +43,60 @@ import {
  * mood / measurement helpers live here. The userId is always resolved
  * from the linked chat via `findTelegramUser` — never from the payload.
  */
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Bare-word aliases.
+ *
+ * The bot's real commands are slash commands (`/help`, `/start`, `/add`) plus
+ * the `taken <name>` text command, and `telegram.helpBody` documents exactly
+ * those in all six bundles — none of that depends on the reader's language.
+ * What did depend on it were the two undocumented courtesies below, which knew
+ * English and German: "aide", "ayuda", "aiuto" and "pomoc" reached the intake
+ * keyword instead, failed it, and the handler returned without replying at all.
+ * Silence is the worst answer to someone asking for help.
+ *
+ * These are ordinary words, not app labels, so there is nothing in the bundles
+ * to derive them from. They are matched on the FOLDED text so "cześć" and
+ * "czesc" are one entry and a stray capital or accent cannot miss.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** "Help", in every language the app ships. */
+const HELP_WORDS: readonly string[] = [
+  "help",
+  "hilfe",
+  "aide",
+  "ayuda",
+  "aiuto",
+  "pomoc",
+];
+
+/** Greetings the bot answers with a wave, in every language the app ships. */
+const GREETING_WORDS: readonly string[] = [
+  "hi",
+  "hello",
+  "hey",
+  "hallo",
+  "moin",
+  "bonjour",
+  "salut",
+  "hola",
+  "buenas",
+  "ciao",
+  "salve",
+  "czesc",
+  "witaj",
+  "dzien dobry",
+];
+
+/**
+ * True when the whole message is one of `words`. Folded on both sides, so the
+ * comparison is case-, accent- and punctuation-insensitive; anchored to the
+ * whole message, so "help me log my weight" is not swallowed as a command.
+ */
+function isBareCommandWord(text: string, words: readonly string[]): boolean {
+  const folded = foldForMatch(text);
+  return folded !== "" && words.includes(folded);
+}
 
 export interface TelegramUpdate {
   update_id: number;
@@ -1106,12 +1161,15 @@ export async function handleTextMessage(update: TelegramUpdate) {
     }
   }
 
-  // "Help" / start: accept English + German keyword aliases independent of locale
+  // Help / start. The slash commands are locale-independent by construction and
+  // are what `telegram.helpBody` documents in every bundle. The BARE word is an
+  // undocumented convenience that used to know English and German only, so a
+  // French user typing "aide" got silence — the handler falls through to the
+  // intake keyword and returns without a reply.
   if (
     /^\/help\b/i.test(text) ||
     /^\/start\b/i.test(text) ||
-    /^hilfe$/i.test(text) ||
-    /^help$/i.test(text)
+    isBareCommandWord(text, HELP_WORDS)
   ) {
     const userMsgId = message?.message_id;
     const resp = await sendTelegramMessage(
@@ -1212,10 +1270,7 @@ export async function handleTextMessage(update: TelegramUpdate) {
   }
 
   // Greeting responses (kept locale-independent)
-  const greetings = ["hi", "hallo", "hey", "moin", "hello"];
-  const lowerText = text.toLowerCase();
-  const matchedGreeting = greetings.find((g) => lowerText === g);
-  if (matchedGreeting) {
+  if (isBareCommandWord(text, GREETING_WORDS)) {
     const userMsgId = message?.message_id;
     const reply = text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
     const resp = await sendTelegramMessage(botToken, chatId, `${reply}! 👋`);

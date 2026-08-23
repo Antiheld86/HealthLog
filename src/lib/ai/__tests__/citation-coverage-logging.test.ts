@@ -2,8 +2,10 @@ import { describe, it, expect, vi } from "vitest";
 import {
   detectsNormativeClaim,
   computeCitationCoverage,
+  normativeKeywordBank,
 } from "../citation-coverage";
 import { MEDICAL_REFERENCES } from "../medical-references";
+import { locales, type Locale } from "@/lib/i18n/config";
 
 const annotateMock = vi.fn();
 
@@ -231,5 +233,92 @@ describe("computeCitationCoverage()", () => {
     expect(result.normativeRecommendations).toBe(2);
     expect(result.citedNormativeRecommendations).toBe(1);
     expect(result.uncitedNormativeRecommendationIds).toEqual(["uncited-1"]);
+  });
+});
+
+/**
+ * The bank used to be English plus German. Recommendations are generated in
+ * the reader's language, so for fr / es / it / pl every rec scored
+ * non-normative and the annotation reported 0 normative, 0 uncited — a
+ * coverage figure indistinguishable from perfect coverage. These pin that the
+ * check can still fail in each shipped language.
+ */
+describe("normative-claim detection across the shipped locales", () => {
+  /** One unambiguously normative sentence per shipped locale. */
+  const NORMATIVE_SENTENCE: Record<Locale, string> = {
+    en: "Your systolic should stay below the target of 130 mmHg.",
+    de: "Ihr systolischer Wert sollte unter dem Zielwert von 130 mmHg bleiben.",
+    fr: "Votre systolique devrait rester en dessous de l’objectif de 130 mmHg.",
+    es: "Su sistólica debería mantenerse por debajo del objetivo de 130 mmHg.",
+    it: "La sistolica dovrebbe restare al di sotto dell’obiettivo di 130 mmHg.",
+    pl: "Ciśnienie skurczowe powinno pozostać poniżej celu 130 mmHg.",
+  };
+
+  /**
+   * The same observation phrased WITHOUT a normative claim — a pure
+   * within-user comparison. Pins that the locale banks widened detection
+   * rather than making every sentence match.
+   */
+  const OBSERVATIONAL_SENTENCE: Record<Locale, string> = {
+    en: "Your 7-day average is 4 mmHg higher than your 90-day median.",
+    de: "Ihr 7-Tage-Mittel liegt 4 mmHg höher als Ihr 90-Tage-Median.",
+    fr: "Votre moyenne sur 7 jours dépasse de 4 mmHg votre médiane sur 90 jours.",
+    es: "Su media de 7 días excede en 4 mmHg su mediana de 90 días.",
+    it: "La media a 7 giorni supera di 4 mmHg la mediana a 90 giorni.",
+    pl: "Twoja średnia z 7 dni przekracza medianę z 90 dni o 4 mmHg.",
+  };
+
+  it.each(locales)("carries a non-empty keyword bank for %s", (locale) => {
+    expect(normativeKeywordBank()[locale].length).toBeGreaterThan(0);
+  });
+
+  it.each(locales)("detects a normative recommendation in %s", (locale) => {
+    expect(detectsNormativeClaim(NORMATIVE_SENTENCE[locale], locale)).toBe(
+      true,
+    );
+  });
+
+  it.each(locales)("leaves an observational %s sentence alone", (locale) => {
+    expect(detectsNormativeClaim(OBSERVATIONAL_SENTENCE[locale], locale)).toBe(
+      false,
+    );
+  });
+
+  it.each(locales)(
+    "counts an uncited normative %s rec as uncited, not as absent",
+    (locale) => {
+      const result = computeCitationCoverage(
+        {
+          recommendations: [
+            { id: "uncited-1", text: NORMATIVE_SENTENCE[locale] },
+            { id: "observational-1", text: OBSERVATIONAL_SENTENCE[locale] },
+          ],
+        },
+        locale,
+      );
+      expect(result.totalRecommendations).toBe(2);
+      expect(result.normativeRecommendations).toBe(1);
+      expect(result.citedNormativeRecommendations).toBe(0);
+      expect(result.uncitedNormativeRecommendationIds).toEqual(["uncited-1"]);
+    },
+  );
+
+  it("still grades an English reply served to a non-English reader", () => {
+    // A fallback provider ignores the language directive; the EN bank runs
+    // alongside the reader's for exactly this case.
+    expect(
+      detectsNormativeClaim("Your systolic should stay below 130 mmHg.", "pl"),
+    ).toBe(true);
+  });
+
+  it("does not fire on the everyday Italian 'soprattutto'", () => {
+    // The comparative is banked as "al di sopra", not a bare "sopra", so an
+    // ordinary intensifier cannot inflate the normative count.
+    expect(
+      detectsNormativeClaim(
+        "Soprattutto la sera i valori restano stabili.",
+        "it",
+      ),
+    ).toBe(false);
   });
 });

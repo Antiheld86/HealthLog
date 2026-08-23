@@ -6,6 +6,7 @@ import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useTranslations } from "@/lib/i18n/context";
+import { foldForMatch } from "@/lib/i18n/fold-for-match";
 import { useRovingRadioGroup } from "@/hooks/use-roving-radio-group";
 import {
   MOOD_TAG_ICON_CATALOG,
@@ -36,21 +37,42 @@ const ICON_GROUP_LABEL_KEYS: Record<string, string> = {
 };
 
 /**
- * Pure search filter — name + keyword substring match, case-insensitive.
+ * Pure search filter — name, keyword, and translated group-header match.
  * Exported for unit tests. Entries the client bundle cannot draw are
  * excluded up front so the picker never offers a fallback-glyph tile.
+ *
+ * `groupLabels` maps a catalog group to the header the picker is CURRENTLY
+ * rendering above it, so the words on screen in the reader's language are also
+ * the words the box searches. Without it the only searchable text was the
+ * English Lucide name and the English keyword aids, and a German reader who
+ * typed what the picker itself had just shown them ("Gesundheit") got an empty
+ * grid and "no icons found" — an empty table, with nothing to say it was the
+ * language rather than the query.
+ *
+ * That is a partial close, stated rather than papered over: the per-icon
+ * keywords ("happy", "gym", "coffee") stay English, so searching for "Herz" or
+ * "kawa" still finds nothing. Translating them is ~80 icons times three aids
+ * times six languages of new content, which is a decision about content rather
+ * than about this filter. Omit the argument and the behaviour is the old one.
+ *
+ * Both sides go through `foldForMatch`, so accents and hyphens cannot make a
+ * reader miss a header they can see.
  */
 export function filterIconCatalog(
   catalog: readonly MoodTagIconCatalogEntry[],
   query: string,
+  groupLabels: Readonly<Record<string, string>> = {},
 ): MoodTagIconCatalogEntry[] {
   const drawable = catalog.filter((entry) => isMoodTagIconName(entry.name));
-  const needle = query.trim().toLowerCase();
+  const needle = foldForMatch(query);
   if (needle.length === 0) return drawable;
   return drawable.filter(
     (entry) =>
-      entry.name.toLowerCase().includes(needle) ||
-      entry.keywords.some((keyword) => keyword.toLowerCase().includes(needle)),
+      foldForMatch(entry.name).includes(needle) ||
+      entry.keywords.some((keyword) =>
+        foldForMatch(keyword).includes(needle),
+      ) ||
+      foldForMatch(groupLabels[entry.group] ?? "").includes(needle),
   );
 }
 
@@ -65,9 +87,22 @@ export function MoodTagIconPicker({ value, onChange }: MoodTagIconPickerProps) {
   const [query, setQuery] = useState("");
   const groupLabelId = useId();
 
+  // The headers the grid is about to render, so the search box matches the
+  // words the reader can see rather than only their English source.
+  const groupLabels = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(ICON_GROUP_LABEL_KEYS).map(([group, key]) => [
+          group,
+          t(key),
+        ]),
+      ),
+    [t],
+  );
+
   const filtered = useMemo(
-    () => filterIconCatalog(MOOD_TAG_ICON_CATALOG, query),
-    [query],
+    () => filterIconCatalog(MOOD_TAG_ICON_CATALOG, query, groupLabels),
+    [query, groupLabels],
   );
 
   // One flat roving radiogroup across the (filtered) grid; the group
