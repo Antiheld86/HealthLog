@@ -11,9 +11,12 @@
  * causal.
  *
  * Reads daily series bounded to a trailing window, day-keyed in the user's
- * display timezone (late-night readings mis-bucket under UTC). Pure compute
- * lives in `src/lib/insights/correlation-discovery.ts`; this route only
- * fetches + day-keys + responds. No LLM, no narrative, no cache table.
+ * display timezone (late-night readings mis-bucket under UTC). The channel set
+ * comes from `src/lib/insights/discovery-matrix.ts`, the one assembler every
+ * discovery surface shares; the pure compute lives in
+ * `src/lib/insights/correlation-discovery.ts`. This route only asks for the
+ * matrix, scans it, persists the pattern decisions and responds. No LLM, no
+ * narrative, no cache table.
  */
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiError, apiSuccess } from "@/lib/api-response";
@@ -25,34 +28,19 @@ import { requireModuleEnabled } from "@/lib/modules/gate";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
 import { prisma } from "@/lib/db";
 import { wallClockInTz } from "@/lib/tz/wall-clock";
-import type { MeasurementType } from "@/generated/prisma/client";
 import {
   discoverCorrelations,
   discoverEmergingCorrelations,
   discoverLabOutcomeCorrelations,
-  discoveryMeasurementTypes,
-  DISCOVERY_BEHAVIOURS,
-  DISCOVERY_OUTCOMES,
   EARLY_WINDOW_DAYS,
-  MEDICATION_COMPLIANCE_CHANNEL_KEY,
-  SYMPTOM_SEVERITY_CHANNEL_KEY,
-  type DailySeriesPoint,
-  type NamedSeries,
 } from "@/lib/insights/correlation-discovery";
 import {
   decisionForEvidence,
   PATTERN_FAMILIES,
   syncAcceptedPatterns,
 } from "@/lib/insights/correlation-patterns";
-import {
-  fetchComplianceSeries,
-  fetchCustomMetricBehaviourSeries,
-  fetchEnvironmentSeries,
-  fetchLabDraws,
-  fetchMeasurementDailySeriesTiered,
-  fetchMoodWindowSeries,
-  fetchSymptomSeries,
-} from "@/lib/insights/correlation-channel-series";
+import { assembleDiscoveryMatrix } from "@/lib/insights/discovery-matrix";
+import { fetchLabDraws } from "@/lib/insights/correlation-channel-series";
 
 export const dynamic = "force-dynamic";
 
@@ -125,85 +113,22 @@ async function buildCorrelationsResponse(
   const now = new Date();
   const since = new Date(now.getTime() - WINDOW_DAYS * MS_PER_DAY);
 
-  // Non-MeasurementType channels are backed by other models, not measurements —
-  // MOOD (MoodEntry), MEDICATION_COMPLIANCE (the dose-history ledger), and
-  // SYMPTOM_SEVERITY (the illness day-log). `discoveryMeasurementTypes` drops
-  // them so the `type IN (...)` query carries only real enum values; each is
-  // built from its own source below and folded into the series.
-  const behaviourTypes = discoveryMeasurementTypes(
-    DISCOVERY_BEHAVIOURS,
-  ) as MeasurementType[];
-  const outcomeTypes = discoveryMeasurementTypes(
-    DISCOVERY_OUTCOMES,
-  ) as MeasurementType[];
-
-  // Rollup read-swap for the measurement channels: eligible spot channels
-  // read their per-day means from the DAY rollup tier, with per-channel
-  // fallback to the raw `fetchMeasurementWindowSeries` path on any miss
-  // (coverage gap, far-from-UTC profile tz, sleep / cumulative grain) —
-  // see `fetchMeasurementDailySeriesTiered` for the full parity contract.
-  // The SWR cache cell above stays in front of this read: the swap only
-  // lowers the cost of a cache MISS, it does not replace the cache.
-  const [measurementDaily, moodWindow] = await Promise.all([
-    fetchMeasurementDailySeriesTiered(userId, tz, since, [
-      ...behaviourTypes,
-      ...outcomeTypes,
-    ]),
-    fetchMoodWindowSeries(userId, tz, since),
-  ]);
-  const { measurementsCapped } = measurementDaily;
-  const { moodDaily, moodCapped } = moodWindow;
-
-  // v1.21.0 (FDREXTEND) — build the two non-measurement, non-mood channels from
-  // their own sources. Each degrades to an empty series when the user has no
-  // data, so the discovery loop drops the channel (it cannot clear n ≥ 20).
-  // v1.22 — lab draws (for the labs ↔ outcome pass) fetch alongside.
-  const [
-    complianceSeries,
-    symptomSeries,
-    labDraws,
-    environmentSeries,
-    customMetricSeries,
-  ] = await Promise.all([
-    fetchComplianceSeries(userId, tz, since),
-    fetchSymptomSeries(userId, tz, since),
+  // The channel set comes from the one assembler every discovery surface
+  // shares (`discovery-matrix.ts`) — this route, the per-metric card, the Coach
+  // tool and the period narrative all scan the same matrix by construction.
+  // `"tiered"` puts the eligible measurement channels on the DAY rollup
+  // read-swap, with per-channel fallback to the raw path on any miss (coverage
+  // gap, far-from-UTC profile tz, sleep / cumulative grain). The SWR cache cell
+  // above stays in front of this read: the swap only lowers the cost of a cache
+  // MISS, it does not replace the cache.
+  //
+  // v1.22 — lab draws (for the labs ↔ outcome pass) fetch alongside; they feed
+  // a different pass over a different grain, so they are not matrix channels.
+  const [matrix, labDraws] = await Promise.all([
+    assembleDiscoveryMatrix(userId, { tz, since, fetchMode: "tiered" }),
     fetchLabDraws(userId, tz, since),
-    // v1.25 (W-ENV) — environmental-exposure behaviour channels (weather /
-    // daylight). Empty when the module is off / no home set, so the channels
-    // degrade to absent. The module gate is implicit: no rows ⇒ no channels.
-    fetchEnvironmentSeries(userId, since),
-    fetchCustomMetricBehaviourSeries(userId, tz, since),
   ]);
-
-  const points = (key: string): DailySeriesPoint[] =>
-    key === "MOOD" ? moodDaily : (measurementDaily.byType.get(key) ?? []);
-
-  const series: NamedSeries[] = [];
-  for (const key of DISCOVERY_BEHAVIOURS) {
-    if (key === MEDICATION_COMPLIANCE_CHANNEL_KEY) {
-      series.push(complianceSeries);
-    } else if (key === SYMPTOM_SEVERITY_CHANNEL_KEY) {
-      series.push({ ...symptomSeries, role: "behaviour" });
-    } else {
-      series.push({ key, role: "behaviour", points: points(key) });
-    }
-  }
-  for (const key of DISCOVERY_OUTCOMES) {
-    if (key === SYMPTOM_SEVERITY_CHANNEL_KEY) {
-      series.push({ ...symptomSeries, role: "outcome" });
-    } else {
-      series.push({ key, role: "outcome", points: points(key) });
-    }
-  }
-  // v1.25 (W-ENV) — fold the environmental-exposure behaviour channels in. They
-  // pair (lag D → D+1) against every outcome above; the n ≥ 20 / FDR / effect-
-  // size gates apply unchanged, so a thin weather series degrades to absent.
-  for (const envSeries of environmentSeries) {
-    series.push(envSeries);
-  }
-  for (const customSeries of customMetricSeries) {
-    series.push(customSeries);
-  }
+  const { series, diagnostics } = matrix;
 
   const result = discoverCorrelations(series, { locale });
 
@@ -278,15 +203,15 @@ async function buildCorrelationsResponse(
       // half of the window may be thin.
       // The cap can only apply to raw-path channels — rollup-served
       // channels read one row per day per source and cannot reach it.
-      measurements_capped: measurementsCapped,
+      measurements_capped: diagnostics.measurementsCapped,
       // Rollup read-swap reach: how many measurement channels rode the DAY
       // rollup tier on this build (the rest took the raw fallback path).
-      measurement_rollup_channels: measurementDaily.rollupTypes.length,
-      mood_entries_capped: moodCapped,
+      measurement_rollup_channels: diagnostics.rollupTypes.length,
+      mood_entries_capped: diagnostics.moodCapped,
       // FDREXTEND — per-channel day-counts so a dashboard can see whether the
       // two sparse new channels reached the n ≥ 20 floor or degraded to absent.
-      compliance_days: complianceSeries.points.length,
-      symptom_days: symptomSeries.points.length,
+      compliance_days: diagnostics.complianceDays,
+      symptom_days: diagnostics.symptomDays,
       // v1.22 — early-detection + labs reach.
       emerging: emerging.emerging.length,
       emerging_window_days: emerging.windowDays,
@@ -295,15 +220,9 @@ async function buildCorrelationsResponse(
       // v1.25 (W-ENV) — env channel reach (sum of stored daily points across
       // the exposure channels) so a dashboard can see whether weather was
       // available for the scan.
-      environment_days: environmentSeries.reduce(
-        (sum, s) => sum + s.points.length,
-        0,
-      ),
-      custom_metric_channels: customMetricSeries.length,
-      custom_metric_days: customMetricSeries.reduce(
-        (sum, channel) => sum + channel.points.length,
-        0,
-      ),
+      environment_days: diagnostics.environmentDays,
+      custom_metric_channels: diagnostics.customMetricChannels,
+      custom_metric_days: diagnostics.customMetricDays,
     },
   });
 

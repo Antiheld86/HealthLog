@@ -6,11 +6,23 @@
  * computed elsewhere and reused verbatim here (no new statistics):
  *
  *  - The FDR-controlled, day-D→D+1 lagged all-pairs discovery
- *    (`@/lib/insights/correlation-discovery`). We run the SAME full-matrix scan
- *    the `/api/insights/correlations` route + the per-metric card run, so the
- *    Coach never surfaces a pair the insight pages would not — same Pearson,
- *    same exact p-value, same Benjamini-Hochberg control. We return every
- *    surviving pair (not filtered to one metric) as a descriptive driver row.
+ *    (`@/lib/insights/correlation-discovery`), over the channel set the one
+ *    shared assembler builds (`@/lib/insights/discovery-matrix`). That is the
+ *    same matrix the `/api/insights/correlations` route and the per-metric card
+ *    scan, so the Coach never surfaces a pair the insight pages would not, and
+ *    never misses one they would — same channels, same Pearson, same exact
+ *    p-value, same Benjamini-Hochberg control. We return every surviving pair
+ *    (not filtered to one metric) as a descriptive driver row.
+ *
+ *    This file claimed that parity from v1.21.0 and did not have it. When the
+ *    environmental-exposure channels arrived in v1.25 and the custom-metric
+ *    channels after them, both landed at the route and at the card and not
+ *    here, because each surface folded its own channel list. The sentence above
+ *    stayed, which is worse than no sentence: a reader checking whether the
+ *    Coach could discuss barometric pressure and sleep found a promise that it
+ *    could, and the pair had never been in its matrix. The promise is now
+ *    structural — the assembler is the only place a matrix is built, frozen by
+ *    `src/__tests__/discovery-matrix-guard.test.ts`.
  *  - The coincident-deviation flag (`computeCoincidentDeviation`): "two or more
  *    of your vitals are outside their usual band today", with the illness-
  *    explained reframe carried through.
@@ -22,8 +34,8 @@
  * interpretation string — so the Coach states the observed linkage without
  * inventing a relationship.
  */
-import type { MeasurementType } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
+import { ENVIRONMENT_FIELDS } from "@/lib/environment/fields";
 import type { Locale } from "@/lib/i18n/config";
 import { annotate } from "@/lib/logging/context";
 import { isModuleEnabled } from "@/lib/modules/gate";
@@ -32,23 +44,12 @@ import {
   discoverCorrelations,
   discoverEmergingCorrelations,
   discoverLabOutcomeCorrelations,
-  discoveryMeasurementTypes,
-  DISCOVERY_BEHAVIOURS,
-  DISCOVERY_OUTCOMES,
   EARLY_WINDOW_DAYS,
   MEDICATION_COMPLIANCE_CHANNEL_KEY,
   SYMPTOM_SEVERITY_CHANNEL_KEY,
-  type NamedSeries,
 } from "@/lib/insights/correlation-discovery";
-import {
-  buildMeasurementDailySeries,
-  fetchComplianceSeries,
-  fetchLabDraws,
-  fetchMeasurementWindowSeries,
-  fetchMoodWindowSeries,
-  fetchSymptomSeries,
-} from "@/lib/insights/correlation-channel-series";
-import { loadUserSourcePriority } from "@/lib/rollups/measurement-read";
+import { assembleDiscoveryMatrix } from "@/lib/insights/discovery-matrix";
+import { fetchLabDraws } from "@/lib/insights/correlation-channel-series";
 import {
   computeCoincidentDeviation,
   loadBaselineProfile,
@@ -133,14 +134,30 @@ function tzDayKey(at: Date, tz: string): string {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
-/** Natural labels for the non-measurement channel keys (read cleanly in prose). */
+/**
+ * Natural labels for the non-measurement channel keys (read cleanly in prose).
+ *
+ * The environmental-exposure channels take their phrase from the one env field
+ * vocabulary rather than a second hand-written list, so a new exposure field
+ * cannot reach the Coach as "env pressure delta".
+ */
 const CHANNEL_LABELS: Record<string, string> = {
   [MEDICATION_COMPLIANCE_CHANNEL_KEY]: "medication adherence",
   [SYMPTOM_SEVERITY_CHANNEL_KEY]: "symptom severity",
+  ...Object.fromEntries(
+    ENVIRONMENT_FIELDS.map((field) => [field.key, field.narrationLabel]),
+  ),
 };
 
-/** Lower-case, space-separated label from a discovery channel key. */
-function humanise(key: string): string {
+/**
+ * Lower-case, space-separated label for a discovery channel.
+ *
+ * `label` is the engine's per-pair label for a DYNAMIC channel — today that is
+ * a custom metric, whose key is `CUSTOM_METRIC:<cuid>`. It has to win over the
+ * key: prettifying that key would put a database id into the Coach's prose.
+ */
+function humanise(key: string, label?: string): string {
+  if (label && label.trim().length > 0) return label.trim().toLowerCase();
   return CHANNEL_LABELS[key] ?? key.replace(/_/g, " ").toLowerCase();
 }
 
@@ -194,80 +211,22 @@ export async function readCoachCorrelations(
     const tz = userRow?.timezone ?? "Europe/Berlin";
     const since = new Date(Date.now() - WINDOW_DAYS * MS_PER_DAY);
 
-    // The non-MeasurementType channels (MOOD, MEDICATION_COMPLIANCE,
-    // SYMPTOM_SEVERITY) are backed by other models — `discoveryMeasurementTypes`
-    // drops them so the Postgres `type IN (...)` enum cast only ever sees real
-    // enum values; each is sourced separately below, exactly like the route.
-    const behaviourTypes = discoveryMeasurementTypes(
-      DISCOVERY_BEHAVIOURS,
-    ) as MeasurementType[];
-    const outcomeTypes = discoveryMeasurementTypes(
-      DISCOVERY_OUTCOMES,
-    ) as MeasurementType[];
-
-    // v1.30.3 (QA F1) — the fetch + desc/cap/resort discipline (a dense
-    // account's cap must fall on the OLDEST rows, never the newest — the
-    // emerging-correlations pass below is entirely about the recent window)
-    // now lives in `fetchMeasurementWindowSeries` / `fetchMoodWindowSeries`
-    // (`correlation-channel-series.ts`), shared with the route, the
-    // per-metric card, and the period narrative.
-    const [
-      { byType, measurementsCapped },
-      { moodDaily, moodCapped },
-      coincidentDerived,
-      priorityJson,
-    ] = await Promise.all([
-      fetchMeasurementWindowSeries(userId, since, [
-        ...behaviourTypes,
-        ...outcomeTypes,
-      ]),
-      fetchMoodWindowSeries(userId, tz, since),
+    // The channel set is the shared one, so the Coach scans exactly what the
+    // correlations page scans. The measurement read stays `"raw"` (the route's
+    // rollup read-swap is a read-cost choice, not a channel-set one).
+    //
+    // v1.22 — the lab draws feed a separate point-vs-window pass, not the
+    // matrix, so they are fetched alongside rather than assembled in.
+    const [matrix, coincidentDerived, labDraws] = await Promise.all([
+      assembleDiscoveryMatrix(userId, { tz, since, fetchMode: "raw" }),
       // Coincident-deviation is its own derived metric — fail-soft to null so a
       // baseline hiccup never sinks the whole correlations read. D2-8: pass the
       // user's tz so the "today" grouping matches the user's calendar day, not
       // UTC's, before the fired flag is narrated as "out of band TODAY".
       computeCoincidentDeviation(userId, profile, { tz }).catch(() => null),
-      loadUserSourcePriority(userId),
-    ]);
-    const seriesPoints = (key: string) =>
-      key === "MOOD"
-        ? moodDaily
-        : buildMeasurementDailySeries(
-            key as MeasurementType,
-            byType.get(key) ?? [],
-            tz,
-            priorityJson,
-          );
-
-    // The two non-measurement, non-mood channels come from their own sources
-    // (the dose-history ledger + the illness day-log), folded in below exactly
-    // like the route. Each degrades to an empty series when the user has no
-    // data, so the discovery loop drops the channel (it cannot clear the n ≥ 20
-    // floor) — it can never surface a fabricated driver.
-    const [complianceSeries, symptomSeries, labDraws] = await Promise.all([
-      fetchComplianceSeries(userId, tz, since),
-      fetchSymptomSeries(userId, tz, since),
-      // v1.22 — lab draws for the labs ↔ outcome pass (degrades to absent).
       fetchLabDraws(userId, tz, since),
     ]);
-
-    const series: NamedSeries[] = [];
-    for (const key of DISCOVERY_BEHAVIOURS) {
-      if (key === MEDICATION_COMPLIANCE_CHANNEL_KEY) {
-        series.push(complianceSeries);
-      } else if (key === SYMPTOM_SEVERITY_CHANNEL_KEY) {
-        series.push({ ...symptomSeries, role: "behaviour" });
-      } else {
-        series.push({ key, role: "behaviour", points: seriesPoints(key) });
-      }
-    }
-    for (const key of DISCOVERY_OUTCOMES) {
-      if (key === SYMPTOM_SEVERITY_CHANNEL_KEY) {
-        series.push({ ...symptomSeries, role: "outcome" });
-      } else {
-        series.push({ key, role: "outcome", points: seriesPoints(key) });
-      }
-    }
+    const { series, diagnostics } = matrix;
 
     // QA F1 — surfaces when a dense account's window exceeded the read cap,
     // mirroring the route's identical annotation. The cap now falls on the
@@ -276,15 +235,20 @@ export async function readCoachCorrelations(
     annotate({
       action: { name: "coach.correlations.read" },
       meta: {
-        measurements_capped: measurementsCapped,
-        mood_entries_capped: moodCapped,
+        measurements_capped: diagnostics.measurementsCapped,
+        mood_entries_capped: diagnostics.moodCapped,
+        // The environmental-exposure and custom-metric families
+        // reach this path for the first time; these say whether they carried
+        // anything on a given turn.
+        environment_days: diagnostics.environmentDays,
+        custom_metric_channels: diagnostics.customMetricChannels,
       },
     });
 
     const discovery = discoverCorrelations(series, { locale });
     const drivers: CoachCorrelationDriver[] = discovery.discovered.map((d) => ({
-      behaviour: humanise(d.behaviour),
-      outcome: humanise(d.outcome),
+      behaviour: humanise(d.behaviour, d.behaviourLabel),
+      outcome: humanise(d.outcome, d.outcomeLabel),
       direction: d.r >= 0 ? "higher" : "lower",
       lagDays: d.lagDays,
       n: d.n,
@@ -306,8 +270,8 @@ export async function readCoachCorrelations(
     });
     const emerging: CoachEmergingDriver[] = emergingResult.emerging.map(
       (d) => ({
-        behaviour: humanise(d.behaviour),
-        outcome: humanise(d.outcome),
+        behaviour: humanise(d.behaviour, d.behaviourLabel),
+        outcome: humanise(d.outcome, d.outcomeLabel),
         direction: d.r >= 0 ? "higher" : "lower",
         lagDays: d.lagDays,
         n: d.n,
@@ -323,6 +287,8 @@ export async function readCoachCorrelations(
     });
     const labDrivers: CoachLabCorrelation[] = labResult.discovered.map((d) => ({
       lab: d.lab.startsWith("LAB:") ? d.lab.slice("LAB:".length) : d.lab,
+      // A lab pair's outcome is always a declared channel key, never a dynamic
+      // one, so there is no per-pair label to prefer here.
       outcome: humanise(d.outcome),
       direction: d.r >= 0 ? "higher" : "lower",
       n: d.n,

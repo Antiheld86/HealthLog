@@ -13,6 +13,8 @@ const intakeEventFindMany = vi.fn();
 const illnessEpisodeFindMany = vi.fn();
 const illnessDayLogFindMany = vi.fn();
 const labResultFindMany = vi.fn();
+const environmentContextFindMany = vi.fn();
+const customMetricFindMany = vi.fn();
 vi.mock("@/lib/modules/gate", () => ({
   isModuleEnabled: vi.fn(async () => true),
 }));
@@ -26,6 +28,14 @@ vi.mock("@/lib/db", () => ({
     illnessEpisode: { findMany: (a: unknown) => illnessEpisodeFindMany(a) },
     illnessDayLog: { findMany: (a: unknown) => illnessDayLogFindMany(a) },
     labResult: { findMany: (a: unknown) => labResultFindMany(a) },
+    // The reader assembles the SHARED discovery matrix, so the
+    // environmental-exposure and custom-metric channels are read here too.
+    // Before that these two models were never touched on this path, which is
+    // the whole defect: the Coach could not correlate weather with anything.
+    environmentContext: {
+      findMany: (a: unknown) => environmentContextFindMany(a),
+    },
+    customMetric: { findMany: (a: unknown) => customMetricFindMany(a) },
   },
 }));
 
@@ -65,6 +75,8 @@ describe("readCoachCorrelations", () => {
     illnessEpisodeFindMany.mockReset().mockResolvedValue([]);
     illnessDayLogFindMany.mockReset().mockResolvedValue([]);
     labResultFindMany.mockReset().mockResolvedValue([]);
+    environmentContextFindMany.mockReset().mockResolvedValue([]);
+    customMetricFindMany.mockReset().mockResolvedValue([]);
     loadBaselineProfile
       .mockReset()
       .mockResolvedValue({ ageYears: 40, sex: "MALE", heightCm: 180 });
@@ -259,5 +271,96 @@ describe("readCoachCorrelations", () => {
     expect(symptomDriver).toBeDefined();
     expect(symptomDriver?.outcome).toBe("sleep duration");
     expect(symptomDriver?.n).toBeGreaterThanOrEqual(20);
+  });
+
+  // ── the matrix the Coach scans is the shared one ────────────────────────
+  //
+  // The Coach tool's header promised, from v1.21.0, "the SAME full-matrix scan
+  // the /api/insights/correlations route + the per-metric card run". It was not
+  // true from v1.25 onward: the environmental-exposure channels landed at the
+  // route and at the card, never here, because each surface folded its own
+  // channel list. A user asking the Coach whether air pressure related to their
+  // sleep met a matrix the pair had never been in.
+  //
+  // These two tests are the pair that matters. The first pins the read (before
+  // the shared assembler, `EnvironmentContext` was never queried on this path
+  // at all — the mock below would record zero calls). The second drives the
+  // REAL engine end-to-end and asserts the pair comes out the other side as a
+  // narratable driver.
+
+  it("reads the environmental-exposure channels (the route's matrix, not a subset)", async () => {
+    discoverCorrelations.mockReturnValue({
+      discovered: [],
+      pairsTested: 0,
+      fdrQ: 0.1,
+      minPairs: 20,
+    });
+    await readCoachCorrelations("u1", "en");
+    expect(environmentContextFindMany).toHaveBeenCalledTimes(1);
+    expect(customMetricFindMany).toHaveBeenCalledTimes(1);
+
+    // Not just "a query happened": the channels reach the scan.
+    const series = discoverCorrelations.mock.calls[0]?.[0] as Array<{
+      key: string;
+    }>;
+    const keys = series.map((s) => s.key);
+    expect(keys).toContain("ENV_PRESSURE_MEAN");
+    expect(keys).toContain("ENV_DAYLIGHT");
+  });
+
+  it("surfaces a barometric-pressure driver through the real engine", async () => {
+    const real = await vi.importActual<
+      typeof import("@/lib/insights/correlation-discovery")
+    >("@/lib/insights/correlation-discovery");
+    discoverCorrelations.mockImplementation((series) =>
+      real.discoverCorrelations(
+        series as Parameters<typeof real.discoverCorrelations>[0],
+        { locale: "en" },
+      ),
+    );
+
+    // 45 consecutive days. Today's barometric pressure (behaviour, day D)
+    // tracks the NEXT day's sleep (outcome, day D+1) with a deterministic
+    // linear relationship, so the pair clears n ≥ 20 / p < 0.05 / FDR / the
+    // effect-size floor rather than riding on noise.
+    const DAYS = 45;
+    const base = Date.UTC(2026, 4, 1, 12, 0, 0); // midday → tz-stable day key
+    const dayKey = (offset: number): string =>
+      new Date(base + offset * 86_400_000).toISOString().slice(0, 10);
+
+    const envRows: Array<{ date: string; pressureMean: number }> = [];
+    const measurements: Array<{
+      type: string;
+      value: number;
+      measuredAt: Date;
+    }> = [];
+    for (let i = 0; i < DAYS; i++) {
+      const swing = i % 5; // 0..4, real variance across the window
+      envRows.push({ date: dayKey(i), pressureMean: 1000 + swing });
+      // Higher pressure today → shorter sleep tomorrow (a clean negative r).
+      measurements.push({
+        type: "SLEEP_DURATION",
+        value: 8 - swing * 0.5,
+        measuredAt: new Date(base + (i + 1) * 86_400_000),
+      });
+    }
+
+    measurementFindMany.mockResolvedValue(measurements);
+    // Every other env column is null, so only the pressure channel carries
+    // points and the assertion below cannot be satisfied by a sibling field.
+    environmentContextFindMany.mockResolvedValue(envRows);
+
+    const result = await readCoachCorrelations("u1", "en");
+
+    expect(result.present).toBe(true);
+    const pressureDriver = result.drivers?.find(
+      (d) => d.behaviour === "barometric pressure",
+    );
+    expect(pressureDriver).toBeDefined();
+    expect(pressureDriver?.outcome).toBe("sleep duration");
+    expect(pressureDriver?.n).toBeGreaterThanOrEqual(20);
+    expect(pressureDriver?.direction).toBe("lower");
+    // The channel key must never leak into prose the Coach reads out.
+    expect(pressureDriver?.behaviour).not.toContain("ENV_");
   });
 });

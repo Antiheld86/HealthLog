@@ -24,6 +24,8 @@ const intakeEventFindMany = vi.fn();
 const illnessEpisodeFindMany = vi.fn();
 const illnessDayLogFindMany = vi.fn();
 const labResultFindMany = vi.fn();
+const environmentContextFindMany = vi.fn();
+const customMetricFindMany = vi.fn();
 
 vi.mock("@/lib/modules/gate", () => ({
   isModuleEnabled: vi.fn(async () => true),
@@ -42,6 +44,12 @@ vi.mock("@/lib/db", () => ({
     illnessEpisode: { findMany: (a: unknown) => illnessEpisodeFindMany(a) },
     illnessDayLog: { findMany: (a: unknown) => illnessDayLogFindMany(a) },
     labResult: { findMany: (a: unknown) => labResultFindMany(a) },
+    // The reader assembles the shared discovery matrix, which reads the
+    // environmental-exposure and custom-metric channels too.
+    environmentContext: {
+      findMany: (a: unknown) => environmentContextFindMany(a),
+    },
+    customMetric: { findMany: (a: unknown) => customMetricFindMany(a) },
   },
 }));
 
@@ -129,6 +137,8 @@ describe("buildCoachReadStrip — the pattern line speaks the reader's language"
     illnessEpisodeFindMany.mockReset().mockResolvedValue([]);
     illnessDayLogFindMany.mockReset().mockResolvedValue([]);
     labResultFindMany.mockReset().mockResolvedValue([]);
+    environmentContextFindMany.mockReset().mockResolvedValue([]);
+    customMetricFindMany.mockReset().mockResolvedValue([]);
     seedSymptomDrivesSleep();
   });
 
