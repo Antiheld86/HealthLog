@@ -546,6 +546,67 @@ describe("Telegram webhook — text-message dispatch", () => {
     expect(prisma.medicationIntakeEvent.create).not.toHaveBeenCalled();
   });
 
+  /**
+   * The bare word is an alias for `/help`. It knew "help" and "hilfe", so the
+   * four other shipped languages asking for help fell through to the intake
+   * keyword, failed it, and the handler returned without sending anything —
+   * silence, not an error. These pin one spelling per shipped language.
+   */
+  it.each([
+    ["help", 210],
+    ["Hilfe", 211],
+    ["aide", 212],
+    ["ayuda", 213],
+    ["aiuto", 214],
+    ["Pomoc", 215],
+  ])("answers the bare help word %s", async (word, updateId) => {
+    const res = await POST(
+      tgRequest({
+        update_id: updateId,
+        message: { message_id: 20, text: word, chat: { id: 7777 } },
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(sendTelegramMessage).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(sendTelegramMessage).mock.calls[0][2]).toMatch(
+      /available commands/i,
+    );
+  });
+
+  it("does not swallow a sentence that merely starts with a help word", async () => {
+    // The alias matches the WHOLE message; "help me log my weight" is prose
+    // the later paths should still see, not a command.
+    const res = await POST(
+      tgRequest({
+        update_id: 216,
+        message: {
+          message_id: 21,
+          text: "help me log my weight",
+          chat: { id: 7777 },
+        },
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(sendTelegramMessage).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["bonjour", 220],
+    ["Hola", 221],
+    ["ciao", 222],
+    ["cześć", 223],
+  ])("answers the greeting %s", async (word, updateId) => {
+    const res = await POST(
+      tgRequest({
+        update_id: updateId,
+        message: { message_id: 22, text: word, chat: { id: 7777 } },
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(sendTelegramMessage).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(sendTelegramMessage).mock.calls[0][2]).toMatch(/👋/);
+  });
+
   it("greeting like 'hi' echoes a friendly reply", async () => {
     const res = await POST(
       tgRequest({
