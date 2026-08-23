@@ -45,3 +45,35 @@ export function encounterKindLabel(
       return t("encounters.kind.other");
   }
 }
+
+/**
+ * The same mapping as a KEY, for callers that already hold a translator and
+ * cannot reach for a second one — the doctor-report PDF, the daily digest and
+ * the clinician share view.
+ *
+ * Those three built the key by interpolation (`encounters.kind.${kind}`), and
+ * the enum is `ROUTINE` while the bundle leaf is `routine`, so all three
+ * printed raw dot notation into a clinical document. The interpolated form was
+ * invisible to `i18n-call-site-coverage`, which is the reason it survived: the
+ * key it asked for never existed and nothing said so.
+ */
+export function encounterKindLabelKey(kind: EncounterKind): string {
+  switch (kind) {
+    case "ROUTINE":
+      return "encounters.kind.routine";
+    case "ACUTE":
+      return "encounters.kind.acute";
+    case "SPECIALIST":
+      return "encounters.kind.specialist";
+    case "PREVENTIVE":
+      return "encounters.kind.preventive";
+    case "EMERGENCY":
+      return "encounters.kind.emergency";
+    case "HOSPITAL":
+      return "encounters.kind.hospital";
+    case "THERAPY":
+      return "encounters.kind.therapy";
+    default:
+      return "encounters.kind.other";
+  }
+}

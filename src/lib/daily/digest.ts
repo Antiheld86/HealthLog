@@ -19,8 +19,10 @@
  * provisional→final refresh (sleep-arrival debounce) is S4's work; it will
  * populate the same two fields the DTO already carries, so no consumer changes.
  */
+import type { EncounterKind } from "@/generated/prisma/client";
 import type { DailyBriefing, DailyBriefingSignal } from "@/lib/ai/schema";
 import type { ArrivalKind } from "@/lib/arrivals/types";
+import { encounterKindLabelKey } from "@/lib/encounters/kind-label";
 import type { MedsTodayBlock } from "@/lib/dashboard/meds-today";
 import type { ModuleKey } from "@/lib/modules/registry";
 import type { ServerTranslator } from "@/lib/i18n/server-translator";
@@ -560,7 +562,12 @@ function buildUpcomingVisitItem(
   // Today vs tomorrow is decided on the SAME instants the read window used, so
   // a visit admitted by the query can never be described as neither.
   const hoursAway = (at.getTime() - now.getTime()) / (60 * 60 * 1000);
-  const what = visit.practitionerName ?? t(`encounters.kind.${visit.kind}`);
+  // Through the key resolver, never `encounters.kind.${kind}`: the enum is
+  // `ROUTINE` and the bundle leaf is `routine`, so the interpolated form put
+  // raw dot notation on a lock screen.
+  const what =
+    visit.practitionerName ??
+    t(encounterKindLabelKey(visit.kind as EncounterKind));
   return {
     kind: "upcoming_visit",
     title: t("daily.item.upcomingVisit.title"),
