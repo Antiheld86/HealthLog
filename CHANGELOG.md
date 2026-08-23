@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.37.27] — 2026-08-23
+
+Five things this release fixes have the same shape: a check that was green because it was not checking.
+
+### Fixed
+
+- Importing an Apple Health archive rejected every ECG recording exported outside a US locale, and counted each one as a failure without recording why. Four separate causes, none about the recording: the file opens with a header row that has no value after it, waveform samples are written with a decimal comma, the sample rate reads `511,422 hertz` rather than `512 Hz`, and a German watch writes the column names in German. The parser had been written against a test fixture and the fixture was US-style throughout. All four forms are accepted now, and both dialects are pinned side by side so a later edit cannot narrow it back to one.
+- Three of Apple's own English verdicts were dropped as unknown. `Heart Rate Over 120` and `Heart Rate Under 50` are what the export actually writes, which matches neither the framework's documented case names nor the wording in Apple's instructions. A verdict the parser cannot represent is now told apart from one it has never heard of.
+- The Coach could not report a single environmental correlation. Four surfaces assembled the correlation matrix independently and three carried different channel sets, so asking whether air pressure related to your sleep searched a matrix that never held the pair. All four assemble from one place now. The Coach's file header had claimed for months that it ran the same scan as the insights page, which is why nobody looked.
+- A metric card's assessment received every surviving correlation in the record rather than the ones about that metric. The filter that narrows to one metric had been replaced by the dismissal filter instead of chained with it, so the name, the docstring and the early-return guard all said "one metric" while the return said otherwise. Its test passed because the fixture held one pair.
+- Reading a personal record issued the same single-row lookup once per metric. On a three-year record the dashboard did it 25 times and the analytics page 17. The comment above the helper had warned about exactly this since it was written. It resolves once per request now.
+- Citation coverage reported full coverage for four of the six languages, because it measured against an English and German word bank while the text it measured was written in the reader's language.
+- The Coach refused legitimate questions in some languages and let off-topic ones through. Its topic vocabulary was English and German, so the Italian word for "series" sat on the off-topic list while nothing recognised the Italian for "measurements".
+- A number the Coach wrote in prose could be matched against an unrelated reading. Unit words were recognised in English only, so `7,4 Stunden` carried no kind, and a value with no kind clears the gate against every entry in the ledger: a sleep figure could ground itself on a glucose result. French dates were not parsed either, so correct prose was stripped as unverifiable.
+- Asking Telegram for help in French, Spanish or Polish got no reply at all.
+- The mood icon picker searched only English names, so typing back the translated group header it had just displayed returned an empty grid.
+
+### Changed
+
+- Deleting every threshold override at once asks first. The endpoint erased the whole set when the metric parameter was omitted, with no confirmation and, unlike its sibling, no rate limit of its own. It takes the same explicit confirmation the account deletion does. Deleting a single metric's override is unchanged.
+- Removing a passkey now needs a fresh proof of possession, the same gate that has always guarded removal of a second-factor security key. The softer gate had been sitting on the primary sign-in credential. A passkey satisfies its own gate, so an account with nothing else enrolled keeps control of its own credential list, and the app keeps the capability through the step-up it already uses.
+- A portable backup that claims a section it does not carry is refused whole rather than restored in part, and the refusal names the missing section. A section the export deliberately left out and declared as omitted still restores, which is what keeps the disaster-recovery export working.
+
+### Internal
+
+- The read surfaces have measured budgets for the first time. Against a three-year record (29,565 measurements, 1,095 mood entries, 5,475 medication intakes, 20,688 rollup rows) the heaviest surface issues 103 statements and 77 KB, and page load does not depend on record size at all. The budgets pin query counts, payload sizes and which rollup arm was taken rather than wall-clock, because counts were identical across runs while wall-clock moved up to sevenfold on the same machine. One ratio budget asserts that counts do not grow between a 30-day record and a three-year one.
+- The dead-code gate had been blind to every re-export since knip 6.16. The tool changed at 6.28 and the old silence turned out to be an artefact of one setting rather than a clean tree: with that setting off, the old and new versions agree exactly. Two dead constants and 204 unimported re-exports are gone; every definition still in use stayed.
+
 ## [1.37.26] — 2026-08-23
 
 The app is offered in six languages, and in seven places it was reading what you wrote as though there were two.
