@@ -11,7 +11,4 @@ export { WorkoutDetailZones } from "./zones";
 export { WorkoutDetailRoute } from "./route-map";
 export { WorkoutDetailSplits } from "./splits";
 export { WorkoutDetailDayContext } from "./day-context";
-export {
-  WorkoutInsightCard,
-  type WorkoutActivityInsightData,
-} from "./insight-slot";
+export { WorkoutInsightCard } from "./insight-slot";
