@@ -37,23 +37,54 @@ function parseRecordedAt(value: string | undefined): Date {
   return parsed;
 }
 
+/**
+ * Split a measured quantity into its magnitude and its unit word.
+ *
+ * The unit is matched loosely on purpose. A real export writes the sampling
+ * rate as "511,422 hertz" — the word spelled out, lower case, and separated by
+ * a NO-BREAK space in the German files — where the fixtures had always assumed
+ * "512 Hz". The magnitude is read through the shared decimal helper, so a
+ * comma-region watch's "511,562" is the same rate as "511.422".
+ *
+ * `\s` covers U+00A0, so the no-break space needs no special case.
+ */
+function splitQuantity(
+  raw: string,
+  unit: RegExp,
+): { magnitude: number; ok: boolean } {
+  const match = /^([+-]?[\d.,]+)\s*([^\s\d]+)$/.exec(raw.trim());
+  if (!match) return { magnitude: Number.NaN, ok: false };
+  const magnitude = parseDecimal(match[1]);
+  if (magnitude === null) return { magnitude: Number.NaN, ok: false };
+  return { magnitude, ok: unit.test(match[2]) };
+}
+
+/** "Hz", "hz", "hertz", "Hertz" — the same unit, spelled as the region does. */
+const HERTZ = /^(?:hz|hertz)$/i;
+
+/** "bpm" and the spelled-out forms a localised export may carry. */
+const BEATS_PER_MINUTE = /^(?:bpm|spm)$/i;
+
 function parseRate(value: string | undefined): number {
-  const match = /^(\d+(?:\.\d+)?)\s*Hz$/i.exec(value?.trim() ?? "");
-  const rate = match ? Number(match[1]) : Number.NaN;
-  if (!Number.isFinite(rate) || rate <= 0 || rate > 10_000) {
+  const { magnitude, ok } = splitQuantity(value ?? "", HERTZ);
+  if (
+    !ok ||
+    !Number.isFinite(magnitude) ||
+    magnitude <= 0 ||
+    magnitude > 10_000
+  ) {
     throw parserError("sample rate is invalid");
   }
-  return Math.round(rate);
+  return Math.round(magnitude);
 }
 
 function parseHeartRate(value: string | undefined): number | null {
   if (value === undefined || value.trim() === "") return null;
-  const match = /^(\d+(?:\.\d+)?)\s*bpm$/i.exec(value.trim());
-  const rate = match ? Number(match[1]) : Number.NaN;
-  if (!Number.isFinite(rate) || rate <= 0 || rate > 300) {
+  const { magnitude, ok } = splitQuantity(value, BEATS_PER_MINUTE);
+  if (!ok || !Number.isFinite(magnitude) || magnitude <= 0 || magnitude > 300) {
     throw parserError("average heart rate is invalid");
   }
-  return Math.round(rate);
+  return Math.round(magnitude);
 }
 
 function mapClassification(

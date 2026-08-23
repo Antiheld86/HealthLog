@@ -513,6 +513,43 @@ describe("Apple Health ECG CSV — real-export shapes", () => {
       ).rejects.toThrow(/sample value is invalid/i);
     });
 
+    it.each([
+      ["512 Hz", 512],
+      ["512 hz", 512],
+      ["512 hertz", 512],
+      ["511,422 hertz", 511],
+      ["511.422 hertz", 511],
+      ["511,562\u00a0Hertz", 512],
+      ["512Hz", 512],
+    ])("reads the sample rate written as %s", async (raw, expected) => {
+      // Observed exports spell the unit out, lower-case it, and (in the German
+      // files) separate it with a no-break space. The fixtures had only ever
+      // used "512 Hz".
+      await expect(
+        parse(validCsv({ "Sample Rate": raw })),
+      ).resolves.toMatchObject({ samplingFrequency: expected });
+    });
+
+    it.each([
+      ["a missing unit", "512"],
+      ["the wrong unit", "512 bpm"],
+      ["a rate above the bound", "20000 hertz"],
+      ["a grouped rate", "1.234,5 hertz"],
+    ])("still rejects a sample rate with %s", async (_label, raw) => {
+      await expect(parse(validCsv({ "Sample Rate": raw }))).rejects.toThrow(
+        /sample rate is invalid/i,
+      );
+    });
+
+    it("reads the average heart rate in both dialects", async () => {
+      await expect(
+        parse(validCsv({ "Average Heart Rate": "64 bpm" })),
+      ).resolves.toMatchObject({ averageHeartRate: 64 });
+      await expect(
+        parse(validCsv({ "Average Heart Rate": "63,7 bpm" })),
+      ).resolves.toMatchObject({ averageHeartRate: 64 });
+    });
+
     it("still rejects a paired row that follows the single-column waveform", async () => {
       await expect(parse(`${singleColumnCsv()}\nI,0.001`)).rejects.toThrow(
         /sample value is invalid/i,
