@@ -1,6 +1,5 @@
 import { resolveProvider, resolveProviderChain } from "@/lib/ai/provider";
 import {
-  AllProvidersFailedError,
   runRawCompletionWithFallback,
   type ProviderChainResolved,
 } from "@/lib/ai/provider-runner";
@@ -299,5 +298,3 @@ export async function runStatusCompletion(
     tokensUsed: result.tokensUsed ?? null,
   };
 }
-
-export { AllProvidersFailedError };

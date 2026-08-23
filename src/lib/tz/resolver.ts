@@ -49,7 +49,6 @@ export {
   formatInUserTz,
   userDayKey,
   hourInTz,
-  type FormatInUserTzShape,
 } from "./format";
 
 const BERLIN_DAY_FORMATTER = new Intl.DateTimeFormat("en-US", {

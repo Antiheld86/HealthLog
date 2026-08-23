@@ -26,10 +26,7 @@
  *
  * Pure and in-place — the snapshot is a plain record by the time it gets here.
  */
-import {
-  TODAY_CLAIM_MAX_AGE_DAYS,
-  isCurrentForTodayClaim,
-} from "@/lib/insights/measurement-freshness";
+import { isCurrentForTodayClaim } from "@/lib/insights/measurement-freshness";
 
 /** When a metric block's series actually ends, and what may be said about it. */
 export interface SnapshotAsOf {
@@ -187,5 +184,3 @@ export function annotateSnapshotFreshness(snapshot: Record<string, unknown>): {
   }
   return { stale, coarseWithheld };
 }
-
-export { TODAY_CLAIM_MAX_AGE_DAYS };

@@ -91,13 +91,6 @@ export type MedicationExtractionResult = z.infer<
 >;
 
 /**
- * Re-export the wizard `CadenceKind` + `WeekdayToken` types so callers
- * (the route, the tests) import a single module rather than chasing
- * the wizard types directory.
- */
-export type { CadenceKind, WeekdayToken };
-
-/**
  * Build the system prompt. Same shape across calls — the model only
  * sees the user's free text via `buildUserPrompt()`. The system prompt
  * itself carries the contract; we pin it as a snapshot test so a
