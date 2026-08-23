@@ -11,7 +11,7 @@
  * The template intersects the fenced tier at zero leaves, and
  * `catalogue-guard.test.ts` fails the build if that stops being true.
  */
-import { SENSITIVE_LEAF_IDS, type ReportLeafId } from "./catalogue";
+import { type ReportLeafId } from "./catalogue";
 
 /**
  * Identity and insurer (the cover page a practice files the document under),
@@ -59,6 +59,3 @@ export function standardTemplateFor(
   const hidden = new Set(hiddenLeaves);
   return STANDARD_TEMPLATE_LEAVES.filter((leaf) => !hidden.has(leaf));
 }
-
-/** Exported so the purity guard reads the same set the panel does. */
-export const SENSITIVE_LEAVES = SENSITIVE_LEAF_IDS;
