@@ -42,6 +42,7 @@ import { describe, expect, it } from "vitest";
 
 import { openApiPaths } from "@/lib/openapi/routes";
 import { buildOpenApiDocument } from "@/lib/openapi/registry";
+import { RETIRED_ROUTES } from "@/lib/http/retired-routes";
 
 const HTTP_METHODS = ["get", "post", "put", "patch", "delete"] as const;
 
@@ -78,6 +79,19 @@ const UNAUTHENTICATED: Readonly<Record<string, string>> = {
     "Says whether single sign-on is configured, so the sign-in screen can offer it.",
   "/api/notifications/vapid":
     "The instance's public Web Push key. Public by definition.",
+  // The tombstones, sourced from the registry rather than restated one by one.
+  // A retired path answers 410 from the proxy before any handler runs, and that
+  // answer never reads the request's cookies or Authorization header — so it is
+  // genuinely credential-free, and publishing it as authenticated would tell a
+  // client to sign in to be told the path is gone. Sourced rather than listed
+  // because a hand-written entry per retirement is a step someone forgets, and
+  // forgetting it here would fail the opt-out check rather than the retirement.
+  ...Object.fromEntries(
+    RETIRED_ROUTES.map((route) => [
+      route.path,
+      `Removed in v${route.removedIn}. The 410 is produced at the edge and reads no credential.`,
+    ]),
+  ),
 };
 
 describe("the contract says how each operation is authenticated", () => {

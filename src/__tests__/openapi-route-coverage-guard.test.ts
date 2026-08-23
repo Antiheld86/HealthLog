@@ -1,5 +1,5 @@
 /**
- * Every route on disk is either published or declared unpublished.
+ * Every route is published, declared unpublished, or registered as retired.
  *
  * `pnpm openapi:check` compares the registry against `docs/api/openapi.yaml`
  * and fails on drift between them. It has never compared the ROUTES against
@@ -14,9 +14,45 @@
  * This file closes the third side of the triangle. It walks `src/app` for
  * route modules, reads the HTTP verbs each one actually exports, and requires
  * every verb to be either present in the route table or named in
- * {@link UNPUBLISHED} with a reason. There is no third outcome. Adding a route
- * without touching either side fails here, which is the only place it can be
- * caught before a client goes looking for a contract that was never written.
+ * {@link UNPUBLISHED} with a reason. Adding a route without touching either
+ * side fails here, which is the only place it can be caught before a client
+ * goes looking for a contract that was never written.
+ *
+ * ## The third state: retired
+ *
+ * Published and exempted both describe a route that exists. Removing one used
+ * to leave exactly one legal move — drop it from the contract too — and that
+ * move is invisible to every client already calling it. The native app spent
+ * twelve days rendering a permanent error card over a chart because
+ * `/api/auth/me/research-mode` went from published to absent with no third
+ * thing in between, and a bare 404 reads as a broken deployment rather than a
+ * decision.
+ *
+ * So retirement is a state here rather than a deletion. A path in
+ * `RETIRED_ROUTES` is required to be gone from `src/app` AND present in the
+ * contract, which is the one combination the fourth case below used to reject
+ * outright. Removing a route now forces a choice: drop it from the contract, or
+ * register it as retired and let the proxy answer 410 for it. What is no longer
+ * available is doing neither and finding out from a client.
+ *
+ * Be exact about what that is worth, because the obvious overclaim is easy to
+ * write and was written here first. This guard reads the tree as it stands. It
+ * cannot see a deletion, so it cannot insist that a removal SHOULD have been
+ * registered: a route deleted from `src/app` and from its route module in one
+ * commit leaves nothing behind to notice, and no check over a single commit's
+ * state can recover the fact that something used to be there. Proving otherwise
+ * needs an anchor outside the commit — the previous release tag — and the job
+ * that runs this suite checks out at depth one with no tags, so a history
+ * comparison here would be a check that silently cannot fail.
+ *
+ * What the third state does buy, and it is not nothing: deleting a route while
+ * it is still published now has TWO legal answers instead of one, and the
+ * failure message names both. Before, the only way past the fourth case was to
+ * erase the path — the move that is invisible to every client. Now the cheaper
+ * move is to leave the path standing as a tombstone, which is the move that
+ * reaches them. And once registered, the registration is held in three
+ * directions by the cases below, so it cannot rot into a lie about a route that
+ * came back or a retirement the contract never mentions.
  *
  * ## Why the exemption list carries prose
  *
@@ -45,9 +81,30 @@
  *   that includes it, and asserts a floor on the number of modules found so an
  *   enumeration that silently matches nothing cannot read as full coverage.
  *
- * Mutation check: delete any single entry from {@link UNPUBLISHED} and this
- * file fails naming that path; delete a path from a registry module and it
- * fails naming the verbs that lost their contract.
+ * Mutation checks, each run and confirmed red:
+ *
+ *   1. Delete any single entry from {@link UNPUBLISHED} → the third case fails
+ *      naming that path.
+ *   2. Delete a path from a route module → the second case fails naming the
+ *      verbs that lost their contract.
+ *   3. Delete a live route module that is published — `src/app/api/version` —
+ *      → the fourth case fails naming `/api/version` as a published path no
+ *      route serves. This is the seam the third state opens: the failure now
+ *      has two ways out, erase the path or register the retirement, and the
+ *      message says so.
+ *   4. Recreate `src/app/api/auth/me/research-mode/route.ts` with a GET export
+ *      → the fifth case fails naming it, because a tombstone over a live route
+ *      is wrong in three places at once (this contract, the capability list,
+ *      and the 410 the proxy answers before the route can ever run).
+ *   5. Drop `...retiredPaths` from the route-table index → the sixth case fails
+ *      naming every registered path as answered by the server and absent from
+ *      the contract.
+ *
+ * Deliberately NOT claimed: deleting an entry from `RETIRED_ROUTES` does not
+ * fail anything here, because the contract entries are generated from that same
+ * constant and both sides disappear together. That is the limit stated above,
+ * written down so the next reader does not mistake this file for a deletion
+ * detector.
  */
 import { readFileSync } from "node:fs";
 import { globSync } from "node:fs";
@@ -56,6 +113,7 @@ import { relative } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { openApiPaths } from "@/lib/openapi/routes";
+import { RETIRED_ROUTES } from "@/lib/http/retired-routes";
 
 const ROOT = process.cwd();
 
@@ -347,8 +405,9 @@ function routesOnDisk(): DiskRoute[] {
   return routes;
 }
 
-describe("every route is published or declared unpublished", () => {
+describe("every route is published, unpublished, or retired", () => {
   const disk = routesOnDisk();
+  const retiredPathSet = new Set(RETIRED_ROUTES.map((route) => route.path));
 
   it("finds the route modules at all", () => {
     // A floor, not a count: the point is that an enumeration returning nothing
@@ -403,15 +462,65 @@ describe("every route is published or declared unpublished", () => {
     ).toEqual([]);
   });
 
-  it("the contract does not publish a path that no route serves", () => {
+  it("the contract does not publish a path that no route serves, unless it is retired", () => {
     const byPath = new Set(disk.map((route) => route.path));
     const phantom = Object.keys(openApiPaths).filter(
-      (path) => !byPath.has(path),
+      (path) => !byPath.has(path) && !retiredPathSet.has(path),
     );
 
     expect(
       phantom,
-      "a published path with no route behind it is a promise the deployment cannot keep",
+      "a published path with no route behind it is a promise the deployment cannot keep — register it in RETIRED_ROUTES if it is gone on purpose",
+    ).toEqual([]);
+  });
+
+  it("a retired path is really gone from src/app", () => {
+    // The other direction of the exemption above. A tombstone standing over a
+    // route that still answers would publish 410 as the only response while
+    // the proxy short-circuits the live handler — the contract, the capability
+    // list and the runtime would all be wrong together, and each of them looks
+    // internally consistent on its own.
+    const byPath = new Set(disk.map((route) => route.path));
+    const undead = RETIRED_ROUTES.map((route) => route.path).filter((path) =>
+      byPath.has(path),
+    );
+
+    expect(
+      undead,
+      "these paths are registered as retired and a route module still exports verbs for them",
+    ).toEqual([]);
+  });
+
+  it("every retired path is published as gone", () => {
+    // Registering a retirement and not publishing it puts a client back where
+    // it started: the proxy answers 410, and a client generated from the
+    // contract has never heard of the path. The retirement is only worth
+    // anything if it reaches the reader.
+    const table = openApiPaths as Record<string, Record<string, unknown>>;
+    const unpublished: string[] = [];
+
+    for (const route of RETIRED_ROUTES) {
+      const published = table[route.path];
+      if (!published) {
+        unpublished.push(`${route.path} (absent from the contract)`);
+        continue;
+      }
+      for (const method of route.methods) {
+        const operation = published[method.toLowerCase()] as
+          { responses?: Record<string, unknown> } | undefined;
+        if (!operation) {
+          unpublished.push(`${method} ${route.path} (verb not published)`);
+          continue;
+        }
+        if (!operation.responses?.["410"]) {
+          unpublished.push(`${method} ${route.path} (published without a 410)`);
+        }
+      }
+    }
+
+    expect(
+      unpublished,
+      "these retirements are answered by the server and invisible in the contract",
     ).toEqual([]);
   });
 });
