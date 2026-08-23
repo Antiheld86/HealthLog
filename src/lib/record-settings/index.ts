@@ -1,10 +1,7 @@
 export { resolveGuardianRecordSettingsAccess } from "./access";
 export { toRecordSettingsDto } from "./dto";
 export { resolveManagedIntegrationState } from "./integrations";
-export {
-  classifySettingsDestination,
-  isManageDelegateSettingsDestination,
-} from "./classification";
+export { classifySettingsDestination } from "./classification";
 export {
   isManagedRecordSettingsFamily,
   managedModulePreferencesFrom,

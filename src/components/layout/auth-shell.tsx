@@ -14,7 +14,13 @@ import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useRecordSessionTransition } from "@/hooks/use-record-session-transition";
 import { useTranslations } from "@/lib/i18n/context";
 import { CoachLaunchProvider } from "@/lib/insights/coach-launch-context";
-import { isManageDelegateSettingsDestination } from "@/lib/record-settings";
+// The leaf module, not the `@/lib/record-settings` barrel. This shell wraps
+// every authenticated route, and the barrel also re-exports the managed
+// settings-patch schemas — so one destination predicate that reads a slug
+// dragged Zod, the module registry and three validation modules into the
+// eager client bundle of all of them. `classification` carries a type import
+// and nothing else.
+import { isManageDelegateSettingsDestination } from "@/lib/record-settings/classification";
 import { isDestinationInSharedRecord } from "./nav-model";
 import { BottomNav } from "./bottom-nav";
 import { DemoBanner } from "./demo-banner";
