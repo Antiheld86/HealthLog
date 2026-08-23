@@ -216,3 +216,91 @@ export function summarizeRestoreSkips(log: RestoreSkipLog): RestoreSkipSummary {
     links: catalogueKeys.reduce((total, entry) => total + entry.links, 0),
   };
 }
+
+/**
+ * A section the file's own manifest says it carries, and does not.
+ *
+ * This is the other half of the honesty contract above, and it is deliberately
+ * the opposite answer. A skip drops one edge and names it, because the record
+ * it hangs off survives and giving the operator the rest is worth more than
+ * refusing them everything. A missing SECTION is not one edge — it is a whole
+ * class of the account, and the restore's first act is to delete the class it
+ * is about to rebuild. Restoring a file whose documents section is not there
+ * therefore does not lose a link. It empties the vault, tells the operator the
+ * restore succeeded, and leaves them to find out later.
+ *
+ * So this one refuses the file. Nothing is deleted, and the response names the
+ * section rather than saying "invalid backup", because an operator holding the
+ * only copy of an account needs to know whether the file is worthless or
+ * whether they picked the wrong one of two.
+ *
+ * ── The manifest is what tells a missing section from an omitted one ────────
+ *
+ * A payload that omits a section on purpose is not broken, and refusing it
+ * would break the two exports that do it. `buildSensitiveBackupSection` leaves
+ * the screener administrations and the consent receipts out of a PORTABLE file
+ * — the first because the encrypted per-item answers include the PHQ-9
+ * self-harm item, the second because a consent belongs to the operator it was
+ * given to — and says so in the manifest as `included: "omitted"`. That is a
+ * declared omission, and it stays restorable.
+ *
+ * The discriminator is therefore the manifest and nothing else. Not the emptiness
+ * of the array: an account with no documents honestly writes `[]`, and treating
+ * that as a loss would refuse a perfectly good file. Not the export's purpose
+ * either, which the payload does not state. Only "the file said it carries this,
+ * and the key is not there".
+ *
+ * A file with NO manifest at all declares nothing, so nothing is missing from
+ * it. Every backup written before the manifest existed is in that category and
+ * has to stay restorable.
+ */
+export type MissingBackupSection =
+  "documents" | "workouts" | "mentalHealth" | "consent";
+
+/**
+ * Which payload key each manifest entry speaks for.
+ *
+ * `included: "omitted"` is the one value that means "not carried". Every other
+ * value the writers produce — `metadata-only`, `encrypted-content`,
+ * `summary-only`, `full` — describes HOW MUCH of the section travels, not
+ * whether the section is there, and all of them come with the key present.
+ */
+const MANIFEST_SECTIONS: ReadonlyArray<{
+  manifestKey: MissingBackupSection;
+  payloadKey: string;
+}> = [
+  { manifestKey: "documents", payloadKey: "documents" },
+  { manifestKey: "workouts", payloadKey: "workouts" },
+  { manifestKey: "mentalHealth", payloadKey: "mentalHealthAssessments" },
+  { manifestKey: "consent", payloadKey: "consentReceipts" },
+];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Sections the raw file claims and does not carry, in manifest order.
+ *
+ * Takes the RAW parsed JSON, not a `BackupPayload`. Every section key in
+ * `backupPayloadSchema` carries `.default([])`, so by the time the payload has
+ * been through the schema an absent section and an empty one are the same
+ * value — which is exactly the distinction this function exists to make. Run it
+ * on the object that came out of `JSON.parse`.
+ */
+export function findMissingBackupSections(
+  raw: unknown,
+): MissingBackupSection[] {
+  if (!isRecord(raw)) return [];
+  const manifest = raw.manifest;
+  if (!isRecord(manifest)) return [];
+
+  const missing: MissingBackupSection[] = [];
+  for (const { manifestKey, payloadKey } of MANIFEST_SECTIONS) {
+    const entry = manifest[manifestKey];
+    if (!isRecord(entry)) continue;
+    if (entry.included === "omitted") continue;
+    if (raw[payloadKey] === undefined) missing.push(manifestKey);
+  }
+  return missing;
+}
