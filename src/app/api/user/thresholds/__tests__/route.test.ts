@@ -32,6 +32,9 @@ vi.mock("@/lib/analytics/effective-range", async (importOriginal) => {
   };
 });
 vi.mock("@/lib/logging/transports", () => ({ emitIfSampled: vi.fn() }));
+vi.mock("@/lib/cache/invalidate", () => ({
+  invalidateUserProfile: vi.fn(),
+}));
 vi.mock("@/lib/db-compat", () => ({
   ensureDbCompatibility: vi.fn().mockResolvedValue(undefined),
 }));
@@ -44,7 +47,7 @@ vi.mock("next/headers", () => ({
   })),
 }));
 
-import { GET, PUT } from "../route";
+import { GET, PUT, DELETE } from "../route";
 import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/db";
@@ -61,6 +64,31 @@ function putReq(body: unknown): NextRequest {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+function deleteReq(
+  options: { metric?: string; body?: unknown } = {},
+): NextRequest {
+  const url = options.metric
+    ? `http://localhost/api/user/thresholds?metric=${options.metric}`
+    : "http://localhost/api/user/thresholds";
+  return new NextRequest(url, {
+    method: "DELETE",
+    ...(options.body === undefined
+      ? {}
+      : {
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(options.body),
+        }),
+  });
+}
+
+/** The stored override set the DELETE branches read before they write. */
+function armOverrides(overrides: Record<string, unknown>) {
+  vi.mocked(prisma.user.findUnique).mockResolvedValue({
+    thresholdsJson: overrides,
+  } as never);
+  vi.mocked(prisma.user.update).mockResolvedValue({} as never);
 }
 
 beforeEach(() => {
@@ -108,6 +136,121 @@ describe("PUT /api/user/thresholds — 422 multi-issue (v1.4.43 W6)", () => {
       details: { issues: Array<unknown> };
     };
     expect(body.details.issues.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+/**
+ * The parameterless DELETE erases every band the account has tuned, and it
+ * used to do it on an omitted query parameter alone — no confirmation, no dry
+ * run, and no rate limit of its own while the PUT beside it had one.
+ *
+ * The confirmation is the same shape the other two wide deletes use
+ * (`/api/settings/account` wants `DELETE_ACCOUNT`, `/api/settings/data` wants
+ * `DELETE`): a literal in the body, compared exactly. What is pinned here is
+ * the pair of properties that make it worth anything — the refusal happens,
+ * AND nothing was written when it does. A status assertion on its own would
+ * stay green if the wipe ran first and the 422 came after it.
+ *
+ * The single-metric form is pinned as UNCHANGED in the same block, because the
+ * failure mode of a confirmation is that it spreads to the narrow path and
+ * breaks the targets sheet, which resets metrics in a loop.
+ *
+ * Mutation check: drop the `confirm !== RESET_ALL_CONFIRMATION` branch and the
+ * first two cases go red; drop the rate-limit call and the fourth goes red;
+ * extend the confirmation to the `?metric=` arm and the fifth goes red.
+ */
+describe("DELETE /api/user/thresholds — the wide form asks first", () => {
+  it("refuses the parameterless form with no body", async () => {
+    armOverrides({ WEIGHT: { min: 60, max: 80 } });
+
+    const res = await DELETE(deleteReq());
+
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toContain("RESET_THRESHOLDS");
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("refuses a body whose confirmation is the wrong token", async () => {
+    armOverrides({ WEIGHT: { min: 60, max: 80 } });
+
+    const res = await DELETE(deleteReq({ body: { confirm: "DELETE" } }));
+
+    expect(res.status).toBe(422);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it("wipes every override once the confirmation is present", async () => {
+    armOverrides({ WEIGHT: { min: 60, max: 80 }, PULSE: { min: 50, max: 90 } });
+
+    const res = await DELETE(
+      deleteReq({ body: { confirm: "RESET_THRESHOLDS" } }),
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: { overrides: unknown } };
+    expect(body.data.overrides).toEqual({});
+    expect(prisma.user.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs the sibling's rate limit and honours a refusal", async () => {
+    armOverrides({ WEIGHT: { min: 60, max: 80 } });
+    vi.mocked(checkRateLimit).mockResolvedValue({ allowed: false } as never);
+
+    const res = await DELETE(
+      deleteReq({ body: { confirm: "RESET_THRESHOLDS" } }),
+    );
+
+    expect(res.status).toBe(429);
+    expect(checkRateLimit).toHaveBeenCalledWith(
+      "thresholds:reset:user-1",
+      30,
+      5 * 60 * 1000,
+    );
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The other end. A confirmation the server demands and the only client that
+   * sends the wide form does not send is not a safeguard, it is an outage —
+   * and it would look like a passing suite, because the route tests above
+   * construct their own requests. So the token is compared across the two
+   * files rather than assumed to match.
+   */
+  it("is the same token the settings card sends", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+
+    const route = readFileSync(
+      join(process.cwd(), "src/app/api/user/thresholds/route.ts"),
+      "utf8",
+    );
+    const client = readFileSync(
+      join(
+        process.cwd(),
+        "src/components/settings/thresholds-editor-section.tsx",
+      ),
+      "utf8",
+    );
+
+    const declared = route.match(/RESET_ALL_CONFIRMATION = "([^"]+)"/)?.[1];
+    expect(declared, "the route no longer declares a confirmation").toBe(
+      "RESET_THRESHOLDS",
+    );
+    expect(client).toContain(`confirm: "${declared}"`);
+  });
+
+  it("leaves the single-metric form exactly as it was", async () => {
+    armOverrides({ WEIGHT: { min: 60, max: 80 }, PULSE: { min: 50, max: 90 } });
+
+    // No body at all — the targets sheet sends none, and must keep working.
+    const res = await DELETE(deleteReq({ metric: "WEIGHT" }));
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { overrides: Record<string, unknown> };
+    };
+    expect(Object.keys(body.data.overrides)).toEqual(["PULSE"]);
   });
 });
 

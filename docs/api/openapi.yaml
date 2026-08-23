@@ -7701,18 +7701,27 @@ paths:
       summary: Reset one threshold override, or all of them
       description: >-
         With `?metric=` it drops that metric's override; WITHOUT the parameter it drops EVERY override on the account.
-        There is no confirmation step and no dry run, so a client that means to reset one metric must send the
-        parameter.
+        The wide form is not reachable by omitting the parameter alone — it requires `{ "confirm": "RESET_THRESHOLDS" }`
+        in the body, the same typed-confirmation shape account deletion and the data reset use. The `?metric=` form
+        takes no body and is unchanged.
 
 
-        Audit-logged with the before and after maps. Unlike the PUT this path runs no rate limit of its own.
+        Audit-logged with the before and after maps. Rate-limited 30 / 5 min per user, matching the PUT.
       parameters:
         - in: query
           name: metric
           schema:
-            description: The single metric to reset. Omit to reset every override on the account.
+            description: The single metric to reset. Omit to reset every override on the account — which then requires the
+              confirmation body.
             $ref: "#/components/schemas/ThresholdMetric"
-          description: The single metric to reset. Omit to reset every override on the account.
+          description: The single metric to reset. Omit to reset every override on the account — which then requires the
+            confirmation body.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ThresholdsResetAllRequest"
       responses:
         "200":
           description: The remaining override map.
@@ -7727,7 +7736,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "401": *a1
-        "422": *a4
+        "422":
+          description: '`metric` was omitted and the body did not carry `{ "confirm": "RESET_THRESHOLDS" }`. Nothing was reset.'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "429": *a5
   /api/auth/me/devices:
     get:
@@ -23030,6 +23044,17 @@ components:
         - TOTAL_BODY_WATER
         - BONE_MASS
         - OXYGEN_SATURATION
+    ThresholdsResetAllRequest:
+      type: object
+      properties:
+        confirm:
+          type: string
+          const: RESET_THRESHOLDS
+          description: Required when `metric` is omitted. Compared exactly; any other value is refused.
+      required:
+        - confirm
+      description: Confirmation body for the reset-everything form. Send no body at all when resetting a single metric with
+        `?metric=`.
     DevicePatchRequest:
       type: object
       properties:
