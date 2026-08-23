@@ -29,44 +29,62 @@ import {
   type NutrientCode,
   type ResolvedNutrientReference,
 } from "@/lib/nutrients/catalog";
+import { defaultLocale } from "@/lib/i18n/config";
+import {
+  buildLocalisedLabelIndex,
+  foldLabel,
+  labelIn,
+} from "@/lib/i18n/localised-label-index";
 import { DEFAULT_TIMEZONE, shiftDateKey, userDayKey } from "@/lib/tz/format";
 
+/** The i18n key the app already labels a nutrient with, in every bundle. */
+function nutrientLabelKey(code: NutrientCode): string {
+  return `nutrients.names.${code}`;
+}
+
 /**
- * English display labels for the closed nutrient catalog. MCP text is
- * protocol-level, not rendered to a localised UI (see `MCP_SERVER_INSTRUCTIONS`'s
- * own docblock) — hardcoded here exactly like the `SUPPLEMENT` labels in
- * `rich-reads.ts` (Weight / Pulse / Body-mass index). Mirrors
- * `messages/en.json`'s `nutrients.names.*` bundle so the wording matches the
- * app's own settings card.
+ * English display labels for the closed nutrient catalog, READ OUT of
+ * `messages/en.json`'s `nutrients.names.*` bundle rather than transcribed
+ * here. MCP text stays protocol-level English on purpose (see
+ * `MCP_SERVER_INSTRUCTIONS`'s own docblock); what changed is only where the
+ * English wording comes from, so it can no longer drift from the settings
+ * card the user reads.
+ *
+ * A missing key throws at module load — the same "fail loudly rather than
+ * silently under-serve" posture `MCP_METRIC_STATUS_DISCOVERY` takes in
+ * `rich-reads.ts`, and the i18n bundle guards would have caught it first.
  */
-export const NUTRIENT_LABELS: Readonly<Record<NutrientCode, string>> = {
-  vitamin_a: "Vitamin A",
-  thiamin: "Thiamin (B1)",
-  riboflavin: "Riboflavin (B2)",
-  niacin: "Niacin (B3)",
-  pantothenic_acid: "Pantothenic acid (B5)",
-  vitamin_b6: "Vitamin B6",
-  biotin: "Biotin (B7)",
-  folate: "Folate (B9)",
-  vitamin_b12: "Vitamin B12",
-  vitamin_c: "Vitamin C",
-  vitamin_d: "Vitamin D",
-  vitamin_e: "Vitamin E",
-  vitamin_k: "Vitamin K",
-  calcium: "Calcium",
-  iron: "Iron",
-  magnesium: "Magnesium",
-  phosphorus: "Phosphorus",
-  zinc: "Zinc",
-  copper: "Copper",
-  manganese: "Manganese",
-  selenium: "Selenium",
-  chromium: "Chromium",
-  molybdenum: "Molybdenum",
-  iodine: "Iodine",
-  water: "Water",
-  caffeine: "Caffeine",
-};
+export const NUTRIENT_LABELS: Readonly<Record<NutrientCode, string>> =
+  Object.freeze(
+    Object.fromEntries(
+      NUTRIENT_CODES.map((code) => {
+        const label = labelIn(defaultLocale, nutrientLabelKey(code));
+        if (label === null) {
+          throw new Error(
+            `message bundle is missing ${nutrientLabelKey(code)}`,
+          );
+        }
+        return [code, label];
+      }),
+    ) as Record<NutrientCode, string>,
+  );
+
+/**
+ * Folded nutrient name → code, across EVERY shipped locale.
+ *
+ * `Fer` and `Żelazo` used to reach `unknown_nutrient` while the app rendered
+ * exactly those words on its own settings card, because the resolver compared
+ * against a hand-typed English copy of the bundle. The index is derived from
+ * `locales`, so a seventh language starts resolving the moment its bundle
+ * lands, with no edit here.
+ */
+const NUTRIENT_NAME_INDEX = buildLocalisedLabelIndex<NutrientCode>(
+  NUTRIENT_CODES.map((code) => ({
+    id: code,
+    messageKey: nutrientLabelKey(code),
+    value: code,
+  })),
+);
 
 /** Overview mode (no `nutrient` arg) mirrors `GET /api/nutrients`'s bounds. */
 const OVERVIEW_DEFAULT_DAYS = 14;
@@ -102,24 +120,24 @@ export interface NutrientsDailyResult {
 
 /**
  * Resolve a free-text nutrient name to a catalog code, or `null`. Forgiving
- * for an NL assistant (exact code, spaces/hyphens folded to underscores, or a
- * display-label match e.g. "Vitamin D") but closed to the 26-code catalog —
- * an unresolved name reports `{ present: false, reason: "unknown_nutrient" }`
- * rather than inventing a series.
+ * for an NL assistant (the exact code, or the display name in ANY shipped
+ * language, with case, accents and separators folded) but closed to the
+ * 26-code catalog — an unresolved name reports
+ * `{ present: false, reason: "unknown_nutrient" }` rather than inventing a
+ * series.
+ *
+ * `unknown_nutrient` therefore keeps meaning "we could not place this word",
+ * distinct from a resolved code that then answers
+ * `{ present: false, reason: "no_data" }` — "placed, and honestly not
+ * recorded". Widening what resolves moves words from the first answer to the
+ * second; it never turns absence into data.
  */
 export function resolveNutrientCode(input: string): NutrientCode | null {
   const raw = input.trim();
   if (!raw) return null;
   const key = raw.toLowerCase().replace(/[\s-]+/g, "_");
   if (isNutrientCode(key)) return key;
-  for (const code of NUTRIENT_CODES) {
-    const folded = NUTRIENT_LABELS[code]
-      .toLowerCase()
-      .replace(/[\s()-]+/g, "_")
-      .replace(/_+$/, "");
-    if (folded === key) return code;
-  }
-  return null;
+  return NUTRIENT_NAME_INDEX.index.get(foldLabel(raw)) ?? null;
 }
 
 /** Presence overview across every logged code — mirrors `GET /api/nutrients`. */

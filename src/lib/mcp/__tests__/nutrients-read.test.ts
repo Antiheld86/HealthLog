@@ -7,12 +7,19 @@ const { nutrientIntakeDay, user } = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/db", () => ({ prisma: { nutrientIntakeDay, user } }));
 
-import { getNutrients, resolveNutrientCode } from "../nutrients-read";
+import {
+  getNutrients,
+  resolveNutrientCode,
+  NUTRIENT_LABELS,
+} from "../nutrients-read";
 import type {
   NutrientsOverviewResult,
   NutrientsDailyResult,
 } from "../nutrients-read";
 import { isModuleEnabled } from "@/lib/modules/gate";
+import { locales } from "@/lib/i18n/config";
+import { labelIn } from "@/lib/i18n/localised-label-index";
+import { NUTRIENT_CODES } from "@/lib/nutrients/catalog";
 
 /** Narrow the union to the overview shape for a test's own assertions. */
 function overview(
@@ -57,6 +64,82 @@ describe("resolveNutrientCode", () => {
   it("returns null for an unknown name (never invents a code)", () => {
     expect(resolveNutrientCode("bananas")).toBeNull();
     expect(resolveNutrientCode("")).toBeNull();
+  });
+});
+
+describe("resolveNutrientCode — every shipped locale, not just English", () => {
+  // `nutrients.names.*` already ships in all six bundles and is what the
+  // settings card renders. The resolver used to compare against a hand-typed
+  // English copy of that bundle, so an account whose language is French or
+  // Polish got `unknown_nutrient` for the word its own screen shows.
+  it.each([
+    ["de", "Eisen", "iron"],
+    ["es", "Hierro", "iron"],
+    ["fr", "Fer", "iron"],
+    ["it", "Ferro", "iron"],
+    ["pl", "Żelazo", "iron"],
+    ["de", "Wasser", "water"],
+    ["es", "Agua", "water"],
+    ["fr", "Eau", "water"],
+    ["it", "Acqua", "water"],
+    ["pl", "Woda", "water"],
+    ["fr", "Magnésium", "magnesium"],
+    ["pl", "Wapń", "calcium"],
+    ["de", "Koffein", "caffeine"],
+    ["it", "Iodio", "iodine"],
+    ["pl", "Kwas pantotenowy (B5)", "pantothenic_acid"],
+    ["fr", "Acide pantothénique (B5)", "pantothenic_acid"],
+  ] as const)("resolves the %s name %s", (_locale, name, code) => {
+    expect(resolveNutrientCode(name)).toBe(code);
+  });
+
+  it("folds case, accents and separators on the localised names too", () => {
+    expect(resolveNutrientCode("  magnésium ")).toBe("magnesium");
+    expect(resolveNutrientCode("MAGNESIO")).toBe("magnesium");
+    expect(resolveNutrientCode("zelazo")).toBe("iron");
+  });
+
+  it("keeps every English spelling that resolved before resolving the same", () => {
+    // The pre-fix English arms: exact code, space/hyphen folding, and a
+    // display-label match. None of them may move.
+    expect(resolveNutrientCode("water")).toBe("water");
+    expect(resolveNutrientCode("vitamin_d")).toBe("vitamin_d");
+    expect(resolveNutrientCode("Vitamin D")).toBe("vitamin_d");
+    expect(resolveNutrientCode("vitamin-d")).toBe("vitamin_d");
+    expect(resolveNutrientCode("MAGNESIUM")).toBe("magnesium");
+    expect(resolveNutrientCode("Vitamin B12")).toBe("vitamin_b12");
+    expect(resolveNutrientCode("Pantothenic acid B5")).toBe("pantothenic_acid");
+    expect(resolveNutrientCode("Caffeine")).toBe("caffeine");
+  });
+
+  it("still refuses a word that is in no bundle — a parse miss stays a miss", () => {
+    expect(resolveNutrientCode("bananas")).toBeNull();
+    expect(resolveNutrientCode("Bananen")).toBeNull();
+    expect(resolveNutrientCode("protein")).toBeNull();
+  });
+
+  // The property, not a sample: EVERY code's name in EVERY shipped locale
+  // round-trips. A seventh locale added to `locales` is covered by this test
+  // the moment its bundle lands — which is the point of deriving the index
+  // instead of transcribing it.
+  it("round-trips every catalog code from every shipped locale's bundle", () => {
+    for (const locale of locales) {
+      for (const code of NUTRIENT_CODES) {
+        const label = labelIn(locale, `nutrients.names.${code}`);
+        expect(label, `${locale} is missing nutrients.names.${code}`).not.toBe(
+          null,
+        );
+        expect(resolveNutrientCode(label!), `${locale}/${code}`).toBe(code);
+      }
+    }
+  });
+
+  it("exposes the same English label the bundle carries, not a copy of it", () => {
+    for (const code of NUTRIENT_CODES) {
+      expect(NUTRIENT_LABELS[code]).toBe(
+        labelIn("en", `nutrients.names.${code}`),
+      );
+    }
   });
 });
 

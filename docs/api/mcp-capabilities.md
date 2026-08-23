@@ -99,6 +99,35 @@ Every read tool is annotated read-only / non-destructive / idempotent /
 closed-world — the read-only guarantee is structural (only read tools are
 registered for a read session), and the annotation merely advertises it.
 
+### Naming a metric or a nutrient
+
+The tools that take a free-text name — `compare_metric`,
+`get_metric_baseline`, `detect_changepoints`, `get_nutrients` — accept the
+metric's or nutrient's own display name in **any language HealthLog ships**
+(de / en / es / fr / it / pl), alongside the internal code and the English
+aliases. `poids`, `Blutzucker`, `Fer` and `Żelazo` reach the same series as
+`weight`, `blood_glucose` and `iron`. Case, accents and punctuation are
+folded, so `magnésium` and `MAGNESIUM` are one word.
+
+The accepted names are read out of the app's own message bundles rather
+than listed in the resolver, so a language works as soon as its bundle
+ships. Two consequences worth relying on:
+
+- **The vocabulary is still closed.** A word in no bundle is a miss, not a
+  guess: `{ present: false, reason: "unknown_metric" }` or
+  `"unknown_nutrient"`. That reason is distinct from `"no_data"`, which
+  means the name WAS understood and the record honestly holds nothing.
+  Widening the accepted spellings moves words from the first answer to the
+  second; it never turns absence into data.
+- **An ambiguous word is refused, not resolved.** Where a language uses one
+  phrase for two different measurements — French and Italian call both body
+  fat and fat mass `masse grasse` / `massa grassa`, and French, Italian and
+  Polish use one phrase for fat-free mass and lean body mass — the word
+  resolves to neither. Name those in English, or by their metric key.
+
+Responses are unchanged: labels and units come back in protocol-level
+English whatever language the request used.
+
 ### Clinical signals
 
 The v1.25 clinical-signals set — **grip strength**, **pain (0–10 NRS)**,
