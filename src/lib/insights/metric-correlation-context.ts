@@ -13,35 +13,27 @@
  * This module runs the SAME full-matrix discovery the
  * `/api/insights/correlations` route runs (so a card never surfaces a pair
  * the correlations page wouldn't), then filters to the surviving pairs that
- * INVOLVE the current metric's discovery channel. The result is the
- * engine's own conservative, descriptive, never-causal `interpretation`
- * strings — passed verbatim into the prompt as grounded context.
+ * INVOLVE the current metric's discovery channel. That parity is structural
+ * rather than asserted: both take their channel set from the one assembler in
+ * `src/lib/insights/discovery-matrix.ts`, and
+ * `src/__tests__/discovery-matrix-guard.test.ts` freezes the assembler as the
+ * only place a matrix is built. The result is the engine's own conservative,
+ * descriptive, never-causal `interpretation` strings — passed verbatim into
+ * the prompt as grounded context.
  *
  * Read-only consumption. No new statistics are computed here; the only
- * change vs the route is the filter to one metric and a shorter window cap.
+ * changes vs the route are the filter to one metric and the raw (rather than
+ * rollup-tiered) measurement read.
  */
 import type { MeasurementType } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import type { Locale } from "@/lib/i18n/config";
 import {
   discoverCorrelations,
-  discoveryMeasurementTypes,
   DISCOVERY_BEHAVIOURS,
   DISCOVERY_OUTCOMES,
-  type NamedSeries,
-  MEDICATION_COMPLIANCE_CHANNEL_KEY,
-  SYMPTOM_SEVERITY_CHANNEL_KEY,
 } from "@/lib/insights/correlation-discovery";
-import {
-  buildMeasurementDailySeries,
-  fetchComplianceSeries,
-  fetchCustomMetricBehaviourSeries,
-  fetchEnvironmentSeries,
-  fetchMeasurementWindowSeries,
-  fetchMoodWindowSeries,
-  fetchSymptomSeries,
-} from "@/lib/insights/correlation-channel-series";
-import { loadUserSourcePriority } from "@/lib/rollups/measurement-read";
+import { assembleDiscoveryMatrix } from "@/lib/insights/discovery-matrix";
 import {
   decisionForEvidence,
   PATTERN_FAMILIES,
@@ -102,73 +94,15 @@ export async function getRelevantCorrelationsForMetric(
     const tz = profile?.timezone ?? "Europe/Berlin";
     const since = new Date(Date.now() - WINDOW_DAYS * MS_PER_DAY);
 
-    // Non-measurement channels (MOOD, and v1.21.0 MEDICATION_COMPLIANCE /
-    // SYMPTOM_SEVERITY) are backed by other models — `discoveryMeasurementTypes`
-    // strips them from the measurement `type IN (...)` query (a non-enum string
-    // would error the cast). This per-metric-card surface does not populate the
-    // compliance / symptom channels (they degrade to absent here); the
-    // canonical `/api/insights/correlations` route builds them.
-    const behaviourTypes = discoveryMeasurementTypes(
-      DISCOVERY_BEHAVIOURS,
-    ) as MeasurementType[];
-    const outcomeTypes = discoveryMeasurementTypes(
-      DISCOVERY_OUTCOMES,
-    ) as MeasurementType[];
-
-    // v1.30.3 (QA F1) — the fetch + desc/cap/resort discipline (a dense
-    // account's cap must fall on the OLDEST rows, never the newest) now
-    // lives in `fetchMeasurementWindowSeries` / `fetchMoodWindowSeries`
-    // (`correlation-channel-series.ts`), shared with the route, the Coach
-    // tool, and the period narrative.
-    const [
-      { byType },
-      { moodDaily },
-      priorityJson,
-      complianceSeries,
-      symptomSeries,
-      environmentSeries,
-      customMetricSeries,
-    ] = await Promise.all([
-      fetchMeasurementWindowSeries(userId, since, [
-        ...behaviourTypes,
-        ...outcomeTypes,
-      ]),
-      fetchMoodWindowSeries(userId, tz, since),
-      loadUserSourcePriority(userId),
-      fetchComplianceSeries(userId, tz, since),
-      fetchSymptomSeries(userId, tz, since),
-      fetchEnvironmentSeries(userId, since),
-      fetchCustomMetricBehaviourSeries(userId, tz, since),
-    ]);
-
-    const points = (key: string) =>
-      key === "MOOD"
-        ? moodDaily
-        : buildMeasurementDailySeries(
-            key as MeasurementType,
-            byType.get(key) ?? [],
-            tz,
-            priorityJson,
-          );
-
-    const series: NamedSeries[] = [];
-    for (const key of DISCOVERY_BEHAVIOURS) {
-      if (key === MEDICATION_COMPLIANCE_CHANNEL_KEY) {
-        series.push(complianceSeries);
-      } else if (key === SYMPTOM_SEVERITY_CHANNEL_KEY) {
-        series.push({ ...symptomSeries, role: "behaviour" });
-      } else {
-        series.push({ key, role: "behaviour", points: points(key) });
-      }
-    }
-    for (const key of DISCOVERY_OUTCOMES) {
-      if (key === SYMPTOM_SEVERITY_CHANNEL_KEY) {
-        series.push({ ...symptomSeries, role: "outcome" });
-      } else {
-        series.push({ key, role: "outcome", points: points(key) });
-      }
-    }
-    series.push(...environmentSeries, ...customMetricSeries);
+    // The channel set is the shared one — every family the correlations page
+    // scans, so a card can never be missing a pair the page would show. The
+    // measurement read stays `"raw"` (the route's rollup read-swap is a
+    // read-cost choice, not a channel-set one; see the option's doc comment).
+    const { series } = await assembleDiscoveryMatrix(userId, {
+      tz,
+      since,
+      fetchMode: "raw",
+    });
 
     const result = discoverCorrelations(series, { locale });
     const decisions = await syncAcceptedPatterns({
@@ -184,16 +118,26 @@ export async function getRelevantCorrelationsForMetric(
         qValue: pattern.qValue,
       })),
     });
-    return result.discovered
-      .filter((d) => {
-        const decision = decisionForEvidence(decisions, {
-          factorKey: d.behaviour,
-          outcomeKey: d.outcome,
-          lagDays: d.lagDays,
-        });
-        return decision?.dismissed !== true;
-      })
-      .map((d) => ({ interpretation: d.interpretation, n: d.n, r: d.r }));
+    return (
+      result.discovered
+        // The pair has to INVOLVE this metric. This filter is the difference
+        // between the function's name and a full dump of the matrix: without
+        // it, a WEIGHT card's prompt is handed "your daylight goes with your
+        // sleep" as grounded context for a paragraph about weight. It was here
+        // from the start and was lost when the pattern-dismissal filter was
+        // written in its place rather than after it; the docstring, the name
+        // and the `channelKeyForType` guard above all kept saying otherwise.
+        .filter((d) => d.behaviour === channel || d.outcome === channel)
+        .filter((d) => {
+          const decision = decisionForEvidence(decisions, {
+            factorKey: d.behaviour,
+            outcomeKey: d.outcome,
+            lagDays: d.lagDays,
+          });
+          return decision?.dismissed !== true;
+        })
+        .map((d) => ({ interpretation: d.interpretation, n: d.n, r: d.r }))
+    );
   } catch {
     return [];
   }

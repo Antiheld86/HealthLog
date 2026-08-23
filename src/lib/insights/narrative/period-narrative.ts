@@ -12,7 +12,19 @@
  * The honesty contract carries through verbatim from the layers it reuses:
  *  - **Drivers** are ONLY the BH-FDR-surviving pairs from `discoverCorrelations`
  *    (`benjaminiHochberg` already enforces descriptive-never-causal); each
- *    keeps its conservative `interpretation` string unchanged.
+ *    keeps its conservative `interpretation` string unchanged. The channels
+ *    scanned come from the one shared assembler in
+ *    `src/lib/insights/discovery-matrix.ts`, so this surface sees the same
+ *    families the correlations page and the Coach do. It differs in exactly
+ *    one declared way — it admits the user's RATED mood factors as
+ *    `FACTOR:<key>` channels, which the three persisting surfaces do not; the
+ *    reason is written at the `includeMoodFactors` option.
+ *
+ *    It also silently lacked, until the assembler landed, the
+ *    medication-compliance, symptom-severity, environmental-exposure and
+ *    custom-metric families, which had arrived at the route and never
+ *    here. Nothing explained that; the comment that appeared to was the
+ *    same sentence a sibling file carried while doing the opposite.
  *  - **Band transitions** are a personal-baseline (median ± k·MAD, Hampel/Leys)
  *    comparison of the current period against the band established over the
  *    PRIOR period — never an invented threshold.
@@ -36,25 +48,14 @@ import { annotate } from "@/lib/logging/context";
 import { wallClockInTz } from "@/lib/tz/wall-clock";
 import {
   discoverCorrelations,
-  discoveryMeasurementTypes,
-  DISCOVERY_BEHAVIOURS,
-  DISCOVERY_OUTCOMES,
-  FACTOR_CHANNEL_PREFIX,
   type DailySeriesPoint,
   type NamedSeries,
 } from "@/lib/insights/correlation-discovery";
 import { buildBaselineBand, median } from "@/lib/insights/derived/baseline";
 import { VITALS_BASELINE_TYPES } from "@/lib/insights/derived/registry";
-import {
-  buildMeasurementDailySeries,
-  fetchMeasurementWindowSeries,
-  toDailyMeans,
-} from "@/lib/insights/correlation-channel-series";
-import { loadUserSourcePriority } from "@/lib/rollups/measurement-read";
+import { assembleDiscoveryMatrix } from "@/lib/insights/discovery-matrix";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-/** Cap on the mood-entry window read, mirroring the route / Coach tool. */
-const MOOD_READ_CAP = 5000;
 
 /** The two supported narrative periods and their length in days. */
 export const PERIOD_DAYS = { week: 7, month: 30 } as const;
@@ -189,61 +190,6 @@ export type PeriodNarrativeResult =
 function tzDayKey(at: Date, tz: string): string {
   const { year, month, day } = wallClockInTz(at, tz);
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
-/**
- * A RATED mood factor link the period read pulls alongside the score.
- * Carries the scale + `inverse` so the series build can apply the
- * documented sign-flip once, at the boundary.
- */
-interface FactorLink {
-  key: string;
-  rating: number;
-  scaleMin: number;
-  scaleMax: number;
-  inverse: boolean;
-  at: Date;
-}
-
-/**
- * v1.14.0 — collapse RATED-factor links to one inverse-flipped daily-mean
- * series per factor, tz-day-keyed exactly like `toDailyMeans` so a factor
- * channel joins the discovery matrix on the same day grid as every vital.
- * An inverse factor's rating `r` maps to `(scaleMin + scaleMax) - r` BEFORE
- * averaging so "up" always reads as a better day — the same flip the mood
- * aggregates apply, kept in lock-step. Returns one `FACTOR:<key>` series per
- * factor the user actually rated. Pure.
- */
-function factorDailyMeans(
-  links: FactorLink[],
-  tz: string,
-): Map<string, DailySeriesPoint[]> {
-  const byFactor = new Map<
-    string,
-    Map<string, { sum: number; count: number }>
-  >();
-  for (const l of links) {
-    if (!Number.isFinite(l.rating)) continue;
-    const value = l.inverse ? l.scaleMin + l.scaleMax - l.rating : l.rating;
-    const day = tzDayKey(l.at, tz);
-    const days =
-      byFactor.get(l.key) ?? new Map<string, { sum: number; count: number }>();
-    const acc = days.get(day) ?? { sum: 0, count: 0 };
-    acc.sum += value;
-    acc.count += 1;
-    days.set(day, acc);
-    byFactor.set(l.key, days);
-  }
-  const out = new Map<string, DailySeriesPoint[]>();
-  for (const [key, days] of byFactor) {
-    out.set(
-      `${FACTOR_CHANNEL_PREFIX}${key}`,
-      [...days.entries()]
-        .map(([day, acc]) => ({ day, value: acc.sum / acc.count }))
-        .sort((a, b) => (a.day < b.day ? -1 : 1)),
-    );
-  }
-  return out;
 }
 
 /** Round to 2 decimals. */
@@ -508,8 +454,15 @@ export interface BuildPeriodNarrativeContextOpts {
  * Fetch + day-key + assemble. Reads a single bounded window covering the
  * current AND prior period (2× the period length plus one extra day so the
  * day-1 lag join in discovery has its source), day-keys in the user's tz,
- * and delegates to the pure core. No LLM, no migration, no new heavy query —
- * one measurement read + one mood read, both bounded.
+ * and delegates to the pure core. No LLM, no migration — every read is the
+ * shared assembler's, bounded, and the delta / band beats ride the same
+ * measurement query as the discovery channels.
+ *
+ * A note on what the `week` period can produce: its window is 15 days, and
+ * `discoverCorrelations` needs 20 lag-joined pairs before it will test one, so
+ * a weekly narrative's `drivers` list is empty by arithmetic, not by data.
+ * That predates this file's current shape and is left as it is; the deltas,
+ * band transitions and coincident flags are what a weekly narrative rests on.
  */
 export async function buildPeriodNarrativeContext(
   userId: string,
@@ -537,77 +490,40 @@ export async function buildPeriodNarrativeContext(
     tz,
   );
 
-  // The full set of types any beat needs: delta metrics ∪ banded vitals ∪
-  // discovery channels (minus the NON-measurement channels: MOOD is mood-entry
-  // backed; v1.21.0 MEDICATION_COMPLIANCE / SYMPTOM_SEVERITY are
-  // ledger / illness-day-log backed — none are MeasurementType enum values, so
-  // `discoveryMeasurementTypes` drops them from the `type IN (...)` query).
-  // Those two channels are not populated on the period-narrative surface (they
-  // degrade to absent here); the canonical `/api/insights/correlations` route
-  // builds them.
-  const measurementTypes = Array.from(
-    new Set<string>([
-      ...DELTA_METRICS.map((m) => m.type),
-      ...VITALS_BASELINE_TYPES,
-      ...discoveryMeasurementTypes(DISCOVERY_BEHAVIOURS),
-      ...discoveryMeasurementTypes(DISCOVERY_OUTCOMES),
-    ]),
-  ) as MeasurementType[];
-
+  // One read for both jobs. The discovery channels come from the shared
+  // assembler; `extraMeasurementTypes` widens the SAME measurement query with
+  // the types only this surface's other beats need (the period deltas and the
+  // banded vitals), so the delta beat costs no second round-trip.
+  //
   // v1.30.3 (QA F2/F3) — the fetch + desc/cap/resort discipline AND the
   // per-type grain resolution (source-collapse sum for cumulative types,
-  // per-night reconstruction for sleep — not a blind per-row MEAN) now
-  // route through the shared `fetchMeasurementWindowSeries` +
-  // `buildMeasurementDailySeries` (`correlation-channel-series.ts`), the
-  // same helpers the route / Coach tool / per-metric card share. Before
-  // this fix the local `toDailyMeans` twin folded EVERY type through a
-  // blind per-row mean: a month's current-vs-prior period comparison for
-  // `SLEEP_DURATION` averaged per-stage segment durations (~45 min)
-  // instead of summing a night's total time asleep, and `ACTIVITY_STEPS`
-  // blended per-sample chunk means with drained daily totals — and the
-  // `asc, take 20000` cap dropped the CURRENT period first on a dense
-  // account, the worst possible direction for a current-vs-prior surface.
-  const [{ byType, measurementsCapped }, moodEntriesDesc, priorityJson] =
-    await Promise.all([
-      fetchMeasurementWindowSeries(userId, since, measurementTypes),
-      prisma.moodEntry.findMany({
-        where: { userId, deletedAt: null, moodLoggedAt: { gte: since } },
-        orderBy: { moodLoggedAt: "desc" },
-        take: MOOD_READ_CAP,
-        select: {
-          score: true,
-          moodLoggedAt: true,
-          // v1.14.0 — pull RATED-factor links so each factor the user scores
-          // (work / sleep-quality / stress …) joins the discovery matrix as a
-          // `FACTOR:<key>` channel. One extra select on the existing mood read
-          // — no new round-trip. BINARY links carry a null `rating` and are
-          // dropped below.
-          tagLinks: {
-            where: { moodTag: { kind: "RATED" }, rating: { not: null } },
-            select: {
-              rating: true,
-              moodTag: {
-                select: {
-                  key: true,
-                  scaleMin: true,
-                  scaleMax: true,
-                  inverse: true,
-                },
-              },
-            },
-          },
-        },
-      }),
-      loadUserSourcePriority(userId),
-    ]);
-  // This surface reads mood alongside its RATED-factor tag-links (a select
-  // the shared `fetchMoodWindowSeries` helper does not carry), so the
-  // desc+cap+resort discipline is applied in place here rather than
-  // through that helper — same discipline, bespoke select.
-  const moodCapped = moodEntriesDesc.length >= MOOD_READ_CAP;
-  const moodEntries = [...moodEntriesDesc].sort(
-    (a, b) => a.moodLoggedAt.getTime() - b.moodLoggedAt.getTime(),
-  );
+  // per-night reconstruction for sleep — not a blind per-row MEAN) live in
+  // `correlation-channel-series.ts`, which the assembler reads through. Before
+  // that fix the local `toDailyMeans` twin folded EVERY type through a blind
+  // per-row mean: a month's current-vs-prior comparison for `SLEEP_DURATION`
+  // averaged per-stage segment durations (~45 min) instead of summing a
+  // night's total time asleep, and `ACTIVITY_STEPS` blended per-sample chunk
+  // means with drained daily totals — and the `asc, take 20000` cap dropped
+  // the CURRENT period first on a dense account, the worst possible direction
+  // for a current-vs-prior surface.
+  const {
+    series: discoverySeries,
+    byMetric: seriesByMetric,
+    diagnostics,
+  } = await assembleDiscoveryMatrix(userId, {
+    tz,
+    since,
+    fetchMode: "raw",
+    // The one surface that admits RATED mood factors — see the option's doc
+    // comment for why it is one and not four.
+    includeMoodFactors: true,
+    extraMeasurementTypes: Array.from(
+      new Set<MeasurementType>([
+        ...DELTA_METRICS.map((m) => m.type),
+        ...VITALS_BASELINE_TYPES,
+      ]),
+    ),
+  });
 
   // QA F2 — surfaces when a dense account's window exceeded the read cap,
   // mirroring the route's identical annotation. The cap now falls on the
@@ -617,70 +533,11 @@ export async function buildPeriodNarrativeContext(
     action: { name: "insights.period-narrative.read" },
     meta: {
       period,
-      measurements_capped: measurementsCapped,
-      mood_entries_capped: moodCapped,
+      measurements_capped: diagnostics.measurementsCapped,
+      mood_entries_capped: diagnostics.moodCapped,
+      mood_factor_channels: diagnostics.moodFactorChannels,
     },
   });
-
-  const seriesByMetric = new Map<string, DailySeriesPoint[]>();
-  for (const type of measurementTypes) {
-    const rows = byType.get(type);
-    if (!rows || rows.length === 0) continue;
-    seriesByMetric.set(
-      type,
-      buildMeasurementDailySeries(type, rows, tz, priorityJson),
-    );
-  }
-  const moodPoints = toDailyMeans(
-    moodEntries.map((e) => ({ value: e.score, at: e.moodLoggedAt })),
-    tz,
-  );
-  if (moodPoints.length > 0) seriesByMetric.set("MOOD", moodPoints);
-
-  // v1.14.0 — RATED-factor channels. Flatten every entry's RATED links into
-  // one inverse-flipped daily-mean series per factor, keyed `FACTOR:<key>`.
-  const factorLinks: FactorLink[] = [];
-  for (const e of moodEntries) {
-    for (const link of e.tagLinks) {
-      if (link.rating == null) continue;
-      factorLinks.push({
-        key: link.moodTag.key,
-        rating: link.rating,
-        scaleMin: link.moodTag.scaleMin,
-        scaleMax: link.moodTag.scaleMax,
-        inverse: link.moodTag.inverse,
-        at: e.moodLoggedAt,
-      });
-    }
-  }
-  const factorSeries = factorDailyMeans(factorLinks, tz);
-  for (const [key, points] of factorSeries) seriesByMetric.set(key, points);
-
-  // Discovery matrix over the same window.
-  const discoverySeries: NamedSeries[] = [];
-  for (const key of DISCOVERY_BEHAVIOURS) {
-    discoverySeries.push({
-      key,
-      role: "behaviour",
-      points: seriesByMetric.get(key) ?? [],
-    });
-  }
-  for (const key of DISCOVERY_OUTCOMES) {
-    discoverySeries.push({
-      key,
-      role: "outcome",
-      points: seriesByMetric.get(key) ?? [],
-    });
-  }
-  // A factor is plausibly both a lag source ("rated work today → next-day
-  // sleep") and a lag target ("steps today → next-day rated energy"), so it
-  // enters as both roles. The engine skips self-pairs and BH-FDR-controls the
-  // wider family this opens. Factors the user rated on < the paired-day floor
-  // simply never get tested — no new statistical machinery, same honesty.
-  for (const [key, points] of factorSeries) {
-    discoverySeries.push({ key, role: "behaviour", points });
-    discoverySeries.push({ key, role: "outcome", points });
-  }
 
   return assemblePeriodNarrativeContext({
     period,

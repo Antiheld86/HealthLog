@@ -1,14 +1,19 @@
 /**
- * v1.21.0 (INTEGFIX) — shared data-fetching helpers for the two non-measurement
- * FDR correlation channels (medication compliance + symptom severity).
+ * v1.21.0 (INTEGFIX) — the DB reads behind the correlation-discovery channels.
  *
  * The pure series shapers live in `correlation-series-builders.ts`; the FDR
- * engine itself is pure over `NamedSeries[]`. These two helpers own the DB reads
- * that feed those shapers — the dose-history ledger (compliance) and the illness
- * day-log (symptom severity) — so EVERY consumer of the discovery matrix (the
- * `/api/insights/correlations` route AND the Coach `get_correlations` tool)
- * builds the channels identically rather than re-implementing the queries, the
- * tz keying, and the episode-span clamping per call site.
+ * engine itself is pure over `NamedSeries[]`. These helpers own the reads that
+ * feed those shapers — the dose-history ledger (compliance), the illness day-log
+ * (symptom severity), the daily weather rows, the opt-in custom metrics, the
+ * measurement window (raw and rollup-tiered), the mood window — so the queries,
+ * the tz keying and the episode-span clamping exist once.
+ *
+ * This module owns FETCHING one channel at a time. It does NOT decide which
+ * channels a surface gets: that is `discovery-matrix.ts`, the one assembler
+ * every consumer of the matrix calls. Fetch discipline was hoisted here in
+ * v1.30.3 and the assembly was left behind at four call sites, which is how the
+ * Coach tool spent v1.25 onward scanning a matrix with no weather in it. Add a
+ * channel here, admit it there, and every surface has it.
  *
  * Each helper degrades to an EMPTY series when the user has no data, so the
  * channel drops out of discovery (it cannot clear the n ≥ 20 floor) rather than
@@ -22,6 +27,7 @@ import {
   SCHEDULE_COMPLIANCE_SELECT,
 } from "@/lib/analytics/compliance";
 import {
+  FACTOR_CHANNEL_PREFIX,
   MEDICATION_COMPLIANCE_CHANNEL_KEY,
   SYMPTOM_SEVERITY_CHANNEL_KEY,
   type DailySeriesPoint,
@@ -389,11 +395,10 @@ export interface MoodWindowFetch {
 
 /**
  * v1.30.3 (QA F1/F2/F3) — shared mood-window fetch, same desc+cap+resort
- * discipline as {@link fetchMeasurementWindowSeries}. Callers that also need
- * per-entry factor tag-links (the period narrative's RATED-factor channels)
- * read `MoodEntry` themselves for the extra `tagLinks` select, but MUST
- * apply the same desc+resort discipline — this helper only covers the
- * plain-score case the route / coach tool / per-metric card share.
+ * discipline as {@link fetchMeasurementWindowSeries}. This helper covers the
+ * plain-score case; the RATED-factor variant that also reads each entry's
+ * tag-links is {@link fetchMoodFactorWindowSeries}, which carries the same
+ * discipline over a wider select.
  */
 export async function fetchMoodWindowSeries(
   userId: string,
@@ -415,6 +420,131 @@ export async function fetchMoodWindowSeries(
     tz,
   );
   return { moodDaily, moodCapped };
+}
+
+/** One mood-window fetch that also carries the RATED-factor channels. */
+export interface MoodFactorWindowFetch extends MoodWindowFetch {
+  /** One inverse-flipped daily-mean series per `FACTOR:<key>` channel. */
+  factorSeries: Map<string, DailySeriesPoint[]>;
+}
+
+/**
+ * A RATED mood factor link, carrying the scale + `inverse` flag so the
+ * documented sign-flip is applied once, at the boundary.
+ */
+interface FactorLink {
+  key: string;
+  rating: number;
+  scaleMin: number;
+  scaleMax: number;
+  inverse: boolean;
+  at: Date;
+}
+
+/**
+ * v1.14.0 — collapse RATED-factor links to one inverse-flipped daily-mean
+ * series per factor, tz-day-keyed exactly like {@link toDailyMeans} so a factor
+ * channel joins the discovery matrix on the same day grid as every vital.
+ * An inverse factor's rating `r` maps to `(scaleMin + scaleMax) - r` BEFORE
+ * averaging so "up" always reads as a better day — the same flip the mood
+ * aggregates apply, kept in lock-step. Returns one `FACTOR:<key>` series per
+ * factor the user actually rated. Pure.
+ */
+function factorDailyMeans(
+  links: FactorLink[],
+  tz: string,
+): Map<string, DailySeriesPoint[]> {
+  const byFactor = new Map<
+    string,
+    Map<string, { sum: number; count: number }>
+  >();
+  for (const l of links) {
+    if (!Number.isFinite(l.rating)) continue;
+    const value = l.inverse ? l.scaleMin + l.scaleMax - l.rating : l.rating;
+    const day = tzDayKey(l.at, tz);
+    const days =
+      byFactor.get(l.key) ?? new Map<string, { sum: number; count: number }>();
+    const acc = days.get(day) ?? { sum: 0, count: 0 };
+    acc.sum += value;
+    acc.count += 1;
+    days.set(day, acc);
+    byFactor.set(l.key, days);
+  }
+  const out = new Map<string, DailySeriesPoint[]>();
+  for (const [key, days] of byFactor) {
+    out.set(
+      `${FACTOR_CHANNEL_PREFIX}${key}`,
+      [...days.entries()]
+        .map(([day, acc]) => ({ day, value: acc.sum / acc.count }))
+        .sort((a, b) => (a.day < b.day ? -1 : 1)),
+    );
+  }
+  return out;
+}
+
+/**
+ * Mood-window fetch WITH the per-entry RATED-factor tag-links, for the one
+ * surface that admits `FACTOR:*` channels into the discovery matrix (see the
+ * `includeMoodFactors` option on `assembleDiscoveryMatrix` for why that is one
+ * surface and not four). Same desc+cap+resort discipline as
+ * {@link fetchMoodWindowSeries} over a wider select — the tag-links ride the
+ * existing mood read, so this costs no extra round-trip over the plain variant.
+ *
+ * BINARY links carry a null `rating` and are excluded at the query.
+ */
+export async function fetchMoodFactorWindowSeries(
+  userId: string,
+  tz: string,
+  since: Date,
+): Promise<MoodFactorWindowFetch> {
+  const rowsDesc = await prisma.moodEntry.findMany({
+    where: { userId, deletedAt: null, moodLoggedAt: { gte: since } },
+    orderBy: { moodLoggedAt: "desc" },
+    take: MOOD_READ_CAP,
+    select: {
+      score: true,
+      moodLoggedAt: true,
+      tagLinks: {
+        where: { moodTag: { kind: "RATED" }, rating: { not: null } },
+        select: {
+          rating: true,
+          moodTag: {
+            select: {
+              key: true,
+              scaleMin: true,
+              scaleMax: true,
+              inverse: true,
+            },
+          },
+        },
+      },
+    },
+  });
+  const moodCapped = rowsDesc.length >= MOOD_READ_CAP;
+  const rows = [...rowsDesc].sort(
+    (a, b) => a.moodLoggedAt.getTime() - b.moodLoggedAt.getTime(),
+  );
+  const moodDaily = toDailyMeans(
+    rows.map((e) => ({ value: e.score, at: e.moodLoggedAt })),
+    tz,
+  );
+
+  const links: FactorLink[] = [];
+  for (const entry of rows) {
+    for (const link of entry.tagLinks) {
+      if (link.rating == null) continue;
+      links.push({
+        key: link.moodTag.key,
+        rating: link.rating,
+        scaleMin: link.moodTag.scaleMin,
+        scaleMax: link.moodTag.scaleMax,
+        inverse: link.moodTag.inverse,
+        at: entry.moodLoggedAt,
+      });
+    }
+  }
+
+  return { moodDaily, moodCapped, factorSeries: factorDailyMeans(links, tz) };
 }
 
 /**
