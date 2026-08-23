@@ -79,6 +79,7 @@ import { nutrientPaths } from "./nutrients";
 import { onboardingPaths } from "./onboarding";
 import { profilePaths } from "./profile";
 import { recordSettingsPaths } from "./record-settings";
+import { retiredPaths } from "./retired";
 import { settingsPaths } from "./settings";
 import { syncPaths } from "./sync";
 import { workoutPaths } from "./workouts";
@@ -164,6 +165,12 @@ export const openApiPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   ...ingestPaths,
   // The environmental-context overview. Its own module because nothing else
   // owns the surface (appended, spread order is load-bearing).
+  //
+  // Last, and last on purpose: these are the tombstones, the only published
+  // paths with no route module behind them. A reader scrolling the emitted
+  // YAML meets the live surface before the removed one (appended, spread
+  // order is load-bearing).
+  ...retiredPaths,
 };
 
 export const openApiComponents: NonNullable<ZodOpenApiObject["components"]> = {

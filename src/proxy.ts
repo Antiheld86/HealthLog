@@ -1,5 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { shouldRunWeb } from "@/lib/process-type";
+import {
+  findRetiredRoute,
+  retiredRouteEnvelope,
+  RETIRED_ROUTE_STATUS,
+} from "@/lib/http/retired-routes";
 
 /**
  * Paths that do NOT require a session cookie (public pages + external webhooks).
@@ -261,6 +266,25 @@ export function proxy(request: NextRequest) {
   if (legacyAdmin) {
     return applyBaselineSecurityHeaders(
       NextResponse.redirect(new URL(legacyAdmin, request.url), 301),
+    );
+  }
+
+  // A route that existed and is gone answers 410, not 404 — see
+  // `src/lib/http/retired-routes.ts` for why the status carries the message
+  // and the error code only fills in the detail.
+  //
+  // Placed before the demo-mode block and before the page session gate on
+  // purpose. A retired path is retired on a demo deploy too, and answering a
+  // logged-out caller with a login redirect would send them to authenticate
+  // for something that no longer exists. It reads nothing off the request but
+  // the path, so it cannot answer differently for an authenticated caller than
+  // for an anonymous one.
+  const retired = findRetiredRoute(pathname);
+  if (retired) {
+    return applyBaselineSecurityHeaders(
+      NextResponse.json(retiredRouteEnvelope(retired), {
+        status: RETIRED_ROUTE_STATUS,
+      }),
     );
   }
 

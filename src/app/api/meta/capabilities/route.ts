@@ -47,6 +47,7 @@ import {
 } from "@/lib/fhir/rest";
 import { SHARE_LINK_MAX_DAYS } from "@/lib/validations/clinician-share-link";
 import { ALL_LEAF_IDS, SHARE_GROUPS } from "@/lib/report-selection/catalogue";
+import { RETIRED_ROUTES } from "@/lib/http/retired-routes";
 
 export const dynamic = "force-dynamic";
 
@@ -140,5 +141,13 @@ export const GET = apiHandler(async () => {
       groups: SHARE_GROUPS,
       leaves: ALL_LEAF_IDS,
     },
+    // Paths this server used to serve and no longer does. A capability that
+    // disappears from the lists above is a signal a client can act on without
+    // comparing versions; this is the same signal for the routes themselves,
+    // and it arrives on the launch read rather than on the failing call. The
+    // list is the same constant the proxy answers 410 from and the contract
+    // publishes as gone, so a retirement cannot be announced here and not
+    // honoured, or honoured and not announced.
+    retiredRoutes: RETIRED_ROUTES,
   });
 });

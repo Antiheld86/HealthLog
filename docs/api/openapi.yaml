@@ -46,6 +46,10 @@ tags:
   - name: Records
   - name: Admin
   - name: Meta
+  - name: Retired
+    description: Paths that were published and have been removed. They answer 410 Gone with `meta.errorCode` =
+      `route.retired`, the removing version, and the replacement path where there is one. Listed so a client generated
+      from this contract learns the path is gone from the contract rather than from a 404 in production.
 security:
   - bearerAuth: []
   - cookieAuth: []
@@ -19347,6 +19351,221 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+  /api/bugreport:
+    post:
+      security: []
+      deprecated: true
+      tags:
+        - Retired
+      summary: POST /api/bugreport — removed in v1.23.0
+      description: >-
+        Removed in v1.23.0. Every request to this path answers 410 Gone, whatever the method and whatever credential it
+        carries. There is no replacement; the capability is gone rather than moved.
+
+
+        The in-app bug reporter forwarded a description to a GitHub issue on the operator's behalf. It was removed with
+        its tables; report through the project's issue tracker instead.
+
+
+        Retiring a path is deliberate, so the answer says so rather than leaving a client to read a 404 as a broken
+        deployment and retry forever. Treat 410 as terminal: drop the call, degrade the surface that depended on it, and
+        do not offer a retry.
+      responses:
+        "410":
+          description: The path was removed in v1.23.0 and will not answer again. `meta.errorCode` = `route.retired`,
+            `meta.removedIn` carries the version, and `meta.replacedBy` carries the replacement path or null.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /api/bugreport/status:
+    get:
+      security: []
+      deprecated: true
+      tags:
+        - Retired
+      summary: GET /api/bugreport/status — removed in v1.23.0
+      description: >-
+        Removed in v1.23.0. Every request to this path answers 410 Gone, whatever the method and whatever credential it
+        carries. There is no replacement; the capability is gone rather than moved.
+
+
+        Told a client whether the in-app bug reporter was configured. Removed with the reporter itself.
+
+
+        Retiring a path is deliberate, so the answer says so rather than leaving a client to read a 404 as a broken
+        deployment and retry forever. Treat 410 as terminal: drop the call, degrade the surface that depended on it, and
+        do not offer a retry.
+      responses:
+        "410":
+          description: The path was removed in v1.23.0 and will not answer again. `meta.errorCode` = `route.retired`,
+            `meta.removedIn` carries the version, and `meta.replacedBy` carries the replacement path or null.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /api/auth/me/doctor-report-prefs:
+    get:
+      security: []
+      deprecated: true
+      tags:
+        - Retired
+      summary: GET /api/auth/me/doctor-report-prefs — removed in v1.32.39
+      description: >-
+        Removed in v1.32.39. Every request to this path answers 410 Gone, whatever the method and whatever credential it
+        carries. Use `/api/auth/me/report-selection` instead.
+
+
+        The doctor report grew a per-leaf selection, and the old preference blob could not express it. The replacement
+        stores the same intent against the current leaf catalogue.
+
+
+        Retiring a path is deliberate, so the answer says so rather than leaving a client to read a 404 as a broken
+        deployment and retry forever. Treat 410 as terminal: drop the call, degrade the surface that depended on it, and
+        do not offer a retry.
+      responses:
+        "410":
+          description: The path was removed in v1.32.39 and will not answer again. `meta.errorCode` = `route.retired`,
+            `meta.removedIn` carries the version, and `meta.replacedBy` carries the replacement path or null.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    put:
+      security: []
+      deprecated: true
+      tags:
+        - Retired
+      summary: PUT /api/auth/me/doctor-report-prefs — removed in v1.32.39
+      description: >-
+        Removed in v1.32.39. Every request to this path answers 410 Gone, whatever the method and whatever credential it
+        carries. Use `/api/auth/me/report-selection` instead.
+
+
+        The doctor report grew a per-leaf selection, and the old preference blob could not express it. The replacement
+        stores the same intent against the current leaf catalogue.
+
+
+        Retiring a path is deliberate, so the answer says so rather than leaving a client to read a 404 as a broken
+        deployment and retry forever. Treat 410 as terminal: drop the call, degrade the surface that depended on it, and
+        do not offer a retry.
+      responses:
+        "410":
+          description: The path was removed in v1.32.39 and will not answer again. `meta.errorCode` = `route.retired`,
+            `meta.removedIn` carries the version, and `meta.replacedBy` carries the replacement path or null.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /api/fhir/$everything:
+    get:
+      security: []
+      deprecated: true
+      tags:
+        - Retired
+      summary: GET /api/fhir/$everything — removed in v1.32.39
+      description: >-
+        Removed in v1.32.39. Every request to this path answers 410 Gone, whatever the method and whatever credential it
+        carries. Use `/api/fhir/Patient/$everything` instead.
+
+
+        The whole-record operation moved under the resource type it operates on, which is where FHIR R4 defines it and
+        where the capability statement points.
+
+
+        Retiring a path is deliberate, so the answer says so rather than leaving a client to read a 404 as a broken
+        deployment and retry forever. Treat 410 as terminal: drop the call, degrade the surface that depended on it, and
+        do not offer a retry.
+      responses:
+        "410":
+          description: The path was removed in v1.32.39 and will not answer again. `meta.errorCode` = `route.retired`,
+            `meta.removedIn` carries the version, and `meta.replacedBy` carries the replacement path or null.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /api/auth/me/research-mode:
+    get:
+      security: []
+      deprecated: true
+      tags:
+        - Retired
+      summary: GET /api/auth/me/research-mode — removed in v1.37.2
+      description: >-
+        Removed in v1.37.2. Every request to this path answers 410 Gone, whatever the method and whatever credential it
+        carries. There is no replacement; the capability is gone rather than moved.
+
+
+        Research Mode was an opt-in for the estimated drug-level curve. The chart had stopped consulting the flag
+        several releases earlier and painted for every account regardless, so the switch governed nothing. The curve is
+        simply part of the medication page now and needs no preference read.
+
+
+        Retiring a path is deliberate, so the answer says so rather than leaving a client to read a 404 as a broken
+        deployment and retry forever. Treat 410 as terminal: drop the call, degrade the surface that depended on it, and
+        do not offer a retry.
+      responses:
+        "410":
+          description: The path was removed in v1.37.2 and will not answer again. `meta.errorCode` = `route.retired`,
+            `meta.removedIn` carries the version, and `meta.replacedBy` carries the replacement path or null.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    post:
+      security: []
+      deprecated: true
+      tags:
+        - Retired
+      summary: POST /api/auth/me/research-mode — removed in v1.37.2
+      description: >-
+        Removed in v1.37.2. Every request to this path answers 410 Gone, whatever the method and whatever credential it
+        carries. There is no replacement; the capability is gone rather than moved.
+
+
+        Research Mode was an opt-in for the estimated drug-level curve. The chart had stopped consulting the flag
+        several releases earlier and painted for every account regardless, so the switch governed nothing. The curve is
+        simply part of the medication page now and needs no preference read.
+
+
+        Retiring a path is deliberate, so the answer says so rather than leaving a client to read a 404 as a broken
+        deployment and retry forever. Treat 410 as terminal: drop the call, degrade the surface that depended on it, and
+        do not offer a retry.
+      responses:
+        "410":
+          description: The path was removed in v1.37.2 and will not answer again. `meta.errorCode` = `route.retired`,
+            `meta.removedIn` carries the version, and `meta.replacedBy` carries the replacement path or null.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+    delete:
+      security: []
+      deprecated: true
+      tags:
+        - Retired
+      summary: DELETE /api/auth/me/research-mode — removed in v1.37.2
+      description: >-
+        Removed in v1.37.2. Every request to this path answers 410 Gone, whatever the method and whatever credential it
+        carries. There is no replacement; the capability is gone rather than moved.
+
+
+        Research Mode was an opt-in for the estimated drug-level curve. The chart had stopped consulting the flag
+        several releases earlier and painted for every account regardless, so the switch governed nothing. The curve is
+        simply part of the medication page now and needs no preference read.
+
+
+        Retiring a path is deliberate, so the answer says so rather than leaving a client to read a 404 as a broken
+        deployment and retry forever. Treat 410 as terminal: drop the call, degrade the surface that depended on it, and
+        do not offer a retry.
+      responses:
+        "410":
+          description: The path was removed in v1.37.2 and will not answer again. `meta.errorCode` = `route.retired`,
+            `meta.removedIn` carries the version, and `meta.replacedBy` carries the replacement path or null.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
 components:
   schemas:
     CreateCycleCustomSymptomRequest:
@@ -29850,6 +30069,41 @@ components:
             - leaves
           additionalProperties: false
           description: Clinician share-link surface descriptor.
+        retiredRoutes:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+                description: The path, as it was published.
+              removedIn:
+                type: string
+                description: Release the removal shipped in, without the `v`.
+              replacedBy:
+                anyOf:
+                  - type: string
+                  - type: "null"
+                description: Where the capability went, or null when it went nowhere.
+              reason:
+                type: string
+                description: Why it was removed, in one sentence, in English.
+              methods:
+                type: array
+                items:
+                  type: string
+                description: The verbs the route exported before it was removed. Every verb answers 410 regardless — the path was
+                  retired, not a selection of methods on it.
+            required:
+              - path
+              - removedIn
+              - replacedBy
+              - reason
+              - methods
+            additionalProperties: false
+          description: Paths this server used to serve and no longer does. Each answers 410 Gone with `meta.errorCode` =
+            `route.retired`. Read on launch so a client can drop the surface that depended on one before it makes the
+            call, rather than learning from the failure.
       required:
         - apiContractVersion
         - derivedMetricIds
@@ -29859,6 +30113,7 @@ components:
         - ingest
         - fhir
         - share
+        - retiredRoutes
       additionalProperties: false
       description: Live id vocabularies + contract version. Every list is derived server-side from the canonical registry it
         documents, so it cannot drift from the values the routes actually accept/emit.

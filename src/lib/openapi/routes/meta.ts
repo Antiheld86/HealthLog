@@ -140,6 +140,32 @@ const capabilitiesResponse = z
           ),
       })
       .describe("Clinician share-link surface descriptor."),
+    retiredRoutes: z
+      .array(
+        z.object({
+          path: z.string().describe("The path, as it was published."),
+          removedIn: z
+            .string()
+            .describe("Release the removal shipped in, without the `v`."),
+          replacedBy: z
+            .string()
+            .nullable()
+            .describe(
+              "Where the capability went, or null when it went nowhere.",
+            ),
+          reason: z
+            .string()
+            .describe("Why it was removed, in one sentence, in English."),
+          methods: z
+            .array(z.string())
+            .describe(
+              "The verbs the route exported before it was removed. Every verb answers 410 regardless — the path was retired, not a selection of methods on it.",
+            ),
+        }),
+      )
+      .describe(
+        "Paths this server used to serve and no longer does. Each answers 410 Gone with `meta.errorCode` = `route.retired`. Read on launch so a client can drop the surface that depended on one before it makes the call, rather than learning from the failure.",
+      ),
   })
   .meta({
     id: "CapabilitiesResponse",

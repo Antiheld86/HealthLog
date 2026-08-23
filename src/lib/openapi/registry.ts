@@ -79,6 +79,11 @@ const openApiBase: Pick<
     { name: "Records" },
     { name: "Admin" },
     { name: "Meta" },
+    {
+      name: "Retired",
+      description:
+        "Paths that were published and have been removed. They answer 410 Gone with `meta.errorCode` = `route.retired`, the removing version, and the replacement path where there is one. Listed so a client generated from this contract learns the path is gone from the contract rather than from a 404 in production.",
+    },
   ],
   /**
    * How a caller authenticates, for every operation that does not say

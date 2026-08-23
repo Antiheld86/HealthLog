@@ -61,6 +61,10 @@ import { describe, expect, it } from "vitest";
 
 import { openApiPaths } from "@/lib/openapi/routes";
 import { SHARING_ACCESS_DENIED_DESCRIPTION } from "@/lib/openapi/routes/shared";
+import { RETIRED_ROUTES } from "@/lib/http/retired-routes";
+
+/** Published paths that deliberately have no handler behind them. */
+const retiredPaths = new Set(RETIRED_ROUTES.map((route) => route.path));
 
 const ROOT = process.cwd();
 const HTTP_METHODS = ["get", "post", "put", "patch", "delete"] as const;
@@ -148,6 +152,13 @@ function publishedOperations(): PublishedOperation[] {
   const operations: PublishedOperation[] = [];
   const missing: string[] = [];
   for (const [path, item] of Object.entries(openApiPaths)) {
+    // A retired path is published deliberately and has no route module by
+    // definition — that is the whole state (`src/lib/http/retired-routes.ts`).
+    // It resolves no fence because it reaches no handler: the proxy answers 410
+    // before routing, for every caller and every verb, so there is no record to
+    // refuse access to. Skipped by the registry rather than by a path pattern,
+    // so a live route can never fall through this hole.
+    if (retiredPaths.has(path)) continue;
     const modulePath = routeModulePath(path);
     if (!existsSync(modulePath)) {
       missing.push(path);
