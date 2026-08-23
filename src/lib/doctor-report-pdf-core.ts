@@ -2,7 +2,10 @@
  * Isomorphic PDF renderer for the doctor report.
  *
  * Runs identically in the browser (settings page download) and in Node
- * (server-rendered `/api/doctor-report/pdf` endpoint). All locale-sensitive
+ * (the clinician share link's `/c/[token]/report.pdf` route). The comment here
+ * named `/api/doctor-report/pdf` until 2026-08-23; that route was removed and
+ * the sweep behind the retired-route registry found the reference still
+ * standing. All locale-sensitive
  * strings and number/date formatting are driven by the injected
  * `{ t, locale }` so DE and EN output match the user's UI language.
  *
