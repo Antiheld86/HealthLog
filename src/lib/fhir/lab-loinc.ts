@@ -30,9 +30,16 @@
  * yet carry that field, so the call site passes only `analyte` today. When the
  * DTO gains a `biomarkerCanonicalName` (or similar), thread it in — no other
  * change to this module is required.
+ *
+ * SERVER-ONLY since the localised alias index landed: the index reads every
+ * shipped message bundle through `@/lib/i18n/shared-resolve`. The single
+ * caller is the FHIR exporter, which runs on the server; a client that needs
+ * to show a biomarker's name resolves it through the labs catalog instead.
  */
 
 import { LOINC_SYSTEM, UCUM_SYSTEM } from "@/lib/fhir/loinc-map";
+import { localisedValues } from "@/lib/i18n/shared-resolve";
+import { stripDiacritics } from "@/lib/i18n/fold-for-match";
 
 export { LOINC_SYSTEM, UCUM_SYSTEM };
 
@@ -45,13 +52,20 @@ export interface LabLoincMapping {
 }
 
 /**
- * Normalise an analyte / unit string to a lookup key: lower-case, strip every
- * character that is not a letter or digit. So "LDL-C", "LDL Cholesterol",
- * "ldl_c" all fold to `ldlc`-ish keys; the alias table below pins the exact
- * variants the app and German users actually type onto a single canonical key.
+ * Normalise an analyte / unit string to a lookup key: lower-case, drop
+ * accents, strip every character that is not a letter or digit. So "LDL-C",
+ * "LDL Cholesterol", "ldl_c" all fold to `ldlc`-ish keys.
+ *
+ * The accent fold is what lets a name carrying diacritics reach a key at all.
+ * Without it "Cholestérol total" lost its "é" entirely and folded to
+ * `cholestroltotal`, and "Hämoglobin" to `hmoglobin` — keys nothing was ever
+ * going to match, which is also why the hand-written German aliases below are
+ * spelled `hamoglobin` and `kreatinin` rather than as the language writes
+ * them. Every pre-existing alias is pure ASCII, so folding is a widening: what
+ * resolved before resolves to the same key now.
  */
 export function normaliseLabKey(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return stripDiacritics(s.toLowerCase()).replace(/[^a-z0-9]/g, "");
 }
 
 /**
@@ -172,11 +186,17 @@ const LAB_LOINC_BY_KEY: Record<string, LabLoincMapping> = {
 };
 
 /**
- * Alias → canonical key. The LEFT side is the normalised form of a name a user
- * (EN or DE) might type; the RIGHT side is a key in `LAB_LOINC_BY_KEY`. Every
- * canonical key is also implicitly its own alias (looked up directly first).
- * Keep the right side honest — only fold a synonym when it unambiguously names
- * the same analyte.
+ * Alias → canonical key, hand-written. The LEFT side is the normalised form of
+ * a name a user might type; the RIGHT side is a key in `LAB_LOINC_BY_KEY`.
+ * Every canonical key is also implicitly its own alias (looked up directly
+ * first). Keep the right side honest — only fold a synonym when it
+ * unambiguously names the same analyte.
+ *
+ * This table covers spellings the app owns NO string for: clinical
+ * abbreviations ("GPT", "ASAT", "hgb"), and the ways a person shortens a name
+ * by hand. The NAMES the app itself displays are not transcribed here — see
+ * the derived index below — because that list exists in six languages already
+ * and copying it in would freeze it at today's six.
  */
 const LAB_ALIASES: Record<string, string> = {
   // HbA1c
@@ -251,6 +271,94 @@ const LAB_ALIASES: Record<string, string> = {
   insulinfasting: "fastinginsulin",
   nuchterninsulin: "fastinginsulin",
 };
+
+/**
+ * Labs-catalog slug → canonical LOINC key.
+ *
+ * Both sides are app-owned stable identities with no language in them, which
+ * is the whole point: this is the only edit a new locale does NOT need. A
+ * biomarker minted from the catalog stores whatever `labs.catalog.<slug>` said
+ * in the language of the person who minted it, and that name is what reaches
+ * the FHIR exporter as free text. Pinning the slug once means every
+ * translation of it resolves.
+ *
+ * Slugs absent here are catalog markers with no entry in `LAB_LOINC_BY_KEY`
+ * (T3, T4, B12, folate, the electrolytes, most of the blood count) — that map
+ * is conservative by design and text-only stays the honest default for them.
+ * Adding one is a decision about a LOINC term, not about a language.
+ */
+export const CATALOG_SLUG_TO_LOINC_KEY: Record<string, string> = {
+  "total-cholesterol": "cholesterol",
+  ldl: "ldlc",
+  hdl: "hdlc",
+  triglycerides: "triglycerides",
+  "fasting-glucose": "glucosefasting",
+  hba1c: "hba1c",
+  tsh: "tsh",
+  ferritin: "ferritin",
+  "vitamin-d": "vitamind",
+  "hs-crp": "hscrp",
+  creatinine: "creatinine",
+  egfr: "egfr",
+  alt: "alt",
+  ast: "ast",
+  ggt: "ggt",
+  hemoglobin: "hemoglobin",
+  apob: "apob",
+  "lp-a": "lpa",
+  "fasting-insulin": "fastinginsulin",
+};
+
+/**
+ * Localised analyte name → canonical LOINC key, DERIVED from
+ * `messages/<locale>.json` rather than transcribed out of it.
+ *
+ * That is the load-bearing part. Before this index, the alias table above was
+ * the whole of the mapping and it was written in English and German, so a
+ * French account's "Cholestérol total", a Spanish "Colesterol total", an
+ * Italian "Colesterolo totale" and a Polish "Cholesterol całkowity" all
+ * exported as a text-only concept with no LOINC code, on a document a
+ * clinician or another system reads. Transcribing four more languages here
+ * would have fixed today's six locales and reopened the same hole on the day a
+ * seventh landed. Reading the bundles means a new locale needs no edit in this
+ * file: `locales` grows, `messages/xx.json` lands, and the names it ships
+ * resolve the same day.
+ *
+ * The hand-written aliases WIN on a conflict. They were verified one by one
+ * over several releases; a derived name that folds onto the same key as one of
+ * them is a duplicate and harmless, and one that folds onto a DIFFERENT key
+ * would be a bundle bug, so it is refused here and the guard suite fails on
+ * it — a translation typo must not quietly re-point an existing alias at
+ * another analyte.
+ *
+ * Known limit: the index is built from the names the bundles carry TODAY,
+ * while the analytes it resolves were typed in the past. Editing a shipped
+ * `labs.catalog.<slug>` string orphans the biomarkers minted under the old
+ * wording; the fix for that is a legacy row in `LAB_ALIASES`, not a migration.
+ */
+function buildLocalisedAliases(): Record<string, string> {
+  const index: Record<string, string> = {};
+  for (const [slug, loincKey] of Object.entries(CATALOG_SLUG_TO_LOINC_KEY)) {
+    for (const name of localisedValues(`labs.catalog.${slug}`)) {
+      const key = normaliseLabKey(name);
+      if (!key) continue;
+      if (LAB_LOINC_BY_KEY[key] || LAB_ALIASES[key]) continue;
+      if (index[key] && index[key] !== loincKey) continue;
+      index[key] = loincKey;
+    }
+  }
+  return index;
+}
+
+const LOCALISED_LAB_ALIASES = buildLocalisedAliases();
+
+/**
+ * Test seam: the guard suite asserts the derived index covers every shipped
+ * locale and contradicts no hand-written alias. Production reads the constant.
+ */
+export function localisedLabAliases(): Readonly<Record<string, string>> {
+  return LOCALISED_LAB_ALIASES;
+}
 
 /**
  * Canonical UCUM symbols that a recorded free-text unit may normalise to. The
@@ -344,7 +452,12 @@ export function resolveLabCoding(
   const source =
     canonicalName && canonicalName.length > 0 ? canonicalName : analyte;
   const key = normaliseLabKey(source);
-  const resolvedKey = LAB_LOINC_BY_KEY[key] ? key : LAB_ALIASES[key];
+  // Canonical key first, then the hand-verified aliases, then the names the
+  // shipped bundles carry. The order is the confidence order, and it keeps
+  // every resolution that worked before working the same way.
+  const resolvedKey = LAB_LOINC_BY_KEY[key]
+    ? key
+    : (LAB_ALIASES[key] ?? LOCALISED_LAB_ALIASES[key]);
   if (!resolvedKey) return null;
   const mapping = LAB_LOINC_BY_KEY[resolvedKey];
   if (!mapping) return null;

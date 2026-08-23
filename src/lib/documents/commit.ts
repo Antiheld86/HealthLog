@@ -28,7 +28,11 @@ import { invalidateUserHealthScore } from "@/lib/cache/invalidate";
 import { emitDataArrival } from "@/lib/arrivals/emit-shared";
 import { decryptFactData } from "@/lib/documents/store";
 import { resolveOrMintBiomarker } from "@/lib/labs/biomarker-store";
-import { parseReferenceRange } from "@/lib/labs/parse-reference-range";
+import {
+  isUnreadableRange,
+  parseReferenceRange,
+} from "@/lib/labs/parse-reference-range";
+import { annotate } from "@/lib/logging/context";
 import type { ExtractedFact } from "@/generated/prisma/client";
 import type {
   ConditionFactData,
@@ -82,6 +86,19 @@ async function commitObservation(
   const sourceLow = printed?.low ?? data.referenceLow;
   const sourceHigh = printed?.high ?? data.referenceHigh;
   const sourceText = printed?.text ?? null;
+  // A window the report printed and the parser could not read is the case that
+  // used to pass without a trace: the reading is then judged against the
+  // catalog band, or against nothing, and no surface says the lab had stated
+  // something else. Count it here so an unreadable notation — a language the
+  // prose table does not carry, a layout nobody anticipated — shows up as a
+  // number on a dashboard instead of as silence. The string itself is the
+  // user's document and stays out of the event.
+  if (isUnreadableRange(printed)) {
+    annotate({
+      action: { name: "labs.referenceRange.unreadable" },
+      meta: { surface: "document.commit", length: printed?.text.length ?? 0 },
+    });
+  }
 
   const biomarker = await resolveOrMintBiomarker(userId, {
     analyte: data.label,

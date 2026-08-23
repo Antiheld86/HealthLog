@@ -20,9 +20,10 @@ import frMessages from "../../../messages/fr.json";
 import esMessages from "../../../messages/es.json";
 import itMessages from "../../../messages/it.json";
 import plMessages from "../../../messages/pl.json";
-import { type Locale } from "./config";
+import { locales, type Locale } from "./config";
+import { resolveKey } from "./resolve-key";
 
-export { resolveKey } from "./resolve-key";
+export { resolveKey };
 
 /**
  * Single source of truth for the per-locale message bundle on the
@@ -36,3 +37,29 @@ export const allMessages: Record<Locale, Record<string, unknown>> = {
   it: itMessages,
   pl: plMessages,
 };
+
+/**
+ * Every shipped translation of one key, in `locales` order, deduplicated and
+ * with missing entries dropped.
+ *
+ * This is the primitive a DERIVED match index is built from. A matcher that
+ * has to recognise an app-owned label in text a person typed must not
+ * transcribe the label into its own source: transcribing fixes the locales
+ * shipped on the day it was written and reopens the same hole when a new
+ * bundle lands. Reading the bundles means a new locale is matchable the day
+ * `messages/<locale>.json` arrives, with no edit in the matcher.
+ *
+ * Known limit, worth stating where it bites: the values returned are what the
+ * bundles carry TODAY, while a matcher applies them to text written in the
+ * past. Editing a shipped translation therefore orphans whatever was written
+ * under the old wording — the fix for that is a legacy alias at the call site,
+ * not a data migration.
+ */
+export function localisedValues(key: string): string[] {
+  const seen = new Set<string>();
+  for (const locale of locales) {
+    const value = resolveKey(allMessages[locale], key);
+    if (value && value.trim()) seen.add(value.trim());
+  }
+  return [...seen];
+}

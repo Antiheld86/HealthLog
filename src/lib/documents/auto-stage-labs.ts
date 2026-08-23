@@ -42,28 +42,139 @@ import {
 } from "@/lib/documents/extract";
 import { encryptFactData, encryptFactProvenance } from "@/lib/documents/store";
 import { prisma } from "@/lib/db";
+import { stripDiacritics } from "@/lib/i18n/fold-for-match";
+import { localisedValues } from "@/lib/i18n/shared-resolve";
+import { BIOMARKER_CATALOG } from "@/lib/labs/biomarker-catalog";
 import { annotate } from "@/lib/logging/context";
 import { isModuleEnabled } from "@/lib/modules/gate";
 
 /**
  * Lab-report signals used to decide whether a transcribed document is worth an
- * extraction call. Each pattern is one class of evidence (a reference-range
- * label, a lab unit, a common analyte name, a report header); requiring TWO
- * distinct hits keeps a stray "mg" in a prose letter from tripping the auto
- * extraction while still catching a real panel in German or English.
+ * extraction call. Each entry is one CLASS of evidence — a reference-range
+ * label, a lab unit, a common analyte name, a report header — and contributes
+ * at most one hit however many of its alternatives fire. Requiring TWO
+ * distinct classes keeps a stray "mg" in a prose letter from tripping the auto
+ * extraction while still catching a real panel.
+ *
+ * Every pattern is tested against the text LOWER-CASED AND ACCENT-FOLDED, not
+ * against the transcription as written, so the patterns are spelled without
+ * accents. That is also what lets one pattern serve "Hämoglobin", "haemoglobin"
+ * and "hemoglobin" instead of three.
+ *
+ * Until now the four classes were English and German only, so a French,
+ * Spanish, Italian or Polish lab report scored at most one hit — the units,
+ * which are the same everywhere — and auto-staging never fired for it. The
+ * whole document was lost from the flow, silently: the manual extract button
+ * stays available, so nothing anywhere reads as broken.
+ *
+ * WHICH WAY THIS ERRS. A false negative loses a real report from auto-staging;
+ * a false positive burns one extraction call on a document that is not a lab
+ * report, and stages facts a person then declines on the review screen —
+ * nothing commits either way. The cost is lopsided, so the vocabulary is
+ * widened rather than kept tight, and the two-distinct-class rule is what
+ * holds the other side: an incidental "sodium" in a prose letter is one class
+ * and still fails the gate. Terms whose only home is a lab report ("emocromo",
+ * "bilan sanguin", "zakres referencyjny") were preferred over generic ones,
+ * and short acronyms below four characters are excluded from the derived names
+ * for exactly this reason — the German word "alt" would otherwise make every
+ * German letter a lab report.
  */
+/**
+ * The analyte class, hand-written half: word stems and the short acronyms,
+ * which are too short to derive safely but were vetted one at a time long ago.
+ * Named rather than inlined so the derived names can be attached to THIS class
+ * by identity — an index would silently re-point them at another class the
+ * first time somebody reorders the list.
+ */
+const ANALYTE_SIGNAL =
+  /h(?:a|ae|e)moglobin|glu[ck]ose|cholesterin|cholesterol|kreatinin|creatinine|hba1c|leuko|erythro|thrombo|ferritin|triglycerid|\btsh\b|\bldl\b|\bhdl\b|\bcrp\b|vitamin\s?d/i;
+
 const LAB_SIGNALS: readonly RegExp[] = [
-  /reference range|referenzbereich|normbereich|normal range|ref\.?-?bereich/i,
+  // 1 — a reference-range label. Only a report that prints windows says this.
+  /reference range|referenzbereich|normbereich|normal range|ref\.?-?bereich|valeurs? de reference|intervalle de reference|plage de reference|valores? de referencia|rango de referencia|intervalo de referencia|valori di riferimento|intervallo di riferimento|zakres referencyjny|wartosci referencyjne/i,
+  // 2 — a lab unit. Language-independent already; unchanged.
   /\b(mg\/dl|mmol\/l|nmol\/l|µmol\/l|umol\/l|g\/dl|µg\/l|ug\/l|ng\/ml|pg\/ml|mmol\/mol|u\/l|iu\/l|mg\/l|\/µl|\/ul)\b/i,
-  /h(?:ä|ae)moglobin|hemoglobin|glu[ck]ose|cholesterin|cholesterol|kreatinin|creatinine|hba1c|leuko|erythro|thrombo|ferritin|triglycerid|\btsh\b|\bldl\b|\bhdl\b|\bcrp\b|vitamin\s?d/i,
-  /labor(?:befund|wert)?|laboratory|blutbild|\bbefund\b/i,
+  // 3 — an analyte name.
+  ANALYTE_SIGNAL,
+  // 4 — a report header.
+  /labor(?:befund|wert)?|laboratory|blutbild|\bbefund\b|laboratoire|bilan sanguin|analyses medicales|hemogramme|laboratorio|analitica|hemograma|analisis de sangre|esami del sangue|emocromo|referto|laboratorium|morfologia krwi|wyniki badan/i,
 ];
 
-/** True when the transcribed text carries at least two lab-report signals. */
+/**
+ * Class 3 again, DERIVED from `messages/<locale>.json` instead of transcribed.
+ *
+ * The names above are stems a maintainer typed. These are the names the app
+ * itself displays for the markers in its catalog, in every language it ships —
+ * so a French report's "Cholestérol total" or a Polish "Płytki krwi" counts as
+ * an analyte the day the bundle carries it, with no edit here. Transcribing
+ * thirty names times four more languages would have fixed today's six locales
+ * and reopened the hole at the seventh.
+ *
+ * Names shorter than four folded characters are dropped: "ALT", "AST", "GGT",
+ * "TSH" and Polish "Sód" are ordinary words or fragments in some language, and
+ * a three-letter alternative in a gate this cheap is a false-positive machine.
+ * The acronyms worth having are already in the hand-written class above, where
+ * each was considered one at a time.
+ */
+function buildAnalyteNamePattern(): RegExp {
+  const names = new Set<string>();
+  for (const seed of BIOMARKER_CATALOG) {
+    for (const name of localisedValues(`labs.catalog.${seed.slug}`)) {
+      const folded = stripDiacritics(name.toLowerCase()).trim();
+      // Also the name without its parenthetical gloss. A report prints
+      // "Apolipoprotéine B", not "Apolipoprotéine B (ApoB)", and the gloss is
+      // the app's way of naming a marker two ways at once.
+      const bare = folded.replace(/\s*\([^)]*\)/gu, "").trim();
+      for (const candidate of [folded, bare]) {
+        if (candidate.length >= 4) names.add(candidate);
+      }
+    }
+  }
+  const alternation = [...names]
+    .sort((a, b) => b.length - a.length)
+    .map((name) =>
+      name
+        .split(/\s+/u)
+        .map((part) => part.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&"))
+        // Any run of whitespace, so a name broken across a transcribed line
+        // still reads as one name.
+        .join(String.raw`\s+`),
+    )
+    .join("|");
+  // Bounded by "not a letter or digit" rather than by \b, because several
+  // names end in punctuation ("Lipoprotéine(a)") where \b cannot match, and
+  // because the Polish "ł" is not a word character to \b.
+  return new RegExp(
+    `(?<![\\p{L}\\p{N}])(?:${alternation})(?![\\p{L}\\p{N}])`,
+    "u",
+  );
+}
+
+const DERIVED_ANALYTE_NAMES = buildAnalyteNamePattern();
+
+/** Test seam: the guard suite pins that the derived pattern covers every locale. */
+export function derivedAnalyteNamePattern(): RegExp {
+  return DERIVED_ANALYTE_NAMES;
+}
+
+/**
+ * True when the transcribed text carries at least two distinct lab-report
+ * signal classes.
+ *
+ * The derived analyte names extend class 3 rather than forming a class of
+ * their own: a document that says "Cholestérol total" and "cholesterol" has
+ * named one analyte twice, and letting that reach two would halve the gate.
+ */
 export function looksLikeLabDocument(text: string): boolean {
+  // Fold once. The transcription is a document's worth of text and every
+  // pattern needs the same folded form.
+  const folded = stripDiacritics(text.toLowerCase());
   let hits = 0;
   for (const signal of LAB_SIGNALS) {
-    if (signal.test(text) && ++hits >= 2) return true;
+    const hit =
+      signal.test(folded) ||
+      (signal === ANALYTE_SIGNAL && DERIVED_ANALYTE_NAMES.test(folded));
+    if (hit && ++hits >= 2) return true;
   }
   return false;
 }
