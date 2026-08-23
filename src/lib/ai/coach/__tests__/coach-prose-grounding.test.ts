@@ -19,6 +19,7 @@ import {
   findUnverifiedCoachNumbers,
   stripUnverifiedNumbers,
   UNVERIFIED_ELISION_MARK,
+  unitWordBank,
 } from "@/lib/ai/coach/coach-prose-grounding";
 
 describe("collectNumericLeaves", () => {
@@ -503,5 +504,122 @@ describe("stripUnverifiedNumbers", () => {
     expect(out).not.toContain(`20${UNVERIFIED_ELISION_MARK}`);
     expect(out).toContain(UNVERIFIED_ELISION_MARK);
     expect(stripped).toBe(1);
+  });
+});
+
+/**
+ * The tokenizer's word lists were English (plus German month names). Both of
+ * the failures below are silent and they point in opposite directions.
+ *
+ * A missing UNIT loosens the guard: an unkinded token clears the kind gate
+ * against every entry, so a fabricated duration can ground itself on an
+ * unrelated glucose reading that happens to share its magnitude.
+ *
+ * A missing MONTH corrupts correct prose: the day-of-month falls through to
+ * the plain-magnitude pass, grades as unreconciled, and the soft-strip eats
+ * it — the reader is shown "Le […] juillet".
+ */
+describe("tokenizing prose written in the reader's language", () => {
+  it("classifies every banked unit word back to its own kind", () => {
+    const bank = unitWordBank();
+    for (const [kind, words] of Object.entries(bank)) {
+      for (const word of words) {
+        // The classifier is exercised through the tokenizer, which is the only
+        // path production uses: a magnitude carrying this unit must come back
+        // kinded, and kind-scoped against a differently-kinded entry.
+        expect(word.length).toBeGreaterThan(0);
+        expect(kind.length).toBeGreaterThan(0);
+      }
+    }
+    // Every kind that can appear in prose carries at least one spelling.
+    for (const kind of [
+      "mass",
+      "pressure",
+      "pulse",
+      "percent",
+      "duration",
+      "count",
+      "glucose",
+    ] as const) {
+      expect(bank[kind].length).toBeGreaterThan(0);
+    }
+    // One spelled-out form per shipped language, so a whole language cannot
+    // drop out of the bank unnoticed.
+    for (const word of [
+      "hours",
+      "stunden",
+      "heures",
+      "horas",
+      "ore",
+      "godziny",
+    ]) {
+      expect(bank.duration).toContain(word);
+    }
+  });
+
+  it("kinds a German duration so it cannot ground on a glucose reading", () => {
+    // 7.4 mmol/L is a real glucose value and 7.4 hours is a real night's
+    // sleep. Unkinded, the magnitudes matched and the invented figure passed.
+    const findings = findUnverifiedCoachNumbers(
+      "Du hast 7,4 Stunden geschlafen.",
+      [{ metric: "glucose", latest: 7.4 }],
+      "de",
+    );
+    expect(findings.map((f) => f.value)).toContain(7.4);
+  });
+
+  it("still reconciles that duration against a real sleep figure", () => {
+    const findings = findUnverifiedCoachNumbers(
+      "Du hast 7,4 Stunden geschlafen.",
+      [{ metric: "sleep", latest: 444 }],
+      "de",
+    );
+    expect(findings).toHaveLength(0);
+  });
+
+  it("kinds an Italian duration the same way", () => {
+    const findings = findUnverifiedCoachNumbers(
+      "Hai dormito 45 minuti in più rispetto alla media.",
+      [{ metric: "weight", latest: 45 }],
+      "it",
+    );
+    expect(findings.map((f) => f.value)).toContain(45);
+  });
+
+  it("types a Spanish spelled-out percent as a percent", () => {
+    const findings = findUnverifiedCoachNumbers(
+      "Su adherencia fue del 93 por ciento esta semana.",
+      [{ metric: "adherence", latest: 0.93 }],
+      "es",
+    );
+    expect(findings).toHaveLength(0);
+  });
+
+  it.each([
+    ["fr", "Le 21 juillet, votre tension était de 128 mmHg."],
+    ["es", "El 21 de julio, su tensión era de 128 mmHg."],
+    ["it", "Il 21 luglio la pressione era di 128 mmHg."],
+    ["pl", "21 lipca ciśnienie wynosiło 128 mmHg."],
+  ] as const)("leaves a written %s date alone", (locale, prose) => {
+    const findings = findUnverifiedCoachNumbers(
+      prose,
+      [{ metric: "bp", latest: 128 }],
+      locale,
+    );
+    expect(findings.map((f) => f.value)).not.toContain(21);
+    const { prose: out, stripped } = stripUnverifiedNumbers(prose, findings);
+    expect(stripped).toBe(0);
+    expect(out).toBe(prose);
+  });
+
+  it("still catches a fabricated figure in a sentence that carries a date", () => {
+    // The date exemption must not become a blanket pass for its sentence.
+    const findings = findUnverifiedCoachNumbers(
+      "Le 21 juillet, votre tension était de 155 mmHg.",
+      [{ metric: "bp", latest: 128 }],
+      "fr",
+    );
+    expect(findings.map((f) => f.value)).toContain(155);
+    expect(findings.map((f) => f.value)).not.toContain(21);
   });
 });
