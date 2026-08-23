@@ -24,7 +24,10 @@ import {
 } from "@/lib/ai/types";
 import { AI_BUDGETS } from "@/lib/ai/ai-budgets";
 import { prisma } from "@/lib/db";
-import { parseReferenceRange } from "@/lib/labs/parse-reference-range";
+import {
+  isUnreadableRange,
+  parseReferenceRange,
+} from "@/lib/labs/parse-reference-range";
 import { annotate } from "@/lib/logging/context";
 import {
   extractedLabsSchema,
@@ -270,7 +273,16 @@ export async function runOcrExtraction(
 
   // Cap defensively (the schema already bounds it) and annotate each row.
   const rows: OcrExtractedRowDto[] = [];
+  // How many rows printed a window the parser could not read. Those rows fall
+  // back to whatever bounds the model itself reported, or to none — either way
+  // the notation went unread, and a count of it is the difference between
+  // noticing that a report layout or a language is unsupported and never
+  // hearing about it. A count only: the string is the user's document.
+  let unreadableRanges = 0;
   for (const row of envelope.rows.slice(0, OCR_MAX_ROWS)) {
+    if (isUnreadableRange(parseReferenceRange(row.referenceText, row.unit))) {
+      unreadableRanges += 1;
+    }
     rows.push(await annotateRow(args.userId, row, reportDate));
   }
 
@@ -282,6 +294,7 @@ export async function runOcrExtraction(
       rows: rows.length,
       duplicates: rows.filter((r) => r.duplicateOf !== null).length,
       newBiomarkers: rows.filter((r) => r.biomarkerMatch === "new").length,
+      unreadableRanges,
     },
   });
 
