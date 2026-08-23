@@ -13,25 +13,12 @@ import { prisma } from "@/lib/db";
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiSuccess } from "@/lib/api-response";
 import { readNote } from "@/lib/crypto/note-cipher";
+import { annotate } from "@/lib/logging/context";
+import { matchGlp1SideEffectTags } from "@/lib/medications/glp1-side-effect-tag-match";
+import type { Glp1SideEffectTag } from "@/lib/medications/glp1-side-effect-tags";
 import { NextRequest } from "next/server";
 
 const DEFAULT_LIMIT = 60;
-const SIDE_EFFECT_TAGS = new Set([
-  "nausea",
-  "constipation",
-  "diarrhea",
-  "fatigue",
-  "appetite-loss",
-  "heartburn",
-  "headache",
-  "übelkeit",
-  "verstopfung",
-  "durchfall",
-  "müdigkeit",
-  "appetitlosigkeit",
-  "sodbrennen",
-  "kopfschmerzen",
-]);
 
 interface TimelineEntry {
   date: string;
@@ -44,25 +31,7 @@ interface TimelineEntry {
   injectionSite?: string | null;
   inventoryDelta?: number;
   reason?: string;
-  tags?: string[];
-}
-
-function parseTagList(raw: string | null): string[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed
-        .map((v) => (typeof v === "string" ? v.trim() : ""))
-        .filter(Boolean);
-    }
-  } catch {
-    /* fall through */
-  }
-  return raw
-    .split(",")
-    .map((p) => p.trim())
-    .filter(Boolean);
+  tags?: Glp1SideEffectTag[];
 }
 
 export const GET = apiHandler(async (request: NextRequest) => {
@@ -157,17 +126,23 @@ export const GET = apiHandler(async (request: NextRequest) => {
     }
   }
 
-  // Side-effect days — collapse to one entry per day (most recent
-  // first) listing every recognised tag picked up that day.
-  const sideEffectByDay = new Map<string, string[]>();
+  // Side-effect days — collapse to one entry per day (most recent first)
+  // listing every catalogue side effect picked up that day.
+  //
+  // `tags` carries the catalogue KEY, not the string the entry was written
+  // with. The chip writes the label of whatever language the writer's UI was
+  // in, so the stored column mixes languages within one account the moment
+  // somebody switches locale; a key renders in the reader's language and a
+  // stored label renders in the writer's.
+  const sideEffectByDay = new Map<string, Glp1SideEffectTag[]>();
+  let unresolvedTagCount = 0;
   for (const mood of moods) {
-    const tags = parseTagList(mood.tags).filter((t) =>
-      SIDE_EFFECT_TAGS.has(t.toLowerCase()),
-    );
-    if (tags.length === 0) continue;
+    const { matched, unresolvedCount } = matchGlp1SideEffectTags(mood.tags);
+    unresolvedTagCount += unresolvedCount;
+    if (matched.length === 0) continue;
     const dayKey = mood.moodLoggedAt.toISOString().slice(0, 10);
     const existing = sideEffectByDay.get(dayKey) ?? [];
-    for (const t of tags) {
+    for (const t of matched) {
       if (!existing.includes(t)) existing.push(t);
     }
     sideEffectByDay.set(dayKey, existing);
@@ -181,6 +156,19 @@ export const GET = apiHandler(async (request: NextRequest) => {
   }
 
   entries.sort((a, b) => b.date.localeCompare(a.date));
+
+  // Mood tags that are not catalogue side effects are correctly absent from a
+  // GLP-1 timeline — they are the user's own prose about their day, and this
+  // surface is not where it belongs. Absent is not the same as untracked
+  // though: the count rides the wide event so the classification rate stays
+  // answerable from a dashboard, without the text leaving the database.
+  annotate({
+    action: { name: "insights.glp1-timeline.read" },
+    meta: {
+      side_effect_days: sideEffectByDay.size,
+      unresolved_mood_tags: unresolvedTagCount,
+    },
+  });
 
   return apiSuccess({ hasGlp1: true, entries: entries.slice(0, limit) });
 });

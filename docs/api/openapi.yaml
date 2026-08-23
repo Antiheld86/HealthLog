@@ -50680,12 +50680,24 @@ components:
               reason:
                 type: string
               tags:
-                description: The recognised side-effect tags picked up that day. Matched against a FIXED bilingual list of English and
-                  German tag strings, so a tag written in any other language — or spelled differently — does not appear
-                  here at all.
+                description: "Catalogue keys of the side effects tagged that day, deduplicated. These are STABLE KEYS, not the strings
+                  the entries were written with: the capture chip writes its label in the writer's language, and the
+                  matcher indexes every shipped locale's label back to the key, so the same recorded symptom yields the
+                  same key whether it was tagged in German, English, Spanish, French, Italian or Polish. Render the key
+                  in the reader's own language rather than echoing it. A mood tag that is not a catalogue side effect —
+                  anything the user typed freehand — is not reported here; it is not a side effect, and a therapy
+                  timeline is not the place for the rest of somebody's day."
                 type: array
                 items:
                   type: string
+                  enum:
+                    - nausea
+                    - constipation
+                    - diarrhea
+                    - fatigue
+                    - appetite-loss
+                    - heartburn
+                    - headache
             required:
               - date
               - kind

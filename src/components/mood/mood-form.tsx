@@ -64,6 +64,10 @@ import { dayOfLocalInput, useLinkedDayContext } from "./use-linked-day-context";
 import { MoodQuickTags } from "./mood-quick-tags";
 import { useRecentTags } from "./recent-tags";
 import { moodFaceIcon } from "./mood-tag-icons";
+// One catalogue for the chip strip and for every server-side reader of what it
+// writes. Split apart, the write side gained a locale and the read side did
+// not notice for four of them.
+import { GLP1_SIDE_EFFECT_TAGS } from "@/lib/medications/glp1-side-effect-tags";
 
 // v1.12.0 — best-on-the-left face order for the "How are you?" hero,
 // mirroring the iOS `Mood1…Mood5` imageset order. The numeric `score`
@@ -81,24 +85,6 @@ const MOOD_LEVELS = [
 // textarea and the server-side Zod bound; surfaced as a character counter
 // so the truncation at the cap is no longer silent.
 const NOTE_MAX_LENGTH = 500;
-
-/**
- * v1.4.25 W4d — curated GLP-1 side-effect chip strip. Tapping a chip
- * appends the localised tag string to the existing free-text tag input
- * (comma-separated). The list is intentionally short — these are the
- * symptoms clinicians most often ask about at GLP-1 follow-up visits
- * (cf. PMC GLP-1 adverse-effects review). Generic mood entries that
- * never touch the chips keep their tag input byte-identical to v1.4.24.
- */
-const GLP1_SIDE_EFFECT_KEYS = [
-  "medications.sideEffectTagNausea",
-  "medications.sideEffectTagConstipation",
-  "medications.sideEffectTagDiarrhea",
-  "medications.sideEffectTagFatigue",
-  "medications.sideEffectTagAppetiteLoss",
-  "medications.sideEffectTagHeartburn",
-  "medications.sideEffectTagHeadache",
-] as const;
 
 interface MoodFormProps {
   onSuccess?: () => void;
@@ -491,18 +477,19 @@ export function MoodForm({ onSuccess, onCancel, footerSlot }: MoodFormProps) {
                 autoCapitalize="none"
                 autoComplete="off"
               />
-              {/* v1.4.25 W4d — GLP-1 side-effect quick-tags. Tapping a chip
-              appends the localised label to the free-text tag list.
-              Always visible for now (cheap UX; the Coach side-effect
-              aggregator filters on the canonical English tag set so the
-              German labels still register correctly). */}
+              {/* GLP-1 side-effect quick-tags. Tapping a chip appends the
+              localised label to the free-text tag list. The catalogue is
+              shared with the server-side matcher, which indexes every shipped
+              locale's label back to the chip's key — so what a chip writes is
+              what the timeline, the Coach snapshot and the doctor report
+              count, in all six languages. */}
               <div className="space-y-1.5 pt-1">
                 <p className="text-muted-foreground text-xs">
                   {t("medications.sideEffectTagsHelp")}
                 </p>
                 <div className="flex flex-wrap gap-1.5">
-                  {GLP1_SIDE_EFFECT_KEYS.map((key) => {
-                    const label = t(key);
+                  {GLP1_SIDE_EFFECT_TAGS.map(({ key, labelKey }) => {
+                    const label = t(labelKey);
                     const tags = tagsInput
                       .split(",")
                       .map((p) => p.trim().toLowerCase());

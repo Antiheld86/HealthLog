@@ -21,6 +21,8 @@
 import { prisma } from "@/lib/db";
 import { sanitizeForPrompt } from "@/lib/insights/sanitize";
 import { readNote } from "@/lib/crypto/note-cipher";
+import { matchGlp1SideEffectTags } from "@/lib/medications/glp1-side-effect-tag-match";
+import type { Glp1SideEffectTag } from "@/lib/medications/glp1-side-effect-tags";
 
 /**
  * Recommended generic name for the canonical GLP-1 drug brand. The Coach
@@ -118,7 +120,13 @@ interface PenInventory {
 }
 
 interface SideEffectSummary {
-  tag: string;
+  /**
+   * The catalogue KEY, not the string the entry was written with. The model
+   * gets one stable vocabulary for a symptom instead of whichever language the
+   * chip was tapped in, which also keeps the block's wording out of the
+   * prompt-injection surface the free-text columns need sanitising for.
+   */
+  tag: Glp1SideEffectTag;
   count: number;
 }
 
@@ -142,50 +150,6 @@ export interface Glp1SnapshotBlock {
 interface RawMoodEntry {
   moodLoggedAt: Date;
   tags: string | null;
-}
-
-const SIDE_EFFECT_TAGS = new Set([
-  "nausea",
-  "constipation",
-  "diarrhea",
-  "fatigue",
-  "appetite-loss",
-  "heartburn",
-  "headache",
-  "vomiting",
-  "reflux",
-  // German variants the mood-tag picker exposes — the maintainer's userbase types
-  // in both languages and we don't want the snapshot to miss "Übelkeit"
-  // because the user picked the German chip.
-  "übelkeit",
-  "verstopfung",
-  "durchfall",
-  "müdigkeit",
-  "appetitlosigkeit",
-  "sodbrennen",
-  "kopfschmerzen",
-  "erbrechen",
-]);
-
-function parseTagList(raw: string | null): string[] {
-  if (!raw) return [];
-  // The MoodEntry.tags column carries either a JSON array (modern
-  // mood-form writes) or a comma-separated list (legacy imported
-  // imports). Be permissive.
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed
-        .map((v) => (typeof v === "string" ? v.trim() : ""))
-        .filter(Boolean);
-    }
-  } catch {
-    /* fall through to CSV */
-  }
-  return raw
-    .split(",")
-    .map((p) => p.trim())
-    .filter(Boolean);
 }
 
 function weeksBetween(from: Date, to: Date): number {
@@ -297,11 +261,9 @@ export async function buildGlp1SnapshotBlock(
     where: { userId, deletedAt: null, moodLoggedAt: { gte: moodCutoff } },
     select: { moodLoggedAt: true, tags: true },
   });
-  const tagCounts = new Map<string, number>();
+  const tagCounts = new Map<Glp1SideEffectTag, number>();
   for (const row of moods) {
-    for (const rawTag of parseTagList(row.tags)) {
-      const tag = rawTag.toLowerCase();
-      if (!SIDE_EFFECT_TAGS.has(tag)) continue;
+    for (const tag of matchGlp1SideEffectTags(row.tags).matched) {
       tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
     }
   }

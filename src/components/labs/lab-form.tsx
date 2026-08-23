@@ -22,7 +22,10 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { apiGet, apiPost } from "@/lib/api/api-fetch";
 import { localizedApiError } from "@/lib/api/localized-error";
-import { parseReferenceRange } from "@/lib/labs/parse-reference-range";
+import {
+  isUnreadableRange,
+  parseReferenceRange,
+} from "@/lib/labs/parse-reference-range";
 import { formatReferenceRange } from "@/lib/labs/reference-range";
 import { formatLabValue } from "@/lib/labs/format-value";
 import { EncounterSuggestionField } from "@/components/encounters/encounter-suggestion-field";
@@ -300,7 +303,7 @@ export function LabForm({
   // the hint says the text is kept as written rather than staying silent.
   const parsedSourceRange = parseReferenceRange(sourceRange, selected?.unit);
   const sourceRangeHint = parsedSourceRange
-    ? parsedSourceRange.low === null && parsedSourceRange.high === null
+    ? isUnreadableRange(parsedSourceRange)
       ? t("labs.form.sourceRangeUnparsed")
       : `${formatReferenceRange(
           parsedSourceRange.low,

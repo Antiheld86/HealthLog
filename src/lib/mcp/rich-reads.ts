@@ -38,6 +38,12 @@ import { readCoachCorrelations } from "@/lib/ai/coach/tools/correlations-read";
 import { buildCoachReadStrip } from "@/lib/insights/derived/coach-read";
 import { resolveLocaleForUser } from "@/lib/i18n/user-locale";
 import {
+  buildLocalisedLabelIndex,
+  foldLabel,
+  type LocalisedLabelEntry,
+} from "@/lib/i18n/localised-label-index";
+import { MEASUREMENT_TYPE_LABEL_KEYS } from "@/lib/measurements/type-label-keys";
+import {
   readBestGranularityRollups,
   aggregateWmyBuckets,
   type RollupBucketRow,
@@ -510,11 +516,71 @@ export async function metricStatusDiscoveryRows(userId: string): Promise<
   });
 }
 
+// ── localised metric names ───────────────────────────────────────────
+//
+// Every other step of `resolveRichMetric` compares against ENGLISH: the alias
+// tables and the metric-status registry's `displayName`. Five of the six
+// shipped languages could therefore not name a metric at all — `poids` and
+// `sommeil` resolved to nothing over MCP even though the app renders exactly
+// those words.
+//
+// The names are not this file's to invent: `MEASUREMENT_TYPE_LABEL_KEYS`
+// already binds every `MeasurementType` to the i18n key the app labels it
+// with, and every bundle carries that key. So the index is DERIVED — one
+// entry per (measurement type × shipped locale) — and a seventh language
+// starts resolving the moment its bundle lands.
+//
+// A value is attached only for the metrics the English resolver can ALREADY
+// produce (`SUPPLEMENT`, the registry-derived clinical allowlist, and the
+// metric-status ids that survive `fromRegistry`'s `mcp:false` veto), so the
+// index widens SPELLINGS, never exposure. A screener or an `ENV_*` signal is
+// value-less here for the same reason it is unresolvable in English.
+//
+// Every OTHER measurement type is still entered, value-less, because
+// ambiguity has to be judged over the whole label space rather than over the
+// exposed slice of it. French and Italian call body fat and fat mass by one
+// phrase ("masse grasse" / "massa grassa"); only one of the two is exposed,
+// so an index that knew about the exposed one alone would have seen no
+// collision and answered kilograms to someone who asked for a percentage.
+//
+// The alias tables stay as they are and stay English: `resting_hr`, `spo2`,
+// `vo2max` are protocol slugs, not translations of anything.
+const LOCALISED_METRIC_INDEX = (() => {
+  const exposed = new Map<MeasurementType, RichMetric>();
+  const claim = (metric: RichMetric | null) => {
+    if (metric && !exposed.has(metric.measurementType)) {
+      exposed.set(metric.measurementType, metric);
+    }
+  };
+  for (const metric of Object.values(SUPPLEMENT)) claim(metric);
+  for (const metric of CLINICAL_SIGNAL_BY_KEY.values()) claim(metric);
+  for (const id of METRIC_STATUS_IDS) claim(fromRegistry(id));
+
+  const entries: LocalisedLabelEntry<RichMetric | null>[] = Object.entries(
+    MEASUREMENT_TYPE_LABEL_KEYS,
+  ).map(([type, messageKey]) => ({
+    id: type,
+    messageKey,
+    value: exposed.get(type as MeasurementType) ?? null,
+  }));
+  return buildLocalisedLabelIndex(entries);
+})();
+
+/**
+ * Words two different measurement types claim in some bundle, and which
+ * therefore resolve to neither. Exported so the guard can pin the set: the
+ * known members are a genuine translation collision, a NEW one is a
+ * regression to look at rather than something to resolve by coin flip.
+ */
+export const LOCALISED_METRIC_NAME_COLLISIONS: ReadonlySet<string> =
+  LOCALISED_METRIC_INDEX.ambiguous;
+
 /**
  * Resolve a free-text metric name to a single scalar series. Forgiving for an
- * NL assistant (alias, exact id, display-name match) but closed — an
- * unresolved name returns `null` so the tool reports `{ present: false }`
- * rather than inventing a series. Multi-series metrics (blood pressure) are not
+ * NL assistant (alias, exact id, the metric's name in any shipped language,
+ * or an English display-name fragment) but closed — an unresolved name
+ * returns `null` so the tool reports `{ present: false }` rather than
+ * inventing a series. Multi-series metrics (blood pressure) are not
  * resolvable here by design; the prompt + `get_metric_series` cover BP.
  */
 export function resolveRichMetric(input: string): RichMetric | null {
@@ -543,7 +609,18 @@ export function resolveRichMetric(input: string): RichMetric | null {
     if (direct) return direct;
   }
 
-  // 4. display-name match (e.g. "heart-rate variability").
+  // 4. the metric's own name, in any shipped language, matched EXACTLY.
+  //
+  // Ahead of the substring pass below on purpose: an exact name beats a loose
+  // English fragment. It has to, or a short name in another language loses to
+  // an unrelated English word that merely contains it — "Puls" (de/pl) landed
+  // on PULSE_WAVE_VELOCITY, because "pulse-wave velocity" contains "puls".
+  // A value-less hit (a metric this surface does not expose) falls through
+  // rather than short-circuiting, so the English behaviour below is untouched.
+  const localised = LOCALISED_METRIC_INDEX.index.get(foldLabel(raw));
+  if (localised) return localised;
+
+  // 5. English display-name substring match (e.g. "heart-rate variability").
   const needle = raw.toLowerCase();
   for (const id of METRIC_STATUS_IDS) {
     const meta = getMetricStatusMeta(id);
