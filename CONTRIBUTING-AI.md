@@ -108,7 +108,7 @@ docker compose logs -f app    # Tail app logs
 - **ESLint**: Strict `react-hooks/set-state-in-effect` rule — avoid `setState` inside `useEffect`. Use lazy `useState()` initializer for localStorage reads
 - **Proxy route protection**: `src/proxy.ts` checks `healthlog_session` cookie; PUBLIC_PATHS array bypasses auth. Security headers (CSP, HSTS, X-Frame-Options) applied to all responses
 - **PWA safe area**: Root layout has `viewportFit: "cover"`. Bottom-nav uses `pb-[env(safe-area-inset-bottom)]` for iOS safe area
-- **Doctor report PDF**: Client-side via `src/lib/doctor-report-pdf.ts` (jsPDF). Data from `POST /api/doctor-report`. European medical format, German terminology
+- **Doctor report PDF**: rendered from `src/lib/doctor-report-pdf-core.ts` (jsPDF), the same module in the browser and on the server; the server side is the clinician share link's `/c/[token]/report.pdf`. European medical format, German terminology
 - **Achievements**: Persistent in `UserAchievement` table. Computed on API call, new unlocks written to DB with stable `unlockedAt` timestamps
 - **Data backup**: pg-boss `data-backup` queue runs weekly (Sundays 03:00), stores JSON in `DataBackup` model
 - **Wide Events / Structured Logging**: `apiHandler()` wraps all API routes. Use `annotate()` from `@/lib/logging/context` for business-action annotations. Use `requireAuth()` / `requireAdmin()` from `@/lib/api-handler` (auto-annotates auth). Background jobs use `withBackgroundEvent()`. External calls tracked via `getEvent()?.addExternalCall()`. No `console.log` in production code — use event annotations instead. Env vars: `LOG_LEVEL`, `LOG_SAMPLE_RATE`, `LOG_SLOW_THRESHOLD_MS`, `LOG_INCLUDE_STACK`, `LOKI_ENDPOINT`, `LOKI_USERNAME`, `LOKI_PASSWORD`
