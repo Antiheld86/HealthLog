@@ -427,3 +427,47 @@ describe("Apple Health HKElectrocardiogram CSV parser", () => {
     expect(spies.every((spy) => spy.mock.calls.length === 0)).toBe(true);
   });
 });
+
+/**
+ * The shapes real exports actually use.
+ *
+ * The fixtures above were written from the format's documentation rather than
+ * from a file off a watch, and they drifted from it in four independent ways.
+ * Each block below pins one of them, and — because the differences are dialect
+ * rather than version — pins BOTH dialects side by side, so a later edit cannot
+ * quietly trade one for the other.
+ */
+describe("Apple Health ECG CSV — real-export shapes", () => {
+  async function parse(csv: string, maxSamples = 8) {
+    const subject = await loadParserSubject();
+    return subject.parseAppleHealthEcgCsv({
+      memberName: "apple_health_export/electrocardiograms/ecg_2026-07-18.csv",
+      stream: Readable.from([Buffer.from(csv)]),
+      maxSamples,
+    });
+  }
+
+  describe("a header row with no value", () => {
+    it("accepts the bare `Name` row every observed export opens with", async () => {
+      // The name field is blank and Apple omits the comma entirely, so the
+      // parser used to fail on line 1, before reading anything.
+      await expect(
+        parse(validCsv().replace("Name,Private Patient Name", "Name")),
+      ).resolves.toMatchObject({ samplingFrequency: 512 });
+    });
+
+    it("keeps a valueless header row out of the metadata", async () => {
+      // `Lead` + `Unit` presence is what switches the parser into the
+      // single-column mode; a valueless key must not be able to trip it.
+      await expect(
+        parse(`${singleColumnCsv().replace("Unit,µV", "Unit")}`),
+      ).rejects.toThrow(/samples are missing|malformed/i);
+    });
+
+    it("still rejects a comma-less row inside the paired waveform", async () => {
+      await expect(
+        parse(validCsv().replace("I,-0.002", "-0.002")),
+      ).rejects.toThrow(/malformed/i);
+    });
+  });
+});

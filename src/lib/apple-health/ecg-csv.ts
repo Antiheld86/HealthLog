@@ -160,7 +160,24 @@ export async function parseAppleHealthEcgCsv(input: {
       }
       const pair = splitPair(line);
       if (!pair) {
-        throw parserError("row is malformed");
+        // A HEADER row whose value is empty is written without the trailing
+        // comma. Every real export opens with a bare `Name` when the name
+        // field is blank, which this parser used to reject on line 1 — before
+        // it had read anything at all.
+        //
+        // Only the header section may do this. Inside the single-column
+        // waveform a comma-less row is a sample and was handled above; inside
+        // the paired waveform every row is `lead,voltage`, so a missing comma
+        // there is still malformed.
+        //
+        // The row contributes NO metadata entry rather than an empty-string
+        // one: `Lead` and `Unit` presence is what switches the parser into the
+        // single-column mode below, and a valueless key must not be able to
+        // trip that switch.
+        if (inSamples) {
+          throw parserError("row is malformed");
+        }
+        continue;
       }
       const [key, value] = pair;
       if (!inSamples) {
