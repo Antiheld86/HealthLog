@@ -993,6 +993,91 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
+  /c/{token}/report.pdf:
+    get:
+      tags:
+        - Export
+      summary: Download a share link's record as the clinical PDF (public)
+      description: "Anonymous, no-session download of exactly the record the page at `/c/{token}` renders — the same frozen
+        selection, resolved through the same `selectionFromStoredBlob`, so the file can never be wider than the page
+        above it. The raw `hls_` share token in the path is the ONLY credential; a passphrase-protected link
+        additionally requires the short-lived, token-scoped unlock cookie the browser already holds after unlocking.
+        Unknown / revoked / expired token, a locked gate, and a documents-only link (which carries no record at all) all
+        collapse to the same flat 404. Charts are embedded. Dates print in the OWNER's timezone and clock preference,
+        not the reader's, so a practice west of the record's own zone files a document dated the way the page it came
+        from was. The insurance number is never carried: the `INSURANCE` leaf is refused at share-link creation.
+        Rate-limited per link at 20/h — its own bucket, because generating a report is far more expensive than serving a
+        stored blob."
+      parameters:
+        - in: path
+          name: token
+          schema:
+            type: string
+            description: Raw `hls_` share token.
+          required: true
+          description: Raw `hls_` share token.
+      responses:
+        "200":
+          description: "The report as `application/pdf`, `Content-Disposition: attachment`."
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Flat 404 for every miss class (unknown / revoked / expired token, locked passphrase gate, or a
+            documents-only link with no record behind it).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "429":
+          description: Per-link report-download rate limit exceeded (20/h).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /c/{token}/fhir:
+    get:
+      tags:
+        - Export
+      summary: Download a share link's record as an HL7 FHIR R4 Bundle (public)
+      description: "The machine-readable twin of `/c/{token}/report.pdf`: the same gate, the same frozen selection, the same
+        flat 404 for every miss class, the same 20/h per-link bucket. Returns an HL7 FHIR R4 **document** Bundle as a
+        download. This is a DOWNLOAD, not a FHIR REST face — a share token authenticates nothing beyond these three
+        routes and `/c/{token}/d/{id}`, and it never becomes a Bearer credential against `/api/fhir/*`. Allergies and
+        family history are deliberately absent from the bundle: they reach the owner's own export through a read this
+        surface does not perform, so the bundle carries the aggregated payload the page renders and nothing beside it.
+        No insurance number, for the same structural reason as the PDF."
+      parameters:
+        - in: path
+          name: token
+          schema:
+            type: string
+            description: Raw `hls_` share token.
+          required: true
+          description: Raw `hls_` share token.
+      responses:
+        "200":
+          description: "FHIR R4 document Bundle (`application/fhir+json`), `Content-Disposition: attachment`."
+          content:
+            application/fhir+json:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Flat 404 for every miss class (unknown / revoked / expired token, locked passphrase gate, or a
+            documents-only link with no record behind it).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "429":
+          description: Per-link report-download rate limit exceeded (20/h).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
   /api/fhir/metadata:
     get:
       tags:
@@ -20207,9 +20292,12 @@ components:
       description: "v1.11.0 — owner request to mint a clinician share link to their own health record. `expiresAt` is required
         (absolute ISO instant) and capped at 90 days. `rangeStart`/`rangeEnd` freeze the reporting window (rangeEnd null
         = rolling). `selection` freezes which record leaves the link may serve, and omitting it means an empty scope
-        rather than a default one. `documentIds` freezes the documents the link carries; `documentOnly` mints a share
-        that serves those documents and no record scope at all. A share link serves the rendered page and the documents
-        frozen onto it — there is no FHIR or other machine-readable face behind a share token. Strict: unknown keys
+        rather than a default one. The `INSURANCE` leaf is refused outright (422, naming it): the share view has never
+        decrypted the insurance number, and refusing it here makes that structural. `documentIds` freezes the documents
+        the link carries; `documentOnly` mints a share that serves those documents and no record scope at all. A share
+        link serves the rendered page, the documents frozen onto it, and the same record as a PDF or FHIR Bundle
+        download under the token (`/c/{token}/report.pdf`, `/c/{token}/fhir`) — all behind the same gate and the same
+        frozen selection. A share token is not a Bearer credential and reaches no other route. Strict: unknown keys
         422."
     EncryptedExportRequest:
       type: object
