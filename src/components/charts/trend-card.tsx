@@ -15,13 +15,7 @@ import {
   getTrendSentiment,
   sentimentColorClass,
   type TrendDirectionSentiment,
-  type TrendSentimentDirection,
 } from "@/lib/insights/trend-sentiment";
-
-// v1.9.0 — the metric-aware sentiment mapping moved to a shared module so the
-// range-delta caption paints the same colour for the same signal. Re-exported
-// here so existing `@/components/charts/trend-card` importers keep the type.
-export type { TrendDirectionSentiment, TrendSentimentDirection };
 
 interface SecondaryMetric {
   /** Sub-value latest reading (e.g. diastolic when latest is systolic). */

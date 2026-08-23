@@ -11,7 +11,6 @@ import {
   SCORE_PILLAR_DOMAINS,
   SCORE_PILLAR_IDS,
   SCORE_VERSION,
-  type CompositeValue,
   type HealthScoreReport,
   type PillarInputs,
   type ScorePillarId,
@@ -95,5 +94,5 @@ export function computeHealthScore(
   };
 }
 
-export type { CompositeValue, HealthScoreReport };
+export type { HealthScoreReport };
 export * from "./types";

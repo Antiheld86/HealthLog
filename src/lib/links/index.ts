@@ -41,9 +41,5 @@ export {
   listTargets,
   listTargetsBySource,
   listDistinctTargets,
-  type LinkSourceKind,
   type LinkTargetKind,
-  type LinkRequest,
-  type LinkResult,
-  type LinkedTarget,
 } from "@/lib/links/link-service";

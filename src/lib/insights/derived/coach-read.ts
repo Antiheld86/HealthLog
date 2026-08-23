@@ -39,12 +39,7 @@ import {
   type CoachReadStripData,
 } from "@/lib/insights/derived/coach-read-shape";
 
-export type {
-  CoachReadBaseline,
-  CoachReadDriver,
-  CoachReadStripData,
-  CoachReadBaselinePlacement,
-} from "@/lib/insights/derived/coach-read-shape";
+export type { CoachReadStripData } from "@/lib/insights/derived/coach-read-shape";
 
 /**
  * Read the latest reading for `(userId, type)` — the value the strip places

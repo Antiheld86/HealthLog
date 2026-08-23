@@ -19,7 +19,6 @@ import {
   REMINDER_METRIC_MAX_CHARS,
 } from "@/lib/ai/coach/reminders";
 import {
-  SUGGESTED_ACTION_TYPES,
   CHECKUP_LABEL_MAX_CHARS,
   ACTION_NOTE_MAX_CHARS,
   ACTION_METRIC_MAX_CHARS,
@@ -133,6 +132,3 @@ export const coachSuggestedActionSchema = z
 export type CoachSuggestedActionInput = z.infer<
   typeof coachSuggestedActionSchema
 >;
-
-/** Stable list of confirmable action types (mirrors the lib allowlist). */
-export const COACH_SUGGESTED_ACTION_TYPES = SUGGESTED_ACTION_TYPES;

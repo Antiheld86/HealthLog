@@ -307,10 +307,7 @@ export type ListLabResultsInput = z.infer<typeof listLabResultsSchema>;
  * implementation. Re-exported here for the existing import sites.
  */
 export {
-  classifyAgainstEffectiveRange,
   classifyReferenceRange,
-  formatReferenceRange,
-  resolveEffectiveReferenceRange,
   type EffectiveReferenceRange,
   type ReferenceRangeOrigin,
   type ReferenceRangeStatus,

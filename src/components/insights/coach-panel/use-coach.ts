@@ -13,7 +13,6 @@ import { toast } from "sonner";
 import type {
   CoachConversationAttachmentDTO,
   CoachConversationDetailDTO,
-  CoachConversationDTO,
   CoachConversationsPage,
   CoachProvenance,
   CoachScope,
@@ -1118,7 +1117,6 @@ export function useSendCoachMessage(opts: UseSendCoachMessageOptions = {}) {
 // `@/lib/ai/coach/types` directly.
 export type {
   CoachConversationAttachmentDTO,
-  CoachConversationDTO,
   CoachConversationDetailDTO,
   CoachProvenance,
   CoachSuggestion,

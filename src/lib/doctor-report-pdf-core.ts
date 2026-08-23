@@ -18,7 +18,7 @@ import {
   isStructuredLeafId,
   REPORT_GROUPS,
 } from "./report-selection/catalogue";
-import { MEASUREMENT_TYPE_LABEL_KEYS } from "./measurements/type-label-keys";
+
 import { getUnitForType } from "./validations/measurement";
 import {
   makeFormatters,
@@ -165,12 +165,6 @@ export interface DoctorReportRenderOptions {
    */
   includeCharts?: boolean;
 }
-
-// Per-type label keys live in a lucide-free module so leaf consumers — the
-// public clinician share view, this renderer — can import the map without
-// dragging icon components into their graph. Re-exported here so the PDF core
-// stays the single import surface its existing callers already use.
-export { MEASUREMENT_TYPE_LABEL_KEYS };
 
 export const DOCTOR_REPORT_TYPE_UNIT_KEYS: Record<string, string | null> = {
   WEIGHT: "kg",

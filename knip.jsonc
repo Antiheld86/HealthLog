@@ -32,7 +32,7 @@
 // This is a review tool, not a second gate, for two reasons written down so
 // the next reader does not have to rediscover them:
 //
-//   1. It reports 29 files today. Some are test-only by construction (the
+//   1. It reports 21 files today. Some are test-only by construction (the
 //      guard helpers under `src/__tests__/helpers/`, the settings section
 //      harness) and some are deliberately unreachable from production
 //      (`src/lib/ai/mock-client.ts` is excluded structurally by the
@@ -130,6 +130,19 @@
   // Scoped to a single file: an export used only inside its own module is not
   // a finding. It is also why the default pass cannot answer the question the
   // production pass answers — this setting is about exports, not reachability.
+  //
+  // It had a second effect nobody asked for, worth knowing because it means
+  // the gate under-reported for a year. Until knip 6.28.0 this setting also
+  // exempted every RE-EXPORT: a barrel line was unconditionally marked
+  // "referenced in its own file", so `export { x } from "./x"` that nothing
+  // imported was never reported. knip 6.28.0 (PR webpro-nl/knip#1895, fixing
+  // issue #1894 — `--fix` deleted the source export and left the barrel line
+  // behind, emitting code that did not compile) dropped the exemption. The
+  // upgrade from 6.16.1 took this repo from 0 findings to 206 on unchanged
+  // code; all but two were barrel lines with no importer, and they are gone
+  // now. The suppression was entirely gated on this setting — with it off,
+  // 6.16.1 and 6.32.2 agree exactly. So a green Dead-code gate on any knip
+  // before 6.28.0 said nothing about re-exports.
   "ignoreExportsUsedInFile": true,
   "ignoreIssues": {
     "src/components/ui/**": ["exports", "types"],
