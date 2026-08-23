@@ -1,47 +1,17 @@
 /**
  * HealthLog MCP server — barrel.
  *
- * A read-only-by-default Model Context Protocol surface that re-exports
+ * A read-only-by-default Model Context Protocol surface that exposes
  * HealthLog's existing server-authoritative read paths over the MCP wire, so a
  * user can query their own health data from any MCP-capable assistant. The tool
- * / resource layer here is transport-agnostic; transports (stdio now, remote
- * `/mcp` later) attach to `createMcpServer(ctx)`.
+ * / resource layer under this directory is transport-agnostic; transports
+ * attach to `createMcpServer(ctx)`.
+ *
+ * The barrel carries only what the remote `/mcp` transport route needs. The
+ * tool, resource, prompt and write registries are imported from their concrete
+ * module by `./server` and by their own tests — mirroring them here produced
+ * lines nothing imported.
  */
-export { createMcpServer, MCP_SERVER_NAME, MCP_SERVER_VERSION } from "./server";
-export { resolveMcpAuthContext, type McpAuthContext } from "./auth";
-export { MCP_TOOLS, MCP_TOOL_NAMES, type McpToolDefinition } from "./tools";
-export { MCP_WRITE_TOOLS, MCP_WRITE_TOOL_NAMES } from "./write-tools";
-export {
-  logMcpMeasurement,
-  logMcpMood,
-  type McpMeasurementResult,
-  type McpMoodResult,
-} from "./writes";
-export {
-  MCP_RESOURCES,
-  MCP_RESOURCE_URIS,
-  type McpResourceDefinition,
-} from "./resources";
-export {
-  MCP_PROMPTS,
-  MCP_PROMPT_NAMES,
-  type McpPromptDefinition,
-  type McpPromptResult,
-  type McpPromptMessage,
-} from "./prompts";
-export {
-  getCorrelation,
-  compareMetric,
-  getMetricBaseline,
-  detectChangepoints,
-  resolveRichMetric,
-  type RichMetric,
-} from "./rich-reads";
-export {
-  SCOPE_HEALTH_READ,
-  SCOPE_HEALTH_WRITE,
-  SCOPE_WILDCARD,
-  tokenAllowsRead,
-  tokenAllowsWrite,
-  sessionBinding,
-} from "./scopes";
+export { createMcpServer } from "./server";
+export { resolveMcpAuthContext } from "./auth";
+export { SCOPE_HEALTH_READ } from "./scopes";
