@@ -7710,7 +7710,17 @@
     },
     "downloadPdf": "Pobierz jako PDF",
     "downloadFhir": "Pobierz jako FHIR",
-    "bmiSection": "Wskaźnik masy ciała"
+    "bmiSection": "Wskaźnik masy ciała",
+    "sectionEmpty": "Objęte tym linkiem, ale nic tu nie zapisano.",
+    "sectionUnavailable": "Objęte tym linkiem, ale ta część dokumentacji jest wyłączona na koncie źródłowym, więc nie zawiera danych.",
+    "lastInjection": "Ostatnie wstrzyknięcie",
+    "identity": {
+      "name": "Imię i nazwisko"
+    },
+    "doses": {
+      "title": "Zarejestrowane dawki",
+      "showing": "Pokazano {shown} najnowszych z {total} zarejestrowanych dawek."
+    }
   },
   "cycle": {
     "symptomCategory": {

@@ -7710,7 +7710,17 @@
     },
     "downloadPdf": "Scarica come PDF",
     "downloadFhir": "Scarica come FHIR",
-    "bmiSection": "Indice di massa corporea"
+    "bmiSection": "Indice di massa corporea",
+    "sectionEmpty": "Incluso in questo link, ma qui non è registrato nulla.",
+    "sectionUnavailable": "Incluso in questo link, ma questa parte della cartella è disattivata nell'account di origine e quindi non contiene dati.",
+    "lastInjection": "Ultima iniezione",
+    "identity": {
+      "name": "Nome"
+    },
+    "doses": {
+      "title": "Dosi registrate",
+      "showing": "Sono mostrate le {shown} dosi più recenti su {total} registrate."
+    }
   },
   "cycle": {
     "symptomCategory": {

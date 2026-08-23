@@ -93,7 +93,7 @@ export default async function ClinicianSharePage({
   // profile timezone so they agree with the patient-tz aggregation behind the
   // stats and with the doctor-report PDF (never the container's zone).
   const [
-    { report, selection, documents, documentOnly },
+    { report, selection, unavailableLeaves, documents, documentOnly },
     locale,
     ownerTimezone,
   ] = await Promise.all([
@@ -110,6 +110,7 @@ export default async function ClinicianSharePage({
       expiresAt={context.expiresAt.toISOString()}
       report={report}
       selection={selection}
+      unavailableLeaves={unavailableLeaves}
       documents={documents}
       documentOnly={documentOnly}
       token={token}

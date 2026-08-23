@@ -178,8 +178,13 @@ describe("<ClinicianView>", () => {
     expect(html).toContain("Body measurements");
     // The measurement-type enum renders as the SAME localised label the rest
     // of the app uses, not the raw enum string and not a second vocabulary.
+    //
+    // Asserted against element TEXT rather than against the whole markup: each
+    // card now carries a `data-leaf` attribute naming the catalogue leaves it
+    // speaks for, so the enum constant is legitimately in the document as
+    // machine metadata. What must never happen is a reader seeing it.
     expect(html).toContain(">Weight<");
-    expect(html).not.toContain("WEIGHT");
+    expect(html).not.toContain(">WEIGHT<");
   });
 
   it("omits the wellness card when there are no scores", () => {
