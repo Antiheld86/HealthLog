@@ -9,6 +9,7 @@
 import { createInterface } from "node:readline";
 import type { Readable } from "node:stream";
 import type { RhythmClassification } from "@/generated/prisma/client";
+import { foldForMatch } from "@/lib/i18n/fold-for-match";
 
 export interface NormalizedAppleHealthEcg {
   recordedAt: Date;
@@ -56,19 +57,117 @@ function parseHeartRate(value: string | undefined): number | null {
   return Math.round(rate);
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * Rhythm classification.
+ *
+ * The map used to hold three verdicts. Apple's documented set is larger, so a
+ * real verdict was being dropped on English devices: "Heart Rate Over 120" and
+ * "Heart Rate Under 50" both landed on `null`, which the column cannot tell
+ * apart from "this recording carries no classification at all".
+ *
+ * The English wordings below are OBSERVED, from a corpus of real Apple Watch
+ * exports rather than taken from the framework's case names — the CSV writes a
+ * display string, and it does not match the `HKElectrocardiogram.Classification`
+ * identifiers. `InconclusiveHighHeartRate` reaches the file as "Heart Rate Over
+ * 120", not as "High Heart Rate". The threshold is part of the wording and it
+ * tracks the watch generation, so the two heart-rate arms match the number
+ * rather than pin it.
+ *
+ * The remaining wordings are Apple's own result names from the ECG
+ * instructions-for-use document. They are verdicts the app can produce; a given
+ * file may never carry one, but mapping a documented verdict is not the same as
+ * leaving a branch in for a hypothetical caller.
+ *
+ * ## What is still unresolved, and why it is not guessed here
+ *
+ * The CSV is localised, and not only in this field — a German export writes
+ * `Klassifizierung,Sinusrhythmus`, with the KEY translated too. A non-English
+ * verdict therefore reaches the `unknown` arm below, and in practice it never
+ * gets this far, because the localised metadata keys fail the parse earlier.
+ * Translating a clinical verdict is not something to do from memory, so the
+ * language half is deliberately left open and named rather than filled in.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** What the parser was able to make of the `Classification` field. */
+export type EcgClassificationOutcome =
+  /** A verdict this repository's enum represents. */
+  | { kind: "mapped"; value: RhythmClassification }
+  /** No classification field, or an empty one — the recording carries no verdict. */
+  | { kind: "absent" }
+  /** A verdict Apple documents that this repository's enum cannot express. */
+  | { kind: "unrepresentable"; verdict: string }
+  /** A verdict this parser has never seen — including every non-English one. */
+  | { kind: "unknown" };
+
+/**
+ * Apple's English verdicts, folded, to the enum member each one means.
+ *
+ * The inconclusive shapes collapse onto `INCONCLUSIVE` honestly: that member is
+ * documented as "device could not classify (poor signal / out-of-range HR)",
+ * which is exactly what Apple says each of them is.
+ */
+const RHYTHM_BY_VERDICT: ReadonlyMap<string, RhythmClassification> = new Map<
+  string,
+  RhythmClassification
+>([
+  // Observed in real exports.
+  ["sinus rhythm", "NOT_DETECTED"],
+  ["inconclusive", "INCONCLUSIVE"],
+  // Documented in Apple's ECG instructions for use.
+  ["atrial fibrillation", "IRREGULAR"],
+  ["atrial fibrillation high heart rate", "IRREGULAR"],
+  ["high heart rate no atrial fibrillation detected", "NOT_DETECTED"],
+  ["poor recording", "INCONCLUSIVE"],
+]);
+
+/**
+ * The heart-rate-bound verdicts, whose wording carries the threshold the watch
+ * generation decides ("Heart Rate Over 120", "Heart Rate Over 150"). Apple's
+ * framework documents both as inconclusive: the classifier could not check for
+ * atrial fibrillation at that rate.
+ */
+const HEART_RATE_BOUND_VERDICT = /^heart rate (?:over|under) \d{2,3}$/;
+
+/**
+ * Verdicts Apple documents that this repository's enum has no honest member
+ * for. `Unrecognized` is NOT `INCONCLUSIVE`: the device did not fail to
+ * classify the waveform, it received a verdict it does not know. Storing it as
+ * "could not classify" would assert something Apple did not say.
+ */
+const UNREPRESENTABLE_VERDICTS: ReadonlySet<string> = new Set(["unrecognized"]);
+
+/**
+ * Classify the `Classification` field.
+ *
+ * Split out from the column write so the parser can tell a verdict it has never
+ * heard of from one it knows it cannot represent. Both still end as `null` in
+ * the nullable enum column — that is the column's whole vocabulary — but they
+ * are different facts, and the previous single `default: return null` could not
+ * distinguish them. No column is added for the distinction: nothing reads one
+ * yet, and a write-only column is the failure mode this repository keeps
+ * rediscovering.
+ */
+export function classifyEcgRhythm(
+  value: string | undefined,
+): EcgClassificationOutcome {
+  const folded = foldForMatch(value ?? "");
+  if (folded === "") return { kind: "absent" };
+  const mapped = RHYTHM_BY_VERDICT.get(folded);
+  if (mapped) return { kind: "mapped", value: mapped };
+  if (HEART_RATE_BOUND_VERDICT.test(folded)) {
+    return { kind: "mapped", value: "INCONCLUSIVE" };
+  }
+  if (UNREPRESENTABLE_VERDICTS.has(folded)) {
+    return { kind: "unrepresentable", verdict: folded };
+  }
+  return { kind: "unknown" };
+}
+
 function mapClassification(
   value: string | undefined,
 ): RhythmClassification | null {
-  switch (value?.trim().toLowerCase()) {
-    case "sinus rhythm":
-      return "NOT_DETECTED";
-    case "atrial fibrillation":
-      return "IRREGULAR";
-    case "inconclusive":
-      return "INCONCLUSIVE";
-    default:
-      return null;
-  }
+  const outcome = classifyEcgRhythm(value);
+  return outcome.kind === "mapped" ? outcome.value : null;
 }
 
 function resolveUnitScale(value: string | undefined): number | null {
