@@ -79,14 +79,23 @@ import { isModuleEnabled } from "@/lib/modules/gate";
  * for exactly this reason — the German word "alt" would otherwise make every
  * German letter a lab report.
  */
+/**
+ * The analyte class, hand-written half: word stems and the short acronyms,
+ * which are too short to derive safely but were vetted one at a time long ago.
+ * Named rather than inlined so the derived names can be attached to THIS class
+ * by identity — an index would silently re-point them at another class the
+ * first time somebody reorders the list.
+ */
+const ANALYTE_SIGNAL =
+  /h(?:a|ae|e)moglobin|glu[ck]ose|cholesterin|cholesterol|kreatinin|creatinine|hba1c|leuko|erythro|thrombo|ferritin|triglycerid|\btsh\b|\bldl\b|\bhdl\b|\bcrp\b|vitamin\s?d/i;
+
 const LAB_SIGNALS: readonly RegExp[] = [
   // 1 — a reference-range label. Only a report that prints windows says this.
   /reference range|referenzbereich|normbereich|normal range|ref\.?-?bereich|valeurs? de reference|intervalle de reference|plage de reference|valores? de referencia|rango de referencia|intervalo de referencia|valori di riferimento|intervallo di riferimento|zakres referencyjny|wartosci referencyjne/i,
   // 2 — a lab unit. Language-independent already; unchanged.
   /\b(mg\/dl|mmol\/l|nmol\/l|µmol\/l|umol\/l|g\/dl|µg\/l|ug\/l|ng\/ml|pg\/ml|mmol\/mol|u\/l|iu\/l|mg\/l|\/µl|\/ul)\b/i,
-  // 3 — an analyte name. The hand-written half: word stems and the short
-  // acronyms, which are too short to derive safely but were vetted long ago.
-  /h(?:a|ae|e)moglobin|glu[ck]ose|cholesterin|cholesterol|kreatinin|creatinine|hba1c|leuko|erythro|thrombo|ferritin|triglycerid|\btsh\b|\bldl\b|\bhdl\b|\bcrp\b|vitamin\s?d/i,
+  // 3 — an analyte name.
+  ANALYTE_SIGNAL,
   // 4 — a report header.
   /labor(?:befund|wert)?|laboratory|blutbild|\bbefund\b|laboratoire|bilan sanguin|analyses medicales|hemogramme|laboratorio|analitica|hemograma|analisis de sangre|esami del sangue|emocromo|referto|laboratorium|morfologia krwi|wyniki badan/i,
 ];
@@ -161,11 +170,10 @@ export function looksLikeLabDocument(text: string): boolean {
   // pattern needs the same folded form.
   const folded = stripDiacritics(text.toLowerCase());
   let hits = 0;
-  for (const [index, signal] of LAB_SIGNALS.entries()) {
-    const analyteClass = index === 2;
+  for (const signal of LAB_SIGNALS) {
     const hit =
       signal.test(folded) ||
-      (analyteClass && DERIVED_ANALYTE_NAMES.test(folded));
+      (signal === ANALYTE_SIGNAL && DERIVED_ANALYTE_NAMES.test(folded));
     if (hit && ++hits >= 2) return true;
   }
   return false;
