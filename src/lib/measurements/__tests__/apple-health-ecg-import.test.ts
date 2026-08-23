@@ -556,4 +556,80 @@ describe("Apple Health ECG CSV — real-export shapes", () => {
       );
     });
   });
+
+  describe("a localised export", () => {
+    /**
+     * The header of a real German export, key for key. Every row here was
+     * observed; nothing is translated by hand. The blank rows mid-header and
+     * the no-break space before "Hertz" are the file's, not a typo.
+     */
+    function germanCsv(
+      overrides: Partial<Record<string, string>> = {},
+    ): string {
+      const metadata: Record<string, string> = {
+        Geburtstag: '"27.03.1987"',
+        Aufzeichnungsdatum: "2020-07-31 22:48:19 +0200",
+        Klassifizierung: "Sinusrhythmus",
+        Symptome: "",
+        Softwareversion: "1.13",
+        Gerät: '"Watch4,2"',
+        Messrate: "511,562\u00a0Hertz",
+        ...overrides,
+      };
+      return [
+        "Name",
+        ...Object.entries(metadata).map(([k, v]) => `${k},${v}`),
+        "",
+        "",
+        "Ableitung,Ableitung I",
+        "Einheit,µV",
+        "",
+        "-180,596",
+        "-199,83",
+        "-217,333",
+      ].join("\n");
+    }
+
+    it("reads a German export end to end", async () => {
+      await expect(parse(germanCsv())).resolves.toMatchObject({
+        recordedAt: new Date("2020-07-31T20:48:19.000Z"),
+        samplingFrequency: 512,
+        samples: [-181, -200, -217],
+        lead: "Ableitung I",
+        rhythmClassification: "NOT_DETECTED",
+      });
+    });
+
+    it("reads the other observed German verdict", async () => {
+      await expect(
+        parse(germanCsv({ Klassifizierung: "Uneindeutig" })),
+      ).resolves.toMatchObject({ rhythmClassification: "INCONCLUSIVE" });
+    });
+
+    it("returns no verdict for a language that is not mapped yet", async () => {
+      // French is not in the alias map and is not guessed at. The recording
+      // still imports; only the verdict is withheld.
+      await expect(
+        parse(germanCsv({ Klassifizierung: "Rythme sinusal" })),
+      ).resolves.toMatchObject({ rhythmClassification: null });
+    });
+
+    it("refuses a file whose keys it cannot place, rather than mis-filing it", async () => {
+      // An unmapped language's KEYS mean the parser never finds the waveform.
+      // Refusing is visible; reading values into the wrong column is not.
+      const french = germanCsv()
+        .replace("Aufzeichnungsdatum,", "Date d'enregistrement,")
+        .replace("Messrate,", "Fréquence d'échantillonnage,")
+        .replace("Ableitung,Ableitung I", "Dérivation,Dérivation I")
+        .replace("Einheit,µV", "Unité,µV");
+      await expect(parse(french)).rejects.toThrow(/samples are missing/i);
+    });
+
+    it("leaves the English header working unchanged", async () => {
+      await expect(parse(validCsv())).resolves.toMatchObject({
+        samplingFrequency: 512,
+        rhythmClassification: "NOT_DETECTED",
+      });
+    });
+  });
 });

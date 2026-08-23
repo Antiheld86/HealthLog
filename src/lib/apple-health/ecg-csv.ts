@@ -9,6 +9,7 @@
 import { createInterface } from "node:readline";
 import type { Readable } from "node:stream";
 import type { RhythmClassification } from "@/generated/prisma/client";
+import { foldForMatch } from "@/lib/i18n/fold-for-match";
 
 export interface NormalizedAppleHealthEcg {
   recordedAt: Date;
@@ -87,9 +88,67 @@ function parseHeartRate(value: string | undefined): number | null {
   return Math.round(magnitude);
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * Localised exports.
+ *
+ * The CSV is written in the device's language, and not only in its values —
+ * the metadata KEYS are translated too. A German watch writes
+ * `Klassifizierung,Sinusrhythmus` and `Aufzeichnungsdatum,…`, so a parser
+ * indexing on the English keys found none of them, never crossed into the
+ * waveform, and rejected the whole recording.
+ *
+ * Both maps below are OBSERVED, from real exports: nine keys and two verdicts,
+ * consistent across every German file seen. The other four shipped languages
+ * are deliberately ABSENT rather than guessed. A wrong key silently mis-files a
+ * value and a wrong clinical verdict is worse than no verdict, so a localised
+ * file this parser cannot place is refused — which is visible — instead of
+ * being read into the wrong column, which is not.
+ *
+ * Adding a language is a data addition to these two maps and nothing else.
+ *
+ * Two gaps worth naming. No observed file carries an average-heart-rate row in
+ * any language, so there is no localised key for it here. And every observed
+ * localised file uses the single-column layout, so the paired layout's
+ * `Lead,Voltage` column header has only ever been seen in English; its
+ * translated form is unknown and is not invented here.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** Folded localised metadata key → the canonical English key we index on. */
+const METADATA_KEY_ALIASES: Readonly<Record<string, string>> = {
+  // de — observed across real exports
+  geburtstag: "Date of Birth",
+  aufzeichnungsdatum: "Recorded Date",
+  klassifizierung: "Classification",
+  symptome: "Symptoms",
+  softwareversion: "Software Version",
+  gerat: "Device",
+  messrate: "Sample Rate",
+  ableitung: "Lead",
+  einheit: "Unit",
+};
+
+/**
+ * Folded localised verdict → its English wording.
+ *
+ * Deliberately an indirection onto the English vocabulary rather than a second
+ * verdict-to-enum table: one place decides what a verdict MEANS, and
+ * translations only feed it.
+ */
+const CLASSIFICATION_ALIASES: Readonly<Record<string, string>> = {
+  // de — observed across real exports
+  sinusrhythmus: "Sinus Rhythm",
+  uneindeutig: "Inconclusive",
+};
+
+/** Resolve a metadata key to the English one this parser indexes on. */
+function canonicalMetadataKey(raw: string): string {
+  return METADATA_KEY_ALIASES[foldForMatch(raw)] ?? raw;
+}
+
 function mapClassification(
-  value: string | undefined,
+  raw: string | undefined,
 ): RhythmClassification | null {
+  const value = CLASSIFICATION_ALIASES[foldForMatch(raw ?? "")] ?? raw;
   switch (value?.trim().toLowerCase()) {
     case "sinus rhythm":
       return "NOT_DETECTED";
@@ -261,11 +320,14 @@ export async function parseAppleHealthEcgCsv(input: {
         // THE CROSSING into the paired waveform: the `Lead,Voltage` column
         // header. Unlike the single-column boundary this one is explicit in
         // the file, so there is nothing to infer.
-        if (key.toLowerCase() === "lead" && value.toLowerCase() === "voltage") {
+        if (
+          canonicalMetadataKey(key) === "Lead" &&
+          value.toLowerCase() === "voltage"
+        ) {
           section = "paired";
           continue;
         }
-        if (key !== "Name") metadata.set(key, value);
+        if (key !== "Name") metadata.set(canonicalMetadataKey(key), value);
         continue;
       }
 
