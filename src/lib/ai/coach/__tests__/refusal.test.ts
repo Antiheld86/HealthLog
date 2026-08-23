@@ -5,6 +5,7 @@ import {
   COACH_REFUSAL_INJECTION_EN,
   COACH_REFUSAL_OUT_OF_SCOPE_DE,
   COACH_REFUSAL_OUT_OF_SCOPE_EN,
+  derivedHealthTokens,
   detectRefusal,
 } from "../refusal";
 
@@ -129,5 +130,84 @@ describe("detectRefusal", () => {
   it("ignores empty input", () => {
     const decision = detectRefusal({ message: "   ", locale: "en" });
     expect(decision.refuse).toBe(false);
+  });
+});
+
+/**
+ * The off-topic gate is `looksOffTopic && !looksHealth`, so both halves of it
+ * were English/German only: an off-topic ask in the other four languages was
+ * never recognised, and — worse — a HEALTH question in those languages that
+ * happened to brush an English deny word ("serie", "film") had nothing on the
+ * allow side to rescue it and was refused.
+ *
+ * The allow side is now read out of the message bundles, so these pin the
+ * derived property rather than a transcription: the words come from
+ * `MEASUREMENT_TYPE_LABEL_KEYS` and the health nav labels, and a seventh
+ * language becomes understood when its bundle lands.
+ */
+describe("detectRefusal across the shipped languages", () => {
+  it("derives a health vocabulary from every shipped bundle", () => {
+    const tokens = derivedHealthTokens();
+    expect(tokens.size).toBeGreaterThan(100);
+    // One metric label per locale, as that bundle spells it.
+    for (const word of [
+      "weight",
+      "gewicht",
+      "poids",
+      "peso",
+      "misurazioni",
+      "tetno",
+    ]) {
+      expect(tokens.has(word)).toBe(true);
+    }
+  });
+
+  it("keeps everyday words out of the derived vocabulary", () => {
+    // "bien-être" would otherwise contribute "bien" and "etre", which appear
+    // in almost any French sentence and would disable the gate for French.
+    for (const word of ["bien", "etre", "estado", "average", "jour", "high"]) {
+      expect(derivedHealthTokens().has(word)).toBe(false);
+    }
+  });
+
+  /**
+   * The case the module's own docblock names for English — "is my BP trend
+   * related to the weather?" stays on-topic — asked in the other four
+   * languages. Each message trips the deny bank AND names the user's own data,
+   * so it survives only when the allow side speaks that language too. These
+   * are the assertions that go red if the allow side stops reading the
+   * bundles.
+   */
+  it.each([
+    ["fr", "Est-ce que la météo influence mes mesures de poids ?"],
+    ["es", "¿El pronóstico del tiempo afecta a mis mediciones de peso?"],
+    ["it", "Il meteo influenza le mie misurazioni di peso?"],
+    ["pl", "Czy pogoda wpływa na moje pomiary wagi?"],
+  ] as const)(
+    "passes through a health question in %s that brushes a deny word",
+    (locale, message) => {
+      expect(detectRefusal({ message, locale }).refuse).toBe(false);
+    },
+  );
+
+  it("does not refuse an Italian health question that brushes a deny word", () => {
+    // "serie" is banked as off-topic (film series). Before the allow side read
+    // the bundles, nothing here said "health" and the question was refused.
+    const decision = detectRefusal({
+      message: "Ho una serie di misurazioni strane, cosa vedi?",
+      locale: "it",
+    });
+    expect(decision.refuse).toBe(false);
+  });
+
+  it.each([
+    ["fr", "Raconte-moi une blague sur la météo."],
+    ["es", "Cuéntame un chiste y dame una receta."],
+    ["it", "Raccontami una barzelletta sul meteo."],
+    ["pl", "Opowiedz mi żart o pogodzie."],
+  ] as const)("refuses an off-topic ask in %s", (locale, message) => {
+    const decision = detectRefusal({ message, locale });
+    expect(decision.refuse).toBe(true);
+    expect(decision.reason).toBe("out_of_scope");
   });
 });

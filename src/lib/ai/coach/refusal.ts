@@ -23,7 +23,10 @@
  * route can choose its bias.
  */
 import type { Locale } from "@/lib/i18n/config";
+import { foldForMatch } from "@/lib/i18n/fold-for-match";
+import { labelsInEveryLocale } from "@/lib/i18n/localised-label-index";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
+import { MEASUREMENT_TYPE_LABEL_KEYS } from "@/lib/measurements/type-label-keys";
 
 /**
  * Refusal copy for the streaming response — UI-rendered as `token` SSE frames
@@ -145,6 +148,265 @@ const OFF_TOPIC_TOKENS: readonly RegExp[] = [
   /\b(?:flight|flug|hotel|trip|urlaub|vacation|travel|reise)\b/i,
 ];
 
+/**
+ * The same deny bank for the other four shipped languages, matched against the
+ * FOLDED message rather than the raw one.
+ *
+ * Two reasons it cannot simply join the array above. JavaScript's `\b` is
+ * defined over ASCII word characters, so `\bżart\b` never matches: the space
+ * before "ż" is a non-word character and so is "ż" itself, which means there is
+ * no boundary between them. And a reply may spell a word with or without its
+ * diacritic. Folding both sides first solves both at once — "żart" and "zart"
+ * fold together, and every entry here is ASCII, so the boundaries hold.
+ *
+ * Only words that mean ONE thing are banked. Spanish "tiempo" and French
+ * "temps" are the everyday word for both weather and time, so neither is here;
+ * "meteo", "pronostico" and "pogoda" carry no second reading. A wrong entry on
+ * the deny side costs a refused health question, which is the expensive
+ * direction, so a missing word is preferred to a loose one.
+ */
+const OFF_TOPIC_TOKENS_FOLDED: readonly RegExp[] = [
+  /\b(?:meteo|pronostico|previsioni|pogoda|prognoza)\b/,
+  /\b(?:noticias|notizie|aktualnosci|wiadomosci|elecciones|elezioni|wybory|elections)\b/,
+  /\b(?:blague|chiste|barzelletta|zart|poeme|poema|poesia|wiersz|opowiadanie)\b/,
+  /\b(?:acciones|azioni|akcje|criptomoneda|criptovaluta|kryptowaluta|inwestycja)\b/,
+  /\b(?:pelicula|cancion|canzone|piosenka|muzyka|musica|musique)\b/,
+  /\b(?:receta|ricetta|recette|przepis|cucinare|cocinar|gotowanie)\b/,
+  /\b(?:vuelo|volo|wakacje|vacaciones|vacanze|vacances|urlop|podroz)\b/,
+];
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * The health allow-list's second half — DERIVED, not transcribed.
+ *
+ * `HEALTH_TOKENS` above is a hand-written English/German bank. It carries
+ * vocabulary no bundle has (`mmhg`, `hrv`, `withings`, `bpm`) and is kept, but
+ * on its own it made the off-topic gate misfire across the four other shipped
+ * languages: the deny bank matches "serie", so an Italian asking "ho una serie
+ * di misurazioni strane" tripped it, and nothing in the allow bank recognised
+ * "misurazioni" as health, so a question about the user's own data was refused.
+ *
+ * The words that fix this are not this module's to invent. Every metric the app
+ * tracks and every health surface it navigates to is already labelled in all six
+ * bundles, and those labels are exactly the nouns a person types. So the second
+ * half of the allow-list is READ from the bundles: a seventh language starts
+ * being understood the day `messages/xx.json` lands, with no edit here.
+ *
+ * Whole-word matching against the folded message, not substring — the derived
+ * set is much larger than the hand bank and a substring match over it would
+ * turn ordinary prose into a health signal. That costs inflected forms
+ * ("pomiarów" does not match the label's "pomiary"); the hand bank and the
+ * `defaultAllow` bias absorb the miss, and a miss here only means the message
+ * is not positively marked health, never that it is refused on its own.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** Health surfaces the sidebar names — the nouns a user asks about by name. */
+const HEALTH_SURFACE_LABEL_KEYS: readonly string[] = [
+  "nav.measurements",
+  "nav.medications",
+  "nav.mood",
+  "nav.cycle",
+  "nav.labs",
+  "nav.vorsorge",
+  "nav.illness",
+  "nav.vaccinations",
+  "nav.mentalWellbeing",
+];
+
+/**
+ * Shortest derived token kept. Three-letter labels are where the collisions
+ * live — French "Pas" (steps) is also the negation particle, Polish "Sen"
+ * (sleep) sits inside ordinary words — and admitting them would mark almost
+ * any sentence in those languages as health.
+ */
+const MIN_DERIVED_TOKEN_LENGTH = 4;
+
+/**
+ * Words that appear inside a metric label while carrying no health meaning of
+ * their own. Three groups, all of them found by reading the derived set rather
+ * than guessed at:
+ *
+ *   - label scaffolding — "average", "daily", "time in …", "… event";
+ *   - comparatives the label uses to name a variant — "high heart rate event",
+ *     "Frequenza cardiaca alta";
+ *   - words that are health-shaped in English but everyday elsewhere. French
+ *     "bien-être" contributes "bien" and "etre", two of the commonest words in
+ *     the language; leaving them in would have marked nearly every French
+ *     sentence as health and disabled the off-topic gate for French entirely.
+ */
+const GENERIC_LABEL_WORDS: ReadonlySet<string> = new Set([
+  // articles, prepositions and copulas long enough to survive the length floor
+  "alla",
+  "alle",
+  "dans",
+  "della",
+  "delle",
+  "dell",
+  "para",
+  "przez",
+  "przy",
+  "bien",
+  "etre",
+  "estado",
+  // label scaffolding
+  "average",
+  "media",
+  "medio",
+  "moyenne",
+  "moyen",
+  "mittel",
+  "mittelwert",
+  "srednie",
+  "durchschnittlicher",
+  "durchschnittliche",
+  "total",
+  "totale",
+  "gesamt",
+  "time",
+  "tempo",
+  "temps",
+  "tiempo",
+  "zeit",
+  "czas",
+  "jour",
+  "giorno",
+  "giornaliero",
+  "dzienne",
+  "dziennym",
+  "daily",
+  "taglich",
+  "minute",
+  "minutes",
+  "minuten",
+  "minuti",
+  "minutos",
+  "minutowego",
+  "index",
+  "indice",
+  "value",
+  "wert",
+  "count",
+  "anzahl",
+  "event",
+  "ereignis",
+  "evento",
+  "zdarzenie",
+  "level",
+  "niveau",
+  "nivel",
+  "livello",
+  "poziom",
+  "notification",
+  "notifica",
+  "powiadomienie",
+  "alert",
+  "alerte",
+  "aviso",
+  "avviso",
+  "hinweis",
+  "rate",
+  "rapport",
+  "rapporto",
+  "course",
+  "support",
+  "load",
+  "charge",
+  "double",
+  "doble",
+  "doppio",
+  "libre",
+  "free",
+  "scale",
+  "need",
+  "besoin",
+  "necesidad",
+  "fabbisogno",
+  "zapotrzebowanie",
+  "tour",
+  "vita",
+  "force",
+  "presa",
+  "seance",
+  "ambiente",
+  "environment",
+  "environnement",
+  "otoczenie",
+  "umgebung",
+  // comparatives naming a label variant
+  "high",
+  "hohe",
+  "alta",
+  "alto",
+  "elevee",
+  "wysokim",
+  "maksymalne",
+  "maxima",
+  "maximale",
+  "maximaler",
+  "maximum",
+  "massima",
+  "bassa",
+  "basse",
+  "baja",
+  "niedrige",
+  "niskim",
+  "forte",
+]);
+
+/**
+ * Split a label or a message into comparable whole words: accent-folded, lower
+ * cased, and cut on every non-alphanumeric run so a parenthesised label
+ * ("Audio exposure (headphones)") yields the noun rather than "(headphones)".
+ *
+ * Applied to BOTH sides — the bundle label and the user's message go through
+ * this one function, so the index cannot drift from the lookup.
+ */
+function healthWordTokens(raw: string): string[] {
+  return foldForMatch(raw)
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word.length >= MIN_DERIVED_TOKEN_LENGTH);
+}
+
+/**
+ * Every health noun the bundles label, folded, across every shipped locale.
+ * Built once at module load — a few hundred short string folds over catalogs
+ * the server translator already holds resident.
+ */
+function buildDerivedHealthTokens(): ReadonlySet<string> {
+  const tokens = new Set<string>();
+  const keys = [
+    ...Object.values(MEASUREMENT_TYPE_LABEL_KEYS),
+    ...HEALTH_SURFACE_LABEL_KEYS,
+  ];
+  for (const key of keys) {
+    for (const label of labelsInEveryLocale(key)) {
+      for (const word of healthWordTokens(label)) {
+        if (GENERIC_LABEL_WORDS.has(word)) continue;
+        tokens.add(word);
+      }
+    }
+  }
+  return tokens;
+}
+
+const DERIVED_HEALTH_TOKENS = buildDerivedHealthTokens();
+
+/**
+ * Test seam: the guard suite asserts the derived set is non-empty and that
+ * every shipped locale contributes to it, so a bundle that stops carrying the
+ * metric labels fails the suite rather than quietly narrowing the allow-list.
+ */
+export function derivedHealthTokens(): ReadonlySet<string> {
+  return DERIVED_HEALTH_TOKENS;
+}
+
+/** True when any whole word of the message is a health noun from the bundles. */
+function matchesDerivedHealthToken(message: string): boolean {
+  for (const word of healthWordTokens(message)) {
+    if (DERIVED_HEALTH_TOKENS.has(word)) return true;
+  }
+  return false;
+}
+
 export interface DetectRefusalParams {
   /** Raw user-input message. */
   message: string;
@@ -187,8 +449,13 @@ export function detectRefusal(
     }
   }
 
-  const looksHealth = HEALTH_TOKENS.some((p) => p.test(trimmed));
-  const looksOffTopic = OFF_TOPIC_TOKENS.some((p) => p.test(trimmed));
+  const looksHealth =
+    HEALTH_TOKENS.some((p) => p.test(trimmed)) ||
+    matchesDerivedHealthToken(trimmed);
+  const folded = foldForMatch(trimmed);
+  const looksOffTopic =
+    OFF_TOPIC_TOKENS.some((p) => p.test(trimmed)) ||
+    OFF_TOPIC_TOKENS_FOLDED.some((p) => p.test(folded));
 
   if (looksOffTopic && !looksHealth) {
     return {
