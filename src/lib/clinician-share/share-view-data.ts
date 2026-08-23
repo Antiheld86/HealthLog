@@ -18,9 +18,13 @@ import {
   type DoctorReportData,
   type DoctorReportRange,
 } from "@/lib/doctor-report-data";
-import { isModuleEnabled } from "@/lib/modules/gate";
+import { resolveModuleMap } from "@/lib/modules/gate";
 import { servingClassFor } from "@/lib/documents/upload-policy";
 import type { DocumentServingClass } from "@/lib/documents/upload-policy";
+import {
+  LEAF_MODULE,
+  type ReportLeafId,
+} from "@/lib/report-selection/catalogue";
 import {
   isEmptySelection,
   selectionFromStoredBlob,
@@ -61,6 +65,22 @@ export interface ShareViewData {
   report: DoctorReportData | null;
   /** The link's frozen selection, resolved. Empty when it carries no scope. */
   selection: ReportSelection;
+  /**
+   * Leaves the owner DID freeze onto the link and whose owning module is
+   * switched off on the account it came from.
+   *
+   * The aggregator ANDs the two gates and returns the same `null` either way,
+   * so the payload alone cannot tell "shared, nothing recorded" from "shared,
+   * but the domain is switched off here". The recipient is owed that
+   * difference — a doctor reading an empty Lab results card should know
+   * whether the person has no results or whether the section never had a
+   * chance to carry any — so the second gate's verdict is carried alongside
+   * the payload rather than being collapsed into it.
+   *
+   * Only leaves the selection carries appear here: a leaf that was never
+   * shared is not the recipient's business in any state.
+   */
+  unavailableLeaves: ReportLeafId[];
   /** v1.28 — the hand-picked documents on this link (metadata only). */
   documents: ShareViewDocument[];
   /**
@@ -122,12 +142,26 @@ export async function loadShareViewData(
   // the link to exactly the documents the owner attached. That is fail-closed
   // for the health record while keeping a public link from 500-ing. The
   // documents themselves are a separate module and keep their own gate.
-  const reportModuleEnabled = await isModuleEnabled(
-    context.ownerUserId,
-    "doctorReport",
-  );
+  //
+  // The whole map is resolved rather than the one key, because the per-leaf
+  // verdicts below come off the same read. It is NOT handed to the aggregator:
+  // the third argument is the frozen selection and there is deliberately no
+  // fourth, so this surface cannot grow an options object that widens what it
+  // asks for. `resolveModuleMap` memoises its DB reads per request, so the
+  // aggregator resolving its own map again costs no round-trip.
+  const moduleMap = await resolveModuleMap(context.ownerUserId);
   const documentOnly =
-    context.documentOnly || isEmptySelection(selection) || !reportModuleEnabled;
+    context.documentOnly ||
+    isEmptySelection(selection) ||
+    moduleMap.doctorReport === false;
+
+  // Shared, but switched off at the source. Derived from the SAME map the
+  // aggregator gates with, so the notice on the page and the absence of the
+  // data behind it can never disagree.
+  const unavailableLeaves = selection.leaves.filter((leaf) => {
+    const moduleKey = LEAF_MODULE[leaf];
+    return moduleKey !== undefined && moduleMap[moduleKey] === false;
+  });
 
   const [report, documents] = await Promise.all([
     documentOnly
@@ -136,7 +170,7 @@ export async function loadShareViewData(
     loadShareDocuments(context),
   ]);
 
-  return { report, selection, documents, documentOnly };
+  return { report, selection, unavailableLeaves, documents, documentOnly };
 }
 
 /**
