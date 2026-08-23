@@ -49,11 +49,18 @@ import { useFormatters, useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import type { BackupRow, BackupsList } from "@/types/backups";
 import type {
+  MissingBackupSection,
   RestoreSkipSummary,
   SkippedCatalogue,
 } from "@/lib/export/restore-skips";
 import { getApiErrorMessage } from "./_shared";
-import { apiFetch, apiFetchRaw, apiGet, apiPost } from "@/lib/api/api-fetch";
+import {
+  ApiError,
+  apiFetch,
+  apiFetchRaw,
+  apiGet,
+  apiPost,
+} from "@/lib/api/api-fetch";
 
 /**
  * Typed-confirmation dialog for restore. The destructive Restore button
@@ -375,6 +382,114 @@ function catalogueLabel(
 }
 
 /**
+ * Which section a refused file claimed and did not carry, as a label.
+ *
+ * Spelled out with literal `t()` calls for the same reason as
+ * `catalogueLabel` above — an interpolated key is invisible to
+ * `i18n-call-site-coverage.test.ts`, and a renamed section would ship as raw
+ * dot notation. The `never` at the foot is what makes the compiler say the
+ * chain is exhaustive.
+ */
+function missingSectionLabel(
+  section: MissingBackupSection,
+  t: ReturnType<typeof useTranslations>["t"],
+) {
+  if (section === "documents") {
+    return t("admin.section.backups.restoreMissingDocuments");
+  }
+  if (section === "workouts") {
+    return t("admin.section.backups.restoreMissingWorkouts");
+  }
+  if (section === "mentalHealth") {
+    return t("admin.section.backups.restoreMissingMentalHealth");
+  }
+  if (section === "consent") {
+    return t("admin.section.backups.restoreMissingConsent");
+  }
+  const unlabelled: never = section;
+  return unlabelled;
+}
+
+/**
+ * Why a file was refused, and what to do about it.
+ *
+ * Held on screen rather than left to the toast, exactly like the skip report
+ * below it. The operator refused here is often holding the only copy of an
+ * account; "restore failed" for four seconds is not enough to act on, and the
+ * two facts that let them act — which section the file claimed and did not
+ * carry, and that nothing was changed — have to survive long enough to be read.
+ */
+/**
+ * The refused sections carried on an `ApiError`, or none.
+ *
+ * Keyed on `meta.errorCode` and not on the message text: the message is prose
+ * the server may reword, and matching on it would turn a copy edit into a
+ * silent loss of the panel.
+ */
+export function missingSectionsOf(err: unknown): MissingBackupSection[] {
+  if (!(err instanceof ApiError)) return [];
+  if (err.meta?.errorCode !== "backup.section.missing") return [];
+  const sections = err.meta?.sections;
+  if (!Array.isArray(sections)) return [];
+  return sections.filter(
+    (section): section is MissingBackupSection => typeof section === "string",
+  );
+}
+
+export function RestoreRefusalNotice({
+  sections,
+  onDismiss,
+}: {
+  sections: MissingBackupSection[];
+  onDismiss: () => void;
+}) {
+  const { t } = useTranslations();
+  if (sections.length === 0) return null;
+  return (
+    <div
+      role="alert"
+      data-slot="restore-refusal-notice"
+      className="border-destructive/40 bg-destructive/10 rounded-md border px-3 py-2 text-sm"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start gap-2">
+          <AlertTriangle
+            className="mt-0.5 h-4 w-4 shrink-0"
+            aria-hidden="true"
+          />
+          <div>
+            <p className="font-medium">
+              {t("admin.section.backups.restoreMissingTitle")}
+            </p>
+            <p className="text-muted-foreground text-xs">
+              {t("admin.section.backups.restoreMissingDescription")}
+            </p>
+            <ul className="mt-2 space-y-1">
+              {sections.map((section) => (
+                <li key={section} className="text-xs">
+                  {missingSectionLabel(section, t)}
+                </li>
+              ))}
+            </ul>
+            <p className="text-muted-foreground mt-2 text-xs">
+              {t("admin.section.backups.restoreMissingRemedy")}
+            </p>
+          </div>
+        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={onDismiss}
+          className="min-h-11"
+        >
+          {t("common.dismiss")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
  * What the last restore could not put back.
  *
  * Its own component, and exported, so it can be rendered against a report in a
@@ -585,6 +700,13 @@ export function BackupsSection() {
   // until they dismiss it.
   const [skipped, setSkipped] = useState<RestoreSkipSummary | null>(null);
 
+  // Why the last restore was refused before it touched anything. Same reason
+  // the skip report is held rather than toasted: the operator has to be able to
+  // read it after the four seconds are up.
+  const [refusedSections, setRefusedSections] = useState<
+    MissingBackupSection[]
+  >([]);
+
   // Restore: typed-confirmation dialog. The mutation is keyed by row id
   // and used inline by `<RestoreRowDialog>` below — keeping the
   // mutation here lets the parent invalidate the list query on success.
@@ -604,6 +726,7 @@ export function BackupsSection() {
       // A restore that dropped links is not a plain success and must not read
       // as one. The count and the exact keys go on screen; the same report is
       // in the audit row for anyone asking later.
+      setRefusedSections([]);
       const report = data.skipped;
       if (report && report.links > 0) {
         setSkipped(report);
@@ -622,6 +745,16 @@ export function BackupsSection() {
       queryClient.invalidateQueries();
     },
     onError: (err) => {
+      // The server refuses an incomplete file before it deletes anything, and
+      // names the sections in `meta`. That is the one restore failure the
+      // operator can act on, so it gets the panel rather than only a toast.
+      const sections = missingSectionsOf(err);
+      if (sections.length > 0) {
+        setRefusedSections(sections);
+        toast.error(t("admin.section.backups.restoreMissingTitle"));
+        return;
+      }
+      setRefusedSections([]);
       toast.error(
         err instanceof Error && err.message
           ? err.message
@@ -744,6 +877,11 @@ export function BackupsSection() {
           </Button>
         </div>
       </div>
+
+      <RestoreRefusalNotice
+        sections={refusedSections}
+        onDismiss={() => setRefusedSections([])}
+      />
 
       {skipped ? (
         <RestoreSkipReport

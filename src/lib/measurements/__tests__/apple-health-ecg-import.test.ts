@@ -6,6 +6,8 @@ import { Readable } from "node:stream";
 
 import { strToU8, zipSync } from "fflate";
 
+import { classifyEcgRhythm } from "@/lib/apple-health/ecg-csv";
+
 type ArchiveLimits = {
   maxMembers: number;
   maxEcgMembers: number;
@@ -349,11 +351,69 @@ describe("Apple Health HKElectrocardiogram CSV parser", () => {
     ["Sinus Rhythm", "NOT_DETECTED"],
     ["Atrial Fibrillation", "IRREGULAR"],
     ["Inconclusive", "INCONCLUSIVE"],
-    ["Localized or unknown verdict", null],
+    // Observed in real exports, and dropped to null until now.
+    ["Heart Rate Over 120", "INCONCLUSIVE"],
+    ["Heart Rate Under 50", "INCONCLUSIVE"],
+    // The same verdict from a watch with a different threshold.
+    ["Heart Rate Over 150", "INCONCLUSIVE"],
+    // Named in Apple's ECG instructions for use.
+    ["Poor Recording", "INCONCLUSIVE"],
+    ["Atrial Fibrillation - High Heart Rate", "IRREGULAR"],
+    ["High Heart Rate - No Atrial Fibrillation Detected", "NOT_DETECTED"],
+    // Apple's own "this device does not know this verdict". Deliberately NOT
+    // INCONCLUSIVE — the device did not fail to classify the waveform.
+    ["Unrecognized", null],
+    // A verdict from a German watch. This asserted `null` while the two
+    // halves of the fix lived on separate branches: the classifier gained
+    // Apple's full English set without knowing any German, so a German
+    // verdict was still unreachable. Together they meet — the alias table
+    // translates the wording, the classifier decides the meaning — and the
+    // old expectation was pinning the gap rather than a decision.
+    ["Sinusrhythmus", "NOT_DETECTED"],
+    // Four of the six languages are still unmapped, so this stays true.
+    ["Fibrillation auriculaire", null],
+    ["Some verdict this parser has never seen", null],
   ])("passes through device classification %s only", async (raw, expected) => {
     await expect(
       parse(validCsv({ Classification: raw })),
     ).resolves.toMatchObject({ rhythmClassification: expected });
+  });
+
+  /**
+   * The nullable column has one spelling for four different facts. The
+   * classifier keeps them apart even though the column cannot, so a reader of
+   * this code can see which nulls are honest and which are the unresolved
+   * language half.
+   *
+   * The old table pinned `["Localized or unknown verdict", null]` as a single
+   * row. That assertion is still true, but it fused a localised verdict with an
+   * unknown one and with the two heart-rate verdicts that were being silently
+   * dropped beside them — it read as "everything else is unknown" when two of
+   * those were verdicts Apple documents. It is split apart here.
+   */
+  it.each([
+    ["Sinus Rhythm", "mapped"],
+    ["Heart Rate Under 50", "mapped"],
+    ["", "absent"],
+    [undefined, "absent"],
+    ["Unrecognized", "unrepresentable"],
+    ["Sinusrhythmus", "unknown"],
+    ["Fibrillation auriculaire", "unknown"],
+  ])("classifies %s as %s", (raw, kind) => {
+    expect(classifyEcgRhythm(raw).kind).toBe(kind);
+  });
+
+  it("treats every heart-rate threshold the same way", () => {
+    // The number is the watch generation's, not a value to enumerate.
+    for (const n of [50, 100, 120, 150]) {
+      expect(classifyEcgRhythm(`Heart Rate Over ${n}`)).toEqual({
+        kind: "mapped",
+        value: "INCONCLUSIVE",
+      });
+    }
+    // Not a threshold verdict — no number, so it stays unknown rather than
+    // being swept into INCONCLUSIVE by a loose pattern.
+    expect(classifyEcgRhythm("Heart Rate Over").kind).toBe("unknown");
   });
 
   it.each([
@@ -425,5 +485,211 @@ describe("Apple Health HKElectrocardiogram CSV parser", () => {
 
     expect(message).not.toContain(secret);
     expect(spies.every((spy) => spy.mock.calls.length === 0)).toBe(true);
+  });
+});
+
+/**
+ * The shapes real exports actually use.
+ *
+ * The fixtures above were written from the format's documentation rather than
+ * from a file off a watch, and they drifted from it in four independent ways.
+ * Each block below pins one of them, and — because the differences are dialect
+ * rather than version — pins BOTH dialects side by side, so a later edit cannot
+ * quietly trade one for the other.
+ */
+describe("Apple Health ECG CSV — real-export shapes", () => {
+  async function parse(csv: string, maxSamples = 8) {
+    const subject = await loadParserSubject();
+    return subject.parseAppleHealthEcgCsv({
+      memberName: "apple_health_export/electrocardiograms/ecg_2026-07-18.csv",
+      stream: Readable.from([Buffer.from(csv)]),
+      maxSamples,
+    });
+  }
+
+  describe("a header row with no value", () => {
+    it("accepts the bare `Name` row every observed export opens with", async () => {
+      // The name field is blank and Apple omits the comma entirely, so the
+      // parser used to fail on line 1, before reading anything.
+      await expect(
+        parse(validCsv().replace("Name,Private Patient Name", "Name")),
+      ).resolves.toMatchObject({ samplingFrequency: 512 });
+    });
+
+    it("keeps a valueless header row out of the metadata", async () => {
+      // `Lead` + `Unit` presence is what switches the parser into the
+      // single-column mode; a valueless key must not be able to trip it.
+      await expect(
+        parse(`${singleColumnCsv().replace("Unit,µV", "Unit")}`),
+      ).rejects.toThrow(/samples are missing|malformed/i);
+    });
+
+    it("still rejects a comma-less row inside the paired waveform", async () => {
+      await expect(
+        parse(validCsv().replace("I,-0.002", "-0.002")),
+      ).rejects.toThrow(/malformed/i);
+    });
+  });
+
+  describe("both decimal dialects", () => {
+    /** The same three samples, written by a dot-region and a comma-region watch. */
+    const DOT_SAMPLES = ["1.5", "-2.4", "3"];
+    const COMMA_SAMPLES = ["1,5", "-2,4", "3"];
+
+    function withSamples(rows: readonly string[]): string {
+      return `${singleColumnCsv().split("\n").slice(0, -3).join("\n")}\n${rows.join("\n")}`;
+    }
+
+    it.each([
+      ["dot", DOT_SAMPLES],
+      ["comma", COMMA_SAMPLES],
+    ])(
+      "reads a %s-decimal waveform to the same microvolts",
+      async (_d, rows) => {
+        await expect(parse(withSamples(rows))).resolves.toMatchObject({
+          samples: [2, -2, 3],
+        });
+      },
+    );
+
+    it("reads both dialects of the paired layout identically", async () => {
+      // splitPair cuts on the first comma, so the value keeps its own mark.
+      await expect(parse(validCsv())).resolves.toMatchObject({
+        samples: [1, -2, 3],
+      });
+      const commaPaired = validCsv()
+        .replace("I,0.001", "I,0,001")
+        .replace("I,-0.002", "I,-0,002")
+        .replace("I,0.003", "I,0,003");
+      await expect(parse(commaPaired)).resolves.toMatchObject({
+        samples: [1, -2, 3],
+      });
+    });
+
+    it("refuses a grouped number rather than guessing its region", async () => {
+      // "1.234,5" needs the file's region to resolve and the file never says.
+      await expect(
+        parse(withSamples(["1.234,5", "-2,4", "3"])),
+      ).rejects.toThrow(/sample value is invalid/i);
+    });
+
+    it.each([
+      ["512 Hz", 512],
+      ["512 hz", 512],
+      ["512 hertz", 512],
+      ["511,422 hertz", 511],
+      ["511.422 hertz", 511],
+      ["511,562\u00a0Hertz", 512],
+      ["512Hz", 512],
+    ])("reads the sample rate written as %s", async (raw, expected) => {
+      // Observed exports spell the unit out, lower-case it, and (in the German
+      // files) separate it with a no-break space. The fixtures had only ever
+      // used "512 Hz".
+      await expect(
+        parse(validCsv({ "Sample Rate": raw })),
+      ).resolves.toMatchObject({ samplingFrequency: expected });
+    });
+
+    it.each([
+      ["a missing unit", "512"],
+      ["the wrong unit", "512 bpm"],
+      ["a rate above the bound", "20000 hertz"],
+      ["a grouped rate", "1.234,5 hertz"],
+    ])("still rejects a sample rate with %s", async (_label, raw) => {
+      await expect(parse(validCsv({ "Sample Rate": raw }))).rejects.toThrow(
+        /sample rate is invalid/i,
+      );
+    });
+
+    it("reads the average heart rate in both dialects", async () => {
+      await expect(
+        parse(validCsv({ "Average Heart Rate": "64 bpm" })),
+      ).resolves.toMatchObject({ averageHeartRate: 64 });
+      await expect(
+        parse(validCsv({ "Average Heart Rate": "63,7 bpm" })),
+      ).resolves.toMatchObject({ averageHeartRate: 64 });
+    });
+
+    it("still rejects a paired row that follows the single-column waveform", async () => {
+      await expect(parse(`${singleColumnCsv()}\nI,0.001`)).rejects.toThrow(
+        /sample value is invalid/i,
+      );
+    });
+  });
+
+  describe("a localised export", () => {
+    /**
+     * The header of a real German export, key for key. Every row here was
+     * observed; nothing is translated by hand. The blank rows mid-header and
+     * the no-break space before "Hertz" are the file's, not a typo.
+     */
+    function germanCsv(
+      overrides: Partial<Record<string, string>> = {},
+    ): string {
+      const metadata: Record<string, string> = {
+        Geburtstag: '"27.03.1987"',
+        Aufzeichnungsdatum: "2020-07-31 22:48:19 +0200",
+        Klassifizierung: "Sinusrhythmus",
+        Symptome: "",
+        Softwareversion: "1.13",
+        Gerät: '"Watch4,2"',
+        Messrate: "511,562\u00a0Hertz",
+        ...overrides,
+      };
+      return [
+        "Name",
+        ...Object.entries(metadata).map(([k, v]) => `${k},${v}`),
+        "",
+        "",
+        "Ableitung,Ableitung I",
+        "Einheit,µV",
+        "",
+        "-180,596",
+        "-199,83",
+        "-217,333",
+      ].join("\n");
+    }
+
+    it("reads a German export end to end", async () => {
+      await expect(parse(germanCsv())).resolves.toMatchObject({
+        recordedAt: new Date("2020-07-31T20:48:19.000Z"),
+        samplingFrequency: 512,
+        samples: [-181, -200, -217],
+        lead: "Ableitung I",
+        rhythmClassification: "NOT_DETECTED",
+      });
+    });
+
+    it("reads the other observed German verdict", async () => {
+      await expect(
+        parse(germanCsv({ Klassifizierung: "Uneindeutig" })),
+      ).resolves.toMatchObject({ rhythmClassification: "INCONCLUSIVE" });
+    });
+
+    it("returns no verdict for a language that is not mapped yet", async () => {
+      // French is not in the alias map and is not guessed at. The recording
+      // still imports; only the verdict is withheld.
+      await expect(
+        parse(germanCsv({ Klassifizierung: "Rythme sinusal" })),
+      ).resolves.toMatchObject({ rhythmClassification: null });
+    });
+
+    it("refuses a file whose keys it cannot place, rather than mis-filing it", async () => {
+      // An unmapped language's KEYS mean the parser never finds the waveform.
+      // Refusing is visible; reading values into the wrong column is not.
+      const french = germanCsv()
+        .replace("Aufzeichnungsdatum,", "Date d'enregistrement,")
+        .replace("Messrate,", "Fréquence d'échantillonnage,")
+        .replace("Ableitung,Ableitung I", "Dérivation,Dérivation I")
+        .replace("Einheit,µV", "Unité,µV");
+      await expect(parse(french)).rejects.toThrow(/samples are missing/i);
+    });
+
+    it("leaves the English header working unchanged", async () => {
+      await expect(parse(validCsv())).resolves.toMatchObject({
+        samplingFrequency: 512,
+        rhythmClassification: "NOT_DETECTED",
+      });
+    });
   });
 });

@@ -29,11 +29,7 @@
 
 import { z } from "zod/v4";
 
-import {
-  WEEKDAY_TOKENS,
-  type CadenceKind,
-  type WeekdayToken,
-} from "@/components/medications/scheduling/types";
+import { WEEKDAY_TOKENS } from "@/components/medications/scheduling/types";
 
 /** Closed list — matches the design-synthesis dose-unit dropdown. */
 export const DOSE_UNITS = [
@@ -89,13 +85,6 @@ export const medicationExtractionSchema = z
 export type MedicationExtractionResult = z.infer<
   typeof medicationExtractionSchema
 >;
-
-/**
- * Re-export the wizard `CadenceKind` + `WeekdayToken` types so callers
- * (the route, the tests) import a single module rather than chasing
- * the wizard types directory.
- */
-export type { CadenceKind, WeekdayToken };
 
 /**
  * Build the system prompt. Same shape across calls — the model only

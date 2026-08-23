@@ -6,28 +6,12 @@
  * figures, and a bounded loop that executes them. The legacy snapshot path
  * stays alive as the no-tools fallback (per-provider `supportsTools`).
  */
-export {
-  COACH_TOOL_DEFS,
-  COACH_TOOL_NAMES,
-  isCoachToolName,
-  type CoachToolName,
-} from "./definitions";
-export {
-  executeCoachTool,
-  type CoachToolResult,
-  type CoachToolTrace,
-} from "./executor";
+export { COACH_TOOL_DEFS } from "./definitions";
+export type { CoachToolTrace } from "./executor";
 export {
   buildCoachDataInventory,
   renderDataInventory,
   renderFocusHint,
-  type CoachDataInventory,
-  type InventoryEntry,
 } from "./inventory";
 export { buildToolModeAddendum } from "./system-addendum";
-export {
-  runCoachToolLoop,
-  MAX_ROUNDS,
-  HARD_CAP,
-  type CoachToolLoopResult,
-} from "./loop";
+export { runCoachToolLoop, MAX_ROUNDS } from "./loop";

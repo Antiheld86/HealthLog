@@ -653,6 +653,27 @@ const thresholdsOverridesResponse = z
   .object({ overrides: thresholdOverrideMap })
   .meta({ id: "ThresholdsOverridesResponse" });
 
+/**
+ * The typed confirmation the parameterless DELETE demands.
+ *
+ * Published because it is the difference between "reset one band" and "erase
+ * every band the account has tuned", and a client that learned the endpoint
+ * from the contract alone would otherwise discover the requirement as a 422.
+ */
+const thresholdsResetAllRequest = z
+  .object({
+    confirm: z
+      .literal("RESET_THRESHOLDS")
+      .describe(
+        "Required when `metric` is omitted. Compared exactly; any other value is refused.",
+      ),
+  })
+  .meta({
+    id: "ThresholdsResetAllRequest",
+    description:
+      "Confirmation body for the reset-everything form. Send no body at all when resetting a single metric with `?metric=`.",
+  });
+
 const thresholdsUpdateRequest = thresholdsUpdateSchema.meta({
   id: "ThresholdsUpdateRequest",
   description:
@@ -1716,16 +1737,22 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Analytics"],
       summary: "Reset one threshold override, or all of them",
       description:
-        "With `?metric=` it drops that metric's override; WITHOUT the parameter it drops EVERY override on the account. There is no confirmation step and no dry run, so a client that means to reset one metric must send the parameter.\n\n" +
-        "Audit-logged with the before and after maps. Unlike the PUT this path runs no rate limit of its own.",
+        'With `?metric=` it drops that metric\'s override; WITHOUT the parameter it drops EVERY override on the account. The wide form is not reachable by omitting the parameter alone — it requires `{ "confirm": "RESET_THRESHOLDS" }` in the body, the same typed-confirmation shape account deletion and the data reset use. The `?metric=` form takes no body and is unchanged.\n\n' +
+        "Audit-logged with the before and after maps. Rate-limited 30 / 5 min per user, matching the PUT.",
       requestParams: {
         query: z.object({
           metric: thresholdMetricEnum
             .optional()
             .describe(
-              "The single metric to reset. Omit to reset every override on the account.",
+              "The single metric to reset. Omit to reset every override on the account — which then requires the confirmation body.",
             ),
         }),
+      },
+      requestBody: {
+        required: false,
+        content: {
+          "application/json": { schema: thresholdsResetAllRequest },
+        },
       },
       responses: {
         "200": {
@@ -1745,6 +1772,14 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
+        // After `stdResponses` on purpose: the generic 422 there would
+        // otherwise overwrite this one and the confirmation contract would
+        // vanish from the published operation.
+        "422": {
+          description:
+            '`metric` was omitted and the body did not carry `{ "confirm": "RESET_THRESHOLDS" }`. Nothing was reset.',
+          content: { "application/json": { schema: errorEnvelope } },
+        },
       },
     },
   },

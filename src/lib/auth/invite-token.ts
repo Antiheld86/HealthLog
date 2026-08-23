@@ -20,8 +20,6 @@ import { randomBytes } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { hashToken } from "@/lib/auth/hmac";
 
-export { INVITE_MAX_TTL_DAYS } from "@/lib/validations/invite";
-
 /** Raw-token prefix — distinct from `hlk_` (API) and `hlr_` (refresh). */
 export const INVITE_TOKEN_PREFIX = "hlv_";
 

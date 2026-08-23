@@ -111,19 +111,168 @@ export type NumKind =
   | "glucose"
   | "dose";
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * Unit vocabulary.
+ *
+ * The reply is written in the READER's language, and this bank was English.
+ * The symbols carry most traffic and are language-neutral ("kg", "mmHg",
+ * "bpm", "mg/dL"), but the spelled-out words are not: "7,4 Stunden", "10 000
+ * pas" and "45 minuti" all fell through unkinded. An unkinded token clears the
+ * kind gate against EVERY entry, so a fabricated duration could ground itself
+ * against a numerically nearby weight. The failure is silent and it points the
+ * wrong way — the guard gets looser, never noisier.
+ *
+ * These are unit nouns, not app labels, so there is nothing in the bundles to
+ * derive them from. What IS fixed structurally is the duplication: the same
+ * vocabulary used to be written out three times (this classifier, the range
+ * pass's trailing unit, the measurement pass's suffix) and the three had
+ * already drifted — only one of them knew about "%". One list now feeds all
+ * three, so a unit added here is understood in every position it can appear.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/** Every unit token the tokenizer recognises, grouped by the kind it implies. */
+const UNIT_WORDS: Readonly<Record<NumKind, readonly string[]>> = {
+  mass: [
+    "kg",
+    "kgs",
+    "kilogram",
+    "kilograms",
+    "kilogramm",
+    "kilogramme",
+    "kilogrammes",
+    "kilogrammen",
+    "kilogramo",
+    "kilogramos",
+    "chilogrammi",
+    "chilogrammo",
+    "kilogramy",
+    "kilogramow",
+    "kilo",
+    "lb",
+    "lbs",
+    "pound",
+    "pounds",
+    "livre",
+    "livres",
+    "libra",
+    "libras",
+    "funt",
+    "funty",
+  ],
+  pressure: ["mmhg"],
+  pulse: ["bpm"],
+  percent: [
+    "%",
+    "percent",
+    "percentage",
+    "per cent",
+    "prozent",
+    "pour cent",
+    "pourcent",
+    "por ciento",
+    "porciento",
+    "per cento",
+    "procent",
+  ],
+  duration: [
+    "min",
+    "mins",
+    "minute",
+    "minutes",
+    "minuten",
+    "minuto",
+    "minutos",
+    "minuti",
+    "minut",
+    "minuty",
+    "m",
+    "h",
+    "hr",
+    "hrs",
+    "std",
+    "hour",
+    "hours",
+    "stunde",
+    "stunden",
+    "heure",
+    "heures",
+    "hora",
+    "horas",
+    "ora",
+    "ore",
+    "godzina",
+    "godziny",
+    "godzin",
+  ],
+  count: [
+    "step",
+    "steps",
+    "schritt",
+    "schritte",
+    "pas",
+    "paso",
+    "pasos",
+    "passo",
+    "passi",
+    "krok",
+    "kroki",
+    "krokow",
+  ],
+  glucose: ["mg/dl", "mmol/l", "mgdl", "mmoll"],
+  dose: [],
+};
+
+/** Unit token in the classifier's normal form → its kind. */
+const UNIT_KIND_BY_TOKEN: ReadonlyMap<string, NumKind> = new Map(
+  (Object.entries(UNIT_WORDS) as [NumKind, readonly string[]][]).flatMap(
+    ([kind, words]) =>
+      words.map(
+        (word) => [word.replace(/\s+/g, ""), kind] as [string, NumKind],
+      ),
+  ),
+);
+
+/**
+ * The unit alternation the tokenizer splices into its patterns, longest first
+ * so "minutes" is preferred over "minute" and "hours" over "hour". Regex
+ * metacharacters are escaped, which matters for "%" and the "mg/dl" slash.
+ */
+const UNIT_ALTERNATION: string = Object.values(UNIT_WORDS)
+  .flat()
+  .slice()
+  .sort((a, b) => b.length - a.length)
+  .map((word) =>
+    word.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&").replace(/ /g, "\\s+"),
+  )
+  .join("|");
+
+/** The percent words alone, for the pass that types a percent before a unit. */
+const PERCENT_ALTERNATION: string = UNIT_WORDS.percent
+  .slice()
+  .sort((a, b) => b.length - a.length)
+  .map((word) =>
+    word.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&").replace(/ /g, "\\s+"),
+  )
+  .join("|");
+
+/**
+ * Test seam: the guard suite asserts each kind's bank is non-empty and that
+ * every entry classifies back to its own kind, so a typo cannot silently
+ * unkind a unit.
+ */
+export function unitWordBank(): Readonly<Record<NumKind, readonly string[]>> {
+  return UNIT_WORDS;
+}
+
 /** Resolve a kind from a unit suffix the prose attaches to a number. */
 function unitToKind(unitRaw: string): NumKind | null {
   const u = unitRaw.toLowerCase().replace(/\s+/g, "");
-  if (/^(?:kg|kilograms?|kgs|lb|lbs|pounds?)$/.test(u)) return "mass";
-  if (u === "mmhg") return "pressure";
-  if (u === "bpm") return "pulse";
-  if (u === "%" || u === "percent" || u === "percent." || u === "percentage")
-    return "percent";
-  if (/^(?:min|mins|minute|minutes|m|h|hr|hrs|hour|hours)$/.test(u))
-    return "duration";
-  if (/^(?:steps?)$/.test(u)) return "count";
-  if (/^(?:mg\/dl|mmol\/l|mgdl|mmoll)$/.test(u)) return "glucose";
-  return null;
+  // "percent." — the tokenizer can hand back a trailing sentence period.
+  return (
+    UNIT_KIND_BY_TOKEN.get(u) ??
+    UNIT_KIND_BY_TOKEN.get(u.replace(/\.$/, "")) ??
+    null
+  );
 }
 
 /** Resolve a kind from a payload KEY name (best-effort substring match). */
@@ -446,8 +595,36 @@ interface ProseMagnitude {
   index: number;
 }
 
-const MONTHS =
-  "january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec|januar|februar|märz|maerz|april|mai|juni|juli|august|september|oktober|november|dezember";
+/**
+ * Month names, for the pass that types a written date as benign.
+ *
+ * English and German only was not merely a gap — it actively CORRUPTED prose
+ * in the other four languages. "Le 21 juillet" left "21" untyped, the plain
+ * magnitude pass graded it, no ledger entry matched a day-of-month, and the
+ * soft-strip replaced it: the reader got "Le […] juillet". A missing word here
+ * costs a mangled sentence, not just a weaker check.
+ *
+ * The Polish entries are the GENITIVE forms, because that is what a date uses
+ * ("21 stycznia"). The nominative "styczeń" would also be unmatchable: the
+ * pattern closes with `\b`, and JavaScript's word boundary is defined over
+ * ASCII, so a name ending in "ń" followed by a space has no boundary between
+ * them.
+ */
+const MONTHS = [
+  // en
+  "january|february|march|april|may|june|july|august|september|october|november|december",
+  "jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec",
+  // de
+  "januar|februar|märz|maerz|mai|juni|juli|oktober|dezember",
+  // fr
+  "janvier|février|fevrier|mars|avril|juin|juillet|août|aout|septembre|octobre|novembre|décembre|decembre",
+  // es
+  "enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre",
+  // it
+  "gennaio|febbraio|aprile|maggio|giugno|luglio|settembre|ottobre|dicembre",
+  // pl — genitive, as a date spells it
+  "stycznia|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|września|wrzesnia|października|pazdziernika|listopada|grudnia",
+].join("|");
 
 /** Parse a raw number token honouring the reply language's separators. */
 function parseLocaleNumber(raw: string, locale: Locale): number | null {
@@ -508,10 +685,14 @@ function tokenizeMagnitudes(prose: string, locale: Locale): ProseMagnitude[] {
     claim(m.index, m.index + m[0].length);
   });
 
-  // (3) Written dates — "July 21st", "21. Juli", "6 May", "Mai 6".
+  // (3) Written dates — "July 21st", "21. Juli", "6 May", "Mai 6",
+  //     "21 juillet", "21 de julio", "21 lipca". Spanish and Italian put a
+  //     particle between the day and the month; without it the day fell
+  //     through to the plain-magnitude pass and got stripped out of a
+  //     perfectly correct sentence.
   runPass(
     new RegExp(
-      String.raw`\b(?:(?:${MONTHS})\s+\d{1,2}(?:st|nd|rd|th)?|\d{1,2}\.?\s+(?:${MONTHS}))\b`,
+      String.raw`\b(?:(?:${MONTHS})\s+\d{1,2}(?:st|nd|rd|th)?|\d{1,2}\.?\s+(?:de|di|del|dell'|d')?\s*(?:${MONTHS}))\b`,
       "gi",
     ),
     (m) => {
@@ -545,7 +726,7 @@ function tokenizeMagnitudes(prose: string, locale: Locale): ProseMagnitude[] {
   // (7) Range pairs — "60-100", "between 120 and 135", "from 120 to 135". Both
   //     endpoints are decomposed into magnitudes graded independently. The unit
   //     that trails the pair kinds both endpoints.
-  const rangeUnit = String.raw`(?:\s*(mmHg|bpm|kg|mg\/dl|mmol\/l|%|steps?|minutes?|mins?|hours?|hrs?|hr))?`;
+  const rangeUnit = String.raw`(?:\s*(${UNIT_ALTERNATION}))?`;
   const dashRange = new RegExp(
     String.raw`\b(\d+(?:[.,]\d+)?)\s*(?:-|–|—|to|bis)\s*(\d+(?:[.,]\d+)?)${rangeUnit}`,
     "gi",
@@ -573,9 +754,9 @@ function tokenizeMagnitudes(prose: string, locale: Locale): ProseMagnitude[] {
     }
   });
 
-  // (8) Percents — "93%", "93 percent".
+  // (8) Percents — "93%", "93 percent", "93 por ciento".
   runPass(
-    new RegExp(String.raw`(${numFrag})\s*(%|percent|per\s+cent|prozent)`, "gi"),
+    new RegExp(String.raw`(${numFrag})\s*(${PERCENT_ALTERNATION})`, "gi"),
     (m) => {
       if (!claim(m.index, m.index + m[0].length)) return;
       const value = parseLocaleNumber(m[1], locale);
@@ -584,15 +765,17 @@ function tokenizeMagnitudes(prose: string, locale: Locale): ProseMagnitude[] {
     },
   );
 
-  // (9) Unit-suffixed measurements — "72.4 kg", "128 mmHg", "10,000 steps".
-  const unitFrag =
-    "kg|kilograms?|lbs?|pounds?|mmHg|bpm|mg\\/dl|mmol\\/l|steps?|minutes?|mins?|hours?|hrs?|hr";
-  runPass(new RegExp(String.raw`(${numFrag})\s*(${unitFrag})\b`, "gi"), (m) => {
-    if (!claim(m.index, m.index + m[0].length)) return;
-    const value = parseLocaleNumber(m[1], locale);
-    if (value !== null)
-      out.push({ value, raw: m[1], kind: unitToKind(m[2]), index: m.index });
-  });
+  // (9) Unit-suffixed measurements — "72.4 kg", "128 mmHg", "10,000 steps",
+  //     "7,4 Stunden", "10 000 pas".
+  runPass(
+    new RegExp(String.raw`(${numFrag})\s*(${UNIT_ALTERNATION})\b`, "gi"),
+    (m) => {
+      if (!claim(m.index, m.index + m[0].length)) return;
+      const value = parseLocaleNumber(m[1], locale);
+      if (value !== null)
+        out.push({ value, raw: m[1], kind: unitToKind(m[2]), index: m.index });
+    },
+  );
 
   // (10) Everything left — plain magnitudes (no benign type, no unit).
   runPass(new RegExp(`(?:${numFrag})`, "g"), (m) => {

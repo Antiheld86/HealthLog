@@ -40,6 +40,7 @@ import {
 import { recomputeUserRollups } from "@/lib/rollups/measurement-rollups";
 import { restoreCycleData } from "@/lib/cycle/backup";
 import {
+  findMissingBackupSections,
   recordUnknownKeys,
   summarizeRestoreSkips,
   type RestoreSkipLog,
@@ -193,9 +194,14 @@ const handler = apiHandler(
       return apiError("Failed to decrypt backup payload", 500);
     }
 
+    // Parsed once and kept, because the schema's per-section `.default([])`
+    // erases the difference between a section that is absent and one that is
+    // empty — and that difference is what the completeness check below reads.
+    let raw: unknown;
     let payload;
     try {
-      payload = parseBackupPayload(plaintext);
+      raw = JSON.parse(plaintext);
+      payload = parseBackupPayload(raw);
     } catch (err) {
       await auditLog("admin.backups.restore.failed", {
         userId: admin.id,
@@ -288,6 +294,39 @@ const handler = apiHandler(
         snapshotExportedAt: payload.exportedAt,
       },
     });
+
+    // A section the file's own manifest says it carries, and does not.
+    //
+    // The restore's first act is to delete the class it is about to rebuild, so
+    // an absent section is not a gap in the file — it is an erasure of that part
+    // of the account, reported as a success. #237: a portable file whose
+    // document payload was gone emptied the vault and said nothing. The whole
+    // file is refused instead, above the transaction, for the same reason the
+    // metadata-only check below sits there.
+    //
+    // A DECLARED omission is not this. The portable export leaves the screener
+    // administrations and the consent receipts out on purpose and says so in the
+    // manifest; `findMissingBackupSections` reads the manifest and not the
+    // emptiness of an array, so those files stay restorable. So does every file
+    // written before the manifest existed, which declares nothing at all.
+    const missingSections = findMissingBackupSections(raw);
+    if (missingSections.length > 0) {
+      await auditLog("admin.backups.restore.failed", {
+        userId: admin.id,
+        ipAddress: getClientIp(request),
+        details: {
+          backupId: id,
+          ownerId,
+          reason: "section_missing",
+          sections: missingSections,
+        },
+      });
+      return apiError(
+        `Backup is missing ${missingSections.join(", ")} — the file's own manifest says it carries ${missingSections.length === 1 ? "that section" : "those sections"}. Nothing was changed. Use a disaster-recovery snapshot, or export the account again.`,
+        422,
+        { errorCode: "backup.section.missing", sections: missingSections },
+      );
+    }
 
     // Portable exports intentionally omit document ciphertext. They remain
     // valid upload/download artifacts, but cannot be used to manufacture an

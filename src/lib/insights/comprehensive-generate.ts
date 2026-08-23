@@ -1216,9 +1216,13 @@ export async function generateComprehensiveInsight(
   if (insights && typeof insights === "object") {
     const payload = insights as Record<string, unknown>;
     if (Array.isArray(payload.recommendations)) {
-      const coverage = computeCitationCoverage({
-        recommendations: payload.recommendations,
-      });
+      // The recommendations are written in `locale`, so the normative-claim
+      // bank has to be the reader's. Grading them against English alone
+      // reported "no normative claims" for four of the six shipped languages.
+      const coverage = computeCitationCoverage(
+        { recommendations: payload.recommendations },
+        locale,
+      );
       annotate({
         action: { name: "insights.generate.citation_coverage" },
         meta: {

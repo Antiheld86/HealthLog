@@ -26,10 +26,8 @@ import { CUSTOM_SYMPTOM_KEY_PREFIX } from "@/lib/cycle/custom-symptoms-shared";
 
 export {
   CUSTOM_SYMPTOM_KEY_PREFIX,
-  CUSTOM_SYMPTOM_CATEGORY_KEY,
   CUSTOM_SYMPTOM_CATEGORY_ID,
   MAX_CUSTOM_SYMPTOMS_PER_USER,
-  CUSTOM_SYMPTOM_ICON_ALLOWLIST,
   isCustomSymptomKey,
   createCustomSymptomSchema,
   updateCustomSymptomSchema,

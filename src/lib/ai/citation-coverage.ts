@@ -57,38 +57,140 @@ export interface PayloadForCoverage {
  * failure. v1.4.16 phase B5c flips it to required for severity
  * >= "important".
  *
- * Heuristic policy: substring match against a small fixed keyword
- * list. Locale-agnostic for v1.4.16; phase B5c may swap in a tagged
- * model output ("rec.kind: normative | observational").
+ * ## Why the keyword bank has six arms
+ *
+ * The recommendations are generated in the READER's language — the prompt is
+ * built per locale and `screenInsightPayloadProse` screens the same prose
+ * against the same locale. The bank was English plus German, so for a French,
+ * Spanish, Italian or Polish reader every recommendation scored
+ * non-normative: the annotation reported `normative: 0`, `uncited: 0`, and the
+ * admin dashboard read that as perfect coverage rather than as no measurement
+ * at all. A check that cannot fail is worse than no check, because it is
+ * indistinguishable from a passing one.
+ *
+ * These words are NOT in `messages/*.json` — they are the model's own prose,
+ * not app labels — so the derive-from-the-bundles shape that fits a UI label
+ * does not apply here. The bank is hand-written, and the structural test
+ * refuses to let a locale ship with an empty arm: adding a seventh language
+ * fails the suite instead of silently reporting 0/0 for it.
+ *
+ * Matching policy: fold both sides through `foldForMatch` (case, accents,
+ * hyphens, apostrophes) and require a LEADING word boundary while leaving the
+ * tail free, so the LLM's inflections still hit ("targets", "should be",
+ * "objectifs") without "sopra" firing inside the everyday Italian
+ * "soprattutto".
  */
 
-const NORMATIVE_KEYWORDS_EN = [
-  "target",
-  "should",
-  "normal range",
-  "above",
-  "below",
-];
+import { locales, type Locale } from "@/lib/i18n/config";
+import { foldForMatch } from "@/lib/i18n/fold-for-match";
 
-const NORMATIVE_KEYWORDS_DE = [
-  "ziel",
-  "sollte",
-  "normalbereich",
-  "über",
-  "unter",
-];
+/**
+ * Normative-claim vocabulary per shipped locale, in `foldForMatch` normal form
+ * (lower case, no accents, hyphens and apostrophes as spaces). Stems, not whole
+ * words: the leading-boundary matcher leaves the tail free.
+ *
+ * Comparatives are spelled as the phrase the language actually uses — "au
+ * dessus", "por encima", "al di sopra" — rather than the bare preposition,
+ * which in Italian and Spanish rides inside common unrelated words.
+ *
+ * Polish "ł" survives the fold (NFD has no decomposition for it), so the
+ * entries are written the way a Polish reply spells them.
+ */
+const NORMATIVE_KEYWORDS: Record<Locale, readonly string[]> = {
+  en: ["target", "should", "normal range", "above", "below"],
+  de: ["ziel", "sollte", "normalbereich", "uber", "unter"],
+  fr: [
+    "objectif",
+    "cible",
+    "devrait",
+    "devriez",
+    "plage normale",
+    "au dessus",
+    "au dessous",
+    "en dessous",
+    "superieur",
+    "inferieur",
+  ],
+  es: [
+    "objetivo",
+    "deberia",
+    "rango normal",
+    "por encima",
+    "por debajo",
+    "superior",
+    "inferior",
+  ],
+  it: [
+    "obiettivo",
+    "dovrebbe",
+    "dovresti",
+    "intervallo normale",
+    "al di sopra",
+    "al di sotto",
+    "superiore",
+    "inferiore",
+  ],
+  pl: [
+    "cel",
+    "docelow",
+    "powinien",
+    "powinna",
+    "powinno",
+    "powinny",
+    "zakres normy",
+    "powyzej",
+    "ponizej",
+  ],
+};
 
-const NORMATIVE_KEYWORDS = [...NORMATIVE_KEYWORDS_EN, ...NORMATIVE_KEYWORDS_DE];
+/**
+ * One compiled matcher per locale — leading word boundary, free tail.
+ *
+ * An EMPTY bank compiles to a matcher that never fires, not to `(?:)`, which
+ * matches the empty string at offset 0 and would therefore grade every
+ * recommendation normative. The failure modes of a missing bank point in
+ * opposite directions — silently zero before, silently total after — and both
+ * are unreadable on the dashboard, so the structural test forbids the empty
+ * bank outright and this only keeps the fallback honest.
+ */
+const NEVER_MATCHES = /(?!)/u;
+
+const NORMATIVE_MATCHERS: Record<Locale, RegExp> = Object.fromEntries(
+  locales.map((locale) => {
+    const bank = NORMATIVE_KEYWORDS[locale];
+    if (bank.length === 0) return [locale, NEVER_MATCHES];
+    const alternation = bank
+      .map((kw) => kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join("|");
+    return [locale, new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternation})`, "u")];
+  }),
+) as Record<Locale, RegExp>;
+
+/**
+ * Test seam: the guard suite asserts every shipped locale carries a non-empty
+ * bank, so a new language cannot land silently scoring every recommendation
+ * non-normative.
+ */
+export function normativeKeywordBank(): Record<Locale, readonly string[]> {
+  return NORMATIVE_KEYWORDS;
+}
 
 /**
  * Returns true when the rec text contains a normative-claim keyword.
- * Case-insensitive substring match; no word-boundary check because
- * the keywords are common-English/-German fragments and the LLM
- * sometimes inflects them ("targets", "should be" all hit).
+ *
+ * The READER's bank and the English one both run. English is always included
+ * because a fallback provider (or a model that ignores the language directive)
+ * answers a non-English reader in English — the same dual-bank rule the Coach's
+ * reference-sentence exemption uses.
  */
-export function detectsNormativeClaim(text: string): boolean {
-  const lower = text.toLowerCase();
-  return NORMATIVE_KEYWORDS.some((kw) => lower.includes(kw));
+export function detectsNormativeClaim(
+  text: string,
+  locale: Locale = "en",
+): boolean {
+  const folded = foldForMatch(text);
+  if (folded === "") return false;
+  if (NORMATIVE_MATCHERS[locale].test(folded)) return true;
+  return locale !== "en" && NORMATIVE_MATCHERS.en.test(folded);
 }
 
 export interface CitationCoverage {
@@ -105,11 +207,15 @@ export interface CitationCoverage {
 /**
  * Compute the citation-coverage breakdown for a parsed insight
  * response. Pure function — no side effects, safe to unit test in
- * isolation. The wrapper at `generate-insight.ts` calls this once on
- * the successful parse and forwards the result via `annotate()`.
+ * isolation. The comprehensive generator calls this once on the successful
+ * parse and forwards the result via `annotate()`.
+ *
+ * `locale` is the language the recommendations were GENERATED in, not a
+ * display preference: it selects which normative-claim bank grades them.
  */
 export function computeCitationCoverage(
   parsed: PayloadForCoverage,
+  locale: Locale = "en",
 ): CitationCoverage {
   const total = parsed.recommendations.length;
   let normative = 0;
@@ -119,7 +225,7 @@ export function computeCitationCoverage(
   for (const [index, raw] of parsed.recommendations.entries()) {
     const rec: RecommendationForCoverage =
       typeof raw === "string" ? { text: raw } : raw;
-    if (!detectsNormativeClaim(rec.text)) continue;
+    if (!detectsNormativeClaim(rec.text, locale)) continue;
     normative += 1;
     if (rec.referenceId) {
       cited += 1;

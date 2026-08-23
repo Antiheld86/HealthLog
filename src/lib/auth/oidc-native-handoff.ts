@@ -44,13 +44,7 @@ export function buildNativeCallbackUrl(params: Record<string, string>): string {
 // Re-export the shared mint/consume core so the OIDC callback + token route
 // keep importing from here unchanged.
 export {
-  HANDOFF_CODE_PREFIX,
   mintNativeHandoff,
   consumeNativeHandoff,
   stampIssuedRefreshToken,
-} from "@/lib/auth/native-handoff";
-export type {
-  HandoffFlow,
-  MintedHandoff,
-  ConsumeHandoffResult,
 } from "@/lib/auth/native-handoff";

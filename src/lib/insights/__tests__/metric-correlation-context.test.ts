@@ -48,20 +48,32 @@ describe("getRelevantCorrelationsForMetric", () => {
   });
 
   it("surfaces only FDR-surviving pairs that involve the metric's channel", async () => {
-    // Build two strongly-correlated daily series over 60 days:
-    //   TIME_IN_DAYLIGHT (behaviour) → next-day RESTING_HEART_RATE (outcome),
-    // anti-correlated, plus uncorrelated noise on other channels.
+    // Two strong, INDEPENDENT lag-1 relationships over 60 days:
+    //   TIME_IN_DAYLIGHT → next-day RESTING_HEART_RATE  (involves the metric)
+    //   BLOOD_GLUCOSE    → next-day WEIGHT              (does not)
+    //
+    // The second pair is what makes this test say anything. With one
+    // correlated pair in the fixture, "every returned relation mentions the
+    // metric" is satisfied by a function that returns the whole matrix — which
+    // is what this one did for four releases while the assertion stayed green.
     const rows: Array<{ type: string; value: number; measuredAt: Date }> = [];
     const base = new Date("2026-01-01T12:00:00Z");
     for (let d = 0; d < 60; d++) {
       const day = new Date(base.getTime() + d * 86_400_000);
+      const next = new Date(base.getTime() + (d + 1) * 86_400_000);
       const daylight = 30 + (d % 10) * 6; // varies 30..84
       rows.push({ type: "TIME_IN_DAYLIGHT", value: daylight, measuredAt: day });
       // next-day RHR moves opposite to today's daylight (lag-1 anti-corr).
-      const next = new Date(base.getTime() + (d + 1) * 86_400_000);
       rows.push({
         type: "RESTING_HEART_RATE",
         value: 90 - daylight * 0.4,
+        measuredAt: next,
+      });
+      const glucose = 80 + (d % 7) * 5; // varies 80..110
+      rows.push({ type: "BLOOD_GLUCOSE", value: glucose, measuredAt: day });
+      rows.push({
+        type: "WEIGHT",
+        value: 60 + glucose * 0.1,
         measuredAt: next,
       });
     }
@@ -78,6 +90,11 @@ describe("getRelevantCorrelationsForMetric", () => {
       expect(c.interpretation.toLowerCase()).toContain("resting heart rate");
       expect(Number.isFinite(c.r)).toBe(true);
       expect(c.n).toBeGreaterThanOrEqual(20);
+    }
+    // And the glucose → weight pair, which the same scan certainly found, is
+    // not in a resting-heart-rate card's grounded context.
+    for (const c of out) {
+      expect(c.interpretation.toLowerCase()).not.toContain("weight");
     }
   });
 

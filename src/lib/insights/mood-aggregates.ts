@@ -39,11 +39,7 @@ import {
   computeMoodDimensionSeries,
   type MoodDimensionSummary,
 } from "@/lib/insights/mood-dimension-series";
-export {
-  computeMoodDimensionSeries,
-  type MoodDimensionPoint,
-  type MoodDimensionSummary,
-} from "@/lib/insights/mood-dimension-series";
+export { type MoodDimensionSummary } from "@/lib/insights/mood-dimension-series";
 import { resolveUserTimezone } from "@/lib/tz/resolver";
 import { annotate } from "@/lib/logging/context";
 import { createCustomLabelResolver } from "@/lib/mood/custom-tags";

@@ -26,13 +26,6 @@ import {
   type ReportSelection,
 } from "./selection";
 
-export {
-  savedReportProfileSchema,
-  parseSavedProfile,
-  SAVED_PROFILE_FALLBACK,
-  type SavedReportProfile,
-} from "./profile-shape";
-
 /**
  * Resolve the owner's saved selection.
  *

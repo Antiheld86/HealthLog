@@ -40,7 +40,6 @@ import {
 } from "@/lib/crypto";
 import {
   ENCRYPTED_COLUMNS,
-  encryptedColumnKey,
   type EncryptedColumn,
 } from "@/lib/crypto/encrypted-columns";
 
@@ -381,5 +380,3 @@ export async function rotateCorpus(
     totalErrors,
   };
 }
-
-export { encryptedColumnKey };

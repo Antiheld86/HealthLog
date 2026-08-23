@@ -37,11 +37,8 @@
  * to show a biomarker's name resolves it through the labs catalog instead.
  */
 
-import { LOINC_SYSTEM, UCUM_SYSTEM } from "@/lib/fhir/loinc-map";
 import { localisedValues } from "@/lib/i18n/shared-resolve";
 import { stripDiacritics } from "@/lib/i18n/fold-for-match";
-
-export { LOINC_SYSTEM, UCUM_SYSTEM };
 
 /** A curated biomarker → LOINC + canonical-UCUM entry. */
 export interface LabLoincMapping {

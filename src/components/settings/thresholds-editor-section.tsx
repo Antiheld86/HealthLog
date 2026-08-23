@@ -108,10 +108,19 @@ export function ThresholdsEditorSection({ id }: { id: string }) {
 
   const resetMutation = useMutation({
     mutationFn: async (metric: ThresholdMetric | null) => {
-      const url = metric
-        ? `/api/user/thresholds?metric=${metric}`
-        : "/api/user/thresholds";
-      const res = await apiFetchRaw(url, { method: "DELETE" });
+      // `metric === null` is the reset-everything arm behind the confirm
+      // dialog at the foot of the card. The server asks for the same decision
+      // in the body, so the dialog's answer is what gets sent — the wide form
+      // is not reachable by dropping the query parameter.
+      const res = metric
+        ? await apiFetchRaw(`/api/user/thresholds?metric=${metric}`, {
+            method: "DELETE",
+          })
+        : await apiFetchRaw("/api/user/thresholds", {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ confirm: "RESET_THRESHOLDS" }),
+          });
       if (!res.ok) throw new Error("reset failed");
     },
     onSuccess: () => {

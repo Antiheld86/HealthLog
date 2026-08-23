@@ -16,5 +16,4 @@ export {
   selectAllState,
   selectedIdsOnPage,
   selectedCountOnPage,
-  type SelectAllState,
 } from "./selection";

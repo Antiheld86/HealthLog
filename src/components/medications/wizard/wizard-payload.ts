@@ -44,10 +44,7 @@
  */
 
 import { encodeCadence } from "@/components/medications/scheduling/cadence-picker";
-import {
-  dateToIsoString,
-  isoStringToDate,
-} from "@/components/medications/scheduling/course-window-row";
+import { dateToIsoString } from "@/components/medications/scheduling/course-window-row";
 import {
   type CadenceKind,
   type CadenceSubControls,
@@ -1277,4 +1274,4 @@ function subControlsFromRrule(rrule: string): CadenceSubControls {
 // Re-exports — convenience for the dialog and tests
 // ────────────────────────────────────────────────────────────────────
 
-export { dateToIsoString, isoStringToDate };
+export { dateToIsoString };

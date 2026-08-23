@@ -18,11 +18,31 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const userFindUnique = vi.fn();
 const measurementFindMany = vi.fn();
 const moodFindMany = vi.fn();
+// The wrapper takes its channel set from the shared discovery
+// assembler, so the four channel families that used to be missing here (the
+// dose-history ledger, the illness day-log, the daily weather rows, the opt-in
+// custom metrics) are read on this path too. Default every one empty: this
+// file is about the measurement read's ORDER and GRAIN, and an empty channel
+// degrades to absent without touching either.
+const medicationFindMany = vi.fn();
+const intakeEventFindMany = vi.fn();
+const illnessEpisodeFindMany = vi.fn();
+const illnessDayLogFindMany = vi.fn();
+const environmentContextFindMany = vi.fn();
+const customMetricFindMany = vi.fn();
 vi.mock("@/lib/db", () => ({
   prisma: {
     user: { findUnique: (a: unknown) => userFindUnique(a) },
     measurement: { findMany: (a: unknown) => measurementFindMany(a) },
     moodEntry: { findMany: (a: unknown) => moodFindMany(a) },
+    medication: { findMany: (a: unknown) => medicationFindMany(a) },
+    medicationIntakeEvent: { findMany: (a: unknown) => intakeEventFindMany(a) },
+    illnessEpisode: { findMany: (a: unknown) => illnessEpisodeFindMany(a) },
+    illnessDayLog: { findMany: (a: unknown) => illnessDayLogFindMany(a) },
+    environmentContext: {
+      findMany: (a: unknown) => environmentContextFindMany(a),
+    },
+    customMetric: { findMany: (a: unknown) => customMetricFindMany(a) },
   },
 }));
 
@@ -37,6 +57,12 @@ beforeEach(() => {
   });
   measurementFindMany.mockReset();
   moodFindMany.mockReset().mockResolvedValue([]);
+  medicationFindMany.mockReset().mockResolvedValue([]);
+  intakeEventFindMany.mockReset().mockResolvedValue([]);
+  illnessEpisodeFindMany.mockReset().mockResolvedValue([]);
+  illnessDayLogFindMany.mockReset().mockResolvedValue([]);
+  environmentContextFindMany.mockReset().mockResolvedValue([]);
+  customMetricFindMany.mockReset().mockResolvedValue([]);
 });
 
 describe("buildPeriodNarrativeContext — grain (QA F3)", () => {
@@ -135,5 +161,53 @@ describe("buildPeriodNarrativeContext — grain (QA F3)", () => {
         take: 20000,
       }),
     );
+    // The mood read carries the same discipline, and it is the one that also
+    // pulls the RATED-factor tag-links this surface admits.
+    expect(moodFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: { moodLoggedAt: "desc" },
+        take: 5000,
+      }),
+    );
+  });
+
+  // The narrative used to fold in only the measurement channels,
+  // MOOD and the RATED mood factors: the compliance, symptom, environmental
+  // and custom-metric families had arrived at the correlations route and never
+  // reached this surface. Nothing explained the gap — the comment that looked
+  // like it did was the same sentence a sibling file carried while doing the
+  // opposite. It scans the shared matrix now.
+  it("reads every discovery channel family, not just the measurement ones", async () => {
+    const now = new Date("2026-06-30T12:00:00.000Z");
+    measurementFindMany.mockResolvedValue([]);
+
+    await buildPeriodNarrativeContext("u1", {
+      period: "month",
+      now,
+      locale: "en",
+    });
+
+    expect(medicationFindMany).toHaveBeenCalledTimes(1);
+    expect(illnessEpisodeFindMany).toHaveBeenCalledTimes(1);
+    expect(environmentContextFindMany).toHaveBeenCalledTimes(1);
+    expect(customMetricFindMany).toHaveBeenCalledTimes(1);
+  });
+
+  // The one declared divergence: this surface — and only this surface — admits
+  // the user's RATED mood factors. See `includeMoodFactors` for why.
+  it("pulls the RATED-factor tag-links the other three surfaces do not", async () => {
+    const now = new Date("2026-06-30T12:00:00.000Z");
+    measurementFindMany.mockResolvedValue([]);
+
+    await buildPeriodNarrativeContext("u1", {
+      period: "month",
+      now,
+      locale: "en",
+    });
+
+    const select = moodFindMany.mock.calls[0]?.[0]?.select as {
+      tagLinks?: { where?: { moodTag?: { kind?: string } } };
+    };
+    expect(select.tagLinks?.where?.moodTag?.kind).toBe("RATED");
   });
 });

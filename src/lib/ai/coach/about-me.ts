@@ -42,8 +42,6 @@ import {
 } from "@/lib/validations/health-profile-facts";
 import { decryptHealthProfileFactValue } from "@/lib/profile/health-facts";
 
-export { ABOUT_ME_MAX_CHARS } from "@/lib/validations/about-me";
-
 export interface SelfContext {
   aboutMe: string | null;
   conditions: string | null;
