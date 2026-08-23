@@ -1157,33 +1157,42 @@ describe("E13 — the second-factor status read needs no elevation", () => {
   });
 });
 
-// ── E14 — passkey removal joins the gate, without locking anyone out ──
+// ── E14 — passkey removal is gated, and a passkey satisfies the gate ──
 
 /**
  * `DELETE /api/auth/passkeys/{id}` used to take a plain cookie session or a
  * wildcard Bearer, while the second-factor key beside it demanded a fresh
  * proof. That was the softer gate on the PRIMARY sign-in credential, so it now
- * goes through `requireMfaManagementAuth({ freshFactor: "if-enrolled" })`.
+ * goes through `requireMfaManagementAuth({ freshFactor: true, proofSource:
+ * "any-possession" })`.
  *
- * The mode is the part worth pinning behaviourally, because it is the part that
- * can go wrong in two opposite directions and a status-only test would miss
- * both:
+ * THE PROOF SOURCE IS THE PART THAT NEEDS PROVING, and the cases split on the
+ * difference between the two refusals rather than on the status, because both
+ * are 401 and only one of them is survivable:
  *
- *   - gate everyone, and an account with no second factor — which is most
- *     accounts holding a passkey — can never remove its own credential again.
- *     That is a lockout dressed as a safeguard;
- *   - gate nobody, and the change did nothing.
+ *   `auth.stepup.required` — re-prove and retry. A gate.
+ *   `auth.stepup.mfa_not_enrolled` — the account holds nothing that could ever
+ *   produce the proof. A dead end, and the reachability pre-check is what
+ *   decides which one a caller gets.
  *
- * The Bearer arm is here for the same reason. `requireFreshMfa` is cookie-only,
- * so a gate built on it alone would have answered the native client with "use
- * the website". These cases prove the app keeps the capability by minting the
- * same elevation it already mints to remove a security key.
+ * A passkey-only account holds no SECOND factor, so the default pre-check would
+ * hand it the dead end over a proof it was already carrying — its passkey stamps
+ * `mfaVerifiedAt` on login and is one of the mint's arms. `"any-possession"` is
+ * what makes its refusal the survivable one, and E14b then shows it actually
+ * surviving: a session stamped the way `/api/auth/passkey/login-verify` stamps
+ * it goes straight through.
  *
- * Mutation check: change the route's option to `true` and the two unenrolled
- * cases go red; drop the option entirely and the two refusals go red; move
- * `commitElevation()` above the 404 branch and the last case goes red.
+ * The Bearer happy path is driven with TOTP rather than a passkey assertion for
+ * the reason `enrolTotp` above already gives — it is the only fresh-factor arm
+ * reachable without a real authenticator. What it proves is the redemption and
+ * the spend; the passkey arm's admission is proved by E14a/E14b on the pre-check
+ * that governs both transports.
+ *
+ * Mutation check: drop `proofSource` from the route and E14a's errorCode
+ * assertion plus E14b go red; drop `freshFactor` and E14a, E14c and E14d's spend
+ * go red; move `commitElevation()` above the 404 branch and E14f goes red.
  */
-describe("E14 — removing a passkey is step-up gated for enrolled accounts", () => {
+describe("E14 — removing a passkey needs a fresh possession proof", () => {
   async function seedPasskey(label: string): Promise<string> {
     const row = await getPrismaClient().passkey.create({
       data: {
@@ -1214,42 +1223,64 @@ describe("E14 — removing a passkey is step-up gated for enrolled accounts", ()
     return session.id;
   }
 
-  it("lets a Bearer client with no second factor remove one, as before", async () => {
+  async function errorCodeOf(res: Response): Promise<string | undefined> {
+    const body = (await res.json()) as { meta?: { errorCode?: string } };
+    return body.meta?.errorCode;
+  }
+
+  it("refuses a passkey-only cookie session, and the refusal is re-provable", async () => {
     const passkeyId = await seedPasskey("e14a");
-    const { raw } = await mintToken("e14a");
-    useToken(raw);
-    useElevation(null);
-
-    expect((await callDelete(passkeyId)).status).toBe(200);
-    expect(await getPrismaClient().passkey.count()).toBe(0);
-  });
-
-  it("lets a cookie session with no second factor remove one, as before", async () => {
-    const passkeyId = await seedPasskey("e14b");
+    // No TOTP, no security key. Only the passkey it is trying to remove.
     await useCookieSession();
 
-    expect((await callDelete(passkeyId)).status).toBe(200);
-    expect(await getPrismaClient().passkey.count()).toBe(0);
-  });
+    const res = await callDelete(passkeyId);
 
-  it("refuses a Bearer client on an enrolled account with no elevation", async () => {
-    const passkeyId = await seedPasskey("e14c");
-    await enrolTotp();
-    const { raw } = await mintToken("e14c");
-    useToken(raw);
-    useElevation(null);
-
-    expect((await callDelete(passkeyId)).status).toBe(401);
-    // The refusal is only worth anything if the row survived it.
+    expect(res.status).toBe(401);
+    // The whole point: NOT `mfa_not_enrolled`. This account can re-prove.
+    expect(await errorCodeOf(res)).toBe("auth.stepup.required");
     expect(await getPrismaClient().passkey.count()).toBe(1);
   });
 
-  it("refuses a cookie session on an enrolled account with no fresh factor", async () => {
-    const passkeyId = await seedPasskey("e14d");
-    await enrolTotp();
-    await useCookieSession();
+  it("admits that same account once its session carries a passkey login", async () => {
+    const passkeyId = await seedPasskey("e14b");
+    const sessionId = await useCookieSession();
+    // Exactly what `/api/auth/passkey/login-verify` writes on a passkey login
+    // (v1.23, M-review M1). Still no second factor anywhere on the account.
+    await getPrismaClient().session.update({
+      where: { id: sessionId },
+      data: { mfaVerifiedAt: new Date() },
+    });
 
-    expect((await callDelete(passkeyId)).status).toBe(401);
+    expect((await callDelete(passkeyId)).status).toBe(200);
+    expect(await getPrismaClient().passkey.count()).toBe(0);
+  });
+
+  it("refuses a stale passkey login, so the window is real", async () => {
+    const passkeyId = await seedPasskey("e14c");
+    const sessionId = await useCookieSession();
+    await getPrismaClient().session.update({
+      where: { id: sessionId },
+      data: {
+        mfaVerifiedAt: new Date(Date.now() - 6 * 60 * 1000),
+      },
+    });
+
+    const res = await callDelete(passkeyId);
+
+    expect(res.status).toBe(401);
+    expect(await errorCodeOf(res)).toBe("auth.stepup.required");
+    expect(await getPrismaClient().passkey.count()).toBe(1);
+  });
+
+  it("refuses a Bearer client presenting no elevation", async () => {
+    const passkeyId = await seedPasskey("e14d");
+    const { raw } = await mintToken("e14d");
+    useToken(raw);
+    useElevation(null);
+
+    const res = await callDelete(passkeyId);
+
+    expect(res.status).toBe(401);
     expect(await getPrismaClient().passkey.count()).toBe(1);
   });
 
@@ -1284,5 +1315,18 @@ describe("E14 — removing a passkey is step-up gated for enrolled accounts", ()
       where: { apiTokenId: tokenId },
     });
     expect(row?.consumedAt).toBeNull();
+  });
+
+  it("tells an account holding nothing that there is nothing to prove with", async () => {
+    // No passkey, no TOTP, no security key. There is no credential this gate
+    // could ever accept, and the refusal says so rather than inviting a
+    // re-verification that cannot happen. Reachable only with a stale id — an
+    // account with no passkey has nothing here to delete.
+    await useCookieSession();
+
+    const res = await callDelete("pk-does-not-exist");
+
+    expect(res.status).toBe(401);
+    expect(await errorCodeOf(res)).toBe("auth.stepup.mfa_not_enrolled");
   });
 });

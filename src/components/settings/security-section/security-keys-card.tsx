@@ -41,7 +41,21 @@ export interface WebauthnKeyInfo {
   lastUsedAt: string | null;
 }
 
-function describeStepUp(
+/**
+ * Turn a refusal into a sentence, with the step-up arm told apart from the rest.
+ *
+ * Exported because the passkey card next door needs the identical mapping since
+ * passkey removal became step-up gated too. The server's own prose there is
+ * "Recent second-factor verification required", which is English-only and, for a
+ * passkey-only account, not even accurate about which credential to re-prove —
+ * so the caller supplies its own sentence and this only decides when to use it.
+ *
+ * Matched on `meta.errorCode`, and on the whole `auth.stepup` prefix rather than
+ * one code: `auth.stepup.required` and `auth.stepup.mfa_not_enrolled` both mean
+ * "the gate stopped you", and a card that handled only the first would fall
+ * through to raw server prose on the second.
+ */
+export function describeStepUp(
   err: unknown,
   fallback: string,
   stepUpMsg: string,

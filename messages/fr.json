@@ -6404,7 +6404,8 @@
       "error": "Le réglage n'a pas pu être enregistré."
     },
     "dangerZoneDetail": "Votre compte et vos identifiants de connexion sont conservés.",
-    "deleteAccountCardDetail": "Cette action est irréversible."
+    "deleteAccountCardDetail": "Cette action est irréversible.",
+    "passkeyStepUpRequired": "Par sécurité, reconnecte-toi avant de supprimer une clé d'accès."
   },
   "admin": {
     "title": "Administration",

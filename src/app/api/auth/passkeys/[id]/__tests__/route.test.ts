@@ -167,24 +167,26 @@ describe("PATCH /api/auth/passkeys/{id} — the rename refusal", () => {
 });
 
 /**
- * The removal's gate, and what it must NOT be.
+ * The removal's gate, and the one option that keeps it from being a dead end.
  *
  * A passkey is the primary sign-in credential and it came off a plain session,
  * while the second-factor key next door demanded a fresh proof. The route now
- * asks the same gate the second-factor removal asks — but with
- * `freshFactor: "if-enrolled"`, not `true`. That distinction is the whole
- * design: `true` refuses an account with no second factor outright, and most
- * accounts holding a passkey have nothing else enrolled, so `true` would take
- * their own credential list away from them.
+ * asks the same gate that one asks, at the same strength — `freshFactor: true`,
+ * not a softer mode. What it adds is `proofSource: "any-possession"`, and that
+ * is the whole design: the gate's reachability pre-check counts second factors,
+ * and a passkey-only account holds none, so the default question would have
+ * refused `mfa_not_enrolled` to an account that was holding the proof the gate
+ * accepts. A passkey stamps `mfaVerifiedAt` on login and is a `passkey`-method
+ * mint arm; the pre-check simply was not asking about it.
  *
  * The gate itself is behavioural and lives against a real database in
  * `tests/integration/step-up-elevation.test.ts` (E14). What is pinned here is
- * what this file can prove without one: the route asks for the right mode, and
- * it spends the proof only when it is actually about to delete.
+ * what this file can prove without one: the route asks both halves of the right
+ * question, and it spends the proof only when it is about to delete.
  *
- * Mutation check: change the option to `true` and the first case goes red; move
- * `commitElevation()` above the ownership check and the third goes red; drop it
- * altogether and the second goes red.
+ * Mutation check: drop the `proofSource` option and the first case goes red;
+ * move `commitElevation()` above the ownership check and the third goes red;
+ * drop it altogether and the second goes red.
  */
 describe("DELETE /api/auth/passkeys/{id} — the removal's gate", () => {
   const mkDelete = () =>
@@ -192,7 +194,7 @@ describe("DELETE /api/auth/passkeys/{id} — the removal's gate", () => {
       method: "DELETE",
     });
 
-  it("asks for the step-up gate in its if-enrolled mode", async () => {
+  it("asks for a full step-up, against any possession factor", async () => {
     vi.mocked(prisma.passkey.findUnique).mockResolvedValue({
       id: "pk-1",
       userId: USER.id,
@@ -204,10 +206,12 @@ describe("DELETE /api/auth/passkeys/{id} — the removal's gate", () => {
     await (DELETE as unknown as Handler)(mkDelete(), { params });
 
     expect(requireMfaManagementAuth).toHaveBeenCalledWith({
-      freshFactor: "if-enrolled",
+      freshFactor: true,
+      proofSource: "any-possession",
     });
-    // Not `true`: that arm refuses an account with no second factor, which is
-    // a lockout on this route rather than a safeguard.
+    // Not the bare second-factor question: it would refuse `mfa_not_enrolled`
+    // to a passkey-only account, which is every account this route mostly
+    // serves, over a proof it was already holding.
     expect(requireMfaManagementAuth).not.toHaveBeenCalledWith({
       freshFactor: true,
     });

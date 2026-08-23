@@ -6404,7 +6404,8 @@
       "error": "Could not save the setting."
     },
     "dangerZoneDetail": "Your account and the credentials you sign in with are kept.",
-    "deleteAccountCardDetail": "This cannot be undone."
+    "deleteAccountCardDetail": "This cannot be undone.",
+    "passkeyStepUpRequired": "For your security, sign in again before removing a passkey."
   },
   "admin": {
     "title": "Administration",

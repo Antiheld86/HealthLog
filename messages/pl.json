@@ -6404,7 +6404,8 @@
       "error": "Nie udało się zapisać ustawienia."
     },
     "dangerZoneDetail": "Konto i dane logowania zostają zachowane.",
-    "deleteAccountCardDetail": "Tej operacji nie można cofnąć."
+    "deleteAccountCardDetail": "Tej operacji nie można cofnąć.",
+    "passkeyStepUpRequired": "Ze względów bezpieczeństwa zaloguj się ponownie przed usunięciem klucza dostępu."
   },
   "admin": {
     "title": "Administracja",

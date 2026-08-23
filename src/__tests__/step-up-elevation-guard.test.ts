@@ -94,9 +94,12 @@ function callers(exportName: string, moduleRe: RegExp): string[] {
  * That one is `DELETE /api/auth/passkeys/{id}`. A passkey is the PRIMARY
  * sign-in credential, and it sat behind a plain session while the second-factor
  * key beside it demanded a fresh proof — the softer gate on the more valuable
- * credential. It joins the set on `freshFactor: "if-enrolled"`, so an account
- * with a second factor pays the full price and an account without one keeps the
- * contract it had rather than losing the ability to remove its own credential.
+ * credential. It joins the set on the same `freshFactor: true` as the rest,
+ * differing only in `proofSource: "any-possession"` — which widens the
+ * REACHABILITY pre-check to count a primary passkey and does not soften the gate
+ * itself. A passkey-only account clears it by re-proving that passkey: on Bearer
+ * through the mint's `passkey` method, on the web through a fresh sign-in, which
+ * is what stamps `mfaVerifiedAt`.
  *
  * The widening that admits is real and bounded: an elevation minted against a
  * re-proved factor can now also remove a passkey. That is the same class of act

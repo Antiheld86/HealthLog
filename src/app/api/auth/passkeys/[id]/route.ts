@@ -76,28 +76,45 @@ export const PATCH = apiHandler(
  * nothing about a hijacked session quietly stripping the credentials the owner
  * signs in with. So this route goes through `requireMfaManagementAuth` too.
  *
- * Two consequences worth stating rather than discovering:
+ * Two things about the gate that are easy to get wrong, and are not:
  *
  *   BEARER IS NOT REFUSED. `requireFreshMfa` is cookie-only, so a gate built on
  *   it alone would have told the native client to go and use the website. The
  *   gate this route borrows has a Bearer arm — a step-up elevation minted
- *   against a re-proved factor, exactly what the app already does to remove a
- *   security key — so the app keeps the capability and pays the same price the
- *   web pays.
+ *   against a re-proved factor — and `passkey` is both one of the mint's methods
+ *   and one of `FRESH_FACTOR_METHODS`, so the app re-proves the passkey it
+ *   already holds and pays the same price the web pays.
  *
- *   AN ACCOUNT WITH NO SECOND FACTOR IS NOT LOCKED OUT. `freshFactor: true`
- *   refuses those outright, which is right for a route that manages a second
- *   factor and wrong here: most accounts with a passkey have nothing else
- *   enrolled, and they would lose the ability to remove their own credential.
- *   `"if-enrolled"` gates the accounts that can clear the gate and leaves the
- *   rest exactly where they were.
+ *   A PASSKEY-ONLY ACCOUNT CAN CLEAR THIS GATE, which is why the gate is the
+ *   plain `freshFactor: true` and not something softer. It reads like a lockout
+ *   — most accounts holding a passkey enrol no second factor beside it — and it
+ *   is not, because a passkey IS a possession factor here, as this codebase
+ *   already says in three places: a passkey login stamps `Session.mfaVerifiedAt`
+ *   (`/api/auth/passkey/login-verify`, v1.23 M-review M1), `passkey` sits in
+ *   `FRESH_FACTOR_METHODS`, and `resolveMfaEnrollmentRequired` counts a primary
+ *   passkey as satisfying the enforcement policy outright. The only thing that
+ *   would have refused such an account is the reachability pre-check inside
+ *   `requireFreshMfa`, which counts second factors and nothing else;
+ *   `proofSource: "any-possession"` asks the question this route actually means.
+ *
+ * WHAT A REFUSED PERSON DOES NEXT. On Bearer: mint an elevation with
+ * `method: "passkey"` at `POST /api/auth/step-up`. On the web: sign in again,
+ * which is what every other step-up refusal in this app tells people and what a
+ * passkey login already does. The web has no dedicated in-page re-proof for a
+ * live cookie session — the mint endpoint is Bearer-only by design — so the
+ * recovery there is a fresh sign-in rather than a dialog. That is a real limit,
+ * it is named here rather than discovered, and it is the same one the
+ * second-factor removal beside this route already lives with.
  */
 export const DELETE = apiHandler(
   async (
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> },
   ) => {
-    const auth = await requireMfaManagementAuth({ freshFactor: "if-enrolled" });
+    const auth = await requireMfaManagementAuth({
+      freshFactor: true,
+      proofSource: "any-possession",
+    });
     const { user } = auth;
 
     const { id } = await params;

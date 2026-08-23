@@ -6404,7 +6404,8 @@
       "error": "No se pudo guardar el ajuste."
     },
     "dangerZoneDetail": "Tu cuenta y las credenciales con las que inicias sesión se conservan.",
-    "deleteAccountCardDetail": "Esto no se puede deshacer."
+    "deleteAccountCardDetail": "Esto no se puede deshacer.",
+    "passkeyStepUpRequired": "Por seguridad, vuelve a iniciar sesión antes de quitar una clave de acceso."
   },
   "admin": {
     "title": "Administration",

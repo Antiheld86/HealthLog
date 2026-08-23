@@ -2581,13 +2581,17 @@ paths:
         the account has no password — an account must keep at least one way in.
 
 
-        Step-up gated for accounts that can clear the gate, on the same mechanism as removing a second-factor security
-        key (DELETE /api/auth/me/mfa/webauthn/{id}). An account with a second factor enrolled — a confirmed TOTP secret
-        or a registered security key — must present a fresh factor proof: a cookie session that completed one within the
-        last five minutes, or, on Bearer, an `X-Step-Up` elevation minted at POST /api/auth/step-up against a re-proved
-        factor (a password-proved elevation is NOT enough). An account with no second factor enrolled is unaffected and
-        keeps the plain session-or-token contract, because a gate it could never satisfy would lock it out of its own
-        credential list.
+        Step-up gated, on the same mechanism and at the same strength as removing a second-factor security key (DELETE
+        /api/auth/me/mfa/webauthn/{id}). The caller must present a fresh possession proof: on the cookie path a session
+        that completed one within the last five minutes, on Bearer an `X-Step-Up` elevation minted at POST
+        /api/auth/step-up against a re-proved factor. A password-proved elevation is NOT enough.
+
+
+        A PASSKEY IS SUCH A PROOF here, unlike on the second-factor routes. An account whose only credential is a
+        passkey can satisfy this gate: a passkey login stamps the session, and POST /api/auth/step-up accepts `method:
+        "passkey"` against the account's primary passkeys. So its refusal is `meta.errorCode: auth.stepup.required` —
+        re-prove and retry — and not the dead-end `auth.stepup.mfa_not_enrolled`, which is reserved for an account
+        holding no credential this gate could ever accept.
 
 
         The elevation is spent only when the deletion is about to happen. A 404 for an unknown id, or the
@@ -2613,9 +2617,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "401":
-          description: Not authenticated, or the account has a second factor and the request carried no proof of it fresh enough
-            (`meta.errorCode` = `auth.stepup.required`). Re-prove the factor and retry — on the web by re-verifying, on
-            a native client by minting an elevation at POST /api/auth/step-up. Nothing was removed.
+          description: Not authenticated, or the request carried no fresh possession proof (`meta.errorCode` =
+            `auth.stepup.required`). Re-prove and retry — on a native client by minting an elevation at POST
+            /api/auth/step-up, on the web by signing in again, which is what stamps the session.
+            `auth.stepup.mfa_not_enrolled` is the other arm and means the account holds no credential this gate can
+            accept, so retrying will not help. Nothing was removed either way.
           content:
             application/json:
               schema:

@@ -6404,7 +6404,8 @@
       "error": "Die Einstellung konnte nicht gespeichert werden."
     },
     "dangerZoneDetail": "Dein Konto und deine Anmeldedaten bleiben erhalten.",
-    "deleteAccountCardDetail": "Dieser Vorgang kann nicht rückgängig gemacht werden."
+    "deleteAccountCardDetail": "Dieser Vorgang kann nicht rückgängig gemacht werden.",
+    "passkeyStepUpRequired": "Aus Sicherheitsgründen bitte erneut anmelden, bevor du einen Passkey entfernst."
   },
   "admin": {
     "title": "Administration",

@@ -6404,7 +6404,8 @@
       "error": "Non è stato possibile salvare l'impostazione."
     },
     "dangerZoneDetail": "Il tuo account e le credenziali con cui accedi restano.",
-    "deleteAccountCardDetail": "Questa azione non può essere annullata."
+    "deleteAccountCardDetail": "Questa azione non può essere annullata.",
+    "passkeyStepUpRequired": "Per sicurezza, accedi di nuovo prima di rimuovere una passkey."
   },
   "admin": {
     "title": "Administration",
