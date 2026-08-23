@@ -6,6 +6,7 @@ import {
   type DoctorReportPdfCursorState,
   type DoctorReportPdfRenderContext,
 } from "./render-context";
+import { GLP1_SIDE_EFFECT_TAG_LABEL_KEYS } from "../medications/glp1-side-effect-tags";
 
 const MOOD_LABEL_KEYS: Record<number, string> = {
   1: "doctorReport.moodAwful",
@@ -242,7 +243,12 @@ export function buildMedicationMoodWellnessSection(
     }
 
     if (data.glp1.sideEffects.length > 0) {
-      const seRows = data.glp1.sideEffects.map((s) => [s.tag, String(s.count)]);
+      // The tally arrives keyed, so the clinician reads the symptom in the
+      // report's language regardless of the one it was captured in.
+      const seRows = data.glp1.sideEffects.map((s) => [
+        t(GLP1_SIDE_EFFECT_TAG_LABEL_KEYS[s.tag]),
+        String(s.count),
+      ]);
       // Keep the heading with the table; the side-effect tally reads as one
       // block.
       y = ensureSpace(y, 5 + estimateTableHeight(seRows.length));

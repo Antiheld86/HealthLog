@@ -14,6 +14,7 @@ import type { GlucoseUnit } from "@/lib/glucose";
 import type { GlucoseClinicalMetrics } from "@/lib/analytics/glucose-metrics";
 import type { MeasurementSource } from "@/generated/prisma/client";
 import type { ModuleKey } from "@/lib/modules/gate";
+import type { Glp1SideEffectTag } from "@/lib/medications/glp1-side-effect-tags";
 import type {
   ComplianceSchedule,
   IntakeEvent,
@@ -186,7 +187,13 @@ export interface DoctorReportData {
     weightDeltaKg: number | null;
     weightStartKg: number | null;
     weightEndKg: number | null;
-    sideEffects: Array<{ tag: string; count: number }>;
+    /**
+     * Side-effect tallies keyed by `Glp1SideEffectTag`, never by the string the
+     * mood entry was written with: the report renders in the reader's language
+     * and the tag may have been captured in another one. The PDF resolves each
+     * key through `GLP1_SIDE_EFFECT_TAG_LABEL_KEYS`.
+     */
+    sideEffects: Array<{ tag: Glp1SideEffectTag; count: number }>;
   } | null;
   /**
    * v1.10.0 — the server-derived nightly wellness scores

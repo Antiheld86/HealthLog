@@ -201,3 +201,63 @@ describe("buildGlp1SnapshotBlock", () => {
     expect(out?.medications[0].penInventory).toBeNull();
   });
 });
+
+/**
+ * The Coach's side-effect tally used to match the stored mood tag against a
+ * hand-written English/German word list. Four of the six shipped locales
+ * matched nothing, so the Coach grounded its answers about side-effect timing
+ * on an empty list and never said the list was empty for a reason.
+ */
+describe("buildGlp1SnapshotBlock side-effect tags across locales", () => {
+  function moodDays(...tagSets: string[][]) {
+    return tagSets.map((tags, i) => ({
+      moodLoggedAt: new Date(Date.UTC(2026, 3, 10 + i)),
+      tags: JSON.stringify(tags),
+    }));
+  }
+
+  it("counts a French-labelled tag exactly as an English one", async () => {
+    prismaMock.medication.findMany.mockResolvedValue([fakeMedication()]);
+
+    prismaMock.moodEntry.findMany.mockResolvedValue(
+      moodDays(["nausea"], ["headache"]),
+    );
+    const en = await buildGlp1SnapshotBlock("user-1");
+
+    prismaMock.moodEntry.findMany.mockResolvedValue(
+      moodDays(["Nausées"], ["Maux de tête"]),
+    );
+    const fr = await buildGlp1SnapshotBlock("user-1");
+
+    expect(fr?.medications[0].sideEffects).toEqual(
+      en?.medications[0].sideEffects,
+    );
+    expect(fr?.medications[0].sideEffects).toEqual([
+      { tag: "nausea", count: 1 },
+      { tag: "headache", count: 1 },
+    ]);
+  });
+
+  it("reports the catalogue key rather than the language it was typed in", async () => {
+    prismaMock.medication.findMany.mockResolvedValue([fakeMedication()]);
+    prismaMock.moodEntry.findMany.mockResolvedValue(
+      moodDays(["Nudności"], ["Übelkeit"], ["Náuseas"]),
+    );
+    const out = await buildGlp1SnapshotBlock("user-1");
+    // One symptom, three languages, one grounded fact for the model.
+    expect(out?.medications[0].sideEffects).toEqual([
+      { tag: "nausea", count: 3 },
+    ]);
+  });
+
+  it("leaves free-text mood tags out of the block", async () => {
+    prismaMock.medication.findMany.mockResolvedValue([fakeMedication()]);
+    prismaMock.moodEntry.findMany.mockResolvedValue(
+      moodDays(["gym", "Feierabend"], ["Zgaga"]),
+    );
+    const out = await buildGlp1SnapshotBlock("user-1");
+    expect(out?.medications[0].sideEffects).toEqual([
+      { tag: "heartburn", count: 1 },
+    ]);
+  });
+});

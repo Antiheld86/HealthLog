@@ -16,6 +16,8 @@ import type {
   DoctorReportData,
 } from "@/lib/doctor-report-types";
 import { resolveMaxMedicationAdministrations } from "@/lib/doctor-report-helpers";
+import { matchGlp1SideEffectTags } from "@/lib/medications/glp1-side-effect-tag-match";
+import type { Glp1SideEffectTag } from "@/lib/medications/glp1-side-effect-tags";
 
 /** The medication columns the ledger and the GLP-1 block read. */
 export interface MedicationRowForReport {
@@ -141,44 +143,6 @@ export function buildAdministrationLedger(
 }
 
 /**
- * Mood tags that mark a GLP-1 side effect, in both languages the tag
- * vocabulary ships. A tag not on this list is never counted, so a free-text
- * tag cannot leak into the block as an invented side effect.
- */
-const SIDE_EFFECT_TAGS = new Set([
-  "nausea",
-  "constipation",
-  "diarrhea",
-  "fatigue",
-  "appetite-loss",
-  "heartburn",
-  "headache",
-  "übelkeit",
-  "verstopfung",
-  "durchfall",
-  "müdigkeit",
-  "appetitlosigkeit",
-  "sodbrennen",
-  "kopfschmerzen",
-]);
-
-function parseTags(raw: string): string[] {
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? parsed
-          .map((v: unknown) => (typeof v === "string" ? v.trim() : ""))
-          .filter(Boolean)
-      : [];
-  } catch {
-    return raw
-      .split(",")
-      .map((p) => p.trim())
-      .filter(Boolean);
-  }
-}
-
-/**
  * The GLP-1 therapy block: current dose, dose history, last injection, the
  * weight delta over the window, and side-effect tallies.
  *
@@ -205,12 +169,16 @@ export function buildGlp1Block(params: {
       ? Math.round((weightEndKg - weightStartKg) * 10) / 10
       : null;
 
-  const sideEffectCounts = new Map<string, number>();
+  // Tallied by catalogue KEY, in every language the app ships. The tally used
+  // to match the stored label against an English/German word list, so a
+  // clinician reading a French, Spanish, Italian or Polish patient's report
+  // saw "no side effects logged" over a record that had them. A tag outside
+  // the catalogue is still never counted — a free-text mood tag must not
+  // reach a doctor as an invented symptom.
+  const sideEffectCounts = new Map<Glp1SideEffectTag, number>();
   for (const row of params.moodTagRows) {
-    for (const tag of parseTags(row.tags ?? "")) {
-      const lower = tag.toLowerCase();
-      if (!SIDE_EFFECT_TAGS.has(lower)) continue;
-      sideEffectCounts.set(lower, (sideEffectCounts.get(lower) ?? 0) + 1);
+    for (const tag of matchGlp1SideEffectTags(row.tags).matched) {
+      sideEffectCounts.set(tag, (sideEffectCounts.get(tag) ?? 0) + 1);
     }
   }
 
