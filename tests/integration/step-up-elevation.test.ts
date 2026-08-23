@@ -1156,3 +1156,133 @@ describe("E13 — the second-factor status read needs no elevation", () => {
     expect(text).not.toContain("credentialId");
   });
 });
+
+// ── E14 — passkey removal joins the gate, without locking anyone out ──
+
+/**
+ * `DELETE /api/auth/passkeys/{id}` used to take a plain cookie session or a
+ * wildcard Bearer, while the second-factor key beside it demanded a fresh
+ * proof. That was the softer gate on the PRIMARY sign-in credential, so it now
+ * goes through `requireMfaManagementAuth({ freshFactor: "if-enrolled" })`.
+ *
+ * The mode is the part worth pinning behaviourally, because it is the part that
+ * can go wrong in two opposite directions and a status-only test would miss
+ * both:
+ *
+ *   - gate everyone, and an account with no second factor — which is most
+ *     accounts holding a passkey — can never remove its own credential again.
+ *     That is a lockout dressed as a safeguard;
+ *   - gate nobody, and the change did nothing.
+ *
+ * The Bearer arm is here for the same reason. `requireFreshMfa` is cookie-only,
+ * so a gate built on it alone would have answered the native client with "use
+ * the website". These cases prove the app keeps the capability by minting the
+ * same elevation it already mints to remove a security key.
+ *
+ * Mutation check: change the route's option to `true` and the two unenrolled
+ * cases go red; drop the option entirely and the two refusals go red; move
+ * `commitElevation()` above the 404 branch and the last case goes red.
+ */
+describe("E14 — removing a passkey is step-up gated for enrolled accounts", () => {
+  async function seedPasskey(label: string): Promise<string> {
+    const row = await getPrismaClient().passkey.create({
+      data: {
+        userId: USER_ID,
+        name: label,
+        credentialId: `cred-${label}`,
+        credentialPublicKey: Buffer.from([1, 2, 3]),
+        credentialDeviceType: "multiDevice",
+        transports: ["internal"],
+      },
+      select: { id: true },
+    });
+    return row.id;
+  }
+
+  async function callDelete(id: string): Promise<Response> {
+    const { DELETE } = await import("@/app/api/auth/passkeys/[id]/route");
+    return await DELETE(req(`/api/auth/passkeys/${id}`, "DELETE"), {
+      params: Promise.resolve({ id }),
+    });
+  }
+
+  async function useCookieSession(): Promise<string> {
+    const session = await getPrismaClient().session.create({
+      data: { userId: USER_ID, expiresAt: new Date(Date.now() + 3_600_000) },
+    });
+    cookieJar.set("healthlog_session", session.id);
+    return session.id;
+  }
+
+  it("lets a Bearer client with no second factor remove one, as before", async () => {
+    const passkeyId = await seedPasskey("e14a");
+    const { raw } = await mintToken("e14a");
+    useToken(raw);
+    useElevation(null);
+
+    expect((await callDelete(passkeyId)).status).toBe(200);
+    expect(await getPrismaClient().passkey.count()).toBe(0);
+  });
+
+  it("lets a cookie session with no second factor remove one, as before", async () => {
+    const passkeyId = await seedPasskey("e14b");
+    await useCookieSession();
+
+    expect((await callDelete(passkeyId)).status).toBe(200);
+    expect(await getPrismaClient().passkey.count()).toBe(0);
+  });
+
+  it("refuses a Bearer client on an enrolled account with no elevation", async () => {
+    const passkeyId = await seedPasskey("e14c");
+    await enrolTotp();
+    const { raw } = await mintToken("e14c");
+    useToken(raw);
+    useElevation(null);
+
+    expect((await callDelete(passkeyId)).status).toBe(401);
+    // The refusal is only worth anything if the row survived it.
+    expect(await getPrismaClient().passkey.count()).toBe(1);
+  });
+
+  it("refuses a cookie session on an enrolled account with no fresh factor", async () => {
+    const passkeyId = await seedPasskey("e14d");
+    await enrolTotp();
+    await useCookieSession();
+
+    expect((await callDelete(passkeyId)).status).toBe(401);
+    expect(await getPrismaClient().passkey.count()).toBe(1);
+  });
+
+  it("admits the native client on a factor-proved elevation, and spends it", async () => {
+    const passkeyId = await seedPasskey("e14e");
+    const secret = await enrolTotp();
+    const { raw, id: tokenId } = await mintToken("e14e");
+    useToken(raw);
+    const elevation = elevationOf(await mintTotpElevation(secret));
+    useElevation(elevation);
+
+    expect((await callDelete(passkeyId)).status).toBe(200);
+    expect(await getPrismaClient().passkey.count()).toBe(0);
+
+    const row = await getPrismaClient().stepUpElevation.findFirst({
+      where: { apiTokenId: tokenId },
+    });
+    expect(row?.consumedAt).not.toBeNull();
+  });
+
+  it("does not burn the elevation on a foreign passkey id", async () => {
+    await seedPasskey("e14f");
+    const secret = await enrolTotp();
+    const { raw, id: tokenId } = await mintToken("e14f");
+    useToken(raw);
+    const elevation = elevationOf(await mintTotpElevation(secret));
+    useElevation(elevation);
+
+    expect((await callDelete("pk-does-not-exist")).status).toBe(404);
+
+    const row = await getPrismaClient().stepUpElevation.findFirst({
+      where: { apiTokenId: tokenId },
+    });
+    expect(row?.consumedAt).toBeNull();
+  });
+});

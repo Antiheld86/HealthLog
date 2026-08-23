@@ -1080,13 +1080,8 @@ export async function requireFreshMfa(
   // unreachable for it by design (the management UI gates enrolment first).
   // Either factor counts: a confirmed TOTP secret OR a registered WebAuthn
   // security key — both stamp `Session.mfaVerifiedAt` on a completed login.
-  if (!sessionData.user.totpConfirmedAt) {
-    const webauthnKeyCount = await prisma.webauthnMfaCredential.count({
-      where: { userId: sessionData.user.id },
-    });
-    if (webauthnKeyCount === 0) {
-      throw new StepUpRequiredError("auth.stepup.mfa_not_enrolled");
-    }
+  if (!(await hasSecondFactorEnrolled(sessionData.user))) {
+    throw new StepUpRequiredError("auth.stepup.mfa_not_enrolled");
   }
 
   // Read the freshness stamp off the live session row — `getSession`'s
@@ -1125,20 +1120,31 @@ export async function requireFreshMfaIfEnrolled(
   maxAgeSeconds: number,
 ): Promise<AuthContext> {
   const auth = await requireAuth();
-  // Either factor enrols the account: a confirmed TOTP secret OR a registered
-  // WebAuthn security key. A webauthn-only user must clear step-up too, so the
-  // destructive-action boundary tracks `requireFreshMfa`'s either-factor rule.
-  let enrolled = Boolean(auth.user.totpConfirmedAt);
-  if (!enrolled) {
-    const webauthnKeyCount = await prisma.webauthnMfaCredential.count({
-      where: { userId: auth.user.id },
-    });
-    enrolled = webauthnKeyCount > 0;
-  }
-  if (enrolled) {
+  if (await hasSecondFactorEnrolled(auth.user)) {
     await requireFreshMfa(maxAgeSeconds);
   }
   return auth;
+}
+
+/**
+ * Does this account have a second factor at all?
+ *
+ * Either factor enrols it: a confirmed TOTP secret OR a registered WebAuthn
+ * security key. A webauthn-only account must clear step-up too, so every
+ * boundary that asks this question tracks `requireFreshMfa`'s either-factor
+ * rule rather than reading `totpConfirmedAt` alone. It was written out three
+ * times before it was a function, which is two more places for the second arm
+ * to be forgotten.
+ */
+async function hasSecondFactorEnrolled(user: {
+  id: string;
+  totpConfirmedAt: Date | null;
+}): Promise<boolean> {
+  if (user.totpConfirmedAt) return true;
+  const webauthnKeyCount = await prisma.webauthnMfaCredential.count({
+    where: { userId: user.id },
+  });
+  return webauthnKeyCount > 0;
 }
 
 /**
@@ -1269,16 +1275,31 @@ export type MfaManagementContext = {
  * @param options.freshFactor mirrors the cookie path's `requireFreshMfa`. Set by
  *   the destructive routes (disable, recovery-code rotation, security-key
  *   removal).
+ *
+ *   `"if-enrolled"` is the third value and it is the one that needs explaining.
+ *   `true` refuses an account with no second factor outright, which is correct
+ *   for the routes that MANAGE a second factor — there is nothing to remove if
+ *   nothing is enrolled. Passkey removal is not like that: the passkey is the
+ *   primary sign-in credential, most accounts holding one have no second factor
+ *   beside it, and a gate they cannot satisfy would not be a safeguard but a
+ *   locked door in front of their own credential list. So `"if-enrolled"`
+ *   applies the full gate to the accounts that can clear it and leaves the rest
+ *   on the plain `requireAuth()` contract they had, which is the same line
+ *   `requireFreshMfaIfEnrolled` draws for the destructive account actions.
  */
 export async function requireMfaManagementAuth(
-  options: { freshFactor?: boolean } = {},
+  options: { freshFactor?: boolean | "if-enrolled" } = {},
 ): Promise<MfaManagementContext> {
-  const freshFactor = options.freshFactor === true;
+  const freshFactorMode = options.freshFactor ?? false;
 
   // Cookie first, and via the original helpers — the web path runs the same
   // code it always did.
   const sessionData = await getSession();
   if (sessionData) {
+    const freshFactor =
+      freshFactorMode === "if-enrolled"
+        ? await hasSecondFactorEnrolled(sessionData.user)
+        : freshFactorMode;
     const resolved = freshFactor
       ? await requireFreshMfa(MFA_STEP_UP_MAX_AGE_SECONDS)
       : await requireCookieAuth();
@@ -1293,6 +1314,24 @@ export async function requireMfaManagementAuth(
   // Bearer path. Resolution first: an unknown, revoked, expired, or narrow-scope
   // token is refused here and never gets as far as presenting an elevation.
   const auth = await requireBearerAuth();
+
+  // Resolved BEFORE the header is read, because on `"if-enrolled"` an account
+  // with no second factor needs no elevation and must not be asked for one —
+  // demanding a header it can never mint would be the lockout this mode exists
+  // to avoid, wearing a 401.
+  const freshFactor =
+    freshFactorMode === "if-enrolled"
+      ? await hasSecondFactorEnrolled(auth.user)
+      : freshFactorMode;
+  if (freshFactorMode === "if-enrolled" && !freshFactor) {
+    return {
+      transport: "bearer",
+      user: auth.user,
+      apiTokenId: auth.apiTokenId,
+      accessTokenHash: auth.accessTokenHash,
+      commitElevation: async () => {},
+    };
+  }
 
   let raw: string | null = null;
   try {
@@ -1341,17 +1380,11 @@ export async function requireMfaManagementAuth(
   // Parity with the cookie path: `requireFreshMfa` refuses an account with no
   // second factor enrolled, because a step-up-gated action is meaningless there.
   // The Bearer path holds the same line rather than becoming the softer route.
-  if (freshFactor) {
-    let enrolled = Boolean(auth.user.totpConfirmedAt);
-    if (!enrolled) {
-      const keys = await prisma.webauthnMfaCredential.count({
-        where: { userId: auth.user.id },
-      });
-      enrolled = keys > 0;
-    }
-    if (!enrolled) {
-      throw new StepUpRequiredError("auth.stepup.mfa_not_enrolled");
-    }
+  // Unreachable under `"if-enrolled"` — that mode returned above when the
+  // account had no factor, so arriving here with `freshFactor` true means the
+  // enrolment was already established.
+  if (freshFactor && !(await hasSecondFactorEnrolled(auth.user))) {
+    throw new StepUpRequiredError("auth.stepup.mfa_not_enrolled");
   }
 
   return {

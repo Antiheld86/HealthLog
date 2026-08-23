@@ -16,6 +16,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("@/lib/api-handler", () => ({
   apiHandler: (fn: unknown) => fn,
   requireAuth: vi.fn(),
+  requireMfaManagementAuth: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -35,8 +36,8 @@ vi.mock("@/lib/auth/audit", () => ({
   auditLog: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { PATCH } from "../route";
-import { requireAuth } from "@/lib/api-handler";
+import { DELETE, PATCH } from "../route";
+import { requireAuth, requireMfaManagementAuth } from "@/lib/api-handler";
 import { prisma } from "@/lib/db";
 
 const USER = { id: "user-1", username: "u", passwordHash: "argon2id$…" };
@@ -70,9 +71,18 @@ type Handler = (
   ctx: { params: Promise<{ id: string }> },
 ) => Promise<Response>;
 
+const commitElevation = vi.fn().mockResolvedValue(undefined);
+
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(requireAuth).mockResolvedValue({ user: USER } as never);
+  commitElevation.mockClear().mockResolvedValue(undefined);
+  vi.mocked(requireMfaManagementAuth).mockResolvedValue({
+    transport: "cookie",
+    user: USER,
+    session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
+    commitElevation,
+  } as never);
 });
 
 describe("PATCH /api/auth/passkeys/{id} — the rename refusal", () => {
@@ -153,5 +163,106 @@ describe("PATCH /api/auth/passkeys/{id} — the rename refusal", () => {
 
     expect(res.status).toBe(404);
     expect(prisma.passkey.update).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The removal's gate, and what it must NOT be.
+ *
+ * A passkey is the primary sign-in credential and it came off a plain session,
+ * while the second-factor key next door demanded a fresh proof. The route now
+ * asks the same gate the second-factor removal asks — but with
+ * `freshFactor: "if-enrolled"`, not `true`. That distinction is the whole
+ * design: `true` refuses an account with no second factor outright, and most
+ * accounts holding a passkey have nothing else enrolled, so `true` would take
+ * their own credential list away from them.
+ *
+ * The gate itself is behavioural and lives against a real database in
+ * `tests/integration/step-up-elevation.test.ts` (E14). What is pinned here is
+ * what this file can prove without one: the route asks for the right mode, and
+ * it spends the proof only when it is actually about to delete.
+ *
+ * Mutation check: change the option to `true` and the first case goes red; move
+ * `commitElevation()` above the ownership check and the third goes red; drop it
+ * altogether and the second goes red.
+ */
+describe("DELETE /api/auth/passkeys/{id} — the removal's gate", () => {
+  const mkDelete = () =>
+    new Request("http://localhost/api/auth/passkeys/pk-1", {
+      method: "DELETE",
+    });
+
+  it("asks for the step-up gate in its if-enrolled mode", async () => {
+    vi.mocked(prisma.passkey.findUnique).mockResolvedValue({
+      id: "pk-1",
+      userId: USER.id,
+      name: "Phone",
+    } as never);
+    vi.mocked(prisma.passkey.count).mockResolvedValue(2 as never);
+    vi.mocked(prisma.passkey.delete).mockResolvedValue({} as never);
+
+    await (DELETE as unknown as Handler)(mkDelete(), { params });
+
+    expect(requireMfaManagementAuth).toHaveBeenCalledWith({
+      freshFactor: "if-enrolled",
+    });
+    // Not `true`: that arm refuses an account with no second factor, which is
+    // a lockout on this route rather than a safeguard.
+    expect(requireMfaManagementAuth).not.toHaveBeenCalledWith({
+      freshFactor: true,
+    });
+  });
+
+  it("spends the proof once, on the way to the delete", async () => {
+    vi.mocked(prisma.passkey.findUnique).mockResolvedValue({
+      id: "pk-1",
+      userId: USER.id,
+      name: "Phone",
+    } as never);
+    vi.mocked(prisma.passkey.count).mockResolvedValue(2 as never);
+    vi.mocked(prisma.passkey.delete).mockResolvedValue({} as never);
+
+    const res = await (DELETE as unknown as Handler)(mkDelete(), { params });
+
+    expect(res.status).toBe(200);
+    expect(commitElevation).toHaveBeenCalledTimes(1);
+    expect(prisma.passkey.delete).toHaveBeenCalledWith({
+      where: { id: "pk-1" },
+    });
+  });
+
+  it("does not spend the proof on another account's passkey id", async () => {
+    vi.mocked(prisma.passkey.findUnique).mockResolvedValue({
+      id: "pk-1",
+      userId: "someone-else",
+      name: "Not yours",
+    } as never);
+
+    const res = await (DELETE as unknown as Handler)(mkDelete(), { params });
+
+    expect(res.status).toBe(404);
+    expect(commitElevation).not.toHaveBeenCalled();
+    expect(prisma.passkey.delete).not.toHaveBeenCalled();
+  });
+
+  it("does not spend the proof when the last credential is refused", async () => {
+    vi.mocked(prisma.passkey.findUnique).mockResolvedValue({
+      id: "pk-1",
+      userId: USER.id,
+      name: "Only one",
+    } as never);
+    vi.mocked(prisma.passkey.count).mockResolvedValue(1 as never);
+    vi.mocked(requireMfaManagementAuth).mockResolvedValue({
+      transport: "cookie",
+      user: { ...USER, passwordHash: null },
+      session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
+      commitElevation,
+    } as never);
+
+    const res = await (DELETE as unknown as Handler)(mkDelete(), { params });
+
+    expect(res.status).toBe(400);
+    expect(commitElevation).not.toHaveBeenCalled();
+    expect(prisma.passkey.delete).not.toHaveBeenCalled();
   });
 });

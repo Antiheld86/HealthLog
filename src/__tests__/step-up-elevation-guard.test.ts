@@ -87,8 +87,22 @@ function callers(exportName: string, moduleRe: RegExp): string[] {
 }
 
 /**
- * Every route an elevation can unlock. This is the whole set — the second-factor
- * management MUTATIONS and nothing besides.
+ * Every route an elevation can unlock: the second-factor management MUTATIONS,
+ * plus the one credential removal that is not a second factor and belongs here
+ * anyway.
+ *
+ * That one is `DELETE /api/auth/passkeys/{id}`. A passkey is the PRIMARY
+ * sign-in credential, and it sat behind a plain session while the second-factor
+ * key beside it demanded a fresh proof — the softer gate on the more valuable
+ * credential. It joins the set on `freshFactor: "if-enrolled"`, so an account
+ * with a second factor pays the full price and an account without one keeps the
+ * contract it had rather than losing the ability to remove its own credential.
+ *
+ * The widening that admits is real and bounded: an elevation minted against a
+ * re-proved factor can now also remove a passkey. That is the same class of act
+ * as the rest of the list — a credential the caller owns, removed after they
+ * prove they are the caller — and it is written down here rather than inferred,
+ * which is the whole point of this file.
  *
  * What is deliberately ABSENT is as much the point as what is present:
  *   - `GET /api/auth/me/mfa`. The status read is plain `requireAuth()`: it
@@ -108,6 +122,7 @@ function callers(exportName: string, moduleRe: RegExp): string[] {
  *     exists to prevent.
  */
 const ELEVATION_ROUTES = [
+  "app/api/auth/passkeys/[id]/route.ts",
   "app/api/auth/me/mfa/disable/route.ts",
   "app/api/auth/me/mfa/recovery-codes/regenerate/route.ts",
   "app/api/auth/me/mfa/totp/confirm/route.ts",

@@ -2581,9 +2581,17 @@ paths:
         the account has no password — an account must keep at least one way in.
 
 
-        No step-up: this endpoint takes a plain cookie session or a wildcard Bearer token, where removing a
-        second-factor security key (DELETE /api/auth/me/mfa/webauthn/{id}) requires a fresh factor proof. The asymmetry
-        is in the code as it stands, not a description of intent.
+        Step-up gated for accounts that can clear the gate, on the same mechanism as removing a second-factor security
+        key (DELETE /api/auth/me/mfa/webauthn/{id}). An account with a second factor enrolled — a confirmed TOTP secret
+        or a registered security key — must present a fresh factor proof: a cookie session that completed one within the
+        last five minutes, or, on Bearer, an `X-Step-Up` elevation minted at POST /api/auth/step-up against a re-proved
+        factor (a password-proved elevation is NOT enough). An account with no second factor enrolled is unaffected and
+        keeps the plain session-or-token contract, because a gate it could never satisfy would lock it out of its own
+        credential list.
+
+
+        The elevation is spent only when the deletion is about to happen. A 404 for an unknown id, or the
+        last-credential refusal, leaves it unconsumed and reusable.
       parameters:
         - in: path
           name: id
@@ -2604,7 +2612,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "401": *a1
+        "401":
+          description: Not authenticated, or the account has a second factor and the request carried no proof of it fresh enough
+            (`meta.errorCode` = `auth.stepup.required`). Re-prove the factor and retry — on the web by re-verifying, on
+            a native client by minting an elevation at POST /api/auth/step-up. Nothing was removed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "404":
           description: No such passkey for this account.
           content:
