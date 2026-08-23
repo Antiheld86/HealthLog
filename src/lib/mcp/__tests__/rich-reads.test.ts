@@ -37,8 +37,12 @@ import {
   getLabHistory,
   resolveRichMetric,
   MCP_METRIC_STATUS_DISCOVERY,
+  LOCALISED_METRIC_NAME_COLLISIONS,
   metricStatusDiscoveryRows,
 } from "../rich-reads";
+import { locales } from "@/lib/i18n/config";
+import { labelIn } from "@/lib/i18n/localised-label-index";
+import { MEASUREMENT_TYPE_LABEL_KEYS } from "@/lib/measurements/type-label-keys";
 import { readCoachCorrelations } from "@/lib/ai/coach/tools/correlations-read";
 import { buildCoachReadStrip } from "@/lib/insights/derived/coach-read";
 import { readBestGranularityRollups } from "@/lib/rollups/measurement-read-wmy";
@@ -175,6 +179,169 @@ describe("resolveRichMetric", () => {
     // the C2 guard only vetoes an EXPLICIT `mcp:false`, so this stays
     // resolvable exactly as before.
     expect(resolveRichMetric("vo2_max")?.measurementType).toBe("VO2_MAX");
+  });
+});
+
+// ── localised metric names ───────────────────────────────────────────
+//
+// The alias tables are app-owned slugs (`resting_hr`, `spo2`, `vo2max`) and
+// stay English by design — they are protocol vocabulary, not language. What
+// was missing is the metric's NAME: the resolver only ever compared against
+// English display names, so five of the six shipped languages could not name
+// a metric at all. The names now come from the same `measurements.type*` keys
+// the app renders, read out of every bundle.
+describe("resolveRichMetric — localised metric names", () => {
+  it.each([
+    ["fr", "poids", "WEIGHT"],
+    ["de", "Gewicht", "WEIGHT"],
+    ["es", "Peso", "WEIGHT"],
+    ["pl", "Waga", "WEIGHT"],
+    ["fr", "Sommeil", "SLEEP_DURATION"],
+    ["de", "Schlaf", "SLEEP_DURATION"],
+    ["it", "Sonno", "SLEEP_DURATION"],
+    ["pl", "Sen", "SLEEP_DURATION"],
+    ["fr", "Pas", "ACTIVITY_STEPS"],
+    ["de", "Schritte", "ACTIVITY_STEPS"],
+    ["fr", "Glycémie", "BLOOD_GLUCOSE"],
+    ["de", "Blutzucker", "BLOOD_GLUCOSE"],
+    ["fr", "Fréquence cardiaque au repos", "RESTING_HEART_RATE"],
+    ["de", "Ruheherzfrequenz", "RESTING_HEART_RATE"],
+    ["fr", "Indice de masse corporelle", "BODY_MASS_INDEX"],
+    ["pl", "Tętno", "PULSE"],
+  ] as const)("resolves the %s name %s", (_locale, name, type) => {
+    expect(resolveRichMetric(name)?.measurementType).toBe(type);
+  });
+
+  it("reaches the MCP-opt-in clinical signals in every language too", () => {
+    expect(resolveRichMetric("Griffstärke")?.measurementType).toBe(
+      "GRIP_STRENGTH",
+    );
+    expect(resolveRichMetric("Force de préhension")?.measurementType).toBe(
+      "GRIP_STRENGTH",
+    );
+    expect(resolveRichMetric("Obwód talii")?.measurementType).toBe(
+      "WAIST_CIRCUMFERENCE",
+    );
+    // Accents and the (0–10) suffix fold on both sides.
+    expect(resolveRichMetric("Ból (0-10)")?.measurementType).toBe("PAIN_NRS");
+  });
+
+  it("keeps the English resolutions that already worked byte-identical", () => {
+    expect(resolveRichMetric("resting_hr")?.measurementType).toBe(
+      "RESTING_HEART_RATE",
+    );
+    expect(resolveRichMetric("weight")?.measurementType).toBe("WEIGHT");
+    expect(resolveRichMetric("pulse")?.measurementType).toBe("PULSE");
+    expect(resolveRichMetric("heart-rate variability")?.measurementType).toBe(
+      "HEART_RATE_VARIABILITY",
+    );
+    expect(resolveRichMetric("grip strength")?.measurementType).toBe(
+      "GRIP_STRENGTH",
+    );
+    expect(resolveRichMetric("vo2_max")?.measurementType).toBe("VO2_MAX");
+  });
+
+  it("does not widen exposure — a vetoed metric stays unreachable in every language", () => {
+    // The localised index is built from the metrics the English resolver can
+    // ALREADY produce, so the `mcp:false` veto and the screener/environmental
+    // exclusions carry over unchanged. A name-based bypass here would be a
+    // leak on the one surface that egresses to a third-party assistant.
+    for (const off of [
+      "PHQ-9-Wert",
+      "Puntuación PHQ-9",
+      "Score PHQ-9",
+      "GAD-7-Wert",
+      "Wynik GAD-7",
+      "Maximaler Puls",
+      "Fréquence cardiaque maximale",
+      "Frequenza cardiaca massima",
+    ]) {
+      expect(resolveRichMetric(off)).toBeNull();
+    }
+  });
+
+  it("still refuses a word that is in no bundle", () => {
+    expect(resolveRichMetric("bananes")).toBeNull();
+    expect(resolveRichMetric("Bananen")).toBeNull();
+    expect(resolveRichMetric("")).toBeNull();
+  });
+
+  it("resolves a short name to the metric it names, not to an English word containing it", () => {
+    // "pulse-wave velocity" contains "puls", so the substring pass used to
+    // hand German and Polish speakers a different metric than they asked for.
+    expect(resolveRichMetric("Puls")?.measurementType).toBe("PULSE");
+    expect(resolveRichMetric("Tętno")?.measurementType).toBe("PULSE");
+    // The English fragment still works where nothing names it exactly.
+    expect(resolveRichMetric("pulse-wave")?.measurementType).toBe(
+      "PULSE_WAVE_VELOCITY",
+    );
+  });
+
+  // Body fat, fat mass, fat-free mass and lean body mass are four distinct
+  // measurements that the Romance and Polish bundles collapse into two words:
+  // "masse grasse" / "massa grassa" cover the first pair, "masse maigre" /
+  // "massa magra" / "masa beztłuszczowa" the second. The index drops a word
+  // two metrics claim rather than picking one — answering kilograms to
+  // someone who asked for a percentage is worse than saying the word was not
+  // recognised. Pinned, so a NEW collision fails here instead of silently
+  // resolving to whichever entry happened to be built first.
+  it("refuses a word two different metrics claim, and only those words", () => {
+    expect([...LOCALISED_METRIC_NAME_COLLISIONS].sort()).toEqual([
+      "masa_beztluszczowa",
+      "massa_grassa",
+      "massa_magra",
+      "masse_grasse",
+      "masse_maigre",
+    ]);
+  });
+
+  // The property, not a sample: over every metric and every shipped locale,
+  // so a seventh language is covered the day its bundle lands.
+  it("never lets a non-English name point at a different metric", () => {
+    const misdirected: string[] = [];
+    for (const [type, key] of Object.entries(MEASUREMENT_TYPE_LABEL_KEYS)) {
+      for (const locale of locales) {
+        const label = labelIn(locale, key);
+        expect(label, `${locale} is missing ${key}`).not.toBe(null);
+        const answer = resolveRichMetric(label!)?.measurementType ?? null;
+        if (answer !== null && answer !== type) {
+          misdirected.push(`${locale}/${type} -> ${answer}`);
+        }
+      }
+    }
+    // Every remaining entry is `en`, which is the point: the derived index
+    // never misdirects. These three come from the English substring pass —
+    // an event type whose label is contained in the running metric's display
+    // name — which predates this index and is deliberately left alone so no
+    // English resolution moves.
+    expect(misdirected.sort()).toEqual([
+      "en/BODY_TEMPERATURE_DEVIATION -> BODY_TEMPERATURE",
+      "en/BREATHING_DISTURBANCE_EVENT -> BREATHING_DISTURBANCES",
+      "en/WALKING_STEADINESS_EVENT -> WALKING_STEADINESS",
+    ]);
+  });
+
+  it("makes a metric nameable in every language or in none", () => {
+    const partial: string[] = [];
+    for (const [type, key] of Object.entries(MEASUREMENT_TYPE_LABEL_KEYS)) {
+      const resolved = locales.filter(
+        (locale) => resolveRichMetric(labelIn(locale, key)!) !== null,
+      );
+      if (resolved.length !== 0 && resolved.length !== locales.length) {
+        partial.push(`${type}: ${resolved.join(",")}`);
+      }
+    }
+    // The body-composition types whose bundles are genuinely ambiguous (see
+    // the collision guard above), plus the same three English-substring
+    // artefacts.
+    expect(partial.sort()).toEqual([
+      "BODY_TEMPERATURE_DEVIATION: en",
+      "BREATHING_DISTURBANCE_EVENT: en",
+      "FAT_FREE_MASS: de,en,es",
+      "FAT_MASS: de,en,es,pl",
+      "LEAN_BODY_MASS: de,en,es",
+      "WALKING_STEADINESS_EVENT: en",
+    ]);
   });
 });
 
