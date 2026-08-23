@@ -470,4 +470,53 @@ describe("Apple Health ECG CSV — real-export shapes", () => {
       ).rejects.toThrow(/malformed/i);
     });
   });
+
+  describe("both decimal dialects", () => {
+    /** The same three samples, written by a dot-region and a comma-region watch. */
+    const DOT_SAMPLES = ["1.5", "-2.4", "3"];
+    const COMMA_SAMPLES = ["1,5", "-2,4", "3"];
+
+    function withSamples(rows: readonly string[]): string {
+      return `${singleColumnCsv().split("\n").slice(0, -3).join("\n")}\n${rows.join("\n")}`;
+    }
+
+    it.each([
+      ["dot", DOT_SAMPLES],
+      ["comma", COMMA_SAMPLES],
+    ])(
+      "reads a %s-decimal waveform to the same microvolts",
+      async (_d, rows) => {
+        await expect(parse(withSamples(rows))).resolves.toMatchObject({
+          samples: [2, -2, 3],
+        });
+      },
+    );
+
+    it("reads both dialects of the paired layout identically", async () => {
+      // splitPair cuts on the first comma, so the value keeps its own mark.
+      await expect(parse(validCsv())).resolves.toMatchObject({
+        samples: [1, -2, 3],
+      });
+      const commaPaired = validCsv()
+        .replace("I,0.001", "I,0,001")
+        .replace("I,-0.002", "I,-0,002")
+        .replace("I,0.003", "I,0,003");
+      await expect(parse(commaPaired)).resolves.toMatchObject({
+        samples: [1, -2, 3],
+      });
+    });
+
+    it("refuses a grouped number rather than guessing its region", async () => {
+      // "1.234,5" needs the file's region to resolve and the file never says.
+      await expect(
+        parse(withSamples(["1.234,5", "-2,4", "3"])),
+      ).rejects.toThrow(/sample value is invalid/i);
+    });
+
+    it("still rejects a paired row that follows the single-column waveform", async () => {
+      await expect(parse(`${singleColumnCsv()}\nI,0.001`)).rejects.toThrow(
+        /sample value is invalid/i,
+      );
+    });
+  });
 });

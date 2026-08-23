@@ -94,6 +94,43 @@ function splitPair(line: string): [string, string] | null {
   return [line.slice(0, comma).trim(), line.slice(comma + 1).trim()];
 }
 
+/**
+ * Which section of the file the reader is in.
+ *
+ * The two waveform layouts disagree about what a comma MEANS, so the parser
+ * cannot decide that per line — it has to know which side of the boundary it is
+ * on. Naming the mode is what makes the two readings safe to hold at once.
+ */
+type Section =
+  /** Key/value metadata rows. A comma separates the key from the value. */
+  | "header"
+  /** One bare number per row. A comma is a decimal mark. */
+  | "single-column"
+  /** `lead,voltage` per row. A comma separates the two fields. */
+  | "paired";
+
+/**
+ * Read one scalar written in either decimal dialect: "-180.596" and "-180,596"
+ * are the same measurement, recorded by watches set to different regions.
+ *
+ * Accepts at most ONE separator. A number carrying thousands grouping
+ * ("1.234,5") is refused rather than guessed at, because resolving it needs to
+ * know the file's region and nothing in the file states it.
+ *
+ * The single ambiguous case is a lone separator followed by exactly three
+ * digits, where "-180,596" could in principle be grouping rather than a
+ * decimal. It is read as a decimal, for two reasons that agree. Observed
+ * waveforms carry two- and three-digit fractions in the same file
+ * ("-199,83" next to "-217,333"), and grouping is always three, so the
+ * two-digit rows settle what the separator is. And a machine writing one bare
+ * value per row has no reason to group thousands at all.
+ */
+function parseDecimal(raw: string): number | null {
+  if (!/^[+-]?\d+(?:[.,]\d+)?$/.test(raw)) return null;
+  const value = Number(raw.replace(",", "."));
+  return Number.isFinite(value) ? value : null;
+}
+
 export async function parseAppleHealthEcgCsv(input: {
   memberName: string;
   stream: Readable;
@@ -106,8 +143,7 @@ export async function parseAppleHealthEcgCsv(input: {
 
   const metadata = new Map<string, string>();
   const samples: number[] = [];
-  let inSamples = false;
-  let singleColumn = false;
+  let section: Section = "header";
   let unitScale = 1;
   let lead: string | null = null;
   const lines = createInterface({
@@ -119,10 +155,23 @@ export async function parseAppleHealthEcgCsv(input: {
     for await (const rawLine of lines) {
       const line = rawLine.replace(/^\uFEFF/, "").trim();
       if (line === "") {
-        // Apple's single-column layout declares the lead and unit as
-        // metadata rows and separates them from the waveform with a blank
-        // line; one bare number per row follows.
-        if (!inSamples && metadata.has("Lead") && metadata.has("Unit")) {
+        // THE CROSSING into the single-column waveform.
+        //
+        // Apple's single-column layout declares the lead and unit as metadata
+        // rows and separates them from the waveform with a blank line; one
+        // bare number per row follows. A blank line on its own does not mean
+        // anything — real exports carry two of them mid-header — so the
+        // boundary is "a blank line once Lead and Unit have both been
+        // declared", and it is taken exactly once, from the header.
+        //
+        // Everything after this point reads a comma as a decimal mark rather
+        // than as a field separator, which is why the parser tracks the
+        // section instead of deciding line by line.
+        if (
+          section === "header" &&
+          metadata.has("Lead") &&
+          metadata.has("Unit")
+        ) {
           const scale = resolveUnitScale(metadata.get("Unit"));
           if (scale === null) {
             throw parserError("sample unit is unsupported");
@@ -132,20 +181,17 @@ export async function parseAppleHealthEcgCsv(input: {
           if (declaredLead.length > 0 && declaredLead.length <= 32) {
             lead = declaredLead;
           }
-          inSamples = true;
-          singleColumn = true;
+          section = "single-column";
         }
         continue;
       }
-      if (singleColumn) {
-        if (line.includes(",")) {
-          throw parserError("row is malformed");
-        }
+      if (section === "single-column") {
         if (samples.length >= input.maxSamples) {
           throw parserError("sample limit exceeded");
         }
-        const value = Number(line);
-        if (!Number.isFinite(value)) {
+        // One value per row, in whichever decimal dialect the watch was set to.
+        const value = parseDecimal(line);
+        if (value === null) {
           throw parserError("sample value is invalid");
         }
         const microvolts = Math.round(value * unitScale);
@@ -174,15 +220,18 @@ export async function parseAppleHealthEcgCsv(input: {
         // one: `Lead` and `Unit` presence is what switches the parser into the
         // single-column mode below, and a valueless key must not be able to
         // trip that switch.
-        if (inSamples) {
+        if (section !== "header") {
           throw parserError("row is malformed");
         }
         continue;
       }
       const [key, value] = pair;
-      if (!inSamples) {
+      if (section === "header") {
+        // THE CROSSING into the paired waveform: the `Lead,Voltage` column
+        // header. Unlike the single-column boundary this one is explicit in
+        // the file, so there is nothing to infer.
         if (key.toLowerCase() === "lead" && value.toLowerCase() === "voltage") {
-          inSamples = true;
+          section = "paired";
           continue;
         }
         if (key !== "Name") metadata.set(key, value);
@@ -192,8 +241,10 @@ export async function parseAppleHealthEcgCsv(input: {
       if (samples.length >= input.maxSamples) {
         throw parserError("sample limit exceeded");
       }
-      const voltage = Number(value);
-      if (!Number.isFinite(voltage) || Math.abs(voltage) > 100) {
+      // `splitPair` cut on the FIRST comma, so a comma still inside the value
+      // is this row's decimal mark, exactly as in the single-column layout.
+      const voltage = parseDecimal(value);
+      if (voltage === null || Math.abs(voltage) > 100) {
         throw parserError("sample value is invalid");
       }
       const microvolts = Math.round(voltage * 1_000);
@@ -204,7 +255,7 @@ export async function parseAppleHealthEcgCsv(input: {
       samples.push(microvolts);
     }
 
-    if (!inSamples || samples.length === 0) {
+    if (section === "header" || samples.length === 0) {
       throw parserError("samples are missing");
     }
     return {
