@@ -6,6 +6,7 @@ vi.mock("@/lib/db", () => ({
   prisma: {
     session: { findUnique: vi.fn() },
     webauthnMfaCredential: { count: vi.fn() },
+    passkey: { count: vi.fn() },
   },
 }));
 
@@ -111,6 +112,75 @@ describe("requireFreshMfa", () => {
 
     const ctx = await requireFreshMfa(MFA_STEP_UP_MAX_AGE_SECONDS);
     expect(ctx.user.id).toBe("user-1");
+  });
+
+  /**
+   * The reachability pre-check, and the one route that asks it differently.
+   *
+   * `requireFreshMfa` refuses `mfa_not_enrolled` when the account holds nothing
+   * that could ever produce the stamp, because a gate nobody can clear is a dead
+   * end rather than a safeguard. Which credentials count is the `proofSource`
+   * parameter, and it changes nothing else: the freshness read below is the same
+   * read either way.
+   *
+   * A primary passkey is deliberately outside the default set and inside
+   * `"any-possession"`. It DOES stamp `mfaVerifiedAt` on login, so it can clear
+   * the gate — but counting it by default would pull every passkey-holding
+   * account into `requireFreshMfaIfEnrolled`'s gate on account deletion, the
+   * data reset, the password change, the encrypted export and key rotation,
+   * none of which have ever applied to them. The sibling suite
+   * `require-fresh-mfa-if-enrolled.test.ts` is what catches that if the two
+   * predicates are ever collapsed into one.
+   */
+  it("refuses a passkey-only account when only a second factor counts", async () => {
+    mockSession({ ...MFA_USER, totpConfirmedAt: null });
+    vi.mocked(prisma.webauthnMfaCredential.count).mockResolvedValue(0 as never);
+    vi.mocked(prisma.passkey.count).mockResolvedValue(1 as never);
+
+    await expect(requireFreshMfa(5 * 60)).rejects.toMatchObject({
+      errorCode: "auth.stepup.mfa_not_enrolled",
+    });
+  });
+
+  it("admits that same account under any-possession, with a fresh stamp", async () => {
+    mockSession({ ...MFA_USER, totpConfirmedAt: null });
+    vi.mocked(prisma.webauthnMfaCredential.count).mockResolvedValue(0 as never);
+    vi.mocked(prisma.passkey.count).mockResolvedValue(1 as never);
+    vi.mocked(prisma.session.findUnique).mockResolvedValue({
+      mfaVerifiedAt: new Date(Date.now() - 60_000),
+    } as never);
+
+    const ctx = await requireFreshMfa(
+      MFA_STEP_UP_MAX_AGE_SECONDS,
+      "any-possession",
+    );
+    expect(ctx.user.id).toBe("user-1");
+  });
+
+  it("still enforces the window under any-possession", async () => {
+    // The wider proof source decides who may attempt the gate, not who passes
+    // it. A stale stamp is refused with the re-provable code, not admitted.
+    mockSession({ ...MFA_USER, totpConfirmedAt: null });
+    vi.mocked(prisma.webauthnMfaCredential.count).mockResolvedValue(0 as never);
+    vi.mocked(prisma.passkey.count).mockResolvedValue(1 as never);
+    vi.mocked(prisma.session.findUnique).mockResolvedValue({
+      mfaVerifiedAt: new Date(Date.now() - 10 * 60_000),
+    } as never);
+
+    await expect(
+      requireFreshMfa(MFA_STEP_UP_MAX_AGE_SECONDS, "any-possession"),
+    ).rejects.toMatchObject({ errorCode: "auth.stepup.required" });
+  });
+
+  it("refuses an account with no credential at all, under either source", async () => {
+    mockSession({ ...MFA_USER, totpConfirmedAt: null });
+    vi.mocked(prisma.webauthnMfaCredential.count).mockResolvedValue(0 as never);
+    vi.mocked(prisma.passkey.count).mockResolvedValue(0 as never);
+
+    await expect(
+      requireFreshMfa(5 * 60, "any-possession"),
+    ).rejects.toMatchObject({ errorCode: "auth.stepup.mfa_not_enrolled" });
+    expect(prisma.session.findUnique).not.toHaveBeenCalled();
   });
 
   it("rejects when there is no cookie session — Bearer can never satisfy it", async () => {

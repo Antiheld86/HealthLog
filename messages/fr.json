@@ -6404,7 +6404,8 @@
       "error": "Le réglage n'a pas pu être enregistré."
     },
     "dangerZoneDetail": "Votre compte et vos identifiants de connexion sont conservés.",
-    "deleteAccountCardDetail": "Cette action est irréversible."
+    "deleteAccountCardDetail": "Cette action est irréversible.",
+    "passkeyStepUpRequired": "Par sécurité, reconnecte-toi avant de supprimer une clé d'accès."
   },
   "admin": {
     "title": "Administration",
@@ -6922,7 +6923,14 @@
         "restoreSkippedPersonalRecordReference": "Provenance d'un record personnel",
         "restoreSkippedEcgReference": "Provenance d'un tracé ECG",
         "restoreSkippedMedicationTarget": "Analyte cible d'un médicament",
-        "restoreSkippedScheduleRevisionLink": "Succession des périodes de schéma"
+        "restoreSkippedScheduleRevisionLink": "Succession des périodes de schéma",
+        "restoreMissingTitle": "Restauration refusée — le fichier est incomplet",
+        "restoreMissingDescription": "Le manifeste du fichier indique qu'il contient la section ci-dessous, et il ne la contient pas. Rien n'a été modifié : une restauration remplace toute une classe d'enregistrements, une section absente l'aurait donc vidée.",
+        "restoreMissingRemedy": "Utilise une sauvegarde de reprise après sinistre, ou réexporte le compte et téléverse le nouveau fichier. Une section que le manifeste déclare omise est autre chose et se restaure normalement.",
+        "restoreMissingDocuments": "Documents",
+        "restoreMissingWorkouts": "Séances",
+        "restoreMissingMentalHealth": "Questionnaires de santé mentale",
+        "restoreMissingConsent": "Preuves de consentement"
       },
       "danger-zone": {
         "title": "Zone de danger",

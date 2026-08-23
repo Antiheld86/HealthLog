@@ -40,6 +40,7 @@ import {
   apiPost,
 } from "@/lib/api/api-fetch";
 import { describePasskeyError } from "@/lib/passkey-errors";
+import { describeStepUp } from "./security-keys-card";
 
 interface PasskeyInfo {
   id: string;
@@ -169,7 +170,14 @@ export function PasskeyListSection({
       setMsg(null);
       queryClient.invalidateQueries({ queryKey: queryKeys.passkeys() });
     },
-    onError: (err: Error) => setMsg(err.message),
+    // Removal is step-up gated. The server's own prose says "second-factor",
+    // which is wrong for the passkey-only account this card mostly serves — the
+    // credential to re-prove is the passkey — so the refusal gets its own
+    // sentence naming the recovery that exists on the web: sign in again.
+    onError: (err: Error) =>
+      setMsg(
+        describeStepUp(err, err.message, t("settings.passkeyStepUpRequired")),
+      ),
   });
 
   const DEVICE_TYPE_LABELS: Record<string, string> = {

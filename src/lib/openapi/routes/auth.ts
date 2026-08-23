@@ -1529,7 +1529,9 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Remove a registered passkey",
       description:
         "Deletes one primary sign-in credential, scoped to the authenticated user. Refuses to remove the LAST one when the account has no password — an account must keep at least one way in.\n\n" +
-        "No step-up: this endpoint takes a plain cookie session or a wildcard Bearer token, where removing a second-factor security key (DELETE /api/auth/me/mfa/webauthn/{id}) requires a fresh factor proof. The asymmetry is in the code as it stands, not a description of intent.",
+        "Step-up gated, on the same mechanism and at the same strength as removing a second-factor security key (DELETE /api/auth/me/mfa/webauthn/{id}). The caller must present a fresh possession proof: on the cookie path a session that completed one within the last five minutes, on Bearer an `X-Step-Up` elevation minted at POST /api/auth/step-up against a re-proved factor. A password-proved elevation is NOT enough.\n\n" +
+        'A PASSKEY IS SUCH A PROOF here, unlike on the second-factor routes. An account whose only credential is a passkey can satisfy this gate: a passkey login stamps the session, and POST /api/auth/step-up accepts `method: "passkey"` against the account\'s primary passkeys. So its refusal is `meta.errorCode: auth.stepup.required` — re-prove and retry — and not the dead-end `auth.stepup.mfa_not_enrolled`, which is reserved for an account holding no credential this gate could ever accept.\n\n' +
+        "The elevation is spent only when the deletion is about to happen. A 404 for an unknown id, or the last-credential refusal, leaves it unconsumed and reusable.",
       requestParams: { path: z.object({ id: z.string() }) },
       responses: {
         "200": {
@@ -1553,6 +1555,13 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
+        // After `stdResponses`, or the generic 401 there overwrites this one
+        // and the step-up contract disappears from the published operation.
+        "401": {
+          description:
+            "Not authenticated, or the request carried no fresh possession proof (`meta.errorCode` = `auth.stepup.required`). Re-prove and retry — on a native client by minting an elevation at POST /api/auth/step-up, on the web by signing in again, which is what stamps the session. `auth.stepup.mfa_not_enrolled` is the other arm and means the account holds no credential this gate can accept, so retrying will not help. Nothing was removed either way.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
       },
     },
   },

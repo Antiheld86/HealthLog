@@ -1047,9 +1047,37 @@ export const MFA_STEP_UP_MAX_AGE_SECONDS = 5 * 60;
 export type FreshMfaContext = AuthContext & { mfaVerifiedAt: Date };
 
 /**
+ * Which credentials count when asking "can this account produce a fresh-factor
+ * proof at all".
+ *
+ * The gate is the same either way — a `Session.mfaVerifiedAt` inside the window
+ * on the cookie path, an elevation minted from a `FRESH_FACTOR_METHODS` proof on
+ * the Bearer path. What differs is the pre-check that decides whether refusing
+ * would be a gate or a dead end, and the honest answer to that depends on what
+ * the route is protecting.
+ *
+ *   `second-factor` — a confirmed TOTP secret or a registered second-factor
+ *   security key. The default, and the right question for the routes that MANAGE
+ *   a second factor: there is nothing there to protect if nothing is enrolled.
+ *
+ *   `any-possession` — the above, OR a registered PRIMARY passkey. The right
+ *   question for a route protecting the passkey itself, because a passkey is a
+ *   possession factor in its own right and this codebase already treats it as
+ *   one in three places: `/api/auth/passkey/login-verify` stamps `mfaVerifiedAt`
+ *   on a passkey login (v1.23, M-review M1), `passkey` is in
+ *   `FRESH_FACTOR_METHODS` so a passkey-proved elevation reaches the fresh-factor
+ *   routes, and `resolveMfaEnrollmentRequired` counts a primary passkey as
+ *   satisfying the enforcement policy outright. A passkey-only account can
+ *   therefore clear the gate on both transports, and asking the narrower
+ *   question would have thrown `mfa_not_enrolled` at an account that was holding
+ *   the proof all along.
+ */
+export type FreshFactorProofSource = "second-factor" | "any-possession";
+
+/**
  * v1.23 — step-up gate. Passes only for a COOKIE session whose
- * `Session.mfaVerifiedAt` is within `maxAgeSeconds` AND whose user has an
- * active second factor (`totpConfirmedAt`). Throws `StepUpRequiredError`
+ * `Session.mfaVerifiedAt` is within `maxAgeSeconds` AND whose user holds a
+ * credential that can produce such a stamp. Throws `StepUpRequiredError`
  * (401, `errorCode: "auth.stepup.required"`) otherwise.
  *
  * Bearer tokens can NEVER satisfy this — exactly like `requireAdmin`, the
@@ -1059,9 +1087,14 @@ export type FreshMfaContext = AuthContext & { mfaVerifiedAt: Date };
  *
  * Consumed in Phase M by MFA disable + recovery-code regeneration; later
  * waves gate account deletion, key rotation, and passphrase export on it.
+ *
+ * @param proofSource which credentials count as "can prove a factor". Defaults
+ *   to the second-factor set every existing caller means; see
+ *   {@link FreshFactorProofSource}.
  */
 export async function requireFreshMfa(
   maxAgeSeconds: number,
+  proofSource: FreshFactorProofSource = "second-factor",
 ): Promise<FreshMfaContext> {
   const sessionData = await getSession();
   if (!sessionData) throw new HttpError(401, "Not authenticated");
@@ -1075,18 +1108,12 @@ export async function requireFreshMfa(
     });
   }
 
-  // The user must actually have a second factor active. A single-factor
-  // account cannot produce a fresh-MFA proof, so step-up-gated actions are
-  // unreachable for it by design (the management UI gates enrolment first).
-  // Either factor counts: a confirmed TOTP secret OR a registered WebAuthn
-  // security key — both stamp `Session.mfaVerifiedAt` on a completed login.
-  if (!sessionData.user.totpConfirmedAt) {
-    const webauthnKeyCount = await prisma.webauthnMfaCredential.count({
-      where: { userId: sessionData.user.id },
-    });
-    if (webauthnKeyCount === 0) {
-      throw new StepUpRequiredError("auth.stepup.mfa_not_enrolled");
-    }
+  // The account must hold a credential that can stamp `mfaVerifiedAt` in the
+  // first place. Without one a step-up-gated action is unreachable by design
+  // rather than merely refused, so the refusal is named differently
+  // (`mfa_not_enrolled`) and the management UI gates enrolment ahead of it.
+  if (!(await canProveFreshFactor(sessionData.user, proofSource))) {
+    throw new StepUpRequiredError("auth.stepup.mfa_not_enrolled");
   }
 
   // Read the freshness stamp off the live session row — `getSession`'s
@@ -1125,20 +1152,63 @@ export async function requireFreshMfaIfEnrolled(
   maxAgeSeconds: number,
 ): Promise<AuthContext> {
   const auth = await requireAuth();
-  // Either factor enrols the account: a confirmed TOTP secret OR a registered
-  // WebAuthn security key. A webauthn-only user must clear step-up too, so the
-  // destructive-action boundary tracks `requireFreshMfa`'s either-factor rule.
-  let enrolled = Boolean(auth.user.totpConfirmedAt);
-  if (!enrolled) {
-    const webauthnKeyCount = await prisma.webauthnMfaCredential.count({
-      where: { userId: auth.user.id },
-    });
-    enrolled = webauthnKeyCount > 0;
-  }
-  if (enrolled) {
+  if (await hasSecondFactorEnrolled(auth.user)) {
     await requireFreshMfa(maxAgeSeconds);
   }
   return auth;
+}
+
+/**
+ * Does this account have a SECOND FACTOR at all?
+ *
+ * Either factor enrols it: a confirmed TOTP secret OR a registered WebAuthn
+ * security key. A webauthn-only account must clear step-up too, so every
+ * boundary that asks this question tracks `requireFreshMfa`'s either-factor
+ * rule rather than reading `totpConfirmedAt` alone. It was written out three
+ * times before it was a function, which is two more places for the second arm
+ * to be forgotten.
+ *
+ * DELIBERATELY DOES NOT COUNT A PRIMARY PASSKEY, even though a passkey login
+ * stamps `mfaVerifiedAt` and could therefore satisfy the gate. This predicate
+ * answers "is there a second factor", and that is the question
+ * `requireFreshMfaIfEnrolled` asks before deciding whether account deletion, the
+ * data reset, the password change, the encrypted export and key rotation demand
+ * a step-up at all. Counting a passkey here would silently pull every
+ * passkey-holding account into a gate those routes have never applied to them —
+ * a behaviour change to five destructive actions, made in passing, for the
+ * benefit of a sixth. {@link canProveFreshFactor} is where the wider question
+ * lives.
+ */
+async function hasSecondFactorEnrolled(user: {
+  id: string;
+  totpConfirmedAt: Date | null;
+}): Promise<boolean> {
+  if (user.totpConfirmedAt) return true;
+  const webauthnKeyCount = await prisma.webauthnMfaCredential.count({
+    where: { userId: user.id },
+  });
+  return webauthnKeyCount > 0;
+}
+
+/**
+ * Can this account produce a fresh-factor proof at all?
+ *
+ * The wider question, asked by the routes that gate on possession rather than
+ * on second-factor management. See {@link FreshFactorProofSource} for why a
+ * primary passkey answers yes and where the codebase already says so; see
+ * {@link hasSecondFactorEnrolled} for why the narrower predicate must not be
+ * widened into this one.
+ */
+async function canProveFreshFactor(
+  user: { id: string; totpConfirmedAt: Date | null },
+  proofSource: FreshFactorProofSource,
+): Promise<boolean> {
+  if (await hasSecondFactorEnrolled(user)) return true;
+  if (proofSource === "second-factor") return false;
+  const passkeyCount = await prisma.passkey.count({
+    where: { userId: user.id },
+  });
+  return passkeyCount > 0;
 }
 
 /**
@@ -1268,19 +1338,28 @@ export type MfaManagementContext = {
  *
  * @param options.freshFactor mirrors the cookie path's `requireFreshMfa`. Set by
  *   the destructive routes (disable, recovery-code rotation, security-key
- *   removal).
+ *   removal, passkey removal).
+ * @param options.proofSource which credentials count as "can prove a factor"
+ *   when deciding whether the gate is reachable. Defaults to the second-factor
+ *   set. Passkey removal passes `"any-possession"` because a primary passkey IS
+ *   the proof there — see {@link FreshFactorProofSource}. It changes only the
+ *   reachability pre-check; the gate itself is identical either way.
  */
 export async function requireMfaManagementAuth(
-  options: { freshFactor?: boolean } = {},
+  options: {
+    freshFactor?: boolean;
+    proofSource?: FreshFactorProofSource;
+  } = {},
 ): Promise<MfaManagementContext> {
   const freshFactor = options.freshFactor === true;
+  const proofSource = options.proofSource ?? "second-factor";
 
   // Cookie first, and via the original helpers — the web path runs the same
   // code it always did.
   const sessionData = await getSession();
   if (sessionData) {
     const resolved = freshFactor
-      ? await requireFreshMfa(MFA_STEP_UP_MAX_AGE_SECONDS)
+      ? await requireFreshMfa(MFA_STEP_UP_MAX_AGE_SECONDS, proofSource)
       : await requireCookieAuth();
     return {
       transport: "cookie",
@@ -1338,20 +1417,13 @@ export async function requireMfaManagementAuth(
   });
   if (!validated.ok) throw refusal(validated.reason);
 
-  // Parity with the cookie path: `requireFreshMfa` refuses an account with no
-  // second factor enrolled, because a step-up-gated action is meaningless there.
-  // The Bearer path holds the same line rather than becoming the softer route.
-  if (freshFactor) {
-    let enrolled = Boolean(auth.user.totpConfirmedAt);
-    if (!enrolled) {
-      const keys = await prisma.webauthnMfaCredential.count({
-        where: { userId: auth.user.id },
-      });
-      enrolled = keys > 0;
-    }
-    if (!enrolled) {
-      throw new StepUpRequiredError("auth.stepup.mfa_not_enrolled");
-    }
+  // Parity with the cookie path: `requireFreshMfa` refuses an account that holds
+  // no credential able to produce the proof, because a step-up-gated action is
+  // unreachable rather than merely refused there. The Bearer path asks the same
+  // question, with the same `proofSource`, rather than becoming the softer or
+  // the stricter route.
+  if (freshFactor && !(await canProveFreshFactor(auth.user, proofSource))) {
+    throw new StepUpRequiredError("auth.stepup.mfa_not_enrolled");
   }
 
   return {
