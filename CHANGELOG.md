@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.37.28] — 2026-08-24
+
+Eleven parts of a shared record were selectable and invisible. Ticking one and sending the link showed the recipient nothing, while the same link's PDF download carried it.
+
+### Fixed
+
+- A share link now renders every part of the record it carries. Eleven of the seventeen selectable sections reached the page and were never drawn: identity, emergency data, lab results, GLP-1 therapy, logged doses, illness episodes, visits, immunizations, family history, mood and cycle. The data had been arriving all along, from the same aggregator the PDF uses, so someone who ticked "Lab values" had every reason to believe they had shared them and no way to find out otherwise.
+- A section that carries nothing now says which kind of nothing it is. A part that was not selected stays absent entirely, because naming it would itself disclose something. A selected part with no records says so. A selected part whose module the account has switched off says that instead, since the recipient would otherwise read an empty card as an empty life.
+- Logged medication doses reached the FHIR download and neither the page nor the report. The one control whose effect a person could only see by opening the bundle in another program now shows the twenty most recent, with a count of what the cut left out.
+- The doctor report printed the raw translation key for a visit's kind rather than its name, and so did the daily digest's upcoming-visit line. Three surfaces built the label by interpolating an enum member into a key space whose entries are lower case, so a routine appointment read as `encounters.kind.ROUTINE` in a document a practice files and on a phone's lock screen.
+- A lab row that diverges from its reference range now names both windows it was measured against instead of one.
+
+### Changed
+
+- `GET /api/insights/derived` accepts a `windowDays` parameter, so a client can ask for a longer trend than the fixed fourteen days. The ceiling is ninety, which is the last day before the read leaves the bucketed rollup tier for an unbounded scan; beyond it the request is refused rather than quietly clamped. Omitting the parameter changes nothing.
+- The response already carried the two numbers that tell a caller what they actually got, and now says so in the contract: one field for the window that was asked for, another for the history that backed it. A three-week record answering a thirty-day request reports both.
+- The wellness-score value object is modelled in the published API document. It was typed as an open record with prose describing one metric, which is why a client team read the contract, built what they could see, and reported two fields as missing that were in the payload all along. The value shapes that stay opaque are named where the gap is, rather than left to be rediscovered.
+- The share link's report and FHIR downloads are published in the API document alongside their document sibling.
+
 ## [1.37.27] — 2026-08-23
 
 Five things this release fixes have the same shape: a check that was green because it was not checking.
