@@ -13,6 +13,10 @@ import {
   VITALS_BASELINE_TYPES,
   SAME_TIME_BASELINE_TYPES,
 } from "@/lib/insights/derived/registry";
+import {
+  DERIVED_MAX_WINDOW_DAYS,
+  SPARKLINE_MAX_POINTS,
+} from "@/lib/insights/derived/types";
 import { ANALYTICS_RANGES } from "@/lib/analytics/range-delta";
 import { PROVIDER_CHAIN_TYPES } from "@/lib/ai/provider-chain";
 import { PERIOD_DAYS } from "@/lib/insights/narrative/period-narrative";
@@ -144,8 +148,96 @@ export const derivedMetricQuery = z
       .describe(
         "The single measurement type a baseline metric works over. `VITALS_BASELINE` takes one of the eleven vitals (`RESTING_HEART_RATE` through `WEIGHT`; defaults to `RESTING_HEART_RATE`). `SAME_TIME_BASELINE` takes one of the four cumulative day metrics — `ACTIVITY_STEPS`, `ACTIVE_ENERGY_BURNED`, `WALKING_RUNNING_DISTANCE`, `FLIGHTS_CLIMBED`. Ignored by the composite metrics. A type the named metric does not support yields an `insufficient` value rather than a 422, so client metric combinations stay forgiving.",
       ),
+    windowDays: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(DERIVED_MAX_WINDOW_DAYS)
+      .optional()
+      .describe(
+        `Trailing window the metric summarises, in days (1–${DERIVED_MAX_WINDOW_DAYS}). Omit it and each metric keeps its own default — 14 days for the wellness-score trend, 30 for the vitals baselines, 90 for BMI, 180 for cardio fitness, 365 for the vascular-age delta. A value outside the range is a 422, never a silent clamp; the ceiling is where the derived tier stops resolving against DAY rollup buckets and would fall back to an uncapped raw read. Always read \`provenance.windowDays\` back: it is the window the engine ACTUALLY used, and \`HEALTH_SCORE\` composes fixed per-pillar windows and reports the widest of them rather than the one you asked for. The window is a request, not a promise about coverage — \`coverage.historyDays\` is how many days of record actually backed the answer, and it is smaller than \`windowDays\` for anyone whose history is shorter than the window. Not accepted on the batch route, which always runs the engine defaults.`,
+      ),
   })
   .meta({ id: "DerivedMetricQuery" });
+
+/**
+ * The `RECOVERY_SCORE` / `STRESS_SCORE` / `STRAIN_SCORE` value object.
+ *
+ * Modelled here because the free-form `value` record left every derived
+ * metric's payload shape undocumented, and a client reading the DTO could not
+ * see that `series`, `daysInWindow` and `asOf` were already on the wire.
+ *
+ * Nothing `$ref`s it — `value` has to stay an open record while one route
+ * serves eighteen differently-shaped value objects — so it is registered in
+ * the forced-components slot in `../index.ts`, the same slot `Medication` and
+ * `CoachPrefs` use. Its fields are held against the runtime interface by
+ * `derived-wellness-value-contract.test.ts`, so the published shape cannot
+ * drift away from what the engine actually returns.
+ *
+ * STILL OPAQUE, and known to be: the value shapes of `VITALS_BASELINE` (prose
+ * only, in the `value` description), `FITNESS_AGE`, `VASCULAR_AGE_DELTA`,
+ * `HRV_BALANCE`, `BMI`, `SLEEP_SCORE`, `READINESS`, `COINCIDENT_DEVIATION`,
+ * `TRAJECTORY`, `SAME_TIME_BASELINE`, `SIX_MINUTE_WALK_BAND`, `HEALTH_SCORE`
+ * and the three fixed-type baselines. Each is a TypeScript interface next to
+ * its engine under `src/lib/insights/derived/`; modelling them is a schema per
+ * engine and belongs in its own change rather than riding along here.
+ */
+export const wellnessScoreValue = z
+  .object({
+    score: z.number().int().describe("The latest persisted 0–100 score."),
+    band: z
+      .enum(["green", "yellow", "red"])
+      .describe(
+        "Server's verdict on the score. Direction-aware: recovery bands high-is-good, stress and strain invert, so a client must never re-band the number itself.",
+      ),
+    trendDelta: z
+      .number()
+      .int()
+      .nullable()
+      .describe(
+        "Score minus the mean of the earlier days in the window; null when the window holds only one day.",
+      ),
+    daysInWindow: z
+      .number()
+      .int()
+      .describe(
+        "Days that actually carried a score inside the window. Compare against `provenance.windowDays` — a shorter record answers a wide request with fewer days, and this is where that shows.",
+      ),
+    asOf: z.iso
+      .datetime({ offset: true })
+      .describe("`measuredAt` of the latest score."),
+    series: z
+      .array(z.number())
+      .describe(
+        `Trailing scores, oldest → newest, capped at ${SPARKLINE_MAX_POINTS} points however wide the window is. For RECOVERY these are the canonical per-night values: a worn band and the server's own proxy write the same night on different clocks, and the server collapses them to one value per night before this array is built.`,
+      ),
+    anchor: z
+      .enum(["personal", "population"])
+      .nullable()
+      .optional()
+      .describe(
+        "STRAIN only — whether this score was judged against the user's own training history or the cold-start population reference. Null for recovery and stress.",
+      ),
+    components: z
+      .array(
+        z.object({
+          key: z.string().describe("Contributor id, e.g. rhr / hrv / sleep."),
+          value: z
+            .number()
+            .nullable()
+            .describe("0–100 sub-score, null when the input was missing."),
+          weight: z
+            .number()
+            .describe("Effective weight after redistributing missing inputs."),
+        }),
+      )
+      .nullable()
+      .optional()
+      .describe(
+        "RECOVERY only, and only when the canonical value is the server's computed proxy — a device-native recovery percentage is not our blend and carries no decomposition.",
+      ),
+  })
+  .meta({ id: "WellnessScoreValue" });
 
 export const derivedCoverage = z
   .object({
@@ -238,7 +330,7 @@ export const derivedMetricResponse = z
       .record(z.string(), z.unknown())
       .nullable()
       .describe(
-        "Metric-specific value object when status is 'ok' (e.g. { type, center, low, high, spread, sampleDays, k, series } for VITALS_BASELINE, where `series` is the trailing per-day mean values for the inline sparkline); null when 'insufficient'.",
+        "Metric-specific value object when status is 'ok'; null when 'insufficient'. The shape is chosen by `metric`, and the record stays open because one route serves eighteen of them. `RECOVERY_SCORE` / `STRESS_SCORE` / `STRAIN_SCORE` return the `WellnessScoreValue` schema — field-by-field in `components.schemas`, including the `series`, `daysInWindow` and `asOf` a client would otherwise have to discover by inspecting a live payload. `VITALS_BASELINE` returns { type, center, low, high, spread, sampleDays, k, series }, where `series` is the trailing per-day means for the inline sparkline. The remaining metrics' value objects are not modelled here yet; their shapes are TypeScript interfaces beside their engines under `src/lib/insights/derived/`.",
       ),
     coverage: derivedCoverage,
     confidence: derivedConfidence

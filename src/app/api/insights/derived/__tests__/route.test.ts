@@ -89,6 +89,7 @@ import { GET } from "../route";
 import { getSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { computeDerivedMetric } from "@/lib/insights/derived";
+import { DERIVED_MAX_WINDOW_DAYS } from "@/lib/insights/derived/types";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -105,6 +106,14 @@ function makeReq(metric?: string, type?: string): NextRequest {
   const url = new URL("http://localhost/api/insights/derived");
   if (metric !== undefined) url.searchParams.set("metric", metric);
   if (type !== undefined) url.searchParams.set("type", type);
+  return new NextRequest(url);
+}
+
+function makeReqWith(params: Record<string, string>): NextRequest {
+  const url = new URL("http://localhost/api/insights/derived");
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
   return new NextRequest(url);
 }
 
@@ -203,5 +212,61 @@ describe("GET /api/insights/derived", () => {
     expect(body.data?.value).toBeNull();
     expect(body.data?.confidence).toBeNull();
     expect(body.data?.reason).toBe("no_readings_in_window");
+  });
+});
+
+describe("GET /api/insights/derived — windowDays", () => {
+  beforeEach(() => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+  });
+
+  it("threads a caller-supplied window into the compute call", async () => {
+    await callGet(makeReqWith({ metric: "VITALS_BASELINE", windowDays: "30" }));
+    expect(computeDerivedMetric).toHaveBeenCalledWith(
+      expect.objectContaining({ metric: "VITALS_BASELINE", windowDays: 30 }),
+    );
+  });
+
+  it("leaves the window undefined when the caller omits it, so each engine keeps its own default", async () => {
+    await callGet(makeReq("VITALS_BASELINE"));
+    expect(computeDerivedMetric).toHaveBeenCalledWith(
+      expect.objectContaining({ windowDays: undefined }),
+    );
+  });
+
+  it("accepts the ceiling exactly", async () => {
+    const res = await callGet(
+      makeReqWith({
+        metric: "VITALS_BASELINE",
+        windowDays: String(DERIVED_MAX_WINDOW_DAYS),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(computeDerivedMetric).toHaveBeenCalledWith(
+      expect.objectContaining({ windowDays: DERIVED_MAX_WINDOW_DAYS }),
+    );
+  });
+
+  it("422s one day past the ceiling without touching the compute layer", async () => {
+    const res = await callGet(
+      makeReqWith({
+        metric: "VITALS_BASELINE",
+        windowDays: String(DERIVED_MAX_WINDOW_DAYS + 1),
+      }),
+    );
+    expect(res.status).toBe(422);
+    expect(computeDerivedMetric).not.toHaveBeenCalled();
+  });
+
+  it("422s on a zero, negative, fractional or non-numeric window", async () => {
+    for (const windowDays of ["0", "-7", "1.5", "thirty", ""]) {
+      vi.clearAllMocks();
+      vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+      const res = await callGet(
+        makeReqWith({ metric: "VITALS_BASELINE", windowDays }),
+      );
+      expect(res.status, `windowDays=${windowDays}`).toBe(422);
+      expect(computeDerivedMetric).not.toHaveBeenCalled();
+    }
   });
 });

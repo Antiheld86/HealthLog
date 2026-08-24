@@ -4,3 +4,4 @@
  * Part of the OpenAPI route table; aggregated in `../index.ts`.
  */
 export { insightsPaths } from "./paths";
+export { wellnessScoreValue } from "./schemas";
