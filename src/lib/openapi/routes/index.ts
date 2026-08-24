@@ -57,7 +57,7 @@ import { encounterPaths } from "./encounters";
 import { vaccinationPaths } from "./vaccinations";
 import { illnessPaths } from "./illness";
 import { importPaths } from "./import";
-import { insightsPaths } from "./insights";
+import { insightsPaths, wellnessScoreValue } from "./insights";
 import { integrationPaths } from "./integrations";
 import { insightsSignalPaths } from "./insights-signals";
 import { labsPaths } from "./labs";
@@ -200,12 +200,22 @@ export const openApiComponents: NonNullable<ZodOpenApiObject["components"]> = {
   // but every actual consumer is a `.extend()` of it (`PutCoachPrefsRequest`,
   // `CoachPrefsResponse`) — `.extend()` builds a new object, so the base
   // never carries forward to a $ref on its own.
+  //
+  // `WellnessScoreValue` is here for a different reason. `GET
+  // /api/insights/derived` serves eighteen metrics through one envelope, so
+  // its `value` has to stay an open record — no single `$ref` can describe
+  // it. That left every metric's payload undocumented, and a client team read
+  // the DTO and reported two fields as missing that were already on the wire.
+  // Publishing the shape a `$ref` cannot reach is exactly what this slot is
+  // for; the `value` description names it as the shape the three score ids
+  // return.
   schemas: {
     Medication: medicationResource,
     MedicationDoseHistoryImportFatalReason:
       medicationDoseHistoryImportFatalReasonEnum,
     CoachPrefs: coachPrefsSchema,
     MoodTagLayout: moodTagLayout,
+    WellnessScoreValue: wellnessScoreValue,
   },
   // v1.36.0 — the per-request account selector, defined in the sharing route
   // module so that `src/__tests__/acting-account-boundary-guard.test.ts` keeps

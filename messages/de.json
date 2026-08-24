@@ -7710,7 +7710,17 @@
     },
     "downloadPdf": "Als PDF herunterladen",
     "downloadFhir": "Als FHIR herunterladen",
-    "bmiSection": "Body-Mass-Index"
+    "bmiSection": "Body-Mass-Index",
+    "sectionEmpty": "In diesem Link enthalten, hier ist aber nichts erfasst.",
+    "sectionUnavailable": "In diesem Link enthalten, dieser Teil der Akte ist im zugehörigen Konto aber abgeschaltet und enthält deshalb keine Daten.",
+    "lastInjection": "Letzte Injektion",
+    "identity": {
+      "name": "Name"
+    },
+    "doses": {
+      "title": "Erfasste Dosen",
+      "showing": "Angezeigt werden die {shown} jüngsten von {total} erfassten Dosen."
+    }
   },
   "cycle": {
     "symptomCategory": {

@@ -7710,7 +7710,17 @@
     },
     "downloadPdf": "Download as PDF",
     "downloadFhir": "Download as FHIR",
-    "bmiSection": "Body mass index"
+    "bmiSection": "Body mass index",
+    "sectionEmpty": "Included in this link, but nothing is recorded here.",
+    "sectionUnavailable": "Included in this link, but this part of the record is switched off in the account it comes from, so it holds no data.",
+    "lastInjection": "Last injection",
+    "identity": {
+      "name": "Name"
+    },
+    "doses": {
+      "title": "Logged doses",
+      "showing": "Showing the {shown} most recent of {total} logged doses."
+    }
   },
   "cycle": {
     "symptomCategory": {

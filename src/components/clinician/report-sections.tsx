@@ -1,6 +1,7 @@
 /**
  * The health sections of the clinician view, grouped the way the owner chose
- * them.
+ * them, plus the leaf primitives every other section file on this surface is
+ * built from.
  *
  * The measurement list used to be a flat `Object.entries(report.stats)` with a
  * humanised-enum fallback for any type the ten-entry label map missed, so a
@@ -16,15 +17,46 @@ import type { MeasurementType } from "@/generated/prisma/client";
 import type { DoctorReportData } from "@/lib/doctor-report-data";
 import { MEASUREMENT_TYPE_LABEL_KEYS } from "@/lib/measurements/type-label-keys";
 import {
+  isReportLeafId,
   isStructuredLeafId,
   REPORT_GROUPS,
+  type ReportLeafId,
 } from "@/lib/report-selection/catalogue";
 import type { ReportSelection } from "@/lib/report-selection/selection";
 
-type Translate = (
+export type Translate = (
   key: string,
   vars?: Record<string, string | number>,
 ) => string;
+
+/**
+ * The two questions every section on this page asks about a leaf, resolved
+ * once by {@link ClinicianView} and threaded down.
+ *
+ * `admits` is the link's own frozen scope. `unavailable` is the OWNER's module
+ * map — a leaf they did share, in a domain their account has switched off.
+ * They are separate because the recipient must be able to tell the resulting
+ * blank sections apart, and the aggregator cannot: it ANDs the two gates and
+ * returns the same nothing either way.
+ */
+export interface LeafScope {
+  /** Whether the link's frozen selection carries this leaf. */
+  admits(leaf: ReportLeafId): boolean;
+  /** Whether the owner's module switch refuses it despite the selection. */
+  unavailable(leaf: ReportLeafId): boolean;
+}
+
+/** Build the scope the sections read from the two things the page holds. */
+export function makeLeafScope(
+  selection: ReportSelection,
+  unavailableLeaves: readonly ReportLeafId[],
+): LeafScope {
+  const blocked = new Set<ReportLeafId>(unavailableLeaves);
+  return {
+    admits: (leaf) => selection.has(leaf),
+    unavailable: (leaf) => blocked.has(leaf),
+  };
+}
 
 /** Human-readable display per persisted wellness-score type (i18n key suffix). */
 const WELLNESS_KEY: Record<string, string> = {
@@ -33,25 +65,55 @@ const WELLNESS_KEY: Record<string, string> = {
   STRAIN_SCORE: "strain",
 };
 
-/** Render a single labelled stat row. */
-export function StatRow({ label, value }: { label: string; value: string }) {
+/**
+ * Render a single labelled stat row. `emphasise` lifts the weight of the value
+ * for the two or three facts on the emergency card a reader must not have to
+ * hunt for; it is weight only, never colour or alpha.
+ */
+export function StatRow({
+  label,
+  value,
+  emphasise = false,
+}: {
+  label: string;
+  value: string;
+  emphasise?: boolean;
+}) {
   return (
     <div className="border-border/40 flex items-baseline justify-between gap-4 border-b py-2 last:border-0">
       <span className="text-muted-foreground text-sm">{label}</span>
-      <span className="text-sm font-medium tabular-nums">{value}</span>
+      <span
+        className={
+          emphasise
+            ? "text-sm font-semibold tabular-nums"
+            : "text-sm font-medium tabular-nums"
+        }
+      >
+        {value}
+      </span>
     </div>
   );
 }
 
 export function Section({
   title,
+  leaves,
   children,
 }: {
   title: string;
+  /**
+   * The catalogue leaves this card speaks for. Emitted as `data-leaf` so the
+   * structural guard can prove the card is on the page, and so a reader
+   * inspecting the markup can see which control produced it.
+   */
+  leaves?: readonly ReportLeafId[];
   children: React.ReactNode;
 }) {
   return (
-    <section className="border-border bg-card rounded-lg border p-4 md:p-6">
+    <section
+      data-leaf={leaves && leaves.length > 0 ? leaves.join(" ") : undefined}
+      className="border-border bg-card rounded-lg border p-4 md:p-6"
+    >
       <h2 className="mb-3 text-base font-semibold">{title}</h2>
       {children}
     </section>
@@ -59,23 +121,91 @@ export function Section({
 }
 
 /**
+ * A section for one or more catalogue leaves, carrying the three states the
+ * recipient has to be able to tell apart:
+ *
+ *   - **not shared** — the link's frozen selection does not carry the leaf, so
+ *     nothing renders at all. Silence is the honest answer: the recipient was
+ *     never promised this part of the record and is owed no account of it.
+ *   - **shared, switched off** — the leaf is on the link but the owner's
+ *     account has the owning module off, so the aggregator never read it. The
+ *     card renders with a line saying exactly that.
+ *   - **shared, nothing recorded** — the leaf is on the link, the domain is
+ *     live, and the window (or the record) holds nothing. The card renders
+ *     with a line saying exactly that.
+ *
+ * A blank card is never allowed to stand for any of the three. This follows
+ * `AnamnesisSection`, which has always printed "Not recorded" per fact rather
+ * than collapsing, and extends it to the section level.
+ *
+ * The MEASUREMENT groups deliberately do NOT use this: a group card is a
+ * container for up to seventeen leaves, and printing twelve empty group cards
+ * for a link whose window happens to hold no readings is noise, not honesty.
+ * There the group's own absence is legible from the cards that are present.
+ */
+export function LeafSection({
+  t,
+  scope,
+  leaves,
+  title,
+  empty,
+  children,
+}: {
+  t: Translate;
+  scope: LeafScope;
+  leaves: readonly ReportLeafId[];
+  title: string;
+  /** True when the admitted leaves produced no content to render. */
+  empty: boolean;
+  children: React.ReactNode;
+}) {
+  const admitted = leaves.filter((leaf) => scope.admits(leaf));
+  if (admitted.length === 0) return null;
+
+  // Every admitted leaf refused by its module ⇒ the card can carry nothing at
+  // all. When only some are refused the rest still have data to show, and the
+  // card says so by simply showing it.
+  const unavailable = admitted.every((leaf) => scope.unavailable(leaf));
+
+  return (
+    <Section title={title} leaves={admitted}>
+      {unavailable ? (
+        <p className="text-muted-foreground text-sm">
+          {t("clinicianView.sectionUnavailable")}
+        </p>
+      ) : empty ? (
+        <p className="text-muted-foreground text-sm">
+          {t("clinicianView.sectionEmpty")}
+        </p>
+      ) : (
+        children
+      )}
+    </Section>
+  );
+}
+
+/**
  * The measurement groups that carry data, in selection order. The aggregator
- * has already applied the selection, so a type missing from `report.stats` is
- * one that was withheld or has no reading.
+ * has already applied the selection; the scope is re-asked here anyway, so a
+ * payload assembled by some future caller that forgot its gate still cannot
+ * put a withheld reading in front of a recipient.
  */
 export function MeasurementGroups({
   t,
   report,
+  scope,
   fmtNum,
 }: {
   t: Translate;
   report: DoctorReportData;
+  scope: LeafScope;
   fmtNum: (n: number) => number;
 }) {
   const groups = REPORT_GROUPS.map((group) => ({
     labelKey: group.labelKey,
     rows: group.leaves
       .filter((leaf): leaf is MeasurementType => !isStructuredLeafId(leaf))
+      .filter((leaf) => scope.admits(leaf))
       .map((type) => ({ type, stat: report.stats[type] }))
       .filter((row) => row.stat !== undefined && row.stat.count > 0),
   })).filter((group) => group.rows.length > 0);
@@ -85,7 +215,11 @@ export function MeasurementGroups({
   return (
     <>
       {groups.map((group) => (
-        <Section key={group.labelKey} title={t(group.labelKey)}>
+        <Section
+          key={group.labelKey}
+          title={t(group.labelKey)}
+          leaves={group.rows.map((row) => row.type)}
+        >
           {group.rows.map(({ type, stat }) => (
             <StatRow
               key={type}
@@ -104,22 +238,34 @@ export function MeasurementGroups({
   );
 }
 
-/** Per-context glucose stats. Present only when the glucose panel was chosen. */
+/**
+ * Per-context glucose stats. The heading used to read "Lab values", which was
+ * the wrong name for it even before the record's actual lab results reached
+ * this page; it is the glucose group's own label now, and "Lab values" belongs
+ * to the section that carries them.
+ */
 export function GlucoseSection({
   t,
   report,
+  scope,
   fmtNum,
 }: {
   t: Translate;
   report: DoctorReportData;
+  scope: LeafScope;
   fmtNum: (n: number) => number;
 }) {
   const entries = Object.entries(report.glucoseStats).filter(
     ([, s]) => s.count > 0,
   );
-  if (entries.length === 0) return null;
   return (
-    <Section title={t("clinicianView.labs")}>
+    <LeafSection
+      t={t}
+      scope={scope}
+      leaves={["GLUCOSE_PANEL"]}
+      title={t("reportSelection.groupGlucose")}
+      empty={entries.length === 0}
+    >
       {entries.map(([ctx, s]) => (
         <StatRow
           key={ctx}
@@ -132,7 +278,7 @@ export function GlucoseSection({
           })}
         />
       ))}
-    </Section>
+    </LeafSection>
   );
 }
 
@@ -140,21 +286,28 @@ export function GlucoseSection({
 export function MedicationsSection({
   t,
   report,
-  selection,
+  scope,
 }: {
   t: Translate;
   report: DoctorReportData;
-  selection: ReportSelection;
+  scope: LeafScope;
 }) {
-  const medications = report.medications ?? [];
-  const complianceOn = selection.has("MEDICATION_COMPLIANCE");
+  const medications = scope.admits("MEDICATION_LIST")
+    ? (report.medications ?? [])
+    : [];
+  const complianceOn = scope.admits("MEDICATION_COMPLIANCE");
   const complianceEntries = complianceOn
     ? Object.entries(report.compliance).filter(([, c]) => c.total > 0)
     : [];
-  if (medications.length === 0 && complianceEntries.length === 0) return null;
 
   return (
-    <Section title={t("clinicianView.medications")}>
+    <LeafSection
+      t={t}
+      scope={scope}
+      leaves={["MEDICATION_LIST", "MEDICATION_COMPLIANCE"]}
+      title={t("clinicianView.medications")}
+      empty={medications.length === 0 && complianceEntries.length === 0}
+    >
       {medications.map((med) => {
         const comp = report.compliance[med.name];
         const rate =
@@ -184,7 +337,7 @@ export function MedicationsSection({
             })}
           />
         ))}
-    </Section>
+    </LeafSection>
   );
 }
 
@@ -192,17 +345,22 @@ export function MedicationsSection({
 export function AllergiesSection({
   t,
   report,
-  selection,
+  scope,
 }: {
   t: Translate;
   report: DoctorReportData;
-  selection: ReportSelection;
+  scope: LeafScope;
 }) {
-  const allergies = selection.has("ALLERGIES") ? report.allergies : null;
-  if (!allergies || allergies.length === 0) return null;
+  const allergies = report.allergies ?? [];
 
   return (
-    <Section title={t("doctorReport.allergiesTitle")}>
+    <LeafSection
+      t={t}
+      scope={scope}
+      leaves={["ALLERGIES"]}
+      title={t("doctorReport.allergiesTitle")}
+      empty={allergies.length === 0}
+    >
       <div className="space-y-4">
         {allergies.map((allergy, index) => (
           <div
@@ -244,7 +402,7 @@ export function AllergiesSection({
           </div>
         ))}
       </div>
-    </Section>
+    </LeafSection>
   );
 }
 
@@ -256,14 +414,13 @@ export function AllergiesSection({
 export function AnamnesisSection({
   t,
   report,
-  selection,
+  scope,
 }: {
   t: Translate;
   report: DoctorReportData;
-  selection: ReportSelection;
+  scope: LeafScope;
 }) {
-  const anamnesis = selection.has("ANAMNESIS") ? report.anamnesis : null;
-  if (!anamnesis) return null;
+  const anamnesis = report.anamnesis ?? null;
 
   const absent = t("doctorReport.anamnesisNotRecorded");
   const unreadable = t("doctorReport.anamnesisUnreadable");
@@ -271,33 +428,39 @@ export function AnamnesisSection({
     kind: "SMOKING_STATUS" | "ALCOHOL_PATTERN" | "SHIFT_SCHEDULE",
     value: string | null,
   ): string => {
-    if (anamnesis.unreadableFacts.includes(kind)) return unreadable;
+    if (anamnesis?.unreadableFacts.includes(kind)) return unreadable;
     return value ? t(`records.profileFacts.values.${kind}.${value}`) : absent;
   };
 
   return (
-    <Section title={t("doctorReport.anamnesisTitle")}>
+    <LeafSection
+      t={t}
+      scope={scope}
+      leaves={["ANAMNESIS"]}
+      title={t("doctorReport.anamnesisTitle")}
+      empty={anamnesis === null}
+    >
       <StatRow
         label={t("doctorReport.anamnesisConditions")}
         value={
-          anamnesis.conditionsUnreadable
+          anamnesis?.conditionsUnreadable
             ? unreadable
-            : (anamnesis.conditions ?? absent)
+            : (anamnesis?.conditions ?? absent)
         }
       />
       <StatRow
         label={t("doctorReport.anamnesisSmoking")}
-        value={factValue("SMOKING_STATUS", anamnesis.smokingStatus)}
+        value={factValue("SMOKING_STATUS", anamnesis?.smokingStatus ?? null)}
       />
       <StatRow
         label={t("doctorReport.anamnesisAlcohol")}
-        value={factValue("ALCOHOL_PATTERN", anamnesis.alcoholPattern)}
+        value={factValue("ALCOHOL_PATTERN", anamnesis?.alcoholPattern ?? null)}
       />
       <StatRow
         label={t("doctorReport.anamnesisShiftSchedule")}
-        value={factValue("SHIFT_SCHEDULE", anamnesis.shiftSchedule)}
+        value={factValue("SHIFT_SCHEDULE", anamnesis?.shiftSchedule ?? null)}
       />
-    </Section>
+    </LeafSection>
   );
 }
 
@@ -308,16 +471,26 @@ export function AnamnesisSection({
 export function WellnessSection({
   t,
   report,
+  scope,
   fmtNum,
 }: {
   t: Translate;
   report: DoctorReportData;
+  scope: LeafScope;
   fmtNum: (n: number) => number;
 }) {
-  const wellness = report.wellnessScores?.filter((s) => s.count > 0) ?? [];
+  const wellness =
+    report.wellnessScores?.filter(
+      (s) => s.count > 0 && isReportLeafId(s.type) && scope.admits(s.type),
+    ) ?? [];
+  // A measurement-backed card, so it collapses rather than printing an
+  // absence line — see the note on `LeafSection`.
   if (wellness.length === 0) return null;
   return (
-    <section className="border-warning/50 bg-warning/5 rounded-lg border border-dashed p-4 md:p-6">
+    <section
+      data-leaf={wellness.map((s) => s.type).join(" ")}
+      className="border-warning/50 bg-warning/5 rounded-lg border border-dashed p-4 md:p-6"
+    >
       <h2 className="text-muted-foreground mb-1 text-base font-semibold">
         {t("clinicianView.wellness.title")}
       </h2>

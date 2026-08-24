@@ -336,8 +336,14 @@ const UNPUBLISHED: Readonly<Record<string, Exemption>> = {
     kind: "providerWebhook",
     methods: ["GET", "POST"],
   },
-  "/c/{token}/fhir": { kind: "shareLink", methods: ["GET"] },
-  "/c/{token}/report.pdf": { kind: "shareLink", methods: ["GET"] },
+  // `/c/{token}/report.pdf` and `/c/{token}/fhir` were exempt here as
+  // `shareLink` and are published now. That reason holds for the page a
+  // recipient opens; it does not hold for two routes that serve machine
+  // formats a practice files into another system, which is precisely the
+  // audience a contract has. `/c/{token}/d/{id}` was published all along, one
+  // route away in the same tree, which is what makes the exemption read as an
+  // oversight rather than a decision. The `shareLink` reason stays: the next
+  // recipient-facing route is likelier to want it than not.
   "/.well-known/apple-app-site-association": {
     kind: "wellKnown",
     methods: ["GET"],
@@ -459,6 +465,29 @@ describe("every route is published, unpublished, or retired", () => {
     expect(
       stale,
       "an exemption for a route that is gone hides the next route that needs one",
+    ).toEqual([]);
+  });
+
+  it("the exemption list names routes that are not published after all", () => {
+    // The other way an entry goes stale, and the one this list had: a route
+    // gets published and its exemption stays behind, so the list reads as
+    // larger than it is and the reason attached to it looks load-bearing when
+    // nothing rests on it. Two share-link routes sat here in exactly that
+    // state, beside a published sibling in the same tree.
+    const table = openApiPaths as Record<string, Record<string, unknown>>;
+    const redundant: string[] = [];
+
+    for (const [path, exempt] of Object.entries(UNPUBLISHED)) {
+      for (const method of exempt.methods) {
+        if (method.toLowerCase() in (table[path] ?? {})) {
+          redundant.push(`${method} ${path}`);
+        }
+      }
+    }
+
+    expect(
+      redundant,
+      "these operations are published AND exempt, so the exemption states a reason nothing depends on",
     ).toEqual([]);
   });
 

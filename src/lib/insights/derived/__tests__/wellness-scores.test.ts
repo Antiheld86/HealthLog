@@ -21,6 +21,7 @@ import {
   bandWellnessScore,
   type WellnessScoreValue,
 } from "../wellness-scores";
+import { SPARKLINE_MAX_POINTS } from "../types";
 
 const PROFILE = { ageYears: 40, sex: "MALE" as const };
 const NOW = new Date("2026-06-02T08:00:00Z");
@@ -226,6 +227,77 @@ describe("computeWellnessScore", () => {
       expect((r.value as WellnessScoreValue).components).toBeNull();
     }
     expect(readinessMock).not.toHaveBeenCalled();
+  });
+
+  it("a widened window still collapses every night through the canonical resolver", async () => {
+    // The wake-day trap: a worn band stamps the wake morning, the COMPUTED
+    // proxy stamps the night that ended, so ONE night arrives as two rows a
+    // calendar day apart. Only `resolveCanonicalRecovery` pairs them. With the
+    // window fixed at 14 days a bypass would be invisible in most fixtures, so
+    // this seeds FORTY such nights and asks for sixty days.
+    const NIGHTS = 40;
+    const rows: Array<{ value: number; measuredAt: Date; source: string }> = [];
+    for (let back = 0; back < NIGHTS; back += 1) {
+      const wake = new Date("2026-06-02T06:00:00Z");
+      wake.setUTCDate(wake.getUTCDate() - back);
+      const priorNoon = new Date("2026-06-01T12:00:00Z");
+      priorNoon.setUTCDate(priorNoon.getUTCDate() - back);
+      rows.push({ value: 80, measuredAt: wake, source: "WHOOP" });
+      rows.push({ value: 50, measuredAt: priorNoon, source: "COMPUTED" });
+    }
+    // The reader orders newest-first; mirror that.
+    rows.sort((a, b) => b.measuredAt.getTime() - a.measuredAt.getTime());
+    findMany.mockResolvedValue(rows);
+
+    const r = await computeWellnessScore("RECOVERY_SCORE", "u1", PROFILE, {
+      now: NOW,
+      windowDays: 60,
+    });
+
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    const v = r.value as WellnessScoreValue;
+    // Forty nights, not eighty rows — the resolver ran over the whole window,
+    // not just its head.
+    expect(v.daysInWindow).toBe(NIGHTS);
+    expect(r.coverage.historyDays).toBe(NIGHTS);
+    // Every canonical row is the WHOOP 80, so the trend against the prior
+    // nights is flat. A bypass would leave the COMPUTED 50s in the mean and
+    // push this to roughly +15.
+    expect(v.score).toBe(80);
+    expect(v.trendDelta).toBe(0);
+    expect(v.series.every((point) => point === 80)).toBe(true);
+    // The sparkline stays capped however wide the window gets.
+    expect(v.series.length).toBe(SPARKLINE_MAX_POINTS);
+    // The read itself honoured the sixty days.
+    const where = findMany.mock.calls[0][0].where as {
+      measuredAt: { gte: Date };
+    };
+    const spanDays = Math.round(
+      (NOW.getTime() - where.measuredAt.gte.getTime()) / (24 * 60 * 60 * 1000),
+    );
+    expect(spanDays).toBe(60);
+  });
+
+  it("reports the requested window and the days actually covered as two different numbers", async () => {
+    // Three weeks of record, thirty days asked for. The window is a request,
+    // not a promise: provenance carries what was asked, coverage carries what
+    // backed the answer.
+    const rows = Array.from({ length: 21 }, (_, back) => {
+      const at = new Date("2026-06-01T12:00:00Z");
+      at.setUTCDate(at.getUTCDate() - back);
+      return { value: 60, measuredAt: at, source: "COMPUTED" };
+    });
+    findMany.mockResolvedValue(rows);
+    const r = await computeWellnessScore("STRESS_SCORE", "u1", PROFILE, {
+      now: NOW,
+      windowDays: 30,
+    });
+    expect(r.status).toBe("ok");
+    if (r.status !== "ok") return;
+    expect(r.provenance.windowDays).toBe(30);
+    expect(r.coverage.historyDays).toBe(21);
+    expect((r.value as WellnessScoreValue).daysInWindow).toBe(21);
   });
 
   it("STRESS still hard-filters to the COMPUTED source", async () => {

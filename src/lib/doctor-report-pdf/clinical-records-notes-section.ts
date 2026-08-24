@@ -1,5 +1,7 @@
 import type { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import type { EncounterKind } from "@/generated/prisma/client";
+import { encounterKindLabelKey } from "../encounters/kind-label";
 import {
   classifyReferenceRange,
   formatReferenceRange,
@@ -239,7 +241,10 @@ export function buildClinicalRecordsNotesSection(
       [visit.practitionerName, visit.practitionerSpecialty]
         .filter(Boolean)
         .join(" · ") || "—",
-      t(`encounters.kind.${visit.kind}`),
+      // Through the key resolver: the enum is `ROUTINE` and the bundle leaf is
+      // `routine`, so the interpolated key printed raw dot notation into the
+      // clinical document.
+      t(encounterKindLabelKey(visit.kind as EncounterKind)),
       visit.reason ?? "—",
       visit.outcome ?? "—",
       visit.conditionLabels.length > 0 ? visit.conditionLabels.join(", ") : "—",

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HealthLog API
-  version: 1.37.27
+  version: 1.37.28
   description: >-
     Self-hosted personal-health-tracking PWA — public API surface for the iOS native client and external ingest.
 
@@ -989,6 +989,91 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "429":
           description: Per-link serve rate limit exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /c/{token}/report.pdf:
+    get:
+      tags:
+        - Export
+      summary: Download a share link's record as the clinical PDF (public)
+      description: "Anonymous, no-session download of exactly the record the page at `/c/{token}` renders — the same frozen
+        selection, resolved through the same `selectionFromStoredBlob`, so the file can never be wider than the page
+        above it. The raw `hls_` share token in the path is the ONLY credential; a passphrase-protected link
+        additionally requires the short-lived, token-scoped unlock cookie the browser already holds after unlocking.
+        Unknown / revoked / expired token, a locked gate, and a documents-only link (which carries no record at all) all
+        collapse to the same flat 404. Charts are embedded. Dates print in the OWNER's timezone and clock preference,
+        not the reader's, so a practice west of the record's own zone files a document dated the way the page it came
+        from was. The insurance number is never carried: the `INSURANCE` leaf is refused at share-link creation.
+        Rate-limited per link at 20/h — its own bucket, because generating a report is far more expensive than serving a
+        stored blob."
+      parameters:
+        - in: path
+          name: token
+          schema:
+            type: string
+            description: Raw `hls_` share token.
+          required: true
+          description: Raw `hls_` share token.
+      responses:
+        "200":
+          description: "The report as `application/pdf`, `Content-Disposition: attachment`."
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Flat 404 for every miss class (unknown / revoked / expired token, locked passphrase gate, or a
+            documents-only link with no record behind it).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "429":
+          description: Per-link report-download rate limit exceeded (20/h).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /c/{token}/fhir:
+    get:
+      tags:
+        - Export
+      summary: Download a share link's record as an HL7 FHIR R4 Bundle (public)
+      description: "The machine-readable twin of `/c/{token}/report.pdf`: the same gate, the same frozen selection, the same
+        flat 404 for every miss class, the same 20/h per-link bucket. Returns an HL7 FHIR R4 **document** Bundle as a
+        download. This is a DOWNLOAD, not a FHIR REST face — a share token authenticates nothing beyond these three
+        routes and `/c/{token}/d/{id}`, and it never becomes a Bearer credential against `/api/fhir/*`. Allergies and
+        family history are deliberately absent from the bundle: they reach the owner's own export through a read this
+        surface does not perform, so the bundle carries the aggregated payload the page renders and nothing beside it.
+        No insurance number, for the same structural reason as the PDF."
+      parameters:
+        - in: path
+          name: token
+          schema:
+            type: string
+            description: Raw `hls_` share token.
+          required: true
+          description: Raw `hls_` share token.
+      responses:
+        "200":
+          description: "FHIR R4 document Bundle (`application/fhir+json`), `Content-Disposition: attachment`."
+          content:
+            application/fhir+json:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Flat 404 for every miss class (unknown / revoked / expired token, locked passphrase gate, or a
+            documents-only link with no record behind it).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "429":
+          description: Per-link report-download rate limit exceeded (20/h).
           content:
             application/json:
               schema:
@@ -10416,7 +10501,9 @@ paths:
         coincident-deviation flag). One generic route over a closed registry enum; an unknown `metric` 422s. Pure
         compute over the rollup tier with a per-type live fallback on a coverage miss — no LLM call, no narrative, no
         cache table. Returns the flat `Derived<T>` union so the native client can decode one stable shape and combine
-        values across metrics. Auth via cookie or Bearer.
+        values across metrics. `windowDays` widens or narrows the trailing window a metric summarises;
+        `provenance.windowDays` always reports the window actually used and `coverage.historyDays` the days that
+        actually backed it. Auth via cookie or Bearer.
       parameters:
         - in: query
           name: metric
@@ -10478,6 +10565,30 @@ paths:
             the four cumulative day metrics — `ACTIVITY_STEPS`, `ACTIVE_ENERGY_BURNED`, `WALKING_RUNNING_DISTANCE`,
             `FLIGHTS_CLIMBED`. Ignored by the composite metrics. A type the named metric does not support yields an
             `insufficient` value rather than a 422, so client metric combinations stay forgiving.
+        - in: query
+          name: windowDays
+          schema:
+            description: "Trailing window the metric summarises, in days (1–90). Omit it and each metric keeps its own default — 14
+              days for the wellness-score trend, 30 for the vitals baselines, 90 for BMI, 180 for cardio fitness, 365
+              for the vascular-age delta. A value outside the range is a 422, never a silent clamp; the ceiling is where
+              the derived tier stops resolving against DAY rollup buckets and would fall back to an uncapped raw read.
+              Always read `provenance.windowDays` back: it is the window the engine ACTUALLY used, and `HEALTH_SCORE`
+              composes fixed per-pillar windows and reports the widest of them rather than the one you asked for. The
+              window is a request, not a promise about coverage — `coverage.historyDays` is how many days of record
+              actually backed the answer, and it is smaller than `windowDays` for anyone whose history is shorter than
+              the window. Not accepted on the batch route, which always runs the engine defaults."
+            type: integer
+            minimum: 1
+            maximum: 90
+          description: "Trailing window the metric summarises, in days (1–90). Omit it and each metric keeps its own default — 14
+            days for the wellness-score trend, 30 for the vitals baselines, 90 for BMI, 180 for cardio fitness, 365 for
+            the vascular-age delta. A value outside the range is a 422, never a silent clamp; the ceiling is where the
+            derived tier stops resolving against DAY rollup buckets and would fall back to an uncapped raw read. Always
+            read `provenance.windowDays` back: it is the window the engine ACTUALLY used, and `HEALTH_SCORE` composes
+            fixed per-pillar windows and reports the widest of them rather than the one you asked for. The window is a
+            request, not a promise about coverage — `coverage.historyDays` is how many days of record actually backed
+            the answer, and it is smaller than `windowDays` for anyone whose history is shorter than the window. Not
+            accepted on the batch route, which always runs the engine defaults."
       responses:
         "200":
           description: The flat derived-metric value (ok or insufficient).
@@ -20207,9 +20318,12 @@ components:
       description: "v1.11.0 — owner request to mint a clinician share link to their own health record. `expiresAt` is required
         (absolute ISO instant) and capped at 90 days. `rangeStart`/`rangeEnd` freeze the reporting window (rangeEnd null
         = rolling). `selection` freezes which record leaves the link may serve, and omitting it means an empty scope
-        rather than a default one. `documentIds` freezes the documents the link carries; `documentOnly` mints a share
-        that serves those documents and no record scope at all. A share link serves the rendered page and the documents
-        frozen onto it — there is no FHIR or other machine-readable face behind a share token. Strict: unknown keys
+        rather than a default one. The `INSURANCE` leaf is refused outright (422, naming it): the share view has never
+        decrypted the insurance number, and refusing it here makes that structural. `documentIds` freezes the documents
+        the link carries; `documentOnly` mints a share that serves those documents and no record scope at all. A share
+        link serves the rendered page, the documents frozen onto it, and the same record as a PDF or FHIR Bundle
+        download under the token (`/c/{token}/report.pdf`, `/c/{token}/fhir`) — all behind the same gate and the same
+        frozen selection. A share token is not a Bearer credential and reaches no other route. Strict: unknown keys
         422."
     EncryptedExportRequest:
       type: object
@@ -51988,9 +52102,14 @@ components:
                 type: string
               additionalProperties: {}
             - type: "null"
-          description: Metric-specific value object when status is 'ok' (e.g. { type, center, low, high, spread, sampleDays, k,
-            series } for VITALS_BASELINE, where `series` is the trailing per-day mean values for the inline sparkline);
-            null when 'insufficient'.
+          description: Metric-specific value object when status is 'ok'; null when 'insufficient'. The shape is chosen by
+            `metric`, and the record stays open because one route serves eighteen of them. `RECOVERY_SCORE` /
+            `STRESS_SCORE` / `STRAIN_SCORE` return the `WellnessScoreValue` schema — field-by-field in
+            `components.schemas`, including the `series`, `daysInWindow` and `asOf` a client would otherwise have to
+            discover by inspecting a live payload. `VITALS_BASELINE` returns { type, center, low, high, spread,
+            sampleDays, k, series }, where `series` is the trailing per-day means for the inline sparkline. The
+            remaining metrics' value objects are not modelled here yet; their shapes are TypeScript interfaces beside
+            their engines under `src/lib/insights/derived/`.
         coverage:
           $ref: "#/components/schemas/DerivedCoverage"
         confidence:
@@ -68041,6 +68160,89 @@ components:
         group at that index, un-placed tags follow in their home category. Display-only — placements referencing
         hidden/archived/unknown keys are silently dropped at read time. Both fields optional: PUT merges
         preserve-when-absent."
+    WellnessScoreValue:
+      type: object
+      properties:
+        score:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: The latest persisted 0–100 score.
+        band:
+          type: string
+          enum:
+            - green
+            - yellow
+            - red
+          description: "Server's verdict on the score. Direction-aware: recovery bands high-is-good, stress and strain invert, so
+            a client must never re-band the number itself."
+        trendDelta:
+          anyOf:
+            - type: integer
+              minimum: -9007199254740991
+              maximum: 9007199254740991
+            - type: "null"
+          description: Score minus the mean of the earlier days in the window; null when the window holds only one day.
+        daysInWindow:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: Days that actually carried a score inside the window. Compare against `provenance.windowDays` — a shorter
+            record answers a wide request with fewer days, and this is where that shows.
+        asOf:
+          type: string
+          format: date-time
+          pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: "`measuredAt` of the latest score."
+        series:
+          type: array
+          items:
+            type: number
+          description: "Trailing scores, oldest → newest, capped at 30 points however wide the window is. For RECOVERY these are
+            the canonical per-night values: a worn band and the server's own proxy write the same night on different
+            clocks, and the server collapses them to one value per night before this array is built."
+        anchor:
+          description: STRAIN only — whether this score was judged against the user's own training history or the cold-start
+            population reference. Null for recovery and stress.
+          anyOf:
+            - type: string
+              enum:
+                - personal
+                - population
+            - type: "null"
+        components:
+          description: RECOVERY only, and only when the canonical value is the server's computed proxy — a device-native recovery
+            percentage is not our blend and carries no decomposition.
+          anyOf:
+            - type: array
+              items:
+                type: object
+                properties:
+                  key:
+                    type: string
+                    description: Contributor id, e.g. rhr / hrv / sleep.
+                  value:
+                    anyOf:
+                      - type: number
+                      - type: "null"
+                    description: 0–100 sub-score, null when the input was missing.
+                  weight:
+                    type: number
+                    description: Effective weight after redistributing missing inputs.
+                required:
+                  - key
+                  - value
+                  - weight
+                additionalProperties: false
+            - type: "null"
+      required:
+        - score
+        - band
+        - trendDelta
+        - daysInWindow
+        - asOf
+        - series
+      additionalProperties: false
   parameters:
     AccountSelector:
       name: X-HealthLog-Account

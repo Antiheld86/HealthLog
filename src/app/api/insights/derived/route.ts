@@ -1,7 +1,7 @@
 /**
  * v1.10.0 — generic derived-wellness-metric route.
  *
- * `GET /api/insights/derived?metric=<DERIVED_METRIC_ID>[&type=<MeasurementType>]`
+ * `GET /api/insights/derived?metric=<DERIVED_METRIC_ID>[&type=<MeasurementType>][&windowDays=N]`
  * serves the compute-once `Derived<T>` value for any metric registered
  * in `derived/registry.ts`. Mirrors the v1.8.7.1 `metric-status` route
  * precedent: `apiHandler` wrapper, Zod `safeParse` on the query, a closed
@@ -33,6 +33,7 @@ import {
   DERIVED_METRIC_IDS,
   type DerivedMetricId,
 } from "@/lib/insights/derived";
+import { DERIVED_MAX_WINDOW_DAYS } from "@/lib/insights/derived/types";
 import { resolveDerivedAssessment } from "@/lib/insights/derived/derived-assessment-ai";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
 
@@ -66,6 +67,20 @@ const derivedQuerySchema = z.object({
   // the dispatcher; an unsupported value yields an `insufficient`, not a
   // 422, so the contract stays forgiving for iOS combinations.
   type: z.string().optional(),
+  // Trailing window override, in days. Absent means "engine default" — each
+  // compute keeps its own (14 for the wellness trend, 30 for the baselines, a
+  // year for vascular age), so omitting the parameter changes nothing. The
+  // ceiling is the point past which the derived engines stop resolving against
+  // DAY rollup buckets and degrade to an uncapped raw read; the reasoning is
+  // written out at `DERIVED_MAX_WINDOW_DAYS`. Out of range is a 422 rather
+  // than a silent clamp: a caller that asked for a year should learn that it
+  // is not on offer, not read back a number it did not choose.
+  windowDays: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(DERIVED_MAX_WINDOW_DAYS)
+    .optional(),
 });
 
 export const GET = apiHandler(async (request: NextRequest) => {
@@ -88,6 +103,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const parsed = derivedQuerySchema.safeParse({
     metric: request.nextUrl.searchParams.get("metric"),
     type: request.nextUrl.searchParams.get("type") ?? undefined,
+    windowDays: request.nextUrl.searchParams.get("windowDays") ?? undefined,
   });
   if (!parsed.success) {
     annotate({
@@ -113,11 +129,21 @@ export const GET = apiHandler(async (request: NextRequest) => {
     userId: user.id,
     profile,
     type: parsed.data.type ?? null,
+    windowDays: parsed.data.windowDays,
   });
 
   annotate({
     action: { name: "insights.derived" },
-    meta: { metric, status: derived.status },
+    meta: {
+      metric,
+      status: derived.status,
+      // Both halves of the window story: what the caller asked for (null when
+      // they asked for nothing) and what the engine actually read. They differ
+      // for a metric that composes fixed per-pillar windows, and a dashboard
+      // that sees them drift apart is looking at a real answer, not a bug.
+      window_days_requested: parsed.data.windowDays ?? null,
+      window_days_effective: derived.provenance.windowDays,
+    },
   });
 
   // v1.13.2 — additive per-score assessment: a short "why is this score what
