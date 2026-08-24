@@ -6,22 +6,51 @@
  * read-only clinical summary. NO client hooks, NO session, NO AI or coach, NO
  * markdown — every value renders as escaped React text.
  *
- * Layout: provenance header (with the two machine-format downloads) → the
- * measurement groups in selection order → glucose → medications and adherence
- * → a FENCED, muted wellness card carrying the load-bearing "descriptive, not
- * a clinical assessment" disclaimer → the attached documents.
+ * Layout follows the catalogue's own group order, which is also the PDF's, so
+ * the picker a person ticked, the page their doctor opens and the file that
+ * doctor files all describe the record in the same sequence: the emergency
+ * sheet first (it is page one of the PDF for the same reason) → personal
+ * details → the measurement groups → glucose → lab values → medications, GLP-1
+ * and the dose log → conditions, visits, immunizations, allergies → family
+ * history, health profile, mood, cycle → a FENCED, muted wellness card
+ * carrying the load-bearing "descriptive, not a clinical assessment"
+ * disclaimer → the attached documents.
  *
- * The section components live in `./report-sections`, the document list in
- * `./documents-list`, the downloads in `./download-actions`.
+ * Every card is gated by the link's frozen selection through {@link LeafScope}
+ * rather than by the presence of its data. The two are not the same question:
+ * the aggregator already applies the selection, but a section that reads only
+ * "is there data" trusts an upstream gate it cannot see, and it cannot tell a
+ * withheld leaf from an empty one. `LeafScope` also carries the OWNER's module
+ * state, which is the third case — shared, but the domain is switched off on
+ * the account it came from.
+ *
+ * The section components live in `./report-sections` (measurements, glucose,
+ * medications, allergies, health profile, wellness), `./identity-sections`,
+ * `./history-sections`, `./therapy-sections` and `./sensitive-sections`; the
+ * document list in `./documents-list`, the downloads in `./download-actions`.
  */
 import type { DoctorReportData } from "@/lib/doctor-report-data";
 import { makeFormatters } from "@/lib/format-locale";
 import type { Locale } from "@/lib/i18n/config";
 import type { ShareViewDocument } from "@/lib/clinician-share/share-view-data";
+import type { ReportLeafId } from "@/lib/report-selection/catalogue";
 import type { ReportSelection } from "@/lib/report-selection/selection";
 import { PageHeader } from "@/components/ui/page-header";
 import { DocumentEntry } from "./documents-list";
 import { ShareDownloadActions } from "./download-actions";
+import { EmergencySection, PatientIdentitySection } from "./identity-sections";
+import {
+  IllnessSection,
+  ImmunizationsSection,
+  LabResultsSection,
+  VisitsSection,
+} from "./history-sections";
+import { DoseLogSection, Glp1Section } from "./therapy-sections";
+import {
+  CycleSection,
+  FamilyHistorySection,
+  MoodSection,
+} from "./sensitive-sections";
 import {
   AllergiesSection,
   AnamnesisSection,
@@ -31,6 +60,7 @@ import {
   Section,
   StatRow,
   WellnessSection,
+  makeLeafScope,
 } from "./report-sections";
 
 type Translate = (
@@ -52,6 +82,15 @@ interface ClinicianViewProps {
   report: DoctorReportData | null;
   /** The link's frozen selection, resolved. */
   selection: ReportSelection;
+  /**
+   * Leaves the link DOES carry whose owning module is switched off on the
+   * owner's account. The payload cannot express this — the aggregator ANDs the
+   * selection and the module map and returns the same nothing either way — so
+   * it arrives beside the payload and the affected cards say so in words
+   * rather than rendering as an empty section the recipient would read as "no
+   * data recorded".
+   */
+  unavailableLeaves?: readonly ReportLeafId[];
   /**
    * A documents-only link. Hides the reporting-period line (there is no
    * report) and, together with a `null` report, keeps every health section off
@@ -81,6 +120,7 @@ export function ClinicianView({
   expiresAt,
   report,
   selection,
+  unavailableLeaves = [],
   documents = [],
   documentOnly = false,
   token = "",
@@ -91,7 +131,9 @@ export function ClinicianView({
   // guards the zone and falls back to Europe/Berlin on garbage/absence.
   const fmt = makeFormatters(locale, timezone);
   const fmtDate = (iso: string) => fmt.date(new Date(iso));
+  const fmtDateTime = (iso: string) => fmt.dateTime(new Date(iso));
   const fmtNum = (n: number) => Math.round(n * 100) / 100;
+  const scope = makeLeafScope(selection, unavailableLeaves);
 
   return (
     <main
@@ -123,20 +165,107 @@ export function ClinicianView({
       <div className="space-y-4">
         {report ? (
           <>
-            <MeasurementGroups t={t} report={report} fmtNum={fmtNum} />
-            {report.bmi !== null && report.bmi !== undefined ? (
-              <Section title={t("clinicianView.bmiSection")}>
+            {/* ── identity ─────────────────────────────────────────── */}
+            <EmergencySection t={t} report={report} scope={scope} />
+            <PatientIdentitySection
+              t={t}
+              report={report}
+              scope={scope}
+              fmtDate={fmtDate}
+            />
+
+            {/* ── measurements ─────────────────────────────────────── */}
+            <MeasurementGroups
+              t={t}
+              report={report}
+              scope={scope}
+              fmtNum={fmtNum}
+            />
+            {report.bmi !== null &&
+            report.bmi !== undefined &&
+            scope.admits("BODY_MASS_INDEX") ? (
+              <Section
+                title={t("clinicianView.bmiSection")}
+                leaves={["BODY_MASS_INDEX"]}
+              >
                 <StatRow
                   label={t("clinicianView.bmi")}
                   value={String(fmtNum(report.bmi))}
                 />
               </Section>
             ) : null}
-            <GlucoseSection t={t} report={report} fmtNum={fmtNum} />
-            <MedicationsSection t={t} report={report} selection={selection} />
-            <AllergiesSection t={t} report={report} selection={selection} />
-            <AnamnesisSection t={t} report={report} selection={selection} />
-            <WellnessSection t={t} report={report} fmtNum={fmtNum} />
+
+            {/* ── glucose and labs ─────────────────────────────────── */}
+            <GlucoseSection
+              t={t}
+              report={report}
+              scope={scope}
+              fmtNum={fmtNum}
+            />
+            <LabResultsSection
+              t={t}
+              report={report}
+              scope={scope}
+              fmtDate={fmtDate}
+              fmtNum={fmtNum}
+            />
+
+            {/* ── medications ──────────────────────────────────────── */}
+            <MedicationsSection t={t} report={report} scope={scope} />
+            <Glp1Section
+              t={t}
+              report={report}
+              scope={scope}
+              fmtDate={fmtDate}
+              fmtNum={fmtNum}
+            />
+            <DoseLogSection
+              t={t}
+              report={report}
+              scope={scope}
+              fmtDateTime={fmtDateTime}
+              fmtNum={fmtNum}
+            />
+
+            {/* ── history ──────────────────────────────────────────── */}
+            <IllnessSection
+              t={t}
+              report={report}
+              scope={scope}
+              fmtDate={fmtDate}
+            />
+            <VisitsSection
+              t={t}
+              report={report}
+              scope={scope}
+              fmtDate={fmtDate}
+            />
+            <ImmunizationsSection
+              t={t}
+              report={report}
+              scope={scope}
+              fmtDate={fmtDate}
+            />
+            <AllergiesSection t={t} report={report} scope={scope} />
+
+            {/* ── the fenced tier, as the owner chose it ───────────── */}
+            <FamilyHistorySection t={t} report={report} scope={scope} />
+            <AnamnesisSection t={t} report={report} scope={scope} />
+            <MoodSection t={t} report={report} scope={scope} fmtNum={fmtNum} />
+            <CycleSection
+              t={t}
+              report={report}
+              scope={scope}
+              fmtDate={fmtDate}
+              fmtNum={fmtNum}
+            />
+
+            <WellnessSection
+              t={t}
+              report={report}
+              scope={scope}
+              fmtNum={fmtNum}
+            />
           </>
         ) : null}
 

@@ -156,6 +156,37 @@ describe("<ClinicianView>", () => {
     expect(html).not.toContain("Current smoker");
   });
 
+  it("names both windows when a lab's report and the saved band disagree", () => {
+    // Two windows that disagree about the same number, and a card showing one
+    // of them is a partial answer. The PDF settles this with a footnote under
+    // the table; inline, both fit on the line.
+    const html = render(
+      makeReport({
+        labResults: [
+          {
+            panel: null,
+            analyte: "Potassium",
+            value: 5.2,
+            valueText: null,
+            unit: "mmol/L",
+            referenceLow: 3.9,
+            referenceHigh: 5.4,
+            catalogReferenceLow: 3.5,
+            catalogReferenceHigh: 5,
+            sourceReferenceText: null,
+            referenceOrigin: "source",
+            referenceDivergesFromCatalog: true,
+            takenAt: "2026-01-20T09:00:00.000Z",
+            count: 1,
+          },
+        ],
+      }),
+    );
+    expect(html).toContain("Potassium");
+    expect(html).toContain("Reference 3.9–5.4");
+    expect(html).toContain("saved range 3.5–5");
+  });
+
   it("renders the fenced wellness card with the descriptive disclaimer", () => {
     const html = render(makeReport());
     expect(html).toContain("Wellness scores");
@@ -178,8 +209,13 @@ describe("<ClinicianView>", () => {
     expect(html).toContain("Body measurements");
     // The measurement-type enum renders as the SAME localised label the rest
     // of the app uses, not the raw enum string and not a second vocabulary.
+    //
+    // Asserted against element TEXT rather than against the whole markup: each
+    // card now carries a `data-leaf` attribute naming the catalogue leaves it
+    // speaks for, so the enum constant is legitimately in the document as
+    // machine metadata. What must never happen is a reader seeing it.
     expect(html).toContain(">Weight<");
-    expect(html).not.toContain("WEIGHT");
+    expect(html).not.toContain(">WEIGHT<");
   });
 
   it("omits the wellness card when there are no scores", () => {

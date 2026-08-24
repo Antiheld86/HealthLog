@@ -10,8 +10,13 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+// The loader resolves the whole module MAP rather than the single
+// `doctorReport` key. The per-leaf "shared, but switched off at the source"
+// verdicts the clinician view renders come off that same read: derived from a
+// second one, the notice on the page and the absence of the data behind it
+// could disagree.
 vi.mock("@/lib/modules/gate", () => ({
-  isModuleEnabled: vi.fn(async () => true),
+  resolveModuleMap: vi.fn(async () => allModulesOn()),
 }));
 vi.mock("@/lib/doctor-report-data", () => ({
   collectDoctorReportData: vi.fn(),
@@ -26,7 +31,10 @@ vi.mock("@/lib/db", () => ({
 }));
 
 import { loadShareViewData } from "../share-view-data";
-import { isModuleEnabled } from "@/lib/modules/gate";
+import { resolveModuleMap } from "@/lib/modules/gate";
+// From the registry, not the gate: the gate is mocked above, so its re-export
+// of the key list would come back undefined.
+import { MODULE_KEYS, type ModuleKey } from "@/lib/modules/registry";
 import { collectDoctorReportData } from "@/lib/doctor-report-data";
 import {
   selectionToBlob,
@@ -35,7 +43,23 @@ import {
 import { prisma } from "@/lib/db";
 import type { ShareContext } from "../resolve-share-token";
 
+/** Every module on — the shape `resolveModuleMap` returns for a fresh account. */
+function allModulesOn(): Record<ModuleKey, boolean> {
+  return Object.fromEntries(MODULE_KEYS.map((key) => [key, true])) as Record<
+    ModuleKey,
+    boolean
+  >;
+}
+
+/** Every module on except the named ones. */
+function modulesWithout(...off: ModuleKey[]): Record<ModuleKey, boolean> {
+  const map = allModulesOn();
+  for (const key of off) map[key] = false;
+  return map;
+}
+
 const collect = collectDoctorReportData as ReturnType<typeof vi.fn>;
+const moduleMap = resolveModuleMap as ReturnType<typeof vi.fn>;
 const findDocs = prisma.clinicianShareLinkDocument.findMany as ReturnType<
   typeof vi.fn
 >;
@@ -349,7 +373,7 @@ describe("clinician share — owner doctorReport module gate", () => {
   beforeEach(() => {
     // Sibling of the suite above, so the outer reset does not reach here.
     vi.clearAllMocks();
-    vi.mocked(isModuleEnabled).mockImplementation(async () => true);
+    moduleMap.mockResolvedValue(allModulesOn());
     collect.mockResolvedValue({ patient: { displayName: "Shared record" } });
   });
 
@@ -365,7 +389,7 @@ describe("clinician share — owner doctorReport module gate", () => {
   });
 
   it("collapses to documents-only with the module off", async () => {
-    vi.mocked(isModuleEnabled).mockImplementation(async () => false);
+    moduleMap.mockResolvedValue(modulesWithout("doctorReport"));
     findDocs.mockResolvedValue([]);
 
     const res = await loadShareViewData(ctx({ documentOnly: false }));
@@ -382,18 +406,70 @@ describe("clinician share — owner doctorReport module gate", () => {
     // from the frozen share context.
     findDocs.mockResolvedValue([]);
     await loadShareViewData(ctx({ documentOnly: false }));
-    expect(isModuleEnabled).toHaveBeenCalledWith("owner-1", "doctorReport");
+    expect(moduleMap).toHaveBeenCalledWith("owner-1");
   });
 
   it("closes the operator kill-switch path too", async () => {
-    vi.mocked(isModuleEnabled).mockImplementation(
-      async (_u: string, key: string) => key !== "doctorReport",
-    );
+    // The operator layer and the per-user layer resolve into the same map, so
+    // an operator-disabled `doctorReport` arrives here as the same `false`.
+    moduleMap.mockResolvedValue(modulesWithout("doctorReport"));
     findDocs.mockResolvedValue([]);
 
     const res = await loadShareViewData(ctx({ documentOnly: false }));
 
     expect(res.documentOnly).toBe(true);
     expect(collect).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The third state a recipient has to be able to see.
+ *
+ * A leaf the owner DID share, in a domain their account has switched off,
+ * produces exactly the same absence in the payload as a leaf they shared and
+ * never recorded anything for. The loader carries the module verdict out
+ * alongside the payload so the page can say which one it is, and it carries
+ * ONLY leaves the selection admits — a withheld leaf's module state is not the
+ * recipient's business in any direction.
+ */
+describe("loadShareViewData — leaves shared but switched off at the source", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    moduleMap.mockResolvedValue(allModulesOn());
+    collect.mockResolvedValue({ patient: { displayName: "Shared record" } });
+    findDocs.mockResolvedValue([]);
+  });
+
+  it("names a selected leaf whose owning module is off", async () => {
+    moduleMap.mockResolvedValue(modulesWithout("labs"));
+    const res = await loadShareViewData(
+      ctx({
+        sectionsJson: selectionToBlob(
+          selectionFromLeaves(["LAB_RESULTS", "WEIGHT"]),
+        ),
+      }),
+    );
+    expect(res.unavailableLeaves).toEqual(["LAB_RESULTS"]);
+  });
+
+  it("stays empty when every selected leaf's module is on", async () => {
+    const res = await loadShareViewData(
+      ctx({
+        sectionsJson: selectionToBlob(
+          selectionFromLeaves(["LAB_RESULTS", "MOOD", "WEIGHT"]),
+        ),
+      }),
+    );
+    expect(res.unavailableLeaves).toEqual([]);
+  });
+
+  it("never names a leaf the link does not carry", async () => {
+    // `mood` is off AND unshared. The recipient learns nothing about it,
+    // because they were never told it existed.
+    moduleMap.mockResolvedValue(modulesWithout("mood"));
+    const res = await loadShareViewData(
+      ctx({ sectionsJson: selectionToBlob(selectionFromLeaves(["WEIGHT"])) }),
+    );
+    expect(res.unavailableLeaves).toEqual([]);
   });
 });

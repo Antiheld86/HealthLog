@@ -18,6 +18,8 @@ import {
   allergyStatusEnum,
 } from "@/lib/validations/allergy";
 import { familyRelationshipEnum } from "@/lib/validations/family-history";
+import { encounterKindEnum } from "@/lib/validations/encounters";
+import { encounterKindLabelKey } from "@/lib/encounters/kind-label";
 import { INSTRUMENTS } from "@/lib/mental-health/instruments";
 
 /**
@@ -131,6 +133,32 @@ const REGISTRY: readonly KeySpace[] = [
   { prefix: "mentalHealth.instrumentDescription", members: INSTRUMENT_SLUGS },
 ];
 
+/**
+ * The second arm: key spaces whose member → key mapping is NOT `prefix +
+ * member`, so the registry above cannot express them. The mapping function
+ * itself is the source, and the guard runs the enum through it.
+ *
+ * `encounters.kind` is why this arm exists. The enum member is `ROUTINE`, the
+ * bundle leaf is `routine`, and three surfaces — the doctor-report PDF's visit
+ * table, the daily digest's upcoming-visit line and the clinician share view —
+ * built the key by interpolation. All three printed `encounters.kind.ROUTINE`
+ * verbatim: into a clinical document, onto a lock screen, and onto a page a
+ * doctor opens. The prefix-plus-member form of this guard would have caught it
+ * on the day the interpolation was written, but only if the mapping had been
+ * expressible; it is not, so it was never registered and nothing else looked.
+ */
+const RESOLVED_REGISTRY: readonly {
+  /** What the space is, for the failure message. */
+  name: string;
+  /** Every key the resolver can return, over the whole source enum. */
+  keys: readonly string[];
+}[] = [
+  {
+    name: "encounters.kind via encounterKindLabelKey",
+    keys: encounterKindEnum.options.map(encounterKindLabelKey),
+  },
+];
+
 describe("dynamic-key exhaustiveness (enum-derived)", () => {
   // Six shipped locales. An empty read of `messages/` would register zero
   // per-locale cases and the suite would report green over nothing.
@@ -158,11 +186,38 @@ describe("dynamic-key exhaustiveness (enum-derived)", () => {
     }
   });
 
+  it("every resolver-mapped key space returns a distinct key per member", () => {
+    for (const space of RESOLVED_REGISTRY) {
+      expect(
+        space.keys.length,
+        `${space.name} resolved to an empty key set — source import broke`,
+      ).toBeGreaterThan(0);
+      // A resolver whose default arm swallowed a member would collapse two
+      // enum values onto one key and the per-locale checks below would still
+      // pass, because the surviving key resolves fine.
+      expect(
+        new Set(space.keys).size,
+        `${space.name} maps two enum members onto one key`,
+      ).toBe(space.keys.length);
+    }
+  });
+
   for (const { locale, messages } of LOCALES) {
     for (const space of REGISTRY) {
       for (const member of space.members) {
         const key = `${space.prefix}.${member}`;
         it(`resolves ${key} in ${locale}`, () => {
+          const value = resolveKey(messages, key);
+          expect(value, `${key} missing in ${locale}.json`).toBeTypeOf(
+            "string",
+          );
+          expect((value ?? "").trim().length).toBeGreaterThan(0);
+        });
+      }
+    }
+    for (const space of RESOLVED_REGISTRY) {
+      for (const key of space.keys) {
+        it(`resolves ${key} in ${locale} (${space.name})`, () => {
           const value = resolveKey(messages, key);
           expect(value, `${key} missing in ${locale}.json`).toBeTypeOf(
             "string",
