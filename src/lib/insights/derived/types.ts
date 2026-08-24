@@ -93,6 +93,32 @@ export interface DerivedInsufficient {
  */
 export const SPARKLINE_MAX_POINTS = 30;
 
+/**
+ * Ceiling on a CALLER-SUPPLIED trailing window (`?windowDays=` on
+ * `GET /api/insights/derived`). Engine defaults are untouched by it — a metric
+ * whose own default is wider (vascular age reads a year, cardio fitness half of
+ * one) keeps reading that far when the caller names no window. This bounds only
+ * what a request may ask for.
+ *
+ * Ninety is where the tier this route promises runs out, not a tidy number.
+ * `readBestGranularityRollups` walks its granularity floors coarsest-first and
+ * the WEEK floor opens at 91 days, so a 91-day request resolves to WEEK buckets
+ * for any account with rollup coverage. The baseline engines cannot use those —
+ * a spread composed from WEEK `sd` is not the same statistic — so they reject
+ * the coarser tier and fall through to the per-type live read, which is a raw
+ * `measurement.findMany` with no row cap. For a densely sampled type (an
+ * Apple-Health heart-rate stream is hundreds of rows a day) that is the whole
+ * history scan this route was built to avoid, and the analytics-read budget
+ * allows 120 of them a minute per account. One day either side of the floor is
+ * therefore the difference between a bounded bucket read and an unbounded one.
+ *
+ * Nothing renderable is lost at the ceiling: a trailing `series` is capped to
+ * `SPARKLINE_MAX_POINTS` regardless, so past thirty days a wider window only
+ * broadens the trend mean behind the value, and ninety days is already three
+ * times what the sparkline can show and six times the trend default.
+ */
+export const DERIVED_MAX_WINDOW_DAYS = 90;
+
 export type Derived<T> = DerivedOk<T> | DerivedInsufficient;
 
 /** Narrowing type guard — `true` when the value computed successfully. */
