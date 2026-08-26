@@ -106,26 +106,31 @@ interface MoodChartProps {
 
 // --- Constants ---
 
+// The range tabs select a CALENDAR-DAY window ending now, matching
+// `health-chart.tsx` (see the note there). Until v1.37.29 this chart
+// sliced the last N LOGGED DAYS out of the whole history instead — the
+// same "7" tab meant seven calendar days on a weight chart and seven
+// logged days (possibly weeks apart) on the mood chart one card over.
 const TIME_RANGES_KEYS = [
   {
-    labelKey: "charts.points7Label",
-    points: 7,
-    titleKey: "charts.points7Title",
+    labelKey: "charts.days7Label",
+    days: 7,
+    titleKey: "charts.days7Title",
   },
   {
-    labelKey: "charts.points30Label",
-    points: 30,
-    titleKey: "charts.points30Title",
+    labelKey: "charts.days30Label",
+    days: 30,
+    titleKey: "charts.days30Title",
   },
   {
-    labelKey: "charts.points90Label",
-    points: 90,
-    titleKey: "charts.points90Title",
+    labelKey: "charts.days90Label",
+    days: 90,
+    titleKey: "charts.days90Title",
   },
   {
-    labelKey: "charts.pointsAllLabel",
-    points: 0,
-    titleKey: "charts.pointsAllTitle",
+    labelKey: "charts.daysAllLabel",
+    days: 0,
+    titleKey: "charts.daysAllTitle",
   },
 ] as const;
 
@@ -444,7 +449,13 @@ export function MoodChart({
       }))
       .sort((a, b) => a.timestamp - b.timestamp);
 
-    const sliced = rangePoints > 0 ? allPoints.slice(-rangePoints) : allPoints;
+    // v1.37.29 — a calendar-day window, not "the last N logged days":
+    // the tabs promise days, and the measurement charts window by days.
+    const cutoff = new Date().getTime() - rangePoints * 86_400_000;
+    const sliced =
+      rangePoints > 0
+        ? allPoints.filter((point) => point.timestamp >= cutoff)
+        : allPoints;
 
     // v1.4.15 Fix 3: parity with health-chart's auto-bucketing. Other
     // dashboard charts (BP, weight, pulse) auto-aggregate to weekly /
@@ -581,10 +592,16 @@ export function MoodChart({
   // doesn't crash the chip render.
   const activeBucket: ChartBucketType = useMemo(() => {
     if (!data?.entries?.length) return "day";
+    const cutoff = new Date().getTime() - rangePoints * 86_400_000;
     const sorted = [...data.entries].sort((a, b) =>
       a.date.localeCompare(b.date),
     );
-    const sliced = rangePoints > 0 ? sorted.slice(-rangePoints) : sorted;
+    // v1.37.29 — the same calendar-day window `chartData` applies, so the
+    // chip describes the points actually painted.
+    const sliced =
+      rangePoints > 0
+        ? sorted.filter((entry) => dayKeyToTimestamp(entry.date) >= cutoff)
+        : sorted;
     if (sliced.length < 2) return "day";
     const firstTs = dayKeyToTimestamp(sliced[0].date);
     const lastTs = dayKeyToTimestamp(sliced[sliced.length - 1].date);
@@ -1079,19 +1096,19 @@ export function MoodChart({
             {TIME_RANGES_KEYS.map((r) => (
               <Button
                 key={r.labelKey}
-                variant={rangePoints === r.points ? "default" : "ghost"}
-                aria-pressed={rangePoints === r.points}
+                variant={rangePoints === r.days ? "default" : "ghost"}
+                aria-pressed={rangePoints === r.days}
                 size="sm"
                 className="min-h-11 px-2 text-xs sm:px-3"
                 onClick={() => {
                   setRangeHydrated(true);
-                  setRangePoints(r.points);
+                  setRangePoints(r.days);
                   // v1.30.1 M2 — persist the pick per chart, same
                   // model as the overlay toggles.
                   if (chartKey && !windowOverride) {
                     overlayPrefs.setPrefs({
                       ...overlayPrefs.prefs,
-                      rangePoints: r.points,
+                      rangePoints: r.days,
                     });
                   }
                 }}

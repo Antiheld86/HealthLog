@@ -65,26 +65,33 @@ import {
 } from "@/lib/charts/window-stats";
 import { shouldFireDataReady } from "@/lib/charts/data-ready-latch";
 
+// The range tabs select a CALENDAR-DAY window ending now — `days: 7` is
+// "the last 7 days", not "the last 7 readings". The labels said "points"
+// until v1.37.29 while the fetch below always treated the value as a day
+// window; a user who weighs in twice a week picked "7 pts" and saw two.
+// The persisted preference field keeps its historical name `rangePoints`
+// (it crosses the chart-overlay-prefs wire), but its value has always
+// been days.
 const TIME_RANGES_KEYS = [
   {
-    labelKey: "charts.points7Label",
-    points: 7,
-    titleKey: "charts.points7Title",
+    labelKey: "charts.days7Label",
+    days: 7,
+    titleKey: "charts.days7Title",
   },
   {
-    labelKey: "charts.points30Label",
-    points: 30,
-    titleKey: "charts.points30Title",
+    labelKey: "charts.days30Label",
+    days: 30,
+    titleKey: "charts.days30Title",
   },
   {
-    labelKey: "charts.points90Label",
-    points: 90,
-    titleKey: "charts.points90Title",
+    labelKey: "charts.days90Label",
+    days: 90,
+    titleKey: "charts.days90Title",
   },
   {
-    labelKey: "charts.pointsAllLabel",
-    points: 0,
-    titleKey: "charts.pointsAllTitle",
+    labelKey: "charts.daysAllLabel",
+    days: 0,
+    titleKey: "charts.daysAllTitle",
   },
 ] as const;
 
@@ -738,8 +745,8 @@ export function HealthChart({
     const totalDays = windowDays + compareShift;
     const from = new Date(to.getTime() - totalDays * 86_400_000);
     // Use ISO strings so the cache key is stable across the day; the
-    // server treats `to` as the upper bound and the chart truncates to
-    // `rangePoints` on the client.
+    // server treats `to` as the upper bound and the chart re-applies the
+    // same day window client-side (see `visibleSlice`).
     return {
       from: from.toISOString(),
       to: to.toISOString(),
@@ -1124,9 +1131,23 @@ export function HealthChart({
   // by it, and the data table below the chart captions its rows with it —
   // a table that said "daily" over a weekly mean would be a lie, and
   // recomputing the decision separately is how that lie starts.
+  //
+  // v1.37.29 — the slice is a CALENDAR-DAY window, matching what the
+  // range tabs promise and what the fetch window requests. The previous
+  // `slice(-rangePoints)` was a no-op on the self-fetched path (the fetch
+  // is already bounded to the window) but silently switched to
+  // "last N readings" on the dashboard's preloaded ~30-day batch slice —
+  // the same tab meant two different things depending on the mount path.
   const visibleSlice = useMemo(() => {
     if (!data?.length) return null;
-    const sliced = rangePoints > 0 ? data.slice(-rangePoints) : [...data];
+    const cutoff = new Date().getTime() - rangePoints * 86_400_000;
+    const sliced =
+      rangePoints > 0
+        ? data.filter((point) => point.timestamp >= cutoff)
+        : [...data];
+    // An empty window stays an empty slice (renders as "no data in this
+    // range") — returning null here would drop chartData back to the
+    // UNFILTERED series and quietly widen the window instead.
     const rangeDays =
       sliced.length < 2
         ? 0
@@ -1226,7 +1247,7 @@ export function HealthChart({
   // v1.12.8 — chart-reactive metric statistics.
   //
   // Compute the per-type Min / Max / Median / Mean over the data currently
-  // visible under the active range tab — i.e. the `rangePoints`-sliced,
+  // visible under the active range tab — i.e. the day-window-filtered,
   // bucketed `chartData` the chart already holds (no re-fetch). The result
   // recomputes whenever the range tab changes the visible slice, so the
   // `<MetricStatStrip>` a sub-page lifts the callback into always reflects the
@@ -1330,16 +1351,12 @@ export function HealthChart({
     );
   }, [chartDataWithCompare, effectiveCompareBaseline, types]);
 
-  const activeBucket: ChartBucketType = useMemo(() => {
-    if (!data?.length) return "day";
-    const sliced = rangePoints > 0 ? data.slice(-rangePoints) : data;
-    if (sliced.length < 2) return "day";
-    const rangeDays = Math.round(
-      (sliced[sliced.length - 1].timestamp - sliced[0].timestamp) /
-        (24 * 60 * 60 * 1000),
-    );
-    return pickBucket(rangeDays);
-  }, [data, rangePoints]);
+  // v1.37.29 — the header chip reads the SAME grain decision `chartData`
+  // and the data table use. This was a second memo re-deriving the bucket
+  // from a `slice(-rangePoints)` of its own — exactly the "recomputing
+  // the decision separately" drift the visibleSlice doc-comment warns
+  // about, and the two had already diverged on the windowing semantics.
+  const activeBucket: ChartBucketType = visibleSlice?.bucketType ?? "day";
 
   const yDomain = useMemo<[number, number] | undefined>(() => {
     if (!chartDataWithCompare?.length) return undefined;
@@ -1783,8 +1800,8 @@ export function HealthChart({
             {TIME_RANGES_KEYS.map((r) => (
               <Button
                 key={r.labelKey}
-                variant={rangePoints === r.points ? "default" : "ghost"}
-                aria-pressed={rangePoints === r.points}
+                variant={rangePoints === r.days ? "default" : "ghost"}
+                aria-pressed={rangePoints === r.days}
                 size="sm"
                 className="min-h-11 px-2 text-xs sm:px-3"
                 onClick={() => {
@@ -1792,14 +1809,14 @@ export function HealthChart({
                   // visible-range stats memo recomputes off the new slice and
                   // the stat strip follows automatically.
                   setRangeHydrated(true);
-                  setRangePoints(r.points);
+                  setRangePoints(r.days);
                   // v1.30.1 M2 — persist the pick per chart, same model
                   // as the overlay toggles, so the range survives a
                   // remount instead of resetting to 30 d every visit.
                   if (chartKey && !windowOverride) {
                     overlayPrefs.setPrefs({
                       ...overlayPrefs.prefs,
-                      rangePoints: r.points,
+                      rangePoints: r.days,
                     });
                   }
                 }}

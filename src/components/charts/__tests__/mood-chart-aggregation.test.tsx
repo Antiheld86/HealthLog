@@ -152,9 +152,12 @@ describe("<MoodChart> bucket chip", () => {
   it("paints the weekly chip when the data spans > 90 days", async () => {
     // Defer the import so the vi.mock above takes effect.
     const { I18nProvider } = await import("@/lib/i18n/context");
+    // The 7/30/90 tabs are calendar-day windows anchored on now
+    // (v1.37.29), so only the All range can hold a span past 90 days —
+    // which is the state the weekly chip exists for.
     const html = renderToStaticMarkup(
       <I18nProvider initialLocale="en">
-        <MoodChart />
+        <MoodChart windowOverride="allTime" />
       </I18nProvider>,
     );
     // The chip text comes from `charts.bucketWeekly` ("Weekly avg").

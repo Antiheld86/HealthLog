@@ -23,6 +23,15 @@ vi.mock("@/hooks/use-auth", () => ({
   }),
 }));
 
+/**
+ * Day key `agoDays` before now. The range tabs are calendar-day windows
+ * anchored on now (v1.37.29), so absolute-dated entries would age out of
+ * the default window and both cases would collapse into the no-data copy.
+ */
+function dayKeyAgo(agoDays: number): string {
+  return new Date(Date.now() - agoDays * 86_400_000).toISOString().slice(0, 10);
+}
+
 describe("<MoodChart> — empty-state gate by raw count", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -31,8 +40,8 @@ describe("<MoodChart> — empty-state gate by raw count", () => {
   it("renders need-more-days copy when chartData.length < 3 but rawCount >= 3", async () => {
     const data = {
       entries: [
-        { date: "2026-05-19", score: 4, samples: 25 },
-        { date: "2026-05-20", score: 5, samples: 25 },
+        { date: dayKeyAgo(1), score: 4, samples: 25 },
+        { date: dayKeyAgo(0), score: 5, samples: 25 },
       ],
       trend: null,
     };
@@ -65,7 +74,7 @@ describe("<MoodChart> — empty-state gate by raw count", () => {
 
   it("renders no-data copy when rawCount < 3", async () => {
     const data = {
-      entries: [{ date: "2026-05-20", score: 4, samples: 1 }],
+      entries: [{ date: dayKeyAgo(0), score: 4, samples: 1 }],
       trend: null,
     };
 

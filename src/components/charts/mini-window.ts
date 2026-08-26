@@ -3,22 +3,25 @@
  *
  * The Oura-style RecommendationCard (B5c) embeds a mini-chart that
  * pins to the recommendation's `rationale.dataWindow`. This helper
- * maps the rationale enum onto the per-points range used by the
+ * maps the rationale enum onto the calendar-day window used by the
  * existing chart wrappers.
  *
- *   last7days  → 7 points
- *   last30days → 30 points
- *   last90days → 90 points
- *   allTime    → 0 (HealthChart treats 0 as "no slice — show all")
+ *   last7days  → 7-day window
+ *   last30days → 30-day window
+ *   last90days → 90-day window
+ *   allTime    → 0 (HealthChart treats 0 as "no window — show all")
  *
  * The values mirror the existing `TIME_RANGES_KEYS` definition in
  * `health-chart.tsx`; the helper is a pure function so unit tests
- * pin the contract without depending on Recharts internals.
+ * pin the contract without depending on Recharts internals. The
+ * exported name keeps the historical `rangePoints` vocabulary because
+ * it feeds the chart state/preference field of that name (a persisted
+ * wire field) — the VALUE has always been calendar days.
  */
 
 export type DataWindow = "last7days" | "last30days" | "last90days" | "allTime";
 
-const POINTS_BY_WINDOW: Record<DataWindow, number> = {
+const DAYS_BY_WINDOW: Record<DataWindow, number> = {
   last7days: 7,
   last30days: 30,
   last90days: 90,
@@ -26,9 +29,9 @@ const POINTS_BY_WINDOW: Record<DataWindow, number> = {
 };
 
 /**
- * Returns the per-points range value the chart wrapper expects for a
- * given rationale dataWindow enum value.
+ * Returns the day-window value the chart wrapper expects for a given
+ * rationale dataWindow enum value.
  */
 export function resolveMiniRangePoints(window: DataWindow): number {
-  return POINTS_BY_WINDOW[window];
+  return DAYS_BY_WINDOW[window];
 }

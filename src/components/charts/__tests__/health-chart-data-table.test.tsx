@@ -11,12 +11,18 @@ import enMessages from "../../../../messages/en.json";
  * table's rows can ever diverge, that is the failure this catches.
  */
 
-/** `spacingDays` apart, so a fixed point count can span a chosen range. */
+/**
+ * `spacingDays` apart, ENDING half a day before now. The range tabs are
+ * calendar-day windows anchored on now (v1.37.29), so an absolute-dated
+ * fixture would age out of the window and exercise the empty state
+ * instead of the table. The half-day offset keeps every point clear of
+ * the exact window-boundary instant.
+ */
 function series(count: number, spacingDays = 1) {
-  const base = Date.UTC(2026, 0, 1, 12, 0, 0);
+  const base = Date.now() - 12 * 3_600_000;
   return Array.from({ length: count }, (_, i) => ({
     date: `p${i}`,
-    timestamp: base + i * spacingDays * 86_400_000,
+    timestamp: base - (count - 1 - i) * spacingDays * 86_400_000,
     PULSE: 60 + i,
   }));
 }
@@ -101,17 +107,23 @@ describe("<HealthChart> — data table", () => {
   });
 
   it("honours the visible range rather than the whole fetched series", async () => {
-    // 40 points fetched, the default range tab draws the newest 30.
+    // 40 daily points fetched, the default range tab windows to the last
+    // 30 calendar days — the 30 points inside the window survive, the 10
+    // older ones do not.
     const html = await renderChart(series(40), { showDataTable: true });
     expect(rowCount(html)).toBe(30);
     expect(html).toContain("Data points (30)");
   });
 
   it("captions a bucketed range as an average instead of implying daily readings", async () => {
-    // 30 points four days apart span 116 days, so the chart buckets to ISO
-    // weeks and several points share a bucket. The rows are weekly means and
-    // the caption has to say so.
-    const html = await renderChart(series(30, 4), { showDataTable: true });
+    // 30 points four days apart span 116 days on the All range, so the
+    // chart buckets to ISO weeks and several points share a bucket. The
+    // rows are weekly means and the caption has to say so. (The 7/30/90
+    // tabs are day windows now, so only "All" can span past 90 days.)
+    const html = await renderChart(series(30, 4), {
+      showDataTable: true,
+      windowOverride: "allTime",
+    });
     expect(html).toContain("One row per week of");
     expect(html).toContain("the average of that week");
     expect(html).not.toContain("One row per day of");
