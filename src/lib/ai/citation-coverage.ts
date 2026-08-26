@@ -141,6 +141,17 @@ const NORMATIVE_KEYWORDS: Record<Locale, readonly string[]> = {
     "powyzej",
     "ponizej",
   ],
+  ko: [
+    "목표",
+    "권장",
+    "정상 범위",
+    "해야",
+    "하세요",
+    "이상",
+    "이하",
+    "초과",
+    "미만",
+  ],
 };
 
 /**

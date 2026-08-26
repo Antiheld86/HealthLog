@@ -202,6 +202,35 @@ const DOSE_PATTERNS: Record<Locale, readonly RegExp[]> = {
       `\\b(?:nast[ęe]pna|kolejna|nowa)\\s+dawka\\b[^.?!]{0,30}\\b[\\d.,]+\\s*${DOSE_UNIT}\\b`,
       "i",
     ),
+  ], // Korean is verb-final: the dose comes first and the change verb closes the
+  // clause ("2.4mg으로 늘려 보세요"), the mirror image of the Latin banks. A
+  // target-marking particle on the dose is required, the same demand the Latin
+  // banks make of "to" / "by" / "auf" — without it the permitted restatement
+  // "7.5mg을 복용 중이고, 체중은 내려가고 있어요" matched the lowering pattern.
+  ko: [
+    new RegExp(
+      `[\\d.,]+\\s*${DOSE_UNIT}\\s*(?:으로|로|까지)[^.?!]{0,20}(?:올리|올려|늘리|늘려|증량|높이|높여|인상)`,
+      "i",
+    ),
+    new RegExp(
+      `[\\d.,]+\\s*${DOSE_UNIT}\\s*(?:으로|로|까지)[^.?!]{0,20}(?:내리|내려|줄이|줄여|감량|낮추|낮춰|감축)`,
+      "i",
+    ),
+    new RegExp(
+      `(?:권해|권장|권고|추천|제안)[^.?!]{0,40}[\\d.,]+\\s*${DOSE_UNIT}\\b`,
+      "i",
+    ),
+    new RegExp(
+      `[\\d.,]+\\s*${DOSE_UNIT}\\b[^.?!]{0,40}(?:권해|권장|권고|추천|제안|드심|드셔|복용하세요|시도해)`,
+      "i",
+    ),
+    new RegExp(
+      `(?:다음|새)\\s*(?:용량|단계|복용량)[^.?!]{0,30}[\\d.,]+\\s*${DOSE_UNIT}\\b`,
+      "i",
+    ),
+    // Both a medication object AND a trial cue are required, as in the EN bank,
+    // so "걸음 수를 두 배로 늘려 2주간 해보세요" never trips.
+    /(?:약|알|정|인슐린|주사|복용|용량)[^.?!]{0,25}(?:절반|반으로|두\s?배|건너뛰|중단|끊)[^.?!]{0,40}(?:주간|주 동안|일 동안|달 동안|보세요|보십시오|보자|해 ?보)/,
   ],
 };
 
@@ -300,6 +329,20 @@ const QUAL_NUM_PL = `(?:\\d{1,3}\\s*%|${PCT_WORD_PL})`;
 const RISK_NOUN_PL = "(?:ryzyk\\w*|prawdopodobieństw\\w*)";
 const RESULT_VERB_PL =
   "(?:umieszcza\\s+(?:cię|pana|panią)|klasyfikuje\\s+(?:cię|pana|panią)|znajdujesz\\s+się\\s+w|wpadasz\\s+w|kwalifikuje\\s+(?:cię|pana|panią))";
+
+// Korean carries no `\\b` next to a Hangul token: `\\b` is an ASCII \\w boundary
+// and Hangul is not \\w, so /\\b위험/ matches nothing. Spelled-out percentages are
+// omitted deliberately — Korean writes "12%", and the Sino-Korean numerals
+// ("이", "삼") collide with common particles.
+const QUAL_NUM_KO = "(?:\\d{1,3}\\s*(?:%|퍼센트|프로))";
+const RISK_NOUN_KO = "(?:위험(?:도|률|성)?|확률|가능성)";
+const HORIZON_KO = "(?:10년|십\\s?년|평생)\\s*(?:위험(?:도|률)?|리스크)";
+const RESULT_VERB_KO =
+  "(?:(?:에|으로|로)\\s*(?:분류|해당|속하|들어가)|군에\\s*(?:속하|해당))";
+const RISK_BAND_KO =
+  "(?:고|중간|중등도|저|높은|낮은)\\s*위험\\s*(?:군|범위|등급|구간)";
+const RISK_LEVEL_KO = "(?:높|상승|증가|중등도|경계|우려)";
+const RISK_VERDICT_KO = `(?:은|는|이|가)\\s*[^.?!]{0,10}${RISK_LEVEL_KO}`;
 
 const RISK_PATTERNS: Record<Locale, readonly RegExp[]> = {
   en: [
@@ -413,6 +456,26 @@ const RISK_PATTERNS: Record<Locale, readonly RegExp[]> = {
     new RegExp(`${QUAL_NUM_PL}[^.?!]{0,50}\\b${ENGINE}\\b`, "i"),
     new RegExp(`\\b${ENGINE}\\b[^.?!]{0,60}${RESULT_VERB_PL}`, "i"),
   ],
+  ko: [
+    new RegExp(`${RISK_NOUN_KO}[^.?!]{0,15}${QUAL_NUM_KO}`, "i"),
+    new RegExp(`${QUAL_NUM_KO}[^.?!]{0,15}${RISK_NOUN_KO}`, "i"),
+    new RegExp(`${HORIZON_KO}[^.?!]{0,40}${QUAL_NUM_KO}`, "i"),
+    new RegExp(`${QUAL_NUM_KO}[^.?!]{0,40}${HORIZON_KO}`, "i"),
+    new RegExp(`\\b${ENGINE}\\b[^.?!]{0,50}${QUAL_NUM_KO}`, "i"),
+    new RegExp(`${QUAL_NUM_KO}[^.?!]{0,50}\\b${ENGINE}\\b`, "i"),
+    new RegExp(
+      `(?:\\b${ENGINE}\\b|${HORIZON_KO})[^.?!]{0,60}${RESULT_VERB_KO}`,
+      "i",
+    ),
+    new RegExp(
+      `(?:\\b${ENGINE}\\b|${HORIZON_KO})[^.?!]{0,60}${RISK_BAND_KO}`,
+      "i",
+    ),
+    new RegExp(
+      `(?:\\b${ENGINE}\\b|${HORIZON_KO})[^.?!]{0,40}${RISK_VERDICT_KO}`,
+      "i",
+    ),
+  ],
 };
 
 /**
@@ -492,6 +555,18 @@ const CAUSAL_PATTERNS: Record<Locale, readonly RegExp[]> = {
     /\bdzi[ęe]ki\b/i,
     /\bodpowiedzialn\w*\s+za\b/i,
   ],
+  ko: [
+    /때문(?:에|이)/,
+    /(?:으로|로)\s*인(?:해|하여|한)/,
+    /탓(?:에|이|으로)/,
+    /(?:이|가)\s*원인/,
+    /원인(?:은|이에요|입니다|이라|으로)/,
+    /유발/,
+    /초래/,
+    /야기/,
+    /덕분(?:에|이)/,
+    /(?:영향을|결과로)\s*(?:줘서|줬|나타났|이어졌)/,
+  ],
 };
 
 const BANKS: Record<OutboundContract, Record<Locale, readonly RegExp[]>> = {
@@ -542,6 +617,7 @@ const DOSE_CONTINUATION: Record<Locale, RegExp> = {
   es: /\b(?:siga\s+(?:tomando|con)|continúe|mantenga|según\s+lo\s+prescrito)\b/i,
   it: /\b(?:continui\s+(?:a|con|il)|mantenga|come\s+prescritto)\b/i,
   pl: /\b(?:kontynuuj|przyjmuj\s+dalej|zgodnie\s+z\s+zaleceniem|pozosta[ńn]\s+przy)\b/i,
+  ko: /(?:그대로\s*(?:유지|복용)|계속\s*(?:복용|드시|유지)|처방(?:대로|받은\s*대로)|지시(?:대로|받은\s*대로)|유지하세요)/,
 };
 
 const DOSE_CHANGE_STEM: Record<Locale, RegExp> = {
@@ -551,6 +627,7 @@ const DOSE_CHANGE_STEM: Record<Locale, RegExp> = {
   es: /\b(?:aument|reduzc|reduc|baj|disminu|dobl|omit|salt)\w*/i,
   it: /\b(?:aument|riduc|ridur|abbass|diminu|raddoppi|salt|dimezz)\w*/i,
   pl: /\b(?:zwiększ|zmniejsz|obniż|podnie[śs]|podwyższ|zreduk|pomi[ńn]|opu[śs][ćc])\w*/i,
+  ko: /(?:올리|올려|늘리|늘려|증량|높이|높여|인상|내리|내려|줄이|줄여|감량|낮추|낮춰|감축|절반|반으로|두\s?배|건너뛰|중단|끊)/,
 };
 
 /** Sentence-level split — the dose exemption must be scoped to one sentence. */

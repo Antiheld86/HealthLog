@@ -21,6 +21,7 @@ const DOSE_VIOLATION: Record<string, string> = {
   es: '{"summary":"Aumente su dosis a 2,4 mg la próxima semana."}',
   it: '{"summary":"Aumenti la sua dose a 2,4 mg la prossima settimana."}',
   pl: '{"summary":"Proszę zwiększyć dawkę do 2,4 mg w przyszłym tygodniu."}',
+  ko: '{"summary":"다음 주에 2.4mg으로 늘려 보세요."}',
 };
 
 const CAUSAL_VIOLATION: Record<string, string> = {
@@ -30,6 +31,7 @@ const CAUSAL_VIOLATION: Record<string, string> = {
   es: '{"summary":"Su peso bajó porque durmió más."}',
   it: '{"summary":"Il suo peso è calato perché ha dormito di più."}',
   pl: '{"summary":"Waga spadła, ponieważ spał Pan więcej."}',
+  ko: '{"summary":"수면 때문에 체중이 줄었어요."}',
 };
 
 const CLEAN: Record<string, string> = {
@@ -39,6 +41,7 @@ const CLEAN: Record<string, string> = {
   es: '{"summary":"Su peso promedia 82 kg esta semana, estable frente al mes pasado."}',
   it: '{"summary":"Il suo peso è in media di 82 kg questa settimana, stabile rispetto al mese scorso."}',
   pl: '{"summary":"Waga wynosi średnio 82 kg w tym tygodniu, stabilnie wobec zeszłego miesiąca."}',
+  ko: '{"summary":"이번 주 체중은 평균 82kg으로, 지난달과 비슷해요."}',
 };
 
 describe("finalizeStatusSummary — dose prescriptions are withheld", () => {

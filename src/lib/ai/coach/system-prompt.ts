@@ -1158,6 +1158,9 @@ export function getCoachSystemPrompt(
     base = COACH_PROMPT_DE;
   } else if (locale === "en") {
     base = COACH_PROMPT_EN;
+  } else if (locale === "ko") {
+    // ko ships no safety-contract matrix, so it is not a NativeCoachLocale.
+    base = COACH_PROMPT_EN + LOCALE_REPLY_FOOTER_FALLBACK.ko;
   } else {
     try {
       base = buildNativeCoachPrompt(locale, PROMPT_VERSION);

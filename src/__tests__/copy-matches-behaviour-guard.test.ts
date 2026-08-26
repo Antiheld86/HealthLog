@@ -78,6 +78,7 @@ const FINALITY_PHRASES: Record<string, readonly string[]> = {
     "permanente",
   ],
   pl: ["nie można cofnąć", "nie można tego cofnąć", "trwale", "nieodwracaln"],
+  ko: ["되돌릴 수 없", "복구할 수 없", "영구", "완전히 삭제"],
 };
 
 /** Per-locale phrase that promises the short undo window. */
@@ -88,6 +89,7 @@ const UNDO_PHRASES: Record<string, string> = {
   fr: "annuler cette action",
   it: "annullare",
   pl: "cofnąć",
+  ko: "되돌릴 수 있",
 };
 
 /** Confirmation bodies whose surface renders an Undo affordance. */
@@ -171,6 +173,7 @@ describe("sleep debt is labelled as a balance, not a summed deficit", () => {
     fr: ["cumulé", "cumulée", "déficit"],
     it: ["cumulato", "cumulata", "accumulato", "deficit"],
     pl: ["skumulowan", "niedobór", "niedoboru"],
+    ko: ["누적", "부족분", "적자", "쌓인"],
   };
 
   for (const locale of LOCALES) {
@@ -296,6 +299,7 @@ describe("the mood prognosis never states a cause", () => {
       "peggiora il tuo",
     ],
     pl: ["ponieważ", "powoduje", "z powodu", "wywołuje", "poprawia twój"],
+    ko: ["때문", "탓", "원인", "유발", "초래", "야기", "덕분", "인해"],
   };
 
   /** Every leaf string under `insights.mood.prognosis`, flattened. */
@@ -394,6 +398,7 @@ describe("the MCP token copy never claims the mint is read-only", () => {
     fr: ["jeton en lecture seule"],
     it: ["token in sola lettura"],
     pl: ["token tylko do odczytu"],
+    ko: ["읽기 전용 토큰", "읽기전용 토큰"],
   };
 
   for (const locale of LOCALES) {

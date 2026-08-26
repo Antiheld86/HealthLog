@@ -59,7 +59,10 @@ const profilePatchSchema = z
     heightCm: z.number().finite().min(30).max(300).nullable().optional(),
     dateOfBirth: z.string().date().nullable().optional(),
     gender: z.enum(["MALE", "FEMALE", "OTHER"]).nullable().optional(),
-    locale: z.enum(["de", "en", "es", "fr", "it", "pl", "ko"]).nullable().optional(),
+    locale: z
+      .enum(["de", "en", "es", "fr", "it", "pl", "ko"])
+      .nullable()
+      .optional(),
     timezone: timezoneSchema.optional(),
     unitPreference: z.enum(["metric", "imperial"]).optional(),
     timeFormat: z.enum(["AUTO", "H12", "H24"]).optional(),

@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+Korean joins as a seventh interface language, and the three things that had to be fixed before it could actually work.
+
+### Added
+
+- Korean (`ko`) ships as a seventh interface language, AI-initial and community-maintained alongside French, Spanish, Italian and Polish. The whole surface speaks it: dashboard, settings, share views, the clinician report, notifications and the AI prompts. The Coach and the daily briefing take the reviewed English body with a Korean reply directive rather than a hand-curated Korean one, the same route the other community locales took before they had a safety-contract matrix of their own.
+
+### Fixed
+
+- A matcher that reads app text against text a person or a lab typed matched nothing at all in Korean. The shared fold decomposes with NFD and strips the combining marks, which turns Latin accents into plain letters — but Hangul decomposes into jamo, and jamo are not combining marks, so they survived and the folded text no longer resembled any table the app carries. Both readers of that fold were affected: the normative-claim check that grades whether a recommendation needs a citation, and the parser that reads a printed reference range. The fold recomposes now, and every Latin, Polish and German fold is byte-identical to before.
+- No Korean analyte name could resolve to a LOINC code. The key normaliser kept `[a-z0-9]` and dropped everything else, so every Korean lab name in the catalogue normalised to the empty string and the derived index held none of them — a Korean account's cholesterol result reached a FHIR export uncoded.
+- The reference-range parser now reads the tilde a Korean lab prints (`3.5~5.0`), in both the ASCII and fullwidth forms. It had the hyphen and the dashes and not the separator the reports actually use.
+
 ## [1.37.28] — 2026-08-24
 
 Eleven parts of a shared record were selectable and invisible. Ticking one and sending the link showed the recipient nothing, while the same link's PDF download carried it.

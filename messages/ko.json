@@ -3175,9 +3175,9 @@
       "debt": {
         "title": "수면 부채",
         "value": "{hours}시간 {minutes}분 부족",
-        "caption": "최근 {nights}일 밤 동안 남은 부족분",
+        "caption": "최근 {nights}일 밤 동안 부족한 수면",
         "clearValue": "모두 채웠어요",
-        "clearCaption": "최근 {nights}일 밤 동안 남은 부족분이 없어요",
+        "clearCaption": "최근 {nights}일 밤 동안 부족한 수면이 없어요",
         "learning": "아직 수면을 익히는 중이에요 — 지금까지 {counted}일 밤, 믿을 만한 부족분을 읽으려면 {remaining}일 밤이 더 필요해요.",
         "computedInfo": "이건 HealthLog가 자체적으로 낸 추정치예요. 최근 밤들의 필요 수면에서 실제 수면을 뺀 누적 잔액이고, 보충 수면이 이를 갚아 나가요. 자체 필요 수면 모델을 쓰는 웨어러블의 수면 부채 수치와는 다를 수 있어요."
       },

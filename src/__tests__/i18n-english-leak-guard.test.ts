@@ -193,6 +193,14 @@ const LEGIT_IDENTICAL = new Set<string>([
   "mentalHealth.sciOptions.problemDuration.2",
   "mentalHealth.sciOptions.problemDuration.1",
   "mentalHealth.sciOptions.problemDuration.0",
+  // Proper nouns, a URL label and an acronym — the accepted written form in
+  // Korean is the Latin original, so these stay identical to en.json.
+  "auth.emailPlaceholder",
+  "settings.fitbitTag",
+  "settings.googleHealthTag",
+  "settings.nightscoutUrl",
+  "admin.aiServerKey.baseUrlLabel",
+  "admin.webPushVapidSubject",
 ]);
 
 describe("i18n English-leak guard", () => {

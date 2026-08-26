@@ -56,6 +56,7 @@ const DRUG_LEVEL_CONCEPT_TOKENS: Record<Locale, readonly string[]> = {
   es: ["nivel", "concentración", "pico", "valle", "Cmax", "terapéutica"],
   it: ["livello", "concentrazione", "picco", "valle", "Cmax", "terapeutica"],
   pl: ["poziom", "stężeni", "szczyt", "minimum", "Cmax", "terapeutyczn"],
+  ko: ["농도", "혈중", "최고", "최저", "Cmax", "치료"],
 };
 
 /**
