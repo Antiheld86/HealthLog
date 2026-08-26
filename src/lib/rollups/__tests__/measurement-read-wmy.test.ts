@@ -43,10 +43,12 @@ vi.mock("@/lib/db", () => ({
 
 import {
   aggregateWmyBuckets,
+  pickRollupGranularityForWindow,
   readBestGranularityRollups,
   readTieredRollupSeries,
   type RollupBucketRow,
 } from "../measurement-read-wmy";
+import { pickBucket } from "@/lib/charts/bucket-time-series";
 
 const { findMany } = mocks;
 
@@ -70,6 +72,12 @@ function bucket(
 
 beforeEach(() => {
   findMany.mockReset();
+  // Default to "no coverage" for any read a test did not queue explicitly —
+  // the v1.37.29 span-refinement probe in `readTieredRollupSeries` issues an
+  // extra read when a fixture's rows span less than the requested window,
+  // and an unqueued vi.fn() would resolve `undefined` and crash the reader
+  // instead of modelling an unminted tier.
+  findMany.mockResolvedValue([]);
   mocks.userFindUnique.mockReset();
   mocks.userFindUnique.mockResolvedValue({ sourcePriorityJson: null });
 });
@@ -453,5 +461,121 @@ describe("readTieredRollupSeries", () => {
     expect(result?.rows[0].value).toBe(81.5);
     expect(result?.rows[0].minValue).toBe(78);
     expect(result?.rows[0].maxValue).toBe(85);
+  });
+
+  // v1.37.29 — the tier keys off the ACTUAL data span, not the requested
+  // window width. The "All" tab always requests ~3650 days, so pre-fix a
+  // record whose history spans four months came back as four MONTH means
+  // while the chart captioned them from the real span — "weekly average"
+  // over monthly buckets.
+  describe("span refinement", () => {
+    it("re-reads at the tier the real span calls for (4 months of data on an All request → DAY)", async () => {
+      const months = [
+        bucket("2026-02-01T00:00:00.000Z"),
+        bucket("2026-03-01T00:00:00.000Z"),
+        bucket("2026-04-01T00:00:00.000Z"),
+        bucket("2026-05-01T00:00:00.000Z"),
+      ];
+      const days = [
+        bucket("2026-02-03T00:00:00.000Z"),
+        bucket("2026-03-14T00:00:00.000Z"),
+        bucket("2026-04-09T00:00:00.000Z"),
+        bucket("2026-05-28T00:00:00.000Z"),
+      ];
+      findMany.mockResolvedValueOnce(months).mockResolvedValueOnce(days);
+
+      const result = await readTieredRollupSeries({
+        userId: "u",
+        type: "WEIGHT",
+        ...win(3650),
+      });
+
+      // Span of the MONTH rows ≈ 89 days → the display ladder wants DAY,
+      // and the refinement jumps straight there (no WEEK stop-over).
+      expect(findMany.mock.calls[0][0].where.granularity).toBe("MONTH");
+      expect(findMany.mock.calls[1][0].where.granularity).toBe("DAY");
+      expect(findMany).toHaveBeenCalledTimes(2);
+      expect(result?.granularity).toBe("DAY");
+      expect(result?.rows).toHaveLength(4);
+      expect(result?.rows[0].measuredAt).toBe("2026-02-03T00:00:00.000Z");
+    });
+
+    it("refines to WEEK for a span between one and two years", async () => {
+      const months = [
+        bucket("2025-01-01T00:00:00.000Z"),
+        bucket("2026-05-01T00:00:00.000Z"),
+      ];
+      const weeks = [
+        bucket("2024-12-30T00:00:00.000Z"),
+        bucket("2026-04-27T00:00:00.000Z"),
+      ];
+      findMany.mockResolvedValueOnce(months).mockResolvedValueOnce(weeks);
+
+      const result = await readTieredRollupSeries({
+        userId: "u",
+        type: "WEIGHT",
+        ...win(3650),
+      });
+
+      expect(findMany.mock.calls[1][0].where.granularity).toBe("WEEK");
+      expect(result?.granularity).toBe("WEEK");
+    });
+
+    it("keeps the coarser rows when the finer tier has no coverage", async () => {
+      const months = [
+        bucket("2026-01-01T00:00:00.000Z"),
+        bucket("2026-05-01T00:00:00.000Z"),
+      ];
+      findMany.mockResolvedValueOnce(months).mockResolvedValueOnce([]);
+
+      const result = await readTieredRollupSeries({
+        userId: "u",
+        type: "WEIGHT",
+        ...win(3650),
+      });
+
+      expect(result?.granularity).toBe("MONTH");
+      expect(result?.rows).toHaveLength(2);
+    });
+
+    it("does not probe when the rows already span the requested tier", async () => {
+      const months = [
+        bucket("2018-01-01T00:00:00.000Z"),
+        bucket("2026-05-01T00:00:00.000Z"),
+      ];
+      findMany.mockResolvedValueOnce(months);
+
+      const result = await readTieredRollupSeries({
+        userId: "u",
+        type: "WEIGHT",
+        ...win(3650),
+      });
+
+      expect(findMany).toHaveBeenCalledTimes(1);
+      expect(result?.granularity).toBe("MONTH");
+    });
+  });
+});
+
+// v1.37.29 — the server tier ladder and the client caption ladder
+// (`pickBucket`) are DIFFERENT functions with different thresholds, and
+// their divergence is exactly what shipped monthly means under a
+// "weekly average" chip. The invariant that keeps the caption honest is
+// directional: for any data span, the tier the server serves is never
+// COARSER than the bucket the client captions — the client may fold
+// finer rows up to its caption, but it cannot split coarser ones.
+describe("server tier vs client caption ladder", () => {
+  const SERVER_COARSENESS = { DAY: 0, WEEK: 1, MONTH: 2, YEAR: 3 } as const;
+  const CLIENT_COARSENESS = { day: 0, week: 1, month: 2 } as const;
+
+  it("never serves coarser than the client captions, for every span up to ten years", () => {
+    for (let span = 1; span <= 3650; span++) {
+      const server = pickRollupGranularityForWindow(span);
+      const client = pickBucket(span);
+      expect(
+        SERVER_COARSENESS[server],
+        `span ${span}d: server ${server} vs client caption ${client}`,
+      ).toBeLessThanOrEqual(CLIENT_COARSENESS[client]);
+    }
   });
 });

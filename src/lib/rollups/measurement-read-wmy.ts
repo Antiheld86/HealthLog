@@ -303,20 +303,28 @@ export interface TieredSeriesRow {
 }
 
 /**
- * Pick the rollup granularity that matches the chart's own client-side
- * `bucketTimeSeries` downsampler (`src/lib/charts/bucket-time-series.ts`):
+ * Pick the rollup granularity for a chart window of `windowDays`:
  *
- *   - > 730 days  → MONTH (the chart renders month points)
- *   - 366–730     → WEEK  (the chart renders week points)
+ *   - > 730 days  → MONTH
+ *   - 366–730     → WEEK
  *   - ≤ 365       → DAY   (daily resolution; the DAY cap covers it)
  *
- * Mirroring the display tier means the server returns exactly the
- * resolution the chart will paint — no finer (which would truncate at the
- * DAY cap) and no coarser (which would drop visible detail). The finer
- * fallback in `readTieredRollupSeries` still rescues a tenant whose
- * coarse buckets the worker has not minted yet.
+ * This ladder must stay COMPATIBLE with the chart's client-side
+ * `pickBucket` (`src/lib/charts/bucket-time-series.ts`), which captions
+ * the rendered series from the visible data span (day ≤ 90, week 91–730,
+ * month > 730): for any span the tier chosen here is never COARSER than
+ * the caption the client will print, so a "Wochendurchschnitt" chip
+ * always sits over points the client actually folded into weeks. The
+ * ladders are not identical — this one may be finer (DAY rows for a
+ * 91–365 d span; the client folds them into the weeks it captions) —
+ * and a test pins the never-coarser direction across every span.
+ *
+ * The finer fallback in `readTieredRollupSeries` still rescues a tenant
+ * whose coarse buckets the worker has not minted yet.
  */
-function pickRollupGranularityForWindow(windowDays: number): RollupGranularity {
+export function pickRollupGranularityForWindow(
+  windowDays: number,
+): RollupGranularity {
   if (windowDays > 730) return "MONTH";
   if (windowDays > 365) return "WEEK";
   return "DAY";
@@ -393,8 +401,8 @@ export async function readTieredRollupSeries(opts: {
   // drop detail the chart can render). Stop at the first tier with coverage.
   const targetIdx = TIER_ORDER.indexOf(target);
   for (let i = targetIdx; i >= 0; i--) {
-    const granularity = TIER_ORDER[i];
-    const rows = await readGranularity(
+    let granularity = TIER_ORDER[i];
+    let rows = await readGranularity(
       userId,
       type,
       granularity,
@@ -403,6 +411,39 @@ export async function readTieredRollupSeries(opts: {
       priority,
     );
     if (rows && rows.length > 0) {
+      // Refine the tier by the ACTUAL data span, not the requested window.
+      // The "Alle" tab always requests ~3650 days, so keying the tier off
+      // the request width alone handed EVERY account MONTH buckets — a
+      // record whose history spans four months came back as four monthly
+      // means while the client (which captions from the real span) labelled
+      // them "weekly average". Re-reading at the tier the real span calls
+      // for returns the resolution the chart will actually caption. A
+      // coverage miss on the finer tier keeps the coarser rows — finer
+      // tiers are the base tiers the workers mint first, so in practice
+      // this probe only fires when the refinement is genuinely available.
+      // The walk is strictly finer-only, so it terminates.
+      for (;;) {
+        const spanDays = Math.ceil(
+          (rows[rows.length - 1].bucketStart.getTime() -
+            rows[0].bucketStart.getTime()) /
+            86_400_000,
+        );
+        const refined = pickRollupGranularityForWindow(Math.max(1, spanDays));
+        if (TIER_ORDER.indexOf(refined) >= TIER_ORDER.indexOf(granularity)) {
+          break;
+        }
+        const finerRows = await readGranularity(
+          userId,
+          type,
+          refined,
+          from,
+          to,
+          priority,
+        );
+        if (!finerRows || finerRows.length === 0) break;
+        granularity = refined;
+        rows = finerRows;
+      }
       const useSum = CUMULATIVE_HK_TYPES.has(type);
       annotate({
         action: { name: "measurement.list" },

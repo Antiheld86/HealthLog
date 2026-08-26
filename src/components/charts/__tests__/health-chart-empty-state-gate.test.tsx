@@ -28,6 +28,18 @@ function buildData(
   }));
 }
 
+/**
+ * ISO instant `agoDays` before now (noon-offset). The range tabs are
+ * calendar-day windows anchored on now (v1.37.29), so an absolute-dated
+ * fixture would age out of the default window and always paint the
+ * no-data card instead of the sparse states under test.
+ */
+function daysAgo(agoDays: number): string {
+  return new Date(
+    Date.now() - 12 * 3_600_000 - agoDays * 86_400_000,
+  ).toISOString();
+}
+
 vi.mock("@/hooks/use-auth", () => ({
   useAuth: () => ({
     isAuthenticated: true,
@@ -71,8 +83,8 @@ describe("<HealthChart> — sparse-data render contract", () => {
   it("renders the chart (not a withholding card) with a sparse caption for two distinct days", async () => {
     const html = await renderChart(
       buildData([
-        { measuredAt: "2026-05-19T09:00:00.000Z", value: 70 },
-        { measuredAt: "2026-05-20T09:00:00.000Z", value: 72 },
+        { measuredAt: daysAgo(1), value: 70 },
+        { measuredAt: daysAgo(0), value: 72 },
       ]),
     );
 
@@ -87,7 +99,7 @@ describe("<HealthChart> — sparse-data render contract", () => {
 
   it("renders the single marker + sparse caption for one day instead of a bare hint", async () => {
     const html = await renderChart(
-      buildData([{ measuredAt: "2026-05-20T09:00:00.000Z", value: 70 }]),
+      buildData([{ measuredAt: daysAgo(0), value: 70 }]),
     );
 
     // A single point still renders (Recharts paints the marker) and the
@@ -109,9 +121,9 @@ describe("<HealthChart> — sparse-data render contract", () => {
   it("omits the sparse caption once three or more distinct days exist", async () => {
     const html = await renderChart(
       buildData([
-        { measuredAt: "2026-05-18T09:00:00.000Z", value: 68 },
-        { measuredAt: "2026-05-19T09:00:00.000Z", value: 70 },
-        { measuredAt: "2026-05-20T09:00:00.000Z", value: 72 },
+        { measuredAt: daysAgo(2), value: 68 },
+        { measuredAt: daysAgo(1), value: 70 },
+        { measuredAt: daysAgo(0), value: 72 },
       ]),
     );
 

@@ -60,11 +60,17 @@ const A11Y_WORKOUT_ID = "a11y-workout";
 const A11Y_CONVERSATION_ID = "a11y-conversation";
 const A11Y_DOCUMENT_ID = "a11y-document";
 
+// Ten daily rows ending half a day before now. The chart range tabs are
+// calendar-day windows anchored on now (v1.37.29), so absolute-dated rows
+// age out of the default window — the weight sub-page would render its
+// empty state and the `.recharts-wrapper` painted gate would never fire.
 const fixedMeasurementRows = Array.from({ length: 10 }, (_, index) => ({
   id: `a11y-measurement-${index}`,
   type: "WEIGHT",
   value: 78.5 + (index % 3) - 1,
-  measuredAt: `2026-07-${String(20 - index).padStart(2, "0")}T08:00:00.000Z`,
+  measuredAt: new Date(
+    Date.now() - 12 * 3_600_000 - index * 86_400_000,
+  ).toISOString(),
   source: "MANUAL",
   notes: null,
 }));

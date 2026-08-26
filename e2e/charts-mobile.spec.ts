@@ -8,8 +8,8 @@ import { mockDashboardSnapshot } from "./utils/mock-dashboard-snapshot";
  *
  * Two assertions per chart visible in the dashboard's initial paint:
  *
- *   1. Header layout integrity — the range tabs (`7 pts / 30 pts /
- *      90 pts / All`) and the cog dropdown sit on a SINGLE horizontal
+ *   1. Header layout integrity — the range tabs (`7d / 30d /
+ *      90d / All`) and the cog dropdown sit on a SINGLE horizontal
  *      row inside the chart card. Pre-fix the bucket-aggregation chip
  *      ("Weekly avg" / "Monthly avg") + comparison caption pushed the
  *      tabs onto a second row on Pixel 5 (and 3-4 rows on Galaxy Fold

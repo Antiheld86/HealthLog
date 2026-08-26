@@ -11,11 +11,14 @@ import deMessages from "../../../../messages/de.json";
 
 function buildData(): unknown[] {
   const out: Array<{ date: string; timestamp: number; PULSE: number }> = [];
-  const base = Date.UTC(2026, 0, 1, 12, 0, 0);
+  // Ten daily points ending half a day before now — the range tabs are
+  // calendar-day windows anchored on now (v1.37.29), so an absolute-dated
+  // fixture would age out of the default window and render the empty state.
+  const base = Date.now() - 12 * 3_600_000;
   for (let i = 0; i < 10; i++) {
     out.push({
-      date: `2026-01-${String(i + 1).padStart(2, "0")}`,
-      timestamp: base + i * 86_400_000,
+      date: `p${i}`,
+      timestamp: base - (9 - i) * 86_400_000,
       PULSE: 60 + i,
     });
   }
