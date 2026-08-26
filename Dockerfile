@@ -60,7 +60,13 @@ FROM node:22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb
 # `tzdata` is required so Europe/Berlin schedules (pg-boss cron, locale-aware
 # timestamp formatting) resolve to the actual offset instead of silently
 # falling back to UTC on Alpine images that ship without it.
-RUN apk add --no-cache tzdata
+#
+# `apk upgrade` pulls in OS-package security fixes the pinned base digest
+# has not absorbed yet (the digest pin stays for build reproducibility;
+# security patches from the Alpine repo override it deliberately —
+# CVE-2026-14456 in openssl was the first instance the container scan
+# caught between base-image rebuilds).
+RUN apk add --no-cache tzdata && apk upgrade --no-cache
 WORKDIR /app
 
 ENV NODE_ENV=production
