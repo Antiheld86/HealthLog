@@ -11,6 +11,7 @@ The chart range selector said points and meant days. Someone who weighs in twice
 - The same tab no longer means two different things depending on how the chart mounted. On the dashboard's preloaded data the old code showed "the last N readings" reaching arbitrarily far back; on a directly opened chart it showed a day window. Both paths now filter to the same calendar-day window, which also keeps comparison-overlay shadow data from leaking into the visible range on sparse records.
 - The mood chart windows by days like every other chart. It used to slice the last N logged days out of the whole history, so its "7" could span weeks while the weight chart's "7" meant a week.
 - The aggregation chip in the chart header reads the same grain decision the chart and its data table use, instead of re-deriving it separately.
+- The runtime image upgrades its OS packages at build time, so the published openssl fix for CVE-2026-14456 ships with this build instead of waiting for the next base-image rebuild.
 
 ## [1.37.28] — 2026-08-24
 
