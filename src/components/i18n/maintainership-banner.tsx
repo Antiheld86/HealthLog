@@ -15,7 +15,7 @@ import { useTranslations } from "@/lib/i18n/context";
  * but the prose has not been hand-reviewed for register, regional
  * vocabulary, or domain-specific nuance.
  *
- * This banner renders ONLY on non-maintained locales (FR/ES/IT/PL
+ * This banner renders ONLY on non-maintained locales (FR/ES/IT/PL/KO
  * today) and surfaces a small, dismissible strip at the top of the
  * authenticated app shell. It tells the user the translation is
  * AI-maintained and links to the GitHub translation-feedback issue

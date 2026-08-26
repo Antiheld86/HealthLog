@@ -121,7 +121,7 @@ Contributors: branch off `main`; PRs target `main`.
 
 ## Translations
 
-HealthLog ships with English (`en`) and German (`de`) maintained by the project, plus French (`fr`), Spanish (`es`), Italian (`it`), and Polish (`pl`) that are **AI-initial, community-maintained**. The maintained locales are reviewed line-by-line; the community-maintained ones surface a small banner inviting users to improve them.
+HealthLog ships with English (`en`) and German (`de`) maintained by the project, plus French (`fr`), Spanish (`es`), Italian (`it`), Polish (`pl`), and Korean (`ko`) that are **AI-initial, community-maintained**. The maintained locales are reviewed line-by-line; the community-maintained ones surface a small banner inviting users to improve them.
 
 ### Improving an existing locale
 

@@ -40,7 +40,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const MESSAGES = join(__dirname, "../../messages");
-const LOCALES = ["de", "en", "es", "fr", "it", "pl"] as const;
+const LOCALES = ["de", "en", "es", "fr", "it", "pl", "ko"] as const;
 
 function bundle(locale: string): Record<string, unknown> {
   return JSON.parse(readFileSync(join(MESSAGES, `${locale}.json`), "utf8"));

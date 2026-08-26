@@ -18,7 +18,7 @@ import { locales, localeLanguageNames, coerceLocale } from "../config";
 import { getPhaseMessage } from "@/lib/jobs/reminder-phases";
 import { detectRefusal } from "@/lib/ai/coach/refusal";
 
-const NON_GERMAN_TRANSLATED = ["es", "fr", "it", "pl"] as const;
+const NON_GERMAN_TRANSLATED = ["es", "fr", "it", "pl", "ko"] as const;
 
 describe("plural tiers", () => {
   it("gives Polish its third tier for 2-4 and keeps many for 5+", () => {

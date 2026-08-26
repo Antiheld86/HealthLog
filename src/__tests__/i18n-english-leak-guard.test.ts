@@ -33,7 +33,7 @@ const EN_PATH = join(MESSAGES_DIR, "en.json");
 // intentionally excluded — it carries accepted anglicisms (e.g. "Health
 // Score") that would be noise here, and is covered by its own pinned checks in
 // `i18n-locale-integrity`.
-const LEAK_LOCALES = ["es", "fr", "it", "pl"] as const;
+const LEAK_LOCALES = ["es", "fr", "it", "pl", "ko"] as const;
 
 function flattenValues(
   obj: unknown,

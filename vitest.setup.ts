@@ -17,6 +17,7 @@ import esMessages from "./messages/es.json";
 import frMessages from "./messages/fr.json";
 import itMessages from "./messages/it.json";
 import plMessages from "./messages/pl.json";
+import koMessages from "./messages/ko.json";
 
 primeMessages("de", deMessages);
 primeMessages("en", enMessages);
@@ -24,3 +25,4 @@ primeMessages("es", esMessages);
 primeMessages("fr", frMessages);
 primeMessages("it", itMessages);
 primeMessages("pl", plMessages);
+primeMessages("ko", koMessages);

@@ -218,7 +218,7 @@ describe("<AppleHealthCard>", () => {
     }
   });
 
-  it.each(["en", "de", "es", "fr", "it", "pl"] as const)(
+  it.each(["en", "de", "es", "fr", "it", "pl", "ko"] as const)(
     "renders localized Apple Health copy for %s without leaking keys",
     (locale) => {
       statusPayload = {

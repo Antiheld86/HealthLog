@@ -855,7 +855,7 @@ export const medicationExtractRequest = z
         "Free-text medication description (any locale). Up to 2 000 characters. The model never echoes the text back into another tenant — it is only used to produce the structured fields.",
       ),
     locale: z
-      .enum(["en", "de", "es", "fr", "it", "pl"])
+      .enum(["en", "de", "es", "fr", "it", "pl", "ko"])
       .optional()
       .describe("Optional UI locale hint for the model."),
     today: z

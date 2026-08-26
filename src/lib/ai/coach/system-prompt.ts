@@ -1130,6 +1130,7 @@ const LOCALE_REPLY_FOOTER_FALLBACK: Record<
   es: "\n\nREPLY LANGUAGE: respond in Spanish. Mirror the user's register; use natural Spanish health vocabulary.",
   it: "\n\nREPLY LANGUAGE: respond in Italian. Mirror the user's register; use natural Italian health vocabulary.",
   pl: "\n\nREPLY LANGUAGE: respond in Polish. Mirror the user's register (formal Pan/Pani for medical-adjacent topics); use natural Polish health vocabulary.",
+  ko: "\n\nREPLY LANGUAGE: respond in Korean. Use the 해요체 register throughout (never 합쇼체 or plain 한다체); use natural Korean health vocabulary.",
 };
 
 /**

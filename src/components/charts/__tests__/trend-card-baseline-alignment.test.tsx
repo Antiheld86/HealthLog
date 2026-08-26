@@ -202,7 +202,7 @@ describe("dashboard.*Short keys exist across all six locales", () => {
 
   // Resolved at test time so the assertion runs against the current
   // bundle, not a stale cached snapshot.
-  const locales = ["en", "de", "fr", "es", "it", "pl"] as const;
+  const locales = ["en", "de", "fr", "es", "it", "pl", "ko"] as const;
 
   it.each(locales)("%s carries every dashboard.*Short key", async (locale) => {
     const messages = (await import(`../../../../messages/${locale}.json`))

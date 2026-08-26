@@ -173,7 +173,7 @@ describe("enqueueSummaryCatchUp", () => {
 });
 
 describe("the toggle copy discloses the catch-up", () => {
-  const LOCALES = ["de", "en", "es", "fr", "it", "pl"] as const;
+  const LOCALES = ["de", "en", "es", "fr", "it", "pl", "ko"] as const;
 
   function autoReadCopy(locale: string): { subLabel: string; honesty: string } {
     const bundle = JSON.parse(
