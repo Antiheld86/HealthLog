@@ -11,8 +11,9 @@
  *   - PHQ-9: Kroenke 2001; GAD-7: Spitzer 2006 (public-domain Pfizer grant).
  *   - WHO-5: WHO/UCN/MSD/MHE/2024.1 (© WHO 2024, CC BY-NC-SA 3.0 IGO) — raw
  *     0–25, × 4 → 0–100; "a percentage score below 50 … an indication for
- *     further assessment". WHO publishes official translations for all six
- *     app locales; they ship verbatim.
+ *     further assessment". Six app locales ship the WHO/PRU translations
+ *     verbatim; Korean, which neither distribution carries, ships the
+ *     published Kim 2010 translation instead.
  *   - SCI: Espie et al., BMJ Open 2014;4:e004183 (© Sleepio Ltd, licensed
  *     free for non-commercial use, CC BY-NC) — 8 items, 0–4 each, total 0–32,
  *     HIGHER = better sleep; "a score of ≤16 … seems reasonable to detect
@@ -98,7 +99,7 @@ export interface InstrumentDefinition {
   attribution: string;
 }
 
-const ALL_APP_LOCALES = ["de", "en", "es", "fr", "it", "pl"] as const;
+const ALL_APP_LOCALES = ["de", "en", "es", "fr", "it", "pl", "ko"] as const;
 
 /**
  * The PHQ family is public-domain (Pfizer 2010); this is the canonical footer
@@ -188,11 +189,17 @@ const WHO5: InstrumentDefinition = {
   actionThreshold: 50,
   safetyItemIndex: null,
   // WHO publishes official de/en/es/fr/it/pl versions — all bundled verbatim.
+  // There is no Korean one, so `ko` carries the published forward/back-
+  // translation from Kim 2010 instead, which is CC BY-NC and so
+  // redistributable. Its validation sample was community-dwelling elderly,
+  // not general adults — narrower than the other six arms.
   validatedItemLocales: ALL_APP_LOCALES,
   attribution:
     "World Health Organization. The World Health Organization-Five Well-Being " +
     "Index (WHO-5). Geneva: World Health Organization; 2024. Licence: " +
-    "CC BY-NC-SA 3.0 IGO. WHO does not endorse this application.",
+    "CC BY-NC-SA 3.0 IGO. WHO does not endorse this application. Korean " +
+    "translation: Kim HJ, Moon YS, Son BK, Lee SK, Rho HJ, Kim DH. J Korean " +
+    "Geriatr Psychiatry 2010;14(2):90-96 (CC BY-NC 3.0).",
 };
 
 /**
