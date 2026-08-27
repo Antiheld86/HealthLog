@@ -6454,6 +6454,25 @@
       "saved": "Ajustes de la clave de IA del servidor guardados",
       "error": "No se pudo guardar la clave de IA del servidor"
     },
+    "providerHealth": {
+      "title": "Estado de los proveedores de IA",
+      "description": "Estado de entrega de cada proveedor de IA, agregado del registro de reintentos por usuario.",
+      "loading": "Cargando el estado de los proveedores…",
+      "loadError": "No se pudo cargar el estado de los proveedores.",
+      "empty": "Aún no se han registrado llamadas de IA.",
+      "trackedUsers": "{count} usuarios registrados",
+      "lastOk": "último éxito {at}",
+      "lastFailure": "último fallo {at}",
+      "statusHealthy": "Correcto",
+      "statusFailing": "{failing} de {tracked} fallan, {run} seguidos",
+      "typeAdminOpenai": "Clave del servidor (operador)",
+      "typeAdminCodex": "ChatGPT central (operador)",
+      "typeOpenai": "Clave de OpenAI (personal)",
+      "typeAnthropic": "Clave de Anthropic (personal)",
+      "typeCodex": "Inicio de sesión de ChatGPT (personal)",
+      "typeLocal": "Modelo local (personal)",
+      "typeGateway": "Pasarela compatible con OpenAI (personal)"
+    },
     "aiQuality": {
       "title": "Calidad de los análisis",
       "loading": "Cargando resumen de comentarios...",

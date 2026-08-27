@@ -6454,6 +6454,25 @@
       "saved": "KI-Server-Schlüssel gespeichert",
       "error": "Speichern des KI-Server-Schlüssels fehlgeschlagen"
     },
+    "providerHealth": {
+      "title": "Zustand der KI-Provider",
+      "description": "Zustellstatus jedes KI-Providers, zusammengefasst aus dem Wiederholungsregister pro Nutzer.",
+      "loading": "Provider-Zustand wird geladen…",
+      "loadError": "Der Provider-Zustand konnte nicht geladen werden.",
+      "empty": "Es wurden noch keine KI-Aufrufe aufgezeichnet.",
+      "trackedUsers": "{count} Nutzer erfasst",
+      "lastOk": "letzter Erfolg {at}",
+      "lastFailure": "letzter Fehlschlag {at}",
+      "statusHealthy": "In Ordnung",
+      "statusFailing": "{failing} von {tracked} scheitern, {run} in Folge",
+      "typeAdminOpenai": "Server-Schlüssel (Betreiber)",
+      "typeAdminCodex": "Zentrales ChatGPT (Betreiber)",
+      "typeOpenai": "OpenAI-Schlüssel (persönlich)",
+      "typeAnthropic": "Anthropic-Schlüssel (persönlich)",
+      "typeCodex": "ChatGPT-Anmeldung (persönlich)",
+      "typeLocal": "Lokales Modell (persönlich)",
+      "typeGateway": "OpenAI-kompatibles Gateway (persönlich)"
+    },
     "aiQuality": {
       "title": "Auswertungs-Qualität",
       "loading": "Feedback-Zusammenfassung wird geladen…",

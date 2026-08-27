@@ -6454,6 +6454,25 @@
       "saved": "Zapisano ustawienia serwerowego klucza AI",
       "error": "Nie udało się zapisać serwerowego klucza AI"
     },
+    "providerHealth": {
+      "title": "Stan dostawców AI",
+      "description": "Stan dostarczania każdego dostawcy AI, zebrany z rejestru ponowień na użytkownika.",
+      "loading": "Ładowanie stanu dostawców…",
+      "loadError": "Nie udało się załadować stanu dostawców.",
+      "empty": "Nie zarejestrowano jeszcze żadnych wywołań AI.",
+      "trackedUsers": "Śledzeni użytkownicy: {count}",
+      "lastOk": "ostatni sukces {at}",
+      "lastFailure": "ostatnia awaria {at}",
+      "statusHealthy": "Sprawny",
+      "statusFailing": "{failing} z {tracked} zawodzi, {run} z rzędu",
+      "typeAdminOpenai": "Klucz serwera (operator)",
+      "typeAdminCodex": "Centralny ChatGPT (operator)",
+      "typeOpenai": "Klucz OpenAI (osobisty)",
+      "typeAnthropic": "Klucz Anthropic (osobisty)",
+      "typeCodex": "Logowanie ChatGPT (osobiste)",
+      "typeLocal": "Model lokalny (osobisty)",
+      "typeGateway": "Brama zgodna z OpenAI (osobista)"
+    },
     "aiQuality": {
       "title": "Jakość analiz",
       "loading": "Ładowanie podsumowania opinii...",

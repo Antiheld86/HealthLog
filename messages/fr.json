@@ -6454,6 +6454,25 @@
       "saved": "Paramètres de la clé IA du serveur enregistrés",
       "error": "Échec de l'enregistrement de la clé IA du serveur"
     },
+    "providerHealth": {
+      "title": "État des fournisseurs d'IA",
+      "description": "État de livraison de chaque fournisseur d'IA, agrégé depuis le registre de reprise par utilisateur.",
+      "loading": "Chargement de l'état des fournisseurs…",
+      "loadError": "Impossible de charger l'état des fournisseurs.",
+      "empty": "Aucun appel d'IA n'a encore été enregistré.",
+      "trackedUsers": "{count} utilisateurs suivis",
+      "lastOk": "dernier succès {at}",
+      "lastFailure": "dernier échec {at}",
+      "statusHealthy": "En bon état",
+      "statusFailing": "{failing} sur {tracked} en échec, {run} d'affilée",
+      "typeAdminOpenai": "Clé du serveur (opérateur)",
+      "typeAdminCodex": "ChatGPT central (opérateur)",
+      "typeOpenai": "Clé OpenAI (personnelle)",
+      "typeAnthropic": "Clé Anthropic (personnelle)",
+      "typeCodex": "Connexion ChatGPT (personnelle)",
+      "typeLocal": "Modèle local (personnel)",
+      "typeGateway": "Passerelle compatible OpenAI (personnelle)"
+    },
     "aiQuality": {
       "title": "Qualité des analyses",
       "loading": "Chargement du résumé des retours...",
