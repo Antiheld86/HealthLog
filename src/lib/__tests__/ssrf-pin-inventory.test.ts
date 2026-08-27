@@ -8,7 +8,8 @@
  * A future edit that drops the pin (re-opening the SSRF surface) fails here
  * instead of shipping silently.
  *
- * The LOCAL AI client is the deliberate exception: it stays CONDITIONAL
+ * The LOCAL AI client and (since v1.37.30) the openai-client's gateway and
+ * admin-key tags are the deliberate exceptions: they stay CONDITIONAL
  * (`requirePublicHost: !allowPrivate`) so an operator can opt into LAN hosts
  * via `ALLOW_LOCAL_AI_PRIVATE_HOSTS`. v1.18.7 (SECURITY LOW) — that flag is
  * now a host ALLOWLIST (`true` = any private host; a comma-separated list =
@@ -26,8 +27,16 @@ const SRC = join(__dirname, "..");
 const read = (rel: string) => readFileSync(join(SRC, rel), "utf8");
 
 describe("SSRF requirePublicHost pin inventory", () => {
-  it("openai-client pins the BYO base-URL outbound unconditionally", () => {
-    expect(read("ai/openai-client.ts")).toMatch(/requirePublicHost:\s*true/);
+  // v1.37.30 — openai-client is no longer a blanket pin: the gateway and
+  // admin-key tags carry a person-typed base URL and route through the
+  // operator allowlist helper, with `true` as the ternary floor for every
+  // other tag (codex). We assert the exact conditional shape so a future
+  // edit can neither drop the floor nor widen the condition silently.
+  it("openai-client routes person-typed base URLs through the allowlist with a pinned floor", () => {
+    const src = read("ai/openai-client.ts");
+    expect(src).toMatch(
+      /requirePublicHost:\s*this\.isGateway \|\| this\.type === "admin-key"\s*\? requirePublicHostFor\(this\.config\.baseUrl\)\s*:\s*true/,
+    );
   });
 
   it("anthropic-client pins the BYO base-URL outbound unconditionally", () => {

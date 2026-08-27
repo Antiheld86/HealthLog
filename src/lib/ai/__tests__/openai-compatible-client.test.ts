@@ -9,9 +9,11 @@ import { singleUserTurn } from "../types";
  * Two properties carry the security weight of this provider and are pinned
  * here rather than left to review:
  *
- *   1. The pinned `admin-key` / `codex` tags keep `requirePublicHost: true`
- *      no matter what the operator allowlisted. Only the gateway tag — whose
- *      base URL a person typed — consults the allowlist.
+ *   1. The `codex` tag keeps `requirePublicHost: true` no matter what the
+ *      operator allowlisted — its base URL is a repository constant. The
+ *      gateway and `admin-key` tags — the two whose base URL a person can
+ *      type — consult the allowlist, and without an allowlist entry a
+ *      private host is refused exactly as before (v1.37.30).
  *   2. The SSRF floor under the gateway is `isPublicUrl`, which is the same
  *      floor the Local provider sits on, including every IPv4 / IPv6
  *      alt-notation class.
@@ -168,18 +170,52 @@ describe("OpenAI-compatible gateway — host policy", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the pinned tags on requirePublicHost even when the operator allowlisted the host", async () => {
+  // v1.37.30 — the admin-key tag joined the allowlist policy: its base URL
+  // is operator-typed in exactly one place (the global provider in the admin
+  // settings, e.g. pointed at a private OpenAI-compatible OAuth proxy), and
+  // the allowlist is the operator's own grant. The floor is unchanged: a
+  // private host WITHOUT an allowlist entry is refused, and the codex tag
+  // stays hard-pinned because its base URL is a repository constant. Note
+  // that every non-operator admin-key construction in the app pins the
+  // public `api.openai.com` constant, so the personal-key posture cannot
+  // reach this branch.
+  it("admin-key consults the allowlist for an operator-typed private host", async () => {
+    const fetchMock = okReply();
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubEnv("ALLOW_LOCAL_AI_PRIVATE_HOSTS", "openai-oauth-proxy");
+
+    await new OpenAIClient({
+      apiKey: "unused-behind-proxy",
+      model: "gpt-4o",
+      baseUrl: "http://openai-oauth-proxy:10531/v1",
+    }).generateCompletion(jsonTurn());
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("admin-key still refuses a private host the operator did not allowlist", async () => {
     vi.stubGlobal("fetch", okReply());
-    // The operator opened every private host for their local AI endpoint.
-    // That opt-in belongs to the gateway/local surface; a client carrying an
-    // OpenAI-issued key must not inherit it.
-    vi.stubEnv("ALLOW_LOCAL_AI_PRIVATE_HOSTS", "true");
+    vi.stubEnv("ALLOW_LOCAL_AI_PRIVATE_HOSTS", "");
 
     await expect(
       new OpenAIClient({
         apiKey: "sk-user-openai-key",
         model: "gpt-4o",
         baseUrl: "http://192.168.1.5:4000/v1",
+      }).generateCompletion(jsonTurn()),
+    ).rejects.toMatchObject({ kind: "private_host" });
+  });
+
+  it("codex stays pinned to public hosts even under a blanket allowlist", async () => {
+    vi.stubGlobal("fetch", okReply());
+    vi.stubEnv("ALLOW_LOCAL_AI_PRIVATE_HOSTS", "true");
+
+    await expect(
+      new OpenAIClient({
+        apiKey: "codex-access-token",
+        model: "gpt-5.4",
+        baseUrl: "http://192.168.1.5:4000/v1",
+        providerType: "codex",
       }).generateCompletion(jsonTurn()),
     ).rejects.toMatchObject({ kind: "private_host" });
   });
