@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.37.31] — 2026-08-27
+
+The retry ledger knew when an AI provider was failing; the operator had no way to see it.
+
+### Added
+
+- The admin AI settings section shows a provider-health card: one row per provider type with how many users' chains touch it, how many are currently failing, the worst uninterrupted failure run, and the last success and failure times. Operator-managed providers sort first, since their failure takes the shared fallback down for everyone relying on it. The backing endpoint is admin-only and reports counts and timestamps, never individual users.
+
 ## [1.37.30] — 2026-08-27
 
 An operator pointing the global AI provider at a private OpenAI-compatible proxy got a network refusal on every call, and nothing said why.

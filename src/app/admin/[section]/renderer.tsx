@@ -18,6 +18,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { AboutSection } from "@/components/settings/about-section";
 import { AiQualitySection } from "@/components/admin/ai-quality-section";
 import { AiServerKeySection } from "@/components/admin/ai-server-key-section";
+import { ProviderHealthSection } from "@/components/admin/provider-health-section";
 import { CentralCodexSection } from "@/components/admin/central-codex-section";
 import { AssistantSection } from "@/components/admin/assistant-section";
 import { CoachFeedbackSection } from "@/components/admin/coach-feedback-section";
@@ -89,6 +90,7 @@ export function AdminSectionRenderer({
           <AssistantSection />
           <AiServerKeySection />
           <CentralCodexSection />
+          <ProviderHealthSection />
           <CoachFeedbackSection />
           <AiQualitySection />
         </SectionFrame>

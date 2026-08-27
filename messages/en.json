@@ -6454,6 +6454,25 @@
       "saved": "AI server key settings saved",
       "error": "Saving the AI server key failed"
     },
+    "providerHealth": {
+      "title": "AI provider health",
+      "description": "Delivery state of every AI provider, folded from the per-user retry ledger.",
+      "loading": "Loading provider health…",
+      "loadError": "Provider health could not be loaded.",
+      "empty": "No AI calls have been recorded yet.",
+      "trackedUsers": "{count} users tracked",
+      "lastOk": "last success {at}",
+      "lastFailure": "last failure {at}",
+      "statusHealthy": "Healthy",
+      "statusFailing": "{failing} of {tracked} failing, {run} in a row",
+      "typeAdminOpenai": "Server key (operator)",
+      "typeAdminCodex": "Central ChatGPT (operator)",
+      "typeOpenai": "OpenAI key (personal)",
+      "typeAnthropic": "Anthropic key (personal)",
+      "typeCodex": "ChatGPT sign-in (personal)",
+      "typeLocal": "Local model (personal)",
+      "typeGateway": "OpenAI-compatible gateway (personal)"
+    },
     "aiQuality": {
       "title": "Insights Quality",
       "loading": "Loading feedback summary…",

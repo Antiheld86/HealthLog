@@ -17,6 +17,11 @@ export const adminKeys = {
    */
   adminAiServerKey: () => ["admin", "ai-server-key"] as const,
   /**
+   * v1.37.31 — per-provider delivery health folded from the per-user
+   * retry ledger. Read via `/api/admin/provider-health`.
+   */
+  adminProviderHealth: () => ["admin", "provider-health"] as const,
+  /**
    * Operator-shared central Codex (ChatGPT subscription) connection status.
    * Read/write via `/api/admin/central-codex`; the user-facing
    * `insightsSettings.centralCodexAvailable` flag mirrors the connected state.

@@ -6454,6 +6454,25 @@
       "saved": "Impostazioni della chiave IA del server salvate",
       "error": "Salvataggio della chiave IA del server non riuscito"
     },
+    "providerHealth": {
+      "title": "Stato dei provider IA",
+      "description": "Stato di consegna di ogni provider IA, aggregato dal registro dei tentativi per utente.",
+      "loading": "Caricamento dello stato dei provider…",
+      "loadError": "Impossibile caricare lo stato dei provider.",
+      "empty": "Non è stata ancora registrata alcuna chiamata IA.",
+      "trackedUsers": "{count} utenti tracciati",
+      "lastOk": "ultimo successo {at}",
+      "lastFailure": "ultimo errore {at}",
+      "statusHealthy": "Regolare",
+      "statusFailing": "{failing} su {tracked} in errore, {run} di fila",
+      "typeAdminOpenai": "Chiave del server (operatore)",
+      "typeAdminCodex": "ChatGPT centrale (operatore)",
+      "typeOpenai": "Chiave OpenAI (personale)",
+      "typeAnthropic": "Chiave Anthropic (personale)",
+      "typeCodex": "Accesso ChatGPT (personale)",
+      "typeLocal": "Modello locale (personale)",
+      "typeGateway": "Gateway compatibile OpenAI (personale)"
+    },
     "aiQuality": {
       "title": "Qualità delle analisi",
       "loading": "Caricamento riepilogo feedback...",
