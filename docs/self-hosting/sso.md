@@ -115,9 +115,11 @@ Client registration essentials only — the IdP's own docs cover the rest.
 (the routes return 403; hiding the buttons is not the boundary).
 Consequences to accept before turning it on:
 
-- **The native iOS app cannot sign in.** It authenticates via
-  password/passkey only; there is no native SSO flow yet. Do not enable
-  `OIDC_ONLY` on a deployment with active iOS users.
+- **The native iOS app needs a build that ships the SSO flow.** The app
+  signs in via the native OIDC handoff (`GET /api/auth/oidc/login?client=native`
+  with PKCE and the fixed `healthlog://` callback) or via password/passkey.
+  `OIDC_ONLY` works with app builds that carry the handoff; older
+  password/passkey-only builds are locked out.
 - **Existing sessions survive.** The flag gates new sign-ins, not live
   sessions — nobody is thrown out at flip time, including
   password-authenticated sessions.

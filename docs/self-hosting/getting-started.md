@@ -17,7 +17,8 @@ already installed, longer if a TLS-fronted public hostname is in scope
 - **Outbound HTTPS** to `ghcr.io` (image pulls) plus whichever
   integration endpoints you plan to enable (Withings, OpenAI, etc.).
   The opt-in environmental-context module additionally reaches
-  `api.open-meteo.com` for weather and daylight; it stays off until you
+  `archive-api.open-meteo.com` and `geocoding-api.open-meteo.com` for
+  weather and daylight; it stays off until you
   enable it and set a home location, and every outbound call goes
   through the SSRF-guarded egress wrapper.
 - **Optional but recommended:** a reverse proxy that terminates TLS
@@ -191,8 +192,9 @@ NEXT_PUBLIC_DASHBOARD_SNAPSHOT=false pnpm build
   `app_settings.singleton.registrationEnabled`. The admin panel can
   flip it back if a previous owner closed it.
 - **Service unreachable on `localhost:3000`.** Check `docker compose
-ps` — the `app` healthcheck polls `/api/version` every 30 seconds
-  and will mark the container unhealthy if Postgres is still
+ps` — the `app` healthcheck polls `/api/health` every 30 seconds
+  (it returns 503 while the database or worker is down) and will mark
+  the container unhealthy if Postgres is still
   starting. Tail `docker compose logs db` to confirm Postgres came up
   cleanly.
 - **OAuth callbacks loop back to localhost.** Confirm `APP_URL` and

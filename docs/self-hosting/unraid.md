@@ -7,7 +7,8 @@ Unraid UI, but because CA templates describe a single container you install
 PostgreSQL separately and wire the two together.
 
 HealthLog stores all persistent state in PostgreSQL — the app container itself is
-stateless (the offline geo-IP databases are baked into the image). A backup of
+stateless (the offline geo-IP databases are either baked in at build time or
+mounted read-only; replaceable either way, not state). A backup of
 the database is a backup of everything.
 
 ## What you need

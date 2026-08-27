@@ -88,10 +88,14 @@ endless spinner.
 
 ## Healthchecks
 
-- `app` (web) healthcheck: `wget /api/version` every 30s.
-- `app-worker` does not expose a port; its liveness is reported into
-  the `worker_status` table on every reminder pass and surfaced through
-  `/api/admin/status`.
+- `app` (web) healthcheck: `wget /api/health` every 30s.
+- `app-worker` does not expose a port; its liveness is tracked
+  in-memory inside the process (`src/lib/jobs/worker-status.ts`) and
+  read back by `/api/admin/status`. In a web/worker split this means
+  the web container cannot see the separate worker container's
+  liveness: `/api/admin/status` only reports the worker embedded in
+  the container that serves the request. Watch the worker container's
+  own logs and restart policy instead.
 
 The web container does NOT depend on the worker, and vice versa, so
 neither container's startup can deadlock the other. The shared
@@ -112,13 +116,17 @@ dependency is Postgres; both wait on `db: condition: service_healthy`.
 
 ## Postgres connection-pool sizing
 
-Every container that boots the HealthLog image opens its own
-`pg.Pool` against the configured `DATABASE_URL`. The pool ceiling is
-**20 connections per container by default** (raised from the library
-default of 10 in v1.4.40 to keep the dashboard's analytics fan-out
-from starving every other query during a cold mount).
+Every container that boots the HealthLog image owns a connection
+budget against the configured `DATABASE_URL`. The budget is
+**20 connections per container by default** and is split between the
+Prisma pool and pg-boss (2 connections). The bundled compose exposes
+the knob as `DB_CONNECTION_LIMIT`, baked into `DATABASE_URL` as
+`connection_limit`; `DATABASE_POOL_MAX` remains a working explicit
+override. Resolution order: `DB_CONNECTION_LIMIT`, then
+`DATABASE_POOL_MAX`, then the `connection_limit` URL parameter, then
+the default of 20.
 
-Plan total Postgres slots as **container_count × `DATABASE_POOL_MAX`**.
+Plan total Postgres slots as **container_count × budget**.
 A stock Postgres 16 container ships with `max_connections = 100`, so
 the safe envelope is:
 
@@ -139,9 +147,10 @@ transaction-pooling mode.
 
 ### Overriding the per-container pool ceiling
 
-Set `DATABASE_POOL_MAX` to a positive integer on every container that
-needs a non-default ceiling — both web and worker pick up the same
-env var:
+With the bundled compose, set `DB_CONNECTION_LIMIT` in `.env`; it
+flows into `DATABASE_URL`'s `connection_limit`. On a hand-rolled
+setup, `DATABASE_POOL_MAX` as a plain env var works the same way on
+every container, web and worker alike:
 
 ```yaml
 # docker-compose.yml — example for a 6-container deployment
@@ -176,6 +185,7 @@ tenant, starving every other dashboard query for the duration. The
 fan-out — keeps 16 slots free for the rest of the dashboard while
 still sitting well under Postgres's 100-slot stock ceiling.
 
-The implementation lives in `src/lib/db.ts → getPoolMax()`; the
+The implementation lives in `src/lib/db.ts → getConnectionBudget()`
+(split into `getPrismaPoolMax()` and `getPgBossPoolMax()`); the
 20-slot default was chosen after measuring on a 4-CPU production
-container — see the inline rationale in `getPoolMax()`.
+container — see the inline rationale in `src/lib/db.ts`.
