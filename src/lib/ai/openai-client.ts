@@ -35,11 +35,13 @@ interface OpenAIClientConfig {
    * to log as "codex" instead.
    *
    * v1.33.1 (#470) — `openai-compatible` is the user-configured gateway
-   * (LiteLLM / OpenRouter / vLLM). It is the ONLY tag whose `baseUrl` is not
-   * a HealthLog-pinned constant, and the two behaviours below hang off it:
-   * the operator's private-host allowlist may apply, and the JSON-mode
-   * dialect is learned per endpoint instead of assumed. Every other tag
-   * keeps the pinned `api.openai.com` posture unchanged.
+   * (LiteLLM / OpenRouter / vLLM). Its `baseUrl` always comes from a person,
+   * and two behaviours hang off that: the operator's private-host allowlist
+   * may apply, and the JSON-mode dialect is learned per endpoint instead of
+   * assumed. `admin-key` carries a person-typed base URL in exactly one
+   * place (the operator's global provider in the admin settings) and shares
+   * the allowlist policy for it since v1.37.30; the dialect stays assumed.
+   * `codex` keeps the fully pinned posture.
    */
   providerType?: OpenAIProviderType;
 }
@@ -148,14 +150,25 @@ export class OpenAIClient implements AIProvider {
       // v1.21.5 — honour the caller's per-request timeout override; default 60 s.
       // v1.33.1 (#470) — the gateway tag reuses the Local provider's host
       // policy verbatim: public hosts always; a private host only when the
-      // operator allowlisted it via ALLOW_LOCAL_AI_PRIVATE_HOSTS. Every other
-      // tag stays pinned to `requirePublicHost: true` — `api.openai.com` is
-      // public and there is nothing to opt into.
+      // operator allowlisted it via ALLOW_LOCAL_AI_PRIVATE_HOSTS.
+      //
+      // v1.37.30 — the `admin-key` tag consults the same policy. Its base URL
+      // is the one other operator-typed URL in this client (an operator can
+      // point the global provider at a private OpenAI-compatible proxy, e.g.
+      // an OAuth sidecar), and both ends of the grant are the operator's own:
+      // the URL comes from the admin settings, the allowlist from the
+      // operator's environment. Every non-operator construction of this tag
+      // pins the public `api.openai.com` constant, for which the policy
+      // resolves to `true` without ever consulting the allowlist — so the
+      // personal-key posture is unchanged. The `codex` tag keeps the hard
+      // pin: its base URL is a repository constant, there is nothing an
+      // operator legitimately redirects.
       {
         timeoutMs: params.timeoutMs ?? 60_000,
-        requirePublicHost: this.isGateway
-          ? requirePublicHostFor(this.config.baseUrl)
-          : true,
+        requirePublicHost:
+          this.isGateway || this.type === "admin-key"
+            ? requirePublicHostFor(this.config.baseUrl)
+            : true,
         signal: params.signal,
       },
     );
