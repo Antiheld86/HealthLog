@@ -73,7 +73,7 @@ only when the OAuth callback must differ from that default.
 
 When HealthLog calls Withings `Notify.subscribe()` for a newly-linked
 account, it hands Withings the callback URL constructed by
-`getWithingsWebhookCallbackUrl()` (`src/lib/withings/sync.ts:38-48`).
+`getWithingsWebhookCallbackUrl()` (`src/lib/withings/sync.ts`).
 The shape is:
 
 ```
@@ -107,8 +107,9 @@ With the credentials saved in Settings, open
 5. The settings page now shows **Connected** with the timestamp of
    the last successful sync.
 
-Subsequent syncs run automatically on every webhook delivery plus a
-safety-net cron pull every few hours.
+Subsequent syncs run automatically on every webhook delivery plus an
+hourly safety-net cron pull (measurements at :00, sleep at :15, ECG
+at :41).
 
 ## Source-priority interaction
 
@@ -117,7 +118,7 @@ for point measurements (weight, BP, pulse, body fat, body
 temperature, SpO₂, VO₂ max) and **APPLE_HEALTH ≻ WITHINGS ≻ MANUAL**
 for cumulative metrics (steps, active energy, distance, flights,
 sleep, HRV, resting HR). The defaults live in
-`src/lib/validations/source-priority.ts:205-220`.
+`DEFAULT_SOURCE_PRIORITY` in `src/lib/validations/source-priority.ts`.
 
 Concrete consequences if you run Withings alongside an Apple Health
 import:
@@ -130,7 +131,7 @@ import:
   when Apple Health is also linked, so the Apple Health stream wins
   for the cumulative axis. The Withings rows stay in the DB.
 
-Override per-user via the Sources section of `/settings/thresholds`.
+Override per-user via Settings → Sources (`/settings/sources`).
 
 ## Troubleshooting
 
@@ -169,7 +170,7 @@ fixes the mismatch by updating the URL Withings holds.
 Withings revokes refresh tokens on password change, app un-authorise,
 or after extended inactivity. The `WithingsConnection` row flips to
 `error_reauth` status and the scheduled sync no-ops until the user
-re-runs the OAuth flow (`src/lib/withings/sync.ts:155-161`).
+re-runs the OAuth flow (`src/lib/withings/sync.ts`).
 Click **Connect Withings** again from the settings page; the
 callback exchanges fresh tokens and the next sync runs through the
 last 30 days of history to catch up.
@@ -179,20 +180,23 @@ last 30 days of history to catch up.
 The Settings page **Disconnect** button:
 
 1. Calls `POST /api/withings/disconnect`.
-2. Server-side: revokes the access token via Withings'
-   `Notify.revoke`, deletes the `WithingsConnection` row, and audits
-   the action.
+2. Server-side: unsubscribes the webhook categories (best-effort
+   Withings `Notify` revoke per category), deletes the
+   `WithingsConnection` row with its stored encrypted tokens, and
+   audits the action. The Withings-side grant itself persists until
+   the user un-authorises HealthLog in their Withings account.
 3. Existing `Measurement` rows tagged `source = WITHINGS` stay in
    the database — disconnect does not delete data. Re-linking the
    same Withings account merges back onto the same metric
    timeline; the upsert path matches on `(userId, type, measuredAt,
 source)` so previously-synced rows update in place.
 
-## Admin probe
+## Connection test
 
-`POST /api/integrations/withings/test` (admin-only) runs a
-read-only round-trip against the user's stored credentials and
-returns the latency in milliseconds. Use it from the admin panel
-when a user reports stale data — a green test plus a stale
-`lastSyncedAt` usually means the webhook URL Withings holds is out
-of sync (re-subscribe per the steps above).
+`POST /api/integrations/withings/test` runs a read-only round-trip
+against the calling user's own stored credentials and returns the
+latency in milliseconds (rate-limited to 5/min per user). The
+Withings settings card surfaces it as the connection test. Use it
+when data looks stale — a green test plus a stale `lastSyncedAt`
+usually means the webhook URL Withings holds is out of sync
+(re-subscribe per the steps above).

@@ -1,6 +1,6 @@
 # Data import
 
-HealthLog has three ways to bring data in, all reachable from
+HealthLog has four ways to bring data in, all reachable from
 **Settings → Export & Import**:
 
 1. An **Apple Health `export.zip`** upload — the full archive from the
@@ -12,8 +12,11 @@ HealthLog has three ways to bring data in, all reachable from
    from another tracker. This page documents that format.
 3. A **CSV import** — one measurement per row, for a spreadsheet or a
    meter / sensor export. Documented in section 3 below.
+4. A **medication dose-history import** — its own card in the same
+   panel, posting to `POST /api/medications/intake/dose-history-import`
+   with its own `?dryRun=1` preview.
 
-All three paths skip rows that already exist, so re-running an import is
+All paths skip rows that already exist, so re-running an import is
 safe — it merges rather than duplicating.
 
 Every import reports what it actually wrote. A file where nothing was
@@ -33,9 +36,10 @@ the browser — and a background job parses it while a progress indicator
 polls for the imported / skipped counts.
 
 Re-uploading the same archive resolves to the same job by content hash,
-so it merges instead of creating duplicates. Clinical records
-(electrocardiograms, lab documents) are intentionally skipped. The full
-type mapping lives in [`apple-health.md`](./apple-health.md).
+so it merges instead of creating duplicates. ECG CSVs and metric-typed
+clinical records are imported too; see
+[`apple-health.md`](./apple-health.md) for the details and the full
+type mapping.
 
 ## 2. Generic JSON import
 
@@ -65,6 +69,7 @@ skipped and counted under `skipped` in the response.
 | `source`         | no       | string | Free-text origin label. Imported rows are tagged `IMPORT` server-side regardless. |
 | `notes`          | no       | string | Optional free text.                                                               |
 | `glucoseContext` | no       | enum   | Only for `BLOOD_GLUCOSE`. See [Glucose context](#glucose-context).                |
+| `externalId`     | no       | string | A source-stable id (1–120 chars). When present, a re-import upserts on `(user, type, source, externalId)` so an edit upstream is reflected rather than skipped. |
 
 ### Glucose context
 
@@ -95,7 +100,7 @@ moment you know it.
 | `mood`       | yes      | enum    | One of `SUPER_GUT`, `GUT`, `OKAY`, `SCHLECHT`, `LAUSIG`.                                                                                                  |
 | `score`      | yes      | integer | `1`–`5`.                                                                                                                                                  |
 | `tags`       | no       | string  | Comma-separated tags.                                                                                                                                     |
-| `loggedAt`   | no       | string  | ISO-8601 datetime; defaults to now.                                                                                                                       |
+| `loggedAt`   | no       | string  | ISO-8601 datetime; defaults to the start of the given `date` in the default timezone.                                                                     |
 | `externalId` | no       | string  | A source-stable id (1–120 chars). When present, a re-import upserts on `(user, source, externalId)` so an edit upstream is reflected rather than skipped. |
 
 ### `MeasurementType` values and canonical units
@@ -172,9 +177,10 @@ hand-authored.
 | `WALKING_STEADINESS_EVENT`      | event                |
 | `BREATHING_DISTURBANCE_EVENT`   | event                |
 
-The live, machine-readable list of writable types and their units is
-also served by `GET /api/meta/capabilities` under `ingest.quantityTypes`
-— the authoritative source if this table ever lags a release.
+The table is a curated subset and lags the enum by a few
+device-derived types. The live, machine-readable list of writable
+types and their units is served by `GET /api/meta/capabilities` under
+`ingest.quantityTypes` and is the authoritative source.
 
 ### Worked example
 
@@ -242,7 +248,7 @@ matching is case-insensitive.
 | `measuredAt`     | yes      | ISO-8601 **with an explicit offset** (`Z` or `±HH:MM`, and `±HHMM` is accepted). No offset, no import.    |
 | `glucoseContext` | no       | Only for `BLOOD_GLUCOSE`; blank means no context. See [Glucose context](#glucose-context).                |
 | `notes`          | no       | Free text, up to 200 characters.                                                                          |
-| `externalId`     | no       | A source-stable id. With it, a re-upload updates the same row; without it, a re-upload creates a new one. |
+| `externalId`     | no       | A source-stable id. With it, a re-upload updates the same row even when the value changed; without it, an identical re-upload is skipped via the natural key `(user, type, measuredAt, source)`. |
 
 A sensor export therefore needs no glucose column at all:
 
