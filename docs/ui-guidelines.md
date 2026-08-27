@@ -320,24 +320,18 @@ tile itself, to avoid accidental hide.
 
 ### 3.3 Settings — `/settings/[section]`
 
-The 1.4 release splits the legacy 3150-LOC settings monolith into one
-route per top-level section:
+The 1.4 release split the legacy 3150-LOC settings monolith into one
+route per top-level section. The pattern holds: every section is a
+route under `/settings/[section]` with its component under
+`src/components/settings/`. The section list has grown far past the
+original eight (account, integrations, notifications, ai, api,
+advanced, about now sit alongside security, access, sources, coach,
+environment, export, mcp, and more); the registry in
+`src/components/settings/settings-shell.tsx` is authoritative.
+Cross-section search lives in the section sidebar header.
 
-- `/settings/account` — profile, password, passkeys, account deletion.
-- `/settings/integrations` — Withings, Nightscout, Telegram, ntfy, Web Push.
-- `/settings/notifications` — channel matrix + quiet hours + reminders.
-- `/settings/dashboard` — tile layout editor, default ranges, threshold
-  overrides.
-- `/settings/ai` — AI provider selection + connection + test.
-- `/settings/api` — API tokens for headless ingest + Bearer issuance.
-- `/settings/advanced` — exports, imports, danger zone.
-- `/settings/about` — version, build, license, links to docs/changelog.
-
-Each section's component lives at `src/components/settings/<section>.tsx`
-and stays under 400 LOC. Cross-section search lives in the section
-sidebar header.
-
-The legacy `/settings` route 301-redirects to `/settings/account`.
+The legacy `/settings` route is a permanent (308) redirect to
+`/settings/account`.
 
 ### 3.4 Admin — `/admin/[section]`
 
@@ -505,8 +499,11 @@ is the point.
 
 ## 7. Internationalization
 
-All user-facing strings come from `messages/en.json` (default) and
-`messages/de.json`. Use `useTranslations()` on the client and
+All user-facing strings come from `messages/en.json` (default) plus
+the `de`, `es`, `fr`, `it`, and `pl` bundles beside it. Guard tests
+(`i18n-call-site-coverage`, `i18n-locale-integrity`) enforce that every
+`t()` key resolves in EN and propagates across all six locales. Use
+`useTranslations()` on the client and
 `getServerTranslator()` (`src/lib/i18n/server-translator.ts`) on the
 server. Numbers, dates, currencies, and units always go through
 `useFormatters()` — never hand-roll `Intl.NumberFormat(...)` with a

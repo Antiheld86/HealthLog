@@ -630,8 +630,9 @@ Confirmed-rejected slugs (despite the source-tree references in the table above)
 
 Confirmed-accepted slugs on a ChatGPT Plus subscription (per `available_in_plans` in `models.json`):
 
-- `gpt-5.3-codex` — coding-optimized, accepted; HealthLog uses this as default
-- `gpt-5.5` / `gpt-5.4` / `gpt-5.4-mini` / `gpt-5.2` — also expected to work per plan
+- `gpt-5.5` — HealthLog's default (first chain entry) as of 2026-06
+- `gpt-5.4` / `gpt-5.4-mini` / `gpt-5.2` — accepted per plan
+- `gpt-5.3-codex` — was the default (verified 2026-05-09); the backend rotated off the `-codex` line on 2026-06-02 and this slug is now only accepted intermittently, so it sits on a late chain rung
 
 The `codex-rs/tui/src/model_migration.rs` references to `gpt-5-codex` etc. are _migration prompts_ shown to existing users — they are NOT the slugs sent on the wire after migration. The wire slugs come from `models.json`. Always cross-check `models.json` (`gh api repos/openai/codex/contents/codex-rs/models-manager/models.json`) before picking a default.
 
@@ -641,16 +642,19 @@ The ChatGPT-Codex allow-list is rotated by OpenAI without prior notice (`gpt-5-c
 
 To eliminate that risk class, HealthLog's `CodexClient` walks an ordered chain on every fresh request series.
 
-**Chain** (top = first try; default order is the empirically-safest most-current-first ordering as of 2026-05):
+**Chain** (top = first try; default order is the empirically-safest most-current-first ordering as of 2026-06, after the backend rotated off the `-codex` line on 2026-06-02):
 
 ```ts
 const DEFAULT_SLUG_FALLBACK_CHAIN = [
-  "gpt-5.3-codex", // current allow-list entry (verified 2026-05-09)
-  "gpt-5-codex", // historical default (rejected as of 2026-05 but safe to retry — backend may flip)
-  "gpt-5", // bare slug — rejected on ChatGPT-auth as of 2026-05 but lives on api-key auth
-  "gpt-4o", // ladder-rung for last-ditch capability
+  "gpt-5.5", // current default across paid tiers as of 2026-06-02
+  "gpt-5.4", // documented fallback
+  "gpt-5.4-mini", // documented lighter-weight fallback
+  "gpt-5.3-codex", // late rung — still accepted intermittently
+  "gpt-5.2", // legacy floor
 ];
 ```
+
+The shipped constant in `src/lib/ai/codex-client.ts` is authoritative; when the upstream rotates again, that file moves first and this listing follows.
 
 The chain is overridable via the env var `CODEX_MODEL_FALLBACK_CHAIN` (comma-separated). The first env-var-named slug supersedes `CODEX_MODEL`; if both are set, `CODEX_MODEL` is folded into position 0 and de-duplicated.
 
