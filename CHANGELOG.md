@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.37.30] — 2026-08-27
+
+An operator pointing the global AI provider at a private OpenAI-compatible proxy got a network refusal on every call, and nothing said why.
+
+### Fixed
+
+- The operator's global AI provider can now reach a private host, provided that host is named in ALLOW_LOCAL_AI_PRIVATE_HOSTS. Its base URL is typed by the operator in the admin settings, so it now consults the same allowlist as the user-configured gateway instead of being pinned to public hosts. A private host that is not allowlisted is refused exactly as before, personal API keys keep the pinned public posture, and the ChatGPT sign-in path stays fully pinned.
+
 ## [1.37.29] — 2026-08-26
 
 The chart range selector said points and meant days. Someone who weighs in twice a week picked "7 pts", saw two, and reasonably concluded the chart was broken.
