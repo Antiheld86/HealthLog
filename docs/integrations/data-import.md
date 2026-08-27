@@ -60,15 +60,15 @@ skipped and counted under `skipped` in the response.
 
 ### Measurement entry
 
-| Field            | Required | Type   | Notes                                                                             |
-| ---------------- | -------- | ------ | --------------------------------------------------------------------------------- |
-| `type`           | yes      | enum   | One of the `MeasurementType` values in the table below.                           |
-| `value`          | yes      | number | Plausibility-checked per type; out-of-range values are rejected.                  |
-| `unit`           | yes      | string | The canonical unit for the type (see the table).                                  |
-| `measuredAt`     | yes      | string | ISO-8601 datetime, e.g. `2026-05-01T08:00:00.000Z`.                               |
-| `source`         | no       | string | Free-text origin label. Imported rows are tagged `IMPORT` server-side regardless. |
-| `notes`          | no       | string | Optional free text.                                                               |
-| `glucoseContext` | no       | enum   | Only for `BLOOD_GLUCOSE`. See [Glucose context](#glucose-context).                |
+| Field            | Required | Type   | Notes                                                                                                                                                           |
+| ---------------- | -------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`           | yes      | enum   | One of the `MeasurementType` values in the table below.                                                                                                         |
+| `value`          | yes      | number | Plausibility-checked per type; out-of-range values are rejected.                                                                                                |
+| `unit`           | yes      | string | The canonical unit for the type (see the table).                                                                                                                |
+| `measuredAt`     | yes      | string | ISO-8601 datetime, e.g. `2026-05-01T08:00:00.000Z`.                                                                                                             |
+| `source`         | no       | string | Free-text origin label. Imported rows are tagged `IMPORT` server-side regardless.                                                                               |
+| `notes`          | no       | string | Optional free text.                                                                                                                                             |
+| `glucoseContext` | no       | enum   | Only for `BLOOD_GLUCOSE`. See [Glucose context](#glucose-context).                                                                                              |
 | `externalId`     | no       | string | A source-stable id (1–120 chars). When present, a re-import upserts on `(user, type, source, externalId)` so an edit upstream is reflected rather than skipped. |
 
 ### Glucose context
@@ -240,14 +240,14 @@ mints a file with the right header.
 A header row is required; column order does not matter and header
 matching is case-insensitive.
 
-| Column           | Required | Notes                                                                                                     |
-| ---------------- | -------- | --------------------------------------------------------------------------------------------------------- |
-| `type`           | yes      | A `MeasurementType` from the table above.                                                                 |
-| `value`          | yes      | A number, in the row's `unit`.                                                                            |
-| `unit`           | yes      | The canonical unit, or a recognised alias: `mmol/L` → `mg/dL`, `lb` → `kg`, `in` → `cm`, `°F` → `°C`.     |
-| `measuredAt`     | yes      | ISO-8601 **with an explicit offset** (`Z` or `±HH:MM`, and `±HHMM` is accepted). No offset, no import.    |
-| `glucoseContext` | no       | Only for `BLOOD_GLUCOSE`; blank means no context. See [Glucose context](#glucose-context).                |
-| `notes`          | no       | Free text, up to 200 characters.                                                                          |
+| Column           | Required | Notes                                                                                                                                                                                            |
+| ---------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `type`           | yes      | A `MeasurementType` from the table above.                                                                                                                                                        |
+| `value`          | yes      | A number, in the row's `unit`.                                                                                                                                                                   |
+| `unit`           | yes      | The canonical unit, or a recognised alias: `mmol/L` → `mg/dL`, `lb` → `kg`, `in` → `cm`, `°F` → `°C`.                                                                                            |
+| `measuredAt`     | yes      | ISO-8601 **with an explicit offset** (`Z` or `±HH:MM`, and `±HHMM` is accepted). No offset, no import.                                                                                           |
+| `glucoseContext` | no       | Only for `BLOOD_GLUCOSE`; blank means no context. See [Glucose context](#glucose-context).                                                                                                       |
+| `notes`          | no       | Free text, up to 200 characters.                                                                                                                                                                 |
 | `externalId`     | no       | A source-stable id. With it, a re-upload updates the same row even when the value changed; without it, an identical re-upload is skipped via the natural key `(user, type, measuredAt, source)`. |
 
 A sensor export therefore needs no glucose column at all:
