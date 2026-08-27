@@ -16,10 +16,12 @@ canonical command sequence on a single-instance host:
 # 1. Pull the new image.
 docker pull ghcr.io/mbombeck/healthlog:vX.Y.Z
 
-# 2. Run migrations against the live DB using the new image.
+# 2. Run migrations against the live DB using the new image. The
+#    production image strips pnpm/npm; use the entrypoint's node
+#    invocation of the bundled Prisma CLI instead.
 docker run --rm --env-file .env.production \
   ghcr.io/mbombeck/healthlog:vX.Y.Z \
-  pnpm prisma migrate deploy
+  sh -c 'NODE_PATH=/opt/prisma-cli/node_modules node /opt/prisma-cli/node_modules/prisma/build/index.js migrate deploy'
 
 # 3. Recreate the app container so it picks up the new image.
 docker compose up -d app
@@ -40,8 +42,9 @@ them in order on boot like any other.
 WHOOP introduces two optional instance env vars, `WHOOP_REDIRECT_URI`
 and `WHOOP_WEBHOOK_SECRET` (HMAC secret for WHOOP webhook signature
 verification). Per-user WHOOP client id/secret live in Settings, not
-in the environment. See `docs/integrations/whoop.md`. Add the two vars
-to the compose `environment:` whitelist if you set them — vars not on
+in the environment. See `docs/integrations/whoop.md`. The shipped
+`docker-compose.yml` already whitelists both under `environment:`; only
+a forked or older compose file needs them added by hand — vars not on
 the whitelist never reach the container.
 
 ### What goes wrong if you reverse it

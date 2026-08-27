@@ -17,7 +17,8 @@ that captures how many failures the bucket ledger has accumulated since
 the last success.
 
 The persistent-failure alert dispatcher in
-`src/lib/integrations/status.ts:453` uses `Math.max(...buckets)` — the
+`src/lib/integrations/status.ts` (the v1.4.43 W14 block) uses
+`Math.max(...Object.values(buckets))` — the
 **max** across the three buckets. A 3-deep persistent streak pages even
 when the transient bucket is empty, and a flapping integration that
 ping-pongs between transient and reauth_required never trips a
@@ -44,7 +45,8 @@ we want to wake someone up for.
 
 If you see an audit row with `attemptNumber >= threshold` but no alert
 was dispatched, check the per-bucket counts on
-`IntegrationStatus.failureBuckets` for that user/integration pair. The
+`IntegrationStatus.consecutiveFailuresByKind` (DB column
+`consecutive_failures_by_kind`) for that user/integration pair. The
 sum may be high while every individual bucket sits below the threshold.
 This is working as designed; manually investigate only if a single
 bucket is at or above the threshold and `alertedAt` is unset (broken

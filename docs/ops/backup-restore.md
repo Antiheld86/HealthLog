@@ -54,12 +54,15 @@ performs a 1-byte PUT + GET round-trip and returns:
 
 ```json
 {
-  "endpoint": "https://...r2.cloudflarestorage.com",
-  "bucket": "healthlog-backups",
-  "region": "auto",
-  "putLatencyMs": 142,
-  "getLatencyMs": 38,
-  "ok": true
+  "data": {
+    "endpoint": "https://...r2.cloudflarestorage.com",
+    "bucket": "healthlog-backups",
+    "region": "auto",
+    "putLatencyMs": 142,
+    "getLatencyMs": 38,
+    "ok": true
+  },
+  "error": null
 }
 ```
 

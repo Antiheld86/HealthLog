@@ -2,9 +2,13 @@
 
 A self-hosted operator can reset a single user's password from inside the
 running container. This is an **operator-only** maintenance path — there is no
-user-facing or API route for it, and it bypasses the normal account-recovery
-flow. Use it only for an account you administer (for example, after a forgotten
-password on a single-user instance).
+self-service reset route for users, and it bypasses the normal
+account-recovery flow. Admins do have an in-app alternative:
+`POST /api/admin/users/{id}/reset-password` (cookie-admin only) sets a new
+password and destroys the user's sessions, tokens, and trusted devices. The
+CLI remains the path when no admin can log in. Use it only for an account you
+administer (for example, after a forgotten password on a single-user
+instance).
 
 > **Operator-only.** The script writes directly to the `users` table and is
 > intended to be run by the host operator with database access. Treat the new

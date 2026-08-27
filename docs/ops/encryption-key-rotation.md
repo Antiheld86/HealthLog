@@ -47,8 +47,13 @@ under `v1` (the synthetic id assigned to the existing `ENCRYPTION_KEY`).
    pnpm dlx tsx scripts/rotate-encryption-key.ts v2
    ```
    The script is idempotent — running it again is a no-op for rows already
-   prefixed with `v2.`. It rotates User, WithingsConnection, AppSettings,
-   NotificationChannel, and PushSubscription rows. The summary line at the
+   prefixed with `v2.`. It rotates every registered encrypted column across
+   all models — the canonical registry lives in
+   `src/lib/crypto/encrypted-columns.ts`, and a guard test fails CI if any
+   `*Encrypted` column in the schema is missing from the registry or not
+   referenced by the script — plus the two non-`*Encrypted` members:
+   `IntegrationStatus.lastError` and `CoachMessage.encryptedContent`
+   (Bytes). The summary line at the
    end shows `scanned`, `rotated`, and `errors` per table+field; treat
    `errors > 0` as a hard failure and re-run after fixing the cause.
 4. **Drop the old key (optional, recommended).** Once the script has run
