@@ -115,7 +115,9 @@ async function main() {
     );
   }
 
-  writeFileSync(out, plaintext, "utf8");
+  // The restored file is decrypted PHI in plaintext. Write it 0o600 so it is
+  // not world-readable on the operator's disk while it sits there.
+  writeFileSync(out, plaintext, { encoding: "utf8", mode: 0o600 });
   console.log(
     `Restored userId=${body.userId} (${plaintext.length} bytes) -> ${out}`,
   );

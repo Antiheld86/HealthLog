@@ -1,6 +1,6 @@
 {
   "$schema": "./env-manifest.schema.json",
-  "description": "Manifest of env vars required by a HealthLog production deployment. Used by `pnpm check-env` to catch missing/empty vars BEFORE a deploy ships. v1.4.42 W6 — born out of the v1.4.40 AP-2 .p8 install gap that shipped silently for 3 days.",
+  "description": "Manifest of env vars required by a HealthLog production deployment. Used by `pnpm check-env` to catch missing/empty vars BEFORE a deploy ships. v1.4.42 W6 \u2014 born out of the v1.4.40 AP-2 .p8 install gap that shipped silently for 3 days.",
   "groups": [
     {
       "name": "Core",
@@ -37,7 +37,7 @@
     },
     {
       "name": "Withings OAuth",
-      "description": "Withings API credentials are entered per user in Settings → Integrations (no env-var path). Only the webhook shared secret is operator-level.",
+      "description": "Withings API credentials are entered per user in Settings \u2192 Integrations (no env-var path). Only the webhook shared secret is operator-level.",
       "required": false,
       "variables": [
         {
@@ -100,7 +100,7 @@
     },
     {
       "name": "OIDC SSO options",
-      "description": "Optional tuning for an enabled OIDC provider. Each stands alone (deliberately NOT allOrNone — any subset is valid) and each has a safe default when unset.",
+      "description": "Optional tuning for an enabled OIDC provider. Each stands alone (deliberately NOT allOrNone \u2014 any subset is valid) and each has a safe default when unset.",
       "required": false,
       "variables": [
         {
@@ -157,7 +157,7 @@
     },
     {
       "name": "APNs (iOS push)",
-      "description": "All four core APNS_* vars together. Missing any disables APNs silently — the v1.4.40 AP-2 gap that motivated this manifest. allOrNone trips the synthetic <all-or-none> required row whenever 1-3 of the 4 are set.",
+      "description": "All four core APNS_* vars together. Missing any disables APNs silently \u2014 the v1.4.40 AP-2 gap that motivated this manifest. allOrNone trips the synthetic <all-or-none> required row whenever 1-3 of the 4 are set.",
       "required": false,
       "allOrNone": true,
       "variables": [
@@ -175,7 +175,7 @@
         },
         {
           "name": "APNS_KEY",
-          "purpose": "APNs auth key (.p8 contents). Use APNS_KEY for 12-factor env-block deploys; APNS_KEY_FILE is the filesystem alternative — at least one of the two must be set.",
+          "purpose": "APNs auth key (.p8 contents). Use APNS_KEY for 12-factor env-block deploys; APNS_KEY_FILE is the filesystem alternative \u2014 at least one of the two must be set.",
           "anyOf": ["APNS_KEY", "APNS_KEY_FILE"]
         }
       ]
@@ -202,13 +202,13 @@
       "variables": [
         {
           "name": "TLS_LEAF_SPKI_PINS",
-          "purpose": "Comma-separated known-good leaf SPKI pins, base64(sha256(DER subjectPublicKeyInfo)) — the same value the native client pins. Hold both the current and the next pin during a dual-pin renewal window."
+          "purpose": "Comma-separated known-good leaf SPKI pins, base64(sha256(DER subjectPublicKeyInfo)) \u2014 the same value the native client pins. Hold both the current and the next pin during a dual-pin renewal window."
         }
       ]
     },
     {
       "name": "SMTP (email channel)",
-      "description": "Operator SMTP transport for the email notification channel (v1.17.1). All of SMTP_HOST, SMTP_PORT, SMTP_FROM together enable the channel; SMTP_USER/SMTP_PASS are optional (unauthenticated relay). Missing any of the three core vars disables email silently — the channel is never offered and the Settings card hides itself.",
+      "description": "Operator SMTP transport for the email notification channel (v1.17.1). All of SMTP_HOST, SMTP_PORT, SMTP_FROM together enable the channel; SMTP_USER/SMTP_PASS are optional (unauthenticated relay). Missing any of the three core vars disables email silently \u2014 the channel is never offered and the Settings card hides itself.",
       "required": false,
       "allOrNone": true,
       "variables": [
@@ -250,7 +250,7 @@
         },
         {
           "name": "BACKUP_ENCRYPTION_KEY",
-          "purpose": "Separate AES key for the backup body — MUST NOT match ENCRYPTION_KEY."
+          "purpose": "Separate AES key for the backup body \u2014 MUST NOT match ENCRYPTION_KEY."
         }
       ]
     },
@@ -268,6 +268,11 @@
           "name": "SESSION_COOKIE_SECURE",
           "purpose": "Forces the Secure flag on every cookie the app issues. Unset, it tracks NODE_ENV. Set false for a LAN / VPN-only self-host served over plain HTTP, where the default makes login look broken.",
           "example": "false"
+        },
+        {
+          "name": "TRUST_PROXY_HOPS",
+          "purpose": "Trusted reverse-proxy hop count; the client IP is read that many entries from the right of X-Forwarded-For.",
+          "example": "1"
         }
       ]
     }
