@@ -87,6 +87,9 @@ server-authoritative path; no new analytics is computed at the wire.
 | `get_integration_status`    | Sync health of connected devices/services — connected, last sync, reauth-required/failing — to answer "why is my data stale?". No secrets or tokens.                                                                                                                             |
 | `get_preventive_care`       | What preventive care is coming up: the user's own configured Vorsorge reminders (upcoming/overdue checkups with next-due dates) plus the appointments booked as future visits. Surfaces configured items, invents nothing.                                                       |
 | `get_visits`                | The user's own past doctor visits over a bounded window (default 12 months, optional practitioner-name filter): date, status, kind, practitioner + specialty, the visit's own reason/outcome, and any linked condition labels. `{ present: false }` when none was ever recorded. |
+| `get_intraday_pulse`        | The 10-minute heart-rate shape for one local day (hourly grain outside the dense-retention window), with at most one cautious descriptive elevated-at-rest window. Gated on the `insights` module.                                                                              |
+| `get_ecg_recordings`        | Metadata for the user's ECG recordings (time, duration, sampling rate, lead, the device's own rhythm classification). Never the waveform, never a re-classification. Gated on the `insights` module.                                                                            |
+| `get_nutrients`             | Without an argument, the presence overview per logged nutrient code; with one, that code's per-day summed series plus its EFSA reference. Gated on the opt-in `nutrients` module.                                                                                               |
 | `search`                    | Free-text search over the user's record (metric domains, medications, lab analytes). Returns `{ results: [{ id, title, url }], nextCursor? }`.                                                                                                                                   |
 | `fetch`                     | Hydrate one record by the id `search` returned (`metric:weight`, `med:<id>`, `lab:LDL`). Returns `{ id, title, text, url, metadata }` with a citation deep-link.                                                                                                                 |
 
@@ -196,6 +199,7 @@ doubles as honest discovery.
 | `healthlog://lab/{analyte}`                | One lab analyte's recent readings (value, unit, reference range, status).               |
 | `healthlog://medication/{id}`              | One medication by id, with its schedules. User-scoped (`{present:false}` if not yours). |
 | `healthlog://report/doctor-visit/{window}` | The doctor-visit summary over a chosen window.                                          |
+| `healthlog://nutrient/{code}`              | One nutrient's per-day intake series plus its EFSA reference (opt-in `nutrients` module). |
 
 ## Prompts (skills)
 
