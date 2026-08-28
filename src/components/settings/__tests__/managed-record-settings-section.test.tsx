@@ -7,7 +7,7 @@ import { ALL_METRICS } from "@/lib/validations/thresholds";
 
 import { ManagedRecordSettingsForm } from "../managed-record-settings-section";
 
-const LOCALES = ["de", "en", "es", "fr", "it", "pl"] as const;
+const LOCALES = ["de", "en", "es", "fr", "it", "pl", "ko"] as const;
 
 const render = (
   family: Parameters<typeof ManagedRecordSettingsForm>[0]["family"],

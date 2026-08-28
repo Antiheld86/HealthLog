@@ -33,7 +33,8 @@ function isLocale(value: string | null | undefined): value is Locale {
     value === "fr" ||
     value === "es" ||
     value === "it" ||
-    value === "pl"
+    value === "pl" ||
+    value === "ko"
   );
 }
 

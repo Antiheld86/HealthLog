@@ -196,7 +196,7 @@ describe("mental-health instruments", () => {
     });
 
     it("declares validated item locales honestly (SCI = English only)", () => {
-      for (const locale of ["de", "en", "es", "fr", "it", "pl"]) {
+      for (const locale of ["de", "en", "es", "fr", "it", "pl", "ko"]) {
         expect(hasValidatedItems("WHO5", locale)).toBe(true);
         expect(hasValidatedItems("PHQ9", locale)).toBe(true);
       }

@@ -20,7 +20,7 @@ import { join } from "node:path";
  * the key is a prop, not a call argument. Both halves are asserted here.
  */
 
-const LOCALES = ["en", "de", "es", "fr", "it", "pl"] as const;
+const LOCALES = ["en", "de", "es", "fr", "it", "pl", "ko"] as const;
 const INSIGHTS_PAGES_DIR = join(process.cwd(), "src/app/insights");
 
 /**

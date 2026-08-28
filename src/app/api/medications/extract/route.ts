@@ -91,7 +91,7 @@ const MAX_OUTPUT_TOKENS = 600;
 const requestSchema = z.object({
   text: z.string().min(1).max(MAX_TEXT_LENGTH),
   /** Optional UI locale; informational hint for the model. */
-  locale: z.enum(["en", "de", "es", "fr", "it", "pl"]).optional(),
+  locale: z.enum(["en", "de", "es", "fr", "it", "pl", "ko"]).optional(),
   /**
    * Optional override of the reference date used to resolve relative
    * phrases ("tomorrow", "next Monday"). Defaults to the server's

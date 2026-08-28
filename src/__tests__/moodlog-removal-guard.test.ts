@@ -25,7 +25,7 @@ import { INTEGRATION_DISPLAY_NAMES } from "@/components/settings/integrations/in
 
 const ROOT = path.resolve(__dirname, "../..");
 
-const LOCALES = ["de", "en", "es", "fr", "it", "pl"] as const;
+const LOCALES = ["de", "en", "es", "fr", "it", "pl", "ko"] as const;
 
 /** Every path the retired bridge occupied. */
 const REMOVED_PATHS = [

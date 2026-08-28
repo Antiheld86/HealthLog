@@ -163,7 +163,7 @@ describe("enqueueStatusGeneration", () => {
     const send = vi.fn().mockResolvedValue("job-id");
     getGlobalBoss.mockReturnValue({ send });
 
-    for (const locale of ["de", "en", "fr", "es", "it", "pl"] as const) {
+    for (const locale of ["de", "en", "fr", "es", "it", "pl", "ko"] as const) {
       await enqueueStatusGeneration({ userId: "u1", metric: "mood", locale });
     }
 

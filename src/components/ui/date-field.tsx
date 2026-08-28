@@ -3,7 +3,7 @@
 import * as React from "react";
 import { CalendarIcon } from "lucide-react";
 import type { Matcher } from "react-day-picker";
-import { de, enUS, es, fr, it, pl } from "date-fns/locale";
+import { de, enUS, es, fr, it, ko, pl } from "date-fns/locale";
 import type { Locale as DateFnsLocale } from "date-fns";
 
 import { cn } from "@/lib/utils";
@@ -325,6 +325,8 @@ function resolveDateFnsLocale(
       return it;
     case "pl":
       return pl;
+    case "ko":
+      return ko;
     default:
       return enUS;
   }

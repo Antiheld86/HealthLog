@@ -50,7 +50,7 @@ describe("managed record settings UI", () => {
         fromRoot("src/components/settings/record-settings-section-gate.tsx"),
         "utf8",
       ),
-      ...["de", "en", "es", "fr", "it", "pl"].map((locale) =>
+      ...["de", "en", "es", "fr", "it", "pl", "ko"].map((locale) =>
         readFile(fromRoot(`messages/${locale}.json`), "utf8"),
       ),
     ]);

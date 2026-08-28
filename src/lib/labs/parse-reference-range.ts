@@ -259,6 +259,15 @@ export const RANGE_PROSE: Record<Locale, RangeProse> = {
       "wartosci referencyjne",
       "normy laboratoryjne",
     ],
+  }, // Korean marks a bound with a POSTPOSITION — "5.0 이하", "3.5 이상" — and the
+  // matchers here are prefix-anchored, so only the prefix-shaped notation is
+  // listed. A postfixed Korean range still falls through to text-only, which
+  // `isUnreadableRange` reports rather than hides.
+  ko: {
+    twoSided: ["에서", "부터"],
+    upper: ["최대", "최고"],
+    lower: ["최소", "최저"],
+    filler: ["참고치", "참고범위", "정상치", "정상범위", "기준치", "기준범위"],
   },
 };
 
@@ -291,7 +300,10 @@ function proseAlternation(field: keyof RangeProse): string {
  * "e" and "y" are one letter long, and a bare `e` that could sit between two
  * digits would read "3.5e5" as a window.
  */
-const SYMBOL_SEP = String.raw`-|–|—|‒|…|\.{2,3}`;
+// U+007E and the fullwidth U+FF5E are the separator a Korean lab prints
+// ("3.5~5.0"); both are added here rather than to `twoSided` because they are
+// symbols, and the symbol branch needs no surrounding whitespace.
+const SYMBOL_SEP = String.raw`-|–|—|‒|~|～|…|\.{2,3}`;
 
 /** Prefixes that state a ceiling only. */
 const UPPER_PREFIX = `(?:<=|<|≤|${proseAlternation("upper")})`;

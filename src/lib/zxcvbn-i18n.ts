@@ -63,6 +63,55 @@ const suggestionsDe: Record<string, string> = {
     'Vorhersehbare Ersetzungen wie „@" statt „a" helfen nicht wesentlich',
 };
 
+const warningsKo: Record<string, string> = {
+  "Straight rows of keys are easy to guess":
+    "키보드에서 일렬로 놓인 키는 쉽게 추측돼요",
+  "Short keyboard patterns are easy to guess":
+    "짧은 키보드 패턴은 쉽게 추측돼요",
+  'Repeats like "aaa" are easy to guess': '"aaa" 같은 반복은 쉽게 추측돼요',
+  'Repeats like "abcabc" are easy to guess':
+    '"abcabc" 같은 반복은 쉽게 추측돼요',
+  "Sequences like abc or 6543 are easy to guess":
+    "abc나 6543 같은 연속은 쉽게 추측돼요",
+  "Recent years are easy to guess": "최근 연도는 쉽게 추측돼요",
+  "Dates are often easy to guess": "날짜는 대체로 쉽게 추측돼요",
+  "This is a top-10 common password": "가장 흔한 비밀번호 10개 안에 들어요",
+  "This is a top-100 common password": "가장 흔한 비밀번호 100개 안에 들어요",
+  "This is a very common password": "아주 흔한 비밀번호예요",
+  "This is similar to a commonly used password":
+    "자주 쓰이는 비밀번호와 비슷해요",
+  "A word by itself is easy to guess": "단어 하나만으로는 쉽게 추측돼요",
+  "Names and surnames by themselves are easy to guess":
+    "이름이나 성만으로는 쉽게 추측돼요",
+  "Common names and surnames are easy to guess":
+    "흔한 이름과 성은 쉽게 추측돼요",
+};
+
+const suggestionsKo: Record<string, string> = {
+  "Use a few words, avoid common phrases":
+    "단어를 여러 개 쓰고, 흔한 문구는 피해 주세요",
+  "No need for symbols, digits, or uppercase letters":
+    "기호, 숫자, 대문자를 꼭 넣지 않아도 돼요",
+  "Add another word or two. Uncommon words are better.":
+    "단어를 한두 개 더 붙여 주세요. 흔하지 않은 단어일수록 좋아요.",
+  "Use a longer keyboard pattern with more turns":
+    "방향이 자주 바뀌는 더 긴 키보드 패턴을 써 주세요",
+  "Avoid repeated words and characters": "반복되는 단어와 문자는 피해 주세요",
+  "Avoid sequences": "연속된 배열은 피해 주세요",
+  "Avoid recent years": "최근 연도는 피해 주세요",
+  "Avoid years that are associated with you":
+    "본인과 관련된 연도는 피해 주세요",
+  "Avoid dates and years that are associated with you":
+    "본인과 관련된 날짜와 연도는 피해 주세요",
+  "Capitalization doesn't help very much": "대문자로 바꿔도 큰 도움이 안 돼요",
+  "All-uppercase is almost as easy to guess as all-lowercase":
+    "전부 대문자로 써도 전부 소문자만큼 쉽게 추측돼요",
+  "Reversed words aren't much harder to guess":
+    "단어를 거꾸로 써도 추측 난이도는 별로 오르지 않아요",
+  "Predictable substitutions like '@' instead of 'a' don't help very much":
+    "'a' 대신 '@'처럼 뻔한 치환은 큰 도움이 안 돼요",
+};
+
 // English: identity map for all known strings (the library already returns
 // English, but we wrap them so unknown values still pass through unchanged).
 const warningsEn: Record<string, string> = Object.fromEntries(
@@ -77,8 +126,14 @@ export interface ZxcvbnTranslations {
 }
 
 export function getZxcvbnTranslations(locale: Locale): ZxcvbnTranslations {
-  const warnings = locale === "de" ? warningsDe : warningsEn;
-  const suggestions = locale === "de" ? suggestionsDe : suggestionsEn;
+  const warnings =
+    locale === "de" ? warningsDe : locale === "ko" ? warningsKo : warningsEn;
+  const suggestions =
+    locale === "de"
+      ? suggestionsDe
+      : locale === "ko"
+        ? suggestionsKo
+        : suggestionsEn;
   return {
     translate(text: string): string {
       return warnings[text] ?? suggestions[text] ?? text;

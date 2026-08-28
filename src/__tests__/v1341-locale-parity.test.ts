@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const ROOT = join(__dirname, "../..");
-const LOCALES = ["en", "de", "es", "fr", "it", "pl"] as const;
+const LOCALES = ["en", "de", "es", "fr", "it", "pl", "ko"] as const;
 
 const REQUIRED_KEYS = [
   // Security: adding a passkey now requires an existing sign-in factor.
