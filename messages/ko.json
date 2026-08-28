@@ -2198,14 +2198,6 @@
     "noData": "선택한 기간에 데이터가 없어요",
     "bucketWeekly": "주 평균",
     "bucketMonthly": "월 평균",
-    "points7Label": "7개",
-    "points7Title": "최근 데이터 7개",
-    "points30Label": "30개",
-    "points30Title": "최근 데이터 30개",
-    "points90Label": "90개",
-    "points90Title": "최근 데이터 90개",
-    "pointsAllLabel": "전체",
-    "pointsAllTitle": "사용 가능한 데이터 전체",
     "systolic": "수축기",
     "diastolic": "이완기",
     "bodyWater": "체수분",
@@ -2294,7 +2286,15 @@
       "moodHeatmapEmpty": "기분 히트맵, 아직 기록한 날이 없어요.",
       "complianceHeatmap": "복약 순응도 히트맵, {start}부터 {end}까지, 활동일 {days}일.",
       "complianceHeatmapEmpty": "복약 순응도 히트맵, 아직 활동일이 없어요."
-    }
+    },
+    "days7Label": "7일",
+    "days7Title": "최근 7일",
+    "days30Label": "30일",
+    "days30Title": "최근 30일",
+    "days90Label": "90일",
+    "days90Title": "최근 90일",
+    "daysAllLabel": "전체",
+    "daysAllTitle": "전체 기간"
   },
   "chart": {
     "overlay": {
@@ -7029,7 +7029,26 @@
       "countOther": "실패 {count}건",
       "lastFailed": "마지막 실패 {when}"
     },
-    "deleteAllDetail": "사용자 계정은 그대로 남아요."
+    "deleteAllDetail": "사용자 계정은 그대로 남아요.",
+    "providerHealth": {
+      "title": "AI 제공자 상태",
+      "description": "사용자별 재시도 기록에서 집계한 각 AI 제공자의 전달 상태입니다.",
+      "loading": "제공자 상태를 불러오는 중…",
+      "loadError": "제공자 상태를 불러올 수 없습니다.",
+      "empty": "아직 기록된 AI 호출이 없습니다.",
+      "trackedUsers": "{count}명 사용자 추적됨",
+      "lastOk": "마지막 성공 {at}",
+      "lastFailure": "마지막 실패 {at}",
+      "statusHealthy": "정상",
+      "statusFailing": "{tracked}개 중 {failing}개 실패, {run}회 연속",
+      "typeAdminOpenai": "서버 키 (운영자)",
+      "typeAdminCodex": "중앙 ChatGPT (운영자)",
+      "typeOpenai": "OpenAI 키 (개인)",
+      "typeAnthropic": "Anthropic 키 (개인)",
+      "typeCodex": "ChatGPT 로그인 (개인)",
+      "typeLocal": "로컬 모델 (개인)",
+      "typeGateway": "OpenAI 호환 게이트웨이 (개인)"
+    }
   },
   "achievements": {
     "title": "업적",

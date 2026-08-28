@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.37.32] — 2026-08-28
+
+Korean joins as a seventh interface language, contributed by @aucun6352, and the three things that had to be fixed before it could actually work.
+
+### Added
+
+- Korean (`ko`) ships as a seventh interface language, AI-initial and community-maintained alongside French, Spanish, Italian and Polish. The whole surface speaks it: dashboard, settings, share views, the clinician report, notifications and the AI prompts. The PHQ-9, GAD-7 and WHO-5 questionnaires carry their officially published Korean wording so a score stays comparable to the Korean literature; the sleep questionnaire stays in its English-validated form with an honest note. The Coach and the daily briefing take the reviewed English body with a Korean reply directive rather than a hand-curated Korean one, the same route the other community locales took.
+
+### Fixed
+
+- A matcher that reads app text against text a person or a lab typed matched nothing at all in Korean. The shared fold decomposes with NFD and strips the combining marks, which turns Latin accents into plain letters, but Hangul decomposes into jamo, and jamo are not combining marks, so they survived and the folded text no longer resembled any table the app carries. Both readers of that fold were affected: the normative-claim check that grades whether a recommendation needs a citation, and the parser that reads a printed reference range. The fold recomposes now, and every Latin, Polish and German fold is byte-identical to before.
+- No Korean analyte name could resolve to a LOINC code. The key normaliser kept `[a-z0-9]` and dropped everything else, so every Korean lab name in the catalogue normalised to the empty string and the derived index held none of them, and a Korean account's cholesterol result reached a FHIR export uncoded.
+- The reference-range parser now reads the tilde a Korean lab prints (`3.5~5.0`), in both the ASCII and fullwidth forms. It had the hyphen and the dashes and not the separator the reports actually use.
+
 ## [1.37.31] — 2026-08-27
 
 The retry ledger knew when an AI provider was failing; the operator had no way to see it.
