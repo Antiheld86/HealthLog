@@ -479,6 +479,7 @@ const NO_READ_LEAD: Localized<string> = {
   es: "Ahora mismo no hay ninguna valoración disponible.",
   it: "Al momento non è disponibile alcuna valutazione.",
   pl: "Na razie nie ma tu żadnej oceny.",
+  ko: "지금은 이 카드에 대한 평가가 없어요.",
 };
 
 function noReadLead(locale: InsightLocale): string {
@@ -520,6 +521,7 @@ const BIOMARKER_NAMED_LEAD: Localized<(named: string) => string> = {
   es: (n) => `Ahora mismo no hay ninguna valoración${n}.`,
   it: (n) => `Al momento non è disponibile alcuna valutazione${n}.`,
   pl: (n) => `Na razie nie ma żadnej oceny${n}.`,
+  ko: (n) => `지금은${n} 평가가 없어요.`,
 };
 
 const BIOMARKER_NAMED_CLAUSE: Localized<(marker: string) => string> = {
@@ -529,6 +531,7 @@ const BIOMARKER_NAMED_CLAUSE: Localized<(marker: string) => string> = {
   es: (m) => ` de «${m}»`,
   it: (m) => ` per «${m}»`,
   pl: (m) => ` dla „${m}”`,
+  ko: (m) => ` '${m}'에 대한`,
 };
 
 export function getNoKeyBiomarkerStatusText(

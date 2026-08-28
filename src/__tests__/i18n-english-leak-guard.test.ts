@@ -33,7 +33,7 @@ const EN_PATH = join(MESSAGES_DIR, "en.json");
 // intentionally excluded — it carries accepted anglicisms (e.g. "Health
 // Score") that would be noise here, and is covered by its own pinned checks in
 // `i18n-locale-integrity`.
-const LEAK_LOCALES = ["es", "fr", "it", "pl"] as const;
+const LEAK_LOCALES = ["es", "fr", "it", "pl", "ko"] as const;
 
 function flattenValues(
   obj: unknown,
@@ -193,6 +193,14 @@ const LEGIT_IDENTICAL = new Set<string>([
   "mentalHealth.sciOptions.problemDuration.2",
   "mentalHealth.sciOptions.problemDuration.1",
   "mentalHealth.sciOptions.problemDuration.0",
+  // Proper nouns, a URL label and an acronym — the accepted written form in
+  // Korean is the Latin original, so these stay identical to en.json.
+  "auth.emailPlaceholder",
+  "settings.fitbitTag",
+  "settings.googleHealthTag",
+  "settings.nightscoutUrl",
+  "admin.aiServerKey.baseUrlLabel",
+  "admin.webPushVapidSubject",
 ]);
 
 describe("i18n English-leak guard", () => {

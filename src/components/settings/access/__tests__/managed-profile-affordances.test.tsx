@@ -276,7 +276,7 @@ describe("the managed-profile card, in the shared-access section", () => {
       /<select[^>]*data-slot="managed-profile-locale"[\s\S]*?<\/select>/
         .exec(html)?.[0]
         .match(/<option/g) ?? [];
-    expect(options).toHaveLength(6);
+    expect(options).toHaveLength(7);
   });
 
   it("lists the profiles this account looks after, and only those", () => {

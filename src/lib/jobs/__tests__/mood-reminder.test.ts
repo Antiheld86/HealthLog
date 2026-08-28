@@ -217,7 +217,7 @@ describe("buildMoodReminderPayload", () => {
     expect(p.body).toBe("How are you feeling today?");
   });
 
-  it.each(["es", "fr", "it", "pl"] as const)(
+  it.each(["es", "fr", "it", "pl", "ko"] as const)(
     "returns native (non-EN) strings for locale=%s",
     (locale) => {
       const p = buildMoodReminderPayload(locale);

@@ -27,7 +27,7 @@ import {
 } from "@/lib/feature-flags";
 
 const ROOT = path.resolve(__dirname, "../../../..");
-const LOCALES = ["de", "en", "es", "fr", "it", "pl"] as const;
+const LOCALES = ["de", "en", "es", "fr", "it", "pl", "ko"] as const;
 
 /** Names the retired switch went by, on the wire and in the database. */
 const RETIRED_NAMES = [

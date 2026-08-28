@@ -71,7 +71,7 @@ export interface NaturalLanguageExtractorProps {
    * UI locale forwarded to the route as a hint. The route accepts an
    * undefined value and falls back to the resolver chain.
    */
-  locale?: "en" | "de" | "es" | "fr" | "it" | "pl";
+  locale?: "en" | "de" | "es" | "fr" | "it" | "pl" | "ko";
   /**
    * Optional override of the API path so the wizard test harness can
    * point at a mock server. Defaults to the production route.

@@ -510,7 +510,7 @@ describe("the scale the popover quotes", () => {
     ).toBeLessThan(100);
   });
 
-  it.each(["en", "de", "fr", "es", "it", "pl"])(
+  it.each(["en", "de", "fr", "es", "it", "pl", "ko"])(
     "quotes those same two numbers in %s",
     (locale) => {
       const bundle = JSON.parse(

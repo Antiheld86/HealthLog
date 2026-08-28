@@ -51,7 +51,12 @@ const COMBINING_MARKS = /[\u0300-\u036f]/gu;
  * printed range's "3,5-5,0", a unit's "mg/dL".
  */
 export function stripDiacritics(raw: string): string {
-  return raw.normalize("NFD").replace(COMBINING_MARKS, "");
+  // Recomposed with NFC after the strip because NFD splits Hangul into JAMO,
+  // and jamo are not in the COMBINING_MARKS range, so they survive: without
+  // this the folded form of "목표" is a jamo sequence that no precomposed
+  // literal in any table can match. Latin/Polish/German folds are unaffected —
+  // the combining marks are already gone, so there is nothing to recompose.
+  return raw.normalize("NFD").replace(COMBINING_MARKS, "").normalize("NFC");
 }
 
 /** Collapse every apostrophe variant onto the straight ASCII one. */

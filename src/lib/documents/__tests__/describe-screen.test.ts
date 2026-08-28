@@ -30,6 +30,7 @@ describe("runDocumentSummary — screened prose", () => {
     es: "Este informe sugiere aumentar su dosis a 2,4 mg la próxima semana.",
     it: "Questo referto suggerisce di aumentare la sua dose a 2,4 mg la prossima settimana.",
     pl: "Ten raport sugeruje, aby zwiększyć dawkę do 2,4 mg w przyszłym tygodniu.",
+    ko: "이 보고서는 다음 주에 2.4mg으로 늘려 보라고 권해요.",
   };
 
   for (const locale of locales) {

@@ -38,7 +38,7 @@ import {
  * it — which is the part that rots silently.
  */
 const ROOT = process.cwd();
-const LOCALES = ["de", "en", "es", "fr", "it", "pl"] as const;
+const LOCALES = ["de", "en", "es", "fr", "it", "pl", "ko"] as const;
 
 /** The published description of the level, off the Zod schema itself. */
 function accessDescription(): string {
@@ -109,10 +109,14 @@ describe("the published boundary matches the one the code draws", () => {
       // accent: the section is "Anamnèse" in French and "Anamneza" in Polish,
       // so anything past "anamn" is already language-specific and a matcher
       // tuned to one of them reports the others as broken.
-      if (!/anamn/i.test(text)) missing.push(locale);
+      // Korean shares no Latin stem for either concept, so it is matched on
+      // its own words: "문진" is the anamnesis section, "계정" the account.
+      if (!/anamn|문진/i.test(text)) missing.push(locale);
       // And it must still say the account itself stays with its owner —
       // dropping that would fix one over-claim by removing the boundary.
-      expect(text, locale).toMatch(/konto|account|compte|cuenta|konta|koncie/i);
+      expect(text, locale).toMatch(
+        /konto|account|compte|cuenta|konta|koncie|계정/i,
+      );
     }
     expect(missing).toEqual([]);
   });

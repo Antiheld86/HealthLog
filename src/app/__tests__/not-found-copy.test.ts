@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(__dirname, "../../..");
-const LOCALES = ["en", "de", "fr", "es", "it", "pl"] as const;
+const LOCALES = ["en", "de", "fr", "es", "it", "pl", "ko"] as const;
 
 interface Messages {
   notFound: {

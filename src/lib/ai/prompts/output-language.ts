@@ -54,6 +54,8 @@ export function targetLanguageName(locale: Locale): string {
       return "Italian";
     case "pl":
       return "Polish";
+    case "ko":
+      return "Korean";
     default:
       return "English";
   }

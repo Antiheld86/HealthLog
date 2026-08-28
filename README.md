@@ -44,7 +44,7 @@ Try the [live demo](https://demo.healthlog.dev) to see a working install — sig
 - **AI insights you own.** Daily briefing, health scores, correlations, and a conversational coach grounded in your own measurements and interpreted against cited guideline reference bands — where a value sits and what that means in plain words, never a diagnosis. The coach proposes concrete if-then plans you accept or decline, and suppresses proactive check-ins when there's nothing genuine to say. Bring your own OpenAI or Anthropic key, or point at a local endpoint (Ollama, LM Studio, vLLM) so nothing leaves your network.
 - **Clinician-ready output.** A doctor-report PDF generated client-side, a read-only HL7 FHIR R4 API, and scoped, time-limited share links you revoke after the visit.
 - **Private by construction.** AES-256-GCM encryption at rest with zero-downtime key rotation, passkey login, server-side sessions, strict CSP — and no third-party tracking anywhere.
-- **Built to be lived in.** Installable PWA with offline support, medication reminders over APNs, Telegram, ntfy, and Web Push, a sub-second dashboard on years of imported history — in English, German, Spanish, French, Italian, and Polish end to end.
+- **Built to be lived in.** Installable PWA with offline support, medication reminders over APNs, Telegram, ntfy, and Web Push, a sub-second dashboard on years of imported history — in English, German, Spanish, French, Italian, Polish, and Korean end to end.
 
 The full feature tour, integration guides, and API reference live at [docs.healthlog.dev](https://docs.healthlog.dev).
 

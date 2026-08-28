@@ -982,6 +982,7 @@ const INSIGHTS_LOCALE_REPLY_FOOTER_FALLBACK: Record<
   es: "\n\nREPLY LANGUAGE: render all user-facing strings in Spanish (peninsular preferred). Use natural Spanish health vocabulary. The severity / sourceWindow / sourceMetric / topic enum values stay in lowercase English exactly as listed in OUTPUT FORMAT — those are contract keys, NOT translations.",
   it: "\n\nREPLY LANGUAGE: render all user-facing strings in Italian. Use natural Italian health vocabulary. The severity / sourceWindow / sourceMetric / topic enum values stay in lowercase English exactly as listed in OUTPUT FORMAT — those are contract keys, NOT translations.",
   pl: "\n\nREPLY LANGUAGE: render all user-facing strings in Polish. Use natural Polish health vocabulary with formal Pan/Pani register for medical-adjacent topics. The severity / sourceWindow / sourceMetric / topic enum values stay in lowercase English exactly as listed in OUTPUT FORMAT — those are contract keys, NOT translations.",
+  ko: "\n\nREPLY LANGUAGE: render all user-facing strings in Korean, in the 해요체 register throughout (never 합쇼체 or plain 한다체). Use natural Korean health vocabulary. The severity / sourceWindow / sourceMetric / topic enum values stay in lowercase English exactly as listed in OUTPUT FORMAT — those are contract keys, NOT translations.",
 };
 
 /**
@@ -991,6 +992,10 @@ const INSIGHTS_LOCALE_REPLY_FOOTER_FALLBACK: Record<
 export function getStrictInsightsSystemPrompt(locale: Locale): string {
   if (locale === "de") return SYSTEM_PROMPT_DE;
   if (locale === "en") return SYSTEM_PROMPT_EN;
+  // ko ships no safety-contract matrix, so it is not a NativeCoachLocale.
+  if (locale === "ko") {
+    return SYSTEM_PROMPT_EN + INSIGHTS_LOCALE_REPLY_FOOTER_FALLBACK.ko;
+  }
   try {
     return buildNativeInsightsPrompt(locale, PROMPT_VERSION);
   } catch {

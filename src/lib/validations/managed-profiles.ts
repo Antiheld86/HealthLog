@@ -19,7 +19,7 @@ export const createManagedProfileSchema = z
   .object({
     displayName: z.string().trim().min(1).max(80),
     dateOfBirth: z.iso.date().nullable().optional(),
-    locale: z.enum(["de", "en", "es", "fr", "it", "pl"]),
+    locale: z.enum(["de", "en", "es", "fr", "it", "pl", "ko"]),
     timezone: z
       .string()
       .min(1)

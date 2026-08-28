@@ -38,6 +38,7 @@ const INTL_LOCALE_MAP: Record<Locale, string> = {
   es: "es-ES",
   it: "it-IT",
   pl: "pl-PL",
+  ko: "ko-KR",
 };
 
 export function resolveIntlLocale(locale: Locale): string {
@@ -310,5 +311,6 @@ export function parseLocaleFromAcceptLanguage(header: string | null): Locale {
   if (primary.startsWith("es")) return "es";
   if (primary.startsWith("it")) return "it";
   if (primary.startsWith("pl")) return "pl";
+  if (primary.startsWith("ko")) return "ko";
   return "en";
 }

@@ -20,11 +20,11 @@ import type { Locale } from "@/lib/i18n/config";
  *  - grounding: the literal "SNAPSHOT" token, which the grounding rule's
  *    `must_contain` pins in every locale.
  *  - GLP-1 dose safety: the brand registry (Mounjaro / Ozempic), which is
- *    identical across all six locales (an international registry, never
+ *    identical across all seven locales (an international registry, never
  *    translated) and only ever appears inside the dose-safety contract.
  */
 
-const ALL_LOCALES: Locale[] = ["de", "en", "fr", "es", "it", "pl"];
+const ALL_LOCALES: Locale[] = ["de", "en", "fr", "es", "it", "pl", "ko"];
 
 describe("resolved Coach system prompt — grounding + GLP-1 per locale", () => {
   for (const locale of ALL_LOCALES) {

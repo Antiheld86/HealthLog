@@ -23,6 +23,7 @@ const DOSE_VIOLATIONS: Record<Locale, string> = {
   es: "Aumente su dosis a 2,4 mg la próxima semana.",
   it: "Aumenti la sua dose a 2,4 mg la prossima settimana.",
   pl: "Proszę zwiększyć dawkę do 2,4 mg w przyszłym tygodniu.",
+  ko: "다음 주에 2.4mg으로 늘려 보세요.",
 };
 
 /**
@@ -37,6 +38,7 @@ const DOSE_CLEAN: Record<Locale, string> = {
   es: "Está en la semana 3 con 7,5 mg, y su peso está bajando.",
   it: "È alla settimana 3 con 7,5 mg, e il suo peso sta calando.",
   pl: "Jest Pan w 3. tygodniu na 7,5 mg, a waga spada.",
+  ko: "3주째 7.5mg을 복용 중이고, 체중은 내려가고 있어요.",
 };
 
 describe("screenModelOutput — dose-prescription, all six locales", () => {
@@ -72,6 +74,7 @@ const RISK_VIOLATIONS: Record<Locale, string> = {
   es: "Su riesgo es del 12%.",
   it: "Il suo rischio è del 12%.",
   pl: "Pana ryzyko wynosi 12%.",
+  ko: "10년 심혈관 위험도는 약 12%예요.",
 };
 
 /** A plain percentage that is NOT a clinical risk claim must pass. */
@@ -82,6 +85,7 @@ const RISK_CLEAN: Record<Locale, string> = {
   es: "Su adherencia fue del 92% en los últimos 30 días.",
   it: "La sua aderenza è stata del 92% negli ultimi 30 giorni.",
   pl: "Przestrzeganie zaleceń wyniosło 92% w ostatnich 30 dniach.",
+  ko: "지난 30일 복약 순응도는 92%였어요.",
 };
 
 describe("screenModelOutput — risk-score, all six locales", () => {
@@ -324,6 +328,7 @@ const CAUSAL_VIOLATIONS: Record<Locale, string> = {
   es: "Su peso bajó porque durmió más.",
   it: "Il suo peso è calato perché ha dormito di più.",
   pl: "Waga spadła, ponieważ spał Pan więcej.",
+  ko: "수면 때문에 체중이 줄었어요.",
 };
 
 /** Descriptive association framing is what the contract REQUIRES. */
@@ -334,6 +339,7 @@ const CAUSAL_CLEAN: Record<Locale, string> = {
   es: "Su peso evolucionó junto con su sueño esta semana.",
   it: "Il suo peso si è mosso insieme al suo sonno questa settimana.",
   pl: "Waga zmieniała się razem ze snem w tym tygodniu.",
+  ko: "이번 주 체중은 수면과 함께 움직였어요.",
 };
 
 describe("screenModelOutput — causal claims, all six locales", () => {

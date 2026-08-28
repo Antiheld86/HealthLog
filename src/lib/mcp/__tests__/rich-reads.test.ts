@@ -337,9 +337,9 @@ describe("resolveRichMetric — localised metric names", () => {
     expect(partial.sort()).toEqual([
       "BODY_TEMPERATURE_DEVIATION: en",
       "BREATHING_DISTURBANCE_EVENT: en",
-      "FAT_FREE_MASS: de,en,es",
-      "FAT_MASS: de,en,es,pl",
-      "LEAN_BODY_MASS: de,en,es",
+      "FAT_FREE_MASS: de,en,es,ko",
+      "FAT_MASS: de,en,es,pl,ko",
+      "LEAN_BODY_MASS: de,en,es,ko",
       "WALKING_STEADINESS_EVENT: en",
     ]);
   });

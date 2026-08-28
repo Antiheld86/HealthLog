@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HealthLog API
-  version: 1.37.31
+  version: 1.37.32
   description: >-
     Self-hosted personal-health-tracking PWA — public API surface for the iOS native client and external ingest.
 
@@ -20248,6 +20248,7 @@ components:
             - es
             - it
             - pl
+            - ko
         practiceName:
           type: string
           maxLength: 120
@@ -22343,6 +22344,7 @@ components:
             - fr
             - it
             - pl
+            - ko
         today:
           description: "Optional override of the reference date used to resolve relative phrases (\"tomorrow\", \"next Monday\").
             Format: `YYYY-MM-DD`. Defaults to the server's UTC day."
@@ -23234,6 +23236,7 @@ components:
             - es
             - it
             - pl
+            - ko
           description: One of the interface locales this build ships.
       required:
         - locale
@@ -27714,6 +27717,7 @@ components:
             - fr
             - it
             - pl
+            - ko
         timezone:
           type: string
           minLength: 1
@@ -27929,6 +27933,7 @@ components:
                 - fr
                 - it
                 - pl
+                - ko
             - type: "null"
         timezone:
           type: string
@@ -46021,6 +46026,7 @@ components:
                 - es
                 - it
                 - pl
+                - ko
           required:
             - locale
           additionalProperties: false
@@ -66553,6 +66559,7 @@ components:
                 - fr
                 - it
                 - pl
+                - ko
             - type: "null"
         timezone:
           type: string
