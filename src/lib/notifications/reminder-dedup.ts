@@ -34,6 +34,18 @@ import type { PrismaClient } from "@/generated/prisma/client";
 export const REMINDER_DEDUP_LOOKBACK_MS = 48 * 60 * 60 * 1000;
 
 /**
+ * Event type for state-scoped admin configuration notices ("offline geo is
+ * not configured" and its future siblings). These anchors are not windowed:
+ * they hold for as long as the configuration state itself holds — days or
+ * years — and are released explicitly when the state exits, so the notice
+ * can fire again on re-entry and never in between. The retention prune in
+ * `cleanup-handlers.ts` excludes this event type for exactly that reason; a
+ * horizon delete would re-open the once-per-state notice every 90 days
+ * (issue #851 wearing a new clock).
+ */
+export const CONFIG_NOTICE_EVENT_TYPE = "ADMIN_CONFIG_NOTICE";
+
+/**
  * Dedup key for one medication dose slot in one phase on one local day.
  *
  * `scheduleId` and the slot's real `HH:mm` are BOTH in the key. Dropping
@@ -116,5 +128,36 @@ export async function claimNotificationEvent(
     // contact a provider. A later tick may retry after the transaction rolls
     // back, so an outage delays rather than duplicates a notification.
     return false;
+  }
+}
+
+/**
+ * Release every claim on one event across all record users. The counterpart
+ * to `claimNotificationEvent` for state-scoped anchors: when the condition a
+ * notice describes stops holding, its anchors are deleted so the next entry
+ * into the condition sends a fresh notice. Deliberately not scoped to a
+ * single `recordUserId` — the state is host-wide, so its exit releases the
+ * anchor for every admin at once.
+ *
+ * Never throws. A failed release leaves the anchors standing, which
+ * suppresses a future notice rather than duplicating one — the safe side of
+ * this particular trade, and the next state exit retries it.
+ */
+export async function releaseNotificationEvent(
+  prisma: PrismaClient,
+  input: {
+    eventType: string;
+    dedupKey: string;
+  },
+): Promise<void> {
+  try {
+    await prisma.notificationEvent.deleteMany({
+      where: {
+        eventType: input.eventType,
+        dedupKey: input.dedupKey,
+      },
+    });
+  } catch {
+    // Swallowed by design; see above.
   }
 }

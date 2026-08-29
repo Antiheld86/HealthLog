@@ -10,6 +10,7 @@ import { getEvent } from "@/lib/logging/context";
 import { recordPushAttemptForPayload } from "@/lib/notifications/senders/push-attempt-record";
 import { loadEmailConfig } from "@/lib/notifications/senders/email-config";
 import { plainPushText } from "@/lib/notifications/strip-emoji";
+import { stripHtml } from "@/lib/notifications/strip-html";
 
 /**
  * SMTP / email sender (v1.17.1).
@@ -126,10 +127,7 @@ export async function sendViaEmail(
 
   // Plain text only — strip HTML + decorative emoji on routine reminders.
   const subject = plainPushText(payload.title, payload.eventType);
-  const text = plainPushText(
-    payload.message.replace(/<[^>]*>/g, ""),
-    payload.eventType,
-  );
+  const text = plainPushText(stripHtml(payload.message), payload.eventType);
 
   try {
     await transport.transporter.sendMail({

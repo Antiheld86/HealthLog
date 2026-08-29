@@ -76,15 +76,25 @@
  * `MAXMIND_LICENSE_KEY` secret — the CI workflow drops an `.empty`
  * marker into the geo asset directory when the key is unset.
  * `offlineGeoReady()` is the canonical check used by `/api/version`
- * and the admin status surface, and the lookup paths fire a one-shot
- * admin notification on the first fallback so the maintainer hears
- * about the gap from the running app.
+ * and the admin status surface, and the lookup paths fire an admin
+ * notification on the first fallback so the maintainer hears about the
+ * gap from the running app. The notification is once per CONFIGURATION
+ * STATE, not once per process: the sent-anchor persists in the
+ * `notification_events` ledger and is released when the state exits
+ * (databases configured, or lookups disabled), so a worker restart does
+ * not re-send while nothing changed (issue #851) and a genuine re-entry
+ * into the unconfigured state does.
  */
 import fs from "node:fs";
 import path from "node:path";
 import { Reader as MmdbReader } from "mmdb-lib";
 import type { AsnResponse, CityResponse } from "mmdb-lib/lib/reader/response";
 import { getEvent } from "@/lib/logging/context";
+import {
+  claimNotificationEvent,
+  releaseNotificationEvent,
+  CONFIG_NOTICE_EVENT_TYPE,
+} from "@/lib/notifications/reminder-dedup";
 import { safeFetch } from "@/lib/safe-fetch";
 
 interface IpwhoIsResponse {
@@ -257,13 +267,16 @@ function getAsnReader(): MmdbReader<AsnResponse> | null {
  * calls this after it places freshly downloaded databases, so a running worker
  * picks them up without a restart — the readers latch `null` on the first miss,
  * so without this a process that booted before the files landed would keep
- * resolving online forever. Also clears the one-shot "offline unavailable"
- * admin-notification latch, since the offline tier may now be present.
+ * resolving online forever. Also clears the "offline unavailable"
+ * notice-evaluation latch, so the next lookup re-evaluates the
+ * configuration state — and, finding the offline tier present, releases
+ * the persisted sent-anchor so a later loss of the databases notifies
+ * again.
  */
 export function resetGeoLite2ReaderCache(): void {
   cache.city = undefined;
   cache.asn = undefined;
-  notifiedThisProcess = false;
+  noticeEvaluatedThisProcess = false;
 }
 
 /**
@@ -277,7 +290,7 @@ export function __resetGeoLite2CacheForTests(): void {
   GEO_CACHE.clear();
 }
 
-// ── Offline readiness + one-shot admin notification ─────────────────
+// ── Offline readiness + once-per-state admin notification ────────────
 //
 // The CI workflow drops an `.empty` marker into the geo asset directory
 // when the maintainer has not configured `MAXMIND_LICENSE_KEY`, in
@@ -286,12 +299,36 @@ export function __resetGeoLite2CacheForTests(): void {
 // `/api/version`, the admin status surface, and the resolver's own
 // offline-first branch, so the three cannot disagree.
 //
-// `notifiedThisProcess` is a module-level latch so the admin only
-// receives the "offline geo is disabled" notification once per worker
-// boot — every subsequent fallback hit is silent. Test-only reset is
-// folded into the cache reset above.
+// The notification is once per CONFIGURATION STATE. A module-level latch
+// alone re-sent it on every worker boot while the state never changed
+// (issue #851: same notice again and again on a host that has simply not
+// mounted the databases). The durable anchor is a per-admin
+// `notification_events` claim — the same ledger every other repeat-prone
+// notice anchors in — released when the state exits, i.e. when the
+// databases are configured or the online lookup is disabled. Entering the
+// unconfigured state sends once; staying in it is silent across restarts;
+// leaving and re-entering sends again.
+//
+// `noticeEvaluatedThisProcess` remains as a cheap gate so the ledger is
+// consulted once per worker boot (and again after a runtime database
+// fetch resets it), not on every lookup. Test-only reset is folded into
+// the cache reset above.
 
-let notifiedThisProcess = false;
+let noticeEvaluatedThisProcess = false;
+
+/** Durable anchor identity for the offline-geo notice in `notification_events`. */
+const OFFLINE_GEO_NOTICE_DEDUP_KEY = "geo:offline-unavailable";
+
+/**
+ * Whether the host is in the state the notice describes: the offline tier
+ * is not configured AND lookups still egress to the online provider. With
+ * `IP_GEO_LOOKUP_DISABLED=1` there is no egress to warn about, so the
+ * disabled host counts as having left the state — exactly like a host
+ * that mounted the databases.
+ */
+function offlineGeoNoticeStateActive(): boolean {
+  return !offlineGeoReady() && process.env.IP_GEO_LOOKUP_DISABLED !== "1";
+}
 
 /**
  * Where the admin notification sends someone who wants the offline tier.
@@ -311,17 +348,28 @@ export function offlineGeoReady(): boolean {
   }
 }
 
-async function notifyOfflineGeoUnavailable(): Promise<void> {
-  if (notifiedThisProcess) return;
-  notifiedThisProcess = true;
+async function evaluateOfflineGeoNotice(): Promise<void> {
+  if (noticeEvaluatedThisProcess) return;
+  noticeEvaluatedThisProcess = true;
   // Defer the resolve so we don't pay the cost of pulling the
-  // Prisma client into the import graph until the first fallback —
+  // Prisma client into the import graph until the first evaluation —
   // most calls are cache hits or private-IP short-circuits.
   try {
-    const [{ prisma }, { dispatchLocalisedNotification }] = await Promise.all([
-      import("@/lib/db"),
-      import("@/lib/notifications/dispatch-localised"),
-    ]);
+    const { prisma } = await import("@/lib/db");
+
+    if (!offlineGeoNoticeStateActive()) {
+      // The state the notice describes does not hold. Release any
+      // persisted sent-anchor so a future re-entry into the unconfigured
+      // state notifies again — this is the "state exit" edge.
+      await releaseNotificationEvent(prisma, {
+        eventType: CONFIG_NOTICE_EVENT_TYPE,
+        dedupKey: OFFLINE_GEO_NOTICE_DEDUP_KEY,
+      });
+      return;
+    }
+
+    const { dispatchLocalisedNotification } =
+      await import("@/lib/notifications/dispatch-localised");
     const admins = await prisma.user.findMany({
       where: { role: "ADMIN" },
       select: { id: true },
@@ -332,10 +380,21 @@ async function notifyOfflineGeoUnavailable(): Promise<void> {
       );
       return;
     }
-    getEvent()?.addWarning(
-      `geo: offline databases unavailable, every lookup goes online to ${resolveGeoProviderHost()} — notifying admins`,
-    );
     for (const admin of admins) {
+      // The anchor is unwindowed (`since` at epoch): it holds until the
+      // state exit above releases it, however many restarts happen in
+      // between. An admin who already has the anchor claimed nothing and
+      // hears nothing.
+      const claimed = await claimNotificationEvent(prisma, {
+        recordUserId: admin.id,
+        eventType: CONFIG_NOTICE_EVENT_TYPE,
+        dedupKey: OFFLINE_GEO_NOTICE_DEDUP_KEY,
+        since: new Date(0),
+      });
+      if (!claimed) continue;
+      getEvent()?.addWarning(
+        `geo: offline databases unavailable, every lookup goes online to ${resolveGeoProviderHost()} — notifying admin`,
+      );
       await dispatchLocalisedNotification({
         userId: admin.id,
         titleKey: "notifications.admin.offlineGeoUnavailableTitle",
@@ -610,15 +669,17 @@ export function lookupIpAsn(
   ip: string | null,
 ): { asn: number; carrier: string | null } | null {
   if (!ip || PRIVATE_IP.test(ip)) return null;
+  // First public-IP lookup of the process evaluates the offline-geo
+  // configuration state: unconfigured-with-egress sends the admin notice
+  // (once per state, anchored durably), configured-or-disabled releases
+  // the anchor so a later re-entry notifies again. Runs on the healthy
+  // path too — that is where the state-exit edge is observed.
+  void evaluateOfflineGeoNotice();
   const reader = getAsnReader();
   if (!reader) {
-    // No offline ASN data — alert once per process. The online tier can
-    // still fill the carrier from its ISP field, but the ASN number and
-    // the authoritative carrier come from the MMDB, so the admin is told
-    // once that the offline tier is not being read.
-    if (!offlineGeoReady()) {
-      void notifyOfflineGeoUnavailable();
-    }
+    // No offline ASN data. The online tier can still fill the carrier
+    // from its ISP field, but the ASN number and the authoritative
+    // carrier come from the MMDB.
     return null;
   }
   try {

@@ -49,8 +49,14 @@ describe("notification retention", () => {
     expect(h.pushDeleteMany).toHaveBeenCalledWith({
       where: { createdAt: { lt: expect.any(Date) } },
     });
+    // State-scoped admin-config-notice anchors live as long as the state
+    // they describe; the horizon prune must leave them alone or the
+    // once-per-state notice re-fires every 90 days.
     expect(h.eventDeleteMany).toHaveBeenCalledWith({
-      where: { createdAt: { lt: expect.any(Date) } },
+      where: {
+        createdAt: { lt: expect.any(Date) },
+        eventType: { not: "ADMIN_CONFIG_NOTICE" },
+      },
     });
     expect(h.authorizationDeleteMany).toHaveBeenCalledWith({
       where: { authorizedAt: { lt: expect.any(Date) } },

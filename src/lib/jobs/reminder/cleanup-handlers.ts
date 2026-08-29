@@ -38,6 +38,7 @@ import {
   cleanupExpiredMoodTombstones,
   cleanupExpiredIntakeTombstones,
 } from "@/lib/jobs/measurement-tombstone-cleanup";
+import { CONFIG_NOTICE_EVENT_TYPE } from "@/lib/notifications/reminder-dedup";
 import { getWorkerPrisma } from "./shared";
 
 const MOOD_REMINDER_RETENTION_DAYS = 90;
@@ -125,7 +126,12 @@ export async function handleMoodReminderCleanup(
  * so anything older than the 90-day retention window is dead weight
  * inflating the table and the `(user_id, created_at DESC)` index. Record-only
  * notification events are claims rather than delivery diagnostics, but after
- * the same horizon their dedup windows have elapsed and they have no reader.
+ * the same horizon their dedup windows have elapsed and they have no reader —
+ * with one carve-out: state-scoped admin-config-notice anchors
+ * (`CONFIG_NOTICE_EVENT_TYPE`) hold for as long as the configuration state
+ * they describe and are released explicitly on state exit, so the horizon
+ * delete must not touch them or the once-per-state notice re-fires every
+ * 90 days.
  *
  * The DELETE is unbounded by user. The event and attempt ledgers carry direct
  * `created_at` indexes, and final egress claims carry `authorized_at`, so each
@@ -151,7 +157,10 @@ export async function handlePushAttemptCleanup(
         where: { createdAt: { lt: cutoff } },
       });
       const deletedEvents = await p.notificationEvent.deleteMany({
-        where: { createdAt: { lt: cutoff } },
+        where: {
+          createdAt: { lt: cutoff },
+          eventType: { not: CONFIG_NOTICE_EVENT_TYPE },
+        },
       });
       const deletedAuthorizations =
         await p.notificationEgressAuthorization.deleteMany({
