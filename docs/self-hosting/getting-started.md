@@ -171,6 +171,7 @@ NEXT_PUBLIC_DASHBOARD_SNAPSHOT=false pnpm build
 | Next step                                                           | File                                  |
 | ------------------------------------------------------------------- | ------------------------------------- |
 | TLS + reverse-proxy configuration                                   | `docs/self-hosting/reverse-proxy.md`  |
+| Tailnet-only HTTPS via `tailscale serve` (no reverse proxy)         | `docs/self-hosting/tailscale.md`      |
 | Push notifications — Web Push, Telegram, ntfy, webhook, email, APNs | `docs/self-hosting/notifications.md`  |
 | Web/worker process split for horizontal scale                       | `docs/self-hosting/scaling.md`        |
 | Off-host encrypted backups to S3/R2/B2                              | `docs/ops/backup-restore.md`          |
