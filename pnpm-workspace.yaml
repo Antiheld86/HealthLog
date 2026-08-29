@@ -7,6 +7,13 @@ overrides:
   "picomatch@<4.0.4": "^4.0.4"
   "body-parser@<2.3.0": "^2.3.0"
   "fast-uri@<3.1.5": "^3.1.5"
+  "flatted@<3.4.2": "^3.4.2"
+  # The advisory covers 4.x only; the bound keeps a hypothetical 3.x consumer
+  # off a major it never asked for.
+  "js-yaml@>=4.0.0 <4.3.1": "^4.3.1"
+  # The scanner suggests 10.x (latest), but the ReDoS fix is backported: only
+  # <3.1.4 is vulnerable, so the 3.x line stays where its consumers expect it.
+  "minimatch@<3.1.4": "^3.1.4"
   # Address4 decoded leading-zero octets as decimal, so `010.0.0.1` parsed as
   # 10.0.0.1 rather than being rejected. That is the exact alt-notation class
   # `isPublicUrl` exists to catch, and this copy arrives under the MCP SDK's
