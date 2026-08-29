@@ -8,6 +8,7 @@ import { getEvent } from "@/lib/logging/context";
 import { recordPushAttemptForPayload } from "@/lib/notifications/senders/push-attempt-record";
 import { safeFetch } from "@/lib/safe-fetch";
 import { plainPushText } from "@/lib/notifications/strip-emoji";
+import { stripHtml } from "@/lib/notifications/strip-html";
 
 /**
  * Send a notification via a generic outbound webhook (v1.17.1).
@@ -49,10 +50,7 @@ export async function sendViaWebhook(
     // a relay rule can route without leaking the cycle event name.
     const body = JSON.stringify({
       title: plainPushText(payload.title, payload.eventType),
-      message: plainPushText(
-        payload.message.replace(/<[^>]*>/g, ""),
-        payload.eventType,
-      ),
+      message: plainPushText(stripHtml(payload.message), payload.eventType),
       eventType: payload.discreet ? "reminder" : payload.eventType,
       // v1.18.4 — an explicitly urgent event maps to `urgent` so a relay
       // rule (Gotify priority, Discord mention, Home Assistant automation)

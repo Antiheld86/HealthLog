@@ -8,6 +8,7 @@ import { getEvent } from "@/lib/logging/context";
 import { recordPushAttemptForPayload } from "@/lib/notifications/senders/push-attempt-record";
 import { safeFetch } from "@/lib/safe-fetch";
 import { plainPushText } from "@/lib/notifications/strip-emoji";
+import { stripHtml } from "@/lib/notifications/strip-html";
 import { isUrgentPayload } from "@/lib/notifications/types";
 
 /**
@@ -57,10 +58,7 @@ export async function sendViaNtfy(
     }
 
     // Strip HTML tags for ntfy (plain text only) + emoji on routine reminders
-    const body = plainPushText(
-      payload.message.replace(/<[^>]*>/g, ""),
-      payload.eventType,
-    );
+    const body = plainPushText(stripHtml(payload.message), payload.eventType);
 
     // requirePublicHost adds the DNS-rebinding pin (issue #217) on top
     // of the input-time isPublicUrl guard already enforced when the

@@ -31,6 +31,7 @@ import { getEvent } from "@/lib/logging/context";
 import type { SendOutcome } from "@/lib/notifications/retry-policy";
 import { recordPushAttemptForPayload } from "@/lib/notifications/senders/push-attempt-record";
 import { plainPushText } from "@/lib/notifications/strip-emoji";
+import { stripHtml } from "@/lib/notifications/strip-html";
 import { isManagedGuardianDelivery } from "@/lib/notifications/managed-delivery";
 
 export interface ApnsPayload {
@@ -996,10 +997,6 @@ export async function sendApnsRawPush(
     shouldDisable,
     message: failure?.error?.message,
   };
-}
-
-function stripHtml(s: string): string {
-  return s.replace(/<[^>]*>/g, "");
 }
 
 /**

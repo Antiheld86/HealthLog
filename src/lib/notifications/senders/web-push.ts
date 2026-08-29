@@ -9,6 +9,7 @@ import { recordPushAttemptForPayload } from "@/lib/notifications/senders/push-at
 import { isPublicUrl } from "@/lib/validations/notifications";
 import { safeFetch } from "@/lib/safe-fetch";
 import { plainPushText } from "@/lib/notifications/strip-emoji";
+import { stripHtml } from "@/lib/notifications/strip-html";
 import { isManagedGuardianDelivery } from "@/lib/notifications/managed-delivery";
 
 /**
@@ -102,10 +103,7 @@ export async function sendViaWebPush(
 
     const pushPayload = JSON.stringify({
       title: plainPushText(payload.title, payload.eventType),
-      body: plainPushText(
-        payload.message.replace(/<[^>]*>/g, ""),
-        payload.eventType,
-      ),
+      body: plainPushText(stripHtml(payload.message), payload.eventType),
       // Discreet mode (cycle privacy): the coalescing `tag` must not name the
       // event. Web-Push payloads are VAPID-encrypted (only the SW sees this),
       // but the discreet contract still requires no event name on the wire —
