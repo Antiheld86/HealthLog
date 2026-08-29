@@ -9,6 +9,11 @@ through unbuffered with a generous read timeout.
 This guide gives copy-paste blocks for five common fronts. Pick one;
 the env-var pairing is identical across them.
 
+If the instance only needs to be reachable from your own devices, none
+of them is required: `tailscale serve` terminates trusted HTTPS on the
+tailnet with no extra container. See
+[`docs/self-hosting/tailscale.md`](tailscale.md).
+
 ## Pre-flight — env vars the proxy interacts with
 
 | Variable              | Required for                                   | Notes                                    |
@@ -247,6 +252,11 @@ and Codex device-OAuth state cookies all stop emitting `Secure` and
 login works over HTTP. The trade-off is explicit: the session
 cookie crosses the wire unencrypted, so the network it traverses
 needs to be one you control.
+
+For the Tailscale case specifically there is a better option than
+lifting the flag: `tailscale serve` gives the same surface real HTTPS
+with a tailnet-trusted certificate, and `SESSION_COOKIE_SECURE` stays
+unset. See [`docs/self-hosting/tailscale.md`](tailscale.md).
 
 **Do not set this on a deployment that ever serves plain HTTP to the
 open internet.** Anyone with passive network access can capture the
