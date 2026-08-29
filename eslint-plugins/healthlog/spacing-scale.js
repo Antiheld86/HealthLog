@@ -61,8 +61,15 @@ const ENFORCED_ROOTS = ["src/components/", "src/app/"];
 // A pt-/pb- utility with a numeric step, `px`, or an arbitrary value,
 // optionally behind modifier prefixes (`md:`, `hover:`, `[.border-b]:`).
 // `pb-safe` (safe-area helpers) and word-suffixed utilities never match.
+//
+// The modifier chain excludes `:` from its chunk class so each chunk ends at
+// exactly one colon. With `:` inside the class the star was ambiguous —
+// `(?:[^\s"']*:)*` could carve the same prefix into chunks many ways — and a
+// long non-matching class string made the engine try them all
+// (exponential backtracking, CodeQL js/redos). Same strings accepted,
+// one parse each, linear time.
 const SLOT_PADDING_RE =
-  /(?:^|\s)(?:[^\s"']*:)*(p[tb]-(?:\d+(?:\.\d+)?|px|\[[^\]]+\]))(?=\s|$)/;
+  /(?:^|\s)(?:[^\s"':]*:)*(p[tb]-(?:\d+(?:\.\d+)?|px|\[[^\]]+\]))(?=\s|$)/;
 
 const SLOT_NAMES = new Set(["CardHeader", "CardContent"]);
 
@@ -83,8 +90,10 @@ const SPACING_PREFIX =
 // `5` or `7`; or a half-step whose integer part is anything but `1`
 // (`0.5`, `2.5`…`9.5`, `10.5`+), so the sanctioned `1.5` is left alone.
 const OFF_SCALE_STEP = "5|7|(?:[02-9]|\\d\\d+)\\.5";
+// Modifier chain shaped like SLOT_PADDING_RE's, and linear for the same
+// reason: `:` is excluded from the chunk class so the star has one parse.
 const SHELL_OFFSCALE_RE = new RegExp(
-  `(?:^|\\s)(?:[^\\s"']*:)*((?:${SPACING_PREFIX})-(?:${OFF_SCALE_STEP}))(?=\\s|$)`,
+  `(?:^|\\s)(?:[^\\s"':]*:)*((?:${SPACING_PREFIX})-(?:${OFF_SCALE_STEP}))(?=\\s|$)`,
 );
 
 function toPosix(filename) {
