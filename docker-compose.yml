@@ -75,6 +75,13 @@ x-healthlog-env: &healthlog_env
   # free ip-api.com endpoint) — off by default, an explicit operator choice.
   # Listed here so operator values in .env reach the container (the
   # `environment:` block is a whitelist — vars not listed never propagate).
+  # TRUST_PROXY_HOPS is the number of trusted reverse-proxy hops in front of
+  # the app: the client IP is read that many entries from the right of the
+  # X-Forwarded-For chain. Wrong value and the app refuses to read XFF and
+  # collapses every anonymous caller into one rate-limit bucket. Listed here
+  # so an operator value in .env reaches the container (the `environment:`
+  # block is a whitelist).
+  TRUST_PROXY_HOPS: "${TRUST_PROXY_HOPS:-}"
   TRUST_CF_CONNECTING_IP: "${TRUST_CF_CONNECTING_IP:-}"
   IP_GEO_LOOKUP_URL: "${IP_GEO_LOOKUP_URL:-}"
   IP_GEO_LOOKUP_DISABLED: "${IP_GEO_LOOKUP_DISABLED:-}"
