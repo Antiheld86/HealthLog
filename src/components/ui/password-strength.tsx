@@ -69,11 +69,12 @@ export function PasswordStrength({
     t("passwordStrength.strong"),
     t("passwordStrength.veryStrong"),
   ];
-  const tooShort = password.length < minLength;
+  const isTooShort = password.length < minLength;
+  const labelColor = isTooShort ? "text-destructive" : colors.textColor;
 
   // Collect feedback
   const feedback: string[] = [];
-  if (tooShort) {
+  if (isTooShort) {
     feedback.push(t("passwordStrength.minLength", { count: minLength }));
   }
   if (result?.feedback?.warning) {
@@ -92,7 +93,7 @@ export function PasswordStrength({
             key={i}
             className={cn(
               "h-1.5 flex-1 rounded-full transition-colors",
-              i <= score && !tooShort ? colors.color : "bg-muted",
+              i <= score && !isTooShort ? colors.color : "bg-muted",
             )}
           />
         ))}
@@ -100,8 +101,8 @@ export function PasswordStrength({
 
       {/* Label */}
       <div className="flex items-center justify-between">
-        <span className={cn("text-xs font-medium", colors.textColor)}>
-          {tooShort ? t("passwordStrength.tooShort") : scoreLabels[score]}
+        <span className={cn("text-xs font-medium", labelColor)}>
+          {isTooShort ? t("passwordStrength.tooShort") : scoreLabels[score]}
         </span>
         <span className="text-muted-foreground text-xs">
           {password.length}/{minLength}+ {t("passwordStrength.characters")}
