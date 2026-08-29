@@ -184,7 +184,7 @@ RUN mkdir -p /opt/prisma-cli && \
     cd /opt/prisma-cli && \
     npm init -y && \
     npm pkg set 'overrides.deepmerge-ts=^8.0.0' && \
-    npm install --omit=dev prisma@7.8 @prisma/engines@7.8 tsx@4.23.1 dotenv@17.4.2 && \
+    npm install --omit=dev prisma@7.8.0 @prisma/engines@7.8.0 tsx@4.23.1 dotenv@17.4.2 && \
     ln -sfn /opt/prisma-cli/node_modules/.bin/tsx /usr/local/bin/healthlog-tsx && \
     ln -sfn /opt/prisma-cli/node_modules/dotenv /app/node_modules/dotenv && \
     ln -sfn /opt/prisma-cli/node_modules/prisma /app/node_modules/prisma && \
