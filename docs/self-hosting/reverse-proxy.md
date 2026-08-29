@@ -3,8 +3,8 @@
 The bundled `docker-compose.yml` exposes HealthLog on plain HTTP at
 `localhost:3000`. Production deployments front the container with a
 reverse proxy that terminates TLS, sets the forwarded headers the
-rate-limiter trusts, and preserves the WebSocket upgrade path the
-streaming Coach surface depends on.
+rate-limiter trusts, and passes the Coach's Server-Sent Events stream
+through unbuffered with a generous read timeout.
 
 This guide gives copy-paste blocks for five common fronts. Pick one;
 the env-var pairing is identical across them.
@@ -20,6 +20,12 @@ the env-var pairing is identical across them.
 Set the URL pair to the public origin (`https://your-instance.example.com`)
 and restart the `app` container. The image reads both at startup; no
 rebuild needed.
+
+Note for bundled-compose users: `TRUST_PROXY_HOPS` is not on the
+shipped `docker-compose.yml` `environment:` whitelist, and a var not on
+the whitelist never reaches the container. If you need a non-default
+value, add `TRUST_PROXY_HOPS: "${TRUST_PROXY_HOPS:-1}"` to the `app`
+service's `environment:` block yourself.
 
 ### `TRUST_PROXY_HOPS` — what to set it to
 
@@ -56,8 +62,8 @@ your-instance.example.com {
 }
 ```
 
-Caddy handles the WebSocket upgrade automatically. `flush_interval -1`
-disables response buffering so the streaming insight events surface
+`flush_interval -1`
+disables response buffering so the SSE events surface
 without batching delays. With Caddy as the only hop, leave
 `TRUST_PROXY_HOPS=1`.
 
@@ -78,8 +84,9 @@ services:
       - "traefik.http.routers.healthlog.middlewares=healthlog-headers"
 ```
 
-Traefik forwards `X-Forwarded-For` by default and respects the WebSocket
-upgrade. Pair with `TRUST_PROXY_HOPS=1`. If Traefik sits behind
+Traefik forwards `X-Forwarded-For` by default and does not buffer
+responses, so the SSE stream passes through as-is. Pair with
+`TRUST_PROXY_HOPS=1`. If Traefik sits behind
 Cloudflare, set it to `2` so the rate-limiter reads the real client IP
 that Cloudflare placed in the chain.
 
@@ -91,8 +98,9 @@ In the NPM UI:
 2. **Domain Names:** `your-instance.example.com`.
 3. **Scheme:** `http`; **Forward Hostname / IP:** the Docker host or
    internal hostname; **Forward Port:** `3000`.
-4. Enable **Websockets Support** (required for streaming Coach
-   responses).
+4. **Websockets Support** may stay on or off; the Coach stream is
+   SSE over plain HTTP, not WebSockets. What matters is the buffering
+   and timeout config in step 6.
 5. **SSL tab:** request a Let's Encrypt certificate, force SSL.
 6. **Advanced tab — Custom Nginx Configuration:**
 

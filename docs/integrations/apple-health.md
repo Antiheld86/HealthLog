@@ -265,7 +265,8 @@ IMPORT** for cumulative metrics (steps, active energy, distance,
 flights, sleep, HRV, resting HR) and **WITHINGS ≻ APPLE_HEALTH ≻
 MANUAL** for point measurements where the Withings device is the
 primary sensor (weight, BP, body fat, body temperature, SpO₂, VO₂
-max). The defaults live in `src/lib/validations/source-priority.ts:205-220`.
+max). The defaults live in `DEFAULT_SOURCE_PRIORITY` in
+`src/lib/validations/source-priority.ts`.
 
 Concrete consequences:
 
@@ -283,7 +284,7 @@ Concrete consequences:
   source tag — the lowest rank — is reserved for legacy CSV/JSON
   imports that pre-date the Apple Health passthrough.
 
-Override per-user via the Sources section of `/settings/thresholds`.
+Override per-user via Settings → Sources (`/settings/sources`).
 
 ## Failure modes
 

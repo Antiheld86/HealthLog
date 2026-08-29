@@ -30,7 +30,7 @@ Three things must be true before `/mcp` will answer:
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`APP_URL` is set**       | The endpoint fails closed without a pinned canonical origin. `APP_URL` (or `NEXT_PUBLIC_APP_URL`) is the origin every OAuth document and audience check is anchored to — `Host` is never trusted. Without it the surface stays invisible (`404`). |
 | **The global API is on**   | The operator's instance-wide API switch must be enabled (it is by default). With it off, every token path — including `/mcp` — returns `404`.                                                                                                     |
-| **The `mcp` module is on** | A per-account opt-in. It is the only module that ships dark; you turn it on in Settings. Until then `/mcp` answers `404` for that account.                                                                                                        |
+| **The `mcp` module is on** | A per-account opt-in that ships off by default; you turn it on in Settings. Until then `/mcp` answers `404` for that account.                                                                                                                     |
 
 `APP_URL` is the same origin you already use for passkeys and invite
 links — for example `https://health.example`. It must be reachable by the

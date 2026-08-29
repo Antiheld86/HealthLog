@@ -13,9 +13,10 @@ notes, and machine-readable specs that ship alongside the source:
   [`api/mcp-capabilities.md`](./api/mcp-capabilities.md) (tools,
   resources, prompts, write model) and
   [`api/mcp-skills.md`](./api/mcp-skills.md) (building a connector / skill).
-- [`ops/`](./ops/) — backup / restore + encryption-key-rotation
-  playbooks. These are the runbooks an operator reaches for during an
-  incident.
+- [`ops/`](./ops/) — operator runbooks: deploy, backup / restore,
+  encryption-key rotation, password reset and account recovery, env
+  checks, TLS pinning, data repair. These are what an operator reaches
+  for during an incident.
 - [`self-hosting/`](./self-hosting/) — horizontal-scaling notes
   (`HEALTHLOG_PROCESS_TYPE=web|worker|all`) and the deploy-pipeline
   recipe. Routine install steps stay on `docs.healthlog.dev`. Includes
@@ -33,14 +34,19 @@ notes, and machine-readable specs that ship alongside the source:
   managed profiles for somebody with no login and the guardians who look
   after them, what revocation does and does not undo, and which trust
   properties of the instance are unchanged by any of it.
-- [`migration/`](./migration/) — release-by-release migration notes.
-  Read the entry for the version you're upgrading from.
-- [`audit/`](./audit/) — per-release audit summaries archived for
-  forensic traceability.
+- [`migration/`](./migration/) — migration notes. Currently only
+  v1.3 to v1.4; later releases are covered by `CHANGELOG.md` and
+  <https://docs.healthlog.dev>.
+- [`integrations/`](./integrations/) — per-integration reference
+  (Withings, Fitbit, Google Health, WHOOP, Apple Health, AI providers,
+  data import).
+- [`adr/`](./adr/) — architecture decision records.
+- [`security/`](./security/) — threat-model notes.
+- [`diagrams/`](./diagrams/) — architecture diagrams rendered through
+  docs.healthlog.dev.
+- [`releases/`](./releases/) — release imagery.
 - [`apple-store-connect-checklist.md`](./apple-store-connect-checklist.md)
   — the iOS submission gate.
-- [`doctor-report.md`](./doctor-report.md) — PDF generator design
-  notes.
 - [`codex-protocol-spec.md`](./codex-protocol-spec.md) — Codex / ChatGPT
   OAuth protocol reverse-engineering notes.
 - [`ui-guidelines.md`](./ui-guidelines.md) — UI / a11y house style.

@@ -134,7 +134,7 @@ triggers the verification + CASA requirements above.)
 
 If Google Health and another source (Withings, WHOOP, Apple Health) both supply
 the same vital — resting heart rate, blood oxygen, respiratory rate — the source
-priority ladder in **Settings → Integrations → Sources** decides which one wins
+priority ladder in **Settings → Sources** decides which one wins
 per metric.
 
 ## Disconnect

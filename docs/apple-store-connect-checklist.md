@@ -34,7 +34,7 @@ Plus pre-submit final checks.
 - [ ] Add the description above to the medical-device-justification field if Apple shows one
 - [ ] Cross-reference the in-app `/privacy` page (https://<your-instance>/privacy) §7 MDR-boundary
 
-**Why this matters**: Apple's first-submission rejection rate for health apps is ~40%. The most common reason is unclear medical-device classification. The above wording mirrors the in-app disclaimer + the per-feature gating; consistency between the form and the app is what Apple looks for.
+**Why this matters**: health apps get rejected on first submission most commonly for unclear medical-device classification. The above wording mirrors the in-app disclaimer + the per-feature gating; consistency between the form and the app is what Apple looks for.
 
 ## Section 2 — Privacy Nutrition Labels
 

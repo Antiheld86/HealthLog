@@ -46,8 +46,10 @@ states:
 | `[missing-optional]` | Variable is optional. The script reports it but does not fail. |
 
 The grep-friendly format lets a CI pipeline do `grep -q
-'\[MISSING-REQUIRED\]'` to gate a deploy. The CI integration itself
-is deferred to v1.4.43 — this release ships the CLI tool only.
+'\[MISSING-REQUIRED\]'` to gate a deploy. CI already does: the
+`env-check.yml` workflow runs `pnpm check-env --file
+.env.production.example` on every PR and fails on missing required
+vars.
 
 ## All-or-none groups
 
@@ -65,11 +67,15 @@ Example output for a partial APNs config:
   [OK] APNS_TEAM_ID
   [OK] APNS_BUNDLE_ID
   [missing-optional] APNS_KEY — Satisfied by any of: APNS_KEY, APNS_KEY_FILE
+  [MISSING-REQUIRED] <all-or-none> — Group is all-or-none but only 3/4 variables are set. Either set all or unset all.
 ```
 
-A reviewer immediately sees that `APNS_KEY` (or its `APNS_KEY_FILE`
-alternative) is missing while the other three APNs vars are set — the
-exact configuration that silently disables iOS push.
+The APNs group is `allOrNone: true`, so the partial config also emits
+the synthetic `<all-or-none>` row at REQUIRED severity and the run
+exits 1. A reviewer immediately sees that `APNS_KEY` (or its
+`APNS_KEY_FILE` alternative) is missing while the other three APNs
+vars are set — the exact configuration that silently disables iOS
+push.
 
 ## Editing the manifest
 
@@ -88,12 +94,13 @@ so changes go through a PR. To add a new variable:
    if the manifest change introduces a new classification branch
    (anyOf, allOrNone, …).
 
-## Future: CI gate
+## CI gate
 
-Deferred to v1.4.43:
+The GitHub Actions workflow `.github/workflows/env-check.yml` runs
+`pnpm check-env --file .env.production.example` on every PR, blocking
+changes that introduce new required vars without updating the example
+file.
 
-- GitHub Actions workflow that runs `pnpm check-env --file
-.env.production.example` on every PR, blocking changes that
-  introduce new required vars without updating the example file.
-- Coolify pre-deploy hook that runs `pnpm check-env` inside the
-  target container and aborts the deploy on exit code 1.
+Still an idea only: a Coolify pre-deploy hook that runs
+`pnpm check-env` inside the target container and aborts the deploy on
+exit code 1.

@@ -95,10 +95,15 @@ fails soft.
 
    ```yaml
    volumes:
-     - /srv/healthlog/geolite2:/var/lib/geolite2:ro
+     - ./geolite2:/opt/geolite2:ro
    ```
 
-3. Point the runtime at the container path:
+   Swap the host side (`./geolite2`) for your directory, e.g.
+   `/srv/healthlog/geolite2`.
+
+3. `/opt/geolite2` is the default value of `GEOLITE2_DIR`, so mounting
+   at that container path needs no env var at all. Only if you mount at
+   a different container path do you set it:
 
    ```env
    GEOLITE2_DIR="/var/lib/geolite2"
@@ -163,7 +168,8 @@ and it is served without a session for exactly that reason.
 **System status still says the online provider.** The readiness check
 requires `GeoLite2-City.mmdb` to exist in `GEOLITE2_DIR` and no `.empty`
 marker file beside it. Check the path from inside the container:
-`docker compose exec app ls -l /var/lib/geolite2`. An empty listing means
+`docker compose exec app ls -l /opt/geolite2` (or your `GEOLITE2_DIR`
+value). An empty listing means
 the bind mount did not land; a `.empty` file means the image was built
 without a licence key and you are still reading the baked-in directory
 rather than your own.

@@ -1,11 +1,10 @@
 # TLS SPKI pinning — coupling, alarm, and re-pin runbook
 
-The native client SPKI-pins the server's TLS chain at the **CA level**. It
-ships a small pin set — currently the issuing intermediate plus the root —
-and accepts a connection only when the served chain passes baseline X.509
-evaluation AND at least one certificate anywhere in the chain matches a pin
-(any-match). The leaf is deliberately **not** pinned, so routine leaf
-renewals are a client no-op. The outage risk is a **chain change**: the
+The native client SPKI-pins the server's TLS chain at the **CA level**: it
+ships a small pin set and rejects a connection whose validated chain
+contains no pinned key. The leaf is deliberately **not** pinned, so routine
+leaf renewals are a client no-op. The pin set itself and its enforcement
+rules live in the client repository, not here. The outage risk is a **chain change**: the
 served chain stops terminating in the pinned CA keys — the server moves to a
 different CA, or the CA rotates its intermediate / root keys. This page
 explains the coupling, the server-side alarm that watches the served leaf,
@@ -15,11 +14,11 @@ and the operator / release-owner steps when it fires.
 
 A SPKI pin is `base64(sha256(DER subjectPublicKeyInfo))` — a hash of a
 certificate's public key, not of the whole certificate. The native client
-carries a set of these pins (build-time config, ≥ 2 well-formed pins
-enforced for release builds) and rejects any TLS connection whose validated
-chain contains no pinned key. Hosts outside the client's pinned-host list
-fall back to plain system-trust validation, which is the documented model
-for self-hosted instances that ship their own chain.
+carries a set of these pins in its build-time config and rejects any TLS
+connection whose validated chain contains no pinned key; the exact pin-set
+rules are the client repository's contract. Self-hosted instances that ship
+their own chain sit outside the pinned-host list and validate against
+system trust.
 
 The app host's certificate auto-renews roughly every 90 days and each
 renewal mints a new leaf keypair. Because the client pins the CA keys rather

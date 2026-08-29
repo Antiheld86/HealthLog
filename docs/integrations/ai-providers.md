@@ -45,8 +45,8 @@ fallback for users who skip the setup.
 ## The fallback chain
 
 `User.aiProviderChain` is a JSON array of providers tried in priority
-order. The default is encoded in
-`src/lib/ai/provider-chain.ts:60-66`:
+order. The default is encoded as `PROVIDER_CHAIN_DEFAULT` in
+`src/lib/ai/provider-chain.ts`:
 
 1. `codex` — ChatGPT OAuth (covered by your ChatGPT Plus / Pro
    subscription; no per-token cost on top).
@@ -79,7 +79,7 @@ the default rather than 500-ing.
 4. In HealthLog, open `/settings/ai`. Set provider to **OpenAI**,
    paste the key, optionally override the model.
 
-The default model is `gpt-4o` (`src/lib/ai/provider.ts:80`) — a
+The default model is `gpt-4o` (see `src/lib/ai/provider.ts`) — a
 full-size model that keeps the headline Insights assessments grounded
 and well-reasoned out of the box. Override to a lighter model such as
 `gpt-4o-mini` if you want to trade some reasoning headroom for a lower
@@ -234,7 +234,7 @@ UI setup:
    `connected`.
 5. Token refresh runs automatically; the client triggers a refresh
    on 401 and persists the new tokens transparently
-   (`src/lib/ai/provider.ts:122-217`).
+   (`src/lib/ai/provider.ts`).
 
 Disconnect cleanly from `/settings/ai` — `POST /api/auth/codex/disconnect`
 clears the encrypted token columns. The wire-level protocol is
@@ -410,12 +410,12 @@ All three variables must also be listed in the compose
 ## Connection test
 
 `POST /api/ai/test` runs a one-shot probe against the resolved
-provider and returns the latency in milliseconds plus the model the
-provider routed to. The Settings UI surfaces a **Test connection**
-button next to each provider section that fires this endpoint. A
-failed probe surfaces a localisable `errorCode` so the UI renders
-the failure in the user's language rather than the raw upstream
-error.
+provider and returns the resolved provider type, the model, the token
+usage, and a short response sample. The Settings UI surfaces a
+**Test connection** button next to each provider section that fires
+this endpoint. A failed probe carries a categorised `reasonCode` so
+the UI renders the failure in the user's language rather than the raw
+upstream error.
 
 ## Troubleshooting
 
