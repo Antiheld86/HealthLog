@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.37.33] — 2026-08-29
+
+A community day: a contributor's first code fix, a self-hoster's suggestion turned into documentation, and the housekeeping a code-scanning tab is for.
+
+### Added
+
+- Tailscale is now a documented way to serve HealthLog, suggested by @el-abcd in #847. For a single Docker box, `tailscale serve` stands in for the reverse proxy entirely: trusted HTTPS on your tailnet, no extra container, the free plan covers it, and the iOS app with Apple Health sync works over the same path. `tailscale funnel` is covered as the deliberate public opt-in. The guide lives in the self-hosting docs and on docs.healthlog.dev, next to the reverse-proxy guide it complements.
+
+### Fixed
+
+- A password shorter than the minimum showed its "too short" label in the strength palette's colour instead of reading as invalid. Fixed by @TimonBed in #848, their first contribution here: the label now uses the destructive colour while the bars stay muted.
+- The admin notice about login locations resolving through the online geo lookup repeated on every worker boot, because the only-once latch was a per-process boolean. The anchor now persists in the notification ledger, survives restarts and retention pruning, and resets only when the configuration state actually changes, so the notice fires once when the condition appears and once more only if it goes away and comes back (#851). A host that has disabled IP lookups outright is no longer notified at all; there is no egress to warn about.
+- Restored backups briefly wrote decrypted health data with default file permissions; the restore script now creates its output `0o600`. `TRUST_PROXY_HOPS` joined the compose `environment:` whitelist so a `.env` value reaches the container without editing the compose file.
+- The HTML stripper the notification senders share is hardened against multi-character bypasses: one helper, applied to a fixpoint, replaces five per-sender copies of a single-pass regex.
+- The operator docs went through a truth audit against the current code: stale claims corrected, invented features removed, and the OpenAPI reference brought in line, here and on docs.healthlog.dev.
+
+### Security
+
+- Dependency overrides lift `flatted`, `js-yaml` and `minimatch` past their published advisories; the Prisma CLI install in the production image is pinned to an exact version; the code-scanning backlog is triaged to zero untreated findings, with false positives dismissed in writing.
+
 ## [1.37.32] — 2026-08-28
 
 Korean joins as a seventh interface language, contributed by @aucun6352, and the three things that had to be fixed before it could actually work.
