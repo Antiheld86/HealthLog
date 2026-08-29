@@ -26,11 +26,12 @@ Set the URL pair to the public origin (`https://your-instance.example.com`)
 and restart the `app` container. The image reads both at startup; no
 rebuild needed.
 
-Note for bundled-compose users: `TRUST_PROXY_HOPS` is not on the
-shipped `docker-compose.yml` `environment:` whitelist, and a var not on
-the whitelist never reaches the container. If you need a non-default
-value, add `TRUST_PROXY_HOPS: "${TRUST_PROXY_HOPS:-1}"` to the `app`
-service's `environment:` block yourself.
+All three variables are on the shipped `docker-compose.yml`
+`environment:` whitelist, so a value in `.env` reaches the container
+without editing the compose file. (Before v1.37.33 the whitelist was
+missing `TRUST_PROXY_HOPS`; on those versions add
+`TRUST_PROXY_HOPS: "${TRUST_PROXY_HOPS:-}"` to the `app` service's
+`environment:` block yourself.)
 
 ### `TRUST_PROXY_HOPS` — what to set it to
 
