@@ -24,6 +24,10 @@ export interface RangeBarProps {
   unit: string;
   orangeMin?: number;
   orangeMax?: number;
+  compact?: boolean;
+  tone?: "target" | "lab";
+  minLabel?: string | null;
+  maxLabel?: string | null;
 }
 
 export function RangeBar({
@@ -33,11 +37,16 @@ export function RangeBar({
   unit,
   orangeMin,
   orangeMax,
+  compact = false,
+  tone = "target",
+  minLabel,
+  maxLabel,
 }: RangeBarProps) {
   const { t } = useTranslations();
+  const isLab = tone === "lab";
 
   const span = max - min;
-  const defaultOrangeWidth = span * 0.3;
+  const defaultOrangeWidth = span * (isLab ? 0.12 : 0.3);
   const computedOrangeMin = min - defaultOrangeWidth;
   const computedOrangeMax = max + defaultOrangeWidth;
   const effectiveOrangeMin =
@@ -45,10 +54,28 @@ export function RangeBar({
   const effectiveOrangeMax =
     orangeMax != null ? Math.max(orangeMax, max) : computedOrangeMax;
 
-  const orangeSpan = Math.max(1, effectiveOrangeMax - effectiveOrangeMin);
-  const sidePadding = Math.max(1, orangeSpan * 0.18);
-  const visualMin = effectiveOrangeMin - sidePadding;
-  const visualMax = effectiveOrangeMax + sidePadding;
+  const orangeSpan = Math.max(
+    isLab ? Number.EPSILON : 1,
+    effectiveOrangeMax - effectiveOrangeMin,
+  );
+  const sidePadding = Math.max(
+    isLab ? Number.EPSILON : 1,
+    orangeSpan * (isLab ? 0.06 : 0.18),
+  );
+  const baseVisualMin = effectiveOrangeMin - sidePadding;
+  const baseVisualMax = effectiveOrangeMax + sidePadding;
+  // Lab values can sit far outside a narrow reference window (for example
+  // vitamin D at 6.8 against a minimum of 30). Expand the visible scale to
+  // include the actual value instead of pinning its marker to the edge.
+  const outlierPadding = Math.max(span * 0.06, Number.EPSILON);
+  const visualMin =
+    isLab
+      ? Math.min(baseVisualMin, value - outlierPadding)
+      : baseVisualMin;
+  const visualMax =
+    isLab
+      ? Math.max(baseVisualMax, value + outlierPadding)
+      : baseVisualMax;
   const visualSpan = visualMax - visualMin;
   const clampedValue = Math.max(visualMin, Math.min(visualMax, value));
   const rawPosition = ((clampedValue - visualMin) / visualSpan) * 100;
@@ -75,11 +102,18 @@ export function RangeBar({
   const inYellow =
     !inGreen && value >= effectiveOrangeMin && value <= effectiveOrangeMax;
 
-  const markerColor = inGreen
-    ? "var(--success)"
-    : inYellow
-      ? "var(--warning)"
-      : "var(--destructive)";
+  const markerColor =
+    isLab
+      ? inGreen
+        ? "var(--success)"
+        : value < min
+          ? "var(--info)"
+          : "var(--warning)"
+      : inGreen
+        ? "var(--success)"
+        : inYellow
+          ? "var(--warning)"
+          : "var(--destructive)";
   const minLabelPosition = Math.max(5, Math.min(95, greenStart));
   const maxLabelPosition = Math.max(5, Math.min(95, greenEnd));
 
@@ -104,32 +138,53 @@ export function RangeBar({
   ].join(". ");
 
   return (
-    <div className="space-y-1.5" data-slot="target-range-bar">
-      <div className="bg-muted/50 relative h-3 w-full overflow-hidden rounded-full">
-        {/* Red background (full bar) — Dracula `--dracula-red` so the
-            chart palette stays aligned with PR-badge, alerts, and the
-            marker dot itself. Raw Tailwind palettes drift from the
-            theme over time and never get dark-mode tuned. */}
-        <div className="bg-destructive/10 absolute inset-0 rounded-full" />
-        {/* Orange (caution) side zones — `--dracula-orange` matches the
-            marker's out-of-band tint. */}
+    <div
+      className={compact ? "space-y-0.5" : "space-y-1.5"}
+      data-slot="target-range-bar"
+    >
+      <div
+        className={`bg-muted/50 relative w-full overflow-hidden rounded-full ${
+          compact ? "h-2" : "h-3"
+        }`}
+      >
+        {/* Full-track tint stays muted for lab ranges and alarm-coloured for
+            target ranges; both use semantic theme tokens. */}
         <div
-          className="bg-warning/15 absolute top-0 h-full"
+          className={`absolute inset-0 rounded-full ${
+            isLab ? "bg-muted/70" : "bg-destructive/10"
+          }`}
+        />
+        {/* Side zones use the lab's calm information palette or the target
+            range's caution palette. */}
+        <div
+          className={`absolute top-0 h-full ${
+            isLab ? "bg-info/35" : "bg-warning/15"
+          }`}
           style={{
-            left: `${yellowLeftStart}%`,
-            width: `${greenStart - yellowLeftStart}%`,
+            left: isLab ? "0%" : `${yellowLeftStart}%`,
+            width:
+              isLab
+                ? `${greenStart}%`
+                : `${greenStart - yellowLeftStart}%`,
           }}
         />
         <div
-          className="bg-warning/15 absolute top-0 h-full"
+          className={`absolute top-0 h-full ${
+            isLab ? "bg-warning/35" : "bg-warning/15"
+          }`}
           style={{
             left: `${greenEnd}%`,
-            width: `${yellowRightEnd - greenEnd}%`,
+            width:
+              isLab
+                ? `${100 - greenEnd}%`
+                : `${yellowRightEnd - greenEnd}%`,
           }}
         />
-        {/* In-band green zone — `--dracula-green`. */}
+        {/* In-band zone — `--success` remains the shared positive signal. */}
         <div
-          className="bg-success/20 absolute top-0 h-full"
+          className={`absolute top-0 h-full ${
+            isLab ? "bg-success/35" : "bg-success/20"
+          }`}
           style={{
             left: `${greenStart}%`,
             width: `${greenEnd - greenStart}%`,
@@ -143,7 +198,9 @@ export function RangeBar({
                 role="img"
                 tabIndex={0}
                 aria-label={markerAriaLabel}
-                className="focus-visible:ring-ring absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full border-2 shadow-sm focus-visible:ring-2 focus-visible:outline-none"
+                className={`focus-visible:ring-ring absolute top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full shadow-sm focus-visible:ring-2 focus-visible:outline-none ${
+                  compact ? "h-5 w-1 border" : "h-5 w-5 border-2"
+                }`}
                 style={{
                   left: `${position}%`,
                   backgroundColor: markerColor,
@@ -167,18 +224,22 @@ export function RangeBar({
           </Tooltip>
         </TooltipProvider>
       </div>
-      <div className="text-muted-foreground relative h-4 text-xs">
+      <div
+        className={`text-muted-foreground relative ${
+          compact ? "h-3 text-[10px]" : "h-4 text-xs"
+        }`}
+      >
         <span
-          className="absolute -translate-x-1/2"
+          className="absolute -translate-x-1/2 whitespace-nowrap"
           style={{ left: `${minLabelPosition}%` }}
         >
-          {min} {unit}
+          {minLabel === null ? null : (minLabel ?? `${min} ${unit}`)}
         </span>
         <span
-          className="absolute -translate-x-1/2"
+          className="absolute -translate-x-1/2 whitespace-nowrap"
           style={{ left: `${maxLabelPosition}%` }}
         >
-          {max} {unit}
+          {maxLabel === null ? null : (maxLabel ?? `${max} ${unit}`)}
         </span>
       </div>
     </div>
