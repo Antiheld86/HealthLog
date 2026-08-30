@@ -22,8 +22,6 @@
  */
 import type { PillarReference, PillarValue } from "../../types";
 
-export const INVENTED_TARGET_MODULE_PATH = new URL(import.meta.url).pathname;
-
 export interface InventedTargetInput {
   /** The profile field the band is synthesised from. */
   heightCm: number | null;
