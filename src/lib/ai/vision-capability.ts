@@ -63,6 +63,7 @@ function isVisionReasoningSlug(m: string): boolean {
 function openaiSupportsVision(model: string): boolean {
   const m = model.toLowerCase();
   return (
+    m.startsWith("gpt-5") ||
     m.startsWith("gpt-4o") ||
     m.startsWith("gpt-4.1") ||
     m.startsWith("gpt-4-turbo") ||

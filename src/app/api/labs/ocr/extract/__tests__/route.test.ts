@@ -136,6 +136,16 @@ describe("POST /api/labs/ocr/extract — text mode budget", () => {
       "2026-06-26",
     );
   });
+
+  it("identifies provider failures instead of blaming image quality", async () => {
+    vi.mocked(runOcrExtraction).mockRejectedValue(new Error("provider down"));
+
+    const res = await POST(textReq());
+    const body = (await res.json()) as { error: string };
+
+    expect(res.status).toBe(502);
+    expect(body.error).toContain("configured AI provider");
+  });
 });
 
 describe("POST /api/labs/ocr/extract — vision PDF rasterization", () => {
