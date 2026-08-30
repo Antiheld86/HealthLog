@@ -2453,7 +2453,8 @@
         "yellow": "Some pillars need attention",
         "red": "One or more pillars are outside the reference range"
       },
-      "insufficient": "{count} of {required} areas of health have enough recent data. The score needs {required}, at least one of them a physical measurement.",
+      "insufficient": "Nothing has enough recent data to score yet. One area of health is enough to start, and the score will say which areas it rests on.",
+      "basis": "Based on {count} of {recommended} areas of health.",
       "anatomyToggle": "How this score comes about",
       "notScored": "Not scored yet ({count})",
       "method": "The score is the equal-weighted average of the pillars that count toward it, on a 0 to 100 scale. Each pillar is graded against a published reference band, and the weakest pillar can set the overall band. A pillar without enough recent data is left out rather than counted as a zero. The reference bands come from published sources; which pillars count is yours to choose, so the combined number is not itself a clinical standard.",
@@ -2533,7 +2534,7 @@
       },
       "configureLink": "Choose what counts toward your score",
       "coverage": {
-        "minimumMet": "Covers the three areas the score needs",
+        "recommendedMet": "Covers the three areas the score recommends",
         "areas": "{present} of {required} areas of health"
       }
     },
@@ -5241,6 +5242,7 @@
           "description": "Every pillar you record counts unless you say otherwise here."
         },
         "threeAxes": "Recording, showing and counting are three separate things. This page changes only the last one. A pillar you switch off here keeps being recorded and keeps appearing everywhere else in HealthLog, it just stops moving the number.",
+        "recommendation": "Three areas of health is the recommendation, not a requirement: a selection with at least one pillar saves. A narrower score is worked out the same way and says on the card how many areas it rests on.",
         "axis": {
           "countsFor": "Count {pillar} toward the score"
         },

@@ -2453,7 +2453,8 @@
         "yellow": "Einige Bereiche brauchen Aufmerksamkeit",
         "red": "Mindestens ein Bereich liegt außerhalb des Referenzbereichs"
       },
-      "insufficient": "{count} von {required} Gesundheitsbereichen haben genug aktuelle Daten. Der Score braucht {required}, mindestens einen davon körperlich gemessen.",
+      "insufficient": "Noch hat nichts genug aktuelle Daten für einen Score. Ein Feld der Gesundheit reicht für den Anfang, und der Score nennt selbst, worauf er beruht.",
+      "basis": "Beruht auf {count} von {recommended} Feldern der Gesundheit.",
       "anatomyToggle": "Wie dieser Score zustande kommt",
       "notScored": "Noch nicht bewertet ({count})",
       "method": "Der Score ist der gleich gewichtete Mittelwert der Säulen, die für ihn zählen, auf einer Skala von 0 bis 100. Jede Säule wird an einem veröffentlichten Referenzbereich gemessen, und die schwächste Säule kann den Gesamtbereich bestimmen. Eine Säule ohne ausreichend aktuelle Daten bleibt außen vor und zählt nicht als null. Die Referenzbereiche stammen aus veröffentlichten Quellen; welche Säulen zählen, entscheidest du selbst, deshalb ist die zusammengefasste Zahl selbst kein klinischer Standard.",
@@ -2533,7 +2534,7 @@
       },
       "configureLink": "Festlegen, was in deinen Score einfließt",
       "coverage": {
-        "minimumMet": "Deckt die drei Felder ab, die der Score braucht",
+        "recommendedMet": "Deckt die drei Felder ab, die der Score empfiehlt",
         "areas": "{present} von {required} Feldern der Gesundheit"
       }
     },
@@ -5241,6 +5242,7 @@
           "description": "Jeder Bereich, den du aufzeichnest, zählt mit, solange du hier nichts anderes sagst."
         },
         "threeAxes": "Aufzeichnen, Anzeigen und Mitzählen sind drei verschiedene Dinge. Diese Seite ändert nur das Letzte. Ein Bereich, den du hier abschaltest, wird weiter aufgezeichnet und weiter überall in HealthLog angezeigt, er bewegt nur die Zahl nicht mehr.",
+        "recommendation": "Drei Felder der Gesundheit sind die Empfehlung, keine Bedingung: Jede Auswahl mit mindestens einem Bereich lässt sich speichern. Ein schmalerer Score wird genauso berechnet und nennt auf der Karte, auf wie vielen Feldern er beruht.",
         "axis": {
           "countsFor": "{pillar} in den Score einrechnen"
         },

@@ -589,13 +589,19 @@ describe("<HealthScoreCard> composite states", () => {
       /data-slot="health-score-card"[^>]*data-status="insufficient"/,
     );
     expect(html).toContain('data-slot="health-score-insufficient"');
-    // `presentInputs` counts distinct DOMAINS. The sentence used to call
-    // them pillars, which told an account with blood pressure, glycaemia
-    // and lipids that it had one eligible pillar while it had three.
+    // The gate survives exactly one case since v1.38: nothing readable at
+    // all. It no longer names a breadth the score "needs" — there is none,
+    // one area is enough — and it no longer counts areas, because above
+    // zero there is a score instead of a gate.
     expect(html).toContain(
-      "1 of 3 areas of health have enough recent data. The score needs 3, at least one of them a physical measurement.",
+      "Nothing has enough recent data to score yet. One area of health is enough to start, and the score will say which areas it rests on.",
     );
     expect(html).not.toMatch(/eligible pillars/i);
+    expect(html).not.toMatch(/the score needs/i);
+    // The gate is the refusal's own face and nothing else wears it: a
+    // narrow score gets the basis line, a different sentence in a
+    // different slot.
+    expect(html).not.toContain('data-slot="health-score-basis"');
     // No band sentence and no fabricated number: a dash, and no bar either.
     expect(html).not.toContain('data-slot="health-score-band"');
     expect(html).not.toContain('data-slot="health-score-card-progress"');
@@ -927,5 +933,134 @@ describe("markAlgorithmNoticeDismissed", () => {
         },
       },
     });
+  });
+});
+
+/**
+ * v1.38 — the basis line, and the promise it carries.
+ *
+ * Two domains score now, and one does. The panel's whole job at those
+ * breadths is to say so without saying it apologetically: the number keeps
+ * its size and its band colour, the bar stays, and a single sentence under
+ * the band states the scope. What the panel must NOT grow is a second
+ * visual language for narrow scores — a smaller number, a drained colour,
+ * a warning glyph, a gate. The number's own markup is compared against the
+ * full-breadth render rather than pattern-matched, because "renders the
+ * same" is the actual claim and a class list is the only place it can
+ * break.
+ */
+describe("<HealthScoreCard> basis line", () => {
+  function withBasis(
+    domains: number,
+    tier: "full" | "partial" | "minimal",
+    band: "green" | "yellow" | "red" = "green",
+  ): HealthScoreReport {
+    return scoredReport({
+      composite: {
+        status: "ok",
+        value: {
+          score: 86,
+          band,
+          bandSetter: null,
+          composition: ["BLOOD_PRESSURE"],
+          configured: false,
+          scoreBasis: { domains, recommended: 3, tier, physiological: true },
+          noiseFloor: 3,
+          scoreVersion: SCORE_VERSION,
+        },
+        coverage: {
+          requiredInputs: 3,
+          presentInputs: domains,
+          historyDays: 28,
+          missing: [],
+        },
+        confidence: { score: 70, band: "medium" },
+        provenance,
+      },
+    } as Partial<HealthScoreReport>);
+  }
+
+  /** The opening tag of the headline number, classes and all. */
+  function numberTag(html: string): string {
+    const match = html.match(
+      /<span data-slot="health-score-card-number"[^>]*>/,
+    );
+    expect(match, "the headline number is missing").not.toBeNull();
+    return match![0];
+  }
+
+  it("states the scope of a two-area score", () => {
+    const html = render(<HealthScoreCard report={withBasis(2, "partial")} />);
+    expect(atRest(html)).toContain('data-slot="health-score-basis"');
+    expect(html).toContain("Based on 2 of 3 areas of health.");
+  });
+
+  it("states the scope of a one-area score", () => {
+    const html = render(<HealthScoreCard report={withBasis(1, "minimal")} />);
+    expect(html).toContain("Based on 1 of 3 areas of health.");
+  });
+
+  it("renders a partial score's number exactly as a full one's", () => {
+    const partial = render(
+      <HealthScoreCard report={withBasis(1, "minimal")} />,
+    );
+    const full = render(<HealthScoreCard report={withBasis(3, "full")} />);
+
+    // Byte-for-byte: same size classes, same band colour, same slot.
+    expect(numberTag(partial)).toBe(numberTag(full));
+    expect(numberTag(partial)).toContain("text-5xl");
+    expect(numberTag(partial)).toContain("sm:text-6xl");
+    expect(numberTag(partial)).toContain("text-success");
+    // And the number itself is there, at full value, with its bar.
+    expect(partial).toContain(">86<");
+    expect(partial).toContain("/ 100");
+    expect(partial).toContain('data-slot="health-score-card-progress"');
+    expect(partial).toMatch(
+      /data-slot="health-score-card"[^>]*data-status="ok"/,
+    );
+    expect(partial).toMatch(
+      /data-slot="health-score-card"[^>]*data-band="green"/,
+    );
+  });
+
+  it("keeps a red partial score in its own band colour", () => {
+    // The band drag is arithmetic and the tier is labelling; a narrow set
+    // may not recolour the number either way.
+    const html = render(
+      <HealthScoreCard report={withBasis(1, "minimal", "red")} />,
+    );
+    expect(numberTag(html)).toContain("text-destructive");
+  });
+
+  it("adds no gate, no alert and no glyph beside a narrow score", () => {
+    const html = render(<HealthScoreCard report={withBasis(1, "minimal")} />);
+    const rest = atRest(html);
+    expect(rest).not.toContain('data-slot="health-score-insufficient"');
+    expect(rest).not.toMatch(/enough recent data to score yet/i);
+    // The only `role="alert"` this panel has ever carried is the failed
+    // read; a narrow score is not a failure and must not borrow it.
+    expect(rest).not.toContain('role="alert"');
+    expect(rest).toContain('data-slot="health-score-band"');
+  });
+
+  it("says nothing extra once the recommended breadth is met", () => {
+    const html = render(<HealthScoreCard report={withBasis(3, "full")} />);
+    expect(html).not.toContain('data-slot="health-score-basis"');
+    expect(html).not.toMatch(/Based on \d+ of 3 areas/);
+  });
+
+  it("says nothing when the composite carries no basis at all", () => {
+    // An older cached payload. The line is a server-resolved fact; the
+    // panel never counts domains out of `composition` to invent one.
+    const html = render(<HealthScoreCard report={scoredReport()} />);
+    expect(html).not.toContain('data-slot="health-score-basis"');
+  });
+
+  it("still shows the gate, and only the gate, on a refusal", () => {
+    const html = render(<HealthScoreCard report={report()} />);
+    expect(html).toContain('data-slot="health-score-insufficient"');
+    expect(html).not.toContain('data-slot="health-score-basis"');
+    expect(html).toContain("—");
+    expect(html).not.toContain('data-slot="health-score-card-progress"');
   });
 });

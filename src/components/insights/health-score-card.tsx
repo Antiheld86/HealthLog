@@ -298,6 +298,25 @@ export function HealthScoreCard({
     composite.status === "ok" ? clampScore(composite.value.score) : null;
   const compositeBand = composite.status === "ok" ? composite.value.band : null;
 
+  // v1.38 — what the number rests on, resolved on the server. A set that
+  // spans the recommended breadth says nothing extra: three of three is
+  // the shape the meter's axis already states, and a four-domain account
+  // would read "4 of 3". Below the recommendation the line is the only
+  // thing on the panel that tells a narrow score from a broad one, so it
+  // is stated in the same weight as the band sentence it follows —
+  // scope, not caveat. The number keeps its size and its band colour at
+  // every tier; the coverage meter and the confidence band below carry
+  // the quantitative caveat they were built for.
+  const basis =
+    composite.status === "ok" ? (composite.value.scoreBasis ?? null) : null;
+  const basisLine =
+    basis && basis.tier !== "full"
+      ? t("insights.healthScore.basis", {
+          count: basis.domains,
+          recommended: basis.recommended,
+        })
+      : null;
+
   return (
     <div
       data-slot="health-score-card"
@@ -380,22 +399,22 @@ export function HealthScoreCard({
             {t(`insights.healthScore.band.${compositeBand}`)}
           </p>
         ) : (
+          // The gate survives for the one case that is still a refusal:
+          // not a single pillar has usable data. It no longer counts
+          // areas, because the count is always nothing and the meter in
+          // the foot renders the same fraction honestly a few lines
+          // below.
           <LearningGate
             compact
             bodySlot="health-score-insufficient"
-            // `presentInputs` on the composite counts DISTINCT DOMAINS,
-            // not pillars. It said "pillars" for its whole life, which
-            // told someone recording blood pressure, glycaemia and lipids
-            // that they had one eligible pillar when they had three. The
-            // count is right; the noun was wrong. `required` rides along
-            // so the sentence tracks the rule's own constant instead of
-            // spelling "three" into six locales.
-            message={t("insights.healthScore.insufficient", {
-              count: composite.coverage.presentInputs,
-              required: composite.coverage.requiredInputs,
-            })}
+            message={t("insights.healthScore.insufficient")}
           />
         )}
+        {basisLine ? (
+          <p data-slot="health-score-basis" className="text-foreground text-xs">
+            {basisLine}
+          </p>
+        ) : null}
         {report.delta != null ? (
           <p
             data-slot="health-score-delta"
@@ -521,15 +540,24 @@ export function HealthScoreCard({
           number, so a short report and a long one both end on the same line. */}
       <div className="mt-auto space-y-3 pt-1">
         {/* The composite's meter names its own axis. Its fraction counts
-            distinct DOMAINS against the three the score requires, and a
-            scored account has cleared that floor by definition, so the
-            default "3/3" would read as full coverage of the person's data
-            for everyone who has a score at all. Below the floor the
-            fraction is a real, moving number and is shown as one; at or
-            above it, the floor is stated instead. The dots and percentage
-            are untouched either way: they track history depth, which does
-            vary, and they are the part of this meter that was always
-            telling the truth. */}
+            distinct DOMAINS against the three the score recommends. Until
+            v1.38 those three were a floor every scored account had
+            cleared by definition, so the default "3/3" read as full
+            coverage of the person's data for everyone who had a score at
+            all, and the axis stated the floor instead.
+
+            The floor is gone, so the branch cannot be "does a score
+            exist" any more: a two-domain account has a score AND a real
+            fraction, and telling it that it covers the three areas the
+            score recommends would be the old lie in a new place. The
+            branch is the TIER — the recommendation is stated only where
+            it is actually met, and everywhere else the moving number is
+            shown as one. The dots and percentage are untouched either
+            way: they track history depth, which does vary.
+
+            A composite carrying no basis block at all — an older cached
+            payload — takes the fraction arm, which states what it can
+            count rather than a recommendation it cannot check. */}
         <CoverageMeter
           coverage={composite.coverage}
           confidence={
@@ -537,8 +565,8 @@ export function HealthScoreCard({
           }
           size="sm"
           axisLabel={
-            composite.status === "ok"
-              ? t("insights.healthScore.coverage.minimumMet")
+            basis?.tier === "full"
+              ? t("insights.healthScore.coverage.recommendedMet")
               : t("insights.healthScore.coverage.areas", {
                   present: composite.coverage.presentInputs,
                   required: composite.coverage.requiredInputs,

@@ -385,3 +385,62 @@ describe("<TodayHero>", () => {
     expect(html).toBe("");
   });
 });
+
+/**
+ * v1.38 — the hero's ring shows the number and nothing else, so a score
+ * resting on one area of health would look here exactly like one resting
+ * on five. The basis line is the whole difference; it is stated only
+ * below the recommended breadth, in the hero's quiet tier, and it never
+ * touches the ring itself.
+ */
+describe("<TodayHero> score basis", () => {
+  function withBasis(
+    domains: number,
+    tier: "full" | "partial" | "minimal",
+  ): DailyDigest {
+    return digest({
+      score: {
+        value: 82,
+        band: "green",
+        delta: 3,
+        deltaReason: null,
+        scoreVersion: SCORE_VERSION,
+        composition: ["BLOOD_PRESSURE"],
+        scoreBasis: { domains, recommended: 3, tier, physiological: true },
+      },
+    });
+  }
+
+  it("says what a two-area score rests on", () => {
+    const html = render(<TodayHero digest={withBasis(2, "partial")} />);
+    expect(html).toContain('data-slot="today-hero-score-basis"');
+    expect(visibleText(html)).toContain("Based on 2 of 3 areas of health.");
+  });
+
+  it("leaves the ring's own face untouched", () => {
+    const html = render(<TodayHero digest={withBasis(1, "minimal")} />);
+    // Same band, same populated face, same delta chip as a full-breadth
+    // day: the line is scope, not a downgrade.
+    expect(html).toContain('data-band="green"');
+    expect(html).not.toContain('data-provisional="true"');
+    expect(html).toContain('data-slot="today-hero-score-delta"');
+    expect(visibleText(html)).toContain("82");
+  });
+
+  it("says nothing once the recommended breadth is met", () => {
+    const html = render(<TodayHero digest={withBasis(3, "full")} />);
+    expect(html).not.toContain('data-slot="today-hero-score-basis"');
+  });
+
+  it("says nothing for a digest carrying no basis at all", () => {
+    // An older cached digest. The hero never counts areas out of
+    // `composition` — three pillars can be one area.
+    const html = render(<TodayHero digest={digest()} />);
+    expect(html).not.toContain('data-slot="today-hero-score-basis"');
+  });
+
+  it("says nothing when there is no score to rest on anything", () => {
+    const html = render(<TodayHero digest={digest({ score: null })} />);
+    expect(html).not.toContain('data-slot="today-hero-score-basis"');
+  });
+});
