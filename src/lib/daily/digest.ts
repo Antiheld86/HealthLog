@@ -27,6 +27,7 @@ import type { MedsTodayBlock } from "@/lib/dashboard/meds-today";
 import type { ModuleKey } from "@/lib/modules/registry";
 import type { ServerTranslator } from "@/lib/i18n/server-translator";
 import type {
+  ScoreBasis,
   ScoreDeltaReason,
   ScorePillarId,
 } from "@/lib/analytics/score/types";
@@ -113,6 +114,14 @@ export interface DailyDigestScore {
    * cached digests, like its siblings above.
    */
   configured?: boolean;
+  /**
+   * v1.38 — how broad the set behind the number is, carried straight
+   * from the snapshot's health-score block. Since v1.38 a score exists
+   * at one or two areas of health as well as three and is computed the
+   * same way at each, so this block is what tells a narrow score from a
+   * broad one. Omitted by older cached digests, like its siblings above.
+   */
+  scoreBasis?: ScoreBasis;
 }
 
 /** A broken integration, deterministically derived from `IntegrationStatus`. */

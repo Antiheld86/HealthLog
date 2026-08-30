@@ -85,6 +85,7 @@ import {
 import type {
   RestModeAnnotation,
   ScoreBand,
+  ScoreBasis,
   ScoreDeltaReason,
   ScorePillarId,
 } from "@/lib/analytics/score/types";
@@ -340,6 +341,20 @@ export interface DashboardSnapshotHealthScore {
    * builder always sets it.
    */
   configured?: boolean;
+  /**
+   * v1.38 — what the number rests on: how many distinct areas of health
+   * were counted, how many the method recommends, the resulting tier
+   * (`full` / `partial` / `minimal`) and whether any counted pillar was a
+   * physiological measurement. Since v1.38 a score exists at one or two
+   * areas as well as three, computed exactly the same way, so this block
+   * is the only thing that tells a narrow score from a broad one — a
+   * surface that renders the number should render its basis too.
+   * Counting `composition` is not a substitute: three of the seven
+   * pillars share the cardiometabolic area. Optional on the type
+   * (additive contract) so older cached snapshots stay valid; the live
+   * builder always sets it when a score exists.
+   */
+  scoreBasis?: ScoreBasis;
   deltaReason?: ScoreDeltaReason | null;
   scoreVersion?: number;
   bandSetter?: ScorePillarId | null;
@@ -803,6 +818,7 @@ async function buildExtras(
           confidence: scoreResult.composite.confidence,
           composition: scoreResult.composite.value.composition,
           configured: scoreResult.composite.value.configured,
+          scoreBasis: scoreResult.composite.value.scoreBasis,
           deltaReason: scoreResult.deltaReason,
           scoreVersion: scoreResult.scoreVersion,
           bandSetter: scoreResult.composite.value.bandSetter,
