@@ -80,7 +80,11 @@ import {
   type SyncOutcomeResource,
   type SyncOutcomeState,
 } from "./sync-outcome";
-import { IntegrationCardDescription } from "./setup-guide-link";
+import {
+  CallbackMismatchNotice,
+  IntegrationCardDescription,
+  integrationCallbackUrl,
+} from "./setup-guide-link";
 
 export function GoogleHealthCard({
   viewModel,
@@ -758,6 +762,10 @@ export function GoogleHealthCard({
           </p>
         )}
       </div>
+      <CallbackMismatchNotice
+        provider={t("settings.googleHealth")}
+        callbackUrl={integrationCallbackUrl("google-health")}
+      />
     </SettingsCard>
   );
 }

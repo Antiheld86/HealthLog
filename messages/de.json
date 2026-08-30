@@ -4636,6 +4636,7 @@
     "remainingMany": "Noch {count} Messungen bis zum Trend."
   },
   "settings": {
+    "oauthCallbackPreflightItem": "{provider}: Die Callback-Adresse {configuredOrigin} unterscheidet sich von der App-Adresse {currentOrigin}.",
     "shell": {
       "sectionsNav": "Einstellungs-Bereiche",
       "groups": {

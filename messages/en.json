@@ -4636,6 +4636,7 @@
     "remainingMany": "{count} more readings to go."
   },
   "settings": {
+    "oauthCallbackPreflightItem": "{provider}: callback address {configuredOrigin} differs from this app address {currentOrigin}.",
     "shell": {
       "sectionsNav": "Settings sections",
       "groups": {

@@ -55,8 +55,10 @@ import {
   type SyncOutcomeState,
 } from "./sync-outcome";
 import {
+  CallbackMismatchNotice,
   IntegrationCardDescription,
   IntegrationRedirectGuide,
+  integrationCallbackUrl,
 } from "./setup-guide-link";
 
 export function WithingsCard({
@@ -552,6 +554,10 @@ export function WithingsCard({
           </p>
         )}
       </div>
+      <CallbackMismatchNotice
+        provider={t("settings.withings")}
+        callbackUrl={integrationCallbackUrl("withings")}
+      />
     </SettingsCard>
   );
 }

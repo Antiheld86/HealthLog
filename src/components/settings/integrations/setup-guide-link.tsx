@@ -11,6 +11,7 @@
  * destination now so a user who is mid-setup always knows where to go.
  */
 
+import { useSyncExternalStore } from "react";
 import { ExternalLink } from "lucide-react";
 
 import { useTranslations } from "@/lib/i18n/context";
@@ -49,6 +50,44 @@ export function integrationCallbackUrl(
 ): string {
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
   return `${base}/api/${provider}/callback`;
+}
+
+/** Shows a compact warning when the callback origin differs from the app. */
+export function CallbackMismatchNotice({
+  provider,
+  callbackUrl,
+}: {
+  provider: string;
+  callbackUrl: string;
+}) {
+  // Get the current origin of the app
+  const { t } = useTranslations();
+  const currentOrigin = useSyncExternalStore(
+    () => () => {},
+    () => window.location.origin,
+    () => null,
+  );
+  // Get the origin of the callback URL
+  const callbackOrigin = (() => {
+    try {
+      return new URL(callbackUrl).origin;
+    } catch {
+      return null;
+    }
+  })();
+  if (!currentOrigin || !callbackOrigin || callbackOrigin === currentOrigin) {
+    return null;
+  }
+  // If the callback origin differs from the app, show a warning
+  return (
+    <span className="text-warning border-warning/30 bg-warning/5 block rounded-md border px-2 py-1 text-xs">
+      {t("settings.oauthCallbackPreflightItem", {
+        provider,
+        configuredOrigin: callbackOrigin,
+        currentOrigin,
+      })}
+    </span>
+  );
 }
 
 /**
