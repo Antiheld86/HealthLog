@@ -4636,6 +4636,7 @@
     "remainingMany": "Encore {count} mesures avant la tendance."
   },
   "settings": {
+    "oauthCallbackPreflightItem": "{provider}: callback address {configuredOrigin} differs from this app address {currentOrigin}.",
     "shell": {
       "sectionsNav": "Sections des réglages",
       "groups": {

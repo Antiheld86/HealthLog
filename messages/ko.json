@@ -4636,6 +4636,7 @@
     "remainingMany": "{count}개만 더 기록하면 돼요."
   },
   "settings": {
+    "oauthCallbackPreflightItem": "{provider}: callback address {configuredOrigin} differs from this app address {currentOrigin}.",
     "shell": {
       "sectionsNav": "설정 섹션",
       "groups": {
