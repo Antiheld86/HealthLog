@@ -25,7 +25,7 @@
 import { describe, expect, it } from "vitest";
 
 import { computeComposite } from "@/lib/analytics/score/composite";
-import { SCORE_MIN_ELIGIBLE_DOMAINS } from "@/lib/analytics/score/breadth";
+import { SCORE_RECOMMENDED_DOMAINS } from "@/lib/analytics/score/breadth";
 import {
   healthScoreConfigFromSelection,
   resolveHealthScoreConfig,
@@ -154,7 +154,7 @@ describe("Health Score coverage contract", () => {
     expect(composite.coverage.requiredInputs).not.toBe(SCORE_PILLAR_IDS.length);
     // The denominator is the breadth rule applied to the person's own set,
     // so it can never exceed what they chose to count.
-    expect(composite.coverage.requiredInputs).toBe(SCORE_MIN_ELIGIBLE_DOMAINS);
+    expect(composite.coverage.requiredInputs).toBe(SCORE_RECOMMENDED_DOMAINS);
     expect(composite.coverage.requiredInputs).toBeLessThanOrEqual(
       selection.length,
     );

@@ -246,7 +246,7 @@ import { MODULE_KEYS } from "@/lib/modules/registry";
 
 import { healthScoreConfigFromSelection } from "../config";
 import { computeUserHealthScore } from "../reader";
-import { SCORE_PILLAR_IDS } from "../types";
+import { SCORE_PILLAR_IDS, SCORE_VERSION } from "../types";
 
 /** The recipe as the settings write would have stored it. */
 function recipe(changedAt: Date): unknown {
@@ -523,16 +523,16 @@ describe("a settings change is never narrated as a health event", () => {
     const unconfigured = await computeUserHealthScore(scoreInput(null));
 
     expect(configured.algorithmNotice!.itemKey).toBe(
-      "health_score_algorithm:3:config:3",
+      `health_score_algorithm:${SCORE_VERSION}:config:3`,
     );
     expect(configured.algorithmNotice!.dismissed).toBe(false);
     // An account that never chose keeps the bare method key, with no
     // recipe suffix on it.
     expect(unconfigured.algorithmNotice!.itemKey).toBe(
-      "health_score_algorithm:3",
+      `health_score_algorithm:${SCORE_VERSION}`,
     );
 
-    dismissedKeys.add("health_score_algorithm:3:config:3");
+    dismissedKeys.add(`health_score_algorithm:${SCORE_VERSION}:config:3`);
     expect(
       (await computeUserHealthScore(scoreInput(JUST_CHANGED))).algorithmNotice!
         .dismissed,
@@ -550,7 +550,7 @@ describe("a settings change is never narrated as a health event", () => {
       ),
     );
     expect(next.algorithmNotice!.itemKey).toBe(
-      "health_score_algorithm:3:config:4",
+      `health_score_algorithm:${SCORE_VERSION}:config:4`,
     );
     expect(next.algorithmNotice!.dismissed).toBe(false);
   });

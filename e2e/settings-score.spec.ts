@@ -13,12 +13,12 @@ import { healthScoreAlgorithmItemKey } from "@/lib/daily/priority-item-key";
  * at any width and in any locale (only the copy assertions read English, and
  * the suite pins the English locale through the storage state).
  *
- * The refusal case is driven through the REAL write. Deselecting down to
- * activity and wellbeing genuinely fails the server's breadth rule, and a
- * refused write persists nothing, so the case leaves the shared account
- * exactly as it found it. Mocking the 422 would have proved that the page
- * can render a message, not that the rule is enforced or that the page reads
- * the reason the server actually sends.
+ * The refusal case is driven through the REAL write. Deselecting every
+ * pillar genuinely fails the server's breadth rule, and a refused write
+ * persists nothing, so the case leaves the shared account exactly as it
+ * found it. Mocking the 422 would have proved that the page can render a
+ * message, not that the rule is enforced or that the page reads the reason
+ * the server actually sends.
  *
  * The analytics read IS mocked, because it is the page's secondary read and
  * the states it drives — waiting for data, safety signposting — depend on
@@ -47,7 +47,7 @@ function scoreReport() {
     provenance,
   });
   return {
-    composite: insufficient("three_domains_required"),
+    composite: insufficient("no_usable_data"),
     pillars: [
       {
         id: "LIPIDS",
@@ -237,16 +237,16 @@ test.describe("Settings → Health Score", () => {
     const card = page.locator('[data-slot="score-config-card"]');
     await settleBeforeMeasure(page, card);
 
-    // Start from everything, then take out every pillar except activity and
-    // wellbeing: two areas of health and no physical measurement, which the
-    // server refuses.
+    // v1.38 — this case used to deselect down to activity and wellbeing,
+    // which the server refused as two areas with no physical
+    // measurement. That selection saves and scores now, so it no longer
+    // exercises a refusal at all. Take every pillar out instead: the
+    // empty selection is the one the scorer genuinely cannot answer, and
+    // it is what this spec exists to prove is enforced server-side.
     await page.locator('[data-slot="score-config-preset-all"]').click();
-    const keep = new Set(["ACTIVITY", "WELLBEING"]);
     const rows = page.locator('[data-slot="score-pillar-row"]');
     for (let index = 0; index < (await rows.count()); index += 1) {
       const row = rows.nth(index);
-      const pillar = await row.getAttribute("data-pillar");
-      if (!pillar || keep.has(pillar)) continue;
       if ((await row.getAttribute("data-counts")) === "false") continue;
       await row.locator('[data-slot="score-pillar-switch"]').click();
     }
@@ -258,8 +258,8 @@ test.describe("Settings → Health Score", () => {
     await expect(refusal).toHaveAttribute("role", "alert");
     // The server's machine reason, rendered as a sentence a person can act
     // on, not as an error code and not as the server's English fallback.
-    await expect(refusal).toContainText("physical measurement");
-    await expect(refusal).not.toContainText("_required");
+    await expect(refusal).toContainText("at least one area of health");
+    await expect(refusal).not.toContainText("_selected");
   });
 
   test("keeps the content column the same width as its neighbours", async ({
