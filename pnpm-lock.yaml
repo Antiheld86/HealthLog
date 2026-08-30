@@ -173,8 +173,8 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
       zod-openapi:
-        specifier: ^6.0.0
-        version: 6.0.0(zod@4.4.3)
+        specifier: ^6.0.1
+        version: 6.0.1(zod@4.4.3)
       zxcvbn-typescript:
         specifier: ^5.0.1
         version: 5.0.1
@@ -7135,8 +7135,8 @@ packages:
   zlibjs@0.3.1:
     resolution: {integrity: sha512-+J9RrgTKOmlxFSDHo0pI1xM6BLVUv+o0ZT9ANtCxGkjIVCCUdx9alUF8Gm+dGLKbkkkidWIHFDZHDMpfITt4+w==}
 
-  zod-openapi@6.0.0:
-    resolution: {integrity: sha512-mS4eRJ4DGCPrg6elRbJqc/3nLe4EPVi8KiHRKZ7dcTR5m5orPy8EfoWmceAyGZAq71MAWuyrTTOag7W5N61ZPQ==}
+  zod-openapi@6.0.1:
+    resolution: {integrity: sha512-ITUfaevP/JcrsOavyVHFQHz788F7YcmN8wFYRZk20UM16BUafdUzxq8ZM4ahyTv3c6ESvY9ywA+MwLXzIvVVAw==}
     engines: {node: '>=22.14.0'}
     peerDependencies:
       zod: ^4.0.0
@@ -14398,7 +14398,7 @@ snapshots:
 
   zlibjs@0.3.1: {}
 
-  zod-openapi@6.0.0(zod@4.4.3):
+  zod-openapi@6.0.1(zod@4.4.3):
     dependencies:
       zod: 4.4.3
 
