@@ -54,6 +54,8 @@ export function RangeBar({
   const effectiveOrangeMax =
     orangeMax != null ? Math.max(orangeMax, max) : computedOrangeMax;
 
+  // Keep zero-width ranges from producing invalid percentages. The lab
+  // adapter currently avoids this by adding a synthetic bound when needed.
   const orangeSpan = Math.max(
     isLab ? Number.EPSILON : 1,
     effectiveOrangeMax - effectiveOrangeMin,
@@ -67,7 +69,11 @@ export function RangeBar({
   // Lab values can sit far outside a narrow reference window (for example
   // vitamin D at 6.8 against a minimum of 30). Expand the visible scale to
   // include the actual value instead of pinning its marker to the edge.
-  const outlierPadding = Math.max(span * 0.06, Number.EPSILON);
+  const baseVisualSpan = Math.max(
+    baseVisualMax - baseVisualMin,
+    Number.EPSILON,
+  );
+  const outlierPadding = Math.max(baseVisualSpan * 0.06, Number.EPSILON);
   const visualMin = isLab
     ? Math.min(baseVisualMin, value - outlierPadding)
     : baseVisualMin;

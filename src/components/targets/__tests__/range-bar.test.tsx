@@ -58,6 +58,19 @@ describe("<RangeBar>", () => {
     expect(html).toContain("var(--destructive)");
   });
 
+  it("keeps a lab outlier clear of the bar edge", () => {
+    const html = render({
+      value: 6.8,
+      min: 30,
+      max: 100,
+      unit: "ng/mL",
+      compact: true,
+      tone: "lab",
+    });
+
+    expect(html).not.toContain("left: 4%");
+  });
+
   it("makes the marker focusable with a text alternative for the value + range (2026-07-17 a11y audit M1)", () => {
     const html = render({
       value: 72,
