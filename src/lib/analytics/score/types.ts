@@ -89,8 +89,34 @@ export const SCORE_PILLAR_DOMAINS: Record<ScorePillarId, ScoreDomain> = {
   LIPIDS: "cardiometabolic",
 };
 
-export type PillarReferenceKind =
-  "clinical-threshold" | "population-percentile" | "guideline-band";
+/**
+ * The three kinds of yardstick a pillar may be scored against, and there
+ * is deliberately no fourth.
+ *
+ * Each names something published: a threshold a clinical body set, a band
+ * drawn from a population distribution, a range a guideline recommends.
+ * What is missing from the list is the kind this score spent two releases
+ * removing — a target derived from the person's own profile that nobody
+ * set and no surface named. The weight pillar once graded against
+ * 22 × height², expanded by 2 kg either side, and it was the only thing
+ * producing that pillar's band.
+ *
+ * A user's own yardstick is not excluded from the app, only from the
+ * scored band: it rides `PillarValue.personalReference` and is shown
+ * beside the reference rather than in place of it (blood pressure does
+ * this today), or it stays unscored context entirely (the weight goal).
+ *
+ * A runtime list rather than a bare union, because
+ * `reference-citation-guard.test.ts` checks emitted references against it
+ * and a type alone disappears at runtime.
+ */
+export const PILLAR_REFERENCE_KINDS = [
+  "clinical-threshold",
+  "population-percentile",
+  "guideline-band",
+] as const;
+
+export type PillarReferenceKind = (typeof PILLAR_REFERENCE_KINDS)[number];
 
 export interface PillarObserved {
   value: number;
@@ -108,6 +134,13 @@ export interface PillarReference {
   high: number | null;
   /** Complete display band for paired or multi-marker references. */
   label: string;
+  /**
+   * Who says so. A citation a reader could go and look up — a guideline
+   * body and year ("ESH 2023"), the papers behind a plateau, or the
+   * reporting laboratory whose ranges came with the panel. Never a
+   * yardstick the app invented on the person's behalf; that is what the
+   * guard beside this file exists to keep out.
+   */
   source: string;
 }
 
