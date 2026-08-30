@@ -5263,8 +5263,7 @@
         "omitted": "{count} pilares no aparecen porque su seguimiento está desactivado. Vuelve a activar un módulo y su pilar regresa.",
         "omittedLink": "Abrir módulos",
         "refusal": {
-          "physiological": "Una puntuación de salud necesita al menos una medición física. Mantén en tu selección la presión arterial, la glucosa, el sueño, la forma corporal o el colesterol, además de lo demás que elijas.",
-          "domains": "Una puntuación de salud necesita al menos tres ámbitos de salud distintos. La presión arterial, la glucosa y el colesterol describen el mismo ámbito, así que una selección hecha solo con ellos cuenta como uno."
+          "empty": "Una puntuación de salud necesita al menos un ámbito de salud que puntuar. Deja al menos uno seleccionado: la puntuación dirá en qué ámbitos se basa."
         },
         "notice": {
           "upgrade": {

@@ -15,15 +15,15 @@ import {
   type ScorePillarResult,
 } from "./types";
 import { mean, provenance, scoreBand } from "./shared";
-import { evaluateScoreBreadth, SCORE_MIN_ELIGIBLE_DOMAINS } from "./breadth";
+import { evaluateScoreBreadth, SCORE_RECOMMENDED_DOMAINS } from "./breadth";
 import type { ScoreConfigBoundary } from "./config";
 
-export const SCORE_ALGORITHM_CHANGED_AT = "2026-07-28T00:00:00.000Z";
+export const SCORE_ALGORITHM_CHANGED_AT = "2026-08-30T00:00:00.000Z";
 
 // The rule itself lives in `./breadth`, where the settings write reads it
 // too. Re-exported here because this is where every existing caller looks
 // for it.
-export { SCORE_MIN_ELIGIBLE_DOMAINS };
+export { SCORE_RECOMMENDED_DOMAINS };
 
 const BAND_RANK: Record<ScoreBand, number> = {
   green: 2,
@@ -74,7 +74,7 @@ export function computeComposite(
     Number.POSITIVE_INFINITY,
   );
   const { coverage, confidence } = deriveCoverage({
-    requiredInputs: SCORE_MIN_ELIGIBLE_DOMAINS,
+    requiredInputs: SCORE_RECOMMENDED_DOMAINS,
     presentInputs: eligibleDomains.size,
     historyDays: Number.isFinite(historyDays) ? historyDays : 0,
     missing,
@@ -100,11 +100,13 @@ export function computeComposite(
     asOf: input.asOf,
   });
 
+  // The only refusal left. Not "too narrow" — nothing readable at all,
+  // and a mean over nothing is an absent score rather than a low one.
   if (!breadth.ok) {
     return buildInsufficient({
       coverage,
       provenance: compositeProvenance,
-      reason: breadth.reason,
+      reason: "no_usable_data",
     });
   }
 
@@ -148,6 +150,15 @@ export function computeComposite(
           : null,
       composition,
       configured: input.configured,
+      // Resolved here for the same reason `configured` is: the count is
+      // over DOMAINS, and a client counting `composition` would get it
+      // wrong every time a cardiometabolic pair is in play.
+      scoreBasis: {
+        domains: breadth.domains.length,
+        recommended: SCORE_RECOMMENDED_DOMAINS,
+        tier: breadth.tier,
+        physiological: breadth.physiological,
+      },
       noiseFloor,
       scoreVersion: SCORE_VERSION,
     },

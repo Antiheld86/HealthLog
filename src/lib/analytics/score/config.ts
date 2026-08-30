@@ -52,10 +52,13 @@
  *     comparison window still straddles the change, with the reason
  *     `config_changed` — the person changed what counts, and a
  *     subtraction across that is not a health event;
- *   * the next stored day is marked as a series break, so the composite
- *     line is drawn in two segments rather than one line through the
- *     change (`./series.ts`), while the per-pillar rows run straight
- *     through it;
+ *   * the next stored day carries the new recipe version and its change
+ *     date (`./record.ts`), so a reader of the stored series can draw
+ *     the composite line in two segments rather than one line through
+ *     the change, while the per-pillar rows run straight through it.
+ *     This used to point at `./series.ts`, which was deleted as dead
+ *     because nothing rendered it; the columns it described are still
+ *     written, which is what the sentence was ever about;
  *   * the notice key gains the recipe version, so the "you changed what
  *     counts" note is raised once and dismissed once per version, and a
  *     dismissal of one version never silences the next.

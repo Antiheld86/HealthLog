@@ -4,6 +4,10 @@ import type {
   Derived,
   DerivedProvenanceSource,
 } from "@/lib/insights/derived/types";
+// Type-only, so the rule module can keep importing this one without a
+// runtime cycle. The tier's definition belongs beside the rule that
+// produces it; its NAME belongs here, where the wire shape is declared.
+import type { ScoreBreadthTier } from "./breadth";
 
 /**
  * The scoring method's identity.
@@ -13,11 +17,17 @@ import type {
  * rules moved (`healthScoreNoticeItemKey`). It is NOT the schema version
  * of the report.
  *
+ * 4 — v1.38: three domains stopped being the price of admission. A score
+ *     is computed from whatever is readable and says how broad that is
+ *     (`scoreBasis`); only an account with nothing readable at all is
+ *     refused. Accounts that were below the old floor start their series
+ *     here, and no v3 number changes meaning — the arithmetic is the
+ *     same, the set it runs over is what widened.
  * 3 — v1.35.1: green starts at 70 rather than 75, matching the two other
  *     scores in the app, and the fitness pillar left the catalogue.
  * 2 — the composite the previous line shipped.
  */
-export const SCORE_VERSION = 3 as const;
+export const SCORE_VERSION = 4 as const;
 
 /**
  * The pillars a score can be built from.
@@ -59,10 +69,11 @@ export type ScoreDomain =
   "cardiometabolic" | "activity" | "sleep" | "adiposity" | "wellbeing";
 
 /**
- * Which domain each pillar speaks to. The composite needs three
- * distinct domains, so this map is part of the breadth rule and not
- * decoration: three of the seven pillars share the cardiometabolic
- * domain, which is why a selection of four pillars can still fail.
+ * Which domain each pillar speaks to. The composite recommends three
+ * distinct domains and reports how many it had, so this map is part of
+ * the breadth rule and not decoration: three of the seven pillars share
+ * the cardiometabolic domain, which is why a selection of four pillars
+ * can still be a one-area score.
  *
  * One map, read by the scorer when it builds a pillar result and by the
  * breadth rule when it judges a selection, so the two can never drift
@@ -128,6 +139,30 @@ export interface ScorePillarResult {
   result: Derived<PillarValue>;
 }
 
+/**
+ * v1.38 — what the number rests on, resolved on the server.
+ *
+ * The score is computed the same way at every breadth, so this block is
+ * the only thing that tells a partial score apart from a full one. It is
+ * resolved beside `configured` and for the same reason: no client
+ * re-derives it, and no client counts domains out of `composition`
+ * (three of the seven pillars share one area, so that count would be
+ * wrong more often than right).
+ *
+ * `physiological` is a fact about the set, not a warning. An account
+ * scoring on activity alone reads false and still gets its number; the
+ * old rule refused that account outright and told it nothing.
+ */
+export interface ScoreBasis {
+  /** Distinct domains counted. */
+  domains: number;
+  /** The breadth the method recommends — `SCORE_RECOMMENDED_DOMAINS`. */
+  recommended: number;
+  tier: ScoreBreadthTier;
+  /** Whether any counted pillar rests on a physiological measurement. */
+  physiological: boolean;
+}
+
 export interface CompositeValue {
   score: number;
   band: ScoreBand;
@@ -143,6 +178,14 @@ export interface CompositeValue {
    * owns the definition and the reasons behind it.
    */
   configured: boolean;
+  /**
+   * v1.38 — how broad the set behind the number is. Optional on the type
+   * so an older cached composite or a fixture written before the field
+   * existed stays valid (the additive-contract pattern the snapshot and
+   * digest blocks have followed six times); `computeComposite` always
+   * sets it on the ok arm.
+   */
+  scoreBasis?: ScoreBasis;
   /** Equal-weighted floor across delta-eligible pillars. */
   noiseFloor: number;
   scoreVersion: typeof SCORE_VERSION;

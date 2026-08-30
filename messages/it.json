@@ -5263,8 +5263,7 @@
         "omitted": "{count} pilastri non compaiono perché il loro monitoraggio è disattivato. Riattiva un modulo e il suo pilastro torna.",
         "omittedLink": "Apri i moduli",
         "refusal": {
-          "physiological": "Un punteggio di salute ha bisogno di almeno una misurazione fisica. Tieni nella selezione la pressione, la glicemia, il sonno, la forma corporea o il colesterolo, oltre a ciò che scegli d'altro.",
-          "domains": "Un punteggio di salute ha bisogno di almeno tre ambiti di salute diversi. Pressione, glicemia e colesterolo descrivono lo stesso ambito, quindi una selezione fatta solo di questi conta come uno."
+          "empty": "Un punteggio di salute ha bisogno di almeno un ambito di salute da valutare. Tienine almeno uno selezionato: il punteggio dirà su quali ambiti si basa."
         },
         "notice": {
           "upgrade": {

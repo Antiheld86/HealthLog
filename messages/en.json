@@ -5263,8 +5263,7 @@
         "omitted": "{count} pillars are not listed because their tracking is switched off. Turn a module back on and its pillar comes back.",
         "omittedLink": "Open modules",
         "refusal": {
-          "physiological": "A health score needs at least one physical measurement. Keep one of blood pressure, glucose, sleep, body shape or cholesterol in your selection, alongside whatever else you choose.",
-          "domains": "A health score needs at least three different areas of health. Blood pressure, glucose and cholesterol all describe the same area, so a selection made only of those counts as one."
+          "empty": "A health score needs at least one area of health to score. Keep one selected — the score will say which areas it is built from."
         },
         "notice": {
           "upgrade": {
