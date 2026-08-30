@@ -50111,6 +50111,51 @@ components:
                 - dismissed
               additionalProperties: false
             - type: "null"
+        compositionNotice:
+          description: "A pillar joined or left the set behind the number since the account's last stored local day. Raised only
+            for a change nobody chose: a method move or a recipe change is the algorithm notice's subject instead, and
+            raising both would announce one event twice. Optional so a payload cached before the field existed stays
+            valid; null when there is nothing to say. Dismissed through `POST /api/daily/digest/dismiss` with this
+            `itemKey`, which is keyed on the resulting SET so it re-raises when the set moves again rather than every
+            day."
+          anyOf:
+            - type: object
+              properties:
+                itemKey:
+                  type: string
+                left:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - BLOOD_PRESSURE
+                      - GLYCAEMIA
+                      - ACTIVITY
+                      - SLEEP
+                      - ADIPOSITY
+                      - WELLBEING
+                      - LIPIDS
+                joined:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - BLOOD_PRESSURE
+                      - GLYCAEMIA
+                      - ACTIVITY
+                      - SLEEP
+                      - ADIPOSITY
+                      - WELLBEING
+                      - LIPIDS
+                dismissed:
+                  type: boolean
+              required:
+                - itemKey
+                - left
+                - joined
+                - dismissed
+              additionalProperties: false
+            - type: "null"
         restMode:
           description: Attached when an illness episode was active as of the scored instant — the instant the score was computed
             for, not a fresh now. The score is NOT penalised; this frames it. Null when no episode was open. On this

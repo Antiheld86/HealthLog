@@ -31,6 +31,8 @@ process.env.ENCRYPTION_KEY ??=
 
 import { caches } from "@/lib/cache/server-cache";
 import { encrypt } from "@/lib/crypto";
+import { SCORE_VERSION } from "@/lib/analytics/score/types";
+import { healthScoreCompositionItemKey } from "@/lib/daily/priority-item-key";
 import { buildFullBackupPayload } from "@/lib/export/full-backup-payload";
 import { parseBackupPayload } from "@/lib/validations/backup";
 
@@ -82,6 +84,12 @@ interface AnalyticsEnvelope {
         status: "ok" | "insufficient";
         value?: { score: number; band: string; composition: string[] };
       };
+      compositionNotice?: {
+        itemKey: string;
+        left: string[];
+        joined: string[];
+        dismissed: boolean;
+      } | null;
     } | null;
   } | null;
 }
@@ -439,5 +447,193 @@ describe("delete all data", () => {
         where: { userId: user.id },
       }),
     ).toBe(0);
+  });
+});
+
+/**
+ * v1.38 — the stored day's first production reader.
+ *
+ * Until this release nothing but backup and restore ever read this table.
+ * The composition note compares today's set against the last stored LOCAL
+ * DAY, which means a restore that brings the rows back as something subtly
+ * different does not fail loudly — it produces a note that is silently
+ * wrong, or no note where one was owed. So the claim proved here is the
+ * round trip: raise the note, wipe the table, restore it through the real
+ * admin route, and get the same note back.
+ */
+describe("the composition note reads the stored day, and survives a restore", () => {
+  /** Yesterday's day, as the account's own clock cut it. */
+  async function seedPriorDay(
+    userId: string,
+    now: number,
+    composition: string[],
+  ) {
+    const dayKey = new Date(now - DAY).toISOString().slice(0, 10);
+    await getPrismaClient().healthScoreRecord.create({
+      data: {
+        userId,
+        dayKey,
+        timezone: "UTC",
+        composite: 80,
+        band: "green",
+        scoreVersion: SCORE_VERSION,
+        composition,
+        pillarScores: Object.fromEntries(composition.map((id) => [id, 80])),
+        inputFingerprint: "0".repeat(64),
+        configVersion: 0,
+        configChangedAt: null,
+        computedAt: new Date(now - DAY),
+      },
+    });
+    return dayKey;
+  }
+
+  function evictScoreCaches(userId: string) {
+    caches.analytics.deleteByPrefix(`${userId}|`);
+    caches.insightsDerived.deleteByPrefix(`${userId}|`);
+  }
+
+  it("names the pillar that stopped counting since the last stored day", async () => {
+    const user = await seedSession("hsc-notice");
+    const now = Date.now();
+    await seedBp(user.id, now, 20, 122);
+    await seedSleep(user.id, now, 14);
+    await seedWaist(user.id, now);
+    // Activity counted yesterday and has no data at all today, which is the
+    // shape a rolled window leaves behind.
+    await seedPriorDay(user.id, now, [
+      "BLOOD_PRESSURE",
+      "ACTIVITY",
+      "SLEEP",
+      "ADIPOSITY",
+    ]);
+
+    const shown = (await readAnalytics()).data!.healthScore!;
+    expect(shown.composite.status).toBe("ok");
+    const notice = shown.compositionNotice;
+    expect(notice, "no composition notice was raised").toBeTruthy();
+    expect(notice!.left).toContain("ACTIVITY");
+    expect(notice!.joined).toEqual([]);
+    expect(notice!.dismissed).toBe(false);
+    // The key names the resulting SET, so it is derivable from what the
+    // same response says the score is made of.
+    expect(notice!.itemKey).toBe(
+      healthScoreCompositionItemKey(
+        SCORE_VERSION,
+        shown.composite.value!.composition,
+      ),
+    );
+  });
+
+  it("says nothing when the stored day holds the same set", async () => {
+    // The counter-case. Without it the assertion above would pass against a
+    // reader that raised a note on every single request.
+    const user = await seedSession("hsc-quiet");
+    const now = Date.now();
+    await seedBp(user.id, now, 20, 122);
+    await seedSleep(user.id, now, 14);
+    await seedWaist(user.id, now);
+
+    const first = (await readAnalytics()).data!.healthScore!;
+    expect(first.compositionNotice ?? null).toBeNull();
+
+    await seedPriorDay(user.id, now, [...first.composite.value!.composition]);
+    evictScoreCaches(user.id);
+
+    const second = (await readAnalytics()).data!.healthScore!;
+    expect(second.compositionNotice ?? null).toBeNull();
+  });
+
+  it("raises the same note again after the table has been through a restore", async () => {
+    const prisma = getPrismaClient();
+    const admin = await seedSession("hsc-restore", "ADMIN");
+    const now = Date.now();
+    await seedBp(admin.id, now, 20, 122);
+    await seedSleep(admin.id, now, 14);
+    await seedWaist(admin.id, now);
+    await seedPriorDay(admin.id, now, [
+      "BLOOD_PRESSURE",
+      "ACTIVITY",
+      "SLEEP",
+      "ADIPOSITY",
+    ]);
+
+    const before = (await readAnalytics()).data!.healthScore!.compositionNotice;
+    expect(before, "the fixture raised no note to round-trip").toBeTruthy();
+
+    const { payload } = await buildFullBackupPayload(prisma, admin.id, {
+      purpose: "disaster-recovery",
+    });
+    const backup = await prisma.dataBackup.create({
+      data: {
+        userId: admin.id,
+        type: "HEALTH_SCORE_COMPOSITION_RESTORE_TEST",
+        data: encrypt(JSON.stringify(payload)),
+      },
+    });
+
+    // Both days go, so a restore that carries nothing cannot pass by
+    // leaving the row the comparison needs.
+    await prisma.healthScoreRecord.deleteMany({ where: { userId: admin.id } });
+    evictScoreCaches(admin.id);
+    // And with the stored days gone there is nothing to compare against,
+    // which is what makes the restore below the thing under test rather
+    // than a formality.
+    expect(
+      (await readAnalytics()).data!.healthScore!.compositionNotice ?? null,
+    ).toBeNull();
+
+    const { POST } = await import("@/app/api/admin/backups/[id]/restore/route");
+    const res = await POST(
+      new Request(`http://localhost/api/admin/backups/${backup.id}/restore`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirm: "RESTORE" }),
+      }) as unknown as Parameters<typeof POST>[0],
+      { params: Promise.resolve({ id: backup.id }) },
+    );
+    expect(res.status).toBe(200);
+    evictScoreCaches(admin.id);
+
+    const after = (await readAnalytics()).data!.healthScore!.compositionNotice;
+    expect(after).toEqual(before);
+  });
+
+  it("holds the dismissal across the restore, keyed on the set rather than the day", async () => {
+    const prisma = getPrismaClient();
+    const user = await seedSession("hsc-dismissed");
+    const now = Date.now();
+    await seedBp(user.id, now, 20, 122);
+    await seedSleep(user.id, now, 14);
+    await seedWaist(user.id, now);
+    await seedPriorDay(user.id, now, [
+      "BLOOD_PRESSURE",
+      "ACTIVITY",
+      "SLEEP",
+      "ADIPOSITY",
+    ]);
+
+    const raised = (await readAnalytics()).data!.healthScore!.compositionNotice;
+    expect(raised!.dismissed).toBe(false);
+
+    const { POST } = await import("@/app/api/daily/digest/dismiss/route");
+    const res = await (POST as unknown as (req: Request) => Promise<Response>)(
+      new Request("http://localhost/api/daily/digest/dismiss", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ itemKey: raised!.itemKey }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(
+      await prisma.dismissedPriorityItem.count({
+        where: { userId: user.id, itemKey: raised!.itemKey },
+      }),
+    ).toBe(1);
+
+    evictScoreCaches(user.id);
+    const again = (await readAnalytics()).data!.healthScore!.compositionNotice;
+    expect(again!.itemKey).toBe(raised!.itemKey);
+    expect(again!.dismissed).toBe(true);
   });
 });

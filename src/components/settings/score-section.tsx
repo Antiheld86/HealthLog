@@ -60,8 +60,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { ScoreChangeNotice } from "@/components/settings/score-change-notice";
+import { ScoreCompositionNotice } from "@/components/settings/score-composition-notice";
 import { ScorePillarRow } from "@/components/settings/score-pillar-row";
-import { markAlgorithmNoticeDismissed } from "@/components/insights/health-score-card";
+import {
+  markAlgorithmNoticeDismissed,
+  markCompositionNoticeDismissed,
+} from "@/components/insights/health-score-card";
 import { useAuth } from "@/hooks/use-auth";
 import { ApiError, apiGet, apiPatch, apiPost } from "@/lib/api/api-fetch";
 import {
@@ -267,6 +271,26 @@ export function ScoreSection() {
     },
   });
 
+  const dismissCompositionMutation = useMutation({
+    mutationFn: async (itemKey: string) => {
+      await apiPost("/api/daily/digest/dismiss", { itemKey });
+      return itemKey;
+    },
+    onSuccess: (itemKey) => {
+      // Same reasoning as the notice above, against its own field: the
+      // insights panel renders this note too, and a stale
+      // `dismissed: false` there would put it back the moment the person
+      // navigates away from this page.
+      queryClient.setQueryData(queryKeys.analytics(), (previous: unknown) =>
+        markCompositionNoticeDismissed(previous, itemKey),
+      );
+      void queryClient.invalidateQueries({ queryKey: queryKeys.analytics() });
+    },
+    onError: () => {
+      toast.error(t("settings.sections.score.notice.dismissError"));
+    },
+  });
+
   function toggle(id: ScorePillarId, next: boolean) {
     setRefusal(null);
     setDraft((current) => {
@@ -281,6 +305,17 @@ export function ScoreSection() {
   const showNotice =
     notice != null && !notice.dismissed && configQuery.isSuccess;
 
+  // The composition note stands on its own read: it says the DATA behind
+  // the number moved, which is true whether or not the configuration read
+  // has landed, and it names no configuration value. Gating it on
+  // `configQuery.isSuccess` the way the notice above is gated would hide it
+  // for the one account whose settings read is the thing that failed.
+  const composition = report?.compositionNotice ?? null;
+  const showComposition =
+    composition != null &&
+    !composition.dismissed &&
+    (composition.left.length > 0 || composition.joined.length > 0);
+
   const busy = saveMutation.isPending;
 
   return (
@@ -291,6 +326,17 @@ export function ScoreSection() {
           changedAt={configQuery.data?.changedAt ?? null}
           dismissing={dismissMutation.isPending}
           onDismiss={() => dismissMutation.mutate(notice.itemKey)}
+        />
+      ) : null}
+
+      {showComposition && composition ? (
+        <ScoreCompositionNotice
+          left={composition.left}
+          joined={composition.joined}
+          dismissing={dismissCompositionMutation.isPending}
+          onDismiss={() =>
+            dismissCompositionMutation.mutate(composition.itemKey)
+          }
         />
       ) : null}
 

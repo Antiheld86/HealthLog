@@ -2068,6 +2068,18 @@ export const healthScoreReport = z
       .describe(
         "The once-per-account notice that the scoring rules moved; null when there is nothing to say.",
       ),
+    compositionNotice: z
+      .object({
+        itemKey: z.string(),
+        left: z.array(z.string()),
+        joined: z.array(z.string()),
+        dismissed: z.boolean(),
+      })
+      .nullable()
+      .optional()
+      .describe(
+        "A pillar joined or left the set behind the number since the account's last stored local day. Raised only for a change nobody chose — a method move or a recipe change is the algorithm notice's subject, and raising both would announce one event twice. Null when there is nothing to say.",
+      ),
     restMode: z
       .object({
         active: z.literal(true),

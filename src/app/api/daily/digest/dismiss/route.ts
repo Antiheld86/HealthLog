@@ -27,6 +27,7 @@ import {
 import { annotate } from "@/lib/logging/context";
 import { prisma } from "@/lib/db";
 import { invalidateUserHealthScore } from "@/lib/cache/invalidate";
+import { isScoreNoticeItemKey } from "@/lib/daily/priority-item";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { dismissPriorityItemSchema } from "@/lib/validations/daily";
@@ -72,7 +73,10 @@ export const POST = apiHandler(async (req: NextRequest) => {
     update: {},
     create: { userId: user.id, itemKey },
   });
-  if (itemKey.startsWith("health_score_algorithm:")) {
+  // Every score notice, not just the method one: the report resolves each
+  // notice's `dismissed` flag at compute time, so a dismissal the cache
+  // outlives comes straight back on the next read.
+  if (isScoreNoticeItemKey(itemKey)) {
     invalidateUserHealthScore(user.id);
   }
 
