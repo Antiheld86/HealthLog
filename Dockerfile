@@ -98,6 +98,17 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # Next's standalone output must carry the externalized worker dependencies.
 # Prisma's pure-JS adapter stays bundled; only modules loaded through native
 # Node resolution belong in this runtime assertion.
+#
+# `pg` is a direct entry in `dependencies` for this line's sake, and it has to
+# stay there. It used to sit in devDependencies and the assertion still passed,
+# but only by coincidence: the version our own entry pinned happened to match
+# the one @prisma/adapter-pg pulled in, so both names resolved to a single
+# copy in the store and the file tracer packed it whole. Bumping the adapter to
+# 7.10.0 moved its transitive pg to 8.23.0 while ours stayed at 8.22.0. The
+# tracer then packed only the copy the adapter reached, the top-level link
+# pointed at the other one, and this line failed with "Cannot find module
+# '/app/node_modules/pg/lib/index.js'" on both architectures. Declaring the
+# runtime requirement makes the two resolve to the same copy by construction.
 RUN node -e "require.resolve('pg-boss'); require.resolve('pg')"
 
 # @napi-rs/canvas (document PDF rasterization): Next's file tracer copies the
