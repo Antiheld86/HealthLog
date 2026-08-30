@@ -4636,7 +4636,7 @@
     "remainingMany": "Encore {count} mesures avant la tendance."
   },
   "settings": {
-    "oauthCallbackPreflightItem": "{provider}: callback address {configuredOrigin} differs from this app address {currentOrigin}.",
+    "oauthCallbackPreflightItem": "{provider} : l'adresse de rappel {configuredOrigin} diffère de l'adresse de cette application {currentOrigin}.",
     "shell": {
       "sectionsNav": "Sections des réglages",
       "groups": {

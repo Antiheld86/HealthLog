@@ -4636,7 +4636,7 @@
     "remainingMany": "Mancano {count} misurazioni al trend."
   },
   "settings": {
-    "oauthCallbackPreflightItem": "{provider}: callback address {configuredOrigin} differs from this app address {currentOrigin}.",
+    "oauthCallbackPreflightItem": "{provider}: l'indirizzo di callback {configuredOrigin} non corrisponde all'indirizzo di questa applicazione {currentOrigin}.",
     "shell": {
       "sectionsNav": "Sezioni delle impostazioni",
       "groups": {
