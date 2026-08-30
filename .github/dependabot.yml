@@ -15,6 +15,15 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3
+    groups:
+      # init, analyze and upload-sarif are one release pinned in three places.
+      # Bumped separately, a run mixes two versions and analyze refuses the
+      # config init wrote ("Loaded a configuration file for version 4.37.7, but
+      # running version 4.37.9"), so none of the single-action pull requests can
+      # reach green on its own. They travel together.
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
