@@ -63,6 +63,25 @@ const EXTRACT_WINDOW_MS = 60 * 60 * 1000;
 /** OCR'd text is bounded in the schema; cap the JSON body proportionally. */
 const TEXT_BODY_MAX_BYTES = 512 * 1024;
 
+function providerFailureMeta(error: unknown, mode?: "text") {
+  const err = error as {
+    httpStatus?: unknown;
+    model?: unknown;
+    bodyExcerpt?: unknown;
+  };
+  return {
+    reason: "provider_error",
+    ...(mode ? { mode } : {}),
+    ...(typeof err.httpStatus === "number"
+      ? { upstreamStatus: err.httpStatus }
+      : {}),
+    ...(typeof err.model === "string" ? { model: err.model } : {}),
+    ...(typeof err.bodyExcerpt === "string"
+      ? { upstreamError: err.bodyExcerpt }
+      : {}),
+  };
+}
+
 export const POST = apiHandler(async (request: Request) => {
   const { user } = await requireAuth();
 
@@ -191,11 +210,13 @@ async function handleTextExtract(
     }
     annotate({
       action: { name: "labs.ocr.extractFailed" },
-      meta: { reason: "provider_error", mode: "text" },
+      meta: providerFailureMeta(err, "text"),
     });
-    return apiError("Couldn't read the report. Try a clearer photo.", 502, {
-      errorCode: "labs.ocr.extractFailed",
-    });
+    return apiError(
+      "The configured AI provider could not process this report. Check the provider configuration and retry.",
+      502,
+      { errorCode: "labs.ocr.extractFailed" },
+    );
   }
 }
 
@@ -397,11 +418,13 @@ async function handleVisionExtract(
       }
       annotate({
         action: { name: "labs.ocr.extractFailed" },
-        meta: { reason: "provider_error" },
+        meta: providerFailureMeta(err),
       });
-      return apiError("Couldn't read the report. Try a clearer photo.", 502, {
-        errorCode: "labs.ocr.extractFailed",
-      });
+      return apiError(
+        "The configured AI provider could not process this report. Check the provider configuration and retry.",
+        502,
+        { errorCode: "labs.ocr.extractFailed" },
+      );
     }
   } catch (err) {
     // A guard threw after the reservation (e.g. consent races) — refund fully.

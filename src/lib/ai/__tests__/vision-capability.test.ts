@@ -37,6 +37,7 @@ describe("supportsVisionForConfig", () => {
     ] as const) {
       expect(supportsVisionForConfig(providerType, "gpt-4o")).toBe(true);
       expect(supportsVisionForConfig(providerType, "gpt-4o-mini")).toBe(true);
+      expect(supportsVisionForConfig(providerType, "gpt-5.6-terra")).toBe(true);
       expect(supportsVisionForConfig(providerType, "gpt-4.1")).toBe(true);
       expect(supportsVisionForConfig(providerType, "gpt-4-turbo")).toBe(true);
       // Full o-series reasoning models read images.
