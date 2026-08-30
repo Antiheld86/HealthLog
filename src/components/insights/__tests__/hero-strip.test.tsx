@@ -158,6 +158,21 @@ const SCORE_WITH_FAILED_READ = scoreReport([
   gated("LIPIDS", "read_failed"),
 ]);
 
+/** v1.38 — a score resting on one area of health, basis block and all. */
+function narrowScore(): HealthScoreReport {
+  const report = scoreReport([scored("BLOOD_PRESSURE", 74)]);
+  if (report.composite.status !== "ok") {
+    throw new Error("fixture is not scored");
+  }
+  report.composite.value.scoreBasis = {
+    domains: 1,
+    recommended: 3,
+    tier: "minimal",
+    physiological: true,
+  };
+  return report;
+}
+
 const morningLocal = new Date("2026-05-10T07:00:00Z"); // 09:00 Berlin
 const afternoonLocal = new Date("2026-05-10T12:00:00Z"); // 14:00 Berlin
 const eveningLocal = new Date("2026-05-10T18:00:00Z"); // 20:00 Berlin
@@ -458,6 +473,26 @@ describe("<HeroStrip>", () => {
     }
     expect(html).toContain(">74<");
     expect(html).toContain('data-pillar="BLOOD_PRESSURE" data-status="ok"');
+  });
+
+  it("carries a narrow score's basis line through to the band", () => {
+    // v1.38 — the panel owns the sentence; the band has to actually mount
+    // the panel with the report it was handed for the sentence to arrive.
+    // Two ends and the pipe: the card tests prove the line exists, this
+    // proves it reaches the surface a person looks at.
+    const html = render(
+      <HeroStrip
+        briefing={null}
+        now={morningLocal}
+        healthScore={narrowScore()}
+      />,
+    );
+    expect(html).toContain('data-slot="health-score-basis"');
+    expect(html).toContain("Based on 1 of 3 areas of health.");
+    // Still the panel's face: full number, its own band colour, its bar.
+    expect(html).toContain(">74<");
+    expect(html).toContain('data-slot="health-score-card-progress"');
+    expect(html).not.toContain('data-slot="health-score-insufficient"');
   });
 
   it("forwards the retry so a failed read can be retried from the band", () => {

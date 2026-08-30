@@ -2453,7 +2453,8 @@
         "yellow": "Niektóre filary wymagają uwagi",
         "red": "Co najmniej jeden filar jest poza zakresem referencyjnym"
       },
-      "insufficient": "{count} z {required} obszarów zdrowia ma wystarczająco świeżych danych. Wynik potrzebuje {required}, w tym co najmniej jednego pomiaru fizycznego.",
+      "insufficient": "Nic nie ma jeszcze wystarczająco świeżych danych, żeby to ocenić. Na początek wystarczy jeden obszar zdrowia, a wynik sam powie, na których obszarach się opiera.",
+      "basis": "Opiera się na {count} z {recommended} obszarów zdrowia.",
       "anatomyToggle": "Jak powstaje ten wynik",
       "notScored": "Jeszcze bez oceny ({count})",
       "method": "Wynik to średnia o równych wagach z filarów, które się do niego liczą, w skali od 0 do 100. Każdy filar jest porównywany z opublikowanym zakresem referencyjnym, a najsłabszy filar może wyznaczyć ogólny zakres. Filar bez wystarczających aktualnych danych jest pomijany, a nie liczony jako zero. Zakresy referencyjne pochodzą z opublikowanych źródeł; to ty decydujesz, które filary się liczą, więc łączna liczba sama w sobie nie jest standardem klinicznym.",
@@ -2533,7 +2534,7 @@
       },
       "configureLink": "Wybierz, co liczy się do Twojego wyniku",
       "coverage": {
-        "minimumMet": "Pokrywa trzy obszary wymagane przez wynik",
+        "recommendedMet": "Pokrywa trzy obszary zalecane przez wynik",
         "areas": "{present} z {required} obszarów zdrowia"
       }
     },
@@ -5241,6 +5242,7 @@
           "description": "Każdy filar, który zapisujesz, liczy się, dopóki nie powiesz tutaj inaczej."
         },
         "threeAxes": "Zapisywanie, pokazywanie i liczenie to trzy różne rzeczy. Ta strona zmienia tylko ostatnią. Filar wyłączony tutaj nadal jest zapisywany i nadal widoczny w całym HealthLogu, przestaje jedynie ruszać liczbą.",
+        "recommendation": "Trzy obszary zdrowia to zalecenie, nie wymóg: zapisze się każdy wybór z co najmniej jednym filarem. Węższy wynik liczony jest tak samo i podaje na karcie, na ilu obszarach się opiera.",
         "axis": {
           "countsFor": "Licz {pillar} do wyniku"
         },

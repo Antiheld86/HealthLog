@@ -281,7 +281,20 @@ export function buildMockSnapshot(
       nextDueMedicationId: null,
     },
     healthScore: options.briefing
-      ? { score: 84, band: "green", delta: -2, restMode: null }
+      ? {
+          score: 84,
+          band: "green",
+          delta: -2,
+          restMode: null,
+          // v1.38 — full breadth, so nothing extra renders. Present
+          // because the server sends it on every scored snapshot.
+          scoreBasis: {
+            domains: 3,
+            recommended: 3,
+            tier: "full" as const,
+            physiological: true,
+          },
+        }
       : null,
     scoreRings: options.scoreRings,
     briefing: options.briefing ?? null,

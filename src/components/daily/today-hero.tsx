@@ -167,6 +167,24 @@ export function TodayHero({
   // server-delivered digest, so SSR and hydration choose it identically.
   const compactAllClear = !lead && !topSignal && !hasItems;
 
+  // v1.38 — what the ring's number rests on, when that is less than the
+  // breadth the score recommends. The hero renders the number and nothing
+  // else, so without this line a one-area score is indistinguishable here
+  // from a full one. Said only below the recommendation: at `full` the
+  // fraction would read "3 of 3" (or worse, "4 of 3" — the block counts
+  // domains, the recommendation caps at three), and a line every account
+  // carries stops being a label. The areas themselves are named on the
+  // insights card, one tap away through the ring; this is scope, not a
+  // warning, and the ring keeps its size and band colour at every tier.
+  const scoreBasis = digest.score?.scoreBasis ?? null;
+  const basisLine =
+    scoreBasis && scoreBasis.tier !== "full"
+      ? t("insights.healthScore.basis", {
+          count: scoreBasis.domains,
+          recommended: scoreBasis.recommended,
+        })
+      : null;
+
   // Calm degrade (plan §3): a genuinely empty account — no score, no rail
   // items, no cached briefing lead and no reaction line — surfaces nothing
   // here. The tile strip below carries its own "add your first reading" empty
@@ -369,6 +387,14 @@ export function TodayHero({
                 className="text-muted-foreground text-xs tabular-nums"
               >
                 {formatDelta(digest.score.delta, t)}
+              </span>
+            ) : null}
+            {basisLine ? (
+              <span
+                data-slot="today-hero-score-basis"
+                className="text-muted-foreground max-w-[11rem] text-center text-xs text-balance md:text-right"
+              >
+                {basisLine}
               </span>
             ) : null}
           </div>

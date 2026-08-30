@@ -2453,7 +2453,8 @@
         "yellow": "Alcuni pilastri richiedono attenzione",
         "red": "Uno o più pilastri sono fuori dall'intervallo di riferimento"
       },
-      "insufficient": "{count} ambiti di salute su {required} hanno abbastanza dati recenti. Il punteggio ne richiede {required}, di cui almeno uno misurato fisicamente.",
+      "insufficient": "Non c'è ancora niente con abbastanza dati recenti da valutare. Un solo ambito di salute basta per iniziare, e il punteggio dirà su quali ambiti si basa.",
+      "basis": "Basato su {count} ambiti di salute su {recommended}.",
       "anatomyToggle": "Come nasce questo punteggio",
       "notScored": "Non ancora valutato ({count})",
       "method": "Il punteggio è la media a peso uguale dei pilastri che contano per esso, su una scala da 0 a 100. Ogni pilastro viene confrontato con un intervallo di riferimento pubblicato e il pilastro più debole può determinare la fascia complessiva. Un pilastro senza dati recenti sufficienti resta escluso invece di contare come zero. Gli intervalli di riferimento provengono da fonti pubblicate; quali pilastri contano lo scegli tu, quindi il numero combinato non è di per sé uno standard clinico.",
@@ -2533,7 +2534,7 @@
       },
       "configureLink": "Scegli cosa conta nel tuo punteggio",
       "coverage": {
-        "minimumMet": "Copre i tre ambiti richiesti dal punteggio",
+        "recommendedMet": "Copre i tre ambiti consigliati dal punteggio",
         "areas": "{present} ambiti di salute su {required}"
       }
     },
@@ -5241,6 +5242,7 @@
           "description": "Ogni pilastro che registri conta, a meno che tu non dica diversamente qui."
         },
         "threeAxes": "Registrare, mostrare e contare sono tre cose diverse. Questa pagina cambia solo l'ultima. Un pilastro che disattivi qui continua a essere registrato e resta visibile ovunque in HealthLog, smette solo di muovere il numero.",
+        "recommendation": "Tre ambiti di salute sono il consiglio, non un requisito: qualsiasi selezione con almeno un pilastro viene salvata. Un punteggio più ristretto viene calcolato allo stesso modo e indica sulla scheda su quanti ambiti si basa.",
         "axis": {
           "countsFor": "Conta {pillar} nel punteggio"
         },

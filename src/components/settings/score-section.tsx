@@ -320,6 +320,19 @@ export function ScoreSection() {
               {t("settings.sections.score.threeAxes")}
             </p>
 
+            {/* v1.38 — the breadth sentence. Three areas of health used to
+                be the price of a score, and the write refused anything
+                narrower; it is a recommendation now and one pillar saves.
+                The recommendation stays on the surface anyway, because a
+                one-area score is honest but thin and a person choosing
+                what counts should know that before they save, not after
+                the card tells them what it rests on. Content, so
+                foreground and in the body beside the sentence it
+                qualifies — not a muted footnote under the rows. */}
+            <p data-slot="score-config-recommendation" className="text-sm">
+              {t("settings.sections.score.recommendation")}
+            </p>
+
             {/* The starting points. Both name data; neither names a
                 person. A template that supplies a rationale for dropping a
                 pillar is the one shape the evidence rules out, so there is

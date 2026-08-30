@@ -181,6 +181,28 @@ function reportWithRows(rows: number): HealthScoreReport {
   );
 }
 
+/**
+ * v1.38 — the same panel, plus the basis line a narrow score carries.
+ *
+ * It is the one block the milestone adds to the at-rest column, and it
+ * lands on the shortest panels: an account with one or two areas of
+ * health has few rows, so this is the shape that decides whether the
+ * reserve still brackets what the report produces.
+ */
+function reportWithBasis(rows: number): HealthScoreReport {
+  const report = reportWithRows(rows);
+  if (report.composite.status !== "ok") {
+    throw new Error("fixture is not scored");
+  }
+  report.composite.value.scoreBasis = {
+    domains: 1,
+    recommended: 3,
+    tier: "minimal",
+    physiological: true,
+  };
+  return report;
+}
+
 function band(node: React.ReactNode, locale: Locale = "en"): string {
   return renderToStaticMarkup(
     <I18nProvider initialLocale={locale}>{node}</I18nProvider>,
@@ -234,17 +256,28 @@ describe("hero band geometry", () => {
     if (skipReason) return expect(skipReason).toBeTruthy();
 
     const heights: Record<string, number> = {};
-    for (const rows of [3, 4, 5, 6]) {
+    const shapes: { key: string; report: HealthScoreReport }[] = [
+      ...[3, 4, 5, 6].map((rows) => ({
+        key: `rows${rows}`,
+        report: reportWithRows(rows),
+      })),
+      // The narrow account: three rows AND the basis line. Measured
+      // rather than reasoned about, because whether one extra `text-xs`
+      // line pushes a three-row panel past the reserve is a fact about
+      // the compiled stylesheet, not about the diff.
+      { key: "rows3basis", report: reportWithBasis(3) },
+    ];
+    for (const shape of shapes) {
       const view = await layout(
         band(
           <HeroStrip
             briefing={null}
             now={new Date("2026-05-10T07:00:00Z")}
-            healthScore={reportWithRows(rows)}
+            healthScore={shape.report}
           />,
         ),
       );
-      heights[`rows${rows}`] = await view
+      heights[shape.key] = await view
         .locator(PANEL)
         .evaluate((el) => Math.round(el.getBoundingClientRect().height));
       const width = await view
@@ -295,9 +328,16 @@ describe("hero band geometry", () => {
       reserve,
       `reserve ${reserve}px is above a six-row panel (${heights.rows6}px): a long report leaves a collapsing gap`,
     ).toBeLessThanOrEqual(heights.rows6);
+    // v1.38 — the narrow account has to sit inside the same range. The
+    // basis line only ever renders on a panel below the recommended
+    // breadth, so this is the tallest the shortest report can get.
+    expect(
+      heights.rows3basis,
+      `a three-row panel with the basis line is ${heights.rows3basis}px, past the tallest report the reserve brackets (${heights.rows6}px)`,
+    ).toBeLessThanOrEqual(heights.rows6);
   }, 60_000);
 
-  it("keeps every row on one line in all six locales", async () => {
+  it("keeps every row on one line in every locale", async () => {
     if (skipReason) return expect(skipReason).toBeTruthy();
 
     const widest: Record<string, { label: string; natural: number }> = {};

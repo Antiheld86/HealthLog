@@ -170,6 +170,17 @@ const HEALTH_SCORE = {
       bandSetter: "SLEEP",
       composition: ["BLOOD_PRESSURE", "ACTIVITY", "SLEEP", "ADIPOSITY"],
       configured: false,
+      // v1.38 — four pillars across four areas of health, so this is a
+      // full-breadth score and the panel adds no basis line. It rides
+      // anyway, because the wire carries the block on every ok composite
+      // and a fixture missing a field the server always sends stops
+      // exercising the branch a person meets.
+      scoreBasis: {
+        domains: 4,
+        recommended: 3,
+        tier: "full" as const,
+        physiological: true,
+      },
       noiseFloor: 3,
       scoreVersion: SCORE_VERSION,
     },

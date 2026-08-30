@@ -2453,7 +2453,8 @@
         "yellow": "Certains piliers demandent une attention",
         "red": "Un ou plusieurs piliers sont hors de la plage de référence"
       },
-      "insufficient": "{count} domaines de santé sur {required} disposent d'assez de données récentes. Le score en demande {required}, dont au moins un issu d'une mesure physique.",
+      "insufficient": "Rien ne dispose encore d'assez de données récentes pour être noté. Un seul domaine de santé suffit pour commencer, et le score indiquera sur quels domaines il repose.",
+      "basis": "Basé sur {count} domaines de santé sur {recommended}.",
       "anatomyToggle": "Comment ce score est établi",
       "notScored": "Pas encore évalué ({count})",
       "method": "Le score est la moyenne à poids égal des piliers qui comptent pour lui, sur une échelle de 0 à 100. Chaque pilier est comparé à une plage de référence publiée, et le pilier le plus faible peut déterminer la plage globale. Un pilier sans données récentes suffisantes est écarté plutôt que compté comme un zéro. Les plages de référence proviennent de sources publiées ; les piliers qui comptent sont ceux que vous choisissez, donc le nombre combiné n'est pas lui-même une norme clinique.",
@@ -2533,7 +2534,7 @@
       },
       "configureLink": "Choisir ce qui compte dans votre score",
       "coverage": {
-        "minimumMet": "Couvre les trois domaines exigés par le score",
+        "recommendedMet": "Couvre les trois domaines recommandés par le score",
         "areas": "{present} domaines de santé sur {required}"
       }
     },
@@ -5241,6 +5242,7 @@
           "description": "Chaque pilier que vous enregistrez compte, sauf indication contraire ici."
         },
         "threeAxes": "Enregistrer, afficher et compter sont trois choses distinctes. Cette page ne change que la dernière. Un pilier désactivé ici continue d'être enregistré et reste visible partout ailleurs dans HealthLog, il cesse simplement de faire bouger le chiffre.",
+        "recommendation": "Trois domaines de santé sont une recommandation, pas une exigence : toute sélection comportant au moins un pilier est enregistrée. Un score plus étroit est calculé de la même façon et indique sur la carte sur combien de domaines il repose.",
         "axis": {
           "countsFor": "Compter {pillar} dans le score"
         },

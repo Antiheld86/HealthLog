@@ -2453,7 +2453,8 @@
         "yellow": "Algunos pilares requieren atención",
         "red": "Uno o más pilares están fuera del intervalo de referencia"
       },
-      "insufficient": "{count} de {required} ámbitos de salud tienen suficientes datos recientes. La puntuación necesita {required}, y al menos uno debe ser una medición física.",
+      "insufficient": "Todavía no hay datos recientes suficientes para puntuar nada. Con un solo ámbito de salud basta para empezar, y la puntuación dirá en qué ámbitos se basa.",
+      "basis": "Basado en {count} de {recommended} ámbitos de salud.",
       "anatomyToggle": "Cómo se forma esta puntuación",
       "notScored": "Aún sin puntuar ({count})",
       "method": "La puntuación es la media con igual peso de los pilares que cuentan para ella, en una escala de 0 a 100. Cada pilar se compara con un rango de referencia publicado, y el pilar más débil puede fijar el rango general. Un pilar sin datos recientes suficientes queda fuera en lugar de contar como cero. Los rangos de referencia proceden de fuentes publicadas; qué pilares cuentan lo eliges tú, así que el número combinado no es en sí mismo un estándar clínico.",
@@ -2533,7 +2534,7 @@
       },
       "configureLink": "Elegir qué cuenta para tu puntuación",
       "coverage": {
-        "minimumMet": "Cubre los tres ámbitos que la puntuación necesita",
+        "recommendedMet": "Cubre los tres ámbitos que la puntuación recomienda",
         "areas": "{present} de {required} ámbitos de salud"
       }
     },
@@ -5241,6 +5242,7 @@
           "description": "Cada pilar que registras cuenta, salvo que digas lo contrario aquí."
         },
         "threeAxes": "Registrar, mostrar y contar son tres cosas distintas. Esta página cambia solo la última. Un pilar que desactives aquí se sigue registrando y se sigue viendo en el resto de HealthLog, simplemente deja de mover el número.",
+        "recommendation": "Tres ámbitos de salud son la recomendación, no un requisito: cualquier selección con al menos un pilar se guarda. Una puntuación más estrecha se calcula igual y dice en la tarjeta en cuántos ámbitos se basa.",
         "axis": {
           "countsFor": "Contar {pillar} para la puntuación"
         },

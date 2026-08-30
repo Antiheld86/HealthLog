@@ -13,28 +13,48 @@
  * fails on the value AND on the copy — passing the domain count into a
  * pillar-shaped string is caught wherever the string lives.
  *
- * **2. The composite's coverage fraction is a floor, not a proportion.**
- * `requiredInputs` is the three-domain minimum and `deriveCoverage` clamps
- * `presentInputs` to it, so every scored account rendered "3/3" forever,
- * whatever it records. The arithmetic is right and stays untouched; what
- * was wrong is presenting a met floor as full coverage of the person's own
- * data. The composite's meter therefore names its axis, and the guard
- * fails if that override is dropped.
+ * **2. The composite's coverage fraction was a floor, not a proportion.**
+ * `requiredInputs` is the three-domain recommendation and `deriveCoverage`
+ * clamps `presentInputs` to it. Until v1.38 three domains were also the
+ * price of a score, so every scored account rendered "3/3" forever,
+ * whatever it recorded: a met floor presented as full coverage of the
+ * person's own data. The composite's meter therefore names its axis, and
+ * the guard fails if that override is dropped.
  *
- * Both are AST matchers rather than text searches, and both carry a
- * counter-test proving they stay quiet on the neighbouring call sites that
- * are legitimately about pillars.
+ * **3. Since v1.38 the fraction is a real moving number, and the axis has
+ * to move with it.** Two domains now score, so a scored account no longer
+ * clears the recommendation by definition and the override cannot branch
+ * on "is there a score" any more — that would tell a two-domain account it
+ * covers the three areas the score recommends, which is claim 2 rebuilt one
+ * floor higher. The branch is the breadth TIER: `full` states the
+ * recommendation, everything narrower shows the fraction it can actually
+ * count. The last block below renders the real panel at each tier rather
+ * than reading the branch out of the source, because a branch that reads
+ * correctly and renders the other arm is the failure this pair of claims
+ * keeps producing.
+ *
+ * The first two are AST matchers rather than text searches, and both carry
+ * a counter-test proving they stay quiet on the neighbouring call sites
+ * that are legitimately about pillars.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import ts from "typescript";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "@/lib/i18n/context";
+import type { ScoreBreadthTier } from "@/lib/analytics/score/breadth";
+import type { HealthScoreReport } from "@/lib/analytics/score/types";
+import { SCORE_VERSION } from "@/lib/analytics/score/types";
 import { CoverageMeter } from "../derived/coverage-meter";
+import { HealthScoreCard } from "../health-score-card";
 import en from "../../../../messages/en.json";
+
+vi.mock("@/hooks/use-auth", () => ({
+  useAuth: () => ({ user: { unitPreference: "metric", glucoseUnit: "mg/dL" } }),
+}));
 
 const CARD_FILE = join(
   process.cwd(),
@@ -155,9 +175,13 @@ describe("the domain count is never described as a pillar count", () => {
 
   it("finds the call site at all", () => {
     // A matcher that matches nothing passes every assertion below it.
+    // The named example is the axis fraction since v1.38: the refusal
+    // sentence stopped counting areas when it stopped being reachable
+    // above zero, and the meter a few lines below renders the same
+    // fraction anyway.
     expect(sites.length).toBeGreaterThan(0);
     expect(sites.map((site) => site.key)).toContain(
-      "insights.healthScore.insufficient",
+      "insights.healthScore.coverage.areas",
     );
   });
 
@@ -226,9 +250,12 @@ describe("the composite's coverage meter names its own axis", () => {
   });
 
   it("has copy for both axis labels", () => {
-    expect(message("insights.healthScore.coverage.minimumMet")).toMatch(
-      /area/i,
-    );
+    const met = message("insights.healthScore.coverage.recommendedMet");
+    expect(met).toMatch(/area/i);
+    // The recommendation arm may not describe the breadth as something
+    // the score needs: needing three is the rule v1.38 removed, and this
+    // sentence is the last place in the panel that still spelled it.
+    expect(met).not.toMatch(/\bneeds?\b|\brequire/i);
     expect(message("insights.healthScore.coverage.areas")).toContain(
       "{present}",
     );
@@ -269,5 +296,122 @@ describe("the axis override reaches the markup", () => {
 
     expect(html).toContain("3/3");
     expect(html).toContain("3 of 3 inputs");
+  });
+});
+
+/**
+ * Claim 3, rendered. The three tiers the composite can carry, each put
+ * through the real panel, so the axis is judged on what a person reads
+ * rather than on which branch the source appears to take.
+ */
+describe("the axis states the recommendation only where it is met", () => {
+  const provenance = {
+    inputs: ["BLOOD_PRESSURE"],
+    source: "live" as const,
+    windowDays: 90,
+    computedAt: "2026-07-28T12:00:00.000Z",
+  };
+
+  /** An ok composite spanning `domains` of the three recommended. */
+  function scoredReport(
+    domains: number,
+    tier: ScoreBreadthTier,
+  ): HealthScoreReport {
+    return {
+      composite: {
+        status: "ok",
+        value: {
+          score: 78,
+          band: "green",
+          bandSetter: null,
+          composition: ["BLOOD_PRESSURE"],
+          configured: false,
+          scoreBasis: {
+            domains,
+            recommended: 3,
+            tier,
+            physiological: true,
+          },
+          noiseFloor: 2,
+          scoreVersion: SCORE_VERSION,
+        },
+        coverage: {
+          requiredInputs: 3,
+          presentInputs: domains,
+          historyDays: 28,
+          missing: [],
+        },
+        confidence: { score: 70, band: "medium" },
+        provenance,
+      },
+      pillars: [],
+      delta: null,
+      deltaReason: null,
+      scoreVersion: SCORE_VERSION,
+      weightGoal: {
+        status: "insufficient",
+        coverage: {
+          requiredInputs: 2,
+          presentInputs: 0,
+          historyDays: 0,
+          missing: [],
+        },
+        provenance: { ...provenance, inputs: ["WEIGHT"] },
+        reason: "no_personal_goal",
+      },
+      algorithmNotice: null,
+    } as HealthScoreReport;
+  }
+
+  /** The refusal: not one pillar has usable data. */
+  function refusedReport(): HealthScoreReport {
+    return {
+      ...scoredReport(0, "minimal"),
+      composite: {
+        status: "insufficient",
+        coverage: {
+          requiredInputs: 3,
+          presentInputs: 0,
+          historyDays: 0,
+          missing: [],
+        },
+        provenance,
+        reason: "no_usable_data",
+      },
+    } as HealthScoreReport;
+  }
+
+  function axisOf(report: HealthScoreReport): string {
+    const html = renderToStaticMarkup(
+      <I18nProvider initialLocale="en">
+        <HealthScoreCard report={report} />
+      </I18nProvider>,
+    );
+    // The composite's meter is the panel's first; the pillar meters live
+    // behind popovers and the weight-goal meter comes after it.
+    const match = html.match(/data-slot="coverage-meter-label"[^>]*>([^<]*)</);
+    expect(match, "the composite meter rendered no axis label").not.toBeNull();
+    return match![1];
+  }
+
+  it("states the recommendation for a full-breadth score", () => {
+    expect(axisOf(scoredReport(3, "full"))).toBe(
+      "Covers the three areas the score recommends",
+    );
+  });
+
+  it("shows the moving fraction for a two-area score", () => {
+    // The arm that used to be unreachable for a scored account: before
+    // v1.38 two domains had no score at all, so this sentence could only
+    // ever appear beside a dash.
+    expect(axisOf(scoredReport(2, "partial"))).toBe("2 of 3 areas of health");
+  });
+
+  it("shows the moving fraction for a one-area score", () => {
+    expect(axisOf(scoredReport(1, "minimal"))).toBe("1 of 3 areas of health");
+  });
+
+  it("shows the moving fraction when there is no score at all", () => {
+    expect(axisOf(refusedReport())).toBe("0 of 3 areas of health");
   });
 });
