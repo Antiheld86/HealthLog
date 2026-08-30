@@ -64,10 +64,7 @@ export function ReferenceRangeBadge({
       ? "border-info/30 bg-info/10 text-info"
       : "border-warning/30 bg-warning/10 text-warning";
   return (
-    <Badge
-      variant="outline"
-      className={`${toneClass} ${compactClass}`.trim()}
-    >
+    <Badge variant="outline" className={`${toneClass} ${compactClass}`.trim()}>
       <Icon aria-hidden />
       {label}
     </Badge>

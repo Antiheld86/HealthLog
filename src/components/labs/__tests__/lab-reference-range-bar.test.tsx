@@ -30,7 +30,7 @@ describe("<LabReferenceRangeBar>", () => {
     expect(html).toContain("bg-info/35");
     expect(html).toContain("bg-warning/35");
     expect(html).toContain("bg-success/35");
-    expect(html).toContain('left:0%;width:');
+    expect(html).toContain("left:0%;width:");
   });
 
   it.each([

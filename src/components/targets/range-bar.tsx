@@ -68,14 +68,12 @@ export function RangeBar({
   // vitamin D at 6.8 against a minimum of 30). Expand the visible scale to
   // include the actual value instead of pinning its marker to the edge.
   const outlierPadding = Math.max(span * 0.06, Number.EPSILON);
-  const visualMin =
-    isLab
-      ? Math.min(baseVisualMin, value - outlierPadding)
-      : baseVisualMin;
-  const visualMax =
-    isLab
-      ? Math.max(baseVisualMax, value + outlierPadding)
-      : baseVisualMax;
+  const visualMin = isLab
+    ? Math.min(baseVisualMin, value - outlierPadding)
+    : baseVisualMin;
+  const visualMax = isLab
+    ? Math.max(baseVisualMax, value + outlierPadding)
+    : baseVisualMax;
   const visualSpan = visualMax - visualMin;
   const clampedValue = Math.max(visualMin, Math.min(visualMax, value));
   const rawPosition = ((clampedValue - visualMin) / visualSpan) * 100;
@@ -102,18 +100,17 @@ export function RangeBar({
   const inYellow =
     !inGreen && value >= effectiveOrangeMin && value <= effectiveOrangeMax;
 
-  const markerColor =
-    isLab
-      ? inGreen
-        ? "var(--success)"
-        : value < min
-          ? "var(--info)"
-          : "var(--warning)"
-      : inGreen
-        ? "var(--success)"
-        : inYellow
-          ? "var(--warning)"
-          : "var(--destructive)";
+  const markerColor = isLab
+    ? inGreen
+      ? "var(--success)"
+      : value < min
+        ? "var(--info)"
+        : "var(--warning)"
+    : inGreen
+      ? "var(--success)"
+      : inYellow
+        ? "var(--warning)"
+        : "var(--destructive)";
   const minLabelPosition = Math.max(5, Math.min(95, greenStart));
   const maxLabelPosition = Math.max(5, Math.min(95, greenEnd));
 
@@ -162,10 +159,9 @@ export function RangeBar({
           }`}
           style={{
             left: isLab ? "0%" : `${yellowLeftStart}%`,
-            width:
-              isLab
-                ? `${greenStart}%`
-                : `${greenStart - yellowLeftStart}%`,
+            width: isLab
+              ? `${greenStart}%`
+              : `${greenStart - yellowLeftStart}%`,
           }}
         />
         <div
@@ -174,10 +170,9 @@ export function RangeBar({
           }`}
           style={{
             left: `${greenEnd}%`,
-            width:
-              isLab
-                ? `${100 - greenEnd}%`
-                : `${yellowRightEnd - greenEnd}%`,
+            width: isLab
+              ? `${100 - greenEnd}%`
+              : `${yellowRightEnd - greenEnd}%`,
           }}
         />
         {/* In-band zone — `--success` remains the shared positive signal. */}
