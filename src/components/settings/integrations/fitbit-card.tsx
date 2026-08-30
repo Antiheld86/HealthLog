@@ -65,8 +65,10 @@ import {
   type SyncOutcomeState,
 } from "./sync-outcome";
 import {
+  CallbackMismatchNotice,
   IntegrationCardDescription,
   IntegrationRedirectGuide,
+  integrationCallbackUrl,
 } from "./setup-guide-link";
 
 export function FitbitCard({
@@ -521,6 +523,10 @@ export function FitbitCard({
           </p>
         )}
       </div>
+      <CallbackMismatchNotice
+        provider={t("settings.fitbit")}
+        callbackUrl={integrationCallbackUrl("fitbit")}
+      />
     </SettingsCard>
   );
 }

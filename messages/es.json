@@ -4637,6 +4637,7 @@
     "remainingMany": "Faltan {count} mediciones para la tendencia."
   },
   "settings": {
+    "oauthCallbackPreflightItem": "{provider}: la dirección de retorno {configuredOrigin} no coincide con la dirección de esta aplicación {currentOrigin}.",
     "shell": {
       "sectionsNav": "Secciones de ajustes",
       "groups": {

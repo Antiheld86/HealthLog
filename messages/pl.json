@@ -4637,6 +4637,7 @@
     "remainingMany": "Jeszcze {count} pomiarów do trendu."
   },
   "settings": {
+    "oauthCallbackPreflightItem": "{provider}: adres zwrotny {configuredOrigin} różni się od adresu tej aplikacji {currentOrigin}.",
     "shell": {
       "sectionsNav": "Sekcje ustawień",
       "groups": {

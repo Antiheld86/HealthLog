@@ -56,8 +56,10 @@ import {
   type SyncOutcomeState,
 } from "./sync-outcome";
 import {
+  CallbackMismatchNotice,
   IntegrationCardDescription,
   IntegrationRedirectGuide,
+  integrationCallbackUrl,
 } from "./setup-guide-link";
 
 export function WhoopCard({
@@ -503,6 +505,10 @@ export function WhoopCard({
           </p>
         )}
       </div>
+      <CallbackMismatchNotice
+        provider={t("settings.whoop")}
+        callbackUrl={integrationCallbackUrl("whoop")}
+      />
     </SettingsCard>
   );
 }

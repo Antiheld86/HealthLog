@@ -65,9 +65,11 @@ import {
   pillStateForVerdict,
 } from "./shared";
 import {
+  CallbackMismatchNotice,
   IntegrationCardDescription,
   IntegrationRedirectGuide,
   type IntegrationDocsProvider,
+  integrationCallbackUrl,
 } from "./setup-guide-link";
 
 export interface OAuthProviderStatus {
@@ -522,6 +524,10 @@ export function OAuthProviderCard({
           </p>
         )}
       </div>
+      <CallbackMismatchNotice
+        provider={t(i18nPrefix)}
+        callbackUrl={integrationCallbackUrl(provider)}
+      />
     </SettingsCard>
   );
 }
