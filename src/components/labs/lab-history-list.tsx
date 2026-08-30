@@ -35,6 +35,7 @@ import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 
 import { ReferenceRangeBadge } from "./reference-range-badge";
+import { LabReferenceRangeBar } from "./lab-reference-range-bar";
 import { SourceRangeNote } from "./source-range-note";
 import type { LabResultDetailDto, LabResultDto } from "./types";
 
@@ -351,7 +352,15 @@ export function LabHistoryList({ readings }: { readings: LabResultDto[] }) {
           {ordered.map((r) => (
             <TableRow key={r.id}>
               <TableCell className="font-semibold tabular-nums">
-                {formatLabReading(r)}
+                <div className="space-y-2">
+                  <span>{formatLabReading(r)}</span>
+                  <LabReferenceRangeBar
+                    value={r.value}
+                    referenceLow={r.referenceLow}
+                    referenceHigh={r.referenceHigh}
+                    unit={r.unit}
+                  />
+                </div>
               </TableCell>
               <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
                 {formatDateShort(r.takenAt, true)}

@@ -54,13 +54,17 @@ export function ReferenceRangeBadge({
     );
   }
 
-  // Below / above — both neutral `secondary`, distinguished only by the
-  // arrow direction and label. No red, no amber.
+  // Below / above use a restrained semantic tint, distinguished by the
+  // arrow direction and label rather than an alarm treatment.
   const Icon = status === "below" ? ArrowDown : ArrowUp;
   const label =
     status === "below" ? t("labs.range.below") : t("labs.range.above");
+  const toneClass =
+    status === "below"
+      ? "border-info/30 bg-info/10 text-info"
+      : "border-warning/30 bg-warning/10 text-warning";
   return (
-    <Badge variant="secondary" className={compactClass || undefined}>
+    <Badge variant="outline" className={`${toneClass} ${compactClass}`.trim()}>
       <Icon aria-hidden />
       {label}
     </Badge>

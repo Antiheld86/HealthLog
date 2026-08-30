@@ -22,6 +22,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { applyOrder, useModuleListPrefs } from "@/lib/module-list-prefs";
 
 import { LabTrendSparkline } from "./lab-trend-sparkline";
+import { LabReferenceRangeBar } from "./lab-reference-range-bar";
 import { ReferenceRangeBadge } from "./reference-range-badge";
 import { SourceRangeNote } from "./source-range-note";
 import type { LabResultDto, LabResultListResponse } from "./types";
@@ -74,6 +75,19 @@ function groupReadings(results: LabResultDto[]): MarkerGroup[] {
     (a, b) =>
       new Date(b.latest.takenAt).getTime() -
       new Date(a.latest.takenAt).getTime(),
+  );
+}
+
+function LabRangeBarSlot({ reading }: { reading: LabResultDto }) {
+  return (
+    <div className="w-48">
+      <LabReferenceRangeBar
+        value={reading.value}
+        referenceLow={reading.referenceLow}
+        referenceHigh={reading.referenceHigh}
+        unit={reading.unit}
+      />
+    </div>
   );
 }
 
@@ -227,23 +241,29 @@ export function LabList({ onAddFirst }: { onAddFirst?: () => void } = {}) {
                   {group.biomarkerId ? (
                     <Link
                       href={`/labs/${group.biomarkerId}`}
-                      className="hover:bg-muted/40 -m-1 flex min-w-0 flex-1 items-center gap-3 rounded-md p-1 transition-colors"
+                      className="hover:bg-muted/40 -m-1 grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_12rem_72px_auto] items-center gap-3 rounded-md p-1 transition-colors"
                     >
                       {inner}
-                      <LabTrendSparkline
-                        values={group.readings.map((r) => r.value)}
-                      />
+                      <LabRangeBarSlot reading={group.latest} />
+                      <div className="w-[72px]">
+                        <LabTrendSparkline
+                          values={group.readings.map((r) => r.value)}
+                        />
+                      </div>
                       <ChevronRight className="text-muted-foreground h-4 w-4 shrink-0" />
                     </Link>
                   ) : (
                     // Un-linked group (not backfilled to a catalog biomarker):
                     // render inert but say so, so it doesn't read as a broken
                     // link next to its clickable neighbours.
-                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_12rem_72px_auto] items-center gap-3">
                       {inner}
-                      <LabTrendSparkline
-                        values={group.readings.map((r) => r.value)}
-                      />
+                      <LabRangeBarSlot reading={group.latest} />
+                      <div className="w-[72px]">
+                        <LabTrendSparkline
+                          values={group.readings.map((r) => r.value)}
+                        />
+                      </div>
                       <span className="text-muted-foreground shrink-0 text-xs italic">
                         {t("labs.notLinkedYet")}
                       </span>
@@ -300,8 +320,8 @@ export function LabList({ onAddFirst }: { onAddFirst?: () => void } = {}) {
                 linkLabel={group.analyte}
               />
               <CardContent>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-muted-foreground flex flex-wrap items-center gap-x-2 text-sm">
+                <div className="flex items-end justify-between gap-3">
+                  <div className="text-muted-foreground flex min-w-0 flex-1 flex-wrap items-center gap-x-2 text-sm">
                     <span className="text-foreground font-semibold tabular-nums">
                       {formatLabReading(group.latest)}
                     </span>
@@ -331,6 +351,12 @@ export function LabList({ onAddFirst }: { onAddFirst?: () => void } = {}) {
                         })}
                       </span>
                     ) : null}
+                    <LabReferenceRangeBar
+                      value={group.latest.value}
+                      referenceLow={group.latest.referenceLow}
+                      referenceHigh={group.latest.referenceHigh}
+                      unit={group.latest.unit}
+                    />
                   </div>
                   <LabTrendSparkline
                     values={group.readings.map((r) => r.value)}
