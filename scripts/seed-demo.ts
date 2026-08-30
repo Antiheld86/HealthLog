@@ -8,7 +8,8 @@
  *
  * - 1 admin user (demo/demo123demo123)
  * - 90 days of measurements (weight, BP, pulse, resting HR, body fat,
- *   sleep, steps) — flat-or-improving trends, most-recent point from today
+ *   sleep, steps, fortnightly waist) — flat-or-improving trends,
+ *   most-recent point from today
  * - A full week of per-stage sleep nights (awake/REM/light(core)/deep),
  *   ~7.5 h each, including last night
  * - 90 days of body composition (fat/lean/muscle mass, total body water,
@@ -25,6 +26,8 @@
  * - 3 medications with schedules and ~90 days of intake history at high
  *   compliance, with today scheduled on-track (taken or not-yet-due)
  * - 90 days of mood entries
+ * - Six mental-wellbeing screeners (WHO-5, PHQ-9, GAD-7) spread over the
+ *   window, item answers encrypted the way the check-in route writes them
  * - Vorsorge (preventive-care) reminders — upcoming dental + annual physical
  * - Two lab panels of biomarkers across two dates (quantitative with
  *   reference ranges + qualitative "negativ" rows)
@@ -37,6 +40,18 @@
  * - App settings (registration disabled, English locale)
  *
  * Every date is relative to "now" so the demo stays fresh on every re-seed.
+ * What ages is the SEEDED DATA, not the script: the pillar windows keep
+ * moving after a seed, so about four weeks on, activity (21 of the last
+ * 28 days) and sleep (14 of 28 nights) fall out of their windows and the
+ * Health Score narrows to whatever cardiometabolic data is still fresh.
+ * Since v1.38 that is a labelled partial score rather than a blank card,
+ * but it is still not the demo at its best — re-seed to restore breadth.
+ *
+ * The five areas of health the score can span all have data here on
+ * purpose: cardiometabolic (BP, glucose, lipids), activity (steps),
+ * sleep, adiposity (waist) and wellbeing (screeners). Removing any one
+ * of them does not break the seed; it quietly narrows what the demo's
+ * score can show.
  *
  * Usage: npx tsx scripts/seed-demo.ts
  * Requires DATABASE_URL env var. The Coach sample conversation additionally
@@ -52,6 +67,11 @@ import {
   DEFAULT_DASHBOARD_LAYOUT,
   serializeDashboardLayout,
 } from "../src/lib/dashboard-layout";
+import {
+  INSTRUMENT_MEASUREMENT_TYPE,
+  scoreTotal,
+  severityBand,
+} from "../src/lib/mental-health/instruments";
 import { VALUE_RANGES } from "../src/lib/validations/measurement";
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -396,6 +416,88 @@ async function seed() {
         `INSERT INTO measurements (id, user_id, type, value, unit, source, measured_at, created_at, updated_at)
          VALUES ($1, $2, 'ACTIVITY_STEPS', $3, 'steps', 'MANUAL', $4, $4, $4)`,
         [cuid(), userId, Math.round(steps[i]), date],
+      );
+
+      // Waist circumference (fortnightly, plus today). The Health Score's
+      // adiposity pillar scores waist-to-height against NICE 2022's 0.5,
+      // and it is the ONLY route into that area of health — weight and
+      // body fat feed the trends, never the score. Without a waist row
+      // the demo account has no adiposity standing at all, so the score
+      // rests on three areas instead of five. 96 cm down to 88 cm over
+      // the window is 0.527 → 0.484 at the demo's 182 cm: the ratio
+      // crosses the threshold inside the seeded span, which is what
+      // makes the pillar worth looking at rather than flat green.
+      const daysBack = days - i;
+      if (daysBack % 14 === 0) {
+        const waistCm = 96 - (8 * i) / (span - 1);
+        await client.query(
+          `INSERT INTO measurements (id, user_id, type, value, unit, source, measured_at, created_at, updated_at)
+           VALUES ($1, $2, 'WAIST_CIRCUMFERENCE', $3, 'cm', 'MANUAL', $4, $4, $4)`,
+          [cuid(), userId, Math.round(waistCm * 10) / 10, date],
+        );
+      }
+    }
+
+    // ── Mental-wellbeing screeners ────────────
+    // WHO-5, PHQ-9 and GAD-7 over the same 90-day window. The score's
+    // wellbeing pillar reads the FRESHEST completed screener, so the last
+    // one written decides what that area of health says; the earlier ones
+    // give the history view something to draw. Totals sit in the calm
+    // bands on purpose — a demo is not the place to model a person in
+    // distress, and item 9 is answered zero throughout, which also keeps
+    // the pillar out of its crisis-signposting arm.
+    //
+    // Item answers are encrypted the way the check-in route writes them
+    // (`{ items, schema: 1 }` through the shared Bytes codec), and each
+    // administration gets its COMPUTED projection measurement so the
+    // trend chart and the assessment history agree.
+    console.log("Creating mental-wellbeing screeners...");
+    const screeners: Array<{
+      instrument: "WHO5" | "PHQ9" | "GAD7";
+      items: number[];
+      daysAgo: number;
+    }> = [
+      { instrument: "WHO5", items: [3, 3, 3, 2, 3], daysAgo: 76 },
+      { instrument: "PHQ9", items: [1, 1, 0, 1, 0, 0, 1, 0, 0], daysAgo: 62 },
+      { instrument: "GAD7", items: [1, 1, 0, 1, 0, 0, 0], daysAgo: 48 },
+      { instrument: "WHO5", items: [4, 3, 4, 3, 3], daysAgo: 34 },
+      { instrument: "PHQ9", items: [0, 1, 0, 0, 0, 0, 1, 0, 0], daysAgo: 20 },
+      { instrument: "WHO5", items: [4, 4, 4, 3, 4], daysAgo: 6 },
+    ];
+    for (const screener of screeners) {
+      const total = scoreTotal(screener.instrument, screener.items);
+      const takenAt = daysAgoAt(screener.daysAgo, 20, 15);
+      const assessmentId = cuid();
+      await client.query(
+        `INSERT INTO mental_health_assessments
+           (id, user_id, instrument, locale, version, responses_encrypted, total_score, severity_band,
+            item9_flagged, taken_at, tz, source, created_at, updated_at)
+         VALUES ($1, $2, $3, 'en', 'standard', $4, $5, $6, false, $7, 'Europe/Berlin', 'WEB', $7, $7)`,
+        [
+          assessmentId,
+          userId,
+          screener.instrument,
+          Buffer.from(
+            encryptToBytes(
+              JSON.stringify({ items: screener.items, schema: 1 }),
+            ),
+          ),
+          total,
+          severityBand(screener.instrument, total),
+          takenAt,
+        ],
+      );
+      await client.query(
+        `INSERT INTO measurements (id, user_id, type, value, unit, source, external_id, measured_at, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'score', 'COMPUTED', $5, $6, $6, $6)`,
+        [
+          cuid(),
+          userId,
+          INSTRUMENT_MEASUREMENT_TYPE[screener.instrument],
+          total,
+          `assessment:${assessmentId}`,
+          takenAt,
+        ],
       );
     }
 
@@ -2122,7 +2224,7 @@ async function seed() {
     console.log("\nDemo data seeded successfully!");
     console.log(`  User: demo / demo123demo123`);
     console.log(
-      `  Measurements: weight, BP, pulse, resting HR, body fat, steps, sleep`,
+      `  Measurements: weight, BP, pulse, resting HR, body fat, steps, sleep, waist`,
     );
     console.log(
       `  Body composition: fat/lean/muscle mass, water, bone, visceral fat, BMI`,
@@ -2147,6 +2249,7 @@ async function seed() {
       `  Workouts: ~3-4/week (running, strength, cycling) with HR samples`,
     );
     console.log(`  Mood: ~${Math.round(span * 0.95)} entries`);
+    console.log(`  Wellbeing screeners: 6 (WHO-5, PHQ-9, GAD-7)`);
     console.log(`  Vorsorge reminders: 2 (dental, annual physical)`);
     console.log(
       `  Lab panels: ${labResults.length} rows across 2 panels (incl. ${recentQual.length} qualitative)`,

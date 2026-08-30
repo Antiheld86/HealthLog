@@ -1345,7 +1345,7 @@ export const dashboardSnapshotResponse = z
       })
       .nullable()
       .describe(
-        "Derived cardiometabolic reference score summary. Null until at least three eligible domains include a measured physiological domain. Additive metadata names confidence, ordered composition, the worst-pillar band setter, score version, and why a delta was suppressed. Rest Mode annotates but never changes the score.",
+        "Derived reference score summary. Since v1.38 it is null only when no pillar is readable at all: one or two areas of health produce a score too, computed identically, with `scoreBasis` saying how broad it is — render that beside the number rather than assuming three areas. Additive metadata names confidence, ordered composition, the worst-pillar band setter, score version, and why a delta was suppressed. Rest Mode annotates but never changes the score.",
       ),
     // v1.27.7 — user-selected hero score rings (max 3), resolved
     // server-side next to the health score. Additive; optional so
@@ -1951,7 +1951,7 @@ const healthScorePillar = z.object({
   domain: z
     .enum(["cardiometabolic", "activity", "sleep", "adiposity", "wellbeing"])
     .describe(
-      "Which area the pillar speaks to. Three of the seven pillars share `cardiometabolic`, so a selection of four pillars can still fail the three-distinct-domains rule.",
+      "Which area the pillar speaks to. Three of the seven pillars share `cardiometabolic`, so four selected pillars can still be one area — which is why `scoreBasis.domains` is served resolved and must not be counted out of `composition`.",
     ),
   result: z
     .union([
