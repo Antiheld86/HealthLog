@@ -32,11 +32,14 @@ import { HeroStrip } from "../hero-strip";
  * that printed them and are reported as such, never baked into a comment as
  * if they were a property of the design.
  *
- * It needs a Chromium build. `pnpm test` on a machine that has one (any
- * machine that has run `pnpm e2e`) measures for real; a machine without one
- * skips loudly rather than passing quietly. The unit CI job installs no
- * browsers, so treat this as a check for the person editing the panel and for
- * the release audit, not as the gate.
+ * It needs a Chromium build, and under CI it IS the gate: the quality job
+ * installs the headless shell before the unit suite, and a launch failure
+ * there fails this suite instead of skipping it. That is the whole point —
+ * until v1.38 the job installed no browsers, every run caught the launch
+ * error and passed, and the check had never measured anything in CI. On a
+ * developer machine without a browser it still skips, loudly, so that
+ * `pnpm test` stays usable; run `pnpm exec playwright install --only-shell
+ * chromium` once to measure for real.
  */
 
 vi.mock("@/hooks/use-auth", () => ({
@@ -219,9 +222,20 @@ beforeAll(async () => {
     const { chromium } = await import("@playwright/test");
     browser = await chromium.launch();
   } catch (error) {
-    skipReason = `no Chromium build available (${String(error).slice(0, 120)})`;
-    // Loud on purpose: a geometry check that quietly skips is the same thing
-    // as no geometry check, and this repo has shipped that before.
+    const reason = `no Chromium build available (${String(error).slice(0, 200)})`;
+    // In CI the browser is installed by the quality job, so a launch failure
+    // is the job being wrong, not the machine being bare. Throwing from the
+    // hook fails every test in this suite: a geometry check that quietly
+    // skips is the same thing as no geometry check, and this repo shipped
+    // exactly that for months because the skip only ever reached a console
+    // line nobody reads.
+    if (process.env.CI) {
+      throw new Error(
+        `[hero geometry] ${reason}. This check is the gate in CI and it has no browser to measure with. ` +
+          `Restore the "pnpm exec playwright install --only-shell chromium" step in the quality job of .github/workflows/security.yml.`,
+      );
+    }
+    skipReason = reason;
     console.warn(`[hero geometry] SKIPPED — ${skipReason}`);
     return;
   }
@@ -252,8 +266,8 @@ const PANEL = '[data-slot="health-score-card"]';
 const RESERVE = '[data-slot="health-score-card-skeleton"]';
 
 describe("hero band geometry", () => {
-  it("holds a reserve that sits inside the range the real report produces", async () => {
-    if (skipReason) return expect(skipReason).toBeTruthy();
+  it("holds a reserve that sits inside the range the real report produces", async (ctx) => {
+    if (skipReason) ctx.skip(skipReason);
 
     const heights: Record<string, number> = {};
     const shapes: { key: string; report: HealthScoreReport }[] = [
@@ -337,8 +351,8 @@ describe("hero band geometry", () => {
     ).toBeLessThanOrEqual(heights.rows6);
   }, 60_000);
 
-  it("keeps every row on one line in every locale", async () => {
-    if (skipReason) return expect(skipReason).toBeTruthy();
+  it("keeps every row on one line in every locale", async (ctx) => {
+    if (skipReason) ctx.skip(skipReason);
 
     const widest: Record<string, { label: string; natural: number }> = {};
 
@@ -444,13 +458,14 @@ describe("hero band geometry", () => {
     );
   }, 60_000);
 
-  it.each([
+  it.for([
     { width: VIEWPORT_PX, where: "the md column" },
     { width: 360, where: "a 360px phone, stacked under the greeting" },
   ])(
     "never scrolls sideways in $where",
-    async ({ width }) => {
-      if (skipReason) return expect(skipReason).toBeTruthy();
+    { timeout: 60_000 },
+    async ({ width }, ctx) => {
+      if (skipReason) ctx.skip(skipReason);
 
       const target = page!;
       await target.setViewportSize({ width, height: 1200 });
@@ -524,6 +539,5 @@ describe("hero band geometry", () => {
 
       await target.setViewportSize({ width: VIEWPORT_PX, height: 1200 });
     },
-    60_000,
   );
 });

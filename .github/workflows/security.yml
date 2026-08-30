@@ -28,6 +28,26 @@ jobs:
 
       - run: pnpm db:generate
 
+      # The hero-geometry check in the unit suite renders the real panel in a
+      # real browser and measures the boxes. Without a browser here it caught
+      # its own launch failure and passed anyway, so from its first day until
+      # v1.38 it measured nothing on any run of this job. The browser is part
+      # of the gate now; the test refuses to skip when CI is set.
+      #
+      # Headless shell only: `chromium.launch()` resolves to
+      # chromium_headless_shell, which is what the failing runs named, and the
+      # full headed build is several times the download for nothing this job
+      # uses. The e2e job keeps `--with-deps chromium` — it drives a real app.
+      - name: Cache Playwright headless shell
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-shell-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            playwright-shell-${{ runner.os }}-
+
+      - run: pnpm exec playwright install --only-shell chromium
+
       # Blocking since v1.15.20 — the settings-split refactor that kept
       # this warn-only is long done and the tree lints clean.
       - name: ESLint
