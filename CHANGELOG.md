@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.38.0] — 2026-08-30
+
+The health score works with the record a person actually keeps.
+
+Until now it demanded three separate areas of health plus one measured value before it would grade at all. Someone who tracks blood pressure and sleep, carefully, for months, got the same blank card as someone who had just signed up. The refusal was the loudest thing on the dashboard and it never said what was missing in a way you could act on.
+
+Three areas is now a recommendation. A score is worked out for one area or two the same way it is for five, and the card says what it rests on.
+
+### Added
+
+- The score names its own basis. Below full breadth the card carries one line, "Based on {n} of {recommended} areas of health", and the number stays at full size in its band colour at every tier. A narrower score is a smaller claim, not a worse one, and it is never dressed up as a full one. The areas themselves are one tap away in the composition list that was already there.
+- The score says when a pillar stops counting. If a window rolls past its floor or a source goes quiet, the composition changes and the card says which area left and why, in the same words the pillar uses when it is short of data. Dismissible, and it only comes back if the composition moves again. Deliberately not a notification: this is something to notice, not something to be woken for.
+- Every score response carries an optional `scoreBasis` block with the area count, the recommendation, the tier and whether a measured physiological value is among them. Additive on all three carriers, so an older client keeps working unchanged.
+- Tailscale is a documented way to serve HealthLog, from a self-hoster's suggestion in #847 (see v1.37.33).
+
+### Changed
+
+- Refusal now means one thing only: nothing in the record can be scored yet. Every other case gets a number.
+- A pillar selection in settings saves from one pillar upward. The page still recommends three, because a one-area score is honest but thin.
+- `scoreVersion` moves from 3 to 4. Stored days keep the version they were written under; deltas suppress across the change as they always have.
+- The demo seeds every area, so a fresh demo shows the score at full breadth instead of decaying to a cardiometabolic-only view after a few weeks.
+
+### Fixed
+
+- Warning on the integration cards when the configured OAuth callback address does not match the address the app is served from, contributed by @TimonBed in #855. Self-hosted OAuth otherwise fails with nothing on screen to explain it.
+- The coverage line no longer says the score "needs" three areas, which stopped being true with this release.
+- The panel-geometry check had never actually measured anything in CI. It needs a browser, and the job that runs it never installed one, so it caught the launch failure and reported four passing assertions. It now installs the browser, fails loudly in CI when one is missing, and skips with a stated reason locally.
+
+### Security
+
+- A structural guard pins the rule that keeps invented targets out of the score: every scored band must cite a clinical threshold or a published guideline, and nothing may be synthesised from a person's height or age beyond the guideline bands that are documented as such. The BMI-22 default that shipped before v1.34 fails this guard.
+
 ## [1.37.33] — 2026-08-29
 
 A community day: a contributor's first code fix, a self-hoster's suggestion turned into documentation, and the housekeeping a code-scanning tab is for.
