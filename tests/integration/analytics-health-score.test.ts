@@ -78,7 +78,19 @@ interface AnalyticsEnvelope {
       composite: {
         status: "ok" | "insufficient";
         reason?: string;
-        value?: { score: number; band: "green" | "yellow" | "red" };
+        value?: {
+          score: number;
+          band: "green" | "yellow" | "red";
+          // Not to be confused with a pillar's `scoreBasis`, which explains
+          // which axis set that pillar's number. This one says how much of
+          // the record the composite rests on.
+          scoreBasis?: {
+            domains: number;
+            recommended: number;
+            tier: "full" | "partial" | "minimal";
+            physiological: boolean;
+          };
+        };
       };
       pillars: PillarEnvelope[];
     } | null;
@@ -348,11 +360,14 @@ describe("GET /api/analytics — Health Score (v1.34 reference composite)", () =
     });
   });
 
-  it("stays insufficient with only two eligible domains — the three-domain floor", async () => {
-    // The composite requires at least three eligible domains, including a
-    // measured physiological one, before it grades at all (CORE_MIN_ELIGIBLE
-    // _DOMAINS). Two graded pillars in two domains must not slip past that
-    // floor.
+  it("grades two eligible domains as a partial score over the wire", async () => {
+    // This case used to assert a refusal: two graded pillars in two areas
+    // fell under the three-domain floor and the whole composite went dark,
+    // which is what someone who keeps sleep and waist saw for as long as
+    // they kept only those two. The floor is now a recommendation, so the
+    // same fixture scores and says what it rests on. Asserted end to end
+    // rather than on the composite alone, because the basis has to survive
+    // the route's serialisation to be worth anything to a client.
     const user = await seedSession("hs-two-domains");
     const now = Date.now();
 
@@ -366,7 +381,13 @@ describe("GET /api/analytics — Health Score (v1.34 reference composite)", () =
     expect(res.status).toBe(200);
     const env = (await res.json()) as AnalyticsEnvelope;
     const hs = env.data!.healthScore!;
-    expect(hs.composite.status).toBe("insufficient");
+    expect(hs.composite.status).toBe("ok");
+    expect(hs.composite.value!.scoreBasis).toEqual({
+      domains: 2,
+      recommended: 3,
+      tier: "partial",
+      physiological: true,
+    });
     const byId = new Map(hs.pillars.map((p) => [p.id, p]));
     expect(byId.get("SLEEP")!.result.status).toBe("ok");
     expect(byId.get("ADIPOSITY")!.result.status).toBe("ok");
