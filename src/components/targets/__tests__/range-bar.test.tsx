@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { I18nProvider } from "@/lib/i18n/context";
-import { RangeBar } from "../range-bar";
+import { EDGE_PADDING_PERCENT, RangeBar } from "../range-bar";
 
 /**
  * v1.4.25 W3e — `<RangeBar>` was extracted from the inline 790-line
@@ -68,7 +68,18 @@ describe("<RangeBar>", () => {
       tone: "lab",
     });
 
-    expect(html).not.toContain("left: 4%");
+    // Assert the distance, not one unlucky string. `not.toContain("left: 4%")`
+    // passes for a marker at 4.02%, which is the same defect one rounding away.
+    // The marker is the fourth `left:` in the markup — the three before it are
+    // the bar slot and the band edges.
+    const positions = [...html.matchAll(/left:\s*([0-9.]+)%/g)].map((m) =>
+      Number(m[1]),
+    );
+    const marker = positions[3];
+
+    expect(marker).toBeGreaterThan(EDGE_PADDING_PERCENT);
+    // And not flung to the other end by an over-eager expansion.
+    expect(marker).toBeLessThan(100 - EDGE_PADDING_PERCENT);
   });
 
   it("makes the marker focusable with a text alternative for the value + range (2026-07-17 a11y audit M1)", () => {

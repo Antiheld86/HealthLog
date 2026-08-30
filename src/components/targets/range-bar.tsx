@@ -30,6 +30,14 @@ export interface RangeBarProps {
   maxLabel?: string | null;
 }
 
+/**
+ * How far from either end the value marker is allowed to sit, in percent.
+ *
+ * Module scope rather than the render body so the test can assert against the
+ * same number the component clamps with, instead of a copy that can drift.
+ */
+export const EDGE_PADDING_PERCENT = 4;
+
 export function RangeBar({
   value,
   min,
@@ -83,7 +91,6 @@ export function RangeBar({
   const visualSpan = visualMax - visualMin;
   const clampedValue = Math.max(visualMin, Math.min(visualMax, value));
   const rawPosition = ((clampedValue - visualMin) / visualSpan) * 100;
-  const EDGE_PADDING_PERCENT = 4;
   const position = Math.max(
     EDGE_PADDING_PERCENT,
     Math.min(100 - EDGE_PADDING_PERCENT, rawPosition),
