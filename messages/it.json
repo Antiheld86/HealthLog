@@ -2455,6 +2455,11 @@
       },
       "insufficient": "Non c'è ancora niente con abbastanza dati recenti da valutare. Un solo ambito di salute basta per iniziare, e il punteggio dirà su quali ambiti si basa.",
       "basis": "Basato su {count} ambiti di salute su {recommended}.",
+      "compositionNotice": {
+        "item": "{pillar} ({reason})",
+        "left": "Non conta più nel punteggio: {pillars}.",
+        "joined": "Ora conta nel punteggio: {pillars}."
+      },
       "anatomyToggle": "Come nasce questo punteggio",
       "notScored": "Non ancora valutato ({count})",
       "method": "Il punteggio è la media a peso uguale dei pilastri che contano per esso, su una scala da 0 a 100. Ogni pilastro viene confrontato con un intervallo di riferimento pubblicato e il pilastro più debole può determinare la fascia complessiva. Un pilastro senza dati recenti sufficienti resta escluso invece di contare come zero. Gli intervalli di riferimento provengono da fonti pubblicate; quali pilastri contano lo scegli tu, quindi il numero combinato non è di per sé uno standard clinico.",
@@ -5276,6 +5281,11 @@
             "title": "Hai cambiato cosa conta",
             "body": "Dal {date} il tuo punteggio è calcolato su un insieme di pilastri diverso. I giorni precedenti vengono dall'insieme vecchio, quindi i due non vengono confrontati e la variazione settimanale resta sospesa finché la finestra di confronto non ha superato il cambiamento. Lo storico di ogni singolo pilastro prosegue senza interruzioni.",
             "bodyUndated": "Il tuo punteggio è calcolato su un insieme di pilastri diverso da prima. I giorni precedenti vengono dall'insieme vecchio, quindi i due non vengono confrontati e la variazione settimanale resta sospesa finché la finestra di confronto non ha superato il cambiamento. Lo storico di ogni singolo pilastro prosegue senza interruzioni."
+          },
+          "composition": {
+            "title": "Cosa conta è cambiato da sé",
+            "left": "Non conta più nel tuo punteggio: {pillars}. Il numero si è mosso per questo, non perché sia cambiata la tua salute.",
+            "joined": "Ora conta nel tuo punteggio: {pillars}."
           },
           "dismiss": "Ho capito",
           "dismissError": "Non è stato possibile salvare. Riprova."

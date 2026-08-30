@@ -162,6 +162,11 @@ const fakeDb = vi.hoisted(() => {
         written.push(...args.data);
         return { count: args.data.length };
       },
+      // v1.38 — the composition note's read. These cases are about a
+      // RECIPE change, which that note deliberately stays silent on, and
+      // an account with no stored day has nothing to compare against
+      // either way.
+      findFirst: async () => null,
     },
     illnessEpisode: { findMany: none },
     moodEntry: { findMany: none },

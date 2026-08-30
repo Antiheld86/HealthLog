@@ -2455,6 +2455,11 @@
       },
       "insufficient": "Rien ne dispose encore d'assez de données récentes pour être noté. Un seul domaine de santé suffit pour commencer, et le score indiquera sur quels domaines il repose.",
       "basis": "Basé sur {count} domaines de santé sur {recommended}.",
+      "compositionNotice": {
+        "item": "{pillar} ({reason})",
+        "left": "Ne compte plus dans le score : {pillars}.",
+        "joined": "Compte désormais dans le score : {pillars}."
+      },
       "anatomyToggle": "Comment ce score est établi",
       "notScored": "Pas encore évalué ({count})",
       "method": "Le score est la moyenne à poids égal des piliers qui comptent pour lui, sur une échelle de 0 à 100. Chaque pilier est comparé à une plage de référence publiée, et le pilier le plus faible peut déterminer la plage globale. Un pilier sans données récentes suffisantes est écarté plutôt que compté comme un zéro. Les plages de référence proviennent de sources publiées ; les piliers qui comptent sont ceux que vous choisissez, donc le nombre combiné n'est pas lui-même une norme clinique.",
@@ -5276,6 +5281,11 @@
             "title": "Vous avez changé ce qui compte",
             "body": "Depuis le {date}, votre score est calculé à partir d'un autre ensemble de piliers. Les jours antérieurs viennent de l'ancien ensemble, les deux ne sont donc pas comparés et la variation hebdomadaire reste suspendue tant que la fenêtre de comparaison n'a pas dépassé le changement. L'historique de chaque pilier, lui, se poursuit sans rupture.",
             "bodyUndated": "Votre score est calculé à partir d'un autre ensemble de piliers qu'auparavant. Les jours antérieurs viennent de l'ancien ensemble, les deux ne sont donc pas comparés et la variation hebdomadaire reste suspendue tant que la fenêtre de comparaison n'a pas dépassé le changement. L'historique de chaque pilier, lui, se poursuit sans rupture."
+          },
+          "composition": {
+            "title": "Ce qui compte a changé tout seul",
+            "left": "Ne compte plus dans votre score : {pillars}. Le chiffre a bougé pour cette raison, et non parce que votre santé a changé.",
+            "joined": "Compte désormais dans votre score : {pillars}."
           },
           "dismiss": "Compris",
           "dismissError": "Enregistrement impossible. Veuillez réessayer."

@@ -27,6 +27,11 @@ import { ACTIVITY_WINDOW_DAYS } from "./activity";
 import { SLEEP_WINDOW_DAYS } from "./sleep";
 import { attachScoreDelta } from "./composite";
 import {
+  buildCompositionNotice,
+  compositionNoticeKey,
+  type StoredCompositionDay,
+} from "./composition-notice";
+import {
   resolveHealthScoreConfig,
   resolveScoreConfigured,
   scoreConfigBoundary,
@@ -109,7 +114,11 @@ async function capture<T>(
   promise: Promise<T>,
   fallback: T,
   failure?:
-    ScorePillarId | "WEIGHT_GOAL" | "ALGORITHM_NOTICE" | ScorePillarId[],
+    | ScorePillarId
+    | "WEIGHT_GOAL"
+    | "ALGORITHM_NOTICE"
+    | "COMPOSITION_NOTICE"
+    | ScorePillarId[],
 ): Promise<Settled<T>> {
   try {
     return { ok: true, value: await promise };
@@ -874,14 +883,48 @@ export async function computeUserHealthScore(
     current.scoreVersion,
     config.version,
   );
-  const dismissal = await capture(
-    db.dismissedPriorityItem.findUnique({
-      where: { userId_itemKey: { userId: input.userId, itemKey } },
-      select: { itemKey: true },
-    }),
-    null,
-    "ALGORITHM_NOTICE",
-  );
+  // v1.38 — the composition note's only input from the database, and the
+  // first production read this table has ever had. It is filed under the
+  // account's LOCAL day, and the row for today is excluded on purpose: the
+  // write happens on the same request that computed the report, so
+  // comparing against "the newest row" would find today's own composition
+  // the second time the panel is opened and the note would vanish between
+  // two loads of the same page.
+  const todayKey = userDayKey(input.now, input.profile.timezone);
+  const [dismissal, priorDay] = await Promise.all([
+    capture(
+      db.dismissedPriorityItem.findUnique({
+        where: { userId_itemKey: { userId: input.userId, itemKey } },
+        select: { itemKey: true },
+      }),
+      null,
+      "ALGORITHM_NOTICE",
+    ),
+    capture(
+      db.healthScoreRecord.findFirst({
+        where: { userId: input.userId, dayKey: { lt: todayKey } },
+        orderBy: { dayKey: "desc" },
+        select: {
+          composition: true,
+          scoreVersion: true,
+          configVersion: true,
+        },
+      }),
+      null,
+      "COMPOSITION_NOTICE",
+    ),
+  ]);
+  const compositionNotice = await resolveCompositionNotice({
+    db,
+    userId: input.userId,
+    scoreVersion: current.scoreVersion,
+    configVersion: config.version,
+    composition:
+      current.composite.status === "ok"
+        ? current.composite.value.composition
+        : [],
+    priorDay: priorDay.value,
+  });
   return {
     ...current,
     ...delta,
@@ -889,5 +932,43 @@ export async function computeUserHealthScore(
       itemKey,
       dismissed: dismissal.value != null,
     },
+    compositionNotice,
   };
+}
+
+/**
+ * Decide whether a pillar leaving or joining is worth saying, and look up
+ * whether it has already been said.
+ *
+ * The decision itself is pure and lives in `./composition-notice`; this is
+ * the seam that holds the one extra round trip, and it only spends it when
+ * there is a note to raise. A read failure here resolves to no note rather
+ * than to a thrown request: the score renders, and the wide event carries
+ * the domain that could not be read.
+ */
+async function resolveCompositionNotice(args: {
+  db: Pick<PrismaClient, "dismissedPriorityItem">;
+  userId: string;
+  scoreVersion: number;
+  configVersion: number;
+  composition: readonly ScorePillarId[];
+  priorDay: StoredCompositionDay | null;
+}): Promise<HealthScoreReport["compositionNotice"]> {
+  const decision = {
+    current: args.composition,
+    previous: args.priorDay,
+    scoreVersion: args.scoreVersion,
+    configVersion: args.configVersion,
+  };
+  const key = compositionNoticeKey(decision);
+  if (!key) return null;
+  const seen = await capture(
+    args.db.dismissedPriorityItem.findUnique({
+      where: { userId_itemKey: { userId: args.userId, itemKey: key } },
+      select: { itemKey: true },
+    }),
+    null,
+    "COMPOSITION_NOTICE",
+  );
+  return buildCompositionNotice(decision, key, seen.value != null);
 }

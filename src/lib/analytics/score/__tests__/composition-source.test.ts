@@ -219,6 +219,10 @@ function fakePrisma(): PrismaClient {
     mentalHealthAssessment: { findMany: async () => ASSESSMENTS },
     labResult: { findMany: async () => [] },
     dismissedPriorityItem: { findUnique: async () => null },
+    // v1.38 — no stored day behind this account, so the composition note
+    // has nothing to compare against. These cases are about what the
+    // recipe and the modules compose TODAY.
+    healthScoreRecord: { findFirst: async () => null },
   } as unknown as PrismaClient;
 }
 

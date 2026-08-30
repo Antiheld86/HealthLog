@@ -13,6 +13,8 @@
  * dismissed one — a milestone by its reach day, an ECG recording by its own
  * timestamp, a tension window by the local day it was detected for.
  */
+import { createHash } from "node:crypto";
+
 import type { Milestone } from "@/lib/daily/milestones";
 
 /** `milestone:<kind>:<metricType>:<sinceDate>` — one key per durable state reached. */
@@ -92,4 +94,44 @@ export function healthScoreNoticeItemKey(
 ): string {
   const base = healthScoreAlgorithmItemKey(scoreVersion);
   return configVersion >= 1 ? `${base}:config:${configVersion}` : base;
+}
+
+/**
+ * `health-score:v<scoreVersion>:composition:<hash>` — one acknowledgement
+ * per SET of pillars a score rests on.
+ *
+ * The third thing that can change what the number means, after the method
+ * and the person's own recipe: a pillar stops counting on its own. A window
+ * rolls past its floor, a module goes off, a source goes quiet — and the
+ * level moves with nothing on the panel saying why. The delta is already
+ * suppressed for exactly this case, which prevents a false "you dropped six
+ * points" and says nothing about the six points.
+ *
+ * Keyed on the RESULTING set rather than on the day, and that choice is the
+ * whole behaviour: a set that stays the same tomorrow resolves to the same
+ * key, so a dismissal holds instead of the note reappearing every morning,
+ * and the next real change hashes differently and raises it again. The cost
+ * is that a set the person has already acknowledged stays acknowledged if
+ * they later return to it — A → B, dismissed, B → A, B again is silent.
+ * That is the honest reading of the dismissal: they have been told what a
+ * score on set B rests on, and nothing about B has changed since.
+ *
+ * The ids are sorted before hashing, so the same set never produces two
+ * keys through registry order alone, and the hash is truncated because the
+ * key is an identity to compare, not a value to invert.
+ *
+ * A namespace of its own rather than a suffix under
+ * `health_score_algorithm:` — dismissing "the rules moved" must not also
+ * dismiss "a pillar left", and one prefix carrying both would make the two
+ * indistinguishable to the ledger.
+ */
+export function healthScoreCompositionItemKey(
+  scoreVersion: number,
+  composition: readonly string[],
+): string {
+  const hash = createHash("sha256")
+    .update([...composition].sort().join(","))
+    .digest("hex")
+    .slice(0, 12);
+  return `health-score:v${scoreVersion}:composition:${hash}`;
 }

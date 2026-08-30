@@ -2455,6 +2455,11 @@
       },
       "insufficient": "Todavía no hay datos recientes suficientes para puntuar nada. Con un solo ámbito de salud basta para empezar, y la puntuación dirá en qué ámbitos se basa.",
       "basis": "Basado en {count} de {recommended} ámbitos de salud.",
+      "compositionNotice": {
+        "item": "{pillar} ({reason})",
+        "left": "Ya no cuenta para la puntuación: {pillars}.",
+        "joined": "Ahora cuenta para la puntuación: {pillars}."
+      },
       "anatomyToggle": "Cómo se forma esta puntuación",
       "notScored": "Aún sin puntuar ({count})",
       "method": "La puntuación es la media con igual peso de los pilares que cuentan para ella, en una escala de 0 a 100. Cada pilar se compara con un rango de referencia publicado, y el pilar más débil puede fijar el rango general. Un pilar sin datos recientes suficientes queda fuera en lugar de contar como cero. Los rangos de referencia proceden de fuentes publicadas; qué pilares cuentan lo eliges tú, así que el número combinado no es en sí mismo un estándar clínico.",
@@ -5276,6 +5281,11 @@
             "title": "Has cambiado qué cuenta",
             "body": "Desde el {date} tu puntuación se calcula con otro conjunto de pilares. Los días anteriores salen del conjunto antiguo, así que no se comparan entre sí y la variación semanal queda en pausa hasta que la ventana de comparación deje atrás el cambio. El historial de cada pilar sigue sin interrupción.",
             "bodyUndated": "Tu puntuación se calcula con un conjunto de pilares distinto al anterior. Los días previos salen del conjunto antiguo, así que no se comparan entre sí y la variación semanal queda en pausa hasta que la ventana de comparación deje atrás el cambio. El historial de cada pilar sigue sin interrupción."
+          },
+          "composition": {
+            "title": "Lo que cuenta ha cambiado por su cuenta",
+            "left": "Ya no cuenta para tu puntuación: {pillars}. El número se movió por eso, no porque haya cambiado tu salud.",
+            "joined": "Ahora cuenta para tu puntuación: {pillars}."
           },
           "dismiss": "Entendido",
           "dismissError": "No se pudo guardar. Inténtalo de nuevo."

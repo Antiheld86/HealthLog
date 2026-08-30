@@ -2455,6 +2455,11 @@
       },
       "insufficient": "Nic nie ma jeszcze wystarczająco świeżych danych, żeby to ocenić. Na początek wystarczy jeden obszar zdrowia, a wynik sam powie, na których obszarach się opiera.",
       "basis": "Opiera się na {count} z {recommended} obszarów zdrowia.",
+      "compositionNotice": {
+        "item": "{pillar} ({reason})",
+        "left": "Nie liczy się już do wyniku: {pillars}.",
+        "joined": "Teraz liczy się do wyniku: {pillars}."
+      },
       "anatomyToggle": "Jak powstaje ten wynik",
       "notScored": "Jeszcze bez oceny ({count})",
       "method": "Wynik to średnia o równych wagach z filarów, które się do niego liczą, w skali od 0 do 100. Każdy filar jest porównywany z opublikowanym zakresem referencyjnym, a najsłabszy filar może wyznaczyć ogólny zakres. Filar bez wystarczających aktualnych danych jest pomijany, a nie liczony jako zero. Zakresy referencyjne pochodzą z opublikowanych źródeł; to ty decydujesz, które filary się liczą, więc łączna liczba sama w sobie nie jest standardem klinicznym.",
@@ -5276,6 +5281,11 @@
             "title": "Zmieniłeś to, co się liczy",
             "body": "Od {date} Twój wynik liczony jest z innego zestawu filarów. Dni wcześniejsze pochodzą ze starego zestawu, więc obu nie porównujemy, a zmiana tygodniowa pozostaje wstrzymana, dopóki okno porównania nie minie tej zmiany. Historia każdego filaru z osobna biegnie przez nią bez przerwy.",
             "bodyUndated": "Twój wynik liczony jest z innego zestawu filarów niż wcześniej. Dni sprzed zmiany pochodzą ze starego zestawu, więc obu nie porównujemy, a zmiana tygodniowa pozostaje wstrzymana, dopóki okno porównania nie minie tej zmiany. Historia każdego filaru z osobna biegnie przez nią bez przerwy."
+          },
+          "composition": {
+            "title": "To, co się liczy, zmieniło się samo",
+            "left": "Nie liczy się już do Twojego wyniku: {pillars}. Liczba zmieniła się z tego powodu, a nie dlatego, że zmieniło się Twoje zdrowie.",
+            "joined": "Teraz liczy się do Twojego wyniku: {pillars}."
           },
           "dismiss": "Rozumiem",
           "dismissError": "Nie udało się zapisać. Spróbuj ponownie."

@@ -233,7 +233,48 @@ export interface HealthScoreReport {
   scoreVersion: typeof SCORE_VERSION;
   weightGoal: Derived<WeightGoalValue>;
   algorithmNotice: { itemKey: string; dismissed: boolean } | null;
+  /**
+   * v1.38 — a pillar joined or left the set behind the number since the
+   * last day this account has a stored score for.
+   *
+   * The gap this closes: the delta is already suppressed on a composition
+   * change, so nobody is told they dropped six points they did not drop —
+   * and nobody is told anything at all. The level moves, the panel shows a
+   * different number, and the cause is invisible. Under the adaptive
+   * minimum that matters more rather than less: compositions are smaller
+   * and sit closer to their floors, so a pillar rolling out of its window
+   * is likelier.
+   *
+   * Absent rather than null on a payload written before the field existed,
+   * which is why it is optional — the additive-contract pattern the
+   * snapshot and digest blocks have followed six times. Null when there is
+   * nothing to say: no prior stored day, an unchanged set, or a change the
+   * method and recipe notice already owns.
+   */
+  compositionNotice?: ScoreCompositionNotice | null;
   restMode?: RestModeAnnotation | null;
+}
+
+/**
+ * What left, what joined, and whether the person already said they saw it.
+ *
+ * Both lists are registry-ordered pillar ids, never localised strings: the
+ * surfaces already own the pillar labels, and the reason a departed pillar
+ * stopped counting is on that pillar's own row in the same report.
+ *
+ * The tier can move with the set (full to partial, or back) and this is
+ * the notice for that too — the tier is a function of the composition, so
+ * a second notice saying the same thing in other words would be two
+ * announcements of one event.
+ */
+export interface ScoreCompositionNotice {
+  /** `health-score:v<scoreVersion>:composition:<hash of the sorted set>`. */
+  itemKey: string;
+  /** Counted on the last stored day, not counted now. */
+  left: ScorePillarId[];
+  /** Counted now, not counted on the last stored day. */
+  joined: ScorePillarId[];
+  dismissed: boolean;
 }
 
 export interface DomainReadState {

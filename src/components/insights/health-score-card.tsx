@@ -160,6 +160,30 @@ export function markAlgorithmNoticeDismissed(
   payload: unknown,
   itemKey: string,
 ): unknown {
+  return markNoticeDismissed(payload, "algorithmNotice", itemKey);
+}
+
+/**
+ * The same patch for the composition note.
+ *
+ * Its own entry point rather than a loop over both fields: dismissing one
+ * notice must never flip the other, and the two keys live in different
+ * namespaces precisely so they cannot be confused. A shared walker that
+ * matched "whichever notice carries this key" would work today and would
+ * quietly do the wrong thing the day the two namespaces collide.
+ */
+export function markCompositionNoticeDismissed(
+  payload: unknown,
+  itemKey: string,
+): unknown {
+  return markNoticeDismissed(payload, "compositionNotice", itemKey);
+}
+
+function markNoticeDismissed(
+  payload: unknown,
+  field: "algorithmNotice" | "compositionNotice",
+  itemKey: string,
+): unknown {
   if (!payload || typeof payload !== "object" || !("healthScore" in payload)) {
     return payload;
   }
@@ -167,11 +191,11 @@ export function markAlgorithmNoticeDismissed(
   if (
     !healthScore ||
     typeof healthScore !== "object" ||
-    !("algorithmNotice" in healthScore)
+    !(field in healthScore)
   ) {
     return payload;
   }
-  const notice = healthScore.algorithmNotice;
+  const notice = (healthScore as Record<string, unknown>)[field];
   if (
     !notice ||
     typeof notice !== "object" ||
@@ -184,7 +208,7 @@ export function markAlgorithmNoticeDismissed(
     ...payload,
     healthScore: {
       ...healthScore,
-      algorithmNotice: { ...notice, dismissed: true },
+      [field]: { ...notice, dismissed: true },
     },
   };
 }
@@ -192,6 +216,21 @@ export function markAlgorithmNoticeDismissed(
 /** The reason a pillar was gated, or null when it carries a score. */
 function gateReason(pillar: ScorePillarResult): string | null {
   return pillar.result.status === "insufficient" ? pillar.result.reason : null;
+}
+
+/**
+ * Why a pillar that used to count no longer does.
+ *
+ * The report's own row for that pillar is the source, so the departure line
+ * and the anatomy list can never say two different things about one pillar.
+ * A pillar with NO row is not an error: turning its module off closes the
+ * data path deliberately and the scorer stops emitting the pillar
+ * altogether. The empty string falls through `REASON_KEY` to the generic
+ * "not currently eligible", which is exactly what is true of it.
+ */
+function reasonOf(report: HealthScoreReport, id: string): string {
+  const pillar = report.pillars.find((entry) => entry.id === id);
+  return (pillar ? gateReason(pillar) : null) ?? "";
 }
 
 export interface HealthScoreCardProps {
@@ -317,6 +356,49 @@ export function HealthScoreCard({
         })
       : null;
 
+  // v1.38 — why the number moved when nobody moved it. A pillar whose
+  // window rolled past its floor, whose module went off or whose source
+  // went quiet changes the set the mean is taken over; the delta is
+  // already suppressed so the move is not narrated as a health event, and
+  // until now that was the whole answer — the level changed and the panel
+  // said nothing.
+  //
+  // One muted line, and the reason comes from the pillar's own row rather
+  // than from a second vocabulary: whatever the anatomy list would say
+  // about that pillar today is what this says. A pillar with no row at all
+  // (its module is off, so it is not waiting for anything) falls through
+  // to the same "not currently eligible" the list uses.
+  //
+  // Not a push, not a toast, not a badge. The person is looking at the
+  // number this explains.
+  const compositionNotice = report.compositionNotice ?? null;
+  const compositionLine =
+    compositionNotice && !compositionNotice.dismissed
+      ? [
+          compositionNotice.left.length > 0
+            ? t("insights.healthScore.compositionNotice.left", {
+                pillars: compositionNotice.left
+                  .map((id) =>
+                    t("insights.healthScore.compositionNotice.item", {
+                      pillar: t(PILLAR_LABEL_KEY[id]),
+                      reason: reasonText(reasonOf(report, id)),
+                    }),
+                  )
+                  .join(", "),
+              })
+            : null,
+          compositionNotice.joined.length > 0
+            ? t("insights.healthScore.compositionNotice.joined", {
+                pillars: compositionNotice.joined
+                  .map((id) => t(PILLAR_LABEL_KEY[id]))
+                  .join(", "),
+              })
+            : null,
+        ]
+          .filter((line): line is string => line !== null)
+          .join(" ") || null
+      : null;
+
   return (
     <div
       data-slot="health-score-card"
@@ -413,6 +495,14 @@ export function HealthScoreCard({
         {basisLine ? (
           <p data-slot="health-score-basis" className="text-foreground text-xs">
             {basisLine}
+          </p>
+        ) : null}
+        {compositionLine ? (
+          <p
+            data-slot="health-score-composition-notice"
+            className="text-muted-foreground text-xs"
+          >
+            {compositionLine}
           </p>
         ) : null}
         {report.delta != null ? (

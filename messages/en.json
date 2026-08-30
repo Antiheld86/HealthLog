@@ -2455,6 +2455,11 @@
       },
       "insufficient": "Nothing has enough recent data to score yet. One area of health is enough to start, and the score will say which areas it rests on.",
       "basis": "Based on {count} of {recommended} areas of health.",
+      "compositionNotice": {
+        "item": "{pillar} ({reason})",
+        "left": "No longer counting toward the score: {pillars}.",
+        "joined": "Now counting toward the score: {pillars}."
+      },
       "anatomyToggle": "How this score comes about",
       "notScored": "Not scored yet ({count})",
       "method": "The score is the equal-weighted average of the pillars that count toward it, on a 0 to 100 scale. Each pillar is graded against a published reference band, and the weakest pillar can set the overall band. A pillar without enough recent data is left out rather than counted as a zero. The reference bands come from published sources; which pillars count is yours to choose, so the combined number is not itself a clinical standard.",
@@ -5276,6 +5281,11 @@
             "title": "You changed what counts",
             "body": "Since {date} your score is worked out from a different set of pillars. Days before that were worked out from the old set, so the two are not compared and the weekly change stays paused until the comparison window is clear of the change. Each pillar's own history runs straight through it.",
             "bodyUndated": "Your score is worked out from a different set of pillars than it used to be. Days before the change were worked out from the old set, so the two are not compared and the weekly change stays paused until the comparison window is clear of the change. Each pillar's own history runs straight through it."
+          },
+          "composition": {
+            "title": "What counts changed on its own",
+            "left": "No longer counting toward your score: {pillars}. The number moved for that reason, not because your health did.",
+            "joined": "Now counting toward your score: {pillars}."
           },
           "dismiss": "Got it",
           "dismissError": "Couldn't save that. Please try again."

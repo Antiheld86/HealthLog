@@ -82,7 +82,32 @@ export function isDismissibleKind(
  * builder (which stamps the key) and the dismiss route's Zod schema (which
  * rejects anything else structurally, before a lookup ever runs).
  */
-const DISMISSIBLE_NOTICE_PREFIXES = ["health_score_algorithm"] as const;
+const DISMISSIBLE_NOTICE_PREFIXES = [
+  "health_score_algorithm",
+  "health-score",
+] as const;
+
+/**
+ * The notice prefixes whose dismissal changes what the score report says,
+ * and therefore has to evict the cached report.
+ *
+ * Both entries are score notices — the method/recipe note and the
+ * composition note. Named rather than repeated as a literal at the dismiss
+ * route, because the route matched exactly one of them for a release and a
+ * second one added there by hand is a dismissal that appears to work and
+ * comes back on the next read.
+ */
+export const SCORE_NOTICE_ITEM_KEY_PREFIXES = [
+  "health_score_algorithm",
+  "health-score",
+] as const;
+
+/** Whether dismissing `itemKey` invalidates the cached Health Score report. */
+export function isScoreNoticeItemKey(itemKey: string): boolean {
+  return SCORE_NOTICE_ITEM_KEY_PREFIXES.some((prefix) =>
+    itemKey.startsWith(`${prefix}:`),
+  );
+}
 
 export function isDismissibleItemKey(itemKey: string): boolean {
   return (

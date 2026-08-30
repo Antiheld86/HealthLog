@@ -2455,6 +2455,11 @@
       },
       "insufficient": "Noch hat nichts genug aktuelle Daten für einen Score. Ein Feld der Gesundheit reicht für den Anfang, und der Score nennt selbst, worauf er beruht.",
       "basis": "Beruht auf {count} von {recommended} Feldern der Gesundheit.",
+      "compositionNotice": {
+        "item": "{pillar} ({reason})",
+        "left": "Zählt nicht mehr in den Score: {pillars}.",
+        "joined": "Zählt jetzt in den Score: {pillars}."
+      },
       "anatomyToggle": "Wie dieser Score zustande kommt",
       "notScored": "Noch nicht bewertet ({count})",
       "method": "Der Score ist der gleich gewichtete Mittelwert der Säulen, die für ihn zählen, auf einer Skala von 0 bis 100. Jede Säule wird an einem veröffentlichten Referenzbereich gemessen, und die schwächste Säule kann den Gesamtbereich bestimmen. Eine Säule ohne ausreichend aktuelle Daten bleibt außen vor und zählt nicht als null. Die Referenzbereiche stammen aus veröffentlichten Quellen; welche Säulen zählen, entscheidest du selbst, deshalb ist die zusammengefasste Zahl selbst kein klinischer Standard.",
@@ -5276,6 +5281,11 @@
             "title": "Du hast geändert, was zählt",
             "body": "Seit {date} wird dein Score aus einer anderen Zusammenstellung berechnet. Die Tage davor stammen aus der alten Zusammenstellung, beide werden deshalb nicht verglichen und die Wochenveränderung bleibt ausgesetzt, bis der Vergleichszeitraum die Änderung hinter sich hat. Der Verlauf jedes einzelnen Bereichs läuft ungebrochen durch.",
             "bodyUndated": "Dein Score wird aus einer anderen Zusammenstellung berechnet als früher. Die Tage davor stammen aus der alten Zusammenstellung, beide werden deshalb nicht verglichen und die Wochenveränderung bleibt ausgesetzt, bis der Vergleichszeitraum die Änderung hinter sich hat. Der Verlauf jedes einzelnen Bereichs läuft ungebrochen durch."
+          },
+          "composition": {
+            "title": "Was zählt, hat sich von selbst geändert",
+            "left": "Zählt nicht mehr in deinen Score: {pillars}. Die Zahl hat sich deshalb bewegt und nicht, weil sich deine Gesundheit geändert hätte.",
+            "joined": "Zählt jetzt in deinen Score: {pillars}."
           },
           "dismiss": "Verstanden",
           "dismissError": "Konnte nicht gespeichert werden. Bitte versuche es erneut."

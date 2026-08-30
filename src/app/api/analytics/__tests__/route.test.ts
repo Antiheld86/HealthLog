@@ -35,6 +35,9 @@ vi.mock("@/lib/db", () => ({
     mentalHealthAssessment: { findMany: vi.fn().mockResolvedValue([]) },
     labResult: { findMany: vi.fn().mockResolvedValue([]) },
     dismissedPriorityItem: { findUnique: vi.fn().mockResolvedValue(null) },
+    // v1.38 — the composition note reads the account's last stored score
+    // day. Nothing stored in these fixtures, so no note is raised.
+    healthScoreRecord: { findFirst: vi.fn().mockResolvedValue(null) },
     // v1.4.33 C1 — slim summaries slice runs through `$queryRaw`. The
     // v1.4.36 per-type coverage probe and the v1.4.37 default-slice
     // probe also ride `$queryRaw`. Default to an empty coverage map so

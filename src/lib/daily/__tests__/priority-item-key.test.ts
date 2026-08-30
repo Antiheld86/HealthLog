@@ -2,10 +2,15 @@ import { describe, it, expect } from "vitest";
 
 import {
   ecgItemKey,
+  healthScoreAlgorithmItemKey,
+  healthScoreCompositionItemKey,
   milestoneItemKey,
   tensionWindowItemKey,
 } from "@/lib/daily/priority-item-key";
-import { isDismissibleItemKey } from "@/lib/daily/priority-item";
+import {
+  isDismissibleItemKey,
+  isScoreNoticeItemKey,
+} from "@/lib/daily/priority-item";
 
 describe("priority-item-key — deterministic dismiss identities", () => {
   it("milestoneItemKey folds kind + metric + reach day, namespaced `milestone:`", () => {
@@ -75,5 +80,35 @@ describe("priority-item-key — deterministic dismiss identities", () => {
     expect(isDismissibleItemKey("dose_window:anything")).toBe(false);
     expect(isDismissibleItemKey("sync_issue:withings")).toBe(false);
     expect(isDismissibleItemKey("")).toBe(false);
+  });
+
+  it("healthScoreCompositionItemKey names the set, not the day", () => {
+    const key = healthScoreCompositionItemKey(3, ["SLEEP", "BLOOD_PRESSURE"]);
+    expect(key).toMatch(/^health-score:v3:composition:[0-9a-f]{12}$/);
+    // Order in, same key out. The registry order the composite emits and the
+    // order a stored row happens to hold must not be two identities for one
+    // set, or the note would re-raise on a change that never happened.
+    expect(healthScoreCompositionItemKey(3, ["BLOOD_PRESSURE", "SLEEP"])).toBe(
+      key,
+    );
+    // A different set, and a different method, are both different notes.
+    expect(healthScoreCompositionItemKey(3, ["SLEEP"])).not.toBe(key);
+    expect(
+      healthScoreCompositionItemKey(4, ["SLEEP", "BLOOD_PRESSURE"]),
+    ).not.toBe(key);
+  });
+
+  it("the composition key dismisses and evicts, without widening what else does", () => {
+    const composition = healthScoreCompositionItemKey(3, ["SLEEP"]);
+    expect(isDismissibleItemKey(composition)).toBe(true);
+    expect(isScoreNoticeItemKey(composition)).toBe(true);
+    expect(isScoreNoticeItemKey(healthScoreAlgorithmItemKey(3))).toBe(true);
+    // The eviction question is narrower than the dismissal question: an
+    // observational rail item is dismissible and has nothing to do with the
+    // score's cache.
+    expect(
+      isScoreNoticeItemKey(tensionWindowItemKey("2026-07-16", "morning")),
+    ).toBe(false);
+    expect(isScoreNoticeItemKey("dose_window:anything")).toBe(false);
   });
 });

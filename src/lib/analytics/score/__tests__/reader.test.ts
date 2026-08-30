@@ -121,6 +121,10 @@ describe("score reader bounds and source parity", () => {
       mentalHealthAssessment: { findMany: vi.fn().mockResolvedValue([]) },
       labResult: { findMany: vi.fn().mockResolvedValue([]) },
       dismissedPriorityItem: { findUnique: vi.fn().mockResolvedValue(null) },
+      // v1.38 — the reader compares today's composition against the last
+      // stored day. No stored day here, so there is nothing to compare and
+      // no note to raise.
+      healthScoreRecord: { findFirst: vi.fn().mockResolvedValue(null) },
     } as unknown as PrismaClient;
 
     const report = await computeUserHealthScore({

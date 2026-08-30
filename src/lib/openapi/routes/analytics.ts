@@ -405,6 +405,18 @@ const healthScoreReport = z
     algorithmNotice: z
       .object({ itemKey: z.string(), dismissed: z.boolean() })
       .nullable(),
+    compositionNotice: z
+      .object({
+        itemKey: z.string(),
+        left: z.array(scorePillarIdEnum),
+        joined: z.array(scorePillarIdEnum),
+        dismissed: z.boolean(),
+      })
+      .nullable()
+      .optional()
+      .describe(
+        "A pillar joined or left the set behind the number since the account's last stored local day. Raised only for a change nobody chose: a method move or a recipe change is the algorithm notice's subject instead, and raising both would announce one event twice. Optional so a payload cached before the field existed stays valid; null when there is nothing to say. Dismissed through `POST /api/daily/digest/dismiss` with this `itemKey`, which is keyed on the resulting SET so it re-raises when the set moves again rather than every day.",
+      ),
     restMode: z
       .object({
         active: z.literal(true),

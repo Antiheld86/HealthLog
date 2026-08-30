@@ -12,6 +12,7 @@ import {
   HealthScoreCard,
   HealthScoreCardSkeleton,
   markAlgorithmNoticeDismissed,
+  markCompositionNoticeDismissed,
 } from "../health-score-card";
 import {
   pillarDetailLines,
@@ -1062,5 +1063,156 @@ describe("<HealthScoreCard> basis line", () => {
     expect(html).not.toContain('data-slot="health-score-basis"');
     expect(html).toContain("—");
     expect(html).not.toContain('data-slot="health-score-card-progress"');
+  });
+});
+
+/**
+ * v1.38 — the line that says why the number moved when nobody moved it.
+ *
+ * The delta was already suppressed for this case, which is the half of the
+ * job that stops a lie. This is the other half: the level changed, and
+ * until now the panel said nothing at all about it.
+ *
+ * The reason comes from the departed pillar's own row, so the line and the
+ * anatomy list can never disagree — asserted by comparing against the
+ * string the list itself renders rather than against a copy of the copy.
+ */
+describe("<HealthScoreCard> composition notice", () => {
+  function withNotice(
+    notice: HealthScoreReport["compositionNotice"],
+    pillars = [
+      BLOOD_PRESSURE,
+      gatedPillar("SLEEP", "below_night_floor_or_stale"),
+    ],
+  ): HealthScoreReport {
+    return scoredReport({ pillars, compositionNotice: notice });
+  }
+
+  const SLEEP_LEFT: NonNullable<HealthScoreReport["compositionNotice"]> = {
+    itemKey: "health-score:v3:composition:abc123abc123",
+    left: ["SLEEP"],
+    joined: [],
+    dismissed: false,
+  };
+
+  it("names the departed pillar and the reason its own row gives", () => {
+    const html = render(
+      <HealthScoreCard report={withNotice({ ...SLEEP_LEFT })} />,
+    );
+    const line = html.match(
+      /data-slot="health-score-composition-notice"[^>]*>([^<]*)</,
+    );
+    expect(line, "the composition line is missing").not.toBeNull();
+    expect(line![1]).toContain("Sleep");
+    // The exact reason the anatomy list uses for that pillar, not a second
+    // wording of it.
+    expect(line![1]).toContain("Not enough recent eligible data");
+  });
+
+  it("says a pillar joined without inventing a reason for it", () => {
+    const html = render(
+      <HealthScoreCard
+        report={withNotice({
+          itemKey: "health-score:v3:composition:def456def456",
+          left: [],
+          joined: ["LIPIDS"],
+          dismissed: false,
+        })}
+      />,
+    );
+    const line = html.match(
+      /data-slot="health-score-composition-notice"[^>]*>([^<]*)</,
+    );
+    expect(line![1]).toContain("Lipids");
+    expect(line![1]).not.toContain("Not enough recent eligible data");
+  });
+
+  it("falls back to the generic verdict for a pillar with no row left at all", () => {
+    // Switching a module off stops the scorer emitting the pillar. It is
+    // not waiting for anything, and claiming it is would nag a person in
+    // the voice of their own settings.
+    const html = render(
+      <HealthScoreCard
+        report={withNotice({ ...SLEEP_LEFT }, [BLOOD_PRESSURE])}
+      />,
+    );
+    const line = html.match(
+      /data-slot="health-score-composition-notice"[^>]*>([^<]*)</,
+    );
+    expect(line![1]).toContain("Sleep");
+    expect(line![1]).toContain("This pillar is not currently eligible");
+  });
+
+  it("stays quiet once it has been acknowledged", () => {
+    const html = render(
+      <HealthScoreCard
+        report={withNotice({ ...SLEEP_LEFT, dismissed: true })}
+      />,
+    );
+    expect(html).not.toContain('data-slot="health-score-composition-notice"');
+  });
+
+  it("stays quiet when the report carries no notice at all", () => {
+    expect(render(<HealthScoreCard report={scoredReport()} />)).not.toContain(
+      'data-slot="health-score-composition-notice"',
+    );
+    expect(render(<HealthScoreCard report={withNotice(null)} />)).not.toContain(
+      'data-slot="health-score-composition-notice"',
+    );
+  });
+
+  it("is a muted line at rest, not a gate and not an alert", () => {
+    const rest = atRest(
+      render(<HealthScoreCard report={withNotice({ ...SLEEP_LEFT })} />),
+    );
+    expect(rest).toContain('data-slot="health-score-composition-notice"');
+    expect(rest).toMatch(
+      /data-slot="health-score-composition-notice"[^>]*class="[^"]*text-muted-foreground/,
+    );
+    expect(rest).not.toContain('role="alert"');
+    expect(rest).not.toContain('data-slot="health-score-insufficient"');
+  });
+});
+
+describe("markCompositionNoticeDismissed", () => {
+  it("patches the composition notice and leaves the algorithm notice alone", () => {
+    const payload = {
+      healthScore: report({
+        algorithmNotice: {
+          itemKey: "health_score_algorithm:3",
+          dismissed: false,
+        },
+        compositionNotice: {
+          itemKey: "health-score:v3:composition:abc123abc123",
+          left: ["SLEEP"],
+          joined: [],
+          dismissed: false,
+        },
+      }),
+    };
+    const patched = markCompositionNoticeDismissed(
+      payload,
+      "health-score:v3:composition:abc123abc123",
+    ) as { healthScore: HealthScoreReport };
+    expect(patched.healthScore.compositionNotice!.dismissed).toBe(true);
+    expect(patched.healthScore.algorithmNotice!.dismissed).toBe(false);
+  });
+
+  it("leaves a payload alone when the key names a different set", () => {
+    const payload = {
+      healthScore: report({
+        compositionNotice: {
+          itemKey: "health-score:v3:composition:abc123abc123",
+          left: ["SLEEP"],
+          joined: [],
+          dismissed: false,
+        },
+      }),
+    };
+    const patched = markCompositionNoticeDismissed(
+      payload,
+      "health-score:v3:composition:999999999999",
+    ) as { healthScore: HealthScoreReport };
+    expect(patched.healthScore.compositionNotice!.dismissed).toBe(false);
   });
 });
