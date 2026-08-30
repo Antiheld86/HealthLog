@@ -301,14 +301,35 @@ describe("building the row", () => {
     expect(draft.composition).not.toContain("ACTIVITY");
   });
 
+  it("records a day built from a single pillar", () => {
+    // Inverted from the v1.35 pin, which used a two-pillar fixture to
+    // assert that a below-the-floor day stored nothing. The floor is
+    // gone, so the day HAS a number and the table has to keep it: an
+    // account that only tracks steps now has a history, and one that
+    // begins on one pillar and widens later has an unbroken series
+    // rather than a hole where its narrow days were.
+    const single = report([pillar("ACTIVITY", 90)]);
+    expect(single.composite.status).toBe("ok");
+    const draft = buildHealthScoreRecord(single, {
+      timezone: "UTC",
+      now: NOW,
+      config: UNCONFIGURED_SCORE_BOUNDARY,
+    });
+    expect(draft).not.toBeNull();
+    if (!draft) return;
+    expect(draft.composite).toBe(90);
+    expect(draft.composition).toEqual(["ACTIVITY"]);
+    expect(draft.pillarScores).toEqual({ ACTIVITY: 90 });
+  });
+
   it("records nothing when the composite did not resolve", () => {
-    // Two domains: below the breadth floor, so there is no number. Absence has
-    // to reach the table as absence — a stored 0 would be a day the person is
-    // told they scored zero.
-    const thin = report([pillar("ACTIVITY", 90), pillar("WELLBEING", 80)]);
-    expect(thin.composite.status).toBe("insufficient");
+    // Absence still has to reach the table as absence — a stored 0 would
+    // be a day the person is told they scored zero. What produces that
+    // absence has narrowed to one case: not one usable pillar.
+    const empty = report([]);
+    expect(empty.composite.status).toBe("insufficient");
     expect(
-      buildHealthScoreRecord(thin, {
+      buildHealthScoreRecord(empty, {
         timezone: "UTC",
         now: NOW,
         config: UNCONFIGURED_SCORE_BOUNDARY,
@@ -383,9 +404,24 @@ describe("writing the row", () => {
     ).toBe("already_recorded");
   });
 
+  it("writes the row for a day that rests on one pillar", async () => {
+    // The other half of the inverted pin: the narrow day does not just
+    // build a draft, it reaches the table.
+    const { db, createMany } = delegate(1);
+    const single = report([pillar("ACTIVITY", 90)]);
+    expect(
+      await recordHealthScore(db, "user-1", single, {
+        timezone: "UTC",
+        now: NOW,
+        config: UNCONFIGURED_SCORE_BOUNDARY,
+      }),
+    ).toBe("written");
+    expect(createMany).toHaveBeenCalledTimes(1);
+  });
+
   it("never touches the database when there is no score to record", async () => {
     const { db, createMany } = delegate(1);
-    const thin = report([pillar("ACTIVITY", 90), pillar("WELLBEING", 80)]);
+    const thin = report([]);
     expect(
       await recordHealthScore(db, "user-1", thin, {
         timezone: "UTC",

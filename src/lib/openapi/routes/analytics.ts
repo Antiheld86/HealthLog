@@ -26,6 +26,7 @@ import {
   derivedCoverage,
   derivedProvenance,
   glucoseClinicalSchema,
+  healthScoreBasis,
 } from "./insights/schemas";
 import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
 
@@ -316,6 +317,11 @@ const compositeValue = z.object({
     .boolean()
     .describe(
       "True when the account's own recipe narrows the composition below what its defaults would resolve to today. The configuration itself never rides this wire.",
+    ),
+  scoreBasis: healthScoreBasis
+    .optional()
+    .describe(
+      "What the number rests on. Since v1.38 a score is produced from one or two areas of health as well as three, with identical arithmetic at each, so this block is the only thing on the wire that distinguishes them. Optional so a composite cached before v1.38 stays valid; the live scorer always sets it.",
     ),
   noiseFloor: z.number(),
   scoreVersion: z.number().int(),

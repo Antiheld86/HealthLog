@@ -5263,8 +5263,7 @@
         "omitted": "{count} filarów nie ma na liście, bo ich śledzenie jest wyłączone. Włącz moduł z powrotem, a jego filar wróci.",
         "omittedLink": "Otwórz moduły",
         "refusal": {
-          "physiological": "Wynik zdrowia potrzebuje co najmniej jednego pomiaru fizycznego. Zostaw w wyborze ciśnienie, glukozę, sen, sylwetkę albo cholesterol, obok wszystkiego innego, co wybierzesz.",
-          "domains": "Wynik zdrowia potrzebuje co najmniej trzech różnych obszarów zdrowia. Ciśnienie, glukoza i cholesterol opisują ten sam obszar, więc wybór złożony tylko z nich liczy się jako jeden."
+          "empty": "Wynik zdrowia potrzebuje co najmniej jednego obszaru zdrowia do oceny. Zostaw wybrany przynajmniej jeden — wynik sam powie, na których obszarach się opiera."
         },
         "notice": {
           "upgrade": {

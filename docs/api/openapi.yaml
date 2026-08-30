@@ -6454,11 +6454,13 @@ paths:
         "422":
           description: "The write was refused and nothing was stored. `meta.errorCode` distinguishes the cases:
             `health_score_config.too_narrow` — the selection cannot produce a score (`meta.reason` is
-            `measured_physiological_domain_required` or `three_domains_required`, and the `error` string is the sentence
-            to show the person); `health_score_config.invalid` — the body failed validation, with the per-issue list
-            under `details.issues`; `invalid_base_updated_at` — `baseUpdatedAt` was present but unparseable, `null`
-            included, which is rejected rather than falling back to the unconditional write. A body that is not JSON at
-            all returns the bare message `health-score-config.body.invalid_json` with no errorCode."
+            `no_pillars_selected`, and the `error` string is the sentence to show the person). Since v1.38 the empty
+            selection is the ONLY one refused: two areas of health, or one, now save and produce a score that labels its
+            own breadth, so a client must not pre-empt the write with a three-area rule of its own.
+            `health_score_config.invalid` — the body failed validation, with the per-issue list under `details.issues`;
+            `invalid_base_updated_at` — `baseUpdatedAt` was present but unparseable, `null` included, which is rejected
+            rather than falling back to the unconditional write. A body that is not JSON at all returns the bare message
+            `health-score-config.body.invalid_json` with no errorCode."
           content:
             application/json:
               schema:
@@ -48915,6 +48917,12 @@ components:
                     configuration itself is never on this wire. Optional so older cached snapshots without the field
                     stay valid."
                   type: boolean
+                scoreBasis:
+                  description: What the number rests on. Since v1.38 a score is served from one or two areas of health as well as three,
+                    computed identically at each, so this is the only field that tells a narrow score from a broad one —
+                    render it beside the number. Optional so older cached snapshots without the field stay valid; the
+                    live builder always sets it.
+                  $ref: "#/components/schemas/HealthScoreBasis"
                 deltaReason:
                   anyOf:
                     - type: string
@@ -49301,6 +49309,43 @@ components:
         - score
         - band
       additionalProperties: false
+    HealthScoreBasis:
+      type: object
+      properties:
+        domains:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+          description: Distinct areas of health counted. NOT the length of `composition` — three of the seven pillars share the
+            cardiometabolic area, so a three-pillar score can rest on one area.
+        recommended:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: "How many distinct areas the method recommends. A recommendation, not a floor: a score below it is computed
+            and served, it is just narrower."
+        tier:
+          type: string
+          enum:
+            - full
+            - partial
+            - minimal
+          description: "`full` = at or above the recommended breadth, `partial` = two areas, `minimal` = one. The arithmetic is
+            identical at every tier — the same mean, the same worst-pillar band drag, the same noise floor — so this is
+            the only thing that distinguishes a narrow score from a broad one on the wire. Render it beside the number."
+        physiological:
+          type: boolean
+          description: "Whether any counted pillar rests on a physiological measurement (blood pressure, glucose, sleep, body
+            shape, cholesterol). False means the score is built from activity and/or wellbeing alone. A statement of
+            scope, not a warning: the score still exists and is still honest about what produced it."
+      required:
+        - domains
+        - recommended
+        - tier
+        - physiological
+      additionalProperties: false
+      description: What the Health Score rests on, resolved server-side. Present on every score computed from at least one
+        usable pillar; optional on every shape that carries it, so payloads cached before v1.38 stay valid.
     InsightsComprehensiveResponseEnvelope:
       type: object
       properties:
@@ -50152,6 +50197,11 @@ components:
                   type: boolean
                   description: True when the account's own recipe narrows the composition below what its defaults would resolve to today.
                     The configuration itself never rides this wire.
+                scoreBasis:
+                  description: What the number rests on. Since v1.38 a score is produced from one or two areas of health as well as three,
+                    with identical arithmetic at each, so this block is the only thing on the wire that distinguishes
+                    them. Optional so a composite cached before v1.38 stays valid; the live scorer always sets it.
+                  $ref: "#/components/schemas/HealthScoreBasis"
                 noiseFloor:
                   type: number
                 scoreVersion:
@@ -64143,14 +64193,19 @@ components:
                   type: array
                   items:
                     type: string
+                scoreBasis:
+                  description: What the value rests on. Since v1.38 a score is produced from one or two areas of health as well as three,
+                    so this is what distinguishes a narrow score from a broad one. Optional so older cached digests
+                    without the field stay valid.
+                  $ref: "#/components/schemas/HealthScoreBasis"
               required:
                 - value
                 - band
                 - delta
               additionalProperties: false
             - type: "null"
-          description: Health score + band + week-over-week delta, plus whether the account authored the composition; null when
-            none.
+          description: Health score + band + week-over-week delta, plus whether the account authored the composition and how broad
+            the set behind it is; null when none.
         topSignal:
           anyOf:
             - type: object

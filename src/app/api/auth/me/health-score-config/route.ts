@@ -19,15 +19,17 @@
  *
  * Two things this route is responsible for beyond storing a list.
  *
- * **It refuses a selection that cannot produce a score.** Three distinct
- * areas of health and at least one physical measurement, or the
- * composite does not exist. Saving such a selection would leave the
- * person with a settings page that says one thing and a score that has
- * silently vanished, so the write is refused with a sentence they can
- * act on. The scorer applies the same rule again at read time through
- * the same function, deliberately: a config written before a rule change
- * or edited outside the app still meets an honest refusal rather than a
- * missing number.
+ * **It refuses a selection that cannot produce a score.** As of v1.38
+ * that is one selection: the empty one. Three areas of health is what
+ * the score recommends, not what it demands — a two-area or one-area
+ * recipe now saves and produces a score that says on its face how broad
+ * it is, so refusing the write would refuse something the scorer is
+ * perfectly willing to compute. Taking every pillar out is different in
+ * kind: there is nothing left to average, and storing that recipe would
+ * leave the person with a settings page that says one thing and a score
+ * that has silently vanished. The scorer applies the same rule again at
+ * read time through the same function, deliberately, so a config edited
+ * outside the app meets an honest refusal rather than a missing number.
  *
  * **It evicts the score caches.** The person just changed what the
  * number means; serving the old one for the next hour would make the
@@ -82,14 +84,11 @@ const healthScoreConfigPatchSchema = z
 
 /**
  * Why a selection cannot produce a score, said the way a person would
- * say it. The cardiometabolic sentence is the one that surprises people:
- * blood pressure, glucose and cholesterol are three pillars but one area.
+ * say it. One entry, because one selection cannot: the empty one.
  */
 const BREADTH_REFUSAL = {
-  measured_physiological_domain_required:
-    "A health score needs at least one physical measurement. Keep one of blood pressure, glucose, sleep, body shape or cholesterol in your selection, alongside whatever else you choose.",
-  three_domains_required:
-    "A health score needs at least three different areas of health. Blood pressure, glucose and cholesterol all describe the same area, so a selection made only of those counts as one.",
+  no_pillars_selected:
+    "A health score needs at least one area of health to score. Keep one selected — the score will say which areas it is built from.",
 } as const;
 
 export const GET = apiHandler(async () => {

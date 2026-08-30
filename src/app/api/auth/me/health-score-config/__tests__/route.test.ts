@@ -258,45 +258,64 @@ describe("PATCH /api/auth/me/health-score-config", () => {
   });
 });
 
+/**
+ * v1.38 — what the write still refuses, after the breadth floor became a
+ * recommendation.
+ *
+ * Two of the three refusals this block used to pin are gone. The route
+ * turned away `["ACTIVITY", "WELLBEING"]` with
+ * `measured_physiological_domain_required` and the cardiometabolic
+ * triple with `three_domains_required`, both on the ground that the
+ * selection could not produce a score. It can now — the scorer computes
+ * from whatever is readable and labels how broad the set was — and a
+ * write that kept refusing what the read is willing to serve would be
+ * the two layers disagreeing, which is the drift the shared rule exists
+ * to prevent. So those two assertions are inverted to acceptances.
+ *
+ * The empty selection stays refused, and that case is why this is a
+ * change of rule rather than a removal of one.
+ */
 describe("PATCH — the breadth rule", () => {
-  it("refuses activity and wellbeing alone, in words a person can act on", async () => {
+  it("accepts activity and wellbeing alone, and stores them", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
     primeUser(null);
 
     const res = await (PATCH as (r: Request) => Promise<Response>)(
       mkPatch({ pillars: ["ACTIVITY", "WELLBEING"] }),
     );
-    expect(res.status).toBe(422);
-    const env = (await res.json()) as {
-      error: string;
-      meta?: { errorCode?: string; reason?: string };
-    };
-    expect(env.meta?.errorCode).toBe("health_score_config.too_narrow");
-    expect(env.meta?.reason).toBe("measured_physiological_domain_required");
-    expect(env.error).toContain("at least one physical measurement");
-    expect(prisma.user.update).not.toHaveBeenCalled();
-    expect(prisma.user.updateMany).not.toHaveBeenCalled();
-    expect(invalidateUserHealthScore).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledTimes(1);
+    expect(invalidateUserHealthScore).toHaveBeenCalledWith("user-1");
   });
 
-  it("refuses the cardiometabolic triple, which is three pillars in one area", async () => {
+  it("accepts the cardiometabolic triple, which is three pillars in one area", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
     primeUser(null);
 
     const res = await (PATCH as (r: Request) => Promise<Response>)(
       mkPatch({ pillars: ["BLOOD_PRESSURE", "GLYCAEMIA", "LIPIDS"] }),
     );
-    expect(res.status).toBe(422);
-    const env = (await res.json()) as {
-      error: string;
-      meta?: { reason?: string };
-    };
-    expect(env.meta?.reason).toBe("three_domains_required");
-    expect(env.error).toContain("three different areas");
-    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts a single pillar", async () => {
+    // The narrowest selection that can still be scored, and the boundary
+    // the one surviving refusal sits against.
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    primeUser(null);
+
+    const res = await (PATCH as (r: Request) => Promise<Response>)(
+      mkPatch({ pillars: ["ACTIVITY"] }),
+    );
+    expect(res.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalledTimes(1);
   });
 
   it("refuses an empty selection rather than storing a score that cannot exist", async () => {
+    // The counter-case. A write that accepted everything would have
+    // stopped enforcing anything, and this is the one selection the
+    // scorer genuinely cannot answer.
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
     primeUser(null);
 
@@ -304,10 +323,19 @@ describe("PATCH — the breadth rule", () => {
       mkPatch({ pillars: [] }),
     );
     expect(res.status).toBe(422);
+    const env = (await res.json()) as {
+      error: string;
+      meta?: { errorCode?: string; reason?: string };
+    };
+    expect(env.meta?.errorCode).toBe("health_score_config.too_narrow");
+    expect(env.meta?.reason).toBe("no_pillars_selected");
+    expect(env.error).toContain("at least one area of health");
     expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.user.updateMany).not.toHaveBeenCalled();
+    expect(invalidateUserHealthScore).not.toHaveBeenCalled();
   });
 
-  it("accepts the smallest selection that clears the rule", async () => {
+  it("accepts a three-area selection", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
     primeUser(null);
 
@@ -449,9 +477,9 @@ describe("the published contract matches what the route serves", () => {
       }
     };
 
-    // Too narrow, both reasons.
-    await record({ pillars: ["ACTIVITY"] });
-    await record({ pillars: ["BLOOD_PRESSURE", "GLYCAEMIA", "LIPIDS"] });
+    // Too narrow. One reason since v1.38, because one selection is: the
+    // empty one.
+    await record({ pillars: [] });
     // Body that fails validation.
     await record({ pillars: ["NOT_A_PILLAR"] });
     // Present-but-unparseable base token.

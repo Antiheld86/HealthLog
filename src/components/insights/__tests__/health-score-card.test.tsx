@@ -207,7 +207,7 @@ function report(overrides: Partial<HealthScoreReport> = {}): HealthScoreReport {
       status: "insufficient",
       coverage,
       provenance,
-      reason: "three_domains_required",
+      reason: "no_usable_data",
     },
     pillars: [BLOOD_PRESSURE, ACTIVITY_BELOW_FLOOR],
     delta: null,

@@ -21,9 +21,9 @@
  *    they switched off is not waiting for anything.
  *
  * 3. **One breadth rule, applied twice.** The settings write refuses a
- *    selection that cannot produce a score; the reader refuses to
- *    produce one from a set that fails the same rule. The block at the
- *    bottom drives the REAL reader and asserts its refusal reason is
+ *    selection that cannot produce a score; the reader grades the set it
+ *    resolved through the same rule. The block at the bottom drives the
+ *    REAL reader and asserts the basis it published is
  *    `evaluateScoreBreadth`'s verdict on the reader's own resolved set,
  *    so a second copy of the rule that disagreed would show up here.
  *
@@ -480,10 +480,16 @@ describe("selected and waiting for data versus switched off", () => {
   });
 });
 
-describe("the breadth rule still refuses at read time", () => {
+describe("the breadth rule still grades at read time", () => {
+  // Inverted from the v1.35 pins, which asserted all three of these
+  // recipes came back `insufficient`. Two of them produce a score now.
+  // What the block proves has not moved — the reader publishes the shared
+  // rule's verdict on the reader's own resolved set, so a second copy of
+  // the rule that disagreed would still show up here — but the agreement
+  // is over a tier rather than over a refusal.
   const NARROW: Array<{ what: string; selection: ScorePillarId[] }> = [
     {
-      what: "a recipe that leaves two scoring domains",
+      what: "a recipe that leaves two scoring areas",
       selection: ["ACTIVITY", "ADIPOSITY", "BLOOD_PRESSURE"],
     },
     {
@@ -497,7 +503,7 @@ describe("the breadth rule still refuses at read time", () => {
   ];
 
   for (const { what, selection } of NARROW) {
-    it(`refuses ${what}, with the reason the shared rule gives`, async () => {
+    it(`agrees with the shared rule on ${what}`, async () => {
       const report = await score({
         modules: ALL_MODULES_ON,
         healthScoreConfigJson: recipe(selection),
@@ -508,10 +514,23 @@ describe("the breadth rule still refuses at read time", () => {
         .map((pillar) => pillar.id);
       const verdict = evaluateScoreBreadth(scoring);
 
-      expect(verdict.ok).toBe(false);
-      expect(report.composite.status).toBe("insufficient");
-      if (report.composite.status !== "insufficient") return;
-      expect(report.composite.reason).toBe(verdict.reason);
+      expect(report.composite.status).toBe(verdict.ok ? "ok" : "insufficient");
+      if (report.composite.status === "ok") {
+        // The published basis IS the shared rule's verdict on the
+        // reader's set, not a second count taken on the way out.
+        expect(report.composite.value.scoreBasis?.tier).toBe(verdict.tier);
+        expect(report.composite.value.scoreBasis?.domains).toBe(
+          verdict.domains.length,
+        );
+        expect(report.composite.value.scoreBasis?.physiological).toBe(
+          verdict.physiological,
+        );
+      } else {
+        // The one refusal that survives, reached the honest way: a recipe
+        // whose three pillars all came back without data.
+        expect(verdict.ok).toBe(false);
+        expect(report.composite.reason).toBe("no_usable_data");
+      }
     });
   }
 

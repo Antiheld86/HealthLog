@@ -5263,8 +5263,7 @@
         "omitted": "{count} piliers ne sont pas listés parce que leur suivi est désactivé. Réactivez un module et son pilier revient.",
         "omittedLink": "Ouvrir les modules",
         "refusal": {
-          "physiological": "Un score de santé a besoin d'au moins une mesure physique. Gardez la tension, la glycémie, le sommeil, la silhouette ou le cholestérol dans votre sélection, en plus de ce que vous choisissez par ailleurs.",
-          "domains": "Un score de santé a besoin d'au moins trois domaines de santé différents. La tension, la glycémie et le cholestérol décrivent le même domaine, une sélection composée uniquement de ceux-là compte donc pour un."
+          "empty": "Un score de santé a besoin d'au moins un domaine de santé à évaluer. Gardez-en au moins un sélectionné : le score indiquera sur quels domaines il repose."
         },
         "notice": {
           "upgrade": {

@@ -479,6 +479,7 @@ export async function loadDailyDigest(
         scoreVersion: snapshot.healthScore.scoreVersion,
         composition: snapshot.healthScore.composition,
         configured: snapshot.healthScore.configured,
+        scoreBasis: snapshot.healthScore.scoreBasis,
       }
     : null;
 

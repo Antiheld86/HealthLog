@@ -87,7 +87,7 @@ vi.mock("@/lib/analytics/score/reader", () => ({
           status: "insufficient" as const,
           coverage,
           provenance,
-          reason: "three_domains_required",
+          reason: "no_usable_data",
         };
     return {
       composite,

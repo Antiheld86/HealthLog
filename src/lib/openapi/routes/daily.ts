@@ -21,6 +21,7 @@ import {
   recordRefusal,
   stdResponses,
 } from "./shared";
+import { healthScoreBasis } from "./insights/schemas";
 
 const priorityItemSchema = z
   .object({
@@ -102,10 +103,15 @@ const dailyDigestResponse = z
           .array(z.string())
           .optional()
           .describe("Registry-ordered pillar ids the value was composed of."),
+        scoreBasis: healthScoreBasis
+          .optional()
+          .describe(
+            "What the value rests on. Since v1.38 a score is produced from one or two areas of health as well as three, so this is what distinguishes a narrow score from a broad one. Optional so older cached digests without the field stay valid.",
+          ),
       })
       .nullable()
       .describe(
-        "Health score + band + week-over-week delta, plus whether the account authored the composition; null when none.",
+        "Health score + band + week-over-week delta, plus whether the account authored the composition and how broad the set behind it is; null when none.",
       ),
     topSignal: z
       .object({

@@ -135,8 +135,10 @@ describe("the band the mean alone gives", () => {
   it("moved the method version with it", () => {
     // A stored day keeps the band it was shown under, and the notice key
     // carries this number, so each account hears once that the rules
-    // moved. A threshold edit without a version bump is a silent one.
-    expect(SCORE_VERSION).toBeGreaterThan(2);
+    // moved. A threshold edit without a version bump is a silent one, and
+    // so is an eligibility edit: v1.38 widened who gets a score at all,
+    // which is why this floor moved from 2 to 3.
+    expect(SCORE_VERSION).toBeGreaterThan(3);
   });
 });
 
@@ -198,21 +200,43 @@ describe("the worst pillar still holds the band down", () => {
 });
 
 describe("reference-score composite", () => {
-  it("requires three domains and one measured physiological domain", () => {
-    const tooNarrow = evaluation(
+  it("scores two areas of health, and says it was two", () => {
+    // Inverted from the v1.35 pin, which asserted this exact pair came
+    // back `insufficient`. Three areas is the recommendation now, so a
+    // person with two gets their number and a basis block that does not
+    // overstate it. Note `physiological: false` — neither activity nor
+    // wellbeing is a measurement, and the old rule refused the set on
+    // that ground alone.
+    const partial = evaluation(
       [pillar("ACTIVITY", 90), pillar("WELLBEING", 80)],
       NOW,
     );
-    expect(tooNarrow.status).toBe("insufficient");
+    expect(partial.status).toBe("ok");
+    if (partial.status !== "ok") return;
+    expect(partial.value.score).toBe(85);
+    expect(partial.value.scoreBasis).toEqual({
+      domains: 2,
+      recommended: 3,
+      tier: "partial",
+      physiological: false,
+    });
 
-    const eligible = evaluation(
+    const full = evaluation(
       [pillar("ACTIVITY", 90), pillar("WELLBEING", 80), pillar("SLEEP", 70)],
       NOW,
     );
-    expect(eligible.status).toBe("ok");
+    expect(full.status).toBe("ok");
+    if (full.status !== "ok") return;
+    expect(full.value.scoreBasis?.tier).toBe("full");
+    expect(full.value.scoreBasis?.physiological).toBe(true);
   });
 
   it("reports breadth coverage as distinct eligible domains", () => {
+    // Same fixture as the v1.35 version — four pillars, two areas — and
+    // the same coverage arithmetic. What changed is the outcome. The
+    // fraction used to be a floor every scored account had already
+    // cleared; it is a real moving number on a scored account now, which
+    // is what makes the coverage meter say something.
     const result = evaluation(
       [
         pillar("BLOOD_PRESSURE", 90),
@@ -223,12 +247,52 @@ describe("reference-score composite", () => {
       NOW,
     );
 
-    expect(result.status).toBe("insufficient");
+    expect(result.status).toBe("ok");
     expect(result.coverage.requiredInputs).toBe(3);
     expect(result.coverage.presentInputs).toBe(2);
-    if (result.status === "insufficient") {
-      expect(result.reason).toBe("three_domains_required");
-    }
+    if (result.status !== "ok") return;
+    expect(result.value.scoreBasis).toEqual({
+      domains: 2,
+      recommended: 3,
+      tier: "partial",
+      physiological: true,
+    });
+    // The narrower set does not read as fully confident, and nothing new
+    // was built for that: the existing coverage blend already does it.
+    expect(result.confidence.score).toBeLessThan(100);
+  });
+
+  it("scores one area of health, at the tier that says so", () => {
+    // The bottom tier boundary, on the shape most likely to fool a
+    // client that counts `composition` instead of areas: three pillars,
+    // one area.
+    const result = evaluation(
+      [
+        pillar("BLOOD_PRESSURE", 90),
+        pillar("GLYCAEMIA", 84),
+        pillar("LIPIDS", 81),
+      ],
+      NOW,
+    );
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.value.score).toBe(85);
+    expect(result.value.composition).toHaveLength(3);
+    expect(result.value.scoreBasis).toEqual({
+      domains: 1,
+      recommended: 3,
+      tier: "minimal",
+      physiological: true,
+    });
+  });
+
+  it("refuses when not one pillar is usable, and says why", () => {
+    // The counter-case. Grading instead of gating is only honest while
+    // something is still turned away; this is the something.
+    const result = evaluation([], NOW);
+    expect(result.status).toBe("insufficient");
+    if (result.status !== "insufficient") return;
+    expect(result.reason).toBe("no_usable_data");
   });
 
   it("uses equal weights in registry order", () => {

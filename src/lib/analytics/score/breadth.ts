@@ -1,14 +1,31 @@
 /**
- * v1.35.0 — the breadth rule, in one place.
+ * v1.38 — the breadth rule, in one place, and no longer a floor.
  *
- * A composite Health Score exists only when the pillars behind it span
- * at least three distinct domains and include at least one physiological
- * measure. Before per-user composition the rule lived inside
- * `computeComposite` alone, because nothing else could narrow the set.
- * Now two layers apply it: the settings write refuses a selection that
- * cannot produce a score, and the scorer refuses to produce one anyway.
- * That is deliberate defence in depth, and it is only honest if both
- * layers ask the same question, so both call this function.
+ * Until now a composite Health Score existed only when the pillars behind
+ * it spanned at least three distinct domains and included at least one
+ * physiological measure. Everything below that line got "not enough data
+ * yet" — including accounts that had a perfectly readable standing in one
+ * or two areas. The refusal told those people nothing they could not
+ * already see, and it hid a number they had earned.
+ *
+ * So three domains stops being the price of admission and becomes the
+ * recommendation it always described: the score is computed the same way
+ * at every breadth, and the verdict says how broad it is. `full` is the
+ * old rule, `partial` is two domains, `minimal` is one. Refusal survives
+ * for the one case where there is genuinely nothing to average — no ok
+ * pillar at all.
+ *
+ * The physiological question moves with it. It is now a labelling fact
+ * rather than a veto: an account whose only ok pillar is activity or
+ * wellbeing gets a `minimal` score that says on its face what it rests
+ * on, which is more than the old refusal ever said. The arithmetic does
+ * not change with the tier — inventing a discount for the pillars
+ * somebody does not track would be exactly the made-up target this score
+ * spent two releases removing.
+ *
+ * Both layers still call this function. The settings write refuses an
+ * empty selection, the scorer refuses an empty ok set, and neither
+ * restates the rule.
  */
 import {
   SCORE_PILLAR_DOMAINS,
@@ -16,12 +33,20 @@ import {
   type ScorePillarId,
 } from "./types";
 
-export const SCORE_MIN_ELIGIBLE_DOMAINS = 3;
+/**
+ * The breadth the score recommends, not the breadth it requires.
+ *
+ * Still the denominator `deriveCoverage` counts distinct domains
+ * against, which is what makes a partial score read as partial without
+ * any new machinery: one domain of three lands at low confidence through
+ * the blend that was already there.
+ */
+export const SCORE_RECOMMENDED_DOMAINS = 3;
 
 /**
  * Pillars that rest on a physiological measurement. `ACTIVITY` and
- * `WELLBEING` are the only two that do not, which is why a selection of
- * those two alone yields no score however many domains it spans.
+ * `WELLBEING` are the only two that do not. This no longer decides
+ * whether a score exists; it decides what the score says about itself.
  */
 const PHYSIOLOGICAL_PILLARS: ReadonlySet<ScorePillarId> = new Set([
   "BLOOD_PRESSURE",
@@ -31,40 +56,68 @@ const PHYSIOLOGICAL_PILLARS: ReadonlySet<ScorePillarId> = new Set([
   "LIPIDS",
 ]);
 
-export type ScoreBreadthFailure =
-  "three_domains_required" | "measured_physiological_domain_required";
+/**
+ * How broad the set behind a score is. Ordered by breadth, and named
+ * rather than numbered so a surface can speak about it without
+ * re-deriving the thresholds.
+ */
+export type ScoreBreadthTier = "full" | "partial" | "minimal";
+
+/**
+ * The one thing that still refuses. A set with no ok pillar has nothing
+ * to average, and a mean over nothing is not a low score, it is an
+ * absent one.
+ */
+export type ScoreBreadthFailure = "no_pillars_selected";
 
 /**
  * Discriminated on `ok` so a caller that has checked cannot then read a
- * reason that is not there, and cannot skip the check to get one.
- * `domains` carries the distinct domains the set spans, for a caller
- * that has to explain the refusal.
+ * reason that is not there, and cannot skip the check to get a tier.
+ * `domains` carries the distinct domains the set spans; `physiological`
+ * carries whether any of them rests on a measurement, for the label.
  */
 export type ScoreBreadthVerdict =
-  | { ok: true; reason: null; domains: ScoreDomain[] }
-  | { ok: false; reason: ScoreBreadthFailure; domains: ScoreDomain[] };
+  | {
+      ok: true;
+      reason: null;
+      tier: ScoreBreadthTier;
+      domains: ScoreDomain[];
+      physiological: boolean;
+    }
+  | {
+      ok: false;
+      reason: ScoreBreadthFailure;
+      tier: null;
+      domains: ScoreDomain[];
+      physiological: boolean;
+    };
 
 /**
  * Judge a pillar set against the breadth rule.
  *
- * The missing-physiological reason wins when both fail, because it is
- * the more specific thing to tell someone: adding a third domain that
- * is neither blood pressure nor a lab still leaves them without a score.
+ * The tier is a function of DOMAINS, not pillars, which is why blood
+ * pressure, glucose and cholesterol together are `minimal`: three
+ * pillars, one area of health.
  */
 export function evaluateScoreBreadth(
   ids: readonly ScorePillarId[],
 ): ScoreBreadthVerdict {
   const domains = [...new Set(ids.map((id) => SCORE_PILLAR_DOMAINS[id]))];
-  const hasPhysiological = ids.some((id) => PHYSIOLOGICAL_PILLARS.has(id));
-  if (!hasPhysiological) {
+  const physiological = ids.some((id) => PHYSIOLOGICAL_PILLARS.has(id));
+  if (domains.length === 0) {
     return {
       ok: false,
-      reason: "measured_physiological_domain_required",
+      reason: "no_pillars_selected",
+      tier: null,
       domains,
+      physiological,
     };
   }
-  if (domains.length < SCORE_MIN_ELIGIBLE_DOMAINS) {
-    return { ok: false, reason: "three_domains_required", domains };
-  }
-  return { ok: true, reason: null, domains };
+  const tier: ScoreBreadthTier =
+    domains.length >= SCORE_RECOMMENDED_DOMAINS
+      ? "full"
+      : domains.length === 2
+        ? "partial"
+        : "minimal";
+  return { ok: true, reason: null, tier, domains, physiological };
 }

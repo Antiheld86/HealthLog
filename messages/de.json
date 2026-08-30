@@ -5263,8 +5263,7 @@
         "omitted": "{count} Bereiche stehen nicht in der Liste, weil ihre Erfassung abgeschaltet ist. Schalte ein Modul wieder ein, dann kommt sein Bereich zurück.",
         "omittedLink": "Module öffnen",
         "refusal": {
-          "physiological": "Ein Health Score braucht mindestens einen körperlich gemessenen Wert. Behalte Blutdruck, Glukose, Schlaf, Körperform oder Cholesterin in deiner Auswahl, zusätzlich zu allem anderen, was du wählst.",
-          "domains": "Ein Health Score braucht mindestens drei verschiedene Felder der Gesundheit. Blutdruck, Glukose und Cholesterin beschreiben dasselbe Feld, eine Auswahl nur daraus zählt also als eines."
+          "empty": "Ein Health Score braucht mindestens ein Feld der Gesundheit, das er bewerten kann. Behalte mindestens eines ausgewählt — der Score nennt selbst, worauf er beruht."
         },
         "notice": {
           "upgrade": {

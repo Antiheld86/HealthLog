@@ -296,6 +296,51 @@ export const derivedProvenance = z
   })
   .meta({ id: "DerivedProvenance" });
 
+/**
+ * v1.38 — what a Health Score rests on.
+ *
+ * Declared once and referenced from every surface that carries a score
+ * (the full report, the dashboard snapshot's flattened block, the daily
+ * digest), so the three cannot drift into describing the same object
+ * three different ways.
+ *
+ * OPTIONAL wherever it appears. It is a new field on shapes that already
+ * ship, and a cached snapshot or digest written before this release has
+ * no way to grow one; a required field would have made every one of them
+ * invalid against the published contract on the day it was published.
+ */
+export const healthScoreBasis = z
+  .object({
+    domains: z
+      .number()
+      .int()
+      .min(1)
+      .describe(
+        "Distinct areas of health counted. NOT the length of `composition` — three of the seven pillars share the cardiometabolic area, so a three-pillar score can rest on one area.",
+      ),
+    recommended: z
+      .number()
+      .int()
+      .describe(
+        "How many distinct areas the method recommends. A recommendation, not a floor: a score below it is computed and served, it is just narrower.",
+      ),
+    tier: z
+      .enum(["full", "partial", "minimal"])
+      .describe(
+        "`full` = at or above the recommended breadth, `partial` = two areas, `minimal` = one. The arithmetic is identical at every tier — the same mean, the same worst-pillar band drag, the same noise floor — so this is the only thing that distinguishes a narrow score from a broad one on the wire. Render it beside the number.",
+      ),
+    physiological: z
+      .boolean()
+      .describe(
+        "Whether any counted pillar rests on a physiological measurement (blood pressure, glucose, sleep, body shape, cholesterol). False means the score is built from activity and/or wellbeing alone. A statement of scope, not a warning: the score still exists and is still honest about what produced it.",
+      ),
+  })
+  .meta({
+    id: "HealthScoreBasis",
+    description:
+      "What the Health Score rests on, resolved server-side. Present on every score computed from at least one usable pillar; optional on every shape that carries it, so payloads cached before v1.38 stay valid.",
+  });
+
 // v1.13.2 — per-derived-SCORE assessment text. Additive, non-breaking field
 // on the derived response; the iOS field-name contract is LOCKED.
 export const derivedAssessment = z
@@ -1227,6 +1272,11 @@ export const dashboardSnapshotResponse = z
           .describe(
             "True when the account's own recipe narrows the score's composition below what its defaults would resolve to today. Server-resolved, so a client never interprets a configuration blob: an account that kept every pillar reads false, and so does one whose disabled modules alone narrow the set. The configuration itself is never on this wire. Optional so older cached snapshots without the field stay valid.",
           ),
+        scoreBasis: healthScoreBasis
+          .optional()
+          .describe(
+            "What the number rests on. Since v1.38 a score is served from one or two areas of health as well as three, computed identically at each, so this is the only field that tells a narrow score from a broad one — render it beside the number. Optional so older cached snapshots without the field stay valid; the live builder always sets it.",
+          ),
         deltaReason: z
           .enum([
             "algorithm_changed",
@@ -1848,7 +1898,11 @@ const healthScoreDerivedInsufficient = z.object({
   status: z.literal("insufficient"),
   coverage: derivedCoverage,
   provenance: derivedProvenance,
-  reason: z.string(),
+  reason: z
+    .string()
+    .describe(
+      "Why no score exists. `no_usable_data` — not one selected pillar has enough recent data to grade. Since v1.38 this is the only value the composite produces; the former `three_domains_required` / `measured_physiological_domain_required` refusals are gone, because a narrow set now scores and labels itself.",
+    ),
 });
 
 const healthScoreComposite = z
@@ -1874,6 +1928,11 @@ const healthScoreComposite = z
           .describe(
             "True when the account's own recipe narrows the composition below what its defaults would resolve to today. The configuration blob itself is never on this wire.",
           ),
+        scoreBasis: healthScoreBasis
+          .optional()
+          .describe(
+            "What the number rests on — how many distinct areas of health were counted against how many the method recommends, and whether any of them was a physiological measurement. Optional so a composite cached before v1.38 stays valid; the live scorer always sets it.",
+          ),
         noiseFloor: z.number(),
         scoreVersion: z.number().int(),
       }),
@@ -1884,7 +1943,7 @@ const healthScoreComposite = z
     healthScoreDerivedInsufficient,
   ])
   .describe(
-    "Discriminated on `status`. The `insufficient` arm carries NO `value` and NO `confidence` key at all — they are absent, not null — which is how a composite reads before three distinct domains are eligible.",
+    "Discriminated on `status`. The `insufficient` arm carries NO `value` and NO `confidence` key at all — they are absent, not null — which is how a composite reads when NO pillar has usable data. Since v1.38 that is the only case: one or two eligible areas of health produce a score too, labelled by `value.scoreBasis`.",
   );
 
 const healthScorePillar = z.object({

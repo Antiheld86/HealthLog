@@ -107,9 +107,13 @@ const routeReasons = objectKeys(parse(ROUTE_FILE), "BREADTH_REFUSAL");
 
 describe("every refusal the rule can give reaches the reader", () => {
   it("reads the rule's own list rather than a copy of it", () => {
-    // A matcher that finds nothing agrees with everything.
+    // A matcher that finds nothing agrees with everything. The anchor
+    // moved from `three_domains_required` to `no_pillars_selected` in
+    // v1.38: three areas of health stopped being the price of a score,
+    // so the write stopped refusing narrow selections and the only
+    // refusal left is the empty one.
     expect(ruleReasons.length).toBeGreaterThan(0);
-    expect(ruleReasons).toContain("three_domains_required");
+    expect(ruleReasons).toContain("no_pillars_selected");
   });
 
   it("gives the route a sentence for each of them", () => {

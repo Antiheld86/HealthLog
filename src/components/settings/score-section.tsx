@@ -97,24 +97,25 @@ interface HealthScoreConfigPayload {
 }
 
 /**
- * The two refusals the write can return, in the reader's language.
+ * The refusals the write can return, in the reader's language.
+ *
+ * One, since v1.38: a selection with nothing in it. Two areas or one now
+ * save and score, so there is no longer anything to explain about them.
  *
  * Keyed on `meta.reason`, which is the machine-readable half of the
  * server's answer. The server's own English sentence is not shown: it
- * exists for callers without a locale, and rendering it would leave five
- * of the six locales reading English at exactly the moment the person
+ * exists for callers without a locale, and rendering it would leave six
+ * of the seven locales reading English at exactly the moment the person
  * needs to understand something.
  *
  * Typed as a total map over `ScoreBreadthFailure` rather than over
- * `string`, so a third refusal reason added to the rule cannot ship with
- * this surface quietly falling through to a generic "couldn't save". The
- * TYPE is imported, never the rule: the breadth question is answered
- * server-side and answered once.
+ * `string`, so a second refusal reason added to the rule cannot ship
+ * with this surface quietly falling through to a generic "couldn't
+ * save". The TYPE is imported, never the rule: the breadth question is
+ * answered server-side and answered once.
  */
 export const REFUSAL_KEYS: Record<ScoreBreadthFailure, string> = {
-  measured_physiological_domain_required:
-    "settings.sections.score.refusal.physiological",
-  three_domains_required: "settings.sections.score.refusal.domains",
+  no_pillars_selected: "settings.sections.score.refusal.empty",
 };
 
 function verdictsFrom(
