@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { useTranslations } from "@/lib/i18n/context";
+import { cn } from "@/lib/utils";
 import type { ReferenceRangeStatus } from "@/lib/validations/labs";
 
 /**
@@ -23,6 +24,7 @@ import type { ReferenceRangeStatus } from "@/lib/validations/labs";
 export function ReferenceRangeBadge({
   status,
   compact = false,
+  className,
 }: {
   status: ReferenceRangeStatus;
   /**
@@ -31,6 +33,7 @@ export function ReferenceRangeBadge({
    * The hero/detail view keeps the default (un-compact) size.
    */
   compact?: boolean;
+  className?: string;
 }) {
   const { t } = useTranslations();
 
@@ -46,7 +49,7 @@ export function ReferenceRangeBadge({
     return (
       <Badge
         variant="outline"
-        className={`text-muted-foreground ${compactClass}`.trim()}
+        className={cn("text-muted-foreground", compactClass, className)}
       >
         {compact ? null : <Minus aria-hidden />}
         {t("labs.range.inRange")}
@@ -64,7 +67,7 @@ export function ReferenceRangeBadge({
       ? "border-info/30 bg-info/10 text-info"
       : "border-warning/30 bg-warning/10 text-warning";
   return (
-    <Badge variant="outline" className={`${toneClass} ${compactClass}`.trim()}>
+    <Badge variant="outline" className={cn(toneClass, compactClass, className)}>
       <Icon aria-hidden />
       {label}
     </Badge>
