@@ -32,17 +32,39 @@
 // This is a review tool, not a second gate, for two reasons written down so
 // the next reader does not have to rediscover them:
 //
-//   1. It reports 21 files today. Some are test-only by construction (the
-//      guard helpers under `src/__tests__/helpers/`, the settings section
-//      harness) and some are deliberately unreachable from production
-//      (`src/lib/ai/mock-client.ts` is excluded structurally by the
-//      `PROVIDER_CHAIN_TYPES` allowlist). Baselining the rest without
-//      triaging each one would encode noise as an invariant.
-//   2. It has false positives. `src/lib/mood/note-backfill.ts` is imported by
-//      `scripts/backfill-mood-note-column.ts` through the `@/` alias and is
-//      still reported, because `scripts/` sits outside the tsconfig that
-//      defines the alias. The default pass hides that resolution failure
-//      behind the module's test importer.
+//   1. It reports 22 files as of 2026-08-31. Some are test-only by
+//      construction (the guard helpers under `src/__tests__/helpers/`, the
+//      settings section harness, a score fixture) and some are deliberately
+//      unreachable from production (`src/lib/ai/mock-client.ts` is excluded
+//      structurally by the `PROVIDER_CHAIN_TYPES` allowlist). Baselining the
+//      rest without triaging each one would encode noise as an invariant.
+//
+//      Re-measure the count when you touch this block. It said 21 until the
+//      v1.38.0 score fixture landed, and a number nobody re-runs drifts
+//      quietly until the whole paragraph reads as guesswork.
+//
+//      One entry is on that list ON PURPOSE and should stay:
+//      `src/lib/signals/adapters/metric-status.ts`. Its only importer is
+//      `src/lib/signals/__tests__/registry-invariants.test.ts`, which is
+//      exactly what the module is for — it projects the signal registry onto
+//      the `MetricStatusMeta` shape so that test can assert the two agree
+//      field-for-field and catch future drift. Deleting it to clear the line
+//      would remove a check rather than ballast. The production pass is right
+//      about the mechanics here and wrong about the conclusion, which is the
+//      whole reason this is a review tool and not a gate.
+//   2. It has false positives, though not always the same ones.
+//      `src/lib/pwa/sw-cache-policy.ts` is the standing example: it runs in
+//      every browser, `public/sw.js` mirrors its logic by hand because a
+//      service worker cannot import app modules, and `sw.js:83` names that
+//      lockstep. Nothing static can see that edge.
+//
+//      This slot used to cite `src/lib/mood/note-backfill.ts`, reported
+//      because `scripts/` sits outside the tsconfig that defines the `@/`
+//      alias. That one no longer appears — the module and its importing
+//      script both still exist, so the resolution improved under us. Left
+//      here as a note rather than deleted, because it is the shape of the
+//      problem: an example that heals silently makes the surrounding
+//      reasoning look wrong when someone checks it.
 //
 // Run it in the deep-audit step, the same way
 // `scripts/audit-column-readers.ts` is run: read the list, judge each entry,
