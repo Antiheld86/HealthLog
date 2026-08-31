@@ -137,9 +137,6 @@ function MeasurementTokensCard() {
         <p className="text-muted-foreground text-sm leading-relaxed">
           {t("settings.measurementsToken.scopeNote")}
         </p>
-        <p className="text-muted-foreground text-sm leading-relaxed">
-          {t("settings.measurementsToken.endpointsNote")}
-        </p>
 
         <form onSubmit={handleCreate} className="flex items-center gap-2">
           <Input
