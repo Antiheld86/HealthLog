@@ -179,7 +179,7 @@ const nullableText = (max: number) =>
  * per-type staged payload. Everything is `.catch`-guarded so a malformed field
  * degrades to null + low confidence rather than 422-ing the whole extraction.
  */
-export const extractedFactRawSchema = z.object({
+const extractedFactRawFields = z.object({
   type: z.enum(INBOUND_FACT_TYPES),
   /** Verbatim label / diagnosis text / medication name as written. */
   label: z.string().trim().min(1).max(300).catch(""),
@@ -216,6 +216,34 @@ export const extractedFactRawSchema = z.object({
   /** The model's self-reported overall confidence for this fact (0..1). */
   confidence: confidenceScore.default(0),
 });
+
+/**
+ * A window whose floor sits above its ceiling cannot be true, so it is dropped
+ * rather than repaired. Swapping the pair would invent a range the report never
+ * printed, and this schema cannot reject the fact the way `labs.ts` does —
+ * every field above is `.catch()`ed precisely so one bad value does not sink a
+ * whole extraction. `referenceText` survives either way, so nothing the
+ * document actually stated is lost: the verbatim string is still there for a
+ * person to read on the review screen.
+ *
+ * `parseReferenceRange` already answers a transposed PRINTED window this way.
+ * These are the numbers the model reported instead, and they travelled
+ * unchecked: an integration run against a real Postgres wrote a 100/30 pair
+ * onto the row AND onto the freshly minted catalog marker, which then handed
+ * the impossible window to every later reading of that analyte.
+ */
+export const extractedFactRawSchema = extractedFactRawFields.transform(
+  (fact) => {
+    if (
+      fact.referenceLow !== null &&
+      fact.referenceHigh !== null &&
+      fact.referenceLow > fact.referenceHigh
+    ) {
+      return { ...fact, referenceLow: null, referenceHigh: null };
+    }
+    return fact;
+  },
+);
 
 export type ExtractedFactRaw = z.infer<typeof extractedFactRawSchema>;
 
@@ -467,6 +495,22 @@ const observationEditSchema = z
     {
       message: "Provide a numeric value OR qualitative text, not both",
       path: ["value"],
+    },
+  )
+  // The same ordering rule the three lab schemas enforce. This is a person
+  // typing on the review screen, not a model guessing, so it refuses rather
+  // than dropping the pair silently — they can see the two numbers and fix
+  // which one is which.
+  .refine(
+    (d) =>
+      d.referenceLow === undefined ||
+      d.referenceLow === null ||
+      d.referenceHigh === undefined ||
+      d.referenceHigh === null ||
+      d.referenceLow <= d.referenceHigh,
+    {
+      message: "referenceLow must not exceed referenceHigh",
+      path: ["referenceLow"],
     },
   );
 

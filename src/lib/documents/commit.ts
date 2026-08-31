@@ -83,8 +83,16 @@ async function commitObservation(
   // existed has no text, and the numeric bounds the model reported are then
   // the whole of what it stated.
   const printed = parseReferenceRange(data.referenceText, data.unit);
-  const sourceLow = printed?.low ?? data.referenceLow;
-  const sourceHigh = printed?.high ?? data.referenceHigh;
+  const rawLow = printed?.low ?? data.referenceLow;
+  const rawHigh = printed?.high ?? data.referenceHigh;
+  // Last gate on an impossible window, and the one that matters for facts
+  // already sitting in the table: a document staged before the extraction
+  // schema learned this rule still carries whatever the model reported, and it
+  // arrives here on confirmation. Dropping beats swapping — the pair says the
+  // transcription is wrong, not which of the two numbers is.
+  const transposed = rawLow !== null && rawHigh !== null && rawLow > rawHigh;
+  const sourceLow = transposed ? null : rawLow;
+  const sourceHigh = transposed ? null : rawHigh;
   const sourceText = printed?.text ?? null;
   // A window the report printed and the parser could not read is the case that
   // used to pass without a trace: the reading is then judged against the
@@ -97,6 +105,15 @@ async function commitObservation(
     annotate({
       action: { name: "labs.referenceRange.unreadable" },
       meta: { surface: "document.commit", length: printed?.text.length ?? 0 },
+    });
+  }
+  // The same reasoning one step further along: a window that WAS readable and
+  // cannot be true. Counted rather than merely dropped, because a rising count
+  // says something about the extraction that no individual row does.
+  if (transposed) {
+    annotate({
+      action: { name: "labs.referenceRange.transposed" },
+      meta: { surface: "document.commit" },
     });
   }
 

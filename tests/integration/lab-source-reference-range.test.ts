@@ -295,4 +295,81 @@ describe("a printed reference range, end to end", () => {
       sourceReferenceText: PRINTED,
     });
   });
+
+  /**
+   * A window whose floor sits above its ceiling. The document path is the one
+   * place these numbers arrive unvalidated: the three lab schemas enforce the
+   * ordering, the extraction schema did not, and the catalog store takes what
+   * it is handed. Before this guard the same run wrote 100/30 onto the row AND
+   * onto the freshly minted marker, so every later reading of that analyte
+   * inherited a range that cannot be true.
+   *
+   * The marker is deliberately absent so it gets minted from this fact — the
+   * mint is the half that outlives the single row.
+   */
+  it("drops a transposed window instead of storing it", async () => {
+    const prisma = getPrismaClient();
+    const { commitApprovedFact } = await import("@/lib/documents/commit");
+    const { encryptFactData, encryptFactProvenance } =
+      await import("@/lib/documents/store");
+    const doc = await prisma.inboundDocument.create({
+      data: {
+        userId: USER_ID,
+        filename: "befund.pdf",
+        mimeType: "application/pdf",
+        byteSize: 1024,
+        contentEncrypted: Buffer.from("stand-in for the stored bytes"),
+        status: "EXTRACTED",
+      },
+    });
+    const fact = await prisma.extractedFact.create({
+      data: {
+        documentId: doc.id,
+        userId: USER_ID,
+        factType: "OBSERVATION",
+        status: "APPROVED",
+        confidence: 0.9,
+        needsReview: false,
+        // No printed text, so the parser never sees the window and these
+        // numbers are the whole of what the fact states. They are transposed.
+        dataEncrypted: encryptFactData({
+          label: "Ferritin",
+          code: null,
+          codeSystem: null,
+          value: 150,
+          valueText: null,
+          unit: "ng/mL",
+          referenceLow: 100,
+          referenceHigh: 30,
+          referenceText: null,
+          effectiveDate: "2026-07-01",
+        }),
+        provenanceEncrypted: encryptFactProvenance({
+          sourceText: "Ferritin 150 ng/mL 30 - 100",
+          anchored: true,
+          sourceOffset: 0,
+          page: 0,
+          confidence: 0.9,
+        }),
+      },
+    });
+
+    // The reading itself still lands — the value is the information, the
+    // window is not, so an impossible window costs the range and nothing else.
+    const ref = await commitApprovedFact(USER_ID, fact);
+    const row = await prisma.labResult.findUniqueOrThrow({
+      where: { id: ref.recordId },
+    });
+    expect(row.value).toBe(150);
+    expect(row.sourceReferenceLow).toBeNull();
+    expect(row.sourceReferenceHigh).toBeNull();
+    expect(row.referenceLow).toBeNull();
+    expect(row.referenceHigh).toBeNull();
+
+    const minted = await prisma.biomarker.findFirstOrThrow({
+      where: { userId: USER_ID, name: "Ferritin" },
+    });
+    expect(minted.lowerBound).toBeNull();
+    expect(minted.upperBound).toBeNull();
+  });
 });
