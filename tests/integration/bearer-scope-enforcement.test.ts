@@ -25,6 +25,10 @@ process.env.API_TOKEN_HMAC_KEY ??=
   "test-hmac-key-bearer-scope-enforcement-32-bytes-min-0987654321";
 
 const { hashToken } = await import("@/lib/auth/hmac");
+// The canonical name rather than a literal, so a rename cannot leave these
+// cases setting a header nothing reads — which is the exact failure the
+// delegation cases below already shipped once.
+const { ACCOUNT_SELECTOR_HEADER } = await import("@/lib/auth/acting-carrier");
 
 const USER_ID = "user-bearer-scope-test";
 const MCP_RESOURCE = "https://health.example/mcp";
@@ -475,15 +479,27 @@ describe("B8 — the measurement-ingest scope reaches its two routes and no othe
     });
   }
 
-  function postMeasurement(selector?: string): NextRequest {
-    const headers: Record<string, string> = {
-      authorization: headerJar.get("authorization")!,
-      "content-type": "application/json",
-    };
-    if (selector) headers["x-healthlog-account"] = selector;
+  /**
+   * Claim a record for the next request.
+   *
+   * It goes in the `headerJar`, NOT on the `NextRequest`, and the difference
+   * is the whole reason the first version of these cases passed for the wrong
+   * reason. `readSelectorHeader()` resolves through `next/headers`, which this
+   * suite mocks against the jar — a header set on the request object is never
+   * read by the resolver, so the carrier came back `none` and the delegation
+   * cases were silently exercising the ordinary own-record path.
+   */
+  function claimRecord(accountId: string): void {
+    headerJar.set(ACCOUNT_SELECTOR_HEADER, accountId);
+  }
+
+  function postMeasurement(): NextRequest {
     return new NextRequest("https://health.example/api/measurements", {
       method: "POST",
-      headers,
+      headers: {
+        authorization: headerJar.get("authorization")!,
+        "content-type": "application/json",
+      },
       body: measurementBody(),
     } as never);
   }
@@ -602,7 +618,13 @@ describe("B8 — the measurement-ingest scope reaches its two routes and no othe
     const res = await GET(req("/api/measurements"));
 
     expect(res.status).toBe(403);
-    expect(await lastBearerFailureReason()).toBe("undeclared_scope");
+    // Polled, not read once: the audit write is fire-and-forget, so a bare
+    // read races the request and reports `undefined` for a row that is about
+    // to exist. Same posture as B1 above — on timeout the poll asserts against
+    // whatever WAS written rather than passing by default.
+    await expect
+      .poll(() => lastBearerFailureReason(), { timeout: 5_000, interval: 100 })
+      .toBe("undeclared_scope");
   });
 
   it("is refused on the manage legs and on an unrelated surface", async () => {
@@ -689,9 +711,10 @@ describe("B8 — the measurement-ingest scope reaches its two routes and no othe
   it("is refused a shared record its own holder may genuinely write to", async () => {
     const ownerId = await seedSharedOwner();
     await armToken(["measurements:write"], "mwrite9");
+    claimRecord(ownerId);
 
     const { POST } = await import("@/app/api/measurements/route");
-    const res = await POST(postMeasurement(ownerId));
+    const res = await POST(postMeasurement());
 
     expect(res.status).toBe(403);
     // Nothing landed on the owner, and nothing quietly landed on the holder
@@ -704,9 +727,10 @@ describe("B8 — the measurement-ingest scope reaches its two routes and no othe
     // outright would make that 403 look like the scope working.
     const ownerId = await seedSharedOwner();
     await armToken(["*"], "wildshared");
+    claimRecord(ownerId);
 
     const { POST } = await import("@/app/api/measurements/route");
-    const res = await POST(postMeasurement(ownerId));
+    const res = await POST(postMeasurement());
 
     expect(res.status).toBe(201);
     const row = await getPrismaClient().measurement.findFirstOrThrow({
