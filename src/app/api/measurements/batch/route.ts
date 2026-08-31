@@ -38,7 +38,8 @@ import { fireAndForget } from "@/lib/logging/fire-and-forget";
 import { z } from "zod/v4";
 
 import { prisma } from "@/lib/db";
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, isScopedCredential, requireAuth } from "@/lib/api-handler";
+import { MEASUREMENTS_WRITE_SCOPE } from "@/lib/measurements/scopes";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import {
@@ -218,7 +219,18 @@ interface EntryResult {
 export const POST = apiHandler(withIdempotency<[NextRequest]>(postBatch));
 
 async function postBatch(request: NextRequest): Promise<Response> {
-  const { user } = await requireAuth();
+  // Declares the third-party ingest scope, so a narrow `measurements:write`
+  // token reaches this route alongside cookie sessions and the wildcard tokens
+  // a native login mints. `requireAuth` refuses any acting-account carrier for
+  // every credential shape, so the scoped token is confined to its owner's own
+  // record here without this route adding an arm of its own.
+  const auth = await requireAuth(MEASUREMENTS_WRITE_SCOPE);
+  const { user } = auth;
+
+  // A scoped credential is a bridge — a scale, a home-automation rule — and not
+  // the native client. Two things below turn on that distinction: what `source`
+  // its rows may carry, and whether it may move the phone's sync checkpoint.
+  const scoped = isScopedCredential(auth);
 
   // v1.4.25 W10 reconcile (security H-2): per-user rate limit. Without
   // it, a leaked wildcard iOS token can sustain unbounded writes
@@ -263,6 +275,27 @@ async function postBatch(request: NextRequest): Promise<Response> {
   const parsed = batchPayloadSchema.safeParse(rawBody);
   if (!parsed.success) {
     return apiError(parsed.error.issues[0]?.message ?? "Invalid batch", 422);
+  }
+
+  // A scoped credential may attribute MANUAL and nothing else. Refused loudly
+  // rather than rewritten quietly: silently relabelling a client's explicit
+  // assertion hands it rows it did not ask for and no way to notice, while a
+  // 422 is fixable on the first call.
+  //
+  // `APPLE_HEALTH` is the label that matters, and forging it is not merely
+  // mislabelling. It is half the `(userId, type, source, externalId)` dedup key,
+  // so a bridge's rows would land in the phone's namespace; it is a mergeable
+  // source, so a forged row joins the cross-source merge and can suppress a
+  // genuine one; and it is what `healthKitSyncSucceeded` reads to decide the
+  // Apple Health card may claim the phone synced.
+  if (scoped && parsed.data.entries.some((e) => e.source === "APPLE_HEALTH")) {
+    annotate({
+      action: { name: "measurement.batch.ingest" },
+      meta: { outcome: "source_not_permitted" },
+    });
+    return apiError("This credential may only attribute MANUAL readings", 422, {
+      errorCode: "measurement.batch.source_not_permitted",
+    });
   }
 
   const { entries, syncTrigger } = parsed.data;
@@ -406,7 +439,13 @@ async function postBatch(request: NextRequest): Promise<Response> {
         unit: mapped.unit,
         // v1.8.6 W6 — honour the per-entry source tag, defaulting to
         // `APPLE_HEALTH` when absent so legacy callers are unchanged.
-        source: entry.source ?? "APPLE_HEALTH",
+        //
+        // A scoped credential defaults to `MANUAL` instead, and can hold no
+        // other value: the guard above already refused an explicit
+        // `APPLE_HEALTH`, so this is the only remaining arm for it. The default
+        // has to move with the credential rather than with the route, because
+        // the route serves both the phone and a third-party bridge.
+        source: scoped ? "MANUAL" : (entry.source ?? "APPLE_HEALTH"),
         measuredAt: mapped.takenAt,
         externalId: entry.externalId,
         externalSourceVersion: entry.externalSourceVersion ?? null,
@@ -671,7 +710,16 @@ async function postBatch(request: NextRequest): Promise<Response> {
   // trigger writes null over the previous value rather than leaving a stale one
   // standing: the field describes THIS sync, and an older build's silence is
   // not evidence about it.
-  if (failedCount === 0) {
+  //
+  // None of that is true of a scoped credential, which is why it is excluded
+  // from the whole block rather than only from the HealthKit half. The
+  // checkpoint's meaning is "the client synced what it was holding", and a
+  // third-party bridge is not the client and holds nothing on its behalf.
+  // `lastSyncedAt` is what `GET /api/sync/state` reports and what the phone
+  // uses to size its undelivered window, so letting a scale advance it can make
+  // the phone skip a window of its own samples — a silent data loss whose cause
+  // would be nowhere near the code that caused it.
+  if (failedCount === 0 && !scoped) {
     const syncedAt = new Date();
     const deliveredWithoutTheApp =
       syncTrigger === "background" || syncTrigger === "push";

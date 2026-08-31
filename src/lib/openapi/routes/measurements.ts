@@ -842,7 +842,8 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Measurements"],
       summary: "Create one measurement (or a small array)",
       description:
-        "Single ingest. The body may also be a bare ARRAY of the same objects — the mode the iOS client uses for a combined blood-pressure + pulse or dual-value glucose write — in which case `data` is the array of created rows in request order. Use `/api/measurements/batch` for Apple Health upload streams.",
+        "Single ingest. The body may also be a bare ARRAY of the same objects — the mode the iOS client uses for a combined blood-pressure + pulse or dual-value glucose write — in which case `data` is the array of created rows in request order. Use `/api/measurements/batch` for Apple Health upload streams.\n\n" +
+        "Also reachable with a narrow `measurements:write` Bearer, which is the supported way to push readings from a scale, a watch bridge or a home-automation rule. That credential is confined to its owner's own record — a request carrying the account selector is refused 403 before any sharing grant is read, however the record is actually shared — and to `MANUAL` attribution, so an explicit `APPLE_HEALTH` source is refused 422 (`measurement.create.source_not_permitted`). The GET on this same path, and the PUT and DELETE beside it, name no scope and so refuse it.",
       parameters: [idempotencyKeyParameter],
       requestBody: {
         required: true,
@@ -875,7 +876,14 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             "A measurement with this data already exists — the `(userId, type, source, externalId)` dedup index rejected the write.",
           content: { "application/json": { schema: errorEnvelope } },
         },
+        // After the spread: `stdResponses` carries a generic 422 that would
+        // otherwise overwrite this one.
         ...stdResponses,
+        "422": {
+          description:
+            "Validation failed, or (`measurement.create.source_not_permitted`) a narrow `measurements:write` credential named `APPLE_HEALTH` as the source. Refused rather than relabelled, so the caller can fix the payload instead of discovering rows it did not ask for.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
       },
     },
   },
@@ -974,7 +982,8 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Measurements"],
       summary: "Apple Health batch ingest",
       description:
-        "Up to 500 HealthKit entries per call. Idempotent via the `Idempotency-Key` header (replay window 24h). Per-entry status lets the iOS client advance its sync cursor accurately. v1.4.25 W8c adds an optional `deviceType` per entry — feed it from `HKDevice.model` so the cross-source canonical picker can break Apple-Watch-vs-iPhone ties; null/absent stays backward-compatible with v1.4.23 clients.",
+        "Up to 500 HealthKit entries per call. Idempotent via the `Idempotency-Key` header (replay window 24h). Per-entry status lets the iOS client advance its sync cursor accurately. v1.4.25 W8c adds an optional `deviceType` per entry — feed it from `HKDevice.model` so the cross-source canonical picker can break Apple-Watch-vs-iPhone ties; null/absent stays backward-compatible with v1.4.23 clients.\n\n" +
+        "Also reachable with a narrow `measurements:write` Bearer, for a bridge that is not the phone. Such a credential writes only on its owner's own record; its entries are attributed `MANUAL` whatever they omit, an entry naming `APPLE_HEALTH` is refused 422 (`measurement.batch.source_not_permitted`), and the call does not advance the native sync checkpoint — `lastSyncedAt` means the CLIENT delivered what it was holding, and a third-party push is not that.",
       requestBody: {
         required: true,
         content: { "application/json": { schema: batchPayloadSchema } },
@@ -989,7 +998,14 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
+        // After the spread: `stdResponses` carries a generic 422 that would
+        // otherwise overwrite this one.
         ...stdResponses,
+        "422": {
+          description:
+            "The batch exceeded the 500-entry limit (`measurement.batch.too_large`), failed validation, or (`measurement.batch.source_not_permitted`) carried an entry naming `APPLE_HEALTH` under a narrow `measurements:write` credential. Nothing was written in any of the three cases.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
       },
     },
   },

@@ -1,5 +1,67 @@
 # Changelog
 
+## [Unreleased]
+
+You can push readings in from your own hardware again.
+
+Since v1.30.17 there was no way to do it. That release made API tokens
+enforce their scope, which closed a real hole — a token issued for
+medication intake had been reaching every other endpoint, the full backup
+export included — and removed the generic "create API token" button along
+with it. What went unnoticed was that the button had been the only
+self-service route to a token that could write a measurement. A scale or a
+watch bridge piped through Home Assistant had no door left, and the OAuth
+integrations do not reach local sensors.
+
+There is now a token for exactly that job, and for nothing else.
+
+### Added
+
+- **A measurement ingest token, minted from Settings → API & Tokens.** It
+  posts readings to `/api/measurements` and `/api/measurements/batch`, on
+  your own record. That is the whole list. It cannot read a reading back,
+  cannot change or delete one, cannot reach the export, and cannot mint
+  another token — so a credential sitting in a container you did not write
+  has a worst case of junk in your own record, not your health history
+  leaving the building. Shown once, expires after a year, and revoked from
+  the same page as every other token.
+- **A guide for wiring one up**, with a worked Home Assistant
+  `rest_command` and automation, the measurement types a scale or a watch
+  bridge tends to report, and what each error response means.
+- The API endpoint list on that settings page now shows the two ingest
+  endpoints alongside the medication one.
+
+### Changed
+
+- Readings pushed with this token are recorded as manually entered, which
+  means you can correct one in the app if a sensor sends something wrong.
+  A push that claims to come from Apple Health is refused rather than
+  quietly relabelled: that label is half of how the iOS app recognises its
+  own rows, and a bridge borrowing it corrupts the phone's sync instead of
+  merely mislabelling a reading.
+- Such a push no longer moves the phone's sync checkpoint. It never should
+  have: the checkpoint records that your phone delivered what it was
+  holding, and a scale advancing it could make the phone skip a window of
+  its own samples.
+
+### Security
+
+- The token is confined to your own record. Pointing it at a record
+  somebody has shared with you is refused, and refused before the sharing
+  grant is even consulted — so no future change to what sharing permits can
+  widen what one of these tokens reaches.
+- Minting one requires being signed in on the web. No API token can mint
+  another, whatever it is allowed to do — the sign-in a phone holds lasts a
+  day and what it could mint here lasts a year, so allowing it would let a
+  credential that leaked for an afternoon leave behind one that outlives
+  cancelling it.
+- Closed a narrower gap found while building this. A repeated request
+  carrying an `Idempotency-Key` could be answered from the cache after a
+  check that asked only whether a sharing grant was live, and not which
+  credential was being presented. Nothing could be written that way, but a
+  cached response about a shared record could be returned to a token that
+  the endpoint itself would have turned away.
+
 ## [1.38.0] — 2026-08-30
 
 The health score works with the record a person actually keeps.

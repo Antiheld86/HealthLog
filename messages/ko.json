@@ -5879,7 +5879,14 @@
     "googleHealthViewData": "걸음 수 보기",
     "apiTokens": "API 토큰",
     "apiTokensDescription": "외부에서 복용을 기록할 때 쓰는 API 토큰을 확인하고 폐기해요.",
-    "tokenMintMovedDescription": "토큰은 약별로 발급돼요. 약을 열고 API 엔드포인트를 켜면 그 약에만 적용되는 토큰을 받을 수 있어요.",
+    "measurementsToken": {
+      "title": "측정 토큰",
+      "description": "체중계나 시계, 홈 오토메이션이 측정값을 기록할 수 있도록 토큰을 만들어요.",
+      "detail": "토큰은 한 번만 표시돼요.",
+      "scopeNote": "본인 기록에 새 측정값을 추가하는 것만 할 수 있어요. 데이터를 읽거나, 무언가를 고치거나 지우거나, 다른 토큰을 만들 수는 없어요. 측정값은 직접 입력한 것처럼 들어오니 언제든 고칠 수 있어요.",
+      "createFailed": "토큰을 만들지 못했어요. 다시 시도해 주세요."
+    },
+    "tokenMintMovedDescription": "토큰은 쓰이는 곳에서 발급돼요. 측정값은 위에서, 특정 약은 그 약의 API 엔드포인트에서 만들 수 있어요.",
     "tokenNamePlaceholder": "토큰 이름 (예: iPhone 단축어)",
     "tokenCreated": "토큰을 만들었어요 — 지금 복사하세요! 다시 보여주지 않아요.",
     "tokenCopy": "토큰 복사",

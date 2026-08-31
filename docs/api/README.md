@@ -56,8 +56,22 @@ before treating a warning as a regression.
   `Labs`, `Illness`, `Documents`, `Records`, `Admin`, `Meta`,
   `Retired`).
 - **`securitySchemes`**:
-  - `bearerAuth` — long-lived `hlk_*` API tokens issued via `POST /api/tokens`.
-    Required on `/api/ingest/medication`.
+  - `bearerAuth` — `hlk_*` API tokens. A scope grants what it names and
+    nothing adjacent, so where a token comes from decides what it reaches:
+    - a completed password / passkey / refresh exchange mints the
+      cookie-equivalent `["*"]` token the native client carries;
+    - a medication's own API-endpoint toggle mints `medication:ingest` plus
+      `medication:<id>:ingest`, the pair `/api/ingest/medication` gates on;
+    - `POST /api/mcp/tokens` mints `health:read` (optionally plus
+      `health:write`), audience-bound to `/mcp` and refused on REST writes;
+    - `POST /api/tokens/measurements` mints `measurements:write`, accepted by
+      `POST /api/measurements` and `POST /api/measurements/batch` only, on the
+      holder's own record only.
+
+    `POST /api/tokens` is **not** among them — that generic mint was removed in
+    v1.30.17. The path still lists (`GET`) and revokes (`DELETE /api/tokens/{id}`)
+    every token above, whichever surface issued it.
+
   - `sessionCookie` — HttpOnly `healthlog_session` cookie set by the
     password and passkey login flows. Used by the web app and any iOS
     client running inside a web view.

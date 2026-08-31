@@ -2,7 +2,15 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Key, Trash2 } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Copy,
+  Key,
+  Loader2,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -19,6 +27,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
 import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SettingsCard } from "@/components/settings/settings-card";
@@ -45,8 +54,144 @@ export function ApiSection() {
   return (
     <div className="space-y-6">
       <ApiEndpointsCard />
+      <MeasurementTokensCard />
       <ApiTokensCard />
     </div>
+  );
+}
+
+/**
+ * Mint a token for third-party measurement ingest.
+ *
+ * No list of its own. `ApiTokensCard` below already reads every token the
+ * account holds and shows its scopes, so a second query here would be the same
+ * rows under a different heading — and a revoke button in two places is two
+ * places to keep agreeing about what revoking means. This card mints; the one
+ * below is where credentials are reviewed and killed.
+ */
+function MeasurementTokensCard() {
+  const { t } = useTranslations();
+  const queryClient = useQueryClient();
+  const [newName, setNewName] = useState("");
+  const [newToken, setNewToken] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [tokenMsg, setTokenMsg] = useState<string | null>(null);
+  const [tokenCopied, setTokenCopied] = useState(false);
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    setCreating(true);
+    setTokenMsg(null);
+    setNewToken(null);
+    try {
+      const res = await apiFetchRaw("/api/tokens/measurements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // No scope field: the endpoint mints one shape, so there is nothing
+        // here for a caller to choose or for this form to get wrong.
+        body: JSON.stringify({ name: newName.trim() }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        setNewToken(json.data.token);
+        setNewName("");
+        // The sibling card lists this token, so it has to hear about it.
+        queryClient.invalidateQueries({ queryKey: queryKeys.tokens() });
+      } else {
+        // The server's own message when it sent one — it names the actual
+        // cause (switch off, rate limit, validation) — and a message about
+        // this specific action when it did not.
+        setTokenMsg(json.error || t("settings.measurementsToken.createFailed"));
+      }
+    } catch {
+      setTokenMsg(t("common.networkError"));
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleCopyToken() {
+    if (!newToken) return;
+    try {
+      await navigator.clipboard.writeText(newToken);
+      setTokenCopied(true);
+      toast.success(t("settings.tokenCopied"));
+      setTimeout(() => setTokenCopied(false), 2_000);
+    } catch {
+      toast.error(t("settings.tokenCopyFailed"));
+    }
+  }
+
+  return (
+    <SettingsCard>
+      <SettingsCardHeader
+        icon={Upload}
+        title={t("settings.measurementsToken.title")}
+        description={t("settings.measurementsToken.description")}
+      />
+
+      <div className="space-y-3">
+        <p className="text-sm leading-relaxed">
+          {t("settings.measurementsToken.detail")}
+        </p>
+        <p className="text-muted-foreground text-sm leading-relaxed">
+          {t("settings.measurementsToken.scopeNote")}
+        </p>
+
+        <form onSubmit={handleCreate} className="flex items-center gap-2">
+          <Input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder={t("settings.tokenNamePlaceholder")}
+            maxLength={100}
+            className="flex-1"
+          />
+          <Button
+            type="submit"
+            variant="outline"
+            className="h-11 sm:h-10"
+            disabled={creating || !newName.trim()}
+          >
+            {creating && (
+              <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
+            )}
+            {t("common.create")}
+          </Button>
+        </form>
+
+        {newToken && (
+          <div
+            className="bg-success/10 rounded-lg p-3 text-sm"
+            data-slot="settings-measurements-token-created"
+          >
+            <p className="text-success mb-1 font-medium">
+              {t("settings.tokenCreated")}
+            </p>
+            <div className="flex items-start gap-2">
+              <code className="bg-muted block flex-1 rounded p-2 font-mono text-xs break-all">
+                {newToken}
+              </code>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="min-h-11 min-w-11 shrink-0 sm:h-9 sm:w-9"
+                onClick={() => void handleCopyToken()}
+                aria-label={t("settings.tokenCopy")}
+              >
+                {tokenCopied ? (
+                  <Check className="text-success h-3.5 w-3.5" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {tokenMsg && <p className="text-destructive text-sm">{tokenMsg}</p>}
+      </div>
+    </SettingsCard>
   );
 }
 
@@ -56,15 +201,27 @@ function ApiEndpointsCard() {
   // v1.4.27 MB5 — dual-render: <md gets a stacked card list, md+
   // keeps the original table. Mobile cards wrap inside their box and
   // never trigger horizontal scroll, mirroring the pattern from
-  // `<ApiTokenOverviewSection>`. The endpoint catalogue currently
-  // ships a single row but stays array-driven so adding new rows
-  // remains a one-line edit on both surfaces.
+  // `<ApiTokenOverviewSection>`. The endpoint catalogue is array-driven
+  // so adding a row remains a one-line edit on both surfaces — which is
+  // what the two measurement ingest rows below cost.
   const endpoints = [
     {
       method: "POST",
       path: "/api/ingest/medication",
       auth: "Authorization: Bearer hlk_...",
       example: `{ "medicationName": "...", "scheduledFor": "..." }`,
+    },
+    {
+      method: "POST",
+      path: "/api/measurements",
+      auth: "Authorization: Bearer hlk_...",
+      example: `{ "type": "WEIGHT", "value": 82.4, "measuredAt": "..." }`,
+    },
+    {
+      method: "POST",
+      path: "/api/measurements/batch",
+      auth: "Authorization: Bearer hlk_...",
+      example: `{ "entries": [ { "hkIdentifier": "...", "value": 1, ... } ] }`,
     },
   ];
 

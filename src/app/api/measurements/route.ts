@@ -1,5 +1,10 @@
 import { prisma } from "@/lib/db";
-import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
+import {
+  apiHandler,
+  isScopedCredential,
+  requireRecordAuth,
+} from "@/lib/api-handler";
+import { MEASUREMENTS_WRITE_SCOPE } from "@/lib/measurements/scopes";
 import { annotate } from "@/lib/logging/context";
 import { fireAndForget } from "@/lib/logging/fire-and-forget";
 import { auditLog } from "@/lib/auth/audit";
@@ -744,6 +749,23 @@ async function sleepListResponse(
   });
 }
 
+/**
+ * Does this body attribute any reading to `APPLE_HEALTH`?
+ *
+ * Read off the raw body rather than the parsed result because the answer has to
+ * be the same for the object arm and the array arm, and those parse against
+ * different schemas further down. Anything that is not a recognisable
+ * measurement shape answers false and falls through to the validation error it
+ * has coming — this function decides attribution, not validity.
+ */
+function namesAppleHealthSource(body: unknown): boolean {
+  const names = (entry: unknown): boolean =>
+    typeof entry === "object" &&
+    entry !== null &&
+    (entry as { source?: unknown }).source === "APPLE_HEALTH";
+  return Array.isArray(body) ? body.some(names) : names(body);
+}
+
 export const POST = apiHandler(withIdempotency<[NextRequest]>(postMeasurement));
 
 async function postMeasurement(request: NextRequest) {
@@ -752,13 +774,35 @@ async function postMeasurement(request: NextRequest) {
   // who may or may not be that person. Nothing else in this handler reads the
   // caller: the safety-floor check, the reminder satisfaction, the rollup
   // recompute and the cache eviction are all statements about the record.
-  const { user } = await requireRecordAuth("write", "measurements");
+  //
+  // v1.38.x — it also declares the third-party ingest scope, so a narrow
+  // `measurements:write` token reaches this arm. The two declarations do not
+  // interact: a scoped credential is refused the moment the request names
+  // another record, before any grant is read, so "delegable" and "reachable by
+  // a bridge token" stay separate properties of the same route.
+  const auth = await requireRecordAuth("write", "measurements", {
+    scope: MEASUREMENTS_WRITE_SCOPE,
+  });
+  const { user } = auth;
+  const scoped = isScopedCredential(auth);
 
   const { data: body, error: jsonError } = await safeJson(request, {
     maxBytes: 64 * 1024,
   });
 
   if (jsonError) return jsonError;
+
+  // A scoped credential may attribute MANUAL and nothing else — the schema's
+  // own default, so only an explicit `APPLE_HEALTH` needs refusing. Checked
+  // before validation branches so the object and array arms share one answer,
+  // and refused rather than rewritten for the reason the batch route gives:
+  // relabelling a client's explicit assertion hands it rows it cannot see.
+  if (scoped && namesAppleHealthSource(body)) {
+    annotate({ action: { name: "measurements.create.source-not-permitted" } });
+    return apiError("This credential may only attribute MANUAL readings", 422, {
+      errorCode: "measurement.create.source_not_permitted",
+    });
+  }
 
   // Batch mode (array of measurements, e.g. combined BP + Pulse)
   if (Array.isArray(body)) {

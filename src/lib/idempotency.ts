@@ -426,6 +426,45 @@ async function canReplayDelegatedResponse(
   }
 }
 
+/**
+ * Is this request presenting a narrow, single-purpose Bearer token?
+ *
+ * Asked only on the delegated-replay path, and it exists because a live grant
+ * is no longer the whole question there. A narrow scope is refused delegation
+ * outright by `requireRecordAuth` — before any grant is read — so a credential
+ * that would be refused by the handler must not be handed a cached delegated
+ * body instead. The actor may genuinely hold the grant and the row may be
+ * genuinely theirs; the point is that THIS credential is not one the grant was
+ * ever exercised through.
+ *
+ * Authorises nothing, exactly like the resolver above: a true answer only
+ * declines to serve the cache, and the handler then issues its own refusal with
+ * the audit trail that belongs to it. One indexed single-row read, on a path
+ * that is already doing a grant lookup.
+ */
+async function presentsNarrowScopedToken(): Promise<boolean> {
+  let authHeader: string | null = null;
+  try {
+    const headerList = await headers();
+    authHeader = headerList.get("authorization");
+  } catch {
+    return false;
+  }
+  if (!authHeader?.startsWith("Bearer ")) return false;
+
+  const apiToken = await prisma.apiToken
+    .findUnique({
+      where: { tokenHash: hashToken(authHeader.slice(7)) },
+      select: { permissions: true },
+    })
+    .catch(() => null);
+
+  // Unreadable reads as narrow: the cache is an accelerator, and falling
+  // through to the handler is always a safe answer.
+  if (!apiToken) return true;
+  return !apiToken.permissions.includes("*");
+}
+
 export function withIdempotency<
   Args extends [Request | NextRequest, ...unknown[]],
 >(
@@ -506,7 +545,14 @@ export function withIdempotency<
     if (cached?.kind === "replay") {
       if (
         claimedRecord !== null &&
-        !(await canReplayDelegatedResponse(userId, claimedRecord))
+        (!(await canReplayDelegatedResponse(userId, claimedRecord)) ||
+          // A narrow scope is refused delegation by the handler before any
+          // grant is read, so a live grant is not sufficient here. Without this
+          // arm, a cell filled earlier by the same person under a cookie
+          // session could be replayed by a single-purpose token naming the
+          // owner's record — no row written, but the owner's response body
+          // returned to a credential the handler would have turned away.
+          (await presentsNarrowScopedToken()))
       ) {
         // Do not replace the route's refusal with a cache-specific response:
         // it owns the stable 403 envelope and the associated audit trail.

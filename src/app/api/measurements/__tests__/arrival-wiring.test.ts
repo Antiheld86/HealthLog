@@ -15,6 +15,12 @@ const SELF = {
 vi.mock("@/lib/api-handler", () => ({
   apiHandler: (fn: unknown) => fn,
   requireRecordAuth: vi.fn(async () => ({ user: SELF, actor: SELF })),
+  // These cases resolve as a cookie session, which is what "unscoped" means:
+  // no narrow Bearer admitted the request, so the route's source and
+  // sync-checkpoint rules take their ordinary path. Stubbed rather than
+  // omitted because this file mocks the module wholesale, so an export the
+  // route reaches for and the mock does not list fails the import outright.
+  isScopedCredential: vi.fn(() => false),
 }));
 
 vi.mock("@/lib/idempotency", () => ({

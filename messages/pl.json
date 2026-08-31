@@ -5879,7 +5879,14 @@
     "googleHealthViewData": "Zobacz swoje kroki",
     "apiTokens": "Tokeny API",
     "apiTokensDescription": "Przeglądaj i unieważniaj tokeny API do zewnętrznego rejestrowania przyjęć leków.",
-    "tokenMintMovedDescription": "Tokeny są wydawane dla pojedynczego leku. Otwórz lek i włącz jego punkt końcowy API, aby otrzymać token obejmujący wyłącznie ten lek.",
+    "measurementsToken": {
+      "title": "Tokeny pomiarów",
+      "description": "Utwórz token, aby waga, zegarek lub automatyka domowa mogły dodawać pomiary.",
+      "detail": "Token pokazujemy tylko raz.",
+      "scopeNote": "Może wyłącznie dodawać nowe pomiary do Twojej dokumentacji — nie odczyta danych, niczego nie zmieni ani nie usunie i nie utworzy kolejnego tokenu. Pomiary trafiają tak, jakbyś wpisał je ręcznie, więc możesz je poprawić.",
+      "createFailed": "Nie udało się utworzyć tokenu. Spróbuj ponownie."
+    },
+    "tokenMintMovedDescription": "Tokeny wydajemy tam, gdzie działają: powyżej dla pomiarów albo w punkcie końcowym API danego leku dla tego jednego leku.",
     "tokenNamePlaceholder": "Nazwa tokena (np. Skrót iPhone)",
     "tokenCreated": "Token utworzony — skopiuj go teraz! Nie zostanie pokazany ponownie.",
     "tokenCopy": "Kopiuj token",

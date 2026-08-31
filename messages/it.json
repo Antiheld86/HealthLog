@@ -5879,7 +5879,14 @@
     "googleHealthViewData": "Vedi i tuoi passi",
     "apiTokens": "Token API",
     "apiTokensDescription": "Rivedi e revoca i token API per la registrazione esterna delle assunzioni di farmaci.",
-    "tokenMintMovedDescription": "I token vengono emessi per singolo farmaco. Apri un farmaco e attiva il suo endpoint API per ottenere un token valido solo per quel farmaco.",
+    "measurementsToken": {
+      "title": "Token per misurazioni",
+      "description": "Crea un token perché una bilancia, un orologio o la tua domotica aggiungano misurazioni.",
+      "detail": "Il token viene mostrato una sola volta.",
+      "scopeNote": "Può soltanto aggiungere nuove misurazioni alla tua cartella: non può leggere i tuoi dati, modificare o eliminare nulla, né creare un altro token. Le misurazioni arrivano come se le avessi inserite a mano, quindi puoi correggerle.",
+      "createFailed": "Non è stato possibile creare il token. Riprova."
+    },
+    "tokenMintMovedDescription": "I token vengono emessi dove si applicano: qui sopra per le misurazioni, oppure nell'endpoint API di un farmaco per quel singolo farmaco.",
     "tokenNamePlaceholder": "Nome del token (ad es. Comando rapido iPhone)",
     "tokenCreated": "Token creato — copialo ora! Non verrà mostrato di nuovo.",
     "tokenCopy": "Copia token",
