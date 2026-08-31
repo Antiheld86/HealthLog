@@ -434,3 +434,255 @@ describe("B7 — cookie sessions are untouched", () => {
     await expect(requireAdmin()).rejects.toBeInstanceOf(HttpError);
   });
 });
+
+describe("B8 — the measurement-ingest scope reaches its two routes and no others", () => {
+  /**
+   * A second account, plus a live, accepted, record-wide grant letting the
+   * token's owner write to it.
+   *
+   * The grant is the whole point of the delegation cases below. Asserting a
+   * 403 against a record nobody shared proves nothing — every credential is
+   * refused that. What has to hold is that the scoped token is refused a
+   * record its own holder genuinely may write to, which is the case a reader
+   * would otherwise assume works.
+   */
+  async function seedSharedOwner(): Promise<string> {
+    const ownerId = "user-bearer-scope-owner";
+    await getPrismaClient().user.create({
+      data: {
+        id: ownerId,
+        username: "scope-owner",
+        email: "scope-owner@example.test",
+        timezone: "UTC",
+      },
+    });
+    await getPrismaClient().accountGrant.create({
+      data: {
+        grantorId: ownerId,
+        granteeId: USER_ID,
+        access: "WRITE",
+        acceptedAt: new Date(),
+      },
+    });
+    return ownerId;
+  }
+
+  function measurementBody(): string {
+    return JSON.stringify({
+      type: "WEIGHT",
+      value: 74.2,
+      measuredAt: new Date().toISOString(),
+    });
+  }
+
+  function postMeasurement(selector?: string): NextRequest {
+    const headers: Record<string, string> = {
+      authorization: headerJar.get("authorization")!,
+      "content-type": "application/json",
+    };
+    if (selector) headers["x-healthlog-account"] = selector;
+    return new NextRequest("https://health.example/api/measurements", {
+      method: "POST",
+      headers,
+      body: measurementBody(),
+    } as never);
+  }
+
+  it("admits the scope on POST /api/measurements, attributed MANUAL", async () => {
+    await armToken(["measurements:write"], "mwrite1");
+    const { POST } = await import("@/app/api/measurements/route");
+    const res = await POST(postMeasurement());
+
+    expect(res.status).toBe(201);
+    const row = await getPrismaClient().measurement.findFirstOrThrow({
+      where: { userId: USER_ID, type: "WEIGHT" },
+    });
+    expect(row.source).toBe("MANUAL");
+  });
+
+  it("admits the scope on the batch route, attributed MANUAL", async () => {
+    await armToken(["measurements:write"], "mwrite2");
+    const { POST } = await import("@/app/api/measurements/batch/route");
+    const res = await POST(
+      new NextRequest("https://health.example/api/measurements/batch", {
+        method: "POST",
+        headers: {
+          authorization: headerJar.get("authorization")!,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          entries: [
+            {
+              hkIdentifier: "HKQuantityTypeIdentifierBodyMass",
+              value: 70,
+              unit: "kg",
+              startDate: new Date().toISOString(),
+              endDate: new Date().toISOString(),
+              externalId: "uuid-measurements-write-1",
+            },
+          ],
+        }),
+      } as never),
+    );
+
+    expect(res.status).toBe(200);
+    const row = await getPrismaClient().measurement.findFirstOrThrow({
+      where: { userId: USER_ID, externalId: "uuid-measurements-write-1" },
+    });
+    // Absent `source` defaults to APPLE_HEALTH for the phone and MANUAL here.
+    expect(row.source).toBe("MANUAL");
+  });
+
+  it("does not move the native sync checkpoint", async () => {
+    await armToken(["measurements:write"], "mwrite3");
+    const { POST } = await import("@/app/api/measurements/batch/route");
+    await POST(
+      new NextRequest("https://health.example/api/measurements/batch", {
+        method: "POST",
+        headers: {
+          authorization: headerJar.get("authorization")!,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          entries: [
+            {
+              hkIdentifier: "HKQuantityTypeIdentifierBodyMass",
+              value: 71,
+              unit: "kg",
+              startDate: new Date().toISOString(),
+              endDate: new Date().toISOString(),
+              externalId: "uuid-measurements-write-2",
+            },
+          ],
+        }),
+      } as never),
+    );
+
+    const user = await getPrismaClient().user.findUniqueOrThrow({
+      where: { id: USER_ID },
+    });
+    expect(user.lastSyncedAt).toBeNull();
+    expect(user.healthKitLastSyncedAt).toBeNull();
+  });
+
+  it("refuses an entry forging the HealthKit source", async () => {
+    await armToken(["measurements:write"], "mwrite4");
+    const { POST } = await import("@/app/api/measurements/batch/route");
+    const res = await POST(
+      new NextRequest("https://health.example/api/measurements/batch", {
+        method: "POST",
+        headers: {
+          authorization: headerJar.get("authorization")!,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          entries: [
+            {
+              hkIdentifier: "HKQuantityTypeIdentifierBodyMass",
+              value: 72,
+              unit: "kg",
+              startDate: new Date().toISOString(),
+              endDate: new Date().toISOString(),
+              externalId: "uuid-measurements-write-3",
+              source: "APPLE_HEALTH",
+            },
+          ],
+        }),
+      } as never),
+    );
+
+    expect(res.status).toBe(422);
+    expect(await getPrismaClient().measurement.count()).toBe(0);
+  });
+
+  it("is refused on the read leg of the very same path", async () => {
+    // What makes the scope write-only rather than write-named.
+    await armToken(["measurements:write"], "mwrite5");
+    const { GET } = await import("@/app/api/measurements/route");
+    const res = await GET(req("/api/measurements"));
+
+    expect(res.status).toBe(403);
+    expect(await lastBearerFailureReason()).toBe("undeclared_scope");
+  });
+
+  it("is refused on the manage legs and on an unrelated surface", async () => {
+    await armToken(["measurements:write"], "mwrite6");
+
+    const bulk = await import("@/app/api/measurements/bulk-delete/route");
+    expect(
+      (await bulk.POST(req("/api/measurements/bulk-delete", "POST"))).status,
+    ).toBe(403);
+
+    const restore = await import("@/app/api/measurements/restore/route");
+    expect(
+      (await restore.POST(req("/api/measurements/restore", "POST"))).status,
+    ).toBe(403);
+
+    const backup = await import("@/app/api/export/full-backup/route");
+    expect((await backup.GET(req("/api/export/full-backup"))).status).toBe(403);
+
+    const labs = await import("@/app/api/labs/route");
+    expect((await labs.GET(req("/api/labs"))).status).toBe(403);
+  });
+
+  it("cannot mint another token", async () => {
+    await armToken(["measurements:write"], "mwrite7");
+    const { POST } = await import("@/app/api/tokens/measurements/route");
+    const res = await POST(
+      new NextRequest("https://health.example/api/tokens/measurements", {
+        method: "POST",
+        headers: {
+          authorization: headerJar.get("authorization")!,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ name: "second" }),
+      } as never),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("cannot reach the medication ingest surface", async () => {
+    await armToken(["measurements:write"], "mwrite8");
+    const { POST } = await import("@/app/api/ingest/medication/route");
+    const res = await POST(
+      new NextRequest("https://health.example/api/ingest/medication", {
+        method: "POST",
+        headers: {
+          authorization: headerJar.get("authorization")!,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ medicationName: "x" }),
+      } as never),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("is refused a shared record its own holder may genuinely write to", async () => {
+    const ownerId = await seedSharedOwner();
+    await armToken(["measurements:write"], "mwrite9");
+
+    const { POST } = await import("@/app/api/measurements/route");
+    const res = await POST(postMeasurement(ownerId));
+
+    expect(res.status).toBe(403);
+    // Nothing landed on the owner, and nothing quietly landed on the holder
+    // instead — the reverse data-mixing failure the resolver exists to avoid.
+    expect(await getPrismaClient().measurement.count()).toBe(0);
+  });
+
+  it("but a wildcard token writes to that same shared record", async () => {
+    // The control for the case above. Without it, a delegation path broken
+    // outright would make that 403 look like the scope working.
+    const ownerId = await seedSharedOwner();
+    await armToken(["*"], "wildshared");
+
+    const { POST } = await import("@/app/api/measurements/route");
+    const res = await POST(postMeasurement(ownerId));
+
+    expect(res.status).toBe(201);
+    const row = await getPrismaClient().measurement.findFirstOrThrow({
+      where: { type: "WEIGHT" },
+    });
+    expect(row.userId).toBe(ownerId);
+  });
+});

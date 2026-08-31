@@ -145,6 +145,10 @@ describe("T3 — the mint sites are frozen", () => {
     // medication grant that `/api/ingest/medication` actually gates on.
     "app/api/medications/[id]/api-endpoint/route.ts":
       '["medication:ingest", scope]',
+    // Third-party measurement ingest. One shape, built from a literal — the
+    // body cannot express a scope. Reaches two write routes on the holder's
+    // own record and nothing else, the mint included.
+    "app/api/tokens/measurements/route.ts": "[MEASUREMENTS_WRITE_SCOPE]",
     // MCP, audience-bound to `/mcp`. `health:write` requires explicit consent.
     "app/api/mcp/tokens/route.ts": "SCOPE_HEALTH_READ / SCOPE_HEALTH_WRITE",
     "app/api/mcp/oauth/token/route.ts":
@@ -170,6 +174,7 @@ describe("T3 — the mint sites are frozen", () => {
     // password / passkey / refresh exchange. Every other mint is narrow.
     const userFacing = [
       "app/api/medications/[id]/api-endpoint/route.ts",
+      "app/api/tokens/measurements/route.ts",
       "app/api/mcp/tokens/route.ts",
       "app/api/mcp/oauth/token/route.ts",
     ];
@@ -182,6 +187,11 @@ describe("T3 — the mint sites are frozen", () => {
     // `POST /api/tokens` minted `["medication:ingest"]` — a token that could
     // not perform its advertised job (it lacked the per-medication grant) and
     // could reach every other authenticated route. List and revoke stay.
+    //
+    // The sibling `app/api/tokens/measurements/route.ts` does export a POST and
+    // does not contradict this: what was retired is a mint at THIS path that
+    // named no scope and answered for the whole API. A child path minting one
+    // named scope, listed in `MINT_SITES` above, is the shape that replaced it.
     const tokensRoute = read("app/api/tokens/route.ts");
     expect(tokensRoute).not.toMatch(/export const POST/);
     expect(tokensRoute).toMatch(/export const GET/);
@@ -210,15 +220,80 @@ describe("T4 — declared scopes are exported constants, never string literals",
   it("the declared scope vocabulary is closed", () => {
     // Scopes a route may name. Adding one means adding a route that accepts a
     // narrow token, which is a widening — it belongs in a reviewed diff.
-    const DECLARED_SCOPES = ["FHIR_READ_SCOPE"];
+    //
+    // Both ways of naming one are collected, and that is the point of the
+    // second matcher rather than a tidiness: since `requireRecordAuth` grew a
+    // `scope` option, a route can widen itself without the word `requireAuth`
+    // appearing anywhere in it. A vocabulary that watched only the first form
+    // would have gone on passing while the surface it describes grew.
+    const DECLARED_SCOPES = ["FHIR_READ_SCOPE", "MEASUREMENTS_WRITE_SCOPE"];
     const used = new Set<string>();
     for (const rel of sourceFiles()) {
-      for (const m of read(rel).matchAll(
+      const src = read(rel);
+      for (const m of src.matchAll(
         /(?<!function\s)requireAuth\(\s*([A-Za-z_$][\w$]*)\s*\)/g,
+      )) {
+        used.add(m[1]);
+      }
+      for (const m of src.matchAll(
+        /requireRecordAuth\([^)]*\bscope:\s*([A-Za-z_$][\w$]*)/g,
       )) {
         used.add(m[1]);
       }
     }
     expect([...used].sort()).toEqual(DECLARED_SCOPES);
+  });
+});
+
+describe("T5 — a delegable route naming a Bearer scope is frozen", () => {
+  /**
+   * Routes that admit a narrow token on a DELEGABLE surface, and the scope each
+   * one names.
+   *
+   * Two declarations meet on these routes and neither implies the other: the
+   * route may act on somebody else's record, AND it accepts a credential minted
+   * for one job. `requireRecordAuth` refuses that combination at run time — a
+   * scoped credential naming another record is turned away before any grant is
+   * read — and this table is what keeps the SET of routes making both
+   * declarations from growing quietly.
+   */
+  const SCOPED_RECORD_ROUTES: Record<string, string> = {
+    // Third-party measurement ingest: a scale, a watch bridge, a
+    // home-automation rule. The sibling read, edit and delete legs on this
+    // module name no scope and so still refuse every narrow token.
+    "app/api/measurements/route.ts": "MEASUREMENTS_WRITE_SCOPE",
+  };
+
+  it("only the known routes pass a scope to the record resolver", () => {
+    const naming = filesMatching(
+      /requireRecordAuth\([^)]*\bscope:\s*[A-Za-z_$][\w$]*/,
+    );
+    // Non-zero proof: an empty match set must fail rather than agree with an
+    // emptied table. This is the leg most likely to rot — the matcher spans a
+    // multi-line call, so a formatting change is exactly what would silently
+    // empty it.
+    expect(naming.length).toBeGreaterThan(0);
+    expect(naming).toEqual(Object.keys(SCOPED_RECORD_ROUTES).sort());
+  });
+
+  it("each names the scope this table says it does", () => {
+    for (const [rel, scope] of Object.entries(SCOPED_RECORD_ROUTES)) {
+      const named = [
+        ...read(rel).matchAll(
+          /requireRecordAuth\([^)]*\bscope:\s*([A-Za-z_$][\w$]*)/g,
+        ),
+      ].map((m) => m[1]);
+      expect(named).toEqual([scope]);
+    }
+  });
+
+  it("the record resolver still refuses a scoped credential a selector", () => {
+    // The whole admission rests on one `if` inside `requireRecordAuth`. Delete
+    // it and every other leg in this file stays green while a single-purpose
+    // token gains delegated write — so the refusal is asserted where it lives,
+    // not only through the behaviour that depends on it.
+    const src = read("lib/api-handler.ts");
+    expect(src).toMatch(/narrow_scope_selector/);
+    expect(src).toMatch(/isScopedCredential\(auth\)/);
   });
 });

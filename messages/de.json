@@ -5879,7 +5879,15 @@
     "googleHealthViewData": "Schritte ansehen",
     "apiTokens": "API-Tokens",
     "apiTokensDescription": "API-Tokens für die externe Medikamenten-Einnahme prüfen und widerrufen.",
-    "tokenMintMovedDescription": "Tokens werden pro Medikament ausgestellt. Öffne ein Medikament und aktiviere dessen API-Endpoint, um ein Token zu erhalten, das nur für dieses Medikament gilt.",
+    "measurementsToken": {
+      "title": "Token für Messwert-Import",
+      "description": "Werte von einer smarten Waage, einer Uhren-Bridge oder einer Hausautomatisierung übertragen.",
+      "detail": "Sende ihn als Authorization: Bearer-Header. Das Token wird nur einmal angezeigt — kopiere es jetzt.",
+      "scopeNote": "Es kann ausschließlich Werte hinzufügen, und nur zu deiner eigenen Akte. Es kann deine Daten nicht lesen, keinen Wert ändern oder löschen und kein weiteres Token erstellen.",
+      "endpointsNote": "Funktioniert mit POST /api/measurements und POST /api/measurements/batch. Werte kommen als manuell erfasst an.",
+      "createFailed": "Das Token konnte nicht erstellt werden. Bitte versuche es erneut."
+    },
+    "tokenMintMovedDescription": "Tokens werden dort ausgestellt, wo ihr Geltungsbereich liegt. Erstelle oben ein Token für den Messwert-Import, oder öffne ein Medikament und aktiviere dessen API-Endpoint für ein Token, das nur für dieses Medikament gilt.",
     "tokenNamePlaceholder": "Token-Name (z.B. iPhone Shortcut)",
     "tokenCreated": "Token erstellt — kopiere ihn jetzt! Er wird nicht erneut angezeigt.",
     "tokenCopy": "Token kopieren",

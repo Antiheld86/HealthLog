@@ -30,6 +30,7 @@ import {
   mfaWebauthnLoginVerifySchema,
 } from "@/lib/validations/mfa";
 import { oidcNativeTokenSchema } from "@/lib/validations/oidc-native";
+import { createMeasurementTokenSchema } from "@/lib/validations/tokens";
 import { nativeHandoffTokenSchema } from "@/lib/validations/native-handoff";
 import {
   stepUpMintSchema,
@@ -448,6 +449,28 @@ const apiTokenInfo = z
 const apiTokenListResponse = z
   .array(apiTokenInfo)
   .meta({ id: "ApiTokenListResponse" });
+
+const createMeasurementTokenRequest = createMeasurementTokenSchema.meta({
+  id: "CreateMeasurementTokenRequest",
+  description:
+    "Mint a measurement-ingest Bearer. There is no `scope` field: this endpoint mints one shape and the permission array is a literal, so no request can widen it. `name` is what the token is listed under — name it after the thing you are pasting it into, because that is what you will be reading when you decide whether to revoke it. `expiresInDays` defaults to 365.",
+});
+
+const createMeasurementTokenResponse = z
+  .object({
+    token: z
+      .string()
+      .describe(
+        "The raw `hlk_` Bearer, RETURNED EXACTLY ONCE. It is stored only as an HMAC-SHA256 hash, so there is no way to retrieve it later; a client that does not capture it here has to mint a replacement. Treat it as a secret in logs, crash reports and analytics.",
+      ),
+    name: z.string(),
+    expiresAt: z.iso.datetime({ offset: true }),
+  })
+  .meta({
+    id: "CreateMeasurementTokenResponse",
+    description:
+      "The one response that carries a usable measurement-ingest Bearer value.",
+  });
 
 // ── Registration, credential rotation, Codex device-auth ─────────────
 
@@ -1571,7 +1594,7 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "List the caller's API tokens",
       description:
         "Every `ApiToken` row belonging to the caller, newest first, revoked ones included — presence in this list is not validity, `revoked` is. The hash is never returned and there is no path that re-reveals a token's plaintext.\n\n" +
-        "Three things the name understates. The list is not limited to tokens a person minted from the settings surface: a native login mints a wildcard access token as an `ApiToken` row, so a signed-in phone shows up here too. There is no mint on this path any more — the generic POST that issued `[\"medication:ingest\"]` was removed, because that scope reached no ingest route while the pre-fail-closed default let it reach everything else; the working credential comes from the per-medication API-endpoint toggle. And unlike the revoke, this read is NOT gated on the operator's instance-wide API switch: that switch governs the surfaces a token is for, not a token's ability to authenticate, so tokens stay live while it is off and their owner has to be able to see them.",
+        "Three things the name understates. The list is not limited to tokens a person minted from the settings surface: a native login mints a wildcard access token as an `ApiToken` row, so a signed-in phone shows up here too. There is no GENERIC mint any more — the POST at this exact path issued `[\"medication:ingest\"]` and was removed, because that scope reached no ingest route while the pre-fail-closed default let it reach everything else. The credentials that work are minted where they are scoped: the per-medication API-endpoint toggle, `POST /api/mcp/tokens` for a connector, and the sibling `POST /api/tokens/measurements` for third-party measurement ingest. And unlike the revoke, this read is NOT gated on the operator's instance-wide API switch: that switch governs the surfaces a token is for, not a token's ability to authenticate, so tokens stay live while it is off and their owner has to be able to see them.",
       responses: {
         "200": {
           description: "The caller's tokens, newest first.",
@@ -1583,6 +1606,65 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
               ),
             },
           },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/tokens/measurements": {
+    post: {
+      tags: ["Auth"],
+      summary: "Mint a measurement-ingest token",
+      description:
+        "Mints a Bearer scoped to exactly `measurements:write` and audits the mint. THE RESPONSE CARRIES THE RAW TOKEN — the only place it ever exists; it is stored as an HMAC and no path re-reveals it.\n\n" +
+        "**What it can do.** `POST /api/measurements` and `POST /api/measurements/batch`, on its owner's own record, attributing `source: MANUAL`. An entry naming `APPLE_HEALTH` is refused 422 rather than relabelled: that source is half a dedup key the phone also writes into, it participates in the cross-source merge, and it is what decides the Apple Health card may claim a sync happened. For the same reason a write through this credential does not move the native client's sync checkpoint.\n\n" +
+        "**What it cannot do.** Everything else, including the measurement reads on the same paths, the edit and delete legs, and the export — a scope grants what it names and nothing adjacent. It cannot be pointed at a shared record: a request carrying the account selector is refused 403 before any grant is read, whatever grants its holder actually has. And it cannot mint another token, this endpoint included.\n\n" +
+        "Minting needs a cookie session or a cookie-equivalent token. Gated by the operator's instance-wide API switch. Body capped at 16 KiB; 10 mints per user per minute. Tokens appear in `GET /api/tokens` and are revoked at `DELETE /api/tokens/{id}` like any other.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: createMeasurementTokenRequest },
+        },
+      },
+      responses: {
+        "201": {
+          description:
+            "Token minted. The `token` field is the only copy of the secret.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                createMeasurementTokenResponse,
+                "CreateMeasurementTokenEnvelope",
+              ),
+            },
+          },
+        },
+        "400": {
+          description: "Body is not parseable JSON.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "403": {
+          description:
+            "The operator has switched the API off instance-wide (`AppSettings.apiGlobal`), or the caller presented a narrow-scope token rather than a session — a scoped credential cannot mint credentials. Nothing was minted either way.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "413": {
+          description: "Body exceeds 16 KiB.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "415": {
+          description: "Content-Type is not `application/json`.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "422": {
+          description:
+            "Validation failed. The envelope carries every offending issue, not just the first.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "429": {
+          description:
+            "More than 10 mints from this account in a minute. Nothing was minted.",
+          content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
       },

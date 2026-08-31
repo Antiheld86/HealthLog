@@ -5879,7 +5879,15 @@
     "googleHealthViewData": "Ver tus pasos",
     "apiTokens": "Tokens de API",
     "apiTokensDescription": "Revisa y revoca tokens de API para el registro externo de tomas de medicación.",
-    "tokenMintMovedDescription": "Los tokens se emiten por medicamento. Abre un medicamento y activa su endpoint de API para obtener un token limitado únicamente a ese medicamento.",
+    "measurementsToken": {
+      "title": "Token de importación de mediciones",
+      "description": "Envía lecturas desde una báscula inteligente, un puente de reloj o una regla de domótica.",
+      "detail": "Mándalo como cabecera Authorization: Bearer. El token se muestra una sola vez: cópialo ahora.",
+      "scopeNote": "Solo puede añadir lecturas, y únicamente a tu propio historial. No puede consultar tus datos, ni modificar o borrar una lectura, ni crear otro token.",
+      "endpointsNote": "Funciona en POST /api/measurements y POST /api/measurements/batch. Las lecturas llegan marcadas como introducidas a mano.",
+      "createFailed": "No se pudo crear el token. Inténtalo de nuevo."
+    },
+    "tokenMintMovedDescription": "Los tokens se emiten allí donde está su alcance. Crea arriba un token de importación de mediciones, o abre un medicamento y activa su endpoint de API para obtener uno limitado únicamente a ese medicamento.",
     "tokenNamePlaceholder": "Nombre del token (p. ej., Atajo de iPhone)",
     "tokenCreated": "Token creado — ¡cópialo ahora! No se mostrará de nuevo.",
     "tokenCopy": "Copiar token",

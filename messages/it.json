@@ -5879,7 +5879,15 @@
     "googleHealthViewData": "Vedi i tuoi passi",
     "apiTokens": "Token API",
     "apiTokensDescription": "Rivedi e revoca i token API per la registrazione esterna delle assunzioni di farmaci.",
-    "tokenMintMovedDescription": "I token vengono emessi per singolo farmaco. Apri un farmaco e attiva il suo endpoint API per ottenere un token valido solo per quel farmaco.",
+    "measurementsToken": {
+      "title": "Token per l'importazione di misurazioni",
+      "description": "Invia letture da una bilancia smart, da un bridge per orologi o da una regola di domotica.",
+      "detail": "Invialo come intestazione Authorization: Bearer. Il token viene mostrato una sola volta: copialo adesso.",
+      "scopeNote": "Può soltanto aggiungere letture, e solo alla tua cartella. Non può leggere i tuoi dati, modificare o eliminare una lettura, né creare un altro token.",
+      "endpointsNote": "Funziona su POST /api/measurements e POST /api/measurements/batch. Le letture arrivano contrassegnate come inserite a mano.",
+      "createFailed": "Non è stato possibile creare il token. Riprova."
+    },
+    "tokenMintMovedDescription": "I token vengono emessi dove si applicano. Crea qui sopra un token per l'importazione di misurazioni, oppure apri un farmaco e attiva il suo endpoint API per un token valido solo per quel farmaco.",
     "tokenNamePlaceholder": "Nome del token (ad es. Comando rapido iPhone)",
     "tokenCreated": "Token creato — copialo ora! Non verrà mostrato di nuovo.",
     "tokenCopy": "Copia token",

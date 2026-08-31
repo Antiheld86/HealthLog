@@ -390,7 +390,35 @@ export type AuthContext = {
    * maps it server-side, the same posture as `userId` being narrowed from auth.
    */
   readonly authMethod: "cookie" | "bearer";
+  /**
+   * The named scope that admitted this Bearer, or null when the credential is
+   * cookie-equivalent — a session, or a `["*"]` token. A non-null value marks a
+   * NARROW, single-purpose credential: one minted for one job, by its own
+   * holder, from their own settings page.
+   *
+   * A single nullable string rather than the token's permission array, and that
+   * is the point: nothing downstream can re-derive an authorisation decision
+   * from it. The decision was made once, in `resolveBearerToken`; this only
+   * reports which arm ran, so a route can refuse a narrow credential something
+   * a cookie session may still do.
+   *
+   * Optional for the reason `actingAsUserId` and `recordEpoch` above are: the
+   * test files that hand-build this object keep compiling, and an absent field
+   * reads as null — "cookie-equivalent", which is what a hand-built context has
+   * always meant.
+   */
+  readonly bearerScope?: string | null;
 };
+
+/**
+ * Was this request authenticated by a narrow, single-purpose Bearer scope?
+ *
+ * The one reader of `bearerScope`, exported so no handler re-derives the test
+ * and they cannot drift on what "narrow" means.
+ */
+export function isScopedCredential(auth: AuthContext): boolean {
+  return (auth.bearerScope ?? null) !== null;
+}
 
 /**
  * Require an authenticated request. Throws HttpError(401) / HttpError(403) on failure.
@@ -585,6 +613,17 @@ async function authenticateBearer(
     session: { id: tokenId, expiresAt },
     user,
     authMethod: "bearer",
+    // Non-null exactly when a NAMED scope admitted a narrow token. A `["*"]`
+    // token is cookie-equivalent and reads null however the route was declared;
+    // a narrow token on a route that named no scope never reaches this line,
+    // because `wildcard-only` already refused it in `resolveBearerToken`.
+    //
+    // Derived here rather than in the resolver so `bearer.ts` keeps its single
+    // authorisation arm: this is a report of the decision that already ran, not
+    // a second one.
+    bearerScope: permissions.includes("*")
+      ? null
+      : (requiredPermission ?? null),
   };
 }
 
@@ -676,10 +715,12 @@ function auditRefusal(
 /**
  * This request says it is acting on another account and this route will not.
  *
- * Two ways to arrive: a route that never declared a mode (`undeclared_mode`),
- * and a selector sent over the transport that does not carry one
- * (`misplaced_selector`). One response either way — the caller learns that the
- * request will not be served, and nothing about grants.
+ * Three ways to arrive: a route that never declared a mode (`undeclared_mode`),
+ * a selector sent over the transport that does not carry one
+ * (`misplaced_selector`), and a narrow single-purpose Bearer naming a record
+ * that is not its owner's (`narrow_scope_selector`). One response every way —
+ * the caller learns that the request will not be served, and nothing about
+ * grants.
  *
  * The audit rule, stated once because it is a judgement call: a HEADER refusal
  * always writes a row, a SESSION refusal never does. The header is a per-request
@@ -692,7 +733,10 @@ function auditRefusal(
 function refuseUndeclaredMode(
   auth: AuthContext,
   carrier: ActingCarrier,
-  reason: "undeclared_mode" | "misplaced_selector" = "undeclared_mode",
+  reason:
+    | "undeclared_mode"
+    | "misplaced_selector"
+    | "narrow_scope_selector" = "undeclared_mode",
 ): SharingNotPermittedError {
   annotate({ meta: { sharing_refusal: reason } });
   if (carrier.kind !== "session") {
@@ -744,6 +788,23 @@ export interface RecordAuthContext extends AuthContext {
   readonly grantId: string | null;
 }
 
+/** What a delegable route may additionally declare about the credentials it takes. */
+export interface RecordAuthOptions {
+  /**
+   * A Bearer scope this route accepts in place of the cookie-equivalent
+   * default. Naming one is a WIDENING — it admits a credential class the route
+   * refused before — and is frozen by `bearer-scope-enforcement-guard.test.ts`
+   * exactly like a `requireAuth` scope, so it lands in a reviewed diff.
+   *
+   * What the option does NOT do is relax anything below it. A credential
+   * admitted this way is single-purpose: it reaches this route on its OWN
+   * record and is refused the moment the request names another, before any
+   * grant is read. The `need` and `domain` checks run unchanged for everyone
+   * else.
+   */
+  readonly scope?: string;
+}
+
 /**
  * v1.36.0 — a delegable surface: this route may act on a shared record.
  *
@@ -768,12 +829,18 @@ export interface RecordAuthContext extends AuthContext {
  *   routes that are delegable. The value is frozen per module by
  *   `src/__tests__/sharing-surface-guard.test.ts` and reviewed against the
  *   design's clustering table; this function only enforces what was declared.
+ * @param options v1.38.x — optional extra declarations. Today that is `scope`,
+ *   naming a narrow Bearer this route admits alongside cookie sessions and
+ *   cookie-equivalent tokens. A route that passes none keeps the fail-closed
+ *   default and refuses every narrow token, which is what makes adding one a
+ *   visible decision rather than an omission.
  */
 export async function requireRecordAuth(
   need: GrantNeed,
   domain: ShareScope,
+  options?: RecordAuthOptions,
 ): Promise<RecordAuthContext> {
-  const auth = await authenticateCaller();
+  const auth = await authenticateCaller(options?.scope);
   // v1.37.0 — before any carrier is read, any grant is looked up, or any record
   // row is touched: does this request still believe what its session believes?
   //
@@ -790,6 +857,24 @@ export async function requireRecordAuth(
   // first database await".
   await assertRecordSessionFence(auth);
   const carrier = await readActingCarrier(auth);
+
+  // A narrow, single-purpose Bearer never acts on another record.
+  //
+  // Its holder mints it themselves, for one job, and pastes it into something
+  // that is not this app — a scale bridge, a home-automation rule. Admitting it
+  // under a selector would exercise somebody else's grant through a credential
+  // nobody reviewed for that purpose, and the blast radius of the paste would
+  // stop being "my own record" without anyone deciding it should.
+  //
+  // Placed above the `none` arm and below the carrier read, which is the only
+  // position that is both correct and cheap: no grant is looked up on the way
+  // to the refusal, and a scoped credential on its own record still falls
+  // through to the untouched `none` path below. A `["*"]` token and a cookie
+  // session read `bearerScope: null` here and keep exactly the delegation
+  // behaviour they had.
+  if (carrier.kind !== "none" && isScopedCredential(auth)) {
+    throw refuseUndeclaredMode(auth, carrier, "narrow_scope_selector");
+  }
 
   if (carrier.kind === "none") {
     // Do no harm: without a carrier this is byte-for-byte the pre-v1.36.0

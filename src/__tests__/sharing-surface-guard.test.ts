@@ -817,7 +817,7 @@ interface ManageEntry extends DelegableEntry {
 const DELEGABLE_ROUTES: Record<string, DelegableEntry> = {
   "app/api/measurements/route.ts": {
     domain: "measurements",
-    why: "The record's readings. The GET returns values, units, timestamps and notes scoped `userId: user.id`; the POST arms are delegable writes (see the write literal) and the PUT / DELETE beside them are not.",
+    why: "The record's readings. The GET returns values, units, timestamps and notes scoped `userId: user.id`; the POST arms are delegable writes (see the write literal) and the PUT / DELETE beside them are not. The POST additionally names a Bearer scope, so a narrow third-party ingest token reaches it — the two declarations do not compound: a scoped credential naming any record but its owner's is refused before a grant is read, so this route is delegable for a session and single-record for that token.",
   },
   "app/api/measurements/[id]/route.ts": {
     domain: "measurements",
@@ -1412,7 +1412,7 @@ const DELEGABLE_ROUTES: Record<string, DelegableEntry> = {
  */
 const DELEGABLE_WRITE_ROUTES: Record<string, string> = {
   "app/api/measurements/route.ts":
-    "Entering a reading. Both POST arms — single and batch — land rows under the resolved record; the safety-floor check, the reminder satisfaction and the rollup recompute all address the same record and are correct under substitution.",
+    "Entering a reading. Both POST arms — single and batch — land rows under the resolved record; the safety-floor check, the reminder satisfaction and the rollup recompute all address the same record and are correct under substitution. The narrow ingest scope this route also names never reaches the substitution: it is refused a selector outright, so every row it writes is its own holder's.",
   "app/api/labs/route.ts":
     "Entering a lab result. The free-text path may mint a biomarker, and mints it into the RECORD's catalogue — a result added to somebody's record that left the marker on the helper's account would be worse than useless to the owner.",
   "app/api/biomarkers/route.ts":

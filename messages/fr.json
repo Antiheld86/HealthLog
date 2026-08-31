@@ -5879,7 +5879,15 @@
     "googleHealthViewData": "Voir vos pas",
     "apiTokens": "Jetons API",
     "apiTokensDescription": "Consultez et révoquez les jetons API pour l’enregistrement externe des prises de médicaments.",
-    "tokenMintMovedDescription": "Les jetons sont émis par médicament. Ouvrez un médicament et activez son point de terminaison API pour obtenir un jeton limité à ce seul médicament.",
+    "measurementsToken": {
+      "title": "Jeton d'import de mesures",
+      "description": "Envoyez des relevés depuis une balance connectée, une passerelle de montre ou une règle domotique.",
+      "detail": "Transmettez-le dans un en-tête Authorization: Bearer. Le jeton n'est affiché qu'une fois — copiez-le maintenant.",
+      "scopeNote": "Il peut uniquement ajouter des relevés, et seulement à votre propre dossier. Il ne peut pas consulter vos données, ni modifier ou supprimer un relevé, ni créer un autre jeton.",
+      "endpointsNote": "Fonctionne sur POST /api/measurements et POST /api/measurements/batch. Les relevés arrivent marqués comme saisis à la main.",
+      "createFailed": "Impossible de créer le jeton. Veuillez réessayer."
+    },
+    "tokenMintMovedDescription": "Les jetons sont émis là où porte leur périmètre. Créez ci-dessus un jeton d'import de mesures, ou ouvrez un médicament et activez son point de terminaison API pour un jeton limité à ce seul médicament.",
     "tokenNamePlaceholder": "Nom du jeton (par exemple Raccourci iPhone)",
     "tokenCreated": "Jeton créé — copiez-le maintenant ! Il ne sera plus affiché.",
     "tokenCopy": "Copier le jeton",
