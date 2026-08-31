@@ -1656,6 +1656,10 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           description: "Content-Type is not `application/json`.",
           content: { "application/json": { schema: errorEnvelope } },
         },
+        // After the spread, not before: `stdResponses` carries its own 422 and
+        // 429, and a key placed ahead of it is silently overwritten by the
+        // generic wording. Same ordering as the MCP mint next door.
+        ...stdResponses,
         "422": {
           description:
             "Validation failed. The envelope carries every offending issue, not just the first.",
@@ -1666,7 +1670,6 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             "More than 10 mints from this account in a minute. Nothing was minted.",
           content: { "application/json": { schema: errorEnvelope } },
         },
-        ...stdResponses,
       },
     },
   },

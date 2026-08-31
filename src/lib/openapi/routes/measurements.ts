@@ -876,12 +876,14 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             "A measurement with this data already exists — the `(userId, type, source, externalId)` dedup index rejected the write.",
           content: { "application/json": { schema: errorEnvelope } },
         },
+        // After the spread: `stdResponses` carries a generic 422 that would
+        // otherwise overwrite this one.
+        ...stdResponses,
         "422": {
           description:
             "Validation failed, or (`measurement.create.source_not_permitted`) a narrow `measurements:write` credential named `APPLE_HEALTH` as the source. Refused rather than relabelled, so the caller can fix the payload instead of discovering rows it did not ask for.",
           content: { "application/json": { schema: errorEnvelope } },
         },
-        ...stdResponses,
       },
     },
   },
@@ -996,12 +998,14 @@ export const measurementPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
+        // After the spread: `stdResponses` carries a generic 422 that would
+        // otherwise overwrite this one.
+        ...stdResponses,
         "422": {
           description:
             "The batch exceeded the 500-entry limit (`measurement.batch.too_large`), failed validation, or (`measurement.batch.source_not_permitted`) carried an entry naming `APPLE_HEALTH` under a narrow `measurements:write` credential. Nothing was written in any of the three cases.",
           content: { "application/json": { schema: errorEnvelope } },
         },
-        ...stdResponses,
       },
     },
   },
