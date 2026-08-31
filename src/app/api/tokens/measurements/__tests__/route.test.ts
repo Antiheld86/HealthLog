@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/api-handler", () => ({
   apiHandler: (fn: unknown) => fn,
-  requireAuth: vi.fn(),
+  requireCookieAuth: vi.fn(),
 }));
 
 vi.mock("@/lib/auth/issue-token", () => ({
@@ -38,7 +38,7 @@ vi.mock("@/lib/logging/context", () => ({
 }));
 
 import { POST } from "../route";
-import { requireAuth } from "@/lib/api-handler";
+import { requireCookieAuth } from "@/lib/api-handler";
 import { issueApiToken } from "@/lib/auth/issue-token";
 import { isApiGloballyEnabled } from "@/lib/app-settings";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -58,7 +58,7 @@ function req(body: unknown): Request {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(requireAuth).mockResolvedValue({ user: USER } as never);
+  vi.mocked(requireCookieAuth).mockResolvedValue({ user: USER } as never);
   vi.mocked(isApiGloballyEnabled).mockResolvedValue(true);
   vi.mocked(checkRateLimit).mockResolvedValue({ allowed: true } as never);
   vi.mocked(auditLog).mockResolvedValue(undefined as never);

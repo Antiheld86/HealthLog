@@ -626,6 +626,10 @@ describe("B8 — the measurement-ingest scope reaches its two routes and no othe
   });
 
   it("cannot mint another token", async () => {
+    // 401, not 403, and the difference is the point: the mint is cookie-only,
+    // so a Bearer is turned away as unauthenticated before any scope is read.
+    // The refusal is therefore not "this token's scope is too narrow" — no
+    // token is wide enough, a wildcard included.
     await armToken(["measurements:write"], "mwrite7");
     const { POST } = await import("@/app/api/tokens/measurements/route");
     const res = await POST(
@@ -638,7 +642,32 @@ describe("B8 — the measurement-ingest scope reaches its two routes and no othe
         body: JSON.stringify({ name: "second" }),
       } as never),
     );
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
+  });
+
+  it("and neither can a wildcard token", async () => {
+    // The case the cookie-only resolver exists for. A native access token
+    // lives a day; what this endpoint mints lives a year, so admitting one
+    // would let a short-lived compromise leave behind a credential that
+    // survives revoking it.
+    await armToken(["*"], "wildmint");
+    const { POST } = await import("@/app/api/tokens/measurements/route");
+    const res = await POST(
+      new NextRequest("https://health.example/api/tokens/measurements", {
+        method: "POST",
+        headers: {
+          authorization: headerJar.get("authorization")!,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ name: "minted by a wildcard" }),
+      } as never),
+    );
+    expect(res.status).toBe(401);
+    expect(
+      await getPrismaClient().apiToken.count({
+        where: { permissions: { has: "measurements:write" } },
+      }),
+    ).toBe(0);
   });
 
   it("cannot reach the medication ingest surface", async () => {

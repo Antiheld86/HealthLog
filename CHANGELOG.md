@@ -50,6 +50,11 @@ There is now a token for exactly that job, and for nothing else.
   somebody has shared with you is refused, and refused before the sharing
   grant is even consulted — so no future change to what sharing permits can
   widen what one of these tokens reaches.
+- Minting one requires being signed in on the web. No API token can mint
+  another, whatever it is allowed to do — the sign-in a phone holds lasts a
+  day and what it could mint here lasts a year, so allowing it would let a
+  credential that leaked for an afternoon leave behind one that outlives
+  cancelling it.
 - Closed a narrower gap found while building this. A repeated request
   carrying an `Idempotency-Key` could be answered from the cache after a
   check that asked only whether a sharing grant was live, and not which

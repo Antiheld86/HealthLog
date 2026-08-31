@@ -1619,7 +1619,7 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Mints a Bearer scoped to exactly `measurements:write` and audits the mint. THE RESPONSE CARRIES THE RAW TOKEN — the only place it ever exists; it is stored as an HMAC and no path re-reveals it.\n\n" +
         "**What it can do.** `POST /api/measurements` and `POST /api/measurements/batch`, on its owner's own record, attributing `source: MANUAL`. An entry naming `APPLE_HEALTH` is refused 422 rather than relabelled: that source is half a dedup key the phone also writes into, it participates in the cross-source merge, and it is what decides the Apple Health card may claim a sync happened. For the same reason a write through this credential does not move the native client's sync checkpoint.\n\n" +
         "**What it cannot do.** Everything else, including the measurement reads on the same paths, the edit and delete legs, and the export — a scope grants what it names and nothing adjacent. It cannot be pointed at a shared record: a request carrying the account selector is refused 403 before any grant is read, whatever grants its holder actually has. And it cannot mint another token, this endpoint included.\n\n" +
-        "Minting needs a cookie session or a cookie-equivalent token. Gated by the operator's instance-wide API switch. Body capped at 16 KiB; 10 mints per user per minute. Tokens appear in `GET /api/tokens` and are revoked at `DELETE /api/tokens/{id}` like any other.",
+        "Minting requires a COOKIE SESSION. No Bearer credential reaches this endpoint at any scope, wildcard included — not because a wildcard lacks the reach, but because of the lifetimes involved: a native access token lives a day and what it could mint here lives a year, so admitting one would let a short-lived compromise leave behind a credential that outlives revoking it. Gated by the operator's instance-wide API switch. Body capped at 16 KiB; 10 mints per user per minute. Tokens appear in `GET /api/tokens` and are revoked at `DELETE /api/tokens/{id}` like any other.",
       requestBody: {
         required: true,
         content: {
@@ -1645,7 +1645,7 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
         "403": {
           description:
-            "The operator has switched the API off instance-wide (`AppSettings.apiGlobal`), or the caller presented a narrow-scope token rather than a session — a scoped credential cannot mint credentials. Nothing was minted either way.",
+            "The operator has switched the API off instance-wide (`AppSettings.apiGlobal`). Nothing was minted. A Bearer caller does not reach this arm — it is refused 401 before the switch is read.",
           content: { "application/json": { schema: errorEnvelope } },
         },
         "413": {

@@ -15,9 +15,8 @@
  * request shape reaches it; the scope it names is accepted by exactly two
  * routes, both writes, both on the holder's own record. It cannot read a
  * reading back, cannot edit or delete one, cannot reach the export, and cannot
- * mint another token — the `requireAuth()` below names no scope, so a
- * measurements token presenting itself here is refused like any other narrow
- * credential. That last property is why the mint is worth its own file: the
+ * mint another token — no Bearer credential reaches this endpoint at all, at
+ * any scope. That last property is why the mint is worth its own file: the
  * blast radius of a credential pasted into a container the user does not
  * operate should not include making more credentials.
  *
@@ -31,7 +30,7 @@
  */
 import { NextRequest } from "next/server";
 
-import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { apiHandler, requireCookieAuth } from "@/lib/api-handler";
 import {
   apiError,
   apiSuccess,
@@ -64,12 +63,20 @@ const MINT_RATE_LIMIT_MAX = 10;
 const MINT_RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
 export const POST = apiHandler(async (request: NextRequest) => {
-  // No scope argument, and that is load-bearing rather than incidental: it
-  // keeps the fail-closed default, so the only credentials that reach the mint
-  // are a cookie session and a cookie-equivalent token. It also refuses any
-  // acting-account carrier, so a delegate cannot mint a credential against the
-  // record they are helping with.
-  const { user } = await requireAuth();
+  // Cookie-only, and the reason is lifetime rather than reach.
+  //
+  // `requireAuth()` would refuse a narrow token — a measurements credential
+  // cannot mint its own successor — but it still admits a cookie-EQUIVALENT
+  // one, and that is the case worth closing. A native access token lives a
+  // day; what it could mint here lives a year. So a credential that leaked for
+  // an afternoon would leave behind one that outlives revoking it, and the
+  // revocation would look like it had worked.
+  //
+  // A session cannot do that: it is held by a browser the person is sitting in
+  // front of, and it is the surface this endpoint is reached from anyway. The
+  // same argument the passkey-registration and trusted-device routes make, and
+  // `requireCookieAuth` is the helper they share.
+  const { user } = await requireCookieAuth();
   annotate({ action: { name: "tokens.measurements.create" } });
 
   if (!(await isApiGloballyEnabled())) {
