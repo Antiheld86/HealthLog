@@ -35,6 +35,7 @@ import {
 import { WhoopCard } from "@/components/settings/integrations/whoop-card";
 import { WithingsCard } from "@/components/settings/integrations/withings-card";
 import { useAuth } from "@/hooks/use-auth";
+import type { IntegrationCallbackUrls } from "@/lib/integrations/callback-urls";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -209,7 +210,17 @@ const CARD_BACKED_INTEGRATIONS: ReadonlySet<IntegrationKey> = new Set([
   "nightscout",
 ]);
 
-export function ConnectionsPanel() {
+export function ConnectionsPanel({
+  callbackUrls,
+}: {
+  /**
+   * The per-provider OAuth callback URLs, resolved on the server per request
+   * (`getIntegrationCallbackUrls`) and threaded down from the route. A client
+   * module cannot derive them: `NEXT_PUBLIC_APP_URL` is inlined at build
+   * time and absent from the published image.
+   */
+  callbackUrls: IntegrationCallbackUrls;
+}) {
   const { t } = useTranslations();
   const { isAuthenticated } = useAuth();
   const router = useRouter();
@@ -328,28 +339,46 @@ export function ConnectionsPanel() {
       {/* Per-provider anchors so deep-links (onboarding "more sources" chips,
           `/settings/integrations#oura`) scroll straight to the right card. */}
       <div id="withings" className="scroll-mt-28">
-        <WithingsCard viewModel={withingsViewModel} />
+        <WithingsCard
+          viewModel={withingsViewModel}
+          callbackUrl={callbackUrls.withings}
+        />
       </div>
       <div id="whoop" className="scroll-mt-28">
-        <WhoopCard viewModel={whoopViewModel} />
+        <WhoopCard
+          viewModel={whoopViewModel}
+          callbackUrl={callbackUrls.whoop}
+        />
       </div>
       <div id="fitbit" className="scroll-mt-28">
-        <FitbitCard viewModel={fitbitViewModel} />
+        <FitbitCard
+          viewModel={fitbitViewModel}
+          callbackUrl={callbackUrls.fitbit}
+        />
       </div>
       <div id="google-health" className="scroll-mt-28">
-        <GoogleHealthCard viewModel={googleHealthViewModel} />
+        <GoogleHealthCard
+          viewModel={googleHealthViewModel}
+          callbackUrl={callbackUrls["google-health"]}
+        />
       </div>
       <div id="apple-health" className="scroll-mt-28">
         <AppleHealthCard enabled={isAuthenticated} />
       </div>
       <div id="polar" className="scroll-mt-28">
-        <PolarCard viewModel={polarViewModel} />
+        <PolarCard
+          viewModel={polarViewModel}
+          callbackUrl={callbackUrls.polar}
+        />
       </div>
       <div id="oura" className="scroll-mt-28">
-        <OuraCard viewModel={ouraViewModel} />
+        <OuraCard viewModel={ouraViewModel} callbackUrl={callbackUrls.oura} />
       </div>
       <div id="strava" className="scroll-mt-28">
-        <StravaCard viewModel={stravaViewModel} />
+        <StravaCard
+          viewModel={stravaViewModel}
+          callbackUrl={callbackUrls.strava}
+        />
       </div>
       <div id="nightscout" className="scroll-mt-28">
         <NightscoutCard viewModel={nightscoutViewModel} />

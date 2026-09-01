@@ -29,6 +29,7 @@ import {
 } from "@/components/settings/section-slugs";
 import { SettingsShell } from "@/components/settings/settings-shell";
 import { RecordSettingsSectionGate } from "@/components/settings/record-settings-section-gate";
+import { getIntegrationCallbackUrls } from "@/lib/integrations/callback-urls";
 
 /**
  * Dynamic settings section route. Each of the `SETTINGS_SECTION_SLUGS`
@@ -46,6 +47,17 @@ export function generateStaticParams() {
   return SETTINGS_SECTION_SLUGS.map((section) => ({ section }));
 }
 
+/**
+ * Integrations is the one section that needs a server-resolved value: the
+ * OAuth callback URL each provider registers. It is read from the runtime env
+ * here, per request, and handed to the client section as a prop, because a
+ * `NEXT_PUBLIC_*` read inside a client module is inlined at build time and the
+ * published image is built without it.
+ */
+function IntegrationsSectionWithCallbackUrls() {
+  return <IntegrationsSection callbackUrls={getIntegrationCallbackUrls()} />;
+}
+
 const SECTION_COMPONENTS: Record<
   SettingsSectionSlug,
   () => JSX.Element | null
@@ -57,7 +69,7 @@ const SECTION_COMPONENTS: Record<
   about: AboutSection,
   ai: AiSection,
   coach: CoachSection,
-  integrations: IntegrationsSection,
+  integrations: IntegrationsSectionWithCallbackUrls,
   sources: SourcesSection,
   notifications: NotificationsSection,
   layout: LayoutSection,

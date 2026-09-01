@@ -69,8 +69,8 @@ import {
   IntegrationCardDescription,
   IntegrationRedirectGuide,
   type IntegrationDocsProvider,
-  integrationCallbackUrl,
 } from "./setup-guide-link";
+import type { IntegrationCallbackUrls } from "@/lib/integrations/callback-urls";
 
 export interface OAuthProviderStatus {
   connected: boolean;
@@ -123,6 +123,8 @@ export interface OAuthProviderCardProps {
    * exist.
    */
   viewModel?: OAuthProviderStatus;
+  /** Server-resolved OAuth callback URL; see `getIntegrationCallbackUrls`. */
+  callbackUrl: IntegrationCallbackUrls[OAuthProviderCardProps["provider"]];
 }
 
 export function OAuthProviderCard({
@@ -133,6 +135,7 @@ export function OAuthProviderCard({
   dataHref,
   credentials = false,
   viewModel,
+  callbackUrl,
 }: OAuthProviderCardProps) {
   const { t } = useTranslations();
   const describeSyncOutcome = useSyncOutcomeMessage();
@@ -341,6 +344,7 @@ export function OAuthProviderCard({
               <IntegrationRedirectGuide
                 provider={provider}
                 providerLabel={t(i18nPrefix)}
+                callbackUrl={callbackUrl}
               />
             )}
             <form onSubmit={handleSaveCredentials} className="space-y-3">
@@ -526,7 +530,7 @@ export function OAuthProviderCard({
       </div>
       <CallbackMismatchNotice
         provider={t(i18nPrefix)}
-        callbackUrl={integrationCallbackUrl(provider)}
+        callbackUrl={callbackUrl}
       />
     </SettingsCard>
   );

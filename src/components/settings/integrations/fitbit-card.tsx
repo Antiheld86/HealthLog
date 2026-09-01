@@ -68,13 +68,16 @@ import {
   CallbackMismatchNotice,
   IntegrationCardDescription,
   IntegrationRedirectGuide,
-  integrationCallbackUrl,
 } from "./setup-guide-link";
+import type { IntegrationCallbackUrls } from "@/lib/integrations/callback-urls";
 
 export function FitbitCard({
   viewModel,
+  callbackUrl,
 }: {
   viewModel: IntegrationStatusViewModel | undefined;
+  /** Server-resolved OAuth callback URL; see `getIntegrationCallbackUrls`. */
+  callbackUrl: IntegrationCallbackUrls["fitbit"];
 }) {
   const { t } = useTranslations();
   const describeSyncOutcome = useSyncOutcomeMessage();
@@ -314,6 +317,7 @@ export function FitbitCard({
             <IntegrationRedirectGuide
               provider="fitbit"
               providerLabel={t("settings.fitbit")}
+              callbackUrl={callbackUrl}
             />
           )}
           <form onSubmit={handleSaveCredentials} className="space-y-3">
@@ -525,7 +529,7 @@ export function FitbitCard({
       </div>
       <CallbackMismatchNotice
         provider={t("settings.fitbit")}
-        callbackUrl={integrationCallbackUrl("fitbit")}
+        callbackUrl={callbackUrl}
       />
     </SettingsCard>
   );

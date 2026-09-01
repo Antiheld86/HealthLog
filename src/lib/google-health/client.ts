@@ -146,7 +146,7 @@ export interface GoogleHealthCredentials {
  *   - must land on the fixed `/api/google-health/callback` path,
  *   - when derived from `NEXT_PUBLIC_APP_URL`, must stay same-origin with it.
  */
-function getRedirectUri(): string {
+export function getGoogleHealthRedirectUri(): string {
   const explicit = process.env.GOOGLE_HEALTH_REDIRECT_URI;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
   const raw =
@@ -276,7 +276,7 @@ export function getAuthorizationUrl(
   const params = new URLSearchParams({
     response_type: "code",
     client_id: creds.clientId,
-    redirect_uri: getRedirectUri(),
+    redirect_uri: getGoogleHealthRedirectUri(),
     scope: getGoogleHealthScopeString(),
     access_type: "offline",
     prompt: "consent",
@@ -371,7 +371,7 @@ export async function exchangeCode(
       grant_type: "authorization_code",
       code,
       client_id: creds.clientId,
-      redirect_uri: getRedirectUri(),
+      redirect_uri: getGoogleHealthRedirectUri(),
       code_verifier: codeVerifier,
     }),
     creds,

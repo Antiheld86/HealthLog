@@ -75,7 +75,7 @@ export interface FitbitCredentials {
  *   - must land on the fixed `/api/fitbit/callback` path,
  *   - when derived from `NEXT_PUBLIC_APP_URL`, must stay same-origin with it.
  */
-function getRedirectUri(): string {
+export function getFitbitRedirectUri(): string {
   const explicit = process.env.FITBIT_REDIRECT_URI;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL;
   const raw =
@@ -188,7 +188,7 @@ export function getAuthorizationUrl(
   const params = new URLSearchParams({
     response_type: "code",
     client_id: creds.clientId,
-    redirect_uri: getRedirectUri(),
+    redirect_uri: getFitbitRedirectUri(),
     scope: FITBIT_OAUTH_SCOPE,
     code_challenge: codeChallenge,
     code_challenge_method: "S256",
@@ -287,7 +287,7 @@ export async function exchangeCode(
       grant_type: "authorization_code",
       code,
       client_id: creds.clientId,
-      redirect_uri: getRedirectUri(),
+      redirect_uri: getFitbitRedirectUri(),
       code_verifier: codeVerifier,
     }),
     creds,

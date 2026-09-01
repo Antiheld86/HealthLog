@@ -40,25 +40,21 @@ export function integrationDocsHref(provider: IntegrationDocsProvider): string {
 }
 
 /**
- * The OAuth callback path every BYO-key provider registers against. Every
- * provider's `getRedirectUri()` (`src/lib/{provider}/client.ts`) derives the
- * same shape from `NEXT_PUBLIC_APP_URL` unless an operator overrides it with
- * an explicit `*_REDIRECT_URI` env var — the common case this card targets.
+ * Shows a compact warning when the callback origin differs from the app.
+ *
+ * `callbackUrl` is the value the server registers as `redirect_uri`, resolved
+ * per request by `getIntegrationCallbackUrls()` and passed down as a prop. It
+ * must not be derived here: a `NEXT_PUBLIC_*` read in a client module is
+ * inlined at build time, and the published image is built without it.
+ * `null` means the provider cannot build a redirect URI from the current env,
+ * so there is nothing to compare.
  */
-export function integrationCallbackUrl(
-  provider: IntegrationDocsProvider,
-): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? "";
-  return `${base}/api/${provider}/callback`;
-}
-
-/** Shows a compact warning when the callback origin differs from the app. */
 export function CallbackMismatchNotice({
   provider,
   callbackUrl,
 }: {
   provider: string;
-  callbackUrl: string;
+  callbackUrl: string | null;
 }) {
   // Get the current origin of the app
   const { t } = useTranslations();
@@ -69,6 +65,7 @@ export function CallbackMismatchNotice({
   );
   // Get the origin of the callback URL
   const callbackOrigin = (() => {
+    if (!callbackUrl) return null;
     try {
       return new URL(callbackUrl).origin;
     } catch {
@@ -103,12 +100,19 @@ export function CallbackMismatchNotice({
 export function IntegrationRedirectGuide({
   provider,
   providerLabel,
+  callbackUrl,
 }: {
   provider: IntegrationDocsProvider;
   providerLabel: string;
+  /**
+   * The server-resolved callback URL (see `CallbackMismatchNotice`). When the
+   * provider cannot build one from the current env, show the fixed path so
+   * the step still names what the vendor form expects.
+   */
+  callbackUrl: string | null;
 }) {
   const { t } = useTranslations();
-  const callbackUrl = integrationCallbackUrl(provider);
+  const shownCallbackUrl = callbackUrl ?? `/api/${provider}/callback`;
   return (
     <div
       className="bg-muted/40 border-border/60 space-y-1.5 rounded-md border p-3 text-xs"
@@ -131,7 +135,7 @@ export function IntegrationRedirectGuide({
             className="bg-background text-foreground rounded px-1 py-0.5 font-mono break-all"
             data-testid={`${provider}-redirect-uri`}
           >
-            {callbackUrl}
+            {shownCallbackUrl}
           </code>
         </li>
         <li>{t("settings.integrationRedirectGuide.step3")}</li>

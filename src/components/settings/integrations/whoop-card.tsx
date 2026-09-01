@@ -59,13 +59,16 @@ import {
   CallbackMismatchNotice,
   IntegrationCardDescription,
   IntegrationRedirectGuide,
-  integrationCallbackUrl,
 } from "./setup-guide-link";
+import type { IntegrationCallbackUrls } from "@/lib/integrations/callback-urls";
 
 export function WhoopCard({
   viewModel,
+  callbackUrl,
 }: {
   viewModel: IntegrationStatusViewModel | undefined;
+  /** Server-resolved OAuth callback URL; see `getIntegrationCallbackUrls`. */
+  callbackUrl: IntegrationCallbackUrls["whoop"];
 }) {
   const { t } = useTranslations();
   const describeSyncOutcome = useSyncOutcomeMessage();
@@ -296,6 +299,7 @@ export function WhoopCard({
             <IntegrationRedirectGuide
               provider="whoop"
               providerLabel={t("settings.whoop")}
+              callbackUrl={callbackUrl}
             />
           )}
           <form onSubmit={handleSaveCredentials} className="space-y-3">
@@ -507,7 +511,7 @@ export function WhoopCard({
       </div>
       <CallbackMismatchNotice
         provider={t("settings.whoop")}
-        callbackUrl={integrationCallbackUrl("whoop")}
+        callbackUrl={callbackUrl}
       />
     </SettingsCard>
   );

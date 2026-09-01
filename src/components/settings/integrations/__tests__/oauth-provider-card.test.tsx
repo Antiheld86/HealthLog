@@ -41,6 +41,7 @@ function render({
         dataHref="/insights/sleep"
         credentials={credentials}
         viewModel={viewModel}
+        callbackUrl="https://app.example/api/polar/callback"
       />
     </I18nProvider>,
   );
@@ -162,7 +163,6 @@ describe("OAuthProviderCard — per-user BYO credentials form (v1.17.1)", () => 
 
 describe("OAuthProviderCard — redirect-URI mini-guide (v1.29.x, UX audit H2)", () => {
   it("shows the callback URL guide before the user has BYO credentials", () => {
-    process.env.NEXT_PUBLIC_APP_URL = "https://app.example";
     const html = render({
       credentials: true,
       viewModel: {

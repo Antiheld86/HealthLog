@@ -83,13 +83,16 @@ import {
 import {
   CallbackMismatchNotice,
   IntegrationCardDescription,
-  integrationCallbackUrl,
 } from "./setup-guide-link";
+import type { IntegrationCallbackUrls } from "@/lib/integrations/callback-urls";
 
 export function GoogleHealthCard({
   viewModel,
+  callbackUrl,
 }: {
   viewModel: IntegrationStatusViewModel | undefined;
+  /** Server-resolved OAuth callback URL; see `getIntegrationCallbackUrls`. */
+  callbackUrl: IntegrationCallbackUrls["google-health"];
 }) {
   const { t } = useTranslations();
   const describeSyncOutcome = useSyncOutcomeMessage();
@@ -764,7 +767,7 @@ export function GoogleHealthCard({
       </div>
       <CallbackMismatchNotice
         provider={t("settings.googleHealth")}
-        callbackUrl={integrationCallbackUrl("google-health")}
+        callbackUrl={callbackUrl}
       />
     </SettingsCard>
   );
