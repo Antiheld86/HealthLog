@@ -65,6 +65,14 @@ There is now a token for exactly that job, and for nothing else.
 
 ### Fixed
 
+- Settings, Integrations: the warning that the configured OAuth callback
+  origin differs from the address you are browsing on, added in v1.38.0,
+  never appeared in the published image, and the copyable callback address in
+  each setup guide showed only a path. Both read the app address inside the
+  browser bundle, where it is fixed at build time and the published image is
+  built without it. Both values now come from the server at request time and
+  reflect the `NEXT_PUBLIC_APP_URL` or `*_REDIRECT_URI` you actually set. A
+  structural test refuses a client module that reads that variable again.
 - Lab OCR with a GPT-5 model on the OpenAI provider path (your own key or
   the operator's admin key), fixed by @TimonBed in #861. The list of models
   the app trusts to read an image stopped at `gpt-4o`, `gpt-4.1`,
@@ -109,15 +117,19 @@ There is now a token for exactly that job, and for nothing else.
 
 ### Security
 
+- `mysql2` is pinned past GHSA-3f6p-5ww8-9rcr (an auth-plugin downgrade
+  that leaks the credential) in both the application tree and the separate
+  Prisma CLI install inside the image. It reaches the tree only through
+  Prisma's MySQL driver, which this app never opens.
 - The token is confined to your own record. Pointing it at a record
   somebody has shared with you is refused, and refused before the sharing
   grant is even consulted, so no future change to what sharing permits can
   widen what one of these tokens reaches.
 - Minting one requires being signed in on the web. No API token can mint
-  another, whatever it is allowed to do: the sign-in a phone holds lasts a
-  day and what it could mint here lasts a year, so allowing it would let a
-  credential that leaked for an afternoon leave behind one that outlives
-  cancelling it.
+  one of these, whatever it is allowed to do: the sign-in a phone holds
+  lasts a day and what it could mint here lasts a year, so allowing it would
+  let a credential that leaked for an afternoon leave behind one that
+  outlives cancelling it.
 - Closed a narrower gap found while building this. A repeated request
   carrying an `Idempotency-Key` could be answered from the cache after a
   check that asked only whether a sharing grant was live, and not which
