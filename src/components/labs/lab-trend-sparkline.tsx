@@ -63,10 +63,16 @@ export function LabTrendSparkline({
       if (value > referenceHigh) return "fill-warning";
       return "fill-success";
     }
-    if (referenceLow !== null) {
+    // Each one-sided branch requires the OTHER bound to be absent. Without
+    // that, a present-but-impossible pair (floor at or above ceiling) reads as
+    // "minimum only" and paints a high value green — the wrong direction for a
+    // transcription error to fail in. Falling through to the neutral dot
+    // matches `lab-reference-range-bar.tsx`, which renders nothing at all for
+    // the same input: a range that cannot be true earns no verdict.
+    if (referenceLow !== null && referenceHigh === null) {
       return value < referenceLow ? "fill-info" : "fill-success";
     }
-    if (referenceHigh !== null) {
+    if (referenceHigh !== null && referenceLow === null) {
       return value > referenceHigh ? "fill-warning" : "fill-success";
     }
     return "fill-muted-foreground";
