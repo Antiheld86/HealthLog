@@ -692,6 +692,82 @@ describe("B8 — the measurement-ingest scope reaches its two routes and no othe
     ).toBe(0);
   });
 
+  /**
+   * The live-token ceiling, on a cookie session because that is the only
+   * credential the mint admits.
+   *
+   * Here rather than in a file of its own for one reason: the assertion that
+   * needs a real database is `permissions: { has: … }` against a Postgres
+   * `text[]`, and the harness for that already exists in this file. A mock
+   * can confirm the query was built; only Postgres can confirm it selects the
+   * rows it means to.
+   */
+  it("refuses a mint once the account holds the ceiling, and revoking frees a slot", async () => {
+    const CEILING = 10;
+    const now = Date.now();
+    await getPrismaClient().apiToken.createMany({
+      data: Array.from({ length: CEILING }, (_, i) => ({
+        userId: USER_ID,
+        name: `bridge ${i}`,
+        tokenHash: hashToken(`hlk_ceiling_${i}_${"0".repeat(40)}`),
+        permissions: ["measurements:write"],
+        expiresAt: new Date(now + 86_400_000),
+      })),
+    });
+    // Neither of these may occupy a slot: one is a different scope, the other
+    // has already expired. Seeded so a query that counted either would push
+    // the live figure past the ceiling and pass this test for the wrong
+    // reason on the revoke leg below.
+    await getPrismaClient().apiToken.createMany({
+      data: [
+        {
+          userId: USER_ID,
+          name: "a browser session",
+          tokenHash: hashToken(`hlk_wild_${"0".repeat(44)}`),
+          permissions: ["*"],
+          expiresAt: new Date(now + 86_400_000),
+        },
+        {
+          userId: USER_ID,
+          name: "long expired",
+          tokenHash: hashToken(`hlk_expired_${"0".repeat(40)}`),
+          permissions: ["measurements:write"],
+          expiresAt: new Date(now - 86_400_000),
+        },
+      ],
+    });
+
+    await useCookieSession();
+    const { POST } = await import("@/app/api/tokens/measurements/route");
+    const mint = () =>
+      POST(
+        new NextRequest("https://health.example/api/tokens/measurements", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: "one too many" }),
+        } as never),
+      );
+
+    const refused = await mint();
+    expect(refused.status).toBe(409);
+    expect((await refused.json()).meta?.errorCode).toBe(
+      "tokens.measurements.ceiling_reached",
+    );
+
+    // Revoking one live row — not the expired or wildcard decoys — must open
+    // exactly one slot. This is the leg that fails if the count is of mints
+    // ever made rather than of tokens currently alive.
+    const victim = await getPrismaClient().apiToken.findFirstOrThrow({
+      where: { name: "bridge 0" },
+    });
+    await getPrismaClient().apiToken.update({
+      where: { id: victim.id },
+      data: { revoked: true },
+    });
+
+    expect((await mint()).status).toBe(201);
+  });
+
   it("cannot reach the medication ingest surface", async () => {
     await armToken(["measurements:write"], "mwrite8");
     const { POST } = await import("@/app/api/ingest/medication/route");

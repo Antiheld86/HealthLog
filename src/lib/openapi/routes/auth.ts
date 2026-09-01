@@ -1620,7 +1620,7 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "Mints a Bearer scoped to exactly `measurements:write` and audits the mint. THE RESPONSE CARRIES THE RAW TOKEN — the only place it ever exists; it is stored as an HMAC and no path re-reveals it.\n\n" +
         "**What it can do.** `POST /api/measurements` and `POST /api/measurements/batch`, on its owner's own record, attributing `source: MANUAL`. An entry naming `APPLE_HEALTH` is refused 422 rather than relabelled: that source is half a dedup key the phone also writes into, it participates in the cross-source merge, and it is what decides the Apple Health card may claim a sync happened. For the same reason a write through this credential does not move the native client's sync checkpoint.\n\n" +
         "**What it cannot do.** Everything else, including the measurement reads on the same paths, the edit and delete legs, and the export — a scope grants what it names and nothing adjacent. It cannot be pointed at a shared record: a request carrying the account selector is refused 403 before any grant is read, whatever grants its holder actually has. And it cannot mint another token, this endpoint included.\n\n" +
-        "Minting requires a COOKIE SESSION. No Bearer credential reaches this endpoint at any scope, wildcard included — not because a wildcard lacks the reach, but because of the lifetimes involved: a native access token lives a day and what it could mint here lives a year, so admitting one would let a short-lived compromise leave behind a credential that outlives revoking it. Gated by the operator's instance-wide API switch. Body capped at 16 KiB; 10 mints per user per minute. Tokens appear in `GET /api/tokens` and are revoked at `DELETE /api/tokens/{id}` like any other.",
+        "Minting requires a COOKIE SESSION. No Bearer credential reaches this endpoint at any scope, wildcard included — not because a wildcard lacks the reach, but because of the lifetimes involved: a native access token lives a day and what it could mint here lives a year, so admitting one would let a short-lived compromise leave behind a credential that outlives revoking it. Gated by the operator's instance-wide API switch. Body capped at 16 KiB; 10 mints per user per minute, and at most 10 live tokens held at once. Tokens appear in `GET /api/tokens` and are revoked at `DELETE /api/tokens/{id}` like any other — revoking frees a slot against the ceiling.",
       requestBody: {
         required: true,
         content: {
@@ -1669,6 +1669,11 @@ export const authPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "429": {
           description:
             "More than 10 mints from this account in a minute. Nothing was minted.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "409": {
+          description:
+            "The account already holds 10 live measurement tokens (`meta.errorCode` = `tokens.measurements.ceiling_reached`). Nothing was minted. Distinct from the 429 above: that one is a rate and clears by waiting, this one is a conflict with the account's current state and clears by revoking a token at `DELETE /api/tokens/{id}`. Only LIVE tokens count — revoked and expired rows do not occupy a slot — and only those carrying `measurements:write`, so the wildcard tokens a sign-in mints never consume the budget.",
           content: { "application/json": { schema: errorEnvelope } },
         },
       },
