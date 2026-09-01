@@ -32,7 +32,7 @@ export interface WhoopCredentials {
   clientSecret: string;
 }
 
-function getRedirectUri(): string {
+export function getWhoopRedirectUri(): string {
   // `||`, not `??`: the compose whitelist materialises the var as an empty
   // string when unset, which must still fall through to the derived URI.
   return (
@@ -61,7 +61,7 @@ export function getAuthorizationUrl(
   const params = new URLSearchParams({
     response_type: "code",
     client_id: creds.clientId,
-    redirect_uri: getRedirectUri(),
+    redirect_uri: getWhoopRedirectUri(),
     scope: WHOOP_OAUTH_SCOPE,
     state,
   });
@@ -119,7 +119,7 @@ export async function exchangeCode(
       code,
       client_id: creds.clientId,
       client_secret: creds.clientSecret,
-      redirect_uri: getRedirectUri(),
+      redirect_uri: getWhoopRedirectUri(),
     }),
     "exchangeCode",
   );

@@ -20,7 +20,7 @@ export interface WithingsCredentials {
   clientSecret: string;
 }
 
-function getRedirectUri(): string {
+export function getWithingsRedirectUri(): string {
   return (
     process.env.WITHINGS_REDIRECT_URI ??
     `${process.env.NEXT_PUBLIC_APP_URL}/api/withings/callback`
@@ -79,7 +79,7 @@ export function getAuthorizationUrl(
   const params = new URLSearchParams({
     response_type: "code",
     client_id: creds.clientId,
-    redirect_uri: getRedirectUri(),
+    redirect_uri: getWithingsRedirectUri(),
     scope: WITHINGS_OAUTH_SCOPE,
     state,
   });
@@ -105,7 +105,7 @@ export async function exchangeCode(
     grant_type: "authorization_code",
     client_id: creds.clientId,
     client_secret: creds.clientSecret,
-    redirect_uri: getRedirectUri(),
+    redirect_uri: getWithingsRedirectUri(),
     code,
   });
 

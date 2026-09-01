@@ -1,13 +1,14 @@
 # Changelog
 
-## [Unreleased]
+## [1.38.1] — 2026-09-01
 
-You can push readings in from your own hardware again.
+You can push readings in from your own hardware again, and a lab reading
+shows where it sits against its reference range at a glance.
 
-Since v1.30.17 there was no way to do it. That release made API tokens
-enforce their scope, which closed a real hole — a token issued for
+Since v1.30.17 there was no way to push a reading in. That release made API
+tokens enforce their scope, which closed a real hole (a token issued for
 medication intake had been reaching every other endpoint, the full backup
-export included — and removed the generic "create API token" button along
+export included) and removed the generic "create API token" button along
 with it. What went unnoticed was that the button had been the only
 self-service route to a token that could write a measurement. A scale or a
 watch bridge piped through Home Assistant had no door left, and the OAuth
@@ -17,19 +18,31 @@ There is now a token for exactly that job, and for nothing else.
 
 ### Added
 
-- **A measurement ingest token, minted from Settings → API & Tokens.** It
-  posts readings to `/api/measurements` and `/api/measurements/batch`, on
-  your own record. That is the whole list. It cannot read a reading back,
-  cannot change or delete one, cannot reach the export, and cannot mint
-  another token — so a credential sitting in a container you did not write
-  has a worst case of junk in your own record, not your health history
-  leaving the building. Shown once, expires after a year, and revoked from
-  the same page as every other token.
+- **A measurement ingest token, minted from Settings → API & Tokens.**
+  Contributed by @Antiheld86 in #881, from their proposal in #878. It posts
+  readings to `/api/measurements` and `/api/measurements/batch`, on your own
+  record. That is the whole list. It cannot read a reading back, cannot
+  change or delete one, cannot reach the export, and cannot mint another
+  token, so a credential sitting in a container you did not write has a
+  worst case of junk in your own record, not your health history leaving
+  the building. Shown once, expires after a year, and revoked from the same
+  page as every other token.
 - **A guide for wiring one up**, with a worked Home Assistant
   `rest_command` and automation, the measurement types a scale or a watch
   bridge tends to report, and what each error response means.
 - The API endpoint list on that settings page now shows the two ingest
   endpoints alongside the medication one.
+- **A reference-range bar beside every lab reading**, contributed by
+  @TimonBed in #860 and #880. The lab list, its mobile cards and the history
+  table on an analyte's page carry a compact bar: the reference window in
+  green, the reading as a marker on it, blue below the window, amber above
+  it. A range with only a minimum or only a maximum gets a bar too, with
+  the one stated bound labelled. A reading far outside its window (vitamin
+  D at 7 against a floor of 30, say) widens the bar's scale so the marker
+  stays visible instead of sitting pinned to the edge. In the list the status badge, the bar and the trend
+  sparkline line up in columns across rows, and every point on the
+  sparkline takes the colour the bar gives it. A qualitative reading, or one
+  without a range, shows no bar.
 
 ### Changed
 
@@ -43,18 +56,80 @@ There is now a token for exactly that job, and for nothing else.
   have: the checkpoint records that your phone delivered what it was
   holding, and a scale advancing it could make the phone skip a window of
   its own samples.
+- The below-range and above-range badges on a lab reading carry a light
+  tint (blue below, amber above) instead of the neutral grey they shared;
+  in range stays neutral. Part of #860.
+- Routine dependency updates: the Prisma Postgres adapter to 7.10.0 (see
+  Fixed), and the Argon2 binding, the WebAuthn server library, Radix,
+  Lucide, the form resolvers and the dev tooling by a patch or minor each.
+
+### Fixed
+
+- Settings, Integrations: the warning that the configured OAuth callback
+  origin differs from the address you are browsing on, added in v1.38.0,
+  never appeared in the published image, and the copyable callback address in
+  each setup guide showed only a path. Both read the app address inside the
+  browser bundle, where it is fixed at build time and the published image is
+  built without it. Both values now come from the server at request time and
+  reflect the `NEXT_PUBLIC_APP_URL` or `*_REDIRECT_URI` you actually set. A
+  structural test refuses a client module that reads that variable again.
+- Lab OCR with a GPT-5 model on the OpenAI provider path (your own key or
+  the operator's admin key), fixed by @TimonBed in #861. The list of models
+  the app trusts to read an image stopped at `gpt-4o`, `gpt-4.1`,
+  `gpt-4-turbo` and the full o-series, so a GPT-5 model was judged unable
+  to read a photo and never sent one; the Codex path already knew better.
+  The extraction call's completion budget doubles from 4000 to 8000 tokens,
+  because a GPT-5 model spends part of it on reasoning and a dense report's
+  JSON was being cut off before the last row. And when the provider itself
+  fails, the error now says so ("The configured AI provider could not
+  process this report") and the server log carries the upstream status,
+  model and error excerpt, where it used to blame the photo and ask for a
+  clearer one.
+- A lab report imported as a document could leave a reference window whose
+  floor sits above its ceiling on the record. The bounds come from the
+  extraction: when a report prints no range text, the two numbers the model
+  reported are the whole of the window, and a transposed pair (100 as the
+  low bound, 30 as the high) went through unchecked. Manual entry, the OCR
+  path and the biomarker endpoint all refuse such a pair; the document path
+  did not, and when the analyte was new to the record the pair was also
+  written to its freshly minted catalog marker, so every later reading of
+  that analyte was judged against a window that cannot be true. The pair is
+  now dropped rather than swapped, because a transposed range says the
+  transcription is wrong and not which of the two numbers is; the verbatim
+  range text survives, so nothing the report actually printed is lost. The
+  extraction drops it, editing a staged fact on the review screen refuses
+  it with the same message the lab forms use, and confirming a fact drops
+  it as the last gate, which is what covers facts staged before this rule
+  existed. Counted as `labs.referenceRange.transposed` in the wide events.
+  The trend sparkline had read the same pair as a minimum-only range and
+  painted a high value green; it now shows a neutral point, as the range
+  bar next to it already showed nothing (#882).
+- Bumping the Prisma Postgres adapter to 7.10.0 broke the image build on
+  both architectures, before any release carried it, with
+  `Cannot find module '/app/node_modules/pg/lib/index.js'`. `pg` had sat in
+  devDependencies, and the assertion that the standalone image can resolve
+  it (pg-boss loads it by plain Node resolution) had passed only because our
+  pin and the adapter's happened to agree on a version; the bump moved the
+  adapter's copy to 8.23.0 while ours stayed at 8.22.0, the file tracer
+  packed only the adapter's copy, and the top-level link pointed at the
+  other. `pg` is a runtime dependency now and the lockfile carries one copy,
+  so the two cannot drift apart on the next adapter release (#872).
 
 ### Security
 
+- `mysql2` is pinned past GHSA-3f6p-5ww8-9rcr (an auth-plugin downgrade
+  that leaks the credential) in both the application tree and the separate
+  Prisma CLI install inside the image. It reaches the tree only through
+  Prisma's MySQL driver, which this app never opens.
 - The token is confined to your own record. Pointing it at a record
   somebody has shared with you is refused, and refused before the sharing
-  grant is even consulted — so no future change to what sharing permits can
+  grant is even consulted, so no future change to what sharing permits can
   widen what one of these tokens reaches.
 - Minting one requires being signed in on the web. No API token can mint
-  another, whatever it is allowed to do — the sign-in a phone holds lasts a
-  day and what it could mint here lasts a year, so allowing it would let a
-  credential that leaked for an afternoon leave behind one that outlives
-  cancelling it.
+  one of these, whatever it is allowed to do: the sign-in a phone holds
+  lasts a day and what it could mint here lasts a year, so allowing it would
+  let a credential that leaked for an afternoon leave behind one that
+  outlives cancelling it.
 - Closed a narrower gap found while building this. A repeated request
   carrying an `Idempotency-Key` could be answered from the cache after a
   check that asked only whether a sharing grant was live, and not which

@@ -58,13 +58,16 @@ import {
   CallbackMismatchNotice,
   IntegrationCardDescription,
   IntegrationRedirectGuide,
-  integrationCallbackUrl,
 } from "./setup-guide-link";
+import type { IntegrationCallbackUrls } from "@/lib/integrations/callback-urls";
 
 export function WithingsCard({
   viewModel,
+  callbackUrl,
 }: {
   viewModel: IntegrationStatusViewModel | undefined;
+  /** Server-resolved OAuth callback URL; see `getIntegrationCallbackUrls`. */
+  callbackUrl: IntegrationCallbackUrls["withings"];
 }) {
   const { t } = useTranslations();
   const describeSyncOutcome = useSyncOutcomeMessage();
@@ -335,6 +338,7 @@ export function WithingsCard({
             <IntegrationRedirectGuide
               provider="withings"
               providerLabel={t("settings.withings")}
+              callbackUrl={callbackUrl}
             />
           )}
           <form onSubmit={handleSaveCredentials} className="space-y-3">
@@ -556,7 +560,7 @@ export function WithingsCard({
       </div>
       <CallbackMismatchNotice
         provider={t("settings.withings")}
-        callbackUrl={integrationCallbackUrl("withings")}
+        callbackUrl={callbackUrl}
       />
     </SettingsCard>
   );

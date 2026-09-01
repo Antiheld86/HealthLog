@@ -104,6 +104,16 @@ import { NotificationsSection } from "../notifications-section";
 // slug like every other settings section.
 import { ThresholdsSection } from "../thresholds-section";
 
+const CALLBACK_URLS = {
+  withings: "https://app.example/api/withings/callback",
+  whoop: "https://app.example/api/whoop/callback",
+  fitbit: "https://app.example/api/fitbit/callback",
+  "google-health": "https://app.example/api/google-health/callback",
+  polar: "https://app.example/api/polar/callback",
+  oura: "https://app.example/api/oura/callback",
+  strava: "https://app.example/api/strava/callback",
+};
+
 function render(node: React.ReactElement, locale: "en" | "de" = "en") {
   return renderToStaticMarkup(
     <I18nProvider initialLocale={locale}>{node}</I18nProvider>,
@@ -184,7 +194,10 @@ describe("settings sections — SSR smoke", () => {
   });
 
   it("<IntegrationsSection> renders Withings card + the delivery-channels group", () => {
-    const html = renderFramed("integrations", <IntegrationsSection />);
+    const html = renderFramed(
+      "integrations",
+      <IntegrationsSection callbackUrls={CALLBACK_URLS} />,
+    );
     expect(html).toContain("Integrations");
     expect(html).toContain("Withings");
     // v1.25.7 — delivery channels moved here from Notifications: the

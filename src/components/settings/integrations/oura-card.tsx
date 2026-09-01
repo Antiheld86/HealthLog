@@ -10,9 +10,16 @@ import {
   OAuthProviderCard,
   type OAuthProviderStatus,
 } from "@/components/settings/integrations/oauth-provider-card";
+import type { IntegrationCallbackUrls } from "@/lib/integrations/callback-urls";
 import { queryKeys } from "@/lib/query-keys";
 
-export function OuraCard({ viewModel }: { viewModel?: OAuthProviderStatus }) {
+export function OuraCard({
+  viewModel,
+  callbackUrl,
+}: {
+  viewModel?: OAuthProviderStatus;
+  callbackUrl: IntegrationCallbackUrls["oura"];
+}) {
   return (
     <OAuthProviderCard
       provider="oura"
@@ -22,6 +29,7 @@ export function OuraCard({ viewModel }: { viewModel?: OAuthProviderStatus }) {
       dataHref="/insights/sleep"
       credentials
       viewModel={viewModel}
+      callbackUrl={callbackUrl}
     />
   );
 }

@@ -11,9 +11,16 @@ import {
   OAuthProviderCard,
   type OAuthProviderStatus,
 } from "@/components/settings/integrations/oauth-provider-card";
+import type { IntegrationCallbackUrls } from "@/lib/integrations/callback-urls";
 import { queryKeys } from "@/lib/query-keys";
 
-export function StravaCard({ viewModel }: { viewModel?: OAuthProviderStatus }) {
+export function StravaCard({
+  viewModel,
+  callbackUrl,
+}: {
+  viewModel?: OAuthProviderStatus;
+  callbackUrl: IntegrationCallbackUrls["strava"];
+}) {
   return (
     <OAuthProviderCard
       provider="strava"
@@ -23,6 +30,7 @@ export function StravaCard({ viewModel }: { viewModel?: OAuthProviderStatus }) {
       dataHref="/insights/workouts"
       credentials
       viewModel={viewModel}
+      callbackUrl={callbackUrl}
     />
   );
 }

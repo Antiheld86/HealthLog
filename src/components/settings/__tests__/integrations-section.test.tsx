@@ -75,10 +75,20 @@ vi.mock("@tanstack/react-query", () => ({
 import { I18nProvider } from "@/lib/i18n/context";
 import { IntegrationsSection } from "../integrations-section";
 
+const CALLBACK_URLS = {
+  withings: "https://app.example/api/withings/callback",
+  whoop: "https://app.example/api/whoop/callback",
+  fitbit: "https://app.example/api/fitbit/callback",
+  "google-health": "https://app.example/api/google-health/callback",
+  polar: "https://app.example/api/polar/callback",
+  oura: "https://app.example/api/oura/callback",
+  strava: "https://app.example/api/strava/callback",
+};
+
 function render() {
   return renderToStaticMarkup(
     <I18nProvider initialLocale="en">
-      <IntegrationsSection />
+      <IntegrationsSection callbackUrls={CALLBACK_URLS} />
     </I18nProvider>,
   );
 }

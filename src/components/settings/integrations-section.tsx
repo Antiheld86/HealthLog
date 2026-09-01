@@ -32,6 +32,7 @@ import Link from "next/link";
 import { Link2, Send } from "lucide-react";
 
 import { useTranslations } from "@/lib/i18n/context";
+import type { IntegrationCallbackUrls } from "@/lib/integrations/callback-urls";
 import { ConnectionsPanel } from "@/components/settings/integrations/connections-panel";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { NotificationChannelsPanel } from "@/components/settings/integrations/notification-channels-panel";
@@ -43,7 +44,12 @@ export {
   oauthReasonKey,
 } from "@/components/settings/integrations/connections-panel";
 
-export function IntegrationsSection() {
+export function IntegrationsSection({
+  callbackUrls,
+}: {
+  /** Server-resolved per-provider OAuth callback URLs; see `ConnectionsPanel`. */
+  callbackUrls: IntegrationCallbackUrls;
+}) {
   const { t } = useTranslations();
 
   // v1.18.6 (W9) — the visible page heading + subtitle come from the shared
@@ -59,7 +65,7 @@ export function IntegrationsSection() {
           icon={Link2}
           title={t("settings.sections.integrations.connectionsHeading")}
         />
-        <ConnectionsPanel />
+        <ConnectionsPanel callbackUrls={callbackUrls} />
 
         {/* 2026-07-17 UX/IA audit M7 — the opt-in nutrients sync inventory
             (moved from Settings → Sources, where "source priority" only
