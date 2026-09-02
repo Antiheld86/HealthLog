@@ -1,6 +1,9 @@
 # Changelog
 
-## [Unreleased]
+## [1.38.2] — 2026-09-02
+
+Anthropic keys work on current Claude models again, and the daily briefing
+stays in the language you read the app in.
 
 ### Fixed
 
