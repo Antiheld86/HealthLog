@@ -6473,6 +6473,7 @@
       "description": "Ein Betreiber-Schlüssel für Konten, die keinen eigenen hinterlegt haben.",
       "byokHint": "Der eigene Schlüssel (BYOK, ChatGPT-Login oder lokaler Provider) hat immer Vorrang — der Server-Schlüssel ist die letzte Stufe der Provider-Kette.",
       "consentHint": "Anfragen über den Server-Schlüssel erfordern die aktive KI-Einwilligung der Person; ohne Einwilligungsbeleg wird nichts gesendet.",
+      "baseUrlHint": "Die Basis-URL bestimmt die API: eine Anthropic-URL wie https://api.anthropic.com/v1 wird erkannt, jeder andere Host wird über die OpenAI-kompatible API angesprochen.",
       "statusConfigured": "Eingerichtet",
       "statusNotConfigured": "Nicht eingerichtet",
       "keyLabel": "API-Schlüssel",

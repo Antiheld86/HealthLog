@@ -6473,6 +6473,7 @@
       "description": "Klucz operatora dla kont, które nie mają własnego.",
       "byokHint": "Własny klucz użytkownika (BYOK, logowanie ChatGPT lub dostawca lokalny) zawsze ma pierwszeństwo — klucz serwera jest ostatnim ogniwem łańcucha dostawców.",
       "consentHint": "Żądania przez klucz serwera wymagają aktywnej zgody użytkownika na AI; bez potwierdzenia zgody nic nie jest wysyłane.",
+      "baseUrlHint": "Adres bazowy decyduje o API: adres Anthropic taki jak https://api.anthropic.com/v1 jest rozpoznawany, każdy inny host jest wywoływany przez API zgodne z OpenAI.",
       "statusConfigured": "Skonfigurowany",
       "statusNotConfigured": "Nieskonfigurowany",
       "keyLabel": "Klucz API",

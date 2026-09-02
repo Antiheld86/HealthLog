@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **The AI server key reaches Anthropic when the base URL points there.** An
+  operator who filled the server key with an Anthropic key and
+  `https://api.anthropic.com/v1` got a failure on every AI call and nothing
+  saying why: the request was built for OpenAI's API and posted at Anthropic's,
+  which speaks a different shape. The base URL now picks the client. Anthropic's
+  host, and any subdomain of it, is called on Anthropic's Messages API and
+  defaults to a Claude model; every other host keeps the OpenAI-compatible API
+  it had before, which is also the right one for a local server or a gateway. A
+  base URL that is not a URL at all behaves as it did. The operator card now
+  says which providers the field accepts. Found in a fork by @sweidinger.
+
 ### Security
 
 - **The published image no longer ships four flagged dependency versions.**

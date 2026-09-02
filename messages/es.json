@@ -6473,6 +6473,7 @@
       "description": "Una clave del operador para las cuentas que no tienen una propia.",
       "byokHint": "La clave propia del usuario (BYOK, inicio de sesión de ChatGPT o proveedor local) siempre tiene prioridad — la clave del servidor es el último paso de la cadena de proveedores.",
       "consentHint": "Las solicitudes con la clave del servidor requieren el consentimiento de IA activo del usuario; sin un recibo de consentimiento no se envía nada.",
+      "baseUrlHint": "La URL base determina la API: se reconoce una URL de Anthropic como https://api.anthropic.com/v1, cualquier otro host se llama a través de la API compatible con OpenAI.",
       "statusConfigured": "Configurada",
       "statusNotConfigured": "Sin configurar",
       "keyLabel": "Clave de API",

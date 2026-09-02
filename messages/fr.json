@@ -6473,6 +6473,7 @@
       "description": "Une clé de l'opérateur pour les comptes qui n'en ont pas configuré une.",
       "byokHint": "La clé personnelle de l'utilisateur (BYOK, connexion ChatGPT ou fournisseur local) a toujours la priorité — la clé du serveur est la dernière étape de la chaîne de fournisseurs.",
       "consentHint": "Les requêtes via la clé du serveur nécessitent le consentement IA actif de l'utilisateur ; sans justificatif de consentement, rien n'est envoyé.",
+      "baseUrlHint": "L'URL de base détermine l'API : une URL Anthropic telle que https://api.anthropic.com/v1 est reconnue, tout autre hôte est appelé via l'API compatible OpenAI.",
       "statusConfigured": "Configurée",
       "statusNotConfigured": "Non configurée",
       "keyLabel": "Clé API",

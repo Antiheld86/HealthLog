@@ -107,6 +107,21 @@ Next.js 16 (App Router, React Server Components), TypeScript strict, PostgreSQL 
 
 Actively developed — new releases roughly weekly, issue reports and PRs welcome. Behaviour and schema can change between versions; migrations are forward-only.
 
+## Thanks
+
+HealthLog is built in the open and people keep making it better. Alongside
+bug reports, setup questions and the ideas that turned into features, these
+people have sent code that shipped:
+
+<a href="https://github.com/MBombeck/HealthLog/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=MBombeck/HealthLog" alt="Contributors to HealthLog" />
+</a>
+
+Every merged pull request keeps its author's name on the commit, so the
+[contributor graph](https://github.com/MBombeck/HealthLog/graphs/contributors)
+is the full list. Release notes name the people whose work is in that release,
+including anyone who found the defect without sending the fix.
+
 ## License
 
 HealthLog is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE): free to use, self-host, and modify for noncommercial purposes. Commercial use requires a separate agreement — open an issue or reach out via [healthlog.dev](https://healthlog.dev). Releases up to and including v1.15.18 were published under AGPL-3.0 and remain available under that license.
