@@ -68,6 +68,16 @@ export const SUMMARY_TYPE_MODULE: Partial<Record<string, ModuleKey>> = {
   SIX_MINUTE_WALK_DISTANCE: "recovery",
   STAIR_ASCENT_SPEED: "recovery",
   STAIR_DESCENT_SPEED: "recovery",
+  // The HRV fallback series. `METRIC_STATUS_MODULE_OWNERS` already owns this
+  // type for the metric-status / MCP reads, for the reason stated there: a
+  // fallback path must not serve the recovery data the primary type refuses.
+  // The dashboard snapshot gates off THIS map instead, and the entry was
+  // missing — harmless only while the dashboard HRV tile read SDNN alone.
+  // Now that the tile falls back to RMSSD (`pickHrvSummary`), the omission
+  // would hand a recovery-off account a tile built from recovery-owned rows.
+  // `HEART_RATE_VARIABILITY` stays deliberately ungated: SDNN is a plain
+  // vital, and it is what the tile shows whenever the account has it.
+  HRV_RMSSD: "recovery",
   // Per-night breathing-disturbance index is a sleep-page signal.
   BREATHING_DISTURBANCES: "sleep",
   // v1.29 — fluid-intake dashboard tile summary, derived server-side from

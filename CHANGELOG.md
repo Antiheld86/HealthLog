@@ -1,5 +1,27 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **The heart-rate-variability tile never appeared on the dashboard for
+  people whose HRV comes from a ring or a strap.** Turning the widget on
+  under Settings → Dashboard did nothing and said nothing, while the same
+  readings charted perfectly on the HRV page — which made it look as though
+  the layout itself was broken. HRV is stored two ways: Apple Health, Fitbit
+  and Google Health record SDNN, whereas Oura, Polar and WHOOP record nightly
+  RMSSD, as does anything pushed in through a bridge from a watch that
+  reports it that way. Every other place HRV appears already accepted both;
+  the dashboard tile looked only for SDNN, so an account that had only RMSSD
+  had nothing for the tile to show. It now uses whichever series you actually
+  have, and says "RMSSD" beside the name when that is the one on screen, so a
+  reading of 40 is not mistaken for a collapsed SDNN figure. An account with
+  both keeps seeing SDNN, and the two are never blended — they are different
+  measures that happen to share a unit. Turning the Recovery module off still
+  takes the RMSSD reading off the dashboard, which it should have done all
+  along: that series belongs to Recovery everywhere else in the app, and the
+  dashboard was the one place not checking.
+
 ## [1.38.6] — 2026-09-03
 
 Blood glucose can be shown in mmol/L, which it never could before, and the

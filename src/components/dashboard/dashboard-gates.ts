@@ -6,6 +6,7 @@
  * live in one cohesive module. `page.tsx` re-exports them so the existing
  * `../page` test imports stay valid.
  */
+import type { DataSummary } from "@/lib/analytics/trends";
 import type { DashboardLayout } from "@/lib/dashboard-layout";
 
 /**
@@ -128,4 +129,56 @@ export function resolveChartRowPlaceholderCount(
     if (widget.id === "weight" && opts?.hasHeightCm) count += 1;
   }
   return count;
+}
+
+/** The two measurement types the HRV surface reads, primary first. */
+export type HrvSummaryType = "HEART_RATE_VARIABILITY" | "HRV_RMSSD";
+
+/**
+ * Which HRV series backs the dashboard tile.
+ *
+ * HRV is stored under two types and they are not the same measure: Apple
+ * Health / Fitbit / Google Health write SDNN as `HEART_RATE_VARIABILITY`,
+ * while Oura / Polar / WHOOP — and a Garmin-style feed pushed in through a
+ * bridge — write nightly RMSSD as `HRV_RMSSD`. Every other HRV surface
+ * already unions the two: `/insights/hrv` passes `fallbackMeasurementType`
+ * (`app/insights/hrv/page.tsx`), the Coach resolves both
+ * (`COACH_SOURCE_MEASUREMENT_TYPES.hrv`), and the MCP reads swap through
+ * `withHrvFallback` (`lib/mcp/rich-reads.ts`). The catalogue entry in
+ * `lib/insights/sub-page-metric.ts` even says listing both is what "keeps the
+ * tab, pill, and dashboard tile lit whichever source the user has" — but the
+ * tile read SDNN alone, so an RMSSD-only account got a Settings toggle that
+ * silently rendered nothing while the insights page charted the data.
+ *
+ * Same rule as `withHrvFallback`: the primary wins whenever it has ANY rows,
+ * and the fallback is taken only when it has none. Deliberately not a merge —
+ * SDNN and RMSSD share `ms` but measure different things, so blending them
+ * would invent a number no device reported. That is why the caller is handed
+ * the winning `type` back: the freshness caption has to read the series being
+ * shown, and the label has to name the measure when it is not SDNN.
+ *
+ * Module gating belongs upstream and must NOT be repeated here. `HRV_RMSSD`
+ * is a `recovery`-owned type, so `SUMMARY_TYPE_MODULE` carries it and
+ * `gateSummariesByModules()` strips it out of `tiles.summaries` before the
+ * client sees anything — a `recovery`-off account has no key to fall back to.
+ * That entry was added WITH this helper: while the tile read SDNN alone the
+ * omission was inert, and a client-side gate here would be a second source of
+ * truth that drifts from the server's.
+ */
+export function pickHrvSummary(
+  summaries: Record<string, DataSummary> | undefined,
+): { summary: DataSummary | null; type: HrvSummaryType } {
+  const primary = summaries?.HEART_RATE_VARIABILITY;
+  if ((primary?.count ?? 0) > 0) {
+    return { summary: primary ?? null, type: "HEART_RATE_VARIABILITY" };
+  }
+  const fallback = summaries?.HRV_RMSSD;
+  if ((fallback?.count ?? 0) > 0) {
+    return { summary: fallback ?? null, type: "HRV_RMSSD" };
+  }
+  // Neither has rows. Report the primary type so the caller's stale-days
+  // lookup and label stay on SDNN for the empty case — the tile is hidden
+  // either way, and reporting the fallback here would make an account with
+  // no HRV at all look like a ring user.
+  return { summary: primary ?? null, type: "HEART_RATE_VARIABILITY" };
 }

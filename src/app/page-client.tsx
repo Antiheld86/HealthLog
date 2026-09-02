@@ -173,6 +173,7 @@ import {
   resolveDashboardFirstPaintGate,
   resolveConfiguredTileCount,
   resolveChartRowPlaceholderCount,
+  pickHrvSummary,
 } from "@/components/dashboard/dashboard-gates";
 
 /**
@@ -490,7 +491,16 @@ export default function DashboardPageClient({
   // the same summaries slice (`computeSummariesSlice` iterates the full
   // measurement-type enum), so no backend change was needed; the strip
   // tiles below self-gate on `count > 0`.
-  const hrvSummary = data?.summaries?.HEART_RATE_VARIABILITY;
+  // HRV is stored under two types and the tile has to accept either: SDNN
+  // (`HEART_RATE_VARIABILITY`, Apple / Fitbit / Google Health) or nightly
+  // RMSSD (`HRV_RMSSD`, Oura / Polar / WHOOP and bridge pushes). Reading
+  // SDNN alone left a ring / strap account with a Settings toggle that
+  // rendered nothing while `/insights/hrv` charted the same data. The
+  // helper keeps the union in one place and hands back which type won, so
+  // the freshness caption and the label below follow the series shown.
+  const { summary: hrvSummary, type: hrvType } = pickHrvSummary(
+    data?.summaries,
+  );
   const spo2Summary = data?.summaries?.OXYGEN_SATURATION;
   const respRateSummary = data?.summaries?.RESPIRATORY_RATE;
   const wristTempSummary = data?.summaries?.WRIST_TEMPERATURE;
@@ -1309,7 +1319,16 @@ export default function DashboardPageClient({
             node: (
               <TrendCard
                 key="hrv"
-                label={t("measurements.typeHeartRateVariability")}
+                // Name the measure when the RMSSD series is the one on show,
+                // the way `/insights/hrv` appends `· RMSSD` to its chart
+                // title. Without it a ring / strap reading (typically 20-60
+                // ms) sits under the same label as an SDNN one and reads as
+                // a collapse rather than a different measure.
+                label={
+                  hrvType === "HRV_RMSSD"
+                    ? `${t("measurements.typeHeartRateVariability")} · RMSSD`
+                    : t("measurements.typeHeartRateVariability")
+                }
                 latest={hrvSummary?.latest ?? null}
                 unit="ms"
                 avg7={hrvSummary?.avg7 ?? null}
@@ -1320,7 +1339,10 @@ export default function DashboardPageClient({
                 directionSentiment="up-good"
                 compareBaseline={compareBaseline}
                 compareDelta={tileCompareDelta(hrvSummary)}
-                staleDays={tileStaleDays("HEART_RATE_VARIABILITY")}
+                // The type that actually backs the tile — reading freshness
+                // off SDNN while showing RMSSD would caption a live tile as
+                // permanently stale.
+                staleDays={tileStaleDays(hrvType)}
               />
             ),
           });
