@@ -118,11 +118,15 @@ function callers(exportName: string, moduleRe: RegExp): string[] {
  *     consult this mechanism at all;
  *   - the trusted-device routes. "Remember this browser" is a browser concept
  *     with no native equivalent to manage;
- *   - `requireFreshMfaIfEnrolled`'s callers (password change, account deletion,
- *     data reset, encrypted export, encryption-key rotation). Those are
+ *   - `requireFreshMfaIfEnrolled`'s callers (password change, encrypted
+ *     export, encryption-key rotation, the sharing invite). Those are
  *     destructive account actions, not second-factor management, and letting an
  *     elevation satisfy them would be exactly the silent widening this file
  *     exists to prevent.
+ *
+ * Account deletion and the record wipe used to sit in that last bullet. They
+ * left it deliberately, and through a different gate: see `ERASURE_ROUTES`
+ * below. The widening is written down there, which is what this file is for.
  */
 const ELEVATION_ROUTES = [
   "app/api/auth/passkeys/[id]/route.ts",
@@ -133,6 +137,28 @@ const ELEVATION_ROUTES = [
   "app/api/auth/me/mfa/webauthn/[id]/route.ts",
   "app/api/auth/me/mfa/webauthn/register/options/route.ts",
   "app/api/auth/me/mfa/webauthn/register/verify/route.ts",
+].sort();
+
+/**
+ * The two erasure routes that accept a FRESH-FACTOR elevation over Bearer.
+ *
+ * App Store guideline 5.1.1(v) requires that an account created in the app can
+ * be deleted from the app. Both routes gated an MFA-enrolled account on a
+ * cookie-side fresh factor and a Bearer transport had no way to present one,
+ * so a native-app user with a second factor could not delete their account at
+ * all. They now resolve through `requireFreshMfaOrElevationIfEnrolled`, the
+ * sibling of `requireFreshMfaIfEnrolled` whose cookie arm is unchanged and
+ * whose Bearer arm runs the same elevation validation the MFA-management
+ * routes use, with `freshFactor` pinned on — so a password-proved elevation
+ * cannot erase an account, exactly as a password login cannot on the web.
+ *
+ * The set is two routes and must stay two. Password change, the encrypted
+ * export, key rotation and the sharing invite keep the cookie-only sibling;
+ * moving one of them here is a visible edit to this list, not a drive-by.
+ */
+const ERASURE_ROUTES = [
+  "app/api/settings/account/route.ts",
+  "app/api/settings/data/route.ts",
 ].sort();
 
 describe("S1 — the elevation-accepting route set is frozen", () => {
@@ -197,6 +223,45 @@ describe("S1 — the elevation-accepting route set is frozen", () => {
     for (const rel of ELEVATION_ROUTES) {
       expect(read(rel)).toMatch(/\.commitElevation\(\)/);
     }
+  });
+});
+
+describe("S6 — the erasure routes accept a fresh-factor elevation", () => {
+  it("only the two erasure routes call the erasure gate", () => {
+    const found = callers(
+      "requireFreshMfaOrElevationIfEnrolled",
+      API_HANDLER,
+    ).filter((rel) => rel !== "lib/api-handler.ts");
+    expect(found).toEqual(ERASURE_ROUTES);
+  });
+
+  it("neither erasure route still carries the cookie-only sibling", () => {
+    for (const rel of ERASURE_ROUTES) {
+      expect(importedAs(rel, "requireFreshMfaIfEnrolled", API_HANDLER)).toEqual(
+        [],
+      );
+      expect(importedAs(rel, "requireFreshMfa", API_HANDLER)).toEqual([]);
+    }
+  });
+
+  it("every erasure route spends its elevation", () => {
+    for (const rel of ERASURE_ROUTES) {
+      expect(read(rel)).toMatch(/\.commitElevation\(\)/);
+    }
+  });
+
+  it("the erasure gate pins the fresh-factor arm and never reads a body factor", () => {
+    // A password-proved elevation must not erase an account, and the gate
+    // must not grow a second, inline factor check beside the elevation: one
+    // mint surface, one redemption path.
+    const src = read("lib/api-handler.ts");
+    const start = src.indexOf(
+      "export async function requireFreshMfaOrElevationIfEnrolled(",
+    );
+    expect(start).toBeGreaterThan(-1);
+    const body = src.slice(start, src.indexOf("\nexport ", start + 1));
+    expect(body).toMatch(/freshFactor:\s*true/);
+    expect(body).not.toMatch(/verifyMfaFactor|verifyTotp|recoveryCode/);
   });
 });
 
