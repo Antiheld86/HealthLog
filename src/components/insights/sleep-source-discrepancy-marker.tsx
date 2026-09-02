@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useTranslations } from "@/lib/i18n/context";
 import { formatDurationMinutes } from "@/lib/i18n/duration";
+import { MEASUREMENT_SOURCE_SETTINGS_LABEL_KEYS } from "@/lib/i18n/source-labels";
 
 /**
  * v1.28.x — the discreet "sources disagree" marker, extracted from
@@ -31,35 +32,6 @@ export interface SleepSourceDiscrepancyDto {
 }
 
 /**
- * Localised label keys per `MeasurementSource` — the same map the
- * source-priority settings surface uses (`sources-section.tsx`), so both
- * surfaces humanise a source identically.
- */
-const SOURCE_LABEL_KEYS: Record<string, string> = {
-  WITHINGS: "settings.sections.sources.sourceLabels.WITHINGS",
-  APPLE_HEALTH: "settings.sections.sources.sourceLabels.APPLE_HEALTH",
-  MANUAL: "settings.sections.sources.sourceLabels.MANUAL",
-  IMPORT: "settings.sections.sources.sourceLabels.IMPORT",
-  WHOOP: "settings.sections.sources.sourceLabels.WHOOP",
-  COMPUTED: "settings.sections.sources.sourceLabels.COMPUTED",
-  FITBIT: "settings.sections.sources.sourceLabels.FITBIT",
-};
-
-/**
- * Brand names for sources without a localised settings label — brand
- * spellings are locale-invariant, so no i18n key is needed for them.
- */
-const SOURCE_BRAND_NAMES: Record<string, string> = {
-  OURA: "Oura",
-  POLAR: "Polar",
-  GOOGLE_HEALTH: "Google Health",
-  NIGHTSCOUT: "Nightscout",
-  STRAVA: "Strava",
-  TELEGRAM: "Telegram",
-  MCP: "MCP",
-};
-
-/**
  * Localised device-type label keys (`Measurement.deviceType`), reused from
  * the source-priority settings surface. Appended in parentheses so two
  * writer apps behind the same source (watch vs phone under Apple Health)
@@ -79,8 +51,13 @@ export function sourceDisplayName(
   deviceType: string | null,
   t: (key: string) => string,
 ): string {
-  const labelKey = SOURCE_LABEL_KEYS[source];
-  const base = labelKey ? t(labelKey) : (SOURCE_BRAND_NAMES[source] ?? source);
+  // The wire carries whatever the row's `source` column held, so an
+  // unknown value still has to render as itself rather than as a missing
+  // key. The catalogue covers every enum member the guard knows about.
+  const labelKey = MEASUREMENT_SOURCE_SETTINGS_LABEL_KEYS[
+    source as keyof typeof MEASUREMENT_SOURCE_SETTINGS_LABEL_KEYS
+  ] as string | undefined;
+  const base = labelKey ? t(labelKey) : source;
   const deviceKey = deviceType ? DEVICE_TYPE_LABEL_KEYS[deviceType] : undefined;
   return deviceKey ? `${base} (${t(deviceKey)})` : base;
 }

@@ -48,6 +48,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useTranslations } from "@/lib/i18n/context";
+import { MEASUREMENT_SOURCE_SETTINGS_LABEL_KEYS } from "@/lib/i18n/source-labels";
 import { queryKeys, refetchInactiveDailyReads } from "@/lib/query-keys";
 import {
   DEFAULT_DEVICE_TYPE_PRIORITY,
@@ -94,19 +95,6 @@ const METRIC_LABEL_KEYS: Record<SourcePriorityMetricKey, string> = {
   stress: "settings.sections.sources.metrics.stress",
   // v1.25.0 — native-vs-computed sleep-debt ladder.
   sleepDebt: "settings.sections.sources.metrics.sleepDebt",
-};
-
-const SOURCE_LABEL_KEYS: Record<string, string> = {
-  WITHINGS: "settings.sections.sources.sourceLabels.WITHINGS",
-  APPLE_HEALTH: "settings.sections.sources.sourceLabels.APPLE_HEALTH",
-  MANUAL: "settings.sections.sources.sourceLabels.MANUAL",
-  IMPORT: "settings.sections.sources.sourceLabels.IMPORT",
-  // v1.11.0 — WHOOP native source + the COMPUTED proxy (surfaces in the
-  // `recovery` ladder for native-vs-derived ordering).
-  WHOOP: "settings.sections.sources.sourceLabels.WHOOP",
-  COMPUTED: "settings.sections.sources.sourceLabels.COMPUTED",
-  // v1.12.0 — Fitbit/Pixel native source.
-  FITBIT: "settings.sections.sources.sourceLabels.FITBIT",
 };
 
 const DEVICE_TYPE_LABEL_KEYS: Record<DeviceType, string> = {
@@ -355,7 +343,7 @@ export function SourcesSection() {
                           {index + 1}.
                         </span>
                         <span className="flex-1 text-sm">
-                          {t(SOURCE_LABEL_KEYS[source] ?? source)}
+                          {t(MEASUREMENT_SOURCE_SETTINGS_LABEL_KEYS[source])}
                         </span>
                         {/* v1.4.27 R3d MB2 — stack up/down vertically on
                             narrow viewports so each button keeps the

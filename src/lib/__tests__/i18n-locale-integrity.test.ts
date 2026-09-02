@@ -260,6 +260,9 @@ describe("i18n locale file integrity", () => {
     "medications.wizard.steps.step3.unit.g",
     // v1.11.0 — "WHOOP" is a brand name, identical across every locale.
     "settings.sections.sources.sourceLabels.WHOOP",
+    // "MCP" is the protocol's own acronym — the same four letters in every
+    // locale, exactly like the WHOOP entry above.
+    "settings.sections.sources.sourceLabels.MCP",
   ]);
 
   it.each(ALL_LOCALES)("$locale locale has no empty values", ({ path }) => {

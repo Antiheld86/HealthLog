@@ -1,5 +1,22 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Settings, Sources: four of the sources in the priority ladder were listed
+  by their internal name. `GOOGLE_HEALTH`, `OURA`, `POLAR` and `STRAVA`
+  appeared exactly like that instead of Google Health, Oura, Polar and
+  Strava. The label catalogue was written when there were seven sources and
+  every provider added since fell through to the raw value. The same
+  fall-through sat in the measurement list, where the source filter offers
+  every source there is and the table paints one per row, and on the
+  medication intake history, where a dose synced from Apple Health read
+  "via APPLE_HEALTH". All three catalogues are complete in all seven
+  languages now, and a test reads the source enums out of the schema and
+  fails when a member has no label, so the next provider cannot ship
+  without its name.
+
 ## [1.38.2] — 2026-09-02
 
 Anthropic keys work on current Claude models again, and the daily briefing

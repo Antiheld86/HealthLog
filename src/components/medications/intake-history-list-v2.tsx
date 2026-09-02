@@ -18,6 +18,10 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { useIsMobile } from "@/hooks/use-is-mobile";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
+import {
+  INTAKE_SOURCE_LABEL_KEYS,
+  type IntakeSourceValue,
+} from "@/lib/i18n/source-labels";
 import { queryKeys } from "@/lib/query-keys";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -71,15 +75,14 @@ import { apiGet } from "@/lib/api/api-fetch";
  *    outline SkipForward + "Übersprungen" for skipped rows. The
  *    component never labels a row both at once.
  *  - Source badge surfaces where the intake was logged — WEB → "Web",
- *    API → "iOS App", REMINDER → "Reminder", IMPORT → "Import" — wrapped
- *    in a muted "via {origin}" caption next to the status. The labels map
- *    the coarse `IntakeSource` enum to the practical client per the
- *    existing `medications.source*` keys; there is no finer client field.
+ *    API → "iOS App", REMINDER → "Reminder", IMPORT → "Import",
+ *    APPLE_HEALTH → "Apple Health" — wrapped in a muted "via {origin}"
+ *    caption next to the status. The labels map the coarse `IntakeSource`
+ *    enum to the practical client per the existing `medications.source*`
+ *    keys; there is no finer client field.
  *  - Empty state copy + CTA back to the daily intake page.
  *  - No edit-in-row, no delete buttons.
  */
-
-type IntakeSource = "WEB" | "API" | "REMINDER" | "IMPORT";
 
 export interface IntakeEvent {
   id: string;
@@ -87,7 +90,7 @@ export interface IntakeEvent {
   scheduledFor: string;
   takenAt: string | null;
   skipped: boolean;
-  source: IntakeSource;
+  source: IntakeSourceValue;
   createdAt: string;
 }
 
@@ -205,13 +208,14 @@ export function IntakeHistoryListV2({
     enabled: isAuthenticated,
   });
 
-  const sourceLabels: Record<IntakeSource, string> = useMemo(
-    () => ({
-      WEB: t("medications.sourceWeb"),
-      API: t("medications.sourceApi"),
-      REMINDER: t("medications.sourceReminder"),
-      IMPORT: t("medications.sourceImport"),
-    }),
+  const sourceLabels: Record<IntakeSourceValue, string> = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(INTAKE_SOURCE_LABEL_KEYS).map(([source, key]) => [
+          source,
+          t(key),
+        ]),
+      ) as Record<IntakeSourceValue, string>,
     [t],
   );
 
