@@ -1,5 +1,24 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **The dashboard opens faster on accounts with years of readings.** Two of the
+  reads behind the metric tiles were doing far more work than the handful of
+  rows they return. The first asked for the newest reading of every metric by
+  sorting the account's entire live measurement set and then keeping one row per
+  metric, which on a multi-year account means reading hundreds of thousands of
+  rows and sorting them on disk once the sort outgrows the memory Postgres gives
+  it. The second read the daily chart buckets without naming a metric, so the
+  rollup table's key could not be used and every stored bucket got scanned,
+  including the weekly, monthly and yearly ones the chart never shows. Both now
+  ask per metric, which is what the existing indexes are built for. On a fixture
+  matching the shape of a real account the first read went from 112 ms to 0.7 ms
+  and the second from 6.9 ms to 1.6 ms, and both stop growing with the size of
+  the archive. Nothing about the tiles changes: same numbers, same order, same
+  metrics.
+
 ## [1.38.4] — 2026-09-02
 
 The shared AI key reaches the provider its address names, and the image
