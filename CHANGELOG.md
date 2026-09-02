@@ -1,5 +1,32 @@
 # Changelog
 
+## [Unreleased]
+
+### Security
+
+- **The published image no longer ships four flagged dependency versions.**
+  Three floors in the override block had gone stale: the sanitiser behind the
+  doctor-report PDF sat below the fix for GHSA-55q2-fjhq-7xh7, the CSS
+  processor the build runs on sat below the fix for CVE-2026-69153, and a
+  schema library that arrives through two unrelated parents had no floor at
+  all (CVE-2026-59952). All three are raised and re-resolved, each inside its
+  existing major, so nothing changes shape for anyone.
+- **The Prisma command line inside the image gets the same pins as the app.**
+  The image carries two separate installs, and only one of them reads the
+  project's override block. The other is an npm install of the Prisma CLI, and
+  it was quietly resolving an HTTP server (GHSA-frvp-7c67-39w9,
+  CVE-2026-39406) and a schema library (CVE-2026-59952) at the versions the
+  image scan flagged, while the same packages were pinned and clean in the
+  application tree. Both are now pinned on the npm side too, verified by
+  rebuilding that install both ways. This is the second time the same gap has
+  produced a finding, so the guard that compares the two files was widened: it
+  had been skipping every scoped package name, which is exactly the case that
+  went unnoticed here.
+- The Dependabot auto-merge workflow no longer hands a write token to the
+  whole run. The workflow default is read-only and the write scopes sit on the
+  one job that spends them. Nothing about which updates merge automatically
+  changes.
+
 ## [1.38.3] — 2026-09-02
 
 An account with two-factor can be deleted from the phone, and every data
