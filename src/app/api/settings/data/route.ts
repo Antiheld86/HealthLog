@@ -4,7 +4,7 @@ import { apiSuccess, apiError, getClientIp } from "@/lib/api-response";
 import { NextRequest } from "next/server";
 import {
   apiHandler,
-  requireFreshMfaIfEnrolled,
+  requireFreshMfaOrElevationIfEnrolled,
   MFA_STEP_UP_MAX_AGE_SECONDS,
 } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
@@ -47,10 +47,15 @@ const WIPE_TRANSACTION_MAX_WAIT_MS = 15_000;
  *
  * v1.23 — gated by a fresh step-up for MFA-enrolled accounts (see the account
  * deletion route); single-factor accounts keep the typed-confirmation-only
- * contract.
+ * contract. Over Bearer the step-up is a fresh-factor elevation in the
+ * `X-Step-Up` header, spent right before the transaction — the same arm the
+ * account deletion route carries, for the same App Store reason.
  */
 export const DELETE = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireFreshMfaIfEnrolled(MFA_STEP_UP_MAX_AGE_SECONDS);
+  const auth = await requireFreshMfaOrElevationIfEnrolled(
+    MFA_STEP_UP_MAX_AGE_SECONDS,
+  );
+  const { user } = auth;
 
   let confirm = "";
   try {
@@ -69,6 +74,10 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
   }
 
   const userId = user.id;
+
+  // The confirmation has passed; spend the Bearer elevation before the wipe
+  // (a no-op on the cookie path).
+  await auth.commitElevation();
 
   let counts: Record<string, number>;
   try {
