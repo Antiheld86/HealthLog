@@ -60,6 +60,7 @@ export async function invalidateHealthProfileFactConsumers(
     data: {
       insightsCachedAt: null,
       insightsCachedText: null,
+      insightsCachedLocale: null,
     },
   });
   invalidateUserInsights(userId);

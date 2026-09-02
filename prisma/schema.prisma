@@ -119,6 +119,13 @@ model User {
   insightsPrivacyMode        String    @default("aggregated") @map("insights_privacy_mode") // "aggregated" | "raw"
   insightsCachedAt           DateTime? @map("insights_cached_at")
   insightsCachedText         String?   @map("insights_cached_text") // cached JSON output
+  // Language the cached text was generated in. The cache is one slot per
+  // user, so a reader in another language must not be served it: the
+  // snapshot briefing lift and the advisor read treat a tag that differs
+  // from the reader's locale as an empty cache and re-warm in the reader's.
+  // NULL on rows written before the tag existed (treated as matching; the
+  // next write tags it).
+  insightsCachedLocale       String?   @map("insights_cached_locale")
   // v1.16.8 — SHA-256 fingerprint of the compacted feature snapshot the
   // cached comprehensive text was generated from. Nightly / forced / lazy
   // regenerations compare the fresh snapshot's hash against this and skip

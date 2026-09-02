@@ -612,6 +612,7 @@ export async function generateComprehensiveInsight(
       insightsPrivacyMode: true,
       insightsCachedAt: true,
       insightsCachedText: true,
+      insightsCachedLocale: true,
       insightsExcludeMetrics: true,
       insightsSnapshotHash: true,
       insightsBriefingRerollDate: true,
@@ -639,10 +640,18 @@ export async function generateComprehensiveInsight(
     AI_BUDGETS.comprehensive.timeoutMs,
   );
 
+  // A cache written in another language is not this locale's cache: it
+  // must not satisfy an unforced run, or a reader in the requested language
+  // keeps being told the slot is warm while it holds someone else's prose.
+  // An untagged row predates the tag and counts as matching.
+  const cachedLocaleMatches =
+    dbUser?.insightsCachedLocale == null ||
+    dbUser.insightsCachedLocale === locale;
   if (
     !force &&
     dbUser?.insightsCachedAt &&
     dbUser.insightsCachedText &&
+    cachedLocaleMatches &&
     Date.now() - dbUser.insightsCachedAt.getTime() < CACHE_TTL_MS
   ) {
     return { status: "cached" };
@@ -896,6 +905,7 @@ export async function generateComprehensiveInsight(
           {
             insightsCachedAt: new Date(),
             insightsCachedText: rerolled.text,
+            insightsCachedLocale: locale,
             insightsBriefingRerollDate: todayKey,
           },
         );
@@ -920,6 +930,10 @@ export async function generateComprehensiveInsight(
         locale,
         {
           insightsCachedAt: new Date(),
+          // The fingerprint covers the generation locale, so a matching hash
+          // means the stored text is in `locale`; tag it (a pre-tag row gets
+          // its label on its first unchanged night).
+          insightsCachedLocale: locale,
           insightsBriefingRerollDate: todayKey,
         },
       );
@@ -939,6 +953,7 @@ export async function generateComprehensiveInsight(
       locale,
       {
         insightsCachedAt: new Date(),
+        insightsCachedLocale: locale,
       },
     );
     const skipped = scopeChangedSkip(stamped, locale);
@@ -1282,6 +1297,7 @@ export async function generateComprehensiveInsight(
     {
       insightsCachedAt: new Date(),
       insightsCachedText: JSON.stringify(insights),
+      insightsCachedLocale: locale,
       insightsSnapshotHash: snapshotHash,
     },
   );

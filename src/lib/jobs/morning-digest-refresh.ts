@@ -35,10 +35,8 @@ import {
   type GenerateOutcome,
 } from "@/lib/insights/comprehensive-generate";
 import { enqueuePregenerateFailureRetry } from "@/lib/jobs/insight-pregenerate-shared";
-import {
-  normalizeLocale,
-  type SupportedLocale,
-} from "@/lib/insights/status-shared";
+import type { SupportedLocale } from "@/lib/insights/status-shared";
+import { resolveJobLocale } from "@/lib/i18n/job-locale";
 import {
   MORNING_DIGEST_REFRESH_QUEUE,
   type MorningDigestRefreshPayload,
@@ -102,7 +100,7 @@ export async function runMorningDigestRefresh(
     return { status: "already-final" };
   }
 
-  const locale = normalizeLocale(user.locale);
+  const locale = await resolveJobLocale(user.locale);
   const outcome = await generate(userId, { locale, force: true });
 
   // A hard provider failure leaves the day provisional and hands recovery to

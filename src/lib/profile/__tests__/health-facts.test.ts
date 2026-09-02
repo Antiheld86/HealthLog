@@ -93,6 +93,7 @@ describe("encrypted health profile fact revisions", () => {
       data: {
         insightsCachedAt: null,
         insightsCachedText: null,
+        insightsCachedLocale: null,
       },
     });
     expect(mocks.invalidateInsights).toHaveBeenCalledWith("user-1");
@@ -128,7 +129,11 @@ describe("encrypted health profile fact revisions", () => {
     expect(mocks.transaction).toHaveBeenCalledOnce();
     expect(mocks.userUpdate).toHaveBeenCalledWith({
       where: { id: "user-1" },
-      data: { insightsCachedAt: null, insightsCachedText: null },
+      data: {
+        insightsCachedAt: null,
+        insightsCachedText: null,
+        insightsCachedLocale: null,
+      },
     });
     expect(JSON.stringify(mocks.create.mock.calls[0][0].data)).not.toContain(
       '"value":"FORMER"',
@@ -189,7 +194,11 @@ describe("encrypted health profile fact revisions", () => {
     expect(mocks.transaction).toHaveBeenCalledOnce();
     expect(mocks.userUpdate).toHaveBeenCalledWith({
       where: { id: "user-1" },
-      data: { insightsCachedAt: null, insightsCachedText: null },
+      data: {
+        insightsCachedAt: null,
+        insightsCachedText: null,
+        insightsCachedLocale: null,
+      },
     });
   });
 
@@ -232,7 +241,11 @@ describe("encrypted health profile fact revisions", () => {
     expect(mocks.transaction).toHaveBeenCalledOnce();
     expect(mocks.userUpdate).toHaveBeenCalledWith({
       where: { id: "user-1" },
-      data: { insightsCachedAt: null, insightsCachedText: null },
+      data: {
+        insightsCachedAt: null,
+        insightsCachedText: null,
+        insightsCachedLocale: null,
+      },
     });
   });
 

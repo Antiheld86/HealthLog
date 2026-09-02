@@ -22,8 +22,8 @@
  */
 import type { PrismaClient } from "@/generated/prisma/client";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
-import type { Locale } from "@/lib/i18n/config";
-import { defaultLocale, locales } from "@/lib/i18n/config";
+import { coerceLocale } from "@/lib/i18n/config";
+import { resolveJobLocale } from "@/lib/i18n/job-locale";
 import { wallClockInTz } from "@/lib/tz/wall-clock";
 import { dispatchNotification } from "@/lib/notifications/dispatcher";
 import { getEvent } from "@/lib/logging/context";
@@ -57,12 +57,6 @@ export interface MoodReminderSummary {
   skippedModuleDisabled: number;
   skippedNoChannel: number;
   failed: number;
-}
-
-function resolveLocale(locale: string | null | undefined): Locale {
-  return locales.includes(locale as Locale)
-    ? (locale as Locale)
-    : defaultLocale;
 }
 
 /**
@@ -115,7 +109,7 @@ export function buildMoodReminderPayload(locale: string | null | undefined): {
   title: string;
   body: string;
 } {
-  const t = getServerTranslator(resolveLocale(locale)).t;
+  const t = getServerTranslator(coerceLocale(locale)).t;
   return {
     title: t("moodReminders.dailyTitle"),
     body: t("moodReminders.dailyBody"),
@@ -222,7 +216,9 @@ export async function runMoodReminderTick(
         continue;
       }
 
-      const { title, body } = buildMoodReminderPayload(user.locale);
+      const { title, body } = buildMoodReminderPayload(
+        await resolveJobLocale(user.locale),
+      );
 
       const outcome = await dispatchImpl({
         eventType: "MOOD_REMINDER",

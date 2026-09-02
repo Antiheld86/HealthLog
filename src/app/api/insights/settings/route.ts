@@ -77,6 +77,7 @@ export const PUT = apiHandler(async (request: NextRequest) => {
     data.insightsPrivacyMode = mode;
     data.insightsCachedAt = null;
     data.insightsCachedText = null;
+    data.insightsCachedLocale = null;
   }
 
   if (Object.keys(data).length === 0) {

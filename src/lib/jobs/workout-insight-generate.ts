@@ -45,7 +45,8 @@ import {
 } from "@/lib/ai/prompts/workout-insight";
 import { prisma } from "@/lib/db";
 import { pickCanonicalWorkoutRows } from "@/lib/measurements/pick-canonical-workout-rows";
-import { defaultLocale, locales, type Locale } from "@/lib/i18n/config";
+import type { Locale } from "@/lib/i18n/config";
+import { resolveJobLocale } from "@/lib/i18n/job-locale";
 import { finalizeStatusSummary } from "@/lib/insights/status-shared";
 import { runStatusCompletion } from "@/lib/insights/status-provider";
 import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
@@ -380,11 +381,7 @@ export async function runWorkoutInsightGenerate(
       return { status: "unchanged" as const };
     }
 
-    const locale: Locale = (locales as readonly string[]).includes(
-      profile?.locale ?? "",
-    )
-      ? (profile?.locale as Locale)
-      : defaultLocale;
+    const locale: Locale = await resolveJobLocale(profile?.locale);
     return { status: "ready" as const, evidence, inputHash, locale };
   })().catch(async (err) => {
     // Nothing could have reached a provider. Delete the reservation so a

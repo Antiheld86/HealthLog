@@ -28,7 +28,8 @@ import type { User } from "@/generated/prisma/client";
 import type { PrismaClient } from "@/generated/prisma/client";
 
 import { annotate, getEvent } from "@/lib/logging/context";
-import { defaultLocale, locales, type Locale } from "@/lib/i18n/config";
+import type { Locale } from "@/lib/i18n/config";
+import { resolveJobLocale } from "@/lib/i18n/job-locale";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 import type { ServerTranslator } from "@/lib/i18n/server-translator";
 import { isModuleEnabled } from "@/lib/modules/gate";
@@ -79,20 +80,19 @@ export type DailyBriefingDispatchResult =
 
 export interface DailyBriefingDispatchDeps {
   dispatch?: typeof dispatchNotification;
-  loadDigest?: (user: User, now: Date) => Promise<DailyDigest>;
+  loadDigest?: (user: User, now: Date, locale: Locale) => Promise<DailyDigest>;
   isModuleEnabled?: typeof isModuleEnabled;
 }
 
-function loadDailyBriefingDigest(user: User, now: Date): Promise<DailyDigest> {
+function loadDailyBriefingDigest(
+  user: User,
+  now: Date,
+  locale: Locale,
+): Promise<DailyDigest> {
   return loadDailyDigest(user, now, {
     enabledItemKinds: PRIORITY_ITEM_KINDS,
+    locale,
   });
-}
-
-function resolveLocale(locale: string | null | undefined): Locale {
-  return locales.includes(locale as Locale)
-    ? (locale as Locale)
-    : defaultLocale;
 }
 
 /**
@@ -211,13 +211,17 @@ export async function maybeDispatchDailyBriefing(
       return "suppressed-frequency";
     }
 
-    const digest = await loadDigest(user, now);
+    // Resolved once, off the job path (stored locale, then the operator
+    // default), and handed to the digest so its lines and the push copy
+    // are in the same language.
+    const locale = await resolveJobLocale(user.locale);
+    const digest = await loadDigest(user, now, locale);
     if (!digestHasSubstance(digest)) {
       annotate({ action: { name: "daily.briefing_push.no_digest" } });
       return "no-digest";
     }
 
-    const { t } = getServerTranslator(resolveLocale(user.locale));
+    const { t } = getServerTranslator(locale);
     const { title, body } = buildDailyBriefingPush(digest, t);
 
     const outcome = await dispatch({

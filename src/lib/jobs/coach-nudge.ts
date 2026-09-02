@@ -87,8 +87,8 @@ import { dispatchNotification } from "@/lib/notifications/dispatcher";
 import { resolveCoachNudgePrefs } from "@/lib/validations/notification-prefs";
 import { recordProactiveNudge } from "@/lib/ai/coach/persistence";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
-import type { Locale } from "@/lib/i18n/config";
-import { defaultLocale, locales } from "@/lib/i18n/config";
+import { coerceLocale } from "@/lib/i18n/config";
+import { resolveJobLocale } from "@/lib/i18n/job-locale";
 import {
   composeNudgeWithAI,
   createNudgeAiTickBudget,
@@ -219,12 +219,6 @@ export interface CoachNudgeSummary {
    */
   skippedDuringIllness: number;
   failed: number;
-}
-
-function resolveLocale(locale: string | null | undefined): Locale {
-  return locales.includes(locale as Locale)
-    ? (locale as Locale)
-    : defaultLocale;
 }
 
 /**
@@ -484,7 +478,7 @@ export function buildCoachNudgePayload(
   locale: string | null | undefined,
   options: NudgePayloadOptions = {},
 ): { title: string; body: string } {
-  const t = getServerTranslator(resolveLocale(locale)).t;
+  const t = getServerTranslator(coerceLocale(locale)).t;
   const name = options.name?.trim() || null;
   const opener =
     GREETING_KEYS[(options.openerSeed ?? 0) % GREETING_KEYS.length];
@@ -987,7 +981,7 @@ export async function runCoachNudgeTick(
         hasCoachFocus = profileRow?.coachFocusEncrypted != null;
       }
 
-      const locale = resolveLocale(user.locale);
+      const locale = await resolveJobLocale(user.locale);
       const name = resolveGreetingName(user);
       // Rotate the opener day to day, stable within a tick.
       const openerSeed = now.getUTCDate();

@@ -34,6 +34,7 @@ import {
   type SnapshotUserInput,
 } from "@/lib/dashboard/snapshot";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
+import type { Locale } from "@/lib/i18n/config";
 
 /**
  * Per-key TTL for the snapshot cache entry. Strictly greater than the
@@ -50,7 +51,16 @@ export const SNAPSHOT_CACHE_TTL_MS = DASHBOARD_REFETCH_INTERVAL_MS + 60_000;
 export interface SnapshotReadResult {
   body: DashboardSnapshot;
   /** The locale the snapshot was resolved (and cache-keyed) under. */
-  locale: string;
+  locale: Locale;
+}
+
+export interface SnapshotReadOptions {
+  /**
+   * A locale already resolved by the caller. Background paths (the morning
+   * briefing push) have no request to resolve one from and pass the job-side
+   * resolution here so the digest and the push copy agree on a language.
+   */
+  locale?: Locale;
 }
 
 /**
@@ -61,6 +71,7 @@ export interface SnapshotReadResult {
 export async function readDashboardSnapshotCached(
   user: User,
   time?: <T>(label: string, builder: () => Promise<T>) => Promise<T>,
+  options: SnapshotReadOptions = {},
 ): Promise<SnapshotReadResult> {
   // `User` row is already in hand at both call sites — no extra round-trip.
   const snapshotUser: SnapshotUserInput = {
@@ -76,6 +87,7 @@ export async function readDashboardSnapshotCached(
     disableCoach: user.disableCoach,
     insightsCachedText: user.insightsCachedText,
     insightsCachedAt: user.insightsCachedAt,
+    insightsCachedLocale: user.insightsCachedLocale,
     dashboardWidgetsJson: user.dashboardWidgetsJson,
     sourcePriorityJson: user.sourcePriorityJson,
     thresholdsJson: user.thresholdsJson,
@@ -87,7 +99,10 @@ export async function readDashboardSnapshotCached(
   // a DE session never share a snapshot cell (and never see each other's
   // memory wording). The `${user.id}|` prefix still covers the key under
   // the measurement-write stale-sweep.
-  const locale = await resolveServerLocale({ userLocale: user.locale });
+  const locale = await resolveServerLocale({
+    userLocale: user.locale,
+    override: options.locale ?? null,
+  });
 
   // Stale-while-revalidate: a measurement write marks the analytics
   // bucket stale rather than hard-evicting the snapshot, so a busy iOS

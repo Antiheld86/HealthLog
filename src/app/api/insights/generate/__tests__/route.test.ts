@@ -447,6 +447,9 @@ describe("POST /api/insights/generate — cache write (v1.16.8)", () => {
     expect(args.data.insightsCachedText).toEqual(expect.any(String));
     // SHA-256 hex digest of the compacted feature snapshot.
     expect(args.data.insightsSnapshotHash).toMatch(/^[0-9a-f]{64}$/);
+    // The cache row records the language it was written in, so a reader
+    // in another language is never served this text.
+    expect(args.data.insightsCachedLocale).toBe("en");
   });
 
   it("refuses a stale cache write when AI profile inclusion changes during generation", async () => {
@@ -795,6 +798,55 @@ describe("GET /api/insights/generate — read-only advisor read", () => {
     // payload so the client polls (bounded) until the warm lands.
     const body = (await res.json()) as { data: { revalidating: boolean } };
     expect(body.data.revalidating).toBe(true);
+  });
+
+  // `resolveServerLocale` is mocked to "en" in this suite, so the reader is
+  // an English session throughout; the cache tag is what varies.
+  it("does NOT serve a fresh cache tagged with another language; warms in the reader's", async () => {
+    const cached = { dailyBriefing: { paragraph: "Deutsch", keyFindings: [] } };
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      insightsCachedAt: new Date(),
+      insightsCachedText: JSON.stringify(cached),
+      insightsCachedLocale: "de",
+      locale: "en",
+    } as never);
+
+    const res = await (GET as unknown as (req: Request) => Promise<Response>)(
+      new Request("http://localhost/api/insights/generate"),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { insights: unknown; cached: boolean; revalidating: boolean };
+    };
+    expect(body.data.cached).toBe(false);
+    expect(body.data.insights).toBeNull();
+    expect(body.data.revalidating).toBe(true);
+    expect(enqueueForceWarm).toHaveBeenCalledWith({
+      userId: "u-1",
+      locale: "en",
+    });
+    expect(resolveProvider).not.toHaveBeenCalled();
+  });
+
+  it("serves a fresh cache whose tag matches the reader's language", async () => {
+    const cached = { dailyBriefing: { paragraph: "English", keyFindings: [] } };
+    vi.mocked(prisma.user.findUnique).mockResolvedValueOnce({
+      insightsCachedAt: new Date(),
+      insightsCachedText: JSON.stringify(cached),
+      insightsCachedLocale: "en",
+      locale: "en",
+    } as never);
+
+    const res = await (GET as unknown as (req: Request) => Promise<Response>)(
+      new Request("http://localhost/api/insights/generate"),
+    );
+    const body = (await res.json()) as {
+      data: { insights: unknown; cached: boolean; revalidating: boolean };
+    };
+    expect(body.data.cached).toBe(true);
+    expect(body.data.insights).toEqual(cached);
+    expect(body.data.revalidating).toBe(false);
+    expect(enqueueForceWarm).not.toHaveBeenCalled();
   });
 
   it("returns an empty payload (no warm) on a cold cache without a provider", async () => {

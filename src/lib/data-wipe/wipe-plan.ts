@@ -316,6 +316,7 @@ export const USER_RESET = {
   insightsPrivacyMode: "aggregated",
   insightsCachedAt: null,
   insightsCachedText: null,
+  insightsCachedLocale: null,
   insightsSnapshotHash: null,
   insightsWarmFailedAt: null,
   insightsBriefingRerollDate: null,

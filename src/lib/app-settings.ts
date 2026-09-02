@@ -68,3 +68,22 @@ export async function getReminderThresholds(): Promise<ReminderThresholds> {
     return { lateMinutes: 120, missedMinutes: 240 };
   }
 }
+
+/**
+ * The operator's configured default locale (`AppSettings.defaultLocale`), or
+ * `null` when the settings row is absent or unreadable. Validation against
+ * the shipped locale list is the caller's job (`resolveJobLocale`); this only
+ * reads the column.
+ */
+export async function getOperatorDefaultLocale(): Promise<string | null> {
+  try {
+    const settings = await prisma.appSettings.findUnique({
+      where: { id: "singleton" },
+      select: { defaultLocale: true },
+    });
+    return settings?.defaultLocale ?? null;
+  } catch {
+    getEvent()?.addWarning("Failed to load the operator default locale");
+    return null;
+  }
+}
