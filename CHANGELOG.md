@@ -1,5 +1,23 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **Anthropic keys work again on current Claude models.** Every JSON surface
+  on the Anthropic provider (the daily briefing, the status cards, lab and
+  document extraction, anything that asks the model for a JSON object) had
+  been failing with an HTTP 400 on the Claude 4.6, 4.7 and 4.8 family, on
+  Opus 5 and Sonnet 5, and on Fable 5 and 5.1. The client had been steering
+  the reply by starting the assistant turn with an opening brace and
+  gluing it back on afterwards. Those models reject an assistant prefill
+  outright, so a self-hoster who brought a key with a current model got a
+  provider failure on each of those calls while the plain chat path kept
+  working. The prefill is gone on every model; the request now carries a
+  plain instruction to reply with a single JSON object and nothing else,
+  and the reply is narrowed to the object body on the way out, so a fenced
+  or prefixed answer still parses. Reported independently by @sweidinger.
+
 ## [1.38.1] — 2026-09-01
 
 You can push readings in from your own hardware again, and a lab reading
