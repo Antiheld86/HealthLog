@@ -150,17 +150,86 @@ describe("container dependency installation", () => {
   });
 });
 
+/**
+ * `>= 0` comparison over a dotted version, enough for the floor checks below.
+ * Pre-release suffixes are not expected in an override replacement and are
+ * ignored rather than guessed at.
+ */
+function atLeast(version: string, floor: string): boolean {
+  const parts = (value: string) =>
+    value
+      .replace(/^[\^~>=<\s]+/, "")
+      .split("-")[0]
+      .split(".")
+      .map((piece) => Number.parseInt(piece, 10) || 0);
+  const [a, b] = [parts(version), parts(floor)];
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    const left = a[i] ?? 0;
+    const right = b[i] ?? 0;
+    if (left !== right) return left > right;
+  }
+  return true;
+}
+
 describe("production dependency advisory floors", () => {
-  it("pins vulnerable transitive ranges to compatible patched versions", () => {
+  /**
+   * The floor an advisory demands, by package. Raising an override past one of
+   * these must not break this test: an earlier version of it asserted the exact
+   * key and replacement string, so every legitimate floor raise failed it while
+   * a floor that had gone STALE against a newer advisory passed. It now asserts
+   * the property that matters, which is that the pin is at or above the fixed
+   * version. Update a floor here when a new advisory raises it.
+   */
+  const floors: Record<string, string> = {
+    // GHSA-55q2-fjhq-7xh7, reached through jspdf's optional HTML renderer.
+    dompurify: "3.4.13",
+    // CVE-2026-69153.
+    postcss: "8.5.23",
+    // GHSA-frvp-7c67-39w9 and CVE-2026-39406. Mirrored in the Dockerfile.
+    "@hono/node-server": "1.19.15",
+    hono: "4.12.25",
+    // CVE-2026-59952. Mirrored in the Dockerfile.
+    valibot: "1.4.2",
+  };
+
+  it("pins vulnerable transitive ranges at or above the fixed version", () => {
     const workspace = parse(readRepoFile("pnpm-workspace.yaml")) as {
       overrides?: Record<string, string>;
     };
+    const overrides = workspace.overrides ?? {};
 
-    expect(workspace.overrides).toMatchObject({
-      "dompurify@<=3.4.10": "^3.4.11",
-      "postcss@<8.5.10": "^8.5.10",
-      "@hono/node-server@<1.19.13": "^1.19.13",
-      "hono@<4.12.25": "^4.12.25",
-    });
+    const byName = new Map<string, string>();
+    for (const [key, replacement] of Object.entries(overrides)) {
+      const selectorAt = key.startsWith("@")
+        ? key.indexOf("@", 1)
+        : key.indexOf("@");
+      byName.set(
+        selectorAt === -1 ? key : key.slice(0, selectorAt),
+        replacement,
+      );
+    }
+    expect(byName.size).toBeGreaterThan(0);
+
+    for (const [name, floor] of Object.entries(floors)) {
+      const replacement = byName.get(name);
+      expect(
+        replacement,
+        `${name} has no override in pnpm-workspace.yaml`,
+      ).toBeDefined();
+      expect(
+        atLeast(replacement as string, floor),
+        `${name} is pinned to ${replacement}, below the advisory floor ${floor}.`,
+      ).toBe(true);
+    }
+  });
+
+  it("compares versions rather than always agreeing", () => {
+    // The comparison is the whole test above; a helper that never returns
+    // false would make it vacuous.
+    expect(atLeast("^3.4.13", "3.4.13")).toBe(true);
+    expect(atLeast("^3.4.14", "3.4.13")).toBe(true);
+    expect(atLeast("^3.4.12", "3.4.13")).toBe(false);
+    expect(atLeast("^1.19.9", "1.19.15")).toBe(false);
+    expect(atLeast("^2.0.5", "1.19.15")).toBe(true);
   });
 });

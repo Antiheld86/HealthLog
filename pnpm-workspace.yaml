@@ -1,8 +1,20 @@
 overrides:
-  "dompurify@<=3.4.10": "^3.4.11"
-  "postcss@<8.5.10": "^8.5.10"
+  # GHSA-55q2-fjhq-7xh7: a crafted document gets past the sanitiser and its
+  # markup survives into the output. The copy here is jspdf's optional HTML
+  # renderer, which the doctor-report PDF path reaches.
+  "dompurify@<3.4.13": "^3.4.13"
+  # CVE-2026-69153. Next declares an exact `postcss@8.4.31`, so nothing except
+  # this bound moves it. The build has run on the 8.5 line since the first
+  # bump; the fix landed in 8.5.23.
+  "postcss@<8.5.23": "^8.5.23"
   "nanoid@<3.3.18": "^3.3.18"
-  "@hono/node-server@<1.19.13": "^1.19.13"
+  # GHSA-frvp-7c67-39w9 raised the floor from 1.19.13 to 1.19.15. Mirrored for
+  # /opt/prisma-cli in the Dockerfile, which is where the flagged 1.19.11
+  # actually landed: prisma pulls it through @prisma/dev, and that install
+  # reads npm `overrides`, not this file. The bound stays on the 1.x line
+  # because the advisory is fixed there too and 2.x is a major nothing asked
+  # for.
+  "@hono/node-server@<1.19.15": "^1.19.15"
   "hono@<4.12.25": "^4.12.25"
   "picomatch@<4.0.4": "^4.0.4"
   "body-parser@<2.3.0": "^2.3.0"
@@ -39,6 +51,12 @@ overrides:
   # override is the only way through. It runs on the config-loading and CLI
   # path, not under a request, but a red audit blocks the whole release train.
   "deepmerge-ts@<8.0.0": "^8.0.0"
+  # CVE-2026-59952. Two copies arrive, neither of them ours to call: an
+  # optional peer of `@hookform/resolvers` (this app validates with zod) and
+  # prisma's local dev server. Mirrored for /opt/prisma-cli in the Dockerfile,
+  # where the flagged 1.2.0 landed. 1.4.2 is the same major, so no consumer is
+  # dragged onto a new one.
+  "valibot@<1.4.2": "^1.4.2"
 
 allowBuilds:
   "@prisma/engines": true

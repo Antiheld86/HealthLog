@@ -20,6 +20,12 @@
  * would encode noise. It asserts agreement where both files speak, which is
  * the failure that actually happened.
  *
+ * The matcher had a blind spot of its own until 2026-09-02: it refused any
+ * workspace key beginning with `@`, so every scoped package was invisible to
+ * it. `@hono/node-server` was pinned on one side and unpinned on the other and
+ * the guard stayed green, which is the same shape of green the guard exists to
+ * prevent. Scoped keys parse now, and a test below pins that they do.
+ *
  * Limit, written down so the next reader does not over-trust a green run: this
  * compares declared ranges. It cannot see a NEW vulnerable transitive that
  * neither file mentions. Only the image scan can, and that job runs on
@@ -45,16 +51,29 @@ function dockerfileOverrides(): Map<string, string> {
 }
 
 /**
+ * Reduces an overrides key to the bare package name. The key carries a version
+ * selector, so `deepmerge-ts@<8.0.0` and a bare `deepmerge-ts` both land on the
+ * same name. A scoped name opens with its own `@`, so the selector starts at
+ * the SECOND one, not the first.
+ */
+function packageNameOf(key: string): string {
+  const trimmed = key.trim();
+  const selectorAt = trimmed.startsWith("@")
+    ? trimmed.indexOf("@", 1)
+    : trimmed.indexOf("@");
+  return (selectorAt === -1 ? trimmed : trimmed.slice(0, selectorAt)).trim();
+}
+
+/**
  * `"<name>@<selector>": "<range>"` entries under the workspace `overrides:`
- * block. The key carries a version selector, so `deepmerge-ts@<8.0.0` and a
- * bare `deepmerge-ts` both have to reduce to the same package name.
+ * block.
  */
 function workspaceOverrides(): Map<string, string> {
   const found = new Map<string, string>();
-  const pattern = /^\s+"([^"@][^"]*?)(?:@[^"]*)?"\s*:\s*"([^"]+)"/gm;
+  const pattern = /^\s+"([^"]+)"\s*:\s*"([^"]+)"/gm;
   const block = WORKSPACE.split(/^allowBuilds:/m)[0];
   for (const match of block.matchAll(pattern)) {
-    found.set(match[1].trim(), match[2].trim());
+    found.set(packageNameOf(match[1]), match[2].trim());
   }
   return found;
 }
@@ -74,6 +93,23 @@ describe("dependency overrides — pnpm workspace and the npm install agree", ()
     expect(workspace.has("deepmerge-ts")).toBe(true);
   });
 
+  it("reads scoped workspace keys rather than skipping them", () => {
+    // The old matcher started the name at `[^"@]`, so `@hono/node-server` was
+    // never in the shared set and could disagree across the two files without
+    // failing anything. Both halves are asserted: the reduction itself, and
+    // that a real scoped entry survives it.
+    expect(packageNameOf("@hono/node-server@<1.19.15")).toBe(
+      "@hono/node-server",
+    );
+    expect(packageNameOf("dompurify@<3.4.13")).toBe("dompurify");
+    expect(packageNameOf("js-yaml@>=4.0.0 <4.3.1")).toBe("js-yaml");
+    expect(packageNameOf("deepmerge-ts")).toBe("deepmerge-ts");
+
+    const workspace = workspaceOverrides();
+    const scoped = [...workspace.keys()].filter((name) => name.startsWith("@"));
+    expect(scoped.length).toBeGreaterThan(0);
+  });
+
   it("pins the same range wherever both files name the same package", () => {
     const docker = dockerfileOverrides();
     const workspace = workspaceOverrides();
@@ -88,6 +124,21 @@ describe("dependency overrides — pnpm workspace and the npm install agree", ()
           `pnpm-workspace.yaml pins it to ${workspace.get(name)}. The image ` +
           `carries both installs, so the looser of the two is what ships.`,
       ).toBe(workspace.get(name));
+    }
+  });
+
+  it("mirrors every pin the /opt/prisma-cli tree was scanned on", () => {
+    // These three were each reported by the image scan under
+    // `/opt/prisma-cli`, reached through `prisma`. Losing a mirror is not a
+    // style regression, it is the vulnerable version coming back.
+    const docker = dockerfileOverrides();
+    for (const name of ["deepmerge-ts", "@hono/node-server", "valibot"]) {
+      expect(
+        docker.has(name),
+        `${name} was flagged under /opt/prisma-cli and needs an ` +
+          `\`npm pkg set 'overrides.${name}=...'\` line in the Dockerfile; ` +
+          `pnpm-workspace.yaml does not reach that install.`,
+      ).toBe(true);
     }
   });
 
