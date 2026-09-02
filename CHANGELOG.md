@@ -1,6 +1,9 @@
 # Changelog
 
-## [Unreleased]
+## [1.38.4] — 2026-09-02
+
+The shared AI key reaches the provider its address names, and the image
+carries no flagged dependency versions.
 
 ### Fixed
 
