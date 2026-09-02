@@ -121,6 +121,25 @@ describe("what it mints", () => {
       }),
     );
   });
+
+  it("counts only live tokens carrying this scope", async () => {
+    // The whole shape of the query, asserted rather than assumed. Counting
+    // every row would let the `["*"]` tokens a login mints consume the budget
+    // and refuse a mint for a reason the person cannot see; counting revoked
+    // or expired rows would mean revoking never frees a slot.
+    await POST(req({ name: "Scale" }) as never);
+
+    const where = vi.mocked(prisma.apiToken.count).mock.calls[0][0]?.where;
+    expect(where).toMatchObject({
+      userId: USER.id,
+      revoked: false,
+      permissions: { has: MEASUREMENTS_WRITE_SCOPE },
+    });
+    expect(where?.OR).toEqual([
+      { expiresAt: null },
+      { expiresAt: { gt: expect.any(Date) } },
+    ]);
+  });
 });
 
 describe("when it refuses", () => {
@@ -171,25 +190,6 @@ describe("when it refuses", () => {
     vi.mocked(prisma.apiToken.count).mockResolvedValue(9 as never);
     const res = await POST(req({ name: "Scale" }) as never);
     expect(res.status).toBe(201);
-  });
-
-  it("counts only live tokens carrying this scope", async () => {
-    // The whole shape of the query, asserted rather than assumed. Counting
-    // every row would let the `["*"]` tokens a login mints consume the budget
-    // and refuse a mint for a reason the person cannot see; counting revoked
-    // or expired rows would mean revoking never frees a slot.
-    await POST(req({ name: "Scale" }) as never);
-
-    const where = vi.mocked(prisma.apiToken.count).mock.calls[0][0]?.where;
-    expect(where).toMatchObject({
-      userId: USER.id,
-      revoked: false,
-      permissions: { has: MEASUREMENTS_WRITE_SCOPE },
-    });
-    expect(where?.OR).toEqual([
-      { expiresAt: null },
-      { expiresAt: { gt: expect.any(Date) } },
-    ]);
   });
 
   it("checks the ceiling only after the body validates", async () => {

@@ -131,6 +131,22 @@ export const POST = apiHandler(async (request: NextRequest) => {
   // Placed after validation and before the create: a request that is going to
   // be refused should not cost a credential, and one that is malformed should
   // hear about the malformation rather than the ceiling.
+  //
+  // Count-then-create is NOT atomic, and deliberately so. Two mints racing at
+  // nine both read nine, both pass, and the account lands eleven. Nothing here
+  // prevents that; what bounds it is the rate limit above, which is a single
+  // `INSERT … ON CONFLICT DO UPDATE … RETURNING` (`lib/rate-limit.ts`) and so
+  // admits at most `MINT_RATE_LIMIT_MAX` mints per user per window. The race
+  // can overshoot the ceiling; it cannot run away from it.
+  //
+  // Left unserialised because of what this limit is for: catching a runaway
+  // automation, not metering a quota anybody is billed against. The holder can
+  // revoke and mint freely, so eleven tokens instead of ten costs nothing,
+  // while a lock on a credential mint is a contention point on a write that
+  // must not hang. If it ever does need to be exact, the house pattern is
+  // `pg_advisory_xact_lock(hashtextextended(<key>, 0))` inside the
+  // transaction — see `lib/managed-profiles/lifecycle.ts:47` or
+  // `lib/integrations/oauth-refresh.ts:89`.
   const live = await prisma.apiToken.count({
     where: {
       userId: user.id,
