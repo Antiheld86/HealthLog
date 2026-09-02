@@ -142,16 +142,65 @@ function buildUserProvider(row: UserAIRow): AIProvider | null {
   }
 }
 
+/**
+ * True when a base URL addresses Anthropic's API: the host itself or any
+ * subdomain of `anthropic.com`, case-insensitively. Parsed rather than
+ * substring-matched, so `https://anthropic.com.attacker.example/v1` and
+ * `https://evil.example/?x=api.anthropic.com` both answer false.
+ *
+ * An unparseable value answers false and keeps the OpenAI path, which is the
+ * behaviour that value had before this function existed.
+ */
+function isAnthropicBaseUrl(baseUrl: string): boolean {
+  let host: string;
+  try {
+    host = new URL(baseUrl).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return host === "anthropic.com" || host.endsWith(".anthropic.com");
+}
+
+/**
+ * The operator's global provider — one key, one model, one base URL in the
+ * admin settings, serving every user who has configured nothing themselves.
+ *
+ * The base URL decides the wire. An operator who fills these fields with an
+ * Anthropic endpoint and an Anthropic key used to get OpenAI-shaped requests
+ * posted at Anthropic, which fails every call with nothing pointing at the
+ * cause; the host check routes them to the same `AnthropicClient` the
+ * per-user `ANTHROPIC` arm builds. Every other host stays on `OpenAIClient`,
+ * which is also the right client for an OpenAI-compatible endpoint (a local
+ * server, a gateway) — the admin base URL is host-allowlisted at write time
+ * in `/api/admin/ai-settings`.
+ *
+ * The chain still reports this entry as `admin-openai` whichever client it
+ * builds. That tag names the SLOT — "the operator's shared credential, last
+ * in the chain" — not the wire: it is persisted in `User.aiProviderChain`,
+ * offered in the chain editor, and pinned by the OpenAPI enum, so splitting
+ * it per wire would rewrite stored chains and widen a structural allowlist to
+ * express something the runtime provider type (`admin-key` / `anthropic` on
+ * the instance, which is what the wide events and the budget classifier read)
+ * already carries.
+ */
 async function resolveAdminProvider(): Promise<AIProvider> {
   const settings = await prisma.appSettings.findUnique({
     where: { id: "singleton" },
   });
 
   if (settings?.adminAiKeyEncrypted) {
+    const baseUrl = settings.adminAiBaseUrl ?? "https://api.openai.com/v1";
+    if (isAnthropicBaseUrl(baseUrl)) {
+      return new AnthropicClient({
+        apiKey: decrypt(settings.adminAiKeyEncrypted),
+        model: settings.adminAiModel ?? "claude-sonnet-4-6",
+        baseUrl,
+      });
+    }
     return new OpenAIClient({
       apiKey: decrypt(settings.adminAiKeyEncrypted),
       model: settings.adminAiModel ?? "gpt-4o",
-      baseUrl: settings.adminAiBaseUrl ?? "https://api.openai.com/v1",
+      baseUrl,
     });
   }
 
