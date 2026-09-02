@@ -82,6 +82,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
       codexConnectionStatus: "connected",
       insightsCachedAt: null,
       insightsCachedText: null,
+      insightsCachedLocale: null,
     },
   });
 

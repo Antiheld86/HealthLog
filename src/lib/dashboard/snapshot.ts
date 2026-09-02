@@ -508,6 +508,12 @@ export interface SnapshotUserInput {
   disableCoach: boolean;
   insightsCachedText: string | null;
   insightsCachedAt: Date | null;
+  /**
+   * Language the cached text was generated in. `null` on rows written before
+   * the tag existed (served as-is). A tag that differs from the reader's
+   * locale makes the cache count as absent for prose purposes.
+   */
+  insightsCachedLocale: string | null;
   dashboardWidgetsJson: unknown;
   /** Raw source-priority settings already loaded with the authenticated user. */
   sourcePriorityJson?: unknown;
@@ -908,6 +914,7 @@ async function liftBriefing(
   user: SnapshotUserInput,
   coachEnabled: boolean,
   hasProvider: () => Promise<boolean>,
+  readerLocale: Locale,
 ): Promise<{
   briefing: DailyBriefing | null;
   briefingState: BriefingState;
@@ -923,10 +930,21 @@ async function liftBriefing(
     };
   }
 
-  const cachedAt = user.insightsCachedAt;
+  // The cache is one slot per user with no per-language copy. Prose written
+  // in another language is never the reader's briefing, stale or not, so a
+  // differing tag makes the slot count as never generated: no text, no
+  // timestamp. The advisor read (`GET /api/insights/generate`) enqueues the
+  // re-warm in the reader's language on the same condition. An untagged row
+  // predates the tag and is served as before.
+  const cachedLocale = user.insightsCachedLocale;
+  const languageMismatch =
+    cachedLocale !== null && cachedLocale !== readerLocale;
+  const cachedAt = languageMismatch ? null : user.insightsCachedAt;
   const updatedAt = cachedAt?.toISOString() ?? null;
   const stale = !cachedAt || Date.now() - cachedAt.getTime() >= BRIEFING_TTL_MS;
-  const cachedBriefing = parseCachedBriefing(user.insightsCachedText);
+  const cachedBriefing = languageMismatch
+    ? null
+    : parseCachedBriefing(user.insightsCachedText);
 
   if (!stale && cachedBriefing) {
     return {
@@ -1375,10 +1393,15 @@ export async function buildDashboardSnapshot(
   // `briefingState: "disabled"` empty surface the existing flags produce
   // (the raw weight/BP/pulse data stays untouched — `insights` is the
   // narrative layer, not the data layer).
+  // The reader's locale: the route resolves it from the request; the builder
+  // defaults to English. It decides which cached briefing counts as the
+  // reader's and which narrative row the briefing memory reads.
+  const locale = options.locale ?? "en";
   const briefing = await liftBriefing(
     user,
     flags.briefing && modules.insights !== false,
     options.hasProvider ?? (() => hasAnyConfiguredProvider(user.id)),
+    locale,
   );
 
   // v1.21.2 (A4 / A5 / A6) — the score-card narrative (Tension Verdict +
@@ -1386,8 +1409,7 @@ export async function buildDashboardSnapshot(
   // briefing on the `insights` module so a narrative-off account carries none.
   // Both are fail-soft — a transient derived-engine read resolves to null and
   // never sinks the snapshot. The narrative block rides the warm phase's
-  // healthScore; memory rides the briefing card. The locale defaults to English.
-  const locale = options.locale ?? "en";
+  // healthScore; memory rides the briefing card.
   const narrativeSex = binaryReferenceSex(user.gender);
   const narrativeProfile = {
     ageYears: getAgeFromDateOfBirth(user.dateOfBirth),

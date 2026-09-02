@@ -194,6 +194,7 @@ function baseUser(
     disableCoach: false,
     insightsCachedText: null,
     insightsCachedAt: null,
+    insightsCachedLocale: null,
     dashboardWidgetsJson: null,
     thresholdsJson: null,
     healthScoreConfigJson: null,
@@ -691,6 +692,78 @@ describe("buildDashboardSnapshot — briefingState matrix", () => {
     );
     expect(snap.briefingState).toBe("preparing");
     expect(snap.briefing).toBeNull();
+  });
+});
+
+describe("buildDashboardSnapshot — briefing locale tag", () => {
+  beforeEach(() => {
+    probeRollupCoverage.mockResolvedValue(new Map());
+    isFullyCovered.mockReturnValue(false);
+  });
+
+  const briefing = {
+    greeting: "Hello",
+    paragraph: "Everything is in the green.",
+    keyFindings: [],
+  };
+
+  it("a cache tagged 'en' read by a 'de' reader serves NO prose and reports preparing", async () => {
+    const snap = await buildDashboardSnapshot(
+      fakePrisma,
+      baseUser({
+        insightsCachedAt: new Date(),
+        insightsCachedText: JSON.stringify({ dailyBriefing: briefing }),
+        insightsCachedLocale: "en",
+      }),
+      { locale: "de" },
+    );
+    expect(snap.briefingState).toBe("preparing");
+    expect(snap.briefing).toBeNull();
+    expect(snap.briefingStale).toBe(false);
+    expect(snap.briefingUpdatedAt).toBeNull();
+  });
+
+  it("a mismatched tag with no provider anywhere reports no-provider, still without prose", async () => {
+    hasAnyConfiguredProvider.mockResolvedValue(false);
+    const snap = await buildDashboardSnapshot(
+      fakePrisma,
+      baseUser({
+        insightsCachedAt: new Date(),
+        insightsCachedText: JSON.stringify({ dailyBriefing: briefing }),
+        insightsCachedLocale: "en",
+      }),
+      { locale: "de" },
+    );
+    expect(snap.briefingState).toBe("no-provider");
+    expect(snap.briefing).toBeNull();
+  });
+
+  it("an untagged cache (written before the tag existed) is served as before", async () => {
+    const snap = await buildDashboardSnapshot(
+      fakePrisma,
+      baseUser({
+        insightsCachedAt: new Date(),
+        insightsCachedText: JSON.stringify({ dailyBriefing: briefing }),
+        insightsCachedLocale: null,
+      }),
+      { locale: "de" },
+    );
+    expect(snap.briefingState).toBe("ready");
+    expect(snap.briefing?.paragraph).toBe(briefing.paragraph);
+  });
+
+  it("a matching tag is served", async () => {
+    const snap = await buildDashboardSnapshot(
+      fakePrisma,
+      baseUser({
+        insightsCachedAt: new Date(),
+        insightsCachedText: JSON.stringify({ dailyBriefing: briefing }),
+        insightsCachedLocale: "de",
+      }),
+      { locale: "de" },
+    );
+    expect(snap.briefingState).toBe("ready");
+    expect(snap.briefing?.paragraph).toBe(briefing.paragraph);
   });
 });
 

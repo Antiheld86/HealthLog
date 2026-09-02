@@ -154,13 +154,38 @@ export const GET = apiHandler(async (request: NextRequest) => {
     select: {
       insightsCachedAt: true,
       insightsCachedText: true,
+      insightsCachedLocale: true,
       locale: true,
     },
   });
 
+  // Resolve the locale the caller is actually reading (cookie /
+  // Accept-Language fall-back when `User.locale` is unset) and validate it
+  // against the shipped list — the same convention the nightly's
+  // `normalizeLocale` and the status routes follow. The previous
+  // `(locale) === "en" ? "en" : "de"` collapsed a NULL `User.locale`
+  // to German even for a client reading the app in English, so the
+  // visit-triggered warm filled the wrong cache family.
+  const readerLocale = normalizeLocale(
+    await resolveServerLocale({
+      request,
+      userLocale: dbUser?.locale ?? user.locale ?? null,
+    }),
+  );
+
+  // The cache is one slot per user. Text written in another language is
+  // never the reader's briefing, however fresh: treat the slot as empty for
+  // prose, and re-warm in the reader's language below. An untagged row
+  // predates the tag and is served as before.
+  const languageMismatch =
+    dbUser?.insightsCachedLocale != null &&
+    dbUser.insightsCachedLocale !== readerLocale;
+
   const cachedAt = dbUser?.insightsCachedAt ?? null;
   const isFresh =
-    cachedAt !== null && Date.now() - cachedAt.getTime() < BRIEFING_FRESH_MS;
+    !languageMismatch &&
+    cachedAt !== null &&
+    Date.now() - cachedAt.getTime() < BRIEFING_FRESH_MS;
 
   // v1.18.9 (#4) — resolve provider availability once, up front. The
   // read path never blocks on or generates through the provider, but it
@@ -204,23 +229,11 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // empty / connect-AI state instead of a wasted enqueue).
   let revalidating = false;
   if (!isFresh && hasProvider) {
-    // Resolve the locale the caller is actually reading (cookie /
-    // Accept-Language fall-back when `User.locale` is unset) and narrow
-    // non-German to English — the same convention the nightly's
-    // `normalizeLocale` and the status routes follow. The previous
-    // `(locale) === "en" ? "en" : "de"` collapsed a NULL `User.locale`
-    // to German even for a client reading the app in English, so the
-    // visit-triggered warm filled the wrong cache family.
-    const resolved = await resolveServerLocale({
-      request,
-      userLocale: dbUser?.locale ?? user.locale ?? null,
-    });
-    const locale = normalizeLocale(resolved);
-    void enqueueForceWarm({ userId, locale });
+    void enqueueForceWarm({ userId, locale: readerLocale });
     revalidating = true;
   }
 
-  if (dbUser?.insightsCachedText) {
+  if (dbUser?.insightsCachedText && !languageMismatch) {
     try {
       const cached = JSON.parse(dbUser.insightsCachedText);
       const legacyPayload = isLegacyInsightPayload(cached);
@@ -260,7 +273,13 @@ export const GET = apiHandler(async (request: NextRequest) => {
 
   annotate({
     action: { name: "insights.generate.read" },
-    meta: { cached: false, revalidating, hasProvider },
+    meta: {
+      cached: false,
+      revalidating,
+      hasProvider,
+      languageMismatch,
+      readerLocale,
+    },
   });
   return apiSuccess({
     insights: null,
@@ -298,6 +317,7 @@ export const POST = apiHandler((request: NextRequest) =>
         insightsPrivacyMode: true,
         insightsCachedAt: true,
         insightsCachedText: true,
+        insightsCachedLocale: true,
         // v1.4.36 W3 T3 — per-user opt-out list mirroring the Coach
         // settings. Filtered off `features` before serialisation so the
         // LLM never sees the excluded blocks.
@@ -366,10 +386,16 @@ export const POST = apiHandler((request: NextRequest) =>
       legacyPayload: boolean;
       cachedAt: Date;
     } | null = null;
+    // A cache tagged with another language is not this reader's cache and
+    // never short-circuits; the generation below writes the reader's own.
+    const cachedLocaleMatches =
+      dbUser?.insightsCachedLocale == null ||
+      dbUser.insightsCachedLocale === locale;
     if (
       !forceRefresh &&
       dbUser?.insightsCachedAt &&
       dbUser.insightsCachedText &&
+      cachedLocaleMatches &&
       Date.now() - dbUser.insightsCachedAt.getTime() < 24 * 60 * 60 * 1000
     ) {
       try {
@@ -999,6 +1025,7 @@ export const POST = apiHandler((request: NextRequest) =>
       data: {
         insightsCachedAt: new Date(),
         insightsCachedText: JSON.stringify(insights),
+        insightsCachedLocale: locale,
         insightsSnapshotHash: hashInsightSnapshot({
           features: compactFeatures,
           aboutMe: aboutMe ?? null,

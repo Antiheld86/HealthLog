@@ -287,6 +287,7 @@ function user(healthScoreConfigJson: unknown): SnapshotUserInput {
     disableCoach: false,
     insightsCachedText: null,
     insightsCachedAt: null,
+    insightsCachedLocale: null,
     dashboardWidgetsJson: null,
     thresholdsJson: null,
     healthScoreConfigJson,

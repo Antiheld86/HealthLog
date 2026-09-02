@@ -756,9 +756,12 @@ describe("backup round trip — export, wire schema, restore", () => {
         userUpdate,
         "a scope-narrowing restore must clear the cached briefing",
       ).toBeDefined();
+      // The language tag is cleared with the text: an empty slot carries
+      // no language, and the next write tags it afresh.
       expect(userUpdate!.data).toEqual({
         insightsCachedText: null,
         insightsCachedAt: null,
+        insightsCachedLocale: null,
       });
     });
 

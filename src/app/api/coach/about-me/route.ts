@@ -271,6 +271,7 @@ export const PUT = apiHandler(async (req: Request) => {
         data: {
           insightsCachedAt: null,
           insightsCachedText: null,
+          insightsCachedLocale: null,
         },
       });
     }

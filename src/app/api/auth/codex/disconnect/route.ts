@@ -22,6 +22,7 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
       codexConnectionStatus: "disconnected",
       insightsCachedAt: null,
       insightsCachedText: null,
+      insightsCachedLocale: null,
     },
   });
 

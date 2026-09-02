@@ -216,6 +216,7 @@ describe("about-me module gate", () => {
       data: {
         insightsCachedAt: null,
         insightsCachedText: null,
+        insightsCachedLocale: null,
       },
     });
     expect(invalidateInsights).toHaveBeenCalledWith("u1");

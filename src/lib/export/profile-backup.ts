@@ -913,7 +913,11 @@ export async function restoreProfileData(
     // pre-restore briefing against a narrower post-restore scope.
     await tx.user.update({
       where: { id: ownerId },
-      data: { insightsCachedText: null, insightsCachedAt: null },
+      data: {
+        insightsCachedText: null,
+        insightsCachedAt: null,
+        insightsCachedLocale: null,
+      },
     });
   }
 

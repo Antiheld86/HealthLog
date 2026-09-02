@@ -226,8 +226,29 @@ describe("generateComprehensiveInsight — content-hash gate (v1.16.8)", () => {
     expect(write).toBeTruthy();
     const data = (write![0] as { data: Record<string, unknown> }).data;
     expect(data.insightsSnapshotHash).toBe(FEATURES_HASH);
+    // The cache row records the language it was generated in.
+    expect(data.insightsCachedLocale).toBe("de");
     // v1.16.8 — the blanket per-status eviction is gone.
     expect(auditDeleteMany).not.toHaveBeenCalled();
+  });
+
+  it("a fresh cache tagged with another language does not short-circuit an unforced run", async () => {
+    findUnique.mockResolvedValue({
+      insightsPrivacyMode: "aggregated",
+      insightsCachedAt: new Date(Date.now() - 1 * 60 * 60 * 1000),
+      insightsCachedText: JSON.stringify({ dailyBriefing: { p: "english" } }),
+      insightsCachedLocale: "en",
+      insightsExcludeMetrics: [],
+      insightsSnapshotHash: null,
+    });
+
+    const outcome = await generateComprehensiveInsight("u1", {
+      locale: "de",
+    });
+
+    // Past the short-circuit → provider chain resolved → no provider.
+    expect(resolveProviderChain).toHaveBeenCalledTimes(1);
+    expect(outcome).toEqual({ status: "skipped", reason: "no-provider" });
   });
 
   it("generates when no fingerprint is stored yet (first run after the gate shipped)", async () => {
