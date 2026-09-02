@@ -1244,6 +1244,78 @@ export async function requireFreshMfaIfEnrolled(
 }
 
 /**
+ * What an erasure route received: the caller, plus the hook that spends a
+ * Bearer elevation. See `MfaManagementContext.commitElevation` for the
+ * contract — call it immediately before the mutation, after every cheap
+ * refusal (a bad confirmation, the last-admin check) has passed, so a 422
+ * does not burn a proof the user then has to mint again.
+ */
+export type ErasureAuthContext = AuthContext & {
+  commitElevation: () => Promise<void>;
+};
+
+/**
+ * The sibling of `requireFreshMfaIfEnrolled` for the two erasure routes —
+ * account deletion and the record wipe — and only those.
+ *
+ * WHY IT EXISTS. App Store guideline 5.1.1(v) requires that an account created
+ * in the app can be deleted from the app. `requireFreshMfaIfEnrolled` gates an
+ * MFA-enrolled account on `requireFreshMfa`, which is cookie-only by
+ * construction, so a native-app user with a second factor could not delete
+ * their account from the app at all: the Bearer transport had no way to
+ * present a fresh factor and the route answered 401 "Not authenticated" to a
+ * perfectly valid token. This helper adds the Bearer arm without touching
+ * `requireFreshMfa`, which stays cookie-only.
+ *
+ * THE THREE ARMS.
+ *
+ *   No second factor enrolled — pass through on either transport, exactly as
+ *   the sibling does. A user who never enrolled has no ceremony to complete.
+ *
+ *   Cookie + enrolled — `requireFreshMfa`, unchanged: `Session.mfaVerifiedAt`
+ *   within the window. A browser session cannot tell the two helpers apart.
+ *
+ *   Bearer + enrolled — a step-up elevation in the `X-Step-Up` header, minted
+ *   by `POST /api/auth/step-up` against a re-proved factor, validated by the
+ *   same code the MFA-management routes use and with `freshFactor` pinned ON:
+ *   a `totp`, `webauthn`, or `passkey` proof passes; a password proof is
+ *   refused with the same generic 401, because a password login has never
+ *   satisfied step-up on the web and must not start here. The elevation is
+ *   token-bound, single-use, and five minutes wide — the cookie window.
+ *
+ * WHAT IT DOES NOT DO. Scope is `requireAuth()`'s fail-closed default, so a
+ * narrow token is refused 403 before the header is read. A recovery code is
+ * not accepted on Bearer — the mint does not take one, and `FRESH_FACTOR_METHODS`
+ * says why; an account that has lost its authenticator erases itself on the
+ * web, where `/api/auth/mfa/verify` accepts the code and stamps the session.
+ * And the gate takes no factor in the BODY: there is one mint surface and one
+ * redemption path, which is what `step-up-elevation-guard.test.ts` freezes.
+ */
+export async function requireFreshMfaOrElevationIfEnrolled(
+  maxAgeSeconds: number,
+): Promise<ErasureAuthContext> {
+  const auth = await requireAuth();
+  const noop = async () => {};
+
+  if (!(await hasSecondFactorEnrolled(auth.user))) {
+    return { ...auth, commitElevation: noop };
+  }
+
+  if (auth.authMethod === "cookie") {
+    await requireFreshMfa(maxAgeSeconds);
+    return { ...auth, commitElevation: noop };
+  }
+
+  // On the Bearer path `requireAuth` puts the resolved `ApiToken` row id in
+  // `session.id` — the binding the elevation was minted against.
+  const commitElevation = await resolveBearerElevation(
+    { user: auth.user, apiTokenId: auth.session.id },
+    { freshFactor: true, proofSource: "second-factor" },
+  );
+  return { ...auth, commitElevation };
+}
+
+/**
  * Does this account have a SECOND FACTOR at all?
  *
  * Either factor enrols it: a confirmed TOTP secret OR a registered WebAuthn
@@ -1457,6 +1529,37 @@ export async function requireMfaManagementAuth(
   // Bearer path. Resolution first: an unknown, revoked, expired, or narrow-scope
   // token is refused here and never gets as far as presenting an elevation.
   const auth = await requireBearerAuth();
+  const commitElevation = await resolveBearerElevation(
+    { user: auth.user, apiTokenId: auth.apiTokenId },
+    { freshFactor, proofSource },
+  );
+
+  return {
+    transport: "bearer",
+    user: auth.user,
+    apiTokenId: auth.apiTokenId,
+    accessTokenHash: auth.accessTokenHash,
+    commitElevation,
+  };
+}
+
+/**
+ * The Bearer elevation arm, shared by `requireMfaManagementAuth` and
+ * `requireFreshMfaOrElevationIfEnrolled` so there is exactly one place that
+ * reads the header, validates, refuses, and claims.
+ *
+ * Takes an ALREADY-RESOLVED Bearer caller: the token's own validity and scope
+ * were decided before this runs, and nothing here can widen that decision. It
+ * returns the commit closure — the atomic single-use claim — and throws
+ * `StepUpRequiredError` for a missing, unknown, foreign, spent, expired, or
+ * too-weak elevation, with the real reason in the audit row and none of it on
+ * the wire.
+ */
+async function resolveBearerElevation(
+  auth: { user: User; apiTokenId: string },
+  options: { freshFactor: boolean; proofSource: FreshFactorProofSource },
+): Promise<() => Promise<void>> {
+  const { freshFactor, proofSource } = options;
 
   let raw: string | null = null;
   try {
@@ -1473,6 +1576,7 @@ export async function requireMfaManagementAuth(
     });
     throw new StepUpRequiredError();
   }
+  const rawToken = raw;
 
   const refusal = (reason: string): StepUpRequiredError => {
     // One audit row with the machine reason, one generic refusal on the wire.
@@ -1495,7 +1599,7 @@ export async function requireMfaManagementAuth(
   // Validate WITHOUT consuming. The route runs its own cheap checks next and
   // spends the elevation only when it is about to act.
   const validated = await validateStepUpElevation({
-    rawToken: raw,
+    rawToken,
     userId: auth.user.id,
     apiTokenId: auth.apiTokenId,
     requireFreshFactor: freshFactor,
@@ -1511,24 +1615,18 @@ export async function requireMfaManagementAuth(
     throw new StepUpRequiredError("auth.stepup.mfa_not_enrolled");
   }
 
-  return {
-    transport: "bearer",
-    user: auth.user,
-    apiTokenId: auth.apiTokenId,
-    accessTokenHash: auth.accessTokenHash,
-    commitElevation: async () => {
-      const claimed = await claimStepUpElevation({
-        rawToken: raw,
-        userId: auth.user.id,
-        apiTokenId: auth.apiTokenId,
-        requireFreshFactor: freshFactor,
-      });
-      if (!claimed.ok) throw refusal(claimed.reason);
-      annotate({
-        action: { name: "auth.stepup.elevation.accepted" },
-        meta: { method: claimed.method, freshFactor },
-      });
-    },
+  return async () => {
+    const claimed = await claimStepUpElevation({
+      rawToken,
+      userId: auth.user.id,
+      apiTokenId: auth.apiTokenId,
+      requireFreshFactor: freshFactor,
+    });
+    if (!claimed.ok) throw refusal(claimed.reason);
+    annotate({
+      action: { name: "auth.stepup.elevation.accepted" },
+      meta: { method: claimed.method, freshFactor },
+    });
   };
 }
 
