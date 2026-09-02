@@ -143,8 +143,7 @@ async function drive(handler: Handler, url: string): Promise<Response> {
  * empty table and agree with themselves, which is the exact failure this
  * repository keeps rediscovering: a check that cannot fail.
  */
-async function refusals(callerId: string): Promise<{ reason?: string }[]> {
-  await new Promise((resolve) => setTimeout(resolve, 150));
+async function readRefusals(callerId: string): Promise<{ reason?: string }[]> {
   const rows = await getPrismaClient().auditLog.findMany({
     where: { userId: callerId, action: "sharing.access.denied" },
     orderBy: { createdAt: "asc" },
@@ -159,12 +158,46 @@ async function refusals(callerId: string): Promise<{ reason?: string }[]> {
   );
 }
 
-/** The reason on the most recent one, or null when there is none. */
-async function lastRefusal(
-  callerId: string,
-): Promise<{ reason?: string } | null> {
-  const rows = await refusals(callerId);
-  return rows.length === 0 ? null : rows[rows.length - 1];
+/**
+ * The refusal audit row is written WITHOUT being awaited (`auditRefusal` in
+ * `src/lib/api-handler.ts` drops the promise on purpose, so the audit write
+ * never delays the 403 a caller is waiting on). The row therefore lands some
+ * time after the response returns, and the two assertions here need opposite
+ * treatment of that gap.
+ *
+ * A fixed 150 ms wait served both until a slow CI runner missed it and the
+ * positive case read an empty table, which reads exactly like "the section
+ * reached the wire" — the one thing this file exists to catch. So the
+ * positive case polls until the row appears, and only the absence case pays
+ * a fixed wait, which is what makes an absence claim mean anything.
+ */
+const REFUSAL_APPEAR_TIMEOUT_MS = 5_000;
+const REFUSAL_ABSENCE_WAIT_MS = 750;
+
+/** The most recent refusal, waited for. Fails the test when none arrives. */
+async function lastRefusal(callerId: string): Promise<{ reason?: string }> {
+  const deadline = Date.now() + REFUSAL_APPEAR_TIMEOUT_MS;
+  for (;;) {
+    const rows = await readRefusals(callerId);
+    if (rows.length > 0) return rows[rows.length - 1];
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `no sharing.access.denied audit row for ${callerId} within ${REFUSAL_APPEAR_TIMEOUT_MS} ms`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+/** Every refusal on file, after a wait long enough for a late write. */
+async function refusals(callerId: string): Promise<{ reason?: string }[]> {
+  await new Promise((resolve) => setTimeout(resolve, REFUSAL_ABSENCE_WAIT_MS));
+  return readRefusals(callerId);
+}
+
+/** No refusal was recorded. Waits before concluding that. */
+async function noRefusal(callerId: string): Promise<boolean> {
+  return (await refusals(callerId)).length === 0;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -277,7 +310,7 @@ describe("a scoped grant opens the sections it names", () => {
     // Reached, not merely "not 403": a route that answered 500 would satisfy
     // an inequality against 403 and prove nothing about the fence.
     expect(response.status, PROBES[open].url).toBe(200);
-    expect(await lastRefusal(delegate.id)).toBeNull();
+    expect(await noRefusal(delegate.id)).toBe(true);
   });
 
   it.each(SHARE_DOMAINS)(
@@ -324,7 +357,7 @@ describe("a NULL scope still opens the whole record", () => {
 
       const response = await PROBES[domain].call();
       expect(response.status, PROBES[domain].url).toBe(200);
-      expect(await lastRefusal(delegate.id)).toBeNull();
+      expect(await noRefusal(delegate.id)).toBe(true);
     },
   );
 });
