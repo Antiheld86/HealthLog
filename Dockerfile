@@ -191,11 +191,21 @@ COPY --from=builder /app/src/generated ./src/generated
 # still reports 7.8.0. Keep the range in step with the entry in
 # `pnpm-workspace.yaml` — they are one decision applied to two package
 # managers, and a fix that lands in only one of them is the defect above.
+#
+# The same class recurred on 2026-09-02: the image scan reported
+# `@hono/node-server@1.19.11` (GHSA-frvp-7c67-39w9, CVE-2026-39406) and
+# `valibot@1.2.0` (CVE-2026-59952) under this path, both reached through
+# `prisma -> @prisma/dev`, while the app tree carried 1.19.17 and a pin the
+# npm install never reads. Rebuilding this install both ways confirms it:
+# without the two fields below npm resolves 1.19.11 and 1.2.0, with them it
+# resolves 1.19.17 and 1.4.2, and `prisma --version` still reports 7.8.0.
 RUN mkdir -p /opt/prisma-cli && \
     cd /opt/prisma-cli && \
     npm init -y && \
     npm pkg set 'overrides.deepmerge-ts=^8.0.0' && \
     npm pkg set 'overrides.mysql2=^3.22.0' && \
+    npm pkg set 'overrides.@hono/node-server=^1.19.15' && \
+    npm pkg set 'overrides.valibot=^1.4.2' && \
     npm install --omit=dev prisma@7.8.0 @prisma/engines@7.8.0 tsx@4.23.1 dotenv@17.4.2 && \
     ln -sfn /opt/prisma-cli/node_modules/.bin/tsx /usr/local/bin/healthlog-tsx && \
     ln -sfn /opt/prisma-cli/node_modules/dotenv /app/node_modules/dotenv && \
