@@ -32,7 +32,8 @@ import {
   type NarrativeGenerateOutcome,
 } from "@/lib/insights/narrative/period-narrative-generate";
 import type { NarrativePeriod } from "@/lib/insights/narrative/period-narrative";
-import { locales, defaultLocale, type Locale } from "@/lib/i18n/config";
+import { defaultLocale } from "@/lib/i18n/config";
+import { resolveJobLocale } from "@/lib/i18n/job-locale";
 import {
   PERIOD_NARRATIVE_QUEUE,
   PERIOD_NARRATIVE_CRON,
@@ -133,19 +134,6 @@ export async function findNarrativeCandidates(
 }
 
 /**
- * The user's stored locale, validated against the shipped UI locale union.
- *
- * The narrative row is keyed `(user, period, locale)`, so the nightly warm has
- * to write the SAME key the read route reads. Collapsing fr/es/it/pl to `en`
- * here would leave those users' rows permanently cold on the nightly path.
- * An unset or unknown value falls back to the app default (`en`), never to
- * German.
- */
-function normalizeLocale(value: string | null): Locale {
-  return locales.includes(value as Locale) ? (value as Locale) : defaultLocale;
-}
-
-/**
  * Run one nightly warm pass. Pure of pg-boss so the unit test can drive it
  * directly. Short-circuits to a no-op when (a) the master assistant briefing
  * switch is off or (b) the night is not a period boundary. The per-user
@@ -197,7 +185,10 @@ export async function runPeriodNarrativeWarm(
       continue;
     }
 
-    const locale = normalizeLocale(candidate.locale);
+    // The narrative row is keyed `(user, period, locale)`, so the nightly
+    // warm has to write the SAME key the read route reads: the stored
+    // locale, then the operator default for an account that never set one.
+    const locale = await resolveJobLocale(candidate.locale);
     for (const period of periods) {
       const outcome = await generate(candidate.id, {
         period,

@@ -7,6 +7,7 @@
 import { type Job } from "pg-boss";
 import { reportWorkerError } from "@/lib/jobs/report-worker-error";
 import { normalizeLocale } from "@/lib/insights/status-shared";
+import { resolveJobLocale } from "@/lib/i18n/job-locale";
 import { recordError, recordInsightsRun } from "@/lib/jobs/worker-status";
 import {
   INSIGHT_PREGENERATE_QUEUE,
@@ -96,7 +97,10 @@ export async function runStatusCronGenerate(
 
       for (const user of users) {
         try {
-          await generate(user.id, { locale: user.locale, force: false });
+          await generate(user.id, {
+            locale: await resolveJobLocale(user.locale),
+            force: false,
+          });
           generated++;
         } catch (error) {
           failed++;
@@ -153,10 +157,9 @@ async function runStatusBatchCron(taskName: string): Promise<JobOutcome> {
       for (const user of users) {
         try {
           const result = await generateStatusBatchForUser(user.id, {
-            // Validate against the six UI locales rather than collapsing to a
-            // binary — the per-metric generators normalise identically, and the
-            // prompt names the reader's own language from this value.
-            locale: normalizeLocale(user.locale),
+            // The stored locale, then the operator default — the prompt names
+            // the reader's own language from this value.
+            locale: await resolveJobLocale(user.locale),
             force: false,
           });
           generated += result.batched + result.fellBack;

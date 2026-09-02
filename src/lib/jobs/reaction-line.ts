@@ -53,7 +53,8 @@ import { extractAssessmentSummary } from "@/lib/insights/status-shared";
 import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 import { fenceUserText } from "@/lib/ai/coach/data-fence";
 import { singleUserTurn, type CompletionResult } from "@/lib/ai/types";
-import { defaultLocale, locales, type Locale } from "@/lib/i18n/config";
+import type { Locale } from "@/lib/i18n/config";
+import { resolveJobLocale } from "@/lib/i18n/job-locale";
 import { openerArchetypeHint } from "@/lib/ai/prompts/opener-archetype";
 import { loadDailyDigest } from "@/lib/daily/load-digest";
 import type { DailyDigest } from "@/lib/daily/digest";
@@ -100,12 +101,6 @@ export const REACTION_LINE_CLAIM_LEASE_MS = 2 * 60_000;
 
 export type ReactionLineOutcome =
   { status: "skipped"; reason: string } | { status: "generated" };
-
-function resolveLocale(locale: string | null | undefined): Locale {
-  return locales.includes(locale as Locale)
-    ? (locale as Locale)
-    : defaultLocale;
-}
 
 /**
  * Normalise the model's output into a shippable sentence, or null.
@@ -458,7 +453,7 @@ export async function runReactionLine(
   const user = await prisma.user.findUnique({ where: { id: job.userId } });
   if (!user) return { status: "skipped", reason: "no_user" };
 
-  const locale = resolveLocale(user.locale);
+  const locale = await resolveJobLocale(user.locale);
   const chain = await resolveProviderChain(job.userId);
   if (chain.length === 0) return { status: "skipped", reason: "no_provider" };
 

@@ -75,8 +75,8 @@ import {
   resolveReorderLeadDays,
 } from "@/lib/validations/notification-prefs";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
-import type { Locale } from "@/lib/i18n/config";
-import { defaultLocale, locales } from "@/lib/i18n/config";
+import { coerceLocale, type Locale } from "@/lib/i18n/config";
+import { resolveJobLocale } from "@/lib/i18n/job-locale";
 import { annotate, getEvent } from "@/lib/logging/context";
 
 /** Pg-boss queue + cron — imported by the reminder worker's bootstrap. */
@@ -228,12 +228,6 @@ export function decideLowStockAction(input: {
   return "notify";
 }
 
-function resolveLocale(locale: string | null | undefined): Locale {
-  return locales.includes(locale as Locale)
-    ? (locale as Locale)
-    : defaultLocale;
-}
-
 /**
  * v1.17.0 — localised push copy. When the supply data is rich enough to
  * date (`runwayDays >= 1` with a derivable cadence) the body names the
@@ -255,7 +249,7 @@ export function buildLowStockPayload(input: {
   schedules: RunwaySchedule[];
   today: Date;
 }): { title: string; body: string } {
-  const t = getServerTranslator(resolveLocale(input.locale)).t;
+  const t = getServerTranslator(coerceLocale(input.locale)).t;
   const title = t("lowStockReminders.title", { medName: input.medName });
 
   if (input.runwayDays < 1) {
@@ -294,7 +288,7 @@ export function buildLowStockPayload(input: {
   // Day-only, UTC: the runway dates are UTC-midnight calendar days, so a
   // UTC formatter renders the intended day in every locale. A medium
   // style stays compact and unambiguous for a push body.
-  const dateFmt = new Intl.DateTimeFormat(resolveLocale(input.locale), {
+  const dateFmt = new Intl.DateTimeFormat(coerceLocale(input.locale), {
     timeZone: "UTC",
     day: "numeric",
     month: "short",
@@ -505,7 +499,7 @@ export async function runMedicationLowStockTick(
             break;
           case "notify": {
             const { title, body } = buildLowStockPayload({
-              locale: user.locale,
+              locale: await resolveJobLocale(user.locale),
               medName: med.name,
               runwayDays: evaluation.runwayDays ?? 0,
               unitsRemaining: evaluation.unitsRemaining,

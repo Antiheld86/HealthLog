@@ -30,8 +30,8 @@
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { MeasurementType } from "@/generated/prisma/client";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
-import type { Locale } from "@/lib/i18n/config";
-import { defaultLocale, locales } from "@/lib/i18n/config";
+import { coerceLocale, type Locale } from "@/lib/i18n/config";
+import { resolveJobLocale } from "@/lib/i18n/job-locale";
 import { wallClockInTz } from "@/lib/tz/wall-clock";
 import { dispatchNotification } from "@/lib/notifications/dispatcher";
 import {
@@ -129,12 +129,6 @@ async function cleanupExpiredCoachReminders(
   return result.count;
 }
 
-function resolveLocale(locale: string | null | undefined): Locale {
-  return locales.includes(locale as Locale)
-    ? (locale as Locale)
-    : defaultLocale;
-}
-
 /**
  * Pure due-predicate: at this instant, is the reminder due AND inside its
  * local notify-hour window?
@@ -171,7 +165,7 @@ export function buildMeasurementReminderPayload(
   label: string,
   location: string | null,
 ): { title: string; body: string } {
-  const t = getServerTranslator(resolveLocale(locale)).t;
+  const t = getServerTranslator(coerceLocale(locale)).t;
   const base = t("measurementReminders.pushBody", { label });
   const body = location
     ? `${base} ${t("measurementReminders.pushLocation", { location })}`
@@ -358,7 +352,7 @@ export async function runMeasurementReminderTick(
       }
 
       const { title, body } = buildMeasurementReminderPayload(
-        reminder.user.locale,
+        await resolveJobLocale(reminder.user.locale),
         reminder.label,
         reminder.location,
       );

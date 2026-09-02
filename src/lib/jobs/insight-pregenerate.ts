@@ -54,10 +54,8 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getAssistantFlags } from "@/lib/feature-flags";
 import { annotate } from "@/lib/logging/context";
-import {
-  normalizeLocale as normalizeStatusLocale,
-  type SupportedLocale,
-} from "@/lib/insights/status-shared";
+import type { SupportedLocale } from "@/lib/insights/status-shared";
+import { resolveJobLocale } from "@/lib/i18n/job-locale";
 import {
   generateComprehensiveInsight,
   type GenerateOutcome,
@@ -536,19 +534,6 @@ export async function findPregenerateCandidates(
 }
 
 /**
- * The user's stored locale, validated against the six the UI ships.
- *
- * This was a local `value === "de" ? "de" : "en"` copy, which flattened a
- * fr/es/it/pl account to English before the warm pass ever reached a prompt.
- * It now defers to the one shared validator so the reader's locale survives
- * into the prompt's output-language directive; an unknown value still
- * defaults to English, never German.
- */
-function normalizeLocale(value: string | null): SupportedLocale {
-  return normalizeStatusLocale(value);
-}
-
-/**
  * Run one pre-generation pass. Pure of pg-boss so the unit test can
  * drive it directly. The master assistant kill-switch short-circuits
  * the whole run (no candidate generation when the operator disabled the
@@ -649,7 +634,10 @@ export async function runInsightPregenerate(
         PREGENERATE_BUDGET_WINDOW_MS,
       );
 
-      const locale = normalizeLocale(candidate.locale);
+      // The stored locale, then the operator default: a NULL column used to
+      // resolve to English here, so a German-language instance warmed its
+      // briefings in English every night.
+      const locale = await resolveJobLocale(candidate.locale);
       let outcome: GenerateOutcome | null = null;
       if (!budget.allowed) {
         result.budgetBlocked++;

@@ -19,7 +19,7 @@ import { annotate } from "@/lib/logging/context";
 import { resolveModuleMap } from "@/lib/modules/gate";
 import { readDashboardSnapshotCached } from "@/lib/dashboard/snapshot-read";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
-import { defaultLocale, locales, type Locale } from "@/lib/i18n/config";
+import type { Locale } from "@/lib/i18n/config";
 import { decryptFromBytes } from "@/lib/ai/coach/bytes-codec";
 import { userDayKey } from "@/lib/tz/format";
 import { getUserTodayBounds } from "@/lib/tz/local-day";
@@ -293,12 +293,6 @@ function toCoachPlanCandidate(row: CoachPlanRow): DailyDigestCoachPlan {
   };
 }
 
-function resolveLocale(locale: string | null | undefined): Locale {
-  return locales.includes(locale as Locale)
-    ? (locale as Locale)
-    : defaultLocale;
-}
-
 /**
  * Today's arrival markers, decrypted fault-isolated.
  *
@@ -348,6 +342,12 @@ export interface DailyDigestLoadOptions {
    * from which cards the user chose to display in the Today hero.
    */
   enabledItemKinds?: readonly PriorityItemKind[];
+  /**
+   * A locale already resolved by a background caller (the morning briefing
+   * push). Request-driven readers leave it unset and the snapshot read
+   * resolves the locale from the request.
+   */
+  locale?: Locale;
 }
 
 export async function loadDailyDigest(
@@ -375,7 +375,7 @@ export async function loadDailyDigest(
     arrivalRows,
     nextVisitRow,
   ] = await Promise.all([
-    readDashboardSnapshotCached(user),
+    readDashboardSnapshotCached(user, undefined, { locale: options.locale }),
     resolveModuleMap(user.id),
     prisma.integrationStatus.findMany({
       where: { userId: user.id, state: { in: [...SYNC_ISSUE_STATES] } },
@@ -597,7 +597,7 @@ export async function loadDailyDigest(
       : [];
   const dismissedItemKeys = new Set(dismissedRows.map((r) => r.itemKey));
 
-  const resolvedLocale = resolveLocale(locale);
+  const resolvedLocale: Locale = locale;
   const { t } = getServerTranslator(resolvedLocale);
 
   // Group the two figures for the reader. `Intl.NumberFormat` is the only

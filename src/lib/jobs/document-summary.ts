@@ -37,7 +37,8 @@ import {
   prepareVisionInput,
 } from "@/lib/documents/ai-route-support";
 import { runDocumentSummary } from "@/lib/documents/describe";
-import { locales, defaultLocale, type Locale } from "@/lib/i18n/config";
+import type { Locale } from "@/lib/i18n/config";
+import { resolveJobLocale } from "@/lib/i18n/job-locale";
 import { documentAutoReadEnabled } from "@/lib/documents/document-settings";
 import { resolveDocumentVisionProvider } from "@/lib/documents/provider-order";
 import { encryptDocumentSummary } from "@/lib/documents/store";
@@ -202,17 +203,13 @@ export async function runDocumentSummaryJob(
   }
 
   // The screen picks its pattern banks by locale; this job has no request, so
-  // the reader's stored preference is the source. An unset/unknown value falls
-  // back to English, never to a silent no-locale path.
+  // the reader's stored preference is the source, then the operator default,
+  // then English — never a silent no-locale path.
   const owner = await prisma.user.findUnique({
     where: { id: userId },
     select: { locale: true },
   });
-  const locale: Locale = (locales as readonly string[]).includes(
-    owner?.locale ?? "",
-  )
-    ? (owner?.locale as Locale)
-    : defaultLocale;
+  const locale: Locale = await resolveJobLocale(owner?.locale);
 
   try {
     const { summary, blocked } = await runDocumentSummary({

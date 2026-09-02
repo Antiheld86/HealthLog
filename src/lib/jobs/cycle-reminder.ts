@@ -38,8 +38,8 @@
  */
 import type { PrismaClient } from "@/generated/prisma/client";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
-import type { Locale } from "@/lib/i18n/config";
-import { defaultLocale, locales } from "@/lib/i18n/config";
+import { coerceLocale } from "@/lib/i18n/config";
+import { resolveJobLocale } from "@/lib/i18n/job-locale";
 import { getUserTodayBounds } from "@/lib/tz/local-day";
 import { wallClockInTz } from "@/lib/tz/wall-clock";
 import { dayDiff } from "@/lib/cycle/day-math";
@@ -107,12 +107,6 @@ function utcDateString(now: Date, offsetDays: number): string {
   )
     .toString()
     .padStart(2, "0")}-${d.getUTCDate().toString().padStart(2, "0")}`;
-}
-
-function resolveLocale(locale: string | null | undefined): Locale {
-  return locales.includes(locale as Locale)
-    ? (locale as Locale)
-    : defaultLocale;
 }
 
 function emptySummary(): CycleReminderSummary {
@@ -221,7 +215,7 @@ export function buildCycleReminderPayload(
   locale: string | null | undefined,
   discreet: boolean,
 ): { title: string; body: string } {
-  const t = getServerTranslator(resolveLocale(locale)).t;
+  const t = getServerTranslator(coerceLocale(locale)).t;
   if (discreet) {
     return {
       title: t("cycleReminders.discreetTitle"),
@@ -452,7 +446,7 @@ export async function runCycleReminderTick(
 
         const { title, body } = buildCycleReminderPayload(
           event,
-          user.locale,
+          await resolveJobLocale(user.locale),
           discreet,
         );
 

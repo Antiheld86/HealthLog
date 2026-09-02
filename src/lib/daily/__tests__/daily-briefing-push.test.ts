@@ -196,10 +196,12 @@ describe("maybeDispatchDailyBriefing", () => {
     );
 
     expect(result).toBe("sent");
+    // The push resolves the locale once (stored, then operator default) and
+    // hands it to the digest so both speak the same language.
     expect(loadDailyDigest).toHaveBeenCalledWith(
       expect.objectContaining({ id: "u1" }),
       IN_WINDOW,
-      { enabledItemKinds: PRIORITY_ITEM_KINDS },
+      { enabledItemKinds: PRIORITY_ITEM_KINDS, locale: "en" },
     );
     expect(deps.dispatch).toHaveBeenCalledOnce();
   });

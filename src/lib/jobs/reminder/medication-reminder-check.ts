@@ -6,6 +6,7 @@
  */
 import { type Job } from "pg-boss";
 import type { Locale } from "@/lib/i18n/config";
+import { resolveJobLocale } from "@/lib/i18n/job-locale";
 import { recordError, recordReminderCheck } from "@/lib/jobs/worker-status";
 import { recomputeMedicationComplianceForEvent } from "@/lib/rollups/medication-compliance-rollups";
 import { decrypt } from "@/lib/crypto";
@@ -623,13 +624,14 @@ export async function handleReminderCheck(
             // — so the gate lives in the dispatcher's APNs branch, which is
             // the only place that knows whether an APNs send was on the table.
             if (med.notificationsEnabled) {
+              const recipientLocale = await resolveJobLocale(med.user.locale);
               const { title, message } = getPhaseMessage(
                 currentPhase,
                 med.name,
                 doseInfo,
                 timeWindow,
                 Math.ceil(minutesToEnd),
-                med.user.locale,
+                recipientLocale,
               );
               const renderForRecipient = (locale: Locale) =>
                 getPhaseMessage(
@@ -644,7 +646,7 @@ export async function handleReminderCheck(
               const keyboard = getPhaseKeyboard(
                 currentPhase,
                 med.id,
-                med.user.locale,
+                recipientLocale,
               );
 
               // v0.5.4 — surface the slot time as an ISO 8601 string so
