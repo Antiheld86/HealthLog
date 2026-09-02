@@ -29,6 +29,8 @@ export interface DeclaredEnum {
   mappedName: string | null;
   /** The name Prisma puts in the SQL — `@@map` when present, else `name`. */
   physicalName: string;
+  /** The declared members, in declaration order. */
+  values: string[];
 }
 
 export interface DeclaredField {
@@ -87,7 +89,19 @@ export function readDeclaredSchema(
     const clean = stripComments(body);
     const mappedName = BLOCK_MAP.exec(clean)?.[1] ?? null;
     if (kind === "enum") {
-      enums.push({ name, mappedName, physicalName: mappedName ?? name });
+      // A member is a bare identifier on its own line; `@@map` and any
+      // trailing comment are already gone (block attributes start with `@`,
+      // comment lines were stripped above).
+      const values = clean
+        .split("\n")
+        .map((line) => line.replace(/\/\/.*$/, "").trim())
+        .filter((line) => /^\w+$/.test(line));
+      enums.push({
+        name,
+        mappedName,
+        physicalName: mappedName ?? name,
+        values,
+      });
     } else {
       rawModels.push({ name, body: clean });
     }

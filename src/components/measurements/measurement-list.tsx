@@ -67,6 +67,7 @@ import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { formatDateOrRelative, formatDateTime } from "@/lib/format";
 import { useTranslations, useFormatters } from "@/lib/i18n/context";
+import { MEASUREMENT_SOURCE_LIST_LABEL_KEYS } from "@/lib/i18n/source-labels";
 import { CUMULATIVE_DAY_SUM_TYPES } from "@/lib/measurements/cumulative-day-sum";
 import { rawDisplayFractionDigits } from "@/lib/measurements/display-transform";
 import { getUnitForType } from "@/lib/validations/measurement";
@@ -217,23 +218,22 @@ function toDateTimeLocalValue(isoString: string): string {
 }
 
 /**
- * Render the `MeasurementSource` enum (`MANUAL` / `WITHINGS` / `IMPORT`
- * / `APPLE_HEALTH`) using the existing `measurements.source*`
- * translation keys instead of leaking the SCREAMING_SNAKE enum into
- * the table cell.
+ * Render the `MeasurementSource` enum using the `measurements.source*`
+ * translation keys instead of leaking the SCREAMING_SNAKE enum into the
+ * table cell or the filter dropdown. The catalogue is keyed by the enum,
+ * so a provider added without its label is a type error rather than a row
+ * that reads `GOOGLE_HEALTH`.
  */
 function formatMeasurementSource(
   source: string,
   t: ReturnType<typeof useTranslations>["t"],
 ) {
-  if (source === "WITHINGS") return t("measurements.sourceWithings");
-  if (source === "IMPORT") return t("measurements.sourceImport");
-  if (source === "MANUAL") return t("measurements.sourceManual");
-  if (source === "APPLE_HEALTH") return t("measurements.sourceAppleHealth");
-  if (source === "COMPUTED") return t("measurements.sourceComputed");
-  if (source === "WHOOP") return t("measurements.sourceWhoop");
-  if (source === "FITBIT") return t("measurements.sourceFitbit");
-  return source;
+  const key = MEASUREMENT_SOURCE_LIST_LABEL_KEYS[
+    source as keyof typeof MEASUREMENT_SOURCE_LIST_LABEL_KEYS
+  ] as string | undefined;
+  // A row written by a server the client does not know yet still renders
+  // as its own value rather than as a missing translation key.
+  return key ? t(key) : source;
 }
 
 /**
