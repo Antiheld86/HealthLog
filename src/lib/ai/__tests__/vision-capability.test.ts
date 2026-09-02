@@ -21,6 +21,19 @@ describe("supportsVisionForConfig", () => {
     }
   });
 
+  it("accepts current Claude 5-generation and Fable pins for anthropic", () => {
+    for (const model of [
+      "claude-sonnet-5",
+      "claude-opus-5",
+      "claude-haiku-4-5",
+      "claude-fable-5",
+      "claude-fable-5-1",
+      "claude-opus-4-8",
+    ]) {
+      expect(supportsVisionForConfig("anthropic", model)).toBe(true);
+    }
+  });
+
   it("rejects legacy / text-only anthropic models", () => {
     expect(supportsVisionForConfig("anthropic", "claude-2.1")).toBe(false);
     expect(supportsVisionForConfig("anthropic", "claude-instant-1")).toBe(

@@ -77,13 +77,14 @@ describe("AnthropicClient", () => {
     expect(body.messages[0].content.toLowerCase()).toContain("json");
   });
 
-  it("prefills the assistant turn with `{` and re-prepends it for JSON surfaces", async () => {
+  it("sends no assistant turn for JSON surfaces and instructs the last user turn", async () => {
+    // Current Anthropic models reject an assistant prefill with HTTP 400, so
+    // the JSON contract rides on the instruction alone.
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () =>
         Promise.resolve({
-          // Model continues from the prefilled `{`, so its text omits it.
-          content: [{ type: "text", text: '"summary":"ok"}' }],
+          content: [{ type: "text", text: '{"summary":"ok"}' }],
           usage: { input_tokens: 5, output_tokens: 5 },
         }),
     });
@@ -91,23 +92,103 @@ describe("AnthropicClient", () => {
 
     const client = new AnthropicClient({
       apiKey: "sk-ant-test",
-      model: "claude-3-5-sonnet-latest",
+      model: "claude-sonnet-4-6",
     });
 
     const result = await client.generateCompletion(
       singleUserTurn({ system: "s", user: "u", responseFormat: "json" }),
     );
 
-    // The returned content is the complete object (the `{` re-prepended).
-    expect(result.content).toBe('{"summary":"ok"}');
     expect(JSON.parse(result.content)).toEqual({ summary: "ok" });
 
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-    expect(body.messages).toHaveLength(2);
-    expect(body.messages[1]).toEqual({ role: "assistant", content: "{" });
+    expect(body.messages).toHaveLength(1);
+    expect(
+      body.messages.some((m: { role: string }) => m.role === "assistant"),
+    ).toBe(false);
+    const last = body.messages[body.messages.length - 1];
+    expect(last.role).toBe("user");
+    expect(last.content).toMatch(/single JSON object/i);
+    expect(last.content).toMatch(/code fences/i);
   });
 
-  it("does NOT prefill for the prose (non-JSON) path", async () => {
+  it("parses a plain `{...}` JSON reply", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            content: [{ type: "text", text: '{"summary":"plain"}' }],
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }),
+      }),
+    );
+    const client = new AnthropicClient({
+      apiKey: "sk-ant-test",
+      model: "claude-sonnet-4-6",
+    });
+    const result = await client.generateCompletion(
+      singleUserTurn({ system: "s", user: "u", responseFormat: "json" }),
+    );
+    expect(result.content).toBe('{"summary":"plain"}');
+    expect(JSON.parse(result.content)).toEqual({ summary: "plain" });
+  });
+
+  it("unwraps a ```json-fenced JSON reply", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            content: [
+              { type: "text", text: '```json\n{"summary":"fenced"}\n```' },
+            ],
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }),
+      }),
+    );
+    const client = new AnthropicClient({
+      apiKey: "sk-ant-test",
+      model: "claude-sonnet-4-6",
+    });
+    const result = await client.generateCompletion(
+      singleUserTurn({ system: "s", user: "u", responseFormat: "json" }),
+    );
+    expect(result.content).toBe('{"summary":"fenced"}');
+    expect(JSON.parse(result.content)).toEqual({ summary: "fenced" });
+  });
+
+  it("trims a leading sentence before the JSON object", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            content: [
+              {
+                type: "text",
+                text: 'Here is the requested JSON:\n{"summary":"prefixed"}',
+              },
+            ],
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }),
+      }),
+    );
+    const client = new AnthropicClient({
+      apiKey: "sk-ant-test",
+      model: "claude-sonnet-4-6",
+    });
+    const result = await client.generateCompletion(
+      singleUserTurn({ system: "s", user: "u", responseFormat: "json" }),
+    );
+    expect(result.content).toBe('{"summary":"prefixed"}');
+    expect(JSON.parse(result.content)).toEqual({ summary: "prefixed" });
+  });
+
+  it("sends a single user turn on the prose (non-JSON) path", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () =>
@@ -204,7 +285,7 @@ describe("AnthropicClient", () => {
       ok: true,
       json: () =>
         Promise.resolve({
-          content: [{ type: "text", text: '"rows":[]}' }],
+          content: [{ type: "text", text: '{"rows":[]}' }],
           usage: { input_tokens: 100, output_tokens: 10 },
         }),
     });
@@ -242,8 +323,8 @@ describe("AnthropicClient", () => {
     });
     const doc = content.find((b: { type: string }) => b.type === "document");
     expect(doc.source.media_type).toBe("application/pdf");
-    // The assistant `{`-prefill still rides after the array content.
-    expect(body.messages[1]).toEqual({ role: "assistant", content: "{" });
+    // No assistant turn follows the array content.
+    expect(body.messages).toHaveLength(1);
   });
 
   it("keeps a bare-string user content when no vision input is present", async () => {
@@ -286,7 +367,7 @@ describe("AnthropicClient", () => {
     ).rejects.toThrow("Anthropic returned empty content");
   });
 
-  it("maps tools, drops the JSON prefill, parses tool_use + cache reads", async () => {
+  it("maps tools, skips the JSON instruction, parses tool_use + cache reads", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () =>
@@ -318,7 +399,7 @@ describe("AnthropicClient", () => {
       singleUserTurn({
         system: "s",
         user: "u",
-        // Even with responseFormat json, tools must win and drop the prefill.
+        // Even with responseFormat json, tools win: no JSON instruction.
         responseFormat: "json",
         tools: [
           {
@@ -340,8 +421,9 @@ describe("AnthropicClient", () => {
       },
     ]);
     expect(body.tool_choice).toEqual({ type: "auto" });
-    // No `{`-prefill assistant turn when tools are present.
+    // A single user turn, and the JSON instruction stays off the tool path.
     expect(body.messages).toHaveLength(1);
+    expect(body.messages[0].content).toBe("u");
     expect(result.toolCalls).toEqual([
       {
         id: "toolu_1",

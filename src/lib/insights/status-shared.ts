@@ -21,6 +21,7 @@
  */
 import { prisma } from "@/lib/db";
 import { locales, type Locale } from "@/lib/i18n/config";
+import { extractJsonObject } from "@/lib/ai/json-extract";
 import { stripChartTokens } from "@/lib/insights/chart-tokens";
 import {
   screenModelOutput,
@@ -176,31 +177,15 @@ export function summarizeSeries(
  *
  * The Anthropic and local providers have no native JSON mode (only the
  * OpenAI-family clients send `response_format: json_object`), so a
- * compliant model still routinely wraps its `{ "summary": … }` reply in a
- * ```json … ``` fence or prefixes it with a sentence. `JSON.parse` then
+ * compliant model still routinely wraps its `{ "summary": ... }` reply in a
+ * ```json ... ``` fence or prefixes it with a sentence. `JSON.parse` then
  * throws and the caller would surface the raw fenced string as the
- * user-facing assessment. This helper removes a leading/trailing fence and
- * narrows to the first `{` … last `}` span so the parse sees clean JSON.
- *
- * It is a no-op on already-clean JSON and on genuinely fence-free prose
- * with no braces — in both cases the original (trimmed) string is returned,
- * so the bare-prose fallback below still works.
+ * user-facing assessment. The extraction itself lives in
+ * `src/lib/ai/json-extract.ts`, where the Anthropic client applies it on the
+ * way out; this name stays for the insights callers.
  */
 export function stripJsonFences(content: string): string {
-  let text = content.trim();
-  // Drop a leading ```json / ``` fence and a trailing ``` fence if present.
-  const fenced = text.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i);
-  if (fenced) {
-    text = fenced[1].trim();
-  }
-  // Narrow to the first `{` … last `}` so a leading/trailing sentence the
-  // model added around the object does not break the parse.
-  const first = text.indexOf("{");
-  const last = text.lastIndexOf("}");
-  if (first !== -1 && last !== -1 && last > first) {
-    return text.slice(first, last + 1);
-  }
-  return text;
+  return extractJsonObject(content);
 }
 
 /**
