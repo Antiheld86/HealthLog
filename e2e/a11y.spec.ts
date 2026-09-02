@@ -745,7 +745,8 @@ const INSIGHTS_ROUTES: readonly RouteCase[] = [
   {
     name: "/insights/workouts/:id detail",
     path: `/insights/workouts/${A11Y_WORKOUT_ID}`,
-    painted: (page) => page.locator('[data-slot="workout-detail-header"]'),
+    painted: (page) =>
+      page.locator('[data-slot="workout-detail-header"]:visible'),
   },
   {
     // `coach-page` is the sizing wrapper around a `<Suspense fallback={null}>`,
@@ -754,7 +755,9 @@ const INSIGHTS_ROUTES: readonly RouteCase[] = [
     name: "/coach",
     path: "/coach",
     painted: (page) =>
-      page.locator('[data-slot="coach-conversation"][data-variant="page"]'),
+      page.locator(
+        '[data-slot="coach-conversation"][data-variant="page"]:visible',
+      ),
   },
 ];
 
@@ -788,7 +791,7 @@ const RECORD_ROUTES: readonly RouteCase[] = [
   {
     name: "/labs",
     path: "/labs",
-    painted: (page) => page.locator('[data-slot="lab-list"]'),
+    painted: (page) => page.locator('[data-slot="lab-list"]:visible'),
   },
   {
     name: "/documents compact panel",
@@ -842,7 +845,7 @@ const ADMIN_AND_BASELINE_ROUTES: readonly RouteCase[] = [
     // status pill later, so the panel's presence is the honest ceiling here.
     name: "/settings/integrations",
     path: "/settings/integrations",
-    painted: (page) => page.locator('[data-slot="connections-panel"]'),
+    painted: (page) => page.locator('[data-slot="connections-panel"]:visible'),
   },
   {
     // The heading comes from `<AdminShell>` and is on screen while every card
@@ -850,12 +853,12 @@ const ADMIN_AND_BASELINE_ROUTES: readonly RouteCase[] = [
     // overview and only exists once its query has answered.
     name: "/admin overview",
     path: "/admin",
-    painted: (page) => page.locator('[data-slot="admin-audit-rows"]'),
+    painted: (page) => page.locator('[data-slot="admin-audit-rows"]:visible'),
   },
   {
     name: "/admin/system-status",
     path: "/admin/system-status",
-    painted: (page) => page.locator('[data-slot="system-status-grid"]'),
+    painted: (page) => page.locator('[data-slot="system-status-grid"]:visible'),
   },
   {
     name: "/admin/users",
@@ -877,7 +880,7 @@ test.describe("axe-core public surfaces", () => {
         // around whatever the segment is streaming, so it is satisfied
         // before the login card itself exists. The action block is the
         // page's own.
-        page.locator('[data-slot="login-actions"]'),
+        page.locator('[data-slot="login-actions"]:visible'),
       );
       expectNoViolations(theme, "/auth/login", blocking);
     });
@@ -937,7 +940,9 @@ test.describe("axe-core authenticated route and state matrix", () => {
 
       await test.step(`${theme} /labs open OCR picker dialog`, async () => {
         await page.goto("/labs", { waitUntil: "domcontentloaded" });
-        await expect(page.locator('[data-slot="lab-list"]')).toBeVisible({
+        await expect(
+          page.locator('[data-slot="lab-list"]:visible'),
+        ).toBeVisible({
           timeout: 15_000,
         });
         await openMenu(
