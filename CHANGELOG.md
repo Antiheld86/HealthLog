@@ -17,6 +17,12 @@
   plain instruction to reply with a single JSON object and nothing else,
   and the reply is narrowed to the object body on the way out, so a fenced
   or prefixed answer still parses. Reported independently by @sweidinger.
+- **Lab and document OCR no longer refuse a current Claude model.** The
+  vision check knew the Claude 3 and 4 families by name, so a key pinned to
+  `claude-sonnet-5`, `claude-opus-5` or a Fable model was told the provider
+  cannot read images even though it can. Any Claude tier from the 4 family
+  upward, and every Fable model, now counts as vision-capable. The model
+  preset list in Settings also offers `claude-sonnet-5` and `claude-opus-5`.
 
 ## [1.38.1] — 2026-09-01
 

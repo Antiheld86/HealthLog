@@ -15,27 +15,33 @@
 
 /**
  * Anthropic vision models. The Messages API `image` + `document` blocks are
- * accepted by the whole Claude 3 family (3 / 3.5 / 3.7) and the Claude 4
- * family. An older `claude-2*` / `claude-instant*` pin is text-only.
+ * accepted by the whole Claude 3 family (3 / 3.5 / 3.7) and by every family
+ * from Claude 4 upward, Fable included. An older `claude-2*` /
+ * `claude-instant*` pin is text-only.
  *
  * The bare `claude-3-opus` / `claude-3-sonnet` / `claude-3-haiku` prefixes are
  * listed explicitly: a self-hoster pinned to e.g. `claude-3-opus-20240229`
- * reads images, but the `claude-3-5` prefix does not match it.
+ * reads images, but the `claude-3-5` prefix does not match it. From Claude 4
+ * on the slug is `claude-<tier>-<major>[-<minor>]`, so a rule on the major
+ * version covers `claude-sonnet-4-6`, `claude-opus-5`, `claude-haiku-4-5` and
+ * whatever ships next without this list growing per release.
  */
 function anthropicSupportsVision(model: string): boolean {
   const m = model.toLowerCase();
-  return (
+  if (
     m.startsWith("claude-3-opus") ||
     m.startsWith("claude-3-sonnet") ||
     m.startsWith("claude-3-haiku") ||
     m.startsWith("claude-3-5") ||
     m.startsWith("claude-3.5") ||
     m.startsWith("claude-3-7") ||
-    m.startsWith("claude-3.7") ||
-    m.startsWith("claude-sonnet-4") ||
-    m.startsWith("claude-opus-4") ||
-    m.startsWith("claude-haiku-4")
-  );
+    m.startsWith("claude-3.7")
+  ) {
+    return true;
+  }
+  if (m.startsWith("claude-fable-")) return true;
+  const tiered = m.match(/^claude-(?:sonnet|opus|haiku)-(\d+)/);
+  return tiered !== null && Number(tiered[1]) >= 4;
 }
 
 /**
