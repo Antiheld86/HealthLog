@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **The check that watches for ungated module routes now watches every
+  module.** It walked a hand-written list of route trees, and the list had
+  stopped keeping up: the Coach tree, the environmental-context tree, the
+  mental-health screeners, the inbound-document vault and the MCP credential
+  surface all shipped an API tree the check never looked at. Nothing was
+  leaking — every route in those trees already refuses when the module is off,
+  and the doctor-report export was gated too — but a green run was saying
+  something narrower than it appeared to say, which is how the FHIR routes once
+  sat in a green bucket while serving the whole record. The trees are declared
+  per module now, so a new module cannot be added without saying where its
+  routes live, and a directory named after a module is found on disk rather
+  than remembered. For a self-hoster this changes no behaviour today; it is the
+  difference between a module switch that is enforced and one that is only
+  believed to be.
+
 ### Security
 
 - **Every webhook verb that checks the shared secret is rate-limited now, not
