@@ -1,5 +1,28 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Dashboard, Today: a self-hoster using the app in German could see the
+  dashboard lead and the Today briefing in English, and they stayed English
+  no matter how often the page was opened. The nightly briefing writer
+  resolved an account that had never picked a language to English, ignoring
+  the instance's configured default language, and the briefing cache is a
+  single slot per account that carried no record of the language it was
+  written in, so every reader was served whatever the last writer left
+  there. The request-driven refresh only replaced it once the cache was a
+  day old and the provider answered, which with a provider at its usage
+  limit was never. The cache now records the language it was generated in,
+  and a reader in another language gets the honest "preparing" state and a
+  re-warm in their own language instead of foreign prose; rows written
+  before this change are served as before until the next write tags them.
+  Every background path (nightly briefing warm, status crons, period
+  narratives, reaction lines, morning refresh, briefing push, coach nudges,
+  reminders, document and workout summaries) now resolves a missing user
+  language to the instance default, then to English, through one shared
+  helper, and a structural test keeps the job tree on it.
+
 ## [1.38.1] — 2026-09-01
 
 You can push readings in from your own hardware again, and a lab reading
