@@ -1,9 +1,28 @@
 # Changelog
 
-## [Unreleased]
+## [1.38.3] — 2026-09-02
+
+An account with two-factor can be deleted from the phone, and every data
+source is called by its name.
 
 ### Fixed
 
+- **An account with two-factor can be deleted from the app.** Deleting
+  the account, and erasing the record while keeping the account, both demand a
+  fresh second-factor proof once a factor is enrolled. That proof lived on the
+  session row, which a native client does not have, so anyone who had turned on
+  TOTP or registered a security key was refused on both endpoints from the app
+  no matter what they sent — the only way through was a browser. The app can
+  now re-prove a factor the same way it already does for second-factor
+  management: mint a single-use elevation at `POST /api/auth/step-up` with a
+  TOTP code, security key, or passkey, and send it back in the `X-Step-Up`
+  header alongside the deletion. The web path is untouched, a token on its own
+  still gets nowhere, a password-proved elevation is refused for erasure just as
+  a password login never satisfied the gate on the web, and the proof is spent
+  only when the erasure is about to run, so a mistyped confirmation does not
+  burn it. One thing to know when erasing the record over a token: API tokens
+  are part of what that request deletes, so the app signs itself out and has to
+  sign in again.
 - Settings, Sources: four of the sources in the priority ladder were listed
   by their internal name. `GOOGLE_HEALTH`, `OURA`, `POLAR` and `STRAVA`
   appeared exactly like that instead of Google Health, Oura, Polar and
@@ -24,22 +43,6 @@ stays in the language you read the app in.
 
 ### Fixed
 
-- **An account with two-factor can be deleted from the app.** Deleting
-  the account, and erasing the record while keeping the account, both demand a
-  fresh second-factor proof once a factor is enrolled. That proof lived on the
-  session row, which a native client does not have, so anyone who had turned on
-  TOTP or registered a security key was refused on both endpoints from the app
-  no matter what they sent — the only way through was a browser. The app can
-  now re-prove a factor the same way it already does for second-factor
-  management: mint a single-use elevation at `POST /api/auth/step-up` with a
-  TOTP code, security key, or passkey, and send it back in the `X-Step-Up`
-  header alongside the deletion. The web path is untouched, a token on its own
-  still gets nowhere, a password-proved elevation is refused for erasure just as
-  a password login never satisfied the gate on the web, and the proof is spent
-  only when the erasure is about to run, so a mistyped confirmation does not
-  burn it. One thing to know when erasing the record over a token: API tokens
-  are part of what that request deletes, so the app signs itself out and has to
-  sign in again.
 - **Anthropic keys work again on current Claude models.** Every JSON surface
   on the Anthropic provider (the daily briefing, the status cards, lab and
   document extraction, anything that asks the model for a JSON object) had
