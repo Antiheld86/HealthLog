@@ -1,4 +1,5 @@
 import { safeFetch } from "@/lib/safe-fetch";
+import { extractJsonObject } from "./json-extract";
 import type {
   AIProvider,
   AiContentPart,
@@ -56,8 +57,11 @@ interface AnthropicClientConfig {
 const DEFAULT_BASE_URL = "https://api.anthropic.com/v1";
 const ANTHROPIC_VERSION = "2023-06-01";
 
+// The only JSON steering on this wire. Current Anthropic models reject an
+// assistant-turn prefill (the old `{` trick) with HTTP 400, so the contract
+// rides on the instruction and on `extractJsonObject` on the way out.
 const JSON_INSTRUCTION =
-  "\n\nRespond only with valid JSON matching the requested schema. Do not include any prose, markdown fences, or explanation outside the JSON object.";
+  "\n\nReply with a single JSON object matching the requested schema and nothing else: no prose, no markdown code fences, no explanation before or after the object.";
 
 /**
  * Map an `AiContentPart[]` body into Anthropic content blocks. The media blocks
@@ -169,11 +173,9 @@ export class AnthropicClient implements AIProvider {
     const url = `${baseUrl}/messages`;
 
     const hasTools = !!params.tools && params.tools.length > 0;
-    // v1.20.0 — the `{`-prefill JSON trick injects an assistant turn that is
-    // incompatible with a `tool_use` response in the same call, so tools and
-    // the prefill are mutually exclusive: when tools are present we drop the
-    // prefill (the tool flow is non-JSON-prefill).
-    const usePrefill = params.responseFormat === "json" && !hasTools;
+    // Tools imply the tool flow, which returns tool_use blocks rather than a
+    // JSON body; the object extraction below stays off that path.
+    const wantsJson = params.responseFormat === "json" && !hasTools;
 
     const wireMessages: AnthropicWireMessage[] =
       params.messages.map(mapMessage);
@@ -205,10 +207,6 @@ export class AnthropicClient implements AIProvider {
         }
         break;
       }
-    }
-
-    if (usePrefill) {
-      wireMessages.push({ role: "assistant", content: "{" });
     }
 
     // v1.20.0 — prompt-cache the stable system prefix. Anthropic needs an
@@ -337,14 +335,11 @@ export class AnthropicClient implements AIProvider {
       throw err;
     }
 
-    // When we prefilled the assistant turn with `{`, the model continues
-    // from there and its returned text omits that leading brace — re-prepend
-    // it so the caller parses a complete object. Guard against a model that
-    // (rarely) echoes the prefill itself.
+    // Without a prefill the model returns the whole object, sometimes inside
+    // a ```json fence or behind a short lead-in sentence; narrow to the
+    // object so the caller parses it as-is.
     const content =
-      usePrefill && rawText && !rawText.trimStart().startsWith("{")
-        ? `{${rawText}`
-        : (rawText ?? "");
+      wantsJson && rawText ? extractJsonObject(rawText) : (rawText ?? "");
 
     const inputTokens = json.usage?.input_tokens ?? 0;
     const outputTokens = json.usage?.output_tokens ?? 0;

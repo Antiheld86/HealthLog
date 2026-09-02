@@ -101,6 +101,8 @@ export const OPENAI_MODEL_PRESETS = [
 export const ANTHROPIC_MODEL_PRESETS = [
   "claude-sonnet-4-6",
   "claude-opus-4-7",
+  "claude-sonnet-5",
+  "claude-opus-5",
   "claude-haiku-4-5",
   "claude-3-5-sonnet-latest",
 ] as const;
