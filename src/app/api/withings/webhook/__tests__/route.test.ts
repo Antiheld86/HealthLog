@@ -473,3 +473,53 @@ describe("GET /api/withings/webhook", () => {
     expect(fail.status).toBe(401);
   });
 });
+
+describe("legacy verification verbs are rate-limited before the secret comparison", () => {
+  // Same reasoning as the path-segment sibling: a verb that answers 200 for
+  // the right secret and 401 for a wrong one is a guessing oracle unless the
+  // limiter runs first. A VALID secret over the limit must still be refused.
+  function overTheLimit(): void {
+    vi.mocked(checkRateLimit).mockResolvedValue({
+      allowed: false,
+      remaining: 0,
+      resetAt: Date.now() + 60_000,
+    } as never);
+  }
+
+  it("HEAD returns 429 for a valid secret when over the limit", async () => {
+    overTheLimit();
+    const res = await HEAD(
+      new NextRequest("http://localhost/api/withings/webhook", {
+        method: "HEAD",
+        headers: { "x-withings-webhook-secret": "test-secret" },
+      }),
+    );
+    expect(res.status).toBe(429);
+    expect(checkRateLimit).toHaveBeenCalledTimes(1);
+  });
+
+  it("GET returns 429 for a valid secret when over the limit", async () => {
+    overTheLimit();
+    const res = await GET(
+      new NextRequest("http://localhost/api/withings/webhook", {
+        headers: { "x-withings-webhook-secret": "test-secret" },
+      }),
+    );
+    expect(res.status).toBe(429);
+    expect(checkRateLimit).toHaveBeenCalledTimes(1);
+  });
+
+  it("the legacy ?secret= form is limited on the same bucket as the POST", async () => {
+    overTheLimit();
+    const res = await GET(
+      new NextRequest("http://localhost/api/withings/webhook?secret=WRONG"),
+    );
+    expect(res.status).toBe(429);
+
+    const buckets = vi
+      .mocked(checkRateLimit)
+      .mock.calls.map((call) => String(call[0]));
+    expect(buckets).toHaveLength(1);
+    expect(buckets[0]).toMatch(/^withings-webhook:/);
+  });
+});

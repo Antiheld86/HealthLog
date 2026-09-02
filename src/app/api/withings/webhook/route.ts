@@ -91,9 +91,21 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
 /**
  * Withings sends a HEAD request to verify the webhook URL.
+ *
+ * Rate-limited on the same bucket as the notification POST, and before the
+ * comparison: HEAD and GET check the same shared secret and answer 200 against
+ * 401, which is an oracle for guessing it unless the limiter runs first.
  */
 export const HEAD = apiHandler(async (request: NextRequest) => {
   annotate({ action: { name: "withings.webhook.verify" } });
+
+  // HEAD carries no body, so the limiter's JSON envelope is re-shaped into a
+  // bodyless 429 that keeps the rate-limit headers.
+  const limited = await applyWebhookRateLimit(request);
+  if (limited) {
+    return new NextResponse(null, { status: 429, headers: limited.headers });
+  }
+
   const auth = await hasValidWebhookSecret(request);
   if (!auth.ok) {
     return new NextResponse(null, { status: 401 });
@@ -104,6 +116,10 @@ export const HEAD = apiHandler(async (request: NextRequest) => {
 
 export const GET = apiHandler(async (request: NextRequest) => {
   annotate({ action: { name: "withings.webhook.verify" } });
+
+  const limited = await applyWebhookRateLimit(request);
+  if (limited) return limited;
+
   const auth = await hasValidWebhookSecret(request);
   if (!auth.ok) {
     return NextResponse.json({ status: "unauthorized" }, { status: 401 });

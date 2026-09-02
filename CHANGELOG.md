@@ -1,5 +1,25 @@
 # Changelog
 
+## [Unreleased]
+
+### Security
+
+- **Every webhook verb that checks the shared secret is rate-limited now, not
+  just the one that carries data.** The Withings entrypoints, the Telegram bot
+  webhook and the Coolify deploy hook all limited their POST and left the
+  reachability verbs — the GET and HEAD a webhook UI sends to confirm the URL
+  before saving it — comparing the same secret with nothing in front of them.
+  Those verbs answer 200 for the right secret and 401 for a wrong one, so
+  unlimited they were a free guessing machine against the callback token of an
+  instance whose URL is known, and a free load channel besides. The comparison
+  was already constant-time, which hides how long the check took but not what
+  it answered. Each verb now runs the per-source limit its POST sibling used,
+  on the same bucket, before it looks at the secret. Nothing changes for a
+  legitimate subscription: Withings, Telegram and Coolify send one or two
+  probes, far below the limit. A new guard walks every webhook route and fails
+  the build if a verb reaches a secret comparison without the limiter in front
+  of it, so the next verb added to one of these files cannot repeat this.
+
 ## [1.38.4] — 2026-09-02
 
 The shared AI key reaches the provider its address names, and the image

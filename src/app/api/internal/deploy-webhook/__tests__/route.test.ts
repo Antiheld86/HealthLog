@@ -329,6 +329,31 @@ describe("GET /api/internal/deploy-webhook (reachability check)", () => {
     const res = await GET(req);
     expect(res.status).toBe(401);
   });
+
+  // The reachability GET compares the same shared secret the POST does and
+  // answers 200 against 401. Unlimited, that is a free oracle for guessing it.
+  // A VALID secret over the limit must still be refused — that proves the
+  // limiter runs before the comparison, not merely beside it.
+  it("returns 429 for a valid secret when over the limit, on the POST bucket", async () => {
+    vi.mocked(checkRateLimit).mockResolvedValue({
+      allowed: false,
+      remaining: 0,
+      resetAt: Date.now() + 60_000,
+    } as never);
+
+    const res = await GET(
+      new NextRequest("http://localhost/api/internal/deploy-webhook", {
+        method: "GET",
+        headers: { "x-deploy-webhook-secret": "test-secret" },
+      }),
+    );
+
+    expect(res.status).toBe(429);
+    expect(checkRateLimit).toHaveBeenCalledTimes(1);
+    expect(String(vi.mocked(checkRateLimit).mock.calls[0][0])).toMatch(
+      /^deploy-webhook:/,
+    );
+  });
 });
 
 describe("POST /api/internal/deploy-webhook (timestamp replay protection)", () => {

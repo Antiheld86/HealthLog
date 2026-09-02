@@ -216,3 +216,64 @@ describe("GET /api/withings/webhook/[token]", () => {
     expect(bad.status).toBe(401);
   });
 });
+
+describe("verification verbs are rate-limited before the secret comparison", () => {
+  // A verification verb answers 200 for the right token and 401 for a wrong
+  // one. Without a limit in front that is a free oracle for guessing the
+  // secret — constant-time comparison hides the timing channel, not the
+  // status code. Handing each verb a VALID token while over the limit is the
+  // sharp proof of ordering: the comparison would have said 200.
+  function overTheLimit(): void {
+    vi.mocked(checkRateLimit).mockResolvedValue({
+      allowed: false,
+      remaining: 0,
+      resetAt: Date.now() + 60_000,
+    } as never);
+  }
+
+  it("HEAD returns 429 for a valid token when over the limit", async () => {
+    overTheLimit();
+    const res = await HEAD(
+      new NextRequest("http://localhost/api/withings/webhook/test-secret", {
+        method: "HEAD",
+      }),
+      paramsFor("test-secret"),
+    );
+    expect(res.status).toBe(429);
+    expect(checkRateLimit).toHaveBeenCalledTimes(1);
+  });
+
+  it("GET returns 429 for a valid token when over the limit", async () => {
+    overTheLimit();
+    const res = await GET(
+      new NextRequest("http://localhost/api/withings/webhook/test-secret"),
+      paramsFor("test-secret"),
+    );
+    expect(res.status).toBe(429);
+    expect(checkRateLimit).toHaveBeenCalledTimes(1);
+  });
+
+  it("HEAD and GET share the POST bucket", async () => {
+    await HEAD(
+      new NextRequest("http://localhost/api/withings/webhook/test-secret", {
+        method: "HEAD",
+      }),
+      paramsFor("test-secret"),
+    );
+    await GET(
+      new NextRequest("http://localhost/api/withings/webhook/test-secret"),
+      paramsFor("test-secret"),
+    );
+    await POST(
+      jsonRequest("test-secret", { userid: "wu-1" }),
+      paramsFor("test-secret"),
+    );
+
+    const buckets = vi
+      .mocked(checkRateLimit)
+      .mock.calls.map((call) => String(call[0]));
+    expect(buckets).toHaveLength(3);
+    expect(new Set(buckets).size).toBe(1);
+    expect(buckets[0]).toMatch(/^withings-webhook:/);
+  });
+});

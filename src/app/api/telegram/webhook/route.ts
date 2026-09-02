@@ -32,17 +32,29 @@ function hasValidSecret(request: NextRequest): boolean {
   return timingSafeEqual(a, b);
 }
 
+/**
+ * The per-source limit both verbs share, on one bucket. It runs before the
+ * secret comparison on every verb that performs one: the comparison answers
+ * 200 against 401, and a constant-time compare hides the timing channel but
+ * not the status code, so the limiter is what makes guessing expensive.
+ */
+async function applyWebhookRateLimit(
+  request: NextRequest,
+): Promise<NextResponse | null> {
+  const ip = getClientIp(request);
+  const rl = await checkRateLimit(`telegram-webhook:${ip}`, 120, 60 * 1000);
+  if (rl.allowed) return null;
+  return NextResponse.json(
+    { status: "rate_limited" },
+    { status: 429, headers: rateLimitHeaders(rl) },
+  );
+}
+
 export const POST = apiHandler(async (request: NextRequest) => {
   annotate({ action: { name: "telegram.webhook" } });
 
-  const ip = getClientIp(request);
-  const rl = await checkRateLimit(`telegram-webhook:${ip}`, 120, 60 * 1000);
-  if (!rl.allowed) {
-    return NextResponse.json(
-      { status: "rate_limited" },
-      { status: 429, headers: rateLimitHeaders(rl) },
-    );
-  }
+  const limited = await applyWebhookRateLimit(request);
+  if (limited) return limited;
 
   if (!hasValidSecret(request)) {
     return NextResponse.json({ status: "unauthorized" }, { status: 401 });
@@ -83,6 +95,9 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
 export const GET = apiHandler(async (request: NextRequest) => {
   annotate({ action: { name: "telegram.webhook.verify" } });
+
+  const limited = await applyWebhookRateLimit(request);
+  if (limited) return limited;
 
   if (!hasValidSecret(request)) {
     return NextResponse.json({ status: "unauthorized" }, { status: 401 });

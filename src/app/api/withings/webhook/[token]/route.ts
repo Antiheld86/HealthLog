@@ -55,10 +55,23 @@ export const POST = apiHandler(
 /**
  * Withings sends HEAD/GET to verify the URL when a subscription is
  * created.
+ *
+ * The verification verbs carry the same rate limit as the notification POST,
+ * on the same bucket. They compare the same shared secret and answer 200
+ * against 401, so without it they are a free oracle for guessing the token —
+ * a constant-time comparison hides the timing channel, not the status code.
  */
 export const HEAD = apiHandler(
-  async (_request: NextRequest, context: RouteContext) => {
+  async (request: NextRequest, context: RouteContext) => {
     annotate({ action: { name: "withings.webhook.verify" } });
+
+    // HEAD carries no body, so the limiter's JSON envelope is re-shaped into
+    // a bodyless 429 that keeps the rate-limit headers.
+    const limited = await applyWebhookRateLimit(request);
+    if (limited) {
+      return new NextResponse(null, { status: 429, headers: limited.headers });
+    }
+
     const { token } = await context.params;
     if (!(await verifyTokenSegment(token))) {
       return new NextResponse(null, { status: 401 });
@@ -69,8 +82,12 @@ export const HEAD = apiHandler(
 );
 
 export const GET = apiHandler(
-  async (_request: NextRequest, context: RouteContext) => {
+  async (request: NextRequest, context: RouteContext) => {
     annotate({ action: { name: "withings.webhook.verify" } });
+
+    const limited = await applyWebhookRateLimit(request);
+    if (limited) return limited;
+
     const { token } = await context.params;
     if (!(await verifyTokenSegment(token))) {
       return NextResponse.json({ status: "unauthorized" }, { status: 401 });

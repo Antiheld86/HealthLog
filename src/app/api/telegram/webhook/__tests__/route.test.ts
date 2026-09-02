@@ -1155,3 +1155,29 @@ describe("Telegram webhook — interactive measurement reminder (v1.19.0)", () =
     expect(deleteMessage).toHaveBeenCalled();
   });
 });
+
+describe("Telegram webhook — GET verification is rate-limited first", () => {
+  // The reachability GET compares the same bot secret the POST does and
+  // answers 200 against 401. Without the limit in front it is an unthrottled
+  // oracle for guessing that secret, so a VALID secret over the limit must
+  // still be refused — that ordering is the whole point.
+  it("returns 429 for a valid secret when over the limit", async () => {
+    vi.mocked(checkRateLimit).mockResolvedValue({
+      allowed: false,
+      remaining: 0,
+      resetAt: Date.now() + 60_000,
+    } as never);
+
+    const res = await GET(
+      new NextRequest("http://localhost/api/telegram/webhook", {
+        headers: { "x-telegram-bot-api-secret-token": "test-secret" },
+      }),
+    );
+
+    expect(res.status).toBe(429);
+    expect(checkRateLimit).toHaveBeenCalledTimes(1);
+    expect(String(vi.mocked(checkRateLimit).mock.calls[0][0])).toMatch(
+      /^telegram-webhook:/,
+    );
+  });
+});
