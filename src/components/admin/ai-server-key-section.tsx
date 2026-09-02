@@ -34,6 +34,10 @@ import { PasswordInput } from "./_shared";
  *     key here never silently forwards anyone's health data.
  *   - The base URL is locked server-side to HTTPS + a hostname allowlist
  *     (`ADMIN_AI_BASE_URL_ALLOWLIST` extends it).
+ *   - The base URL also picks the wire: an `anthropic.com` host is called on
+ *     Anthropic's Messages API, every other host on the OpenAI-compatible one
+ *     (`resolveAdminProvider` in `src/lib/ai/provider.ts`). `baseUrlHint` is
+ *     that sentence for the operator.
  */
 
 interface AiServerKeyResponse {
@@ -113,6 +117,7 @@ export function AiServerKeySection() {
         <div className="space-y-2 text-sm">
           <p>{t("admin.aiServerKey.byokHint")}</p>
           <p>{t("admin.aiServerKey.consentHint")}</p>
+          <p>{t("admin.aiServerKey.baseUrlHint")}</p>
         </div>
 
         <div className="space-y-1.5">
