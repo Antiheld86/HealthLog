@@ -562,7 +562,8 @@ export const settingsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Permanently delete the account and everything in it",
       description:
         "Erasure, not deactivation: the user row goes, every related row cascades with it, and the account's own audit history — IP addresses, login geo — is purged inside the same transaction rather than being left orphaned. There is no undo and no grace period.\n\n" +
-        "Two gates, and they compose. The body must carry the typed confirmation. And for an account with a second factor enrolled — a confirmed TOTP secret OR a registered security key — the session must additionally carry a fresh factor proof, which is cookie-only by construction: a Bearer transport carries no `mfaVerifiedAt` and therefore cannot satisfy it at any scope. An account with NO second factor keeps the typed-confirmation-only contract on either transport, deliberately, because a user who never enrolled has no ceremony to complete.\n\n" +
+        "Two gates, and they compose. The body must carry the typed confirmation. And for an account with a second factor enrolled — a confirmed TOTP secret OR a registered security key — the caller must additionally present a fresh factor proof. An account with NO second factor keeps the typed-confirmation-only contract on either transport, deliberately, because a user who never enrolled has no ceremony to complete.\n\n" +
+        "How the fresh proof is presented depends on the transport. A cookie session carries it on the session row: complete the second factor within the last five minutes and retry. A Bearer caller presents a single-use elevation from `POST /api/auth/step-up` in the `X-Step-Up` header, minted against a `totp`, `webauthn`, or `passkey` proof — a `password`-proved elevation is refused here exactly as a password login never satisfies step-up on the web. The elevation is bound to the token that minted it, valid five minutes, and spent only when the deletion is about to run, so a rejected confirmation does not burn it. A recovery code is not accepted on the Bearer path: the mint does not take one, so an account that has lost its authenticator deletes itself from the web.\n\n" +
         "Two refusals are not about the caller's credentials at all. The last remaining admin cannot delete themselves, and the last Guardian of a managed profile cannot leave that profile unattended.",
       requestBody: {
         required: true,
@@ -597,7 +598,12 @@ export const settingsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         ...stdResponses,
         "401": {
           description:
-            "Not authenticated — or the account has a second factor and the session carries no proof of it fresh enough for a destructive action (`meta.errorCode` = `auth.stepup.required`, or `auth.stepup.mfa_not_enrolled`). Re-verify the factor on the web and retry; a Bearer token cannot clear this arm.",
+            "Not authenticated — or the account has a second factor and the caller carries no proof of it fresh enough for a destructive action (`meta.errorCode` = `auth.stepup.required`, or `auth.stepup.mfa_not_enrolled`). On a cookie session, re-verify the factor and retry; on a Bearer token, mint an elevation at `POST /api/auth/step-up` with a `totp`, `webauthn`, or `passkey` proof and resend with `X-Step-Up`. The same code covers an elevation that is unknown, expired, already spent, minted for a different token, or minted from too weak a factor — the refusals are deliberately indistinguishable on the wire, and the real reason is audited.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "403": {
+          description:
+            "The Bearer token carries a narrow scope. Erasure needs a cookie session or a full-access token; the refusal happens before any second-factor proof is looked at.",
           content: { "application/json": { schema: errorEnvelope } },
         },
       },
@@ -749,8 +755,9 @@ export const settingsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         "The other half of account deletion: this removes what the account HAS and keeps what signs into it. Ninety-nine models are hard-deleted for this user — measurements and every derived rollup, medications and their intake history, mood, labs, documents, cycle, workouts, nutrients, notification channels, Coach conversations, consent receipts, audit history — with no `deletedAt` filter, so soft-deleted tombstones go too. The account row survives with its personal columns reset: body and identity fields, home location, cached AI output. What is deliberately kept is the credential set (password hash, SSO binding, second-factor secret and enrolment, trusted-device state) and the interface preferences (timezone, locale, units, time and date format, glucose unit), because those are about the account rather than the record.\n\n" +
         "The model list is not written at the route. It is declared once in the wipe plan and held against the Prisma schema by a completeness test, which exists because this endpoint once deleted thirteen tables out of eighty-odd while telling people it had deleted everything.\n\n" +
         "One transaction, with a two-minute budget: a half-applied wipe is worse than none, because the person is told it succeeded either way. Every cached payload for the account is evicted afterwards so no surface serves pre-wipe data.\n\n" +
-        "Gated like account deletion: the typed confirmation, plus a fresh factor proof for an MFA-enrolled account, which is cookie-only by construction. The confirmation string is `DELETE`, NOT the `DELETE_ACCOUNT` that route wants.\n\n" +
-        "One audit row survives the wipe that clears the rest of the audit history: it is written after the transaction commits, as the receipt for the erasure the person asked for.",
+        "Gated like account deletion: the typed confirmation, plus a fresh factor proof for an MFA-enrolled account — on a cookie session the second factor completed within the last five minutes, on a Bearer token a single-use `X-Step-Up` elevation minted at `POST /api/auth/step-up` against a `totp`, `webauthn`, or `passkey` proof. The confirmation string is `DELETE`, NOT the `DELETE_ACCOUNT` that route wants.\n\n" +
+        "One audit row survives the wipe that clears the rest of the audit history: it is written after the transaction commits, as the receipt for the erasure the person asked for.\n\n" +
+        "A Bearer client should expect to be signed out by its own request: API tokens are on the wipe list, so the token that called this — and any step-up elevation minted from it — is removed along with the record. Sign in again rather than retrying with the same credential.",
       requestBody: {
         required: true,
         content: { "application/json": { schema: dataWipeRequest } },
@@ -777,7 +784,12 @@ export const settingsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         ...stdResponses,
         "401": {
           description:
-            "Not authenticated — or the account has a second factor and the session carries no proof of it fresh enough for a destructive action (`meta.errorCode` = `auth.stepup.required`, or `auth.stepup.mfa_not_enrolled`). A Bearer token cannot clear this arm.",
+            "Not authenticated — or the account has a second factor and the caller carries no proof of it fresh enough for a destructive action (`meta.errorCode` = `auth.stepup.required`, or `auth.stepup.mfa_not_enrolled`). A Bearer caller clears it with an `X-Step-Up` elevation from `POST /api/auth/step-up`; the same code covers an elevation that is unknown, expired, already spent, bound to another token, or minted from too weak a factor.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "403": {
+          description:
+            "The Bearer token carries a narrow scope. Erasure needs a cookie session or a full-access token; the refusal happens before any second-factor proof is looked at.",
           content: { "application/json": { schema: errorEnvelope } },
         },
       },
