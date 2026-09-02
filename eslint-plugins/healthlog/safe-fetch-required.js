@@ -16,9 +16,22 @@
  *     mock or assert against `fetch` directly.
  *
  * The check is a syntactic `CallExpression` match against a bare
- * `fetch(` callee (Identifier `fetch`) and `globalThis.fetch(` /
- * `window.fetch(` member forms. `safeFetch` is a distinct identifier and
- * never matches.
+ * `fetch(` callee (Identifier `fetch`), the `globalThis.fetch(` /
+ * `window.fetch(` / `self.fetch(` member forms, and — since 2026-09-03 —
+ * any local name bound to a module's `fetch` export or reached through a
+ * namespace import. `safeFetch` is a distinct identifier and never matches.
+ *
+ * The aliased spelling is not hypothetical: `src/lib/safe-fetch.ts` opens
+ * with `import { fetch as undiciFetch } from "undici"`, so the codebase
+ * demonstrably reaches for it, and every copy of that spelling outside the
+ * wrapper escaped the rule in every file.
+ *
+ * Limits, so a green run is not read as more than it is: the binding scan
+ * walks top-level `import` declarations only. A `require("undici").fetch`,
+ * a dynamic `await import(...)`, a fetch handed through a parameter or
+ * stored on an object, and a local shadow of an imported name are all
+ * outside it — as is any egress that never spells `fetch` at all, such as
+ * `http.request` or a client library with its own transport.
  *
  * Same-origin client fetches are exempt: a first argument that is a
  * string literal (or template head) starting with `/` is a relative,
@@ -45,9 +58,27 @@ const EXEMPT_FILES = [
   "src/lib/api/api-fetch.ts",
 ];
 
-// Only enforce inside the application source roots. Scripts, config, and
-// generated code are out of scope.
-const ENFORCED_ROOTS = ["src/lib/", "src/app/"];
+// Only enforce inside the application source. Scripts, config, and generated
+// code are out of scope.
+//
+// The list carries three single files alongside the two directory roots.
+// `src/proxy.ts`, `src/instrumentation.ts` and `src/cli/` sit outside
+// `src/lib/` and `src/app/`, and the companion `healthlog/api-fetch-required`
+// does not reach them either (it guards the client surface), so between them
+// they were egress-unguarded. They are egress-free today; instrumentation is
+// precisely where an exporter pointed at an operator-supplied URL would land,
+// and nothing would have flagged it.
+const ENFORCED_PATHS = [
+  "src/lib/",
+  "src/app/",
+  "src/proxy.ts",
+  "src/instrumentation.ts",
+  "src/cli/",
+];
+
+// Objects that carry the platform `fetch`. Treated as namespaces below so the
+// member form goes through one code path with the imported-namespace case.
+const GLOBAL_FETCH_OBJECTS = ["globalThis", "window", "self"];
 
 function toPosix(filename) {
   return filename.replace(/\\/g, "/");
@@ -64,7 +95,7 @@ function isTestFile(posix) {
 
 function isEnforced(filename) {
   const posix = toPosix(filename);
-  if (!ENFORCED_ROOTS.some((root) => posix.includes(root))) return false;
+  if (!ENFORCED_PATHS.some((path) => posix.includes(path))) return false;
   if (EXEMPT_FILES.some((f) => posix.includes(f))) return false;
   if (isTestFile(posix)) return false;
   return true;
@@ -86,27 +117,54 @@ const safeFetchRequiredRule = {
   },
   create(context) {
     const filename = context.filename ?? context.getFilename?.();
+    const sourceCode = context.sourceCode ?? context.getSourceCode();
     if (!filename || !isEnforced(filename)) {
       return {};
     }
 
-    function isFetchCallee(callee) {
-      // Bare `fetch(...)`.
-      if (callee.type === "Identifier" && callee.name === "fetch") return true;
-      // `globalThis.fetch(...)` / `window.fetch(...)` / `self.fetch(...)`.
-      if (
-        callee.type === "MemberExpression" &&
-        !callee.computed &&
-        callee.property.type === "Identifier" &&
-        callee.property.name === "fetch" &&
-        callee.object.type === "Identifier" &&
-        (callee.object.name === "globalThis" ||
-          callee.object.name === "window" ||
-          callee.object.name === "self")
-      ) {
-        return true;
+    // Local names this module bound to somebody's `fetch`, collected from the
+    // top-level imports before any call site is visited. `import { fetch as f }
+    // from "undici"` makes `f(...)` a fetch call; `import * as undici from
+    // "undici"` makes `undici.fetch(...)` one.
+    const aliasedFetch = new Set();
+    const namespaces = new Set([...GLOBAL_FETCH_OBJECTS]);
+    for (const node of sourceCode.ast.body) {
+      if (node.type !== "ImportDeclaration") continue;
+      for (const specifier of node.specifiers) {
+        if (specifier.type === "ImportSpecifier") {
+          const imported =
+            specifier.imported.type === "Identifier"
+              ? specifier.imported.name
+              : specifier.imported.value;
+          if (imported === "fetch") aliasedFetch.add(specifier.local.name);
+        } else if (specifier.type === "ImportNamespaceSpecifier") {
+          namespaces.add(specifier.local.name);
+        }
       }
-      return false;
+    }
+
+    function isFetchCallee(callee) {
+      // Bare `fetch(...)`, and any local name bound to an imported `fetch`.
+      if (callee.type === "Identifier") {
+        return callee.name === "fetch" || aliasedFetch.has(callee.name);
+      }
+      if (callee.type !== "MemberExpression") return false;
+      // `globalThis.fetch(...)` / `window.fetch(...)` / `self.fetch(...)` and
+      // `<namespace>.fetch(...)`, including the static computed spelling.
+      if (
+        callee.object.type !== "Identifier" ||
+        !namespaces.has(callee.object.name)
+      ) {
+        return false;
+      }
+      const property = !callee.computed
+        ? callee.property.type === "Identifier"
+          ? callee.property.name
+          : null
+        : callee.property.type === "Literal"
+          ? callee.property.value
+          : null;
+      return property === "fetch";
     }
 
     function isSameOriginRelative(arg) {
