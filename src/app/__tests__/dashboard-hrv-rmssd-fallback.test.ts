@@ -91,7 +91,14 @@ describe("pickHrvSummary", () => {
     // The tile is hidden either way; reporting the fallback type here would
     // make an account with no HRV at all look like a ring user to the label
     // and the freshness lookup.
-    for (const input of [undefined, {}, { HRV_RMSSD: summary(0, 0) }]) {
+    // Annotated: inferred from the literals alone, `{}` widens to
+    // `{ HRV_RMSSD?: undefined }`, which the index signature rejects.
+    const inputs: (Record<string, DataSummary> | undefined)[] = [
+      undefined,
+      {},
+      { HRV_RMSSD: summary(0, 0) },
+    ];
+    for (const input of inputs) {
       const picked = pickHrvSummary(input);
       expect((picked.summary?.count ?? 0) > 0).toBe(false);
       expect(picked.type).toBe("HEART_RATE_VARIABILITY");
