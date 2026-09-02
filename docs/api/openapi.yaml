@@ -2782,8 +2782,8 @@ paths:
         not because a wildcard lacks the reach, but because of the lifetimes involved: a native access token lives a day
         and what it could mint here lives a year, so admitting one would let a short-lived compromise leave behind a
         credential that outlives revoking it. Gated by the operator's instance-wide API switch. Body capped at 16 KiB;
-        10 mints per user per minute. Tokens appear in `GET /api/tokens` and are revoked at `DELETE /api/tokens/{id}`
-        like any other.
+        10 mints per user per minute, and at most 10 live tokens held at once. Tokens appear in `GET /api/tokens` and
+        are revoked at `DELETE /api/tokens/{id}` like any other — revoking frees a slot against the ceiling.
       requestBody:
         required: true
         content:
@@ -2807,6 +2807,17 @@ paths:
         "403":
           description: The operator has switched the API off instance-wide (`AppSettings.apiGlobal`). Nothing was minted. A Bearer
             caller does not reach this arm — it is refused 401 before the switch is read.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "409":
+          description: "The account already holds 10 live measurement tokens (`meta.errorCode` =
+            `tokens.measurements.ceiling_reached`). Nothing was minted. Distinct from the 429 above: that one is a rate
+            and clears by waiting, this one is a conflict with the account's current state and clears by revoking a
+            token at `DELETE /api/tokens/{id}`. Only LIVE tokens count — revoked and expired rows do not occupy a slot —
+            and only those carrying `measurements:write`, so the wildcard tokens a sign-in mints never consume the
+            budget."
           content:
             application/json:
               schema:
