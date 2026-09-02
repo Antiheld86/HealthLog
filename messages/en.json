@@ -6473,6 +6473,7 @@
       "description": "An operator key for accounts that have not configured one of their own.",
       "byokHint": "A user's own key (BYOK, ChatGPT login or local provider) always takes precedence — the server key is the last step in the provider chain.",
       "consentHint": "Requests over the server key require the user's active AI consent; without a consent receipt nothing is sent.",
+      "baseUrlHint": "The base URL selects the API: an Anthropic URL such as https://api.anthropic.com/v1 is understood, any other host is called on the OpenAI-compatible API.",
       "statusConfigured": "Configured",
       "statusNotConfigured": "Not configured",
       "keyLabel": "API key",
