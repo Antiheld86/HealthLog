@@ -36,7 +36,12 @@ vi.mock("@/lib/db", () => ({
   toJson: <T>(value: T) => value,
 }));
 
-vi.mock("@/lib/crypto", () => ({ decrypt: vi.fn(() => "{}") }));
+vi.mock("@/lib/crypto", () => ({
+  decrypt: vi.fn(() => "{}"),
+  // The envelope reader asks which stored shape it was handed first.
+  isStreamCiphertext: () => false,
+  decryptStream: vi.fn(),
+}));
 vi.mock("@/lib/crypto/note-cipher", () => ({ encryptNote: vi.fn() }));
 vi.mock("@/lib/validations/backup", () => ({
   parseBackupPayload: vi.fn(),

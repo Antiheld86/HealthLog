@@ -103,6 +103,7 @@ export const JOB_FACT_ALLOWLIST: ReadonlySet<string> = new Set([
   "geo_backfill_skipped",
   "geo_backfill_still_unresolved",
   "geolite2_fetch_status",
+  "heap_budget_trips",
   "host_metric_pruned",
   "hourly_rows_upserted",
   "imported",

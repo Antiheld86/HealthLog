@@ -396,3 +396,139 @@ export function extractKeyId(encoded: string): string | null {
   if (!/^[A-Za-z0-9_-]{1,32}$/.test(id)) return null;
   return id;
 }
+
+// ─── Streaming codec ("stream1") ─────────────────────────────────────────────
+//
+// AES-256-GCM over a plaintext that is produced INCREMENTALLY and consumed as
+// one base64 string. Written for the weekly backup blob, whose plaintext is
+// hundreds of megabytes on a long-lived record: the string codec above has to
+// hold the whole plaintext, the whole ciphertext AND the whole base64 at once,
+// which is three full copies of a record that already does not fit.
+//
+// Layout: "~hlgcm1." + keyId + "." + base64(iv | ciphertext | authTag)
+//
+// Two deliberate differences from the string codec, and no others:
+//
+//   - The tag rides at the END rather than in front of the ciphertext. GCM
+//     only produces it once the last block is in, so a leading tag is what
+//     makes the string codec un-streamable. Nothing about the authentication
+//     changes: the tag still covers every ciphertext byte and `decryptStream`
+//     still verifies it BEFORE returning a single plaintext byte.
+//   - The `~` prefix. Key ids match [A-Za-z0-9_-]{1,32} and a legacy payload is
+//     bare base64, so no value the string codec can ever write starts with a
+//     tilde. The two formats are disjoint by construction rather than by
+//     sniffing, which is why `decrypt()` below is left untouched.
+//
+// The write side never materialises the ciphertext: base64 is emitted in
+// 3-byte-aligned pieces as the cipher produces them, with the sub-group
+// remainder carried across chunks. The read side is deliberately NOT
+// incremental — a caller that reads a backup parses it as one document
+// anyway, and releasing unverified plaintext to save a copy would trade the
+// authentication for memory.
+
+/** Marker prefix of a streamed ciphertext. Disjoint from every other format. */
+const STREAM_CODEC_PREFIX = "~hlgcm1.";
+
+/** Incremental AES-256-GCM writer. Emits base64 pieces; concatenate in order. */
+export interface StreamEncryptor {
+  /** The header, including base64(iv). Emit before any `update()` output. */
+  readonly header: string;
+  /** Encrypt one plaintext chunk into a base64 piece (may be empty). */
+  update(chunk: Buffer): string;
+  /** Flush the cipher and the auth tag. No further calls after this. */
+  final(): string;
+}
+
+/**
+ * Open a streaming encryptor under the ACTIVE key.
+ *
+ * The 12-byte IV is exactly four base64 groups, so it encodes standalone and
+ * the ciphertext continues on a group boundary — which is what lets the rest
+ * be emitted piecewise without ever holding the whole thing.
+ */
+export function createStreamEncryptor(): StreamEncryptor {
+  const { id, key } = getActiveKey();
+  const iv = randomBytes(IV_LENGTH);
+  const cipher = createCipheriv(ALGORITHM, key, iv);
+  // Bytes that did not fill a 3-byte base64 group in the previous chunk.
+  let carry = Buffer.alloc(0);
+  let done = false;
+
+  const emit = (bytes: Buffer): string => {
+    const buf = carry.byteLength > 0 ? Buffer.concat([carry, bytes]) : bytes;
+    const aligned = buf.byteLength - (buf.byteLength % 3);
+    carry = Buffer.from(buf.subarray(aligned));
+    return aligned === 0 ? "" : buf.subarray(0, aligned).toString("base64");
+  };
+
+  return {
+    header: `${STREAM_CODEC_PREFIX}${id}.${iv.toString("base64")}`,
+    update(chunk: Buffer): string {
+      if (done) throw new Error("Stream encryptor already finalised");
+      return emit(cipher.update(chunk));
+    },
+    final(): string {
+      if (done) throw new Error("Stream encryptor already finalised");
+      done = true;
+      // The tag is plaintext-independent trailing data, so it simply joins the
+      // byte stream; the last group is padded exactly once, here.
+      const tail = Buffer.concat([carry, cipher.final(), cipher.getAuthTag()]);
+      carry = Buffer.alloc(0);
+      return tail.toString("base64");
+    },
+  };
+}
+
+/** True when `stored` was written by `createStreamEncryptor`. */
+export function isStreamCiphertext(stored: string): boolean {
+  return stored.startsWith(STREAM_CODEC_PREFIX);
+}
+
+/**
+ * Decrypt a streamed ciphertext back to its raw plaintext bytes.
+ *
+ * Fail-closed on every arm — a malformed header, an unconfigured key id, a
+ * truncated payload or a tag that does not verify all throw, and no plaintext
+ * is returned until `final()` has authenticated the whole ciphertext.
+ */
+export function decryptStream(stored: string): Buffer {
+  if (!isStreamCiphertext(stored)) {
+    throw new Error("Not a streamed ciphertext");
+  }
+  const rest = stored.slice(STREAM_CODEC_PREFIX.length);
+  const dot = rest.indexOf(".");
+  if (dot <= 0 || dot >= rest.length - 1) {
+    throw new Error("Streamed ciphertext has a malformed header");
+  }
+  const keyId = rest.slice(0, dot);
+  if (!/^[A-Za-z0-9_-]{1,32}$/.test(keyId)) {
+    throw new Error("Streamed ciphertext carries a malformed key id");
+  }
+  const key = getKeyById(keyId);
+  if (!key) {
+    throw new Error(
+      `Encryption key id '${keyId}' is not configured. Add it to ` +
+        `ENCRYPTION_KEYS before decrypting rows written under that key.`,
+    );
+  }
+  const packed = Buffer.from(rest.slice(dot + 1), "base64");
+  if (packed.byteLength < IV_LENGTH + AUTH_TAG_LENGTH) {
+    throw new Error("Streamed ciphertext is truncated");
+  }
+  const iv = packed.subarray(0, IV_LENGTH);
+  const tag = packed.subarray(packed.byteLength - AUTH_TAG_LENGTH);
+  const ct = packed.subarray(IV_LENGTH, packed.byteLength - AUTH_TAG_LENGTH);
+  const dec = createDecipheriv(ALGORITHM, key, iv);
+  dec.setAuthTag(tag);
+  return Buffer.concat([dec.update(ct), dec.final()]);
+}
+
+/** The key id a streamed ciphertext was written under, or null when unparsable. */
+export function extractStreamKeyId(stored: string): string | null {
+  if (!isStreamCiphertext(stored)) return null;
+  const rest = stored.slice(STREAM_CODEC_PREFIX.length);
+  const dot = rest.indexOf(".");
+  if (dot <= 0) return null;
+  const keyId = rest.slice(0, dot);
+  return /^[A-Za-z0-9_-]{1,32}$/.test(keyId) ? keyId : null;
+}

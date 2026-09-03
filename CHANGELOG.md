@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **The weekly backup no longer takes the instance down with it.** The
+  compression that went out last release was real, and it was measured in the
+  wrong place. On a development machine with a multi-gigabyte heap the pass
+  finished; the container it actually runs in is capped at 1 GB, which gives
+  Node a 524 MB heap, and there the same pass died with
+  `Reached heap limit — JavaScript heap out of memory` about fifteen seconds
+  in. Because the job shares the application process, that was not one failed
+  backup: it was a restart, and every signed-in session on the host went with
+  it. The document is now written incrementally. The three tables that grow
+  without bound — readings, doses, mood entries — are read a page at a time and
+  serialised straight into the compressor and the cipher, every other section
+  is released as soon as its own JSON exists, and nothing between the database
+  rows and the stored value is ever held whole. On a seeded account of 445 000
+  readings the pass used to exhaust a 546 MB heap; the same account doubled to
+  890 000 now finishes inside 296 MB. The writer also watches its own memory
+  and stops at 80 percent of the limit, so an account too large for its host is
+  a backup that failed for that one account and is counted in the run's meta,
+  not a restart for everybody. Backups written under either older shape still
+  restore, which is checked both ways rather than asserted.
+
 ### Internal
 
 - The column-reader sweep was wrong in both directions and had been for as long as it existed. It answers "does this column have a consumer" for every column in the schema, and it is the tool this project leans on to catch a schema change that ships its writer and forgets its reader. Its idea of a write was any `field:` key anywhere, so `where: { ticketHash }` counted as writing `ticketHash`: all twelve columns it reported were a lookup key or a cron's discovery predicate being filtered on, every one a false alarm. And because it only ever reported a column that HAD a write, a column with no write at all was the one thing it could not see. It now understands which Prisma argument a key sits in, follows a payload assembled into a variable before the call, credits raw SQL against the mapped column name, and reports a column no code touches at all as its own category. Twelve false alarms became nineteen findings that each hold up, four of them worth acting on. The matcher underneath is pinned by a test that was checked by breaking it three ways.

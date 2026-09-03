@@ -66,7 +66,8 @@ import { buildFullBackupPayload } from "@/lib/export/full-backup-payload";
 import { UNREADABLE_EXPORT_MARKER } from "@/lib/export/unreadable-marker";
 import { decryptNoteFromBytes } from "@/lib/labs/store";
 import { decryptContextFromBytes } from "@/lib/labs/biomarker-store";
-import { packBackupBlob } from "@/lib/export/backup-blob";
+import { packBackupBlobStreaming } from "@/lib/export/backup-blob";
+import { streamFullBackupJson } from "@/lib/export/full-backup-stream";
 import { TWO_ENDED_MODELS, type TwoEndedModel } from "@/lib/export/backup-plan";
 import { POST } from "@/app/api/admin/backups/[id]/restore/route";
 
@@ -1252,9 +1253,35 @@ describe("every model the plan claims two-ended survives a real restore", () => 
         "compare nothing against nothing and pass",
     ).toEqual([]);
 
+    // Pinned so the two writers below describe the same instant and can be
+    // compared byte for byte; `exportedAt` otherwise defaults to `new Date()`.
+    const exportedAt = new Date("2026-08-01T00:00:00.000Z");
     const { payload } = await buildFullBackupPayload(prisma, OWNER_ID, {
       purpose: "disaster-recovery",
+      exportedAt,
     });
+
+    // The writer the weekly job actually uses never builds this payload: it
+    // pulls the unbounded tables through page by page and serialises each row
+    // straight into the cipher, because materialising them is what used to
+    // exhaust the heap. Two writers is two chances to drift, so the file it
+    // produces is pinned against the one above — every per-table assertion
+    // below then covers BOTH, since the row that gets restored comes from the
+    // streamed bytes.
+    let streamedJson = "";
+    await streamFullBackupJson(
+      prisma,
+      OWNER_ID,
+      (chunk) => {
+        streamedJson += chunk;
+      },
+      { purpose: "disaster-recovery", exportedAt },
+    );
+    expect(
+      streamedJson,
+      "the streaming writer and the materialising builder disagree; the " +
+        "weekly backup no longer contains what this test proves restorable",
+    ).toBe(JSON.stringify(payload));
 
     // The tombstone has to be IN the file. A disaster-recovery payload that
     // carries only live rows is smaller and cheaper and wrong: the restore
@@ -1292,12 +1319,15 @@ describe("every model the plan claims two-ended survives a real restore", () => 
       data: {
         userId: OWNER_ID,
         type: "TWO_ENDED_ROUND_TRIP",
-        // The envelope the weekly worker actually writes: gzip, then
-        // encrypt. The three cases further down deliberately keep the plain
-        // `encrypt(json)` form, which is what every row written before this
-        // envelope existed looks like — an operator's newest usable copy may
-        // well be one of those, so both arms have to reach the restore route.
-        data: packBackupBlob(JSON.stringify(payload)),
+        // The envelope the weekly worker actually writes: stream the JSON
+        // through gzip and the cipher without ever holding a whole copy. The
+        // three cases further down deliberately keep the plain `encrypt(json)`
+        // form, which is what every row written before any of this existed
+        // looks like — an operator's newest usable copy may well be one of
+        // those, so every arm has to reach the restore route.
+        data: await packBackupBlobStreaming(async (write) => {
+          await write(streamedJson);
+        }),
       },
     });
     const response = await POST(
