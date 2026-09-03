@@ -11763,9 +11763,16 @@ paths:
       tags:
         - Notifications
       summary: Update the caller's ntfy channel config
-      description: "Upserts the channel. Accepts either the toggle-only body or the full config. The response is `{ saved:
-        true }` and carries no config echo, so re-read the GET if the client needs the resolved state. Auth via cookie
-        or Bearer."
+      description: >-
+        Upserts the channel. Accepts either the toggle-only body or the full config. The response is `{ saved: true }`
+        and carries no config echo, so re-read the GET if the client needs the resolved state. Auth via cookie or
+        Bearer.
+
+
+        An operator can switch ntfy off for the whole instance. While that switch is off, a body that sets `enabled` to
+        true is refused with 403 and nothing is stored — the channel would not deliver, so the toggle does not pretend
+        otherwise. Disabling the channel keeps working either way. Read the switch from `GET
+        /api/settings/global-services`.
       requestBody:
         required: true
         content:
@@ -11786,6 +11793,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "401": *a1
+        "403":
+          description: The operator switched ntfy off for this instance and the body asked to enable it. Nothing was stored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "413": &a16
           description: Body exceeds 64 KiB.
           content:
@@ -11827,10 +11840,16 @@ paths:
       tags:
         - Notifications
       summary: Update the caller's Telegram channel config
-      description: "Accepts either the toggle-only body or the full config, then registers (on enable) or deletes (on disable)
-        the Telegram webhook for the bot before persisting. Webhook deletion is best-effort and its failure does not
-        fail the write; webhook REGISTRATION is not — a rejected registration aborts the whole call and nothing is
-        stored. The response is `{ updated: true }` with no config echo. Auth via cookie or Bearer."
+      description: >-
+        Accepts either the toggle-only body or the full config, then registers (on enable) or deletes (on disable) the
+        Telegram webhook for the bot before persisting. Webhook deletion is best-effort and its failure does not fail
+        the write; webhook REGISTRATION is not — a rejected registration aborts the whole call and nothing is stored.
+        The response is `{ updated: true }` with no config echo. Auth via cookie or Bearer.
+
+
+        An operator can switch Telegram off for the whole instance. While that switch is off, a body that sets `enabled`
+        to true is refused with 403 before any webhook call and nothing is stored. Disabling the channel keeps working
+        either way. Read the switch from `GET /api/settings/global-services`.
       requestBody:
         required: true
         content:
@@ -11846,6 +11865,13 @@ paths:
                 $ref: "#/components/schemas/PutTelegramSettingsResponse"
         "400": *a15
         "401": *a1
+        "403":
+          description: The operator switched Telegram off for this instance and the body asked to enable it. No webhook was
+            registered and nothing was stored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "404":
           description: The session's user row no longer exists.
           content:
@@ -18649,6 +18675,11 @@ paths:
         Body capped at 64 KB. A rejected subscription answers the standard multi-issue 422, so a client can tell a
         non-HTTPS endpoint from an internal-host one from a missing key. The issue list carries `path`, `code` and
         `message` and never the rejected value — neither the endpoint nor the subscription keys are echoed back.
+
+
+        An operator can switch Web Push off for the whole instance. While that switch is off this answers 403 before it
+        reads the body, and no subscription and no channel row are created. Read the switch from `GET
+        /api/settings/global-services` and hide the subscribe control rather than retrying.
       requestBody:
         required: true
         content:
@@ -18663,6 +18694,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/WebPushSubscribeEnvelope"
         "401": *a1
+        "403":
+          description: The operator switched Web Push off for this instance. Nothing was stored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "413":
           description: Request body exceeds 65536 bytes. Nothing was stored.
           content:

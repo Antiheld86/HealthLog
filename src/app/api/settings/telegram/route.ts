@@ -7,7 +7,16 @@ import { notificationChannelEnabledSchema } from "@/lib/validations/notification
 import { NextRequest } from "next/server";
 import { z } from "zod/v4";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { isChannelGloballyEnabled } from "@/lib/app-settings";
 import { annotate } from "@/lib/logging/context";
+
+/**
+ * Refusal for an enable attempt on a channel the operator switched off
+ * instance-wide (`AppSettings.telegramGlobal`). A toggle that appeared to
+ * work and then delivered nothing is worse than a refusal that says why.
+ */
+const TELEGRAM_GLOBALLY_DISABLED =
+  "Telegram is disabled on this instance by the operator";
 
 /**
  * Get Telegram notification settings for the current user.
@@ -117,6 +126,14 @@ export const PUT = apiHandler(async (request: NextRequest) => {
   const enabledOnly = notificationChannelEnabledSchema.safeParse(body);
   if (enabledOnly.success) {
     const { enabled } = enabledOnly.data;
+    if (enabled && !(await isChannelGloballyEnabled("TELEGRAM"))) {
+      annotate({
+        action: { name: "settings.telegram.update" },
+        meta: { refused: "globally_disabled" },
+      });
+      return apiError(TELEGRAM_GLOBALLY_DISABLED, 403);
+    }
+
     if (enabled && (!current.telegramBotToken || !current.telegramChatId)) {
       return apiError(
         "Bot token and chat ID are required when Telegram is enabled",
@@ -165,6 +182,14 @@ export const PUT = apiHandler(async (request: NextRequest) => {
     botToken !== undefined ? !!trimmedToken : !!current.telegramBotToken;
   const hasChatIdAfter =
     chatId !== undefined ? !!trimmedChatId : !!current.telegramChatId;
+
+  if (enabled && !(await isChannelGloballyEnabled("TELEGRAM"))) {
+    annotate({
+      action: { name: "settings.telegram.update" },
+      meta: { refused: "globally_disabled" },
+    });
+    return apiError(TELEGRAM_GLOBALLY_DISABLED, 403);
+  }
 
   if (enabled && (!hasTokenAfter || !hasChatIdAfter)) {
     return apiError(

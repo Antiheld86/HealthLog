@@ -7,7 +7,16 @@ import {
 import { encrypt, decrypt } from "@/lib/crypto";
 import { NextRequest } from "next/server";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { isChannelGloballyEnabled } from "@/lib/app-settings";
 import { annotate } from "@/lib/logging/context";
+
+/**
+ * Refusal for an enable attempt on a channel the operator switched off
+ * instance-wide (`AppSettings.ntfyGlobal`). A toggle that appeared to work
+ * and then delivered nothing is worse than a refusal that says why.
+ */
+const NTFY_GLOBALLY_DISABLED =
+  "ntfy is disabled on this instance by the operator";
 
 /**
  * GET: Return current ntfy config (without auth token).
@@ -60,6 +69,14 @@ export const PUT = apiHandler(async (request: NextRequest) => {
   if (enabledOnly.success) {
     const { enabled } = enabledOnly.data;
 
+    if (enabled && !(await isChannelGloballyEnabled("NTFY"))) {
+      annotate({
+        action: { name: "settings.ntfy.update" },
+        meta: { refused: "globally_disabled" },
+      });
+      return apiError(NTFY_GLOBALLY_DISABLED, 403);
+    }
+
     if (enabled) {
       const existing = await prisma.notificationChannel.findUnique({
         where: { userId_type: { userId: user.id, type: "NTFY" } },
@@ -105,6 +122,14 @@ export const PUT = apiHandler(async (request: NextRequest) => {
   if (!parsed.success) return apiError("Invalid data", 422);
 
   const { serverUrl, topic, authToken, enabled } = parsed.data;
+
+  if (enabled && !(await isChannelGloballyEnabled("NTFY"))) {
+    annotate({
+      action: { name: "settings.ntfy.update" },
+      meta: { refused: "globally_disabled" },
+    });
+    return apiError(NTFY_GLOBALLY_DISABLED, 403);
+  }
 
   if (enabled && (!serverUrl || !topic)) {
     return apiError(
