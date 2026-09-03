@@ -6,13 +6,16 @@
  * already carries the active key id prefix are skipped.
  *
  * The set of columns this script rotates is the canonical registry in
- * `src/lib/crypto/encrypted-columns.ts`. The guard test
- * `src/lib/crypto/__tests__/encrypted-columns.test.ts` fails CI if any
- * encrypted column in `prisma/schema.prisma` is missing from the registry,
- * or if any registry column is not referenced here — so a new `*Encrypted`
- * column can never silently skip rotation (which would make those rows
- * permanently undecryptable once the legacy key is dropped, since decrypt is
- * fail-closed).
+ * `src/lib/crypto/encrypted-columns.ts`. Two guard tests keep it honest:
+ * `encrypted-columns.test.ts` fails CI if a `*Encrypted`-named schema column
+ * is missing from the registry or is not referenced here, and
+ * `encrypted-column-writers.test.ts` derives the ciphertext-bearing columns
+ * from the Prisma write payloads instead of from names — the check that would
+ * have caught `DataBackup.data`, ciphertext under a column called `data`.
+ *
+ * The run ends by naming every registered column it did NOT walk and exiting
+ * non-zero, because an operator reads a zero here as permission to drop the
+ * previous key, and "nothing left" and "never looked" must not print alike.
  *
  * Usage:
  *   ENCRYPTION_KEYS='{"v1":"<old>","v2":"<new>"}' \
@@ -28,6 +31,11 @@ import {
   rotateColumn,
   type CorpusClient,
 } from "@/lib/crypto/encryption-corpus";
+import {
+  ENCRYPTED_COLUMNS,
+  encryptedColumnKey,
+  type EncryptedColumn,
+} from "@/lib/crypto/encrypted-columns";
 import { tokeniseAndHash } from "@/lib/documents/content-index";
 
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -55,6 +63,42 @@ interface RotationResult {
   scanned: number;
   rotated: number;
   errors: number;
+  /** Unreadable rows deleted from a `disposable` column (cache entries only). */
+  dropped: number;
+}
+
+/**
+ * Look a column up in the canonical registry so the walk honours the flags
+ * recorded there (`batched`, `disposable`, `codecField`) rather than a second
+ * hand-written copy of them here.
+ */
+function registryColumn(model: string, field: string): EncryptedColumn {
+  const col = ENCRYPTED_COLUMNS.find(
+    (c) => c.model === model && c.field === field,
+  );
+  if (!col) {
+    throw new Error(
+      `${model}.${field} is not in the encrypted-column registry`,
+    );
+  }
+  return col;
+}
+
+/** Rotate one column through the shared registry-driven corpus walk. */
+async function rotateRegistryColumn(
+  model: string,
+  field: string,
+  client: CorpusClient,
+): Promise<RotationResult> {
+  const r = await rotateColumn(client, registryColumn(model, field));
+  return {
+    table: r.model,
+    field: r.field,
+    scanned: r.scanned,
+    rotated: r.rotated,
+    errors: r.errors,
+    dropped: r.dropped,
+  };
 }
 
 function shouldRotate(value: string | null): boolean {
@@ -89,6 +133,7 @@ async function rotateStringColumn(
     scanned: rows.length,
     rotated: 0,
     errors: 0,
+    dropped: 0,
   };
   for (const row of rows) {
     const v = row[field] as string | null;
@@ -131,6 +176,7 @@ async function rotateBytesColumn(
     scanned: rows.length,
     rotated: 0,
     errors: 0,
+    dropped: 0,
   };
   for (const row of rows) {
     const buf = row[field] as Uint8Array | null;
@@ -487,13 +533,14 @@ async function main() {
   // v1.38 — the day-context note on a mood entry. Its own table, so its own
   // walk; a context row exists only where somebody added one, and a row with
   // no note carries NULL here and is skipped like every other nullable Bytes
-  // column.
+  // column. It goes through the registry-driven walk rather than the generic
+  // `id`-keyed one above: the table is keyed on `moodEntryId`, and selecting a
+  // column Prisma does not know threw mid-pass and abandoned every column
+  // after it — a rotation that reported nothing at all rather than a gap.
   results.push(
-    await rotateBytesColumn(
-      "MoodContext",
-      "notesEncrypted",
-      prisma.moodContext,
-    ),
+    await rotateRegistryColumn("MoodContext", "notesEncrypted", {
+      moodContext: prisma.moodContext,
+    } as unknown as CorpusClient),
   );
 
   // ───── v1.25 medication free-text notes (Bytes columns) ─────
@@ -601,6 +648,7 @@ async function main() {
       scanned: docResult.scanned,
       rotated: docResult.rotated,
       errors: docResult.errors,
+      dropped: docResult.dropped,
     });
   }
   // The staged extracted-fact payloads: the FHIR-staged clinical values and the
@@ -650,6 +698,19 @@ async function main() {
       scanned: 0,
       rotated: 0,
       errors: 0,
+      dropped: 0,
+    };
+    // The verbatim sibling rides the same update, but it needs its own line in
+    // the summary: the coverage check reads the results to decide which
+    // registered columns this run actually looked at, and a column that
+    // rotates without ever being named there reads as skipped.
+    const verbatim: RotationResult = {
+      table: "DocumentContentIndex",
+      field: "verbatimTextEncrypted",
+      scanned: 0,
+      rotated: 0,
+      errors: 0,
+      dropped: 0,
     };
     let cursor: string | null = null;
     // v1.27.33 (Document vault P4) — re-encrypt the string-shaped BYTEA into a
@@ -676,18 +737,19 @@ async function main() {
         if (!buf || buf.byteLength === 0) continue;
         const asString = Buffer.from(buf).toString("utf8");
         if (!shouldRotate(asString)) continue;
+        // The "verbatimTextEncrypted" column (nullable; written together with
+        // "textEncrypted" so it shares the same key) rotates in the same
+        // update when present. Read outside the try so the catch can count it.
+        const verbatimBuf = row.verbatimTextEncrypted as Uint8Array | null;
+        const hasVerbatim = Boolean(verbatimBuf && verbatimBuf.byteLength > 0);
+        if (hasVerbatim) verbatim.scanned++;
         try {
           const plaintext = decrypt(asString);
           const nextBytes = reEncryptBytes(asString);
           const searchTokens = tokeniseAndHash(plaintext);
-          // The "verbatimTextEncrypted" column (nullable; written together with
-          // "textEncrypted" so it shares the same key) rotates in the same
-          // update when present.
-          const verbatimBuf = row.verbatimTextEncrypted as Uint8Array | null;
-          const verbatimNext =
-            verbatimBuf && verbatimBuf.byteLength > 0
-              ? reEncryptBytes(Buffer.from(verbatimBuf).toString("utf8"))
-              : undefined;
+          const verbatimNext = hasVerbatim
+            ? reEncryptBytes(Buffer.from(verbatimBuf!).toString("utf8"))
+            : undefined;
           await prisma.documentContentIndex.update({
             where: { id: row.id },
             data: {
@@ -697,8 +759,10 @@ async function main() {
             },
           });
           result.rotated++;
+          if (verbatimNext) verbatim.rotated++;
         } catch (err) {
           result.errors++;
+          if (hasVerbatim) verbatim.errors++;
           console.error(
             `[DocumentContentIndex.textEncrypted] row ${row.id}: ${(err as Error).message}`,
           );
@@ -708,6 +772,7 @@ async function main() {
       if (rows.length < 100) break;
     }
     results.push(result);
+    results.push(verbatim);
   }
 
   // ───── Document preview thumbnails (Bytes column) ─────
@@ -723,18 +788,71 @@ async function main() {
     ),
   );
 
+  // ───── Whole-account backup blob (String, batched) ─────
+  // `DataBackup.data` holds `packBackupBlob()` output: AES-256-GCM ciphertext
+  // under a column that does NOT carry the `*Encrypted` suffix, which is why
+  // it sat outside rotation until v1.38.6. Missing it was the worst possible
+  // miss — the script reported zero rows remaining, the runbook told the
+  // operator that zero meant safe to drop the old key, and every stored backup
+  // became undecryptable. Walked in bounded id-cursor batches because one row
+  // is an entire compressed account, and re-sealed WITHOUT reading the
+  // plaintext, so both stored envelopes (the plain backup JSON and the
+  // `HLZ1:` gzip form) — and any later one — rotate unchanged.
+  results.push(
+    await rotateRegistryColumn("DataBackup", "data", {
+      dataBackup: prisma.dataBackup,
+    } as unknown as CorpusClient),
+  );
+
+  // ───── Idempotent-replay response cache (String, disposable) ─────
+  // `IdempotencyKey.responseBody` is the cached response body, encrypted
+  // because the PHI-returning creates echo their own decrypted DTO. Rotating
+  // it keeps a key drop from handing a replaying client a body it cannot
+  // parse; a row that cannot be read is deleted rather than counted as an
+  // error, because a cache miss only costs a re-run.
+  results.push(
+    await rotateRegistryColumn("IdempotencyKey", "responseBody", {
+      idempotencyKey: prisma.idempotencyKey,
+    } as unknown as CorpusClient),
+  );
+
   console.log("\n=== Rotation summary ===");
   let totalRotated = 0;
   let totalErrors = 0;
+  let totalDropped = 0;
   for (const r of results) {
     console.log(
-      `${r.table}.${r.field}: scanned=${r.scanned} rotated=${r.rotated} errors=${r.errors}`,
+      `${r.table}.${r.field}: scanned=${r.scanned} rotated=${r.rotated} ` +
+        `errors=${r.errors} dropped=${r.dropped}`,
     );
     totalRotated += r.rotated;
     totalErrors += r.errors;
+    totalDropped += r.dropped;
   }
-  console.log(`\nTOTAL rotated=${totalRotated} errors=${totalErrors}`);
+  console.log(
+    `\nTOTAL rotated=${totalRotated} errors=${totalErrors} dropped=${totalDropped}`,
+  );
+
+  // ───── Coverage: what was NOT looked at ─────
+  // A zero that means "nothing left" and a zero that means "never looked" read
+  // the same on the summary above, and the operator acts on that zero by
+  // dropping the old key. So say which registered columns this run actually
+  // walked, and refuse to report success if any of them was skipped.
+  const walked = new Set(results.map((r) => `${r.table}.${r.field}`));
+  const notWalked = ENCRYPTED_COLUMNS.filter(
+    (c) => !walked.has(encryptedColumnKey(c)),
+  ).map(encryptedColumnKey);
+  console.log(
+    `\nColumns walked: ${walked.size}/${ENCRYPTED_COLUMNS.length} registered`,
+  );
+  if (notWalked.length > 0) {
+    console.error(
+      `\nNOT WALKED (${notWalked.length}) — rotation is INCOMPLETE, do not ` +
+        `drop the previous key:\n  ${notWalked.join("\n  ")}`,
+    );
+  }
   await prisma.$disconnect();
+  if (notWalked.length > 0) process.exit(4);
   process.exit(totalErrors > 0 ? 3 : 0);
 }
 

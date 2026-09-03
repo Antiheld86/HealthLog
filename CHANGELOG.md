@@ -8,6 +8,14 @@
   client that decoded it as a required field needs the field made optional or
   dropped; the `timezone` it sits beside is unchanged and is what the greeting
   should be derived from.
+- The rotation script says what it did NOT look at. A zero that means "nothing
+  left" and a zero that means "never looked" read the same on a summary, and an
+  operator acts on that zero by dropping a key. Each run now ends with the
+  count of registered columns it walked, names any it skipped, and exits
+  non-zero when the two disagree. The runbook's retire-the-key step was
+  rewritten around that signal instead of around "the script ran cleanly", and
+  it tells an operator who already rotated on an older release how to get their
+  backups back.
 
 ### Fixed
 
@@ -146,8 +154,39 @@
   a backup that failed for that one account and is counted in the run's meta,
   not a restart for everybody. Backups written under either older shape still
   restore, which is checked both ways rather than asserted.
+- **Backups were outside key rotation.** `DataBackup.data` holds every weekly
+  disaster-recovery snapshot and every uploaded pack, encrypted at rest like
+  everything else — but under a column called `data`, and the rotation registry
+  was keyed on the `*Encrypted` naming convention. So the rotation script never
+  read a backup, reported zero rows remaining, and the runbook told the
+  operator that zero meant the previous key was safe to retire. Following those
+  instructions to the letter made every stored backup permanently
+  undecryptable, which is the last thing that should break. The registry now
+  covers it, rotation walks it in bounded batches (one row is a whole
+  compressed account), and it re-seals the ciphertext without reading the
+  plaintext, so both stored envelopes — the plain JSON and the compressed one —
+  come back byte-identical, as will any later one. The same sweep found one
+  more: the idempotent-replay response cache, now rotated too.
+- **Rotation crashed a third of the way through and said nothing.** Running the
+  script against a seeded database — rather than reading it — showed it dying
+  on the mood day-context note. That table is keyed on the entry it belongs to,
+  not on an `id`, and the walk asked for a column the database does not have.
+  Everything after it in the pass, the backups included, was never reached. The
+  walk now takes the model's actual key, and a check fails the build if a
+  registered column's key does not match the schema.
+- The document index's verbatim text was rotating but never appeared in the
+  summary, so the new coverage check read it as skipped. It has its own line
+  now, with its own counts.
 
 ### Internal
+
+- A column holding ciphertext is now recognised by what the code writes into
+  it, not by what it is called. A new guard traces the encryption helpers
+  through their wrappers, walks every Prisma write payload, and fails when a
+  column receives ciphertext without being registered for rotation — the
+  check that would have caught the backup blob nine releases ago. It asserts a
+  non-zero, anchored match count, so a matcher that quietly stops matching
+  fails instead of passing, and it was verified by breaking it three ways.
 
 - The column-reader sweep was wrong in both directions and had been for as long as it existed. It answers "does this column have a consumer" for every column in the schema, and it is the tool this project leans on to catch a schema change that ships its writer and forgets its reader. Its idea of a write was any `field:` key anywhere, so `where: { ticketHash }` counted as writing `ticketHash`: all twelve columns it reported were a lookup key or a cron's discovery predicate being filtered on, every one a false alarm. And because it only ever reported a column that HAD a write, a column with no write at all was the one thing it could not see. It now understands which Prisma argument a key sits in, follows a payload assembled into a variable before the call, credits raw SQL against the mapped column name, and reports a column no code touches at all as its own category. Twelve false alarms became nineteen findings that each hold up, four of them worth acting on. The matcher underneath is pinned by a test that was checked by breaking it three ways.
 - **Two columns have a reader and no writer.** The glucose unit preference is read across twenty-nine files, the dashboard and both exports and the doctor report and the FHIR resources among them, and no surface anywhere writes it, so an account cannot leave mg/dL. An import job's export date is described in the schema as parsed during unpack, is returned by the import status endpoint and is in the published contract, but the parser skips Apple's `ExportDate` element outright: the field has always been null.

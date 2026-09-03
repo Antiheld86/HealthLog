@@ -24,6 +24,17 @@
  *     reads/writes the value directly.
  *   - "bytes"  — the ciphertext is stored as a `Bytes` column; the script
  *     goes through a UTF-8 Buffer round-trip (matching the persistence layer).
+ *
+ * The `*Encrypted` suffix is NOT what makes a column belong here. It is a
+ * naming convention that happens to hold for most of them, and treating it as
+ * the definition is how `DataBackup.data` — the whole-account backup blob —
+ * went unregistered until v1.38.6: encrypted on write, invisible to
+ * a registry keyed on names, and therefore reported as "zero rows remaining"
+ * by a rotation that never looked at it. An operator following the runbook
+ * would then have dropped the old key and lost every backup. The guard test
+ * `encrypted-column-writers.test.ts` now derives the ciphertext-bearing set
+ * from the Prisma write payloads instead, so a column earns its place here by
+ * what the code stores in it, not by what it is called.
  */
 
 export type EncryptedColumnKind = "string" | "bytes";
@@ -43,6 +54,30 @@ export interface EncryptedColumn {
    * multi-megabyte blobs, so an unbounded `findMany` would balloon memory.
    */
   readonly codecField?: string;
+  /**
+   * Walk this column in bounded id-cursor batches instead of one `findMany`.
+   * Set it on any column whose rows are blobs rather than short strings — a
+   * whole-account backup compresses to megabytes, and pulling every row of
+   * them into one array is how the weekly backup pass died before
+   * `packBackupBlob` existed. `codecField` implies batching.
+   */
+  readonly batched?: boolean;
+  /**
+   * The column is a cache, not a record. Rotation still re-encrypts it, but a
+   * row it cannot read is DELETED rather than counted as an error: the value
+   * is reproducible, and leaving an undecryptable row behind would hand the
+   * next reader a body it cannot parse. Never set this on anything a user
+   * would notice the loss of.
+   */
+  readonly disposable?: boolean;
+  /**
+   * The model's primary-key field, when it is not `id`. The rotation walk
+   * selects it, orders by it and addresses each row through it, so a model
+   * keyed on something else (`MoodContext.moodEntryId`) crashes the whole run
+   * without this — Prisma rejects the unknown `id` in the select, and every
+   * column after it in the pass is left un-rotated.
+   */
+  readonly pkField?: string;
 }
 
 /**
@@ -226,7 +261,12 @@ export const ENCRYPTED_COLUMNS: readonly EncryptedColumn[] = [
   // v1.38 — the one free-text note on a mood entry's day context. Same codec
   // as the entry note beside it; one column for the whole context rather than
   // one per section, so there is one rotation entry rather than four.
-  { model: "MoodContext", field: "notesEncrypted", kind: "bytes" },
+  {
+    model: "MoodContext",
+    field: "notesEncrypted",
+    kind: "bytes",
+    pkField: "moodEntryId",
+  },
 
   // ───── v1.25 medication free-text notes (Bytes columns) ─────
   // Side-effect log note, dose-change titration note, and inventory-item
@@ -318,6 +358,34 @@ export const ENCRYPTED_COLUMNS: readonly EncryptedColumn[] = [
   // codec `DocumentContentIndex.textEncrypted` uses. A scanned medical preview
   // is PHI; rotation re-encrypts it on the standard Bytes walk.
   { model: "DocumentThumbnail", field: "thumbnailEncrypted", kind: "bytes" },
+
+  // ───── Whole-account backup blob (String, batched) ─────
+  // The weekly disaster-recovery snapshot and every manually uploaded pack.
+  // Named `data`, so the `*Encrypted` scan never saw it; the value is
+  // `packBackupBlob()` output, which is AES-256-GCM ciphertext like every
+  // other entry here. It is also the single worst column to miss: a backup
+  // that cannot be decrypted is the copy an operator reaches for precisely
+  // when nothing else works.
+  //
+  // Rotation re-encrypts the ciphertext WITHOUT touching the plaintext, so it
+  // is blind to the envelope inside: today a row is either the plain backup
+  // JSON or the `HLZ1:`-prefixed gzip form, and any further shape a future
+  // writer introduces rotates unchanged for the same reason. Batched, because
+  // a single row is megabytes.
+  { model: "DataBackup", field: "data", kind: "string", batched: true },
+
+  // ───── Idempotent-replay response cache (String, disposable) ─────
+  // The cached response body, encrypted because the PHI-returning creates echo
+  // their own decrypted DTO. Rows live 24 hours. It is registered so a key
+  // drop cannot leave a reader holding an undecryptable body, and marked
+  // disposable so an unreadable row is dropped instead of failing the run —
+  // the cache is an accelerator, and a miss only costs a re-run.
+  {
+    model: "IdempotencyKey",
+    field: "responseBody",
+    kind: "string",
+    disposable: true,
+  },
 ] as const;
 
 /** Stable `Model.field` key for a registry entry. */

@@ -127,21 +127,29 @@ describe("encrypted-column registry", () => {
   });
 
   it("covers EVERY encrypted column in prisma/schema.prisma", () => {
-    const schemaEncrypted = parseSchemaColumns()
+    const schema = parseSchemaColumns();
+    const schemaEncrypted = schema
       .filter(isEncryptedColumn)
       .map((c) => `${c.model}.${c.field}`)
       .sort();
+    const allSchemaColumns = new Set(
+      schema.map((c) => `${c.model}.${c.field}`),
+    );
     const registered = ENCRYPTED_COLUMNS.map(encryptedColumnKey).sort();
 
     // Any schema column the registry forgot is a rotation gap (data-loss
     // risk on key drop). Any registry column missing from the schema is a
     // stale entry. Both fail here.
+    //
+    // Staleness is checked against the WHOLE schema, not against the name
+    // scan: the registry legitimately carries columns this scan cannot see —
+    // `DataBackup.data` holds ciphertext under a name the convention does not
+    // reach — and the sibling guard `encrypted-column-writers.test.ts` is
+    // what finds those, by tracing the writers instead of the names.
     const missingFromRegistry = schemaEncrypted.filter(
       (k) => !registered.includes(k),
     );
-    const staleInRegistry = registered.filter(
-      (k) => !schemaEncrypted.includes(k),
-    );
+    const staleInRegistry = registered.filter((k) => !allSchemaColumns.has(k));
     expect(
       missingFromRegistry,
       "encrypted schema columns NOT wired into the rotation registry",
@@ -149,6 +157,42 @@ describe("encrypted-column registry", () => {
     expect(
       staleInRegistry,
       "registry columns that no longer exist in the schema",
+    ).toEqual([]);
+  });
+
+  it("declares the primary key for every model not keyed on `id`", () => {
+    // The rotation walk selects, orders by and addresses rows through this
+    // field. Get it wrong and Prisma rejects the select at runtime, which
+    // abandons the rest of the pass — a rotation that stops early looks the
+    // same from the outside as one that had nothing to do.
+    const src = readFileSync(SCHEMA_PATH, "utf8");
+    const primaryKey = new Map<string, string>();
+    let model: string | null = null;
+    for (const rawLine of src.split("\n")) {
+      const line = rawLine.trim();
+      const head = /^model\s+(\w+)\s*\{/.exec(line);
+      if (head) {
+        model = head[1];
+        continue;
+      }
+      if (line === "}") {
+        model = null;
+        continue;
+      }
+      if (!model) continue;
+      const field = /^(\w+)\s+[A-Za-z]\w*\??\s.*@id\b/.exec(line);
+      if (field) primaryKey.set(model, field[1]);
+    }
+
+    const wrong = (ENCRYPTED_COLUMNS as EncryptedColumn[])
+      .filter((c) => (c.pkField ?? "id") !== primaryKey.get(c.model))
+      .map(
+        (c) =>
+          `${encryptedColumnKey(c)} (schema key: ${primaryKey.get(c.model) ?? "none"})`,
+      );
+    expect(
+      wrong,
+      "registry entries whose pkField does not match the model's @id column",
     ).toEqual([]);
   });
 
