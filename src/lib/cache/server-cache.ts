@@ -35,6 +35,7 @@
  *     reaching into the private `Map`.
  */
 
+import { trackBackgroundTask } from "@/lib/logging/background-tasks";
 import type { WorkoutsProjection } from "@/lib/workouts/list-read";
 
 export interface ServerCacheOptions<T = unknown> {
@@ -416,15 +417,21 @@ export class ServerCache<T> {
         // console.error stands in for the wide-event annotation; the
         // key is logged as its djb2 hash, matching the cache-outcome
         // meta convention, so the userId segment never reaches stdout.
-        refresh.catch((err) => {
-          console.error(
-            `cache.${this.opts.name ?? "unnamed"}.refresh_failed`,
-            JSON.stringify({
-              key_hash: hashCacheKey(key),
-              error: err instanceof Error ? err.message : String(err),
-            }),
-          );
-        });
+        // Registered so the test suite can await it: the error below is a
+        // console write on a detached handle, and one that lands while a
+        // vitest worker is closing its RPC channel fails the whole run.
+        // No-op outside test.
+        trackBackgroundTask(
+          refresh.catch((err) => {
+            console.error(
+              `cache.${this.opts.name ?? "unnamed"}.refresh_failed`,
+              JSON.stringify({
+                key_hash: hashCacheKey(key),
+                error: err instanceof Error ? err.message : String(err),
+              }),
+            );
+          }),
+        );
       }
       return { value: cachedEntry.value, outcome: "stale" };
     }

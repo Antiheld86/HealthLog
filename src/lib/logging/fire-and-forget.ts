@@ -1,4 +1,5 @@
 import { annotate } from "./context";
+import { trackBackgroundTask } from "./background-tasks";
 
 /**
  * Run a best-effort background promise and leave an observable breadcrumb
@@ -22,7 +23,10 @@ import { annotate } from "./context";
  *     the raw console sink, keeping it redaction-safe by construction.
  *
  * The promise stays fire-and-forget: the caller does not await it and its
- * resolution is discarded exactly as before.
+ * resolution is discarded exactly as before. Under test the settled handle is
+ * registered with `trackBackgroundTask` so the suite setup can await it — see
+ * `./background-tasks` for why a late `console.warn` is otherwise a teardown
+ * hazard.
  *
  * @param promise The background work. May already be running.
  * @param context.action A stable `<surface>.<noun>.<verb>` label (never user
@@ -34,7 +38,7 @@ export function fireAndForget(
   promise: Promise<unknown>,
   context: { action: string; meta?: Record<string, unknown> },
 ): void {
-  void Promise.resolve(promise).catch((error: unknown) => {
+  const settled = Promise.resolve(promise).catch((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     annotate({
       meta: {
@@ -48,4 +52,6 @@ export function fireAndForget(
     // above, so nothing sensitive reaches the raw console sink.
     console.warn(`[fire-and-forget] background task failed: ${context.action}`);
   });
+
+  trackBackgroundTask(settled);
 }
