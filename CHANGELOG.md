@@ -1,6 +1,9 @@
 # Changelog
 
-## [Unreleased]
+## [1.38.7] — 2026-09-03
+
+The weekly backup actually produces a backup again. v1.38.6 stopped it
+taking the instance down when it failed, and also stopped it succeeding.
 
 ### Fixed
 
