@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Security
+
+- Two advisory floors raised. A URI parser that arrives under several
+  dependencies, the connector SDK among them, was below the fix for four
+  advisories about host confusion and request forgery through percent-encoded
+  schemes, skipped internationalised-name canonicalisation, and malformed or
+  repeated authorities. A query-string parser was below the fix for an
+  array-limit bypass and a denial of service. Both are pinned past their fixes,
+  and the dependency audit reads clean again.
+
 ### Fixed
 
 - **Twenty-eight settings a self-hoster could write down but not actually
