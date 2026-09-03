@@ -1,5 +1,34 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **A large record no longer outruns the weekly backup.** On an account with a
+  few hundred thousand readings the Sunday snapshot could not finish. It was
+  never given a time limit of its own, so it inherited the queue's fifteen
+  minutes, was killed part-way through, redelivered twice against the same
+  record, and gave up three quarters of an hour later having never completed
+  once. The reason it needed so long was memory: the whole account was built in
+  memory, serialised whole, encrypted whole, and handed to the database whole,
+  which is four full copies of the record at the same moment. The stored copy
+  is now compressed before it is encrypted, which takes an order of magnitude
+  off everything after it, and the pass releases each stage before allocating
+  the next. A seeded 445 000-reading account went from dying of memory to
+  finishing in about twenty seconds, with a stored copy of 25 MB instead of
+  322 MB. The pass also has an explicit two-hour window now, so a genuinely
+  slow disk cannot be mistaken for a broken run. The nightly off-host copy is
+  built the same way and got the same treatment; files written before this
+  still restore, and so do backups already sitting in the database.
+- **A failed backup run is now visible on the backups page.** The weekly pass
+  can stop and leave no trace: the page listed whatever copies existed, and a
+  copy from six weeks ago carries a timestamp exactly like Sunday's. The page
+  now says how old the newest scheduled copy is when it has gone past due, and
+  how the last scheduled run ended when it ended badly, with the reason the
+  queue recorded. Both are shown because they stop being available at different
+  times — a run's own record is kept for a week, the age of the newest copy for
+  as long as the copy exists.
+
 ## [1.38.4] — 2026-09-02
 
 The shared AI key reaches the provider its address names, and the image
