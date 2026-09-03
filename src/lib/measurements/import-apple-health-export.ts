@@ -308,6 +308,13 @@ export interface StreamParseInput {
    */
   onProgress?: (snapshot: ImportJobProgress) => Promise<void> | void;
   /**
+   * Called once, mid-run, with the instant Apple stamped on the archive
+   * (`<ExportDate value="..."/>`, the first child of `<HealthData>`).
+   * Never called for an archive that omits the element or writes an
+   * unreadable value. Best-effort, like `onProgress`.
+   */
+  onExportDate?: (exportedAt: Date) => Promise<void> | void;
+  /**
    * Optional override of the spot-row flush batch size. Defaults to
    * `SPOT_FLUSH_BATCH`. Lower values make the upsert path more
    * granular for tests; production runs should keep the default.
@@ -339,6 +346,7 @@ export async function streamParseExportXml(
     userTimezone,
     prisma,
     onProgress,
+    onExportDate,
     spotBatchSize = SPOT_FLUSH_BATCH,
     workoutBatchSize = WORKOUT_FLUSH_BATCH,
   } = input;
@@ -775,6 +783,21 @@ export async function streamParseExportXml(
   let pendingError: Error | null = null;
   let currentWorkout: PreparedWorkout | null = null;
 
+  // Apple stamps the archive with its own export instant as the first
+  // child of `<HealthData>`. The element used to be on the ignore list,
+  // so `ImportJob.exportedAt` — a column the status endpoint and the
+  // published contract both promise — could only ever answer null. The
+  // value is captured in the synchronous tag handler and handed to
+  // `onExportDate` from the async drain, so the worker can persist it
+  // while the run is still going rather than only on the terminal write.
+  let pendingExportDate: Date | null = null;
+  const flushExportDate = async (): Promise<void> => {
+    const stamped = pendingExportDate;
+    if (!stamped) return;
+    pendingExportDate = null;
+    if (onExportDate) await onExportDate(stamped);
+  };
+
   parser.onerror = (err) => {
     pendingError = err instanceof Error ? err : new Error(String(err));
   };
@@ -983,8 +1006,17 @@ export async function streamParseExportXml(
       return;
     }
 
+    if (name === "ExportDate") {
+      // `value` carries Apple's own format ("2026-05-15 14:32:01 +0200"),
+      // the same shape every `Record` start/end date uses. An archive
+      // without the element, or with a value the runtime cannot read,
+      // leaves the column null rather than guessing at an instant.
+      const stamped = new Date(attrs.value ?? "");
+      if (!Number.isNaN(stamped.getTime())) pendingExportDate = stamped;
+      return;
+    }
+
     if (
-      name === "ExportDate" ||
       name === "Me" ||
       name === "Correlation" ||
       name === "ActivitySummary" ||
@@ -1049,9 +1081,11 @@ export async function streamParseExportXml(
         }
         // Drain any batches the parser filled to keep memory bounded.
         const shouldFlush =
+          pendingExportDate !== null ||
           spotBatch.length >= spotBatchSize ||
           workoutBatch.length >= workoutBatchSize;
         const drain = async (): Promise<void> => {
+          await flushExportDate();
           if (spotBatch.length >= spotBatchSize) await flushSpotBatch();
           if (workoutBatch.length >= workoutBatchSize)
             await flushWorkoutBatch();
@@ -1089,6 +1123,10 @@ export async function streamParseExportXml(
 
   await pipeline(readable, sink);
   if (pendingError) throw pendingError;
+
+  // An archive small enough to arrive in a single chunk can finish
+  // before any drain ran; the stamp still has to reach the caller.
+  await flushExportDate();
 
   await emitProgress("upserting");
   // Drain any partial spot/workout batches that did not hit the flush
