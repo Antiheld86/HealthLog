@@ -74,6 +74,51 @@ export function isMaterialEvidenceChange(args: {
 }
 
 /**
+ * Whether this run releases a dismissal.
+ *
+ * Two things have to hold. The evidence must have MOVED since the dismissal,
+ * which is what `dismissedEvidenceHash` records — the only part of the
+ * snapshot that covers the whole evidence tuple rather than two of its
+ * numbers — and the move must be material by the thresholds above, so an
+ * ordinary sampling wobble does not undo a dismissal the user made on
+ * purpose.
+ *
+ * The hash also answers the case the two scalars cannot. A snapshot that
+ * carries a hash but no effect size and no sample size — a restore from a
+ * partial backup — used to be frozen dismissed forever, because the gate had
+ * no number to compare and fell through to `false` on every future run. A
+ * hash that no longer matches is still proof the evidence moved, so it
+ * releases the dismissal rather than holding it against a snapshot nobody
+ * can evaluate.
+ */
+export function shouldReleaseDismissal(args: {
+  dismissedAt: Date | null;
+  dismissedEvidenceHash: string | null;
+  dismissedEffectSize: number | null;
+  dismissedSampleSize: number | null;
+  currentEvidenceHash: string;
+  currentEffectSize: number;
+  currentSampleSize: number;
+}): boolean {
+  if (args.dismissedAt == null) return false;
+
+  // Byte-identical to what was dismissed: nothing has changed, so there is
+  // nothing to reconsider and no threshold worth evaluating.
+  if (args.dismissedEvidenceHash === args.currentEvidenceHash) return false;
+
+  if (args.dismissedEffectSize != null && args.dismissedSampleSize != null) {
+    return isMaterialEvidenceChange({
+      currentEffectSize: args.currentEffectSize,
+      currentSampleSize: args.currentSampleSize,
+      dismissedEffectSize: args.dismissedEffectSize,
+      dismissedSampleSize: args.dismissedSampleSize,
+    });
+  }
+
+  return args.dismissedEvidenceHash != null;
+}
+
+/**
  * Persist one accepted family run, retire findings no longer accepted, and
  * return the server's presentation decision for every accepted finding.
  */
@@ -123,16 +168,15 @@ export async function syncAcceptedPatterns(args: {
     const decisions = new Map<string, PatternDecision>();
     for (const item of prepared) {
       const prior = existingByKey.get(item.canonicalKey);
-      const shouldResurface =
-        prior?.dismissedAt != null &&
-        prior.dismissedEffectSize != null &&
-        prior.dismissedSampleSize != null &&
-        isMaterialEvidenceChange({
-          currentEffectSize: item.evidence.effectSize,
-          currentSampleSize: item.evidence.sampleSize,
-          dismissedEffectSize: prior.dismissedEffectSize,
-          dismissedSampleSize: prior.dismissedSampleSize,
-        });
+      const shouldResurface = shouldReleaseDismissal({
+        dismissedAt: prior?.dismissedAt ?? null,
+        dismissedEvidenceHash: prior?.dismissedEvidenceHash ?? null,
+        dismissedEffectSize: prior?.dismissedEffectSize ?? null,
+        dismissedSampleSize: prior?.dismissedSampleSize ?? null,
+        currentEvidenceHash: item.evidenceHash,
+        currentEffectSize: item.evidence.effectSize,
+        currentSampleSize: item.evidence.sampleSize,
+      });
 
       const row = await tx.correlationPattern.upsert({
         where: {
