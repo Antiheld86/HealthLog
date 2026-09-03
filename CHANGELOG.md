@@ -1,6 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [1.38.8] — 2026-09-03
+
+The heart-rate-variability tile now works for accounts whose HRV comes
+from a ring or a strap, and an account can no longer accumulate an
+unbounded pile of measurement tokens. Both from @Antiheld86.
 
 ### Changed
 
