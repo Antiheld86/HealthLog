@@ -6,8 +6,8 @@
  */
 import { type Job } from "pg-boss";
 import { recordError } from "@/lib/jobs/worker-status";
-import { buildFullBackupPayload } from "@/lib/export/full-backup-payload";
-import { encrypt } from "@/lib/crypto";
+import { buildFullBackupJson } from "@/lib/export/full-backup-payload";
+import { packBackupBlob } from "@/lib/export/backup-blob";
 import { jobDone, jobFailed, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import {
@@ -79,15 +79,21 @@ export async function handleDataBackup(
 
       let backed = 0;
       let usersFailed = 0;
+      let largestBlobBytes = 0;
       for (const user of users) {
         try {
-          const { payload } = await buildFullBackupPayload(prisma, user.id, {
-            purpose: "disaster-recovery",
-          });
-          const backupJson = JSON.stringify(payload);
-
-          // Encrypt the backup data (contains sensitive health information)
-          const encryptedBackup = encrypt(backupJson);
+          // Compressed, then encrypted (the record contains sensitive health
+          // information). Both legs live in `packBackupBlob`, which is also
+          // what the restore path reads back through.
+          const encryptedBackup = packBackupBlob(
+            await buildFullBackupJson(prisma, user.id, {
+              purpose: "disaster-recovery",
+            }),
+          );
+          largestBlobBytes = Math.max(
+            largestBlobBytes,
+            Buffer.byteLength(encryptedBackup, "utf8"),
+          );
 
           await prisma.dataBackup.upsert({
             where: {
@@ -113,6 +119,9 @@ export async function handleDataBackup(
         }
       }
 
+      // The stored size is the one number that says whether this pass is
+      // heading back towards the wall it hit before: it tracks the record.
+      evt.addMeta("data_backup_largest_blob_bytes", largestBlobBytes);
       evt.setBackground({
         task_name: "job.data_backup",
         result: { backed, total: users.length },

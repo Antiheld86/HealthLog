@@ -3,11 +3,27 @@ import { renderToStaticMarkup } from "react-dom/server";
 import de from "../../../../messages/de.json";
 import en from "../../../../messages/en.json";
 
+const healthySchedule = {
+  lastSuccessAt: "2026-09-01T03:00:00.000Z",
+  lastSuccessAgeDays: 2,
+  staleAfterDays: 10,
+  stale: false,
+  lastRun: {
+    at: "2026-09-01T03:00:12.000Z",
+    state: "completed" as const,
+    error: null,
+  },
+  lastRunFailed: false,
+};
+
 const mocks = vi.hoisted(() => ({
   mutationOptions: [] as Array<{
     onSuccess?: (data: { summary: Record<string, number> }) => void;
   }>,
   toastSuccess: vi.fn(),
+  // Mutable so one file can render both a healthy schedule and a broken one;
+  // the query mock reads it on every render.
+  queryData: { rows: [], retentionDays: 30 } as Record<string, unknown>,
 }));
 
 /**
@@ -34,7 +50,7 @@ vi.mock("sonner", () => ({
 
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({
-    data: { rows: [], retentionDays: 30 },
+    data: mocks.queryData,
     isLoading: false,
     isError: false,
   }),
@@ -69,6 +85,11 @@ import { I18nProvider } from "@/lib/i18n/context";
 import { BackupsSection } from "../backups-section";
 
 function render(locale: "en" | "de" = "en") {
+  mocks.queryData = {
+    rows: [],
+    retentionDays: 30,
+    schedule: healthySchedule,
+  };
   return renderToStaticMarkup(
     <I18nProvider initialLocale={locale}>
       <BackupsSection />
@@ -126,6 +147,68 @@ describe("BackupsSection — empty state", () => {
     expect(en.admin.section.backups.restoreDescription).toMatch(
       /instance-wide settings/i,
     );
+  });
+});
+
+/**
+ * The gap that let a weekly backup stop for a month and a half without anyone
+ * noticing: the page rendered whatever rows it had, and a copy from six weeks
+ * ago is indistinguishable from Sunday's until somebody subtracts the dates.
+ */
+describe("BackupsSection — schedule health", () => {
+  function withSchedule(schedule: Record<string, unknown>) {
+    mocks.queryData = { rows: [], retentionDays: 30, schedule };
+    return renderToStaticMarkup(
+      <I18nProvider initialLocale="en">
+        <BackupsSection />
+      </I18nProvider>,
+    );
+  }
+
+  it("stays quiet while the schedule is healthy", () => {
+    const html = render();
+    expect(html).not.toContain('data-slot="backup-schedule-notice"');
+  });
+
+  it("says so when the newest scheduled copy has gone stale", () => {
+    const html = withSchedule({
+      ...healthySchedule,
+      lastSuccessAt: "2026-07-19T03:00:00.000Z",
+      lastSuccessAgeDays: 46,
+      stale: true,
+      lastRun: null,
+      lastRunFailed: false,
+    });
+
+    expect(html).toContain('data-slot="backup-schedule-notice"');
+    expect(html).toContain("The weekly backup has stopped");
+    expect(html).toContain("46");
+  });
+
+  it("names the reason when the last scheduled run failed", () => {
+    const html = withSchedule({
+      ...healthySchedule,
+      lastRun: {
+        at: "2026-08-30T03:46:00.000Z",
+        state: "failed",
+        error: "job timed out",
+      },
+      lastRunFailed: true,
+    });
+
+    expect(html).toContain("The last scheduled backup run failed");
+    expect(html).toContain("job timed out");
+  });
+
+  it("survives a response that predates the schedule field", () => {
+    mocks.queryData = { rows: [], retentionDays: 30 };
+    expect(() =>
+      renderToStaticMarkup(
+        <I18nProvider initialLocale="en">
+          <BackupsSection />
+        </I18nProvider>,
+      ),
+    ).not.toThrow();
   });
 });
 

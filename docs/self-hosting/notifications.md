@@ -91,10 +91,8 @@ VAPID_PRIVATE_KEY="...(private key)"
 VAPID_SUBJECT="mailto:you@example.com"
 ```
 
-The database values win when both are present. The loader also accepts a
-few aliases (`WEB_PUSH_VAPID_PUBLIC_KEY`, `WEB_PUSH_PUBLIC_KEY`, and the
-private/subject equivalents) so a config copied from another deployment
-keeps working.
+The database values win when both are present. These three names are the
+only ones the loader reads.
 
 ### 3. Subscribe a device
 

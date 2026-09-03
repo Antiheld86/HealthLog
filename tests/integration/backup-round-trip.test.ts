@@ -63,6 +63,10 @@ import {
   encryptWaveformToBytes,
 } from "@/lib/withings/ecg-waveform-codec";
 import { buildFullBackupPayload } from "@/lib/export/full-backup-payload";
+import { UNREADABLE_EXPORT_MARKER } from "@/lib/export/unreadable-marker";
+import { decryptNoteFromBytes } from "@/lib/labs/store";
+import { decryptContextFromBytes } from "@/lib/labs/biomarker-store";
+import { packBackupBlob } from "@/lib/export/backup-blob";
 import { TWO_ENDED_MODELS, type TwoEndedModel } from "@/lib/export/backup-plan";
 import { POST } from "@/app/api/admin/backups/[id]/restore/route";
 
@@ -257,6 +261,27 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       unit: "kg",
       measuredAt: AT("2026-07-01T07:00:00.000Z"),
       source: "MANUAL",
+    },
+  });
+  // A DELETED reading, kept as a tombstone. It is here because the obvious way
+  // to make the weekly backup cheaper — stop exporting soft-deleted rows, which
+  // on a real record is four rows in five — is wrong, and nothing in the tree
+  // said so out loud. A tombstone inside the retention window is what tells a
+  // synced client the row is gone (`/api/sync/changes` reads exactly these) and
+  // what makes a re-sent Apple Health sample a no-op instead of a resurrection.
+  // Drop them from a disaster-recovery file and a restore quietly brings back
+  // every measurement the account ever deleted on the next device sync.
+  await prisma.measurement.create({
+    data: {
+      userId: OWNER_ID,
+      type: "PULSE",
+      value: 61,
+      unit: "bpm",
+      measuredAt: AT("2026-07-02T06:30:00.000Z"),
+      source: "APPLE_HEALTH",
+      externalId: "round-trip-deleted-sample",
+      syncVersion: 4,
+      deletedAt: AT("2026-07-20T09:15:00.000Z"),
     },
   });
   // The EVENT row an ECG strip is filed against, and the strip itself. The
@@ -1231,6 +1256,26 @@ describe("every model the plan claims two-ended survives a real restore", () => 
       purpose: "disaster-recovery",
     });
 
+    // The tombstone has to be IN the file. A disaster-recovery payload that
+    // carries only live rows is smaller and cheaper and wrong: the restore
+    // wipes the account first, so a deletion that is not in the file is a
+    // deletion the account no longer knows it made, and the next device sync
+    // re-inserts every one of those samples as fresh readings.
+    const exportedMeasurements = payload.measurements as Array<{
+      externalId: string | null;
+      deletedAt: string | null;
+      syncVersion: number;
+    }>;
+    expect(
+      exportedMeasurements.find(
+        (row) => row.externalId === "round-trip-deleted-sample",
+      ),
+      "a soft-deleted reading is missing from the disaster-recovery payload",
+    ).toMatchObject({
+      deletedAt: "2026-07-20T09:15:00.000Z",
+      syncVersion: 4,
+    });
+
     // Cascade rather than a hand-listed sweep — see the file comment.
     await prisma.user.delete({ where: { id: OWNER_ID } });
     await createOwner(prisma);
@@ -1247,7 +1292,12 @@ describe("every model the plan claims two-ended survives a real restore", () => 
       data: {
         userId: OWNER_ID,
         type: "TWO_ENDED_ROUND_TRIP",
-        data: encrypt(JSON.stringify(payload)),
+        // The envelope the weekly worker actually writes: gzip, then
+        // encrypt. The three cases further down deliberately keep the plain
+        // `encrypt(json)` form, which is what every row written before this
+        // envelope existed looks like — an operator's newest usable copy may
+        // well be one of those, so both arms have to reach the restore route.
+        data: packBackupBlob(JSON.stringify(payload)),
       },
     });
     const response = await POST(
@@ -2026,6 +2076,18 @@ describe("every model the plan claims two-ended survives a real restore", () => 
     // measurement pointer is asserted against the row the RESTORE wrote rather
     // than against the id the fixture used, because resolving to something
     // that exists is the property the reference owes.
+    const restoredTombstone = await prisma.measurement.findFirstOrThrow({
+      where: { userId: OWNER_ID, externalId: "round-trip-deleted-sample" },
+    });
+    expect(
+      {
+        deletedAt: restoredTombstone.deletedAt?.toISOString() ?? null,
+        syncVersion: restoredTombstone.syncVersion,
+      },
+      "the deleted reading came back, but not as a deletion — a tombstone " +
+        "restored without its `deletedAt` is a resurrected measurement",
+    ).toEqual({ deletedAt: "2026-07-20T09:15:00.000Z", syncVersion: 4 });
+
     const restoredMeasurement = await prisma.measurement.findFirstOrThrow({
       where: { userId: OWNER_ID, type: "WEIGHT" },
     });
@@ -2618,5 +2680,104 @@ describe("every model the plan claims two-ended survives a real restore", () => 
         effectiveDate: "2026-06-30",
       },
     });
+  });
+
+  /**
+   * A note this instance can no longer decrypt leaves the export as a marker,
+   * not as nothing.
+   *
+   * A fail-soft decrypt answers `null` on a wrong or dropped key, and in a
+   * portable file `null` is byte-for-byte what a note that was never written
+   * looks like. The restore importer then writes no note, so a note the person
+   * did write is gone and no one is told — the whole loss fits inside a
+   * fail-soft `catch` written for a list view, where returning null is right.
+   *
+   * The Coach transcript and the doctor report both refuse that trade, one
+   * with a placeholder sentence and one with a rendered flag. This asserts the
+   * lab note now does the same, and that the marker is still there after the
+   * file has been through a real restore: the ciphertext is unreadable either
+   * way, but a person opening the restored account can see that something was
+   * there rather than believing they never wrote it.
+   */
+  it("carries a lab note it cannot decrypt through the round trip as a visible marker", async () => {
+    const prisma = getPrismaClient();
+    await seedAdminSession(prisma);
+    await createOwner(prisma);
+
+    const biomarker = await prisma.biomarker.create({
+      data: { userId: OWNER_ID, name: "Ferritin", unit: "ng/mL" },
+    });
+    // Ciphertext under a key id this instance does not hold — the shape a row
+    // written before a key rotation that dropped its key has. `decrypt` is
+    // fail-closed on an unknown key id, so this throws rather than returning
+    // garbage, which is the case the soft helper swallowed.
+    const unreadable = new Uint8Array(
+      Buffer.from("v9.AAAAAAAAAAAAAAAAAAAAAAAA", "utf8"),
+    );
+    await prisma.labResult.create({
+      data: {
+        userId: OWNER_ID,
+        biomarkerId: biomarker.id,
+        analyte: "Ferritin",
+        value: 91,
+        unit: "ng/mL",
+        takenAt: AT("2026-06-30T09:00:00.000Z"),
+        noteEncrypted: unreadable,
+      },
+    });
+    await prisma.biomarker.update({
+      where: { id: biomarker.id },
+      data: { contextEncrypted: unreadable },
+    });
+
+    const { payload } = await buildFullBackupPayload(prisma, OWNER_ID, {
+      purpose: "portable-export",
+    });
+
+    const exported = payload.labResults as Array<{ note: string | null }>;
+    expect(exported).toHaveLength(1);
+    expect(exported[0].note).toContain("unreadable");
+    const exportedBiomarkers = payload.biomarkers as Array<{
+      context: string | null;
+    }>;
+    expect(exportedBiomarkers[0].context).toContain("unreadable");
+
+    await prisma.user.delete({ where: { id: OWNER_ID } });
+    await createOwner(prisma);
+
+    const backup = await prisma.dataBackup.create({
+      data: {
+        userId: OWNER_ID,
+        type: "TWO_ENDED_ROUND_TRIP",
+        data: encrypt(JSON.stringify(payload)),
+      },
+    });
+    const response = await POST(
+      new Request(`http://localhost/api/admin/backups/${backup.id}/restore`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirm: "RESTORE" }),
+      }) as never,
+      { params: Promise.resolve({ id: backup.id }) },
+    );
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).toBe(200);
+
+    const restoredLab = await prisma.labResult.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+    });
+    // Back in the column it came from, readable again because the restore
+    // re-encrypted it under the CURRENT key — and saying what happened.
+    expect(restoredLab.noteEncrypted).not.toBeNull();
+    expect(decryptNoteFromBytes(restoredLab.noteEncrypted!)).toBe(
+      UNREADABLE_EXPORT_MARKER,
+    );
+
+    const restoredBiomarker = await prisma.biomarker.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+    });
+    expect(decryptContextFromBytes(restoredBiomarker.contextEncrypted!)).toBe(
+      UNREADABLE_EXPORT_MARKER,
+    );
   });
 });

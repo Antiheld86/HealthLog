@@ -50,4 +50,44 @@ describe("prompt reads exclude tombstoned rows", () => {
     expect(intakeRead).not.toBeNull();
     expect(intakeRead![0]).toContain("deletedAt: null");
   });
+  // A soft delete has to be able to reach the CACHE GATE as well as the
+  // prompt. `buildStatusInputHash` fingerprints "how much data is there and
+  // how new is it"; a tombstoned row that still counts leaves the fingerprint
+  // unchanged, the gate re-dates yesterday's assessment, and text reasoning
+  // over a deleted reading is served as today's. The measurement arm of that
+  // same query already filters, which is what makes the two that did not so
+  // easy to miss.
+  it("the status input hash filters its mood aggregate", () => {
+    const src = read("../status-cache.ts");
+    const moodRead = src.match(
+      /moodEntry\s*\n?\s*\.aggregate\(\{[\s\S]{0,800}?where:\s*\{[^}]*\}/,
+    );
+    expect(moodRead).not.toBeNull();
+    expect(moodRead![0]).toContain("deletedAt: null");
+  });
+
+  it("the status input hash filters its custom-metric entry reads", () => {
+    const src = read("../status-cache.ts");
+    // Both the count and the newest-entry probe: either one left unfiltered
+    // keeps the fingerprint still after a delete.
+    expect(src).toMatch(
+      /_count:\s*\{\s*select:\s*\{\s*entries:\s*\{[\s\S]{0,200}?deletedAt:\s*null/,
+    );
+    const newest = src.match(
+      /entries:\s*\{\s*where:\s*\{[^}]*\}[\s\S]{0,200}?take:\s*1/,
+    );
+    expect(newest).not.toBeNull();
+    expect(newest![0]).toContain("deletedAt: null");
+  });
+
+  it("the custom-metric correlation channel filters its entry read", () => {
+    // The parent metric's own tombstone is filtered; its entries' were not,
+    // so a reading the person deleted still shaped the correlation cards.
+    const src = read("../correlation-channel-series.ts");
+    const entryRead = src.match(
+      /entries:\s*\{[\s\S]{0,400}?where:\s*\{[^}]*\}/,
+    );
+    expect(entryRead).not.toBeNull();
+    expect(entryRead![0]).toContain("deletedAt: null");
+  });
 });

@@ -109,6 +109,7 @@ import {
   canonicalPatternKey,
   isMaterialEvidenceChange,
   PATTERN_FAMILIES,
+  shouldReleaseDismissal,
   syncAcceptedPatterns,
 } from "@/lib/insights/correlation-patterns";
 
@@ -199,5 +200,139 @@ describe("correlation pattern identity and dismissal", () => {
         dismissedSampleSize: 40,
       }),
     ).toBe(true);
+  });
+});
+
+/**
+ * `dismissedEvidenceHash` was written on every dismissal and read by nothing:
+ * the gate compared effect size and sample size only. These tests pin it as a
+ * reader, in both directions.
+ */
+describe("dismissal release against the stored evidence hash", () => {
+  const DISMISSED_AT = new Date("2026-07-02T00:00:00.000Z");
+
+  it("holds a dismissal whose evidence has not moved at all", () => {
+    expect(
+      shouldReleaseDismissal({
+        dismissedAt: DISMISSED_AT,
+        dismissedEvidenceHash: "a".repeat(64),
+        dismissedEffectSize: 0.3,
+        dismissedSampleSize: 40,
+        currentEvidenceHash: "a".repeat(64),
+        currentEffectSize: 0.3,
+        currentSampleSize: 40,
+      }),
+    ).toBe(false);
+  });
+
+  it("releases a dismissal whose evidence moved materially", () => {
+    expect(
+      shouldReleaseDismissal({
+        dismissedAt: DISMISSED_AT,
+        dismissedEvidenceHash: "a".repeat(64),
+        dismissedEffectSize: 0.3,
+        dismissedSampleSize: 40,
+        currentEvidenceHash: "b".repeat(64),
+        currentEffectSize: -0.2,
+        currentSampleSize: 40,
+      }),
+    ).toBe(true);
+  });
+
+  it("holds a dismissal whose evidence moved only within the noise band", () => {
+    expect(
+      shouldReleaseDismissal({
+        dismissedAt: DISMISSED_AT,
+        dismissedEvidenceHash: "a".repeat(64),
+        dismissedEffectSize: 0.3,
+        dismissedSampleSize: 40,
+        currentEvidenceHash: "b".repeat(64),
+        currentEffectSize: 0.35,
+        currentSampleSize: 45,
+      }),
+    ).toBe(false);
+  });
+
+  it("releases a snapshot that has only a hash once that hash no longer matches", () => {
+    expect(
+      shouldReleaseDismissal({
+        dismissedAt: DISMISSED_AT,
+        dismissedEvidenceHash: "a".repeat(64),
+        dismissedEffectSize: null,
+        dismissedSampleSize: null,
+        currentEvidenceHash: "b".repeat(64),
+        currentEffectSize: 0.3,
+        currentSampleSize: 40,
+      }),
+    ).toBe(true);
+  });
+
+  it("holds a snapshot that has only a hash while that hash still matches", () => {
+    expect(
+      shouldReleaseDismissal({
+        dismissedAt: DISMISSED_AT,
+        dismissedEvidenceHash: "a".repeat(64),
+        dismissedEffectSize: null,
+        dismissedSampleSize: null,
+        currentEvidenceHash: "a".repeat(64),
+        currentEffectSize: 0.3,
+        currentSampleSize: 40,
+      }),
+    ).toBe(false);
+  });
+
+  it("holds a pattern that was never dismissed", () => {
+    expect(
+      shouldReleaseDismissal({
+        dismissedAt: null,
+        dismissedEvidenceHash: null,
+        dismissedEffectSize: null,
+        dismissedSampleSize: null,
+        currentEvidenceHash: "b".repeat(64),
+        currentEffectSize: 0.9,
+        currentSampleSize: 400,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("syncAcceptedPatterns honours the stored hash", () => {
+  beforeEach(() => {
+    rows.clear();
+    vi.clearAllMocks();
+  });
+
+  it("resurfaces a hash-only dismissal on the next run and leaves an unchanged one dismissed", async () => {
+    const first = await syncAcceptedPatterns({
+      userId: "owner-2",
+      family: PATTERN_FAMILIES.moodTagCrosstab,
+      accepted: [baseEvidence],
+      computedAt: new Date("2026-07-01T00:00:00.000Z"),
+    });
+    const canonicalKey = [...first.values()][0].canonicalKey;
+    const row = [...rows.values()][0];
+
+    // A dismissal snapshot carrying the hash and nothing else — the shape a
+    // partial restore leaves behind. It used to be frozen dismissed forever.
+    row.dismissedAt = new Date("2026-07-02T00:00:00.000Z");
+    row.dismissedEvidenceHash = row.evidenceHash;
+    row.dismissedEffectSize = null;
+    row.dismissedSampleSize = null;
+
+    const unchanged = await syncAcceptedPatterns({
+      userId: "owner-2",
+      family: PATTERN_FAMILIES.moodTagCrosstab,
+      accepted: [baseEvidence],
+    });
+    expect(unchanged.get(canonicalKey)?.dismissed).toBe(true);
+
+    const moved = await syncAcceptedPatterns({
+      userId: "owner-2",
+      family: PATTERN_FAMILIES.moodTagCrosstab,
+      accepted: [{ ...baseEvidence, pValue: 0.002 }],
+    });
+    expect(moved.get(canonicalKey)?.dismissed).toBe(false);
+    expect(row.dismissedAt).toBeNull();
+    expect(row.dismissedEvidenceHash).toBeNull();
   });
 });

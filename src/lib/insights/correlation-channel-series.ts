@@ -288,7 +288,10 @@ export async function fetchCustomMetricBehaviourSeries(
       name: true,
       unit: true,
       entries: {
-        where: { measuredAt: { gte: since } },
+        // The parent metric's tombstone is filtered above; the entries' own
+        // one has to be too, or a reading the person deleted keeps shaping
+        // the correlation they are shown.
+        where: { deletedAt: null, measuredAt: { gte: since } },
         orderBy: [{ measuredAt: "desc" }, { id: "desc" }],
         take: 2000,
         select: { value: true, unit: true, measuredAt: true },

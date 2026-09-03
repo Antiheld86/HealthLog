@@ -136,7 +136,8 @@ export const notificationTransportPaths: NonNullable<
       description:
         "Stores a browser Push subscription for the caller and, on the first one, creates the account's Web Push notification channel enabled. Upsert by endpoint: re-posting the same endpoint refreshes its keys rather than duplicating the row, so a client can send this on every page load without checking first.\n\n" +
         "The subscription keys are encrypted at rest. The endpoint is validated as HTTPS and as a public host before anything is written — the push library dials it later through its own fetch, outside the shared egress wrapper, so input time is where that has to be caught.\n\n" +
-        "Body capped at 64 KB. A rejected subscription answers the standard multi-issue 422, so a client can tell a non-HTTPS endpoint from an internal-host one from a missing key. The issue list carries `path`, `code` and `message` and never the rejected value — neither the endpoint nor the subscription keys are echoed back.",
+        "Body capped at 64 KB. A rejected subscription answers the standard multi-issue 422, so a client can tell a non-HTTPS endpoint from an internal-host one from a missing key. The issue list carries `path`, `code` and `message` and never the rejected value — neither the endpoint nor the subscription keys are echoed back.\n\n" +
+        "An operator can switch Web Push off for the whole instance. While that switch is off this answers 403 before it reads the body, and no subscription and no channel row are created. Read the switch from `GET /api/settings/global-services` and hide the subscribe control rather than retrying.",
       requestBody: {
         required: true,
         content: { "application/json": { schema: webPushSubscribeRequest } },
@@ -152,6 +153,11 @@ export const notificationTransportPaths: NonNullable<
               ),
             },
           },
+        },
+        "403": {
+          description:
+            "The operator switched Web Push off for this instance. Nothing was stored.",
+          content: { "application/json": { schema: errorEnvelope } },
         },
         "413": {
           description: "Request body exceeds 65536 bytes. Nothing was stored.",

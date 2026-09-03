@@ -1,6 +1,9 @@
 # Changelog
 
-## [Unreleased]
+## [1.38.5] — 2026-09-03
+
+The weekly backup finishes again, the dashboard stops scanning the two
+largest tables, and several settings now do what they say.
 
 ### Security
 
@@ -14,6 +17,155 @@
 
 ### Fixed
 
+- **A large record no longer outruns the weekly backup.** On an account with a
+  few hundred thousand readings the Sunday snapshot could not finish. It was
+  never given a time limit of its own, so it inherited the queue's fifteen
+  minutes, was killed part-way through, redelivered twice against the same
+  record, and gave up three quarters of an hour later having never completed
+  once. The reason it needed so long was memory: the whole account was built in
+  memory, serialised whole, encrypted whole, and handed to the database whole,
+  which is four full copies of the record at the same moment. The stored copy
+  is now compressed before it is encrypted, which takes an order of magnitude
+  off everything after it, and the pass releases each stage before allocating
+  the next. A seeded 445 000-reading account went from dying of memory to
+  finishing in about twenty seconds, with a stored copy of 25 MB instead of
+  322 MB. The pass also has an explicit two-hour window now, so a genuinely
+  slow disk cannot be mistaken for a broken run. The nightly off-host copy is
+  built the same way and got the same treatment; files written before this
+  still restore, and so do backups already sitting in the database.
+- **A failed backup run is now visible on the backups page.** The weekly pass
+  can stop and leave no trace: the page listed whatever copies existed, and a
+  copy from six weeks ago carries a timestamp exactly like Sunday's. The page
+  now says how old the newest scheduled copy is when it has gone past due, and
+  how the last scheduled run ended when it ended badly, with the reason the
+  queue recorded. Both are shown because they stop being available at different
+  times — a run's own record is kept for a week, the age of the newest copy for
+  as long as the copy exists.
+- **Mood correlations no longer call five days of noise a strong finding.** The
+  mood page painted a "Strong" or "Moderate" badge on a mood-versus-sleep,
+  activity, pulse, weight or blood-pressure card as soon as five days had been
+  paired, with the day count and the coefficient tucked behind an info icon.
+  Five points sloping the right way by chance is not a finding, and the rest of
+  the app has refused to call it one for a while: the weight, blood-pressure
+  and mood status surfaces all require at least twenty paired days and a result
+  that a significance test says is unlikely to be chance. The mood page now
+  requires the same. Fewer cards will show a coefficient, and the ones that do
+  mean something. A card that cannot show one says which of the two it is: how
+  many of the twenty days you have so far, or that twenty days went by and
+  nothing stood out. Those used to look identical.
+- **A medication with no schedule no longer reports perfect adherence.** If you
+  saved a medication without a dose time, the insights list, the blood-pressure
+  read and the medication-compliance summary all showed it at 100 percent and
+  folded that into your average, because nothing was expected of it so nothing
+  could be missed. It was never an adherence figure, and it made every other
+  medication's average look better than it was. Such a medication is now left
+  out of adherence entirely, which is what the doctor report has always done.
+  Add a schedule and it comes back.
+- **A day you never logged is no longer counted as a day you took nothing.** The
+  chart pairing blood-pressure medication continuity against your systolic
+  readings treated every day without an intake record as a measured zero, so a
+  week away from the app read as a week off your medication and dragged the
+  relationship between the two around. Only days that carry an intake record
+  are used now. A dose you marked as skipped is still a real zero and still
+  counts; a day you simply did not open the app is not in the chart at all.
+- **A lab note this instance cannot decrypt survives an export instead of
+  vanishing.** If your encryption key was rotated and the old one dropped
+  before every row had moved, a lab note or a biomarker context written under
+  the old key came out of a data export as empty. In the file that is
+  indistinguishable from a note you never wrote, so restoring the export
+  finished the job and the text was gone with nothing to show it had been
+  there. Both now export as a short marker saying the text was encrypted with
+  a key this instance no longer holds, and the marker survives a restore. The
+  original text is still unrecoverable without the old key; what changes is
+  that you can see something was lost.
+- **A deleted mood entry or custom-metric reading now counts as deleted in the
+  AI surfaces.** Deleting a reading left it in place with a tombstone, and
+  three reads had not been told to skip tombstones: the correlation channel
+  built from a custom metric kept using deleted readings, and the check that
+  decides whether an AI assessment is still current could not see a mood
+  deletion or a custom-metric deletion at all, so yesterday's text was re-dated
+  and served as today's over data you had removed. All three now skip deleted
+  rows.
+- **Twenty-eight settings a self-hoster could write down but not actually
+  change.** The `environment:` block in `docker-compose.yml` is a whitelist:
+  compose reads `.env` for `${VAR}` substitution, so a value set there looks
+  configured, but a variable the block does not name never reaches the app.
+  Everything below was read by the server and missing from that list, so the
+  default silently stood no matter what was in `.env`. Now forwarded, each
+  with a line in `.env.production.example` saying what it does and when to
+  reach for it: `DEMO_MODE`; the four log knobs (`LOG_LEVEL`,
+  `LOG_SAMPLE_RATE`, `LOG_SLOW_THRESHOLD_MS`, `LOG_INCLUDE_STACK`) and log
+  shipping (`LOKI_ENDPOINT`, `LOKI_USERNAME`, `LOKI_PASSWORD`);
+  `DATABASE_STATEMENT_TIMEOUT_MS`; four retention and alerting windows
+  (`COACH_MESSAGE_RETENTION_DAYS`, `HOST_METRIC_RETENTION_DAYS`,
+  `DENSE_INTRADAY_RETENTION_ENABLED`, `INTEGRATION_FAILURE_ALERT_THRESHOLD`);
+  `TELEGRAM_WEBHOOK_SECRET`; `NIGHTSCOUT_PRIVATE_ORIGINS`; the three callback
+  overrides `WITHINGS_REDIRECT_URI`, `FITBIT_REDIRECT_URI` and
+  `GOOGLE_HEALTH_REDIRECT_URI`; both Open-Meteo endpoints;
+  `ADMIN_AI_BASE_URL_ALLOWLIST`, `CODEX_MODEL`, `CODEX_MODEL_FALLBACK_CHAIN`
+  and `COACH_EXPERIMENT_VERDICT`; `APNS_KEY`, `APNS_KEY_FILE` and
+  `APNS_PRODUCTION`; and `DASHBOARD_SSR_PREFETCH`. The Coach retention window
+  matters twice over — the Data & Privacy page quotes it back to the user, so
+  an instance keeping conversations for 90 days now says 90 instead of
+  repeating the default. A Codex slug rotation is likewise something an
+  operator can now ride out by pinning a model, rather than waiting for a
+  release.
+- **`APNS_KEY` and `APNS_KEY_FILE` work where the documentation always said
+  they did.** The example file and the manifest both describe a precedence
+  chain of `APNS_KEY_B64` before `APNS_KEY` before `APNS_KEY_FILE`, but only
+  the first ever reached the container, so an operator who chose either of the
+  other two got a silently disabled APNs and no explanation.
+- **The Web Push key loader no longer advertises names it cannot read.** Six
+  `WEB_PUSH_*` aliases and a `NEXT_PUBLIC_VAPID_PUBLIC_KEY` one sat behind the
+  three real `VAPID_*` variables. None was ever on the compose whitelist and
+  none appeared in any example file, so under the bundled stack a value set
+  under those names could not arrive — an escape hatch that had never been
+  open. They are gone, and the self-hosting guide no longer mentions them. The
+  VAPID section of the example file also carried a note saying the three real
+  names were absent from the whitelist; they have been on it since v1.17.1.
+- **A test now answers the question instead of a comment on each entry.** The
+  whitelist is derived from the compose file and the read set from the source
+  — including the four modules that resolve a variable name through a helper,
+  which a plain search for `process.env.` does not see at all. A variable read
+  without being forwarded fails the build unless it carries a written reason
+  why forwarding it would be wrong. Thirteen do: build stamps, values the
+  runtime supplies, two spellings of a knob that already reaches the container
+  through `DATABASE_URL`, three that only ever run in CI, and the dashboard
+  snapshot flag, which is compiled into the client bundle and so cannot be
+  steered from a running container at all. This is the second time the class
+  has shipped; v1.5.2 closed one instance of it by hand.
+- **A dismissed correlation finding comes back when its evidence has really
+  moved.** Dismissing a finding stores a fingerprint of the evidence behind it,
+  and the check that decides whether to raise it again never read that
+  fingerprint; it compared two of the numbers instead. A dismissal restored
+  from a backup that carried the fingerprint but not those numbers could not be
+  released by anything and stayed hidden for good. The fingerprint is read now:
+  evidence that has not moved at all is settled without going further, and a
+  dismissal with no numbers to measure against is released once the fingerprint
+  stops matching. A dismissal still survives ordinary sampling noise, which is
+  the whole point of it.
+- **The five assistant switches save when they are sent to the general admin
+  settings endpoint.** That endpoint accepted them, answered 200 and stored
+  nothing; sent on their own they came back as "no valid fields". An operator
+  scripting their settings over the one endpoint had no way to tell the
+  difference between a switch that was written and one that was dropped. They
+  are written now, and echoed in the response so the write reads back. The
+  dedicated endpoint the admin console uses was never affected.
+
+### Security
+
+- **A notification channel the operator switched off stops delivering.**
+  Telegram, ntfy and Web Push each carry an instance-wide switch in admin
+  settings. Switching one off only hid its setup card: every account that had
+  already configured the channel kept receiving on it, for as long as the
+  channel was configured. The switch now holds where it has to, at delivery. A
+  dispatch on a channel that is off sends nothing and writes the skip to the
+  delivery ledger with a reason, so the admin notification diagnostics name the
+  cause instead of showing a gap. Accounts keep their own channel settings
+  untouched, so switching a channel back on restores delivery without anyone
+  re-enabling anything. Turning such a channel on from the user side is now
+  refused with a message that says why, rather than a toggle that flips and
+  then delivers nothing.
 - **The dashboard opens faster on accounts with years of readings.** Two of the
   reads behind the metric tiles were doing far more work than the handful of
   rows they return. The first asked for the newest reading of every metric by
@@ -28,6 +180,38 @@
   and the second from 6.9 ms to 1.6 ms, and both stop growing with the size of
   the archive. Nothing about the tiles changes: same numbers, same order, same
   metrics.
+- **The check that watches for ungated module routes now watches every
+  module.** It walked a hand-written list of route trees, and the list had
+  stopped keeping up: the Coach tree, the environmental-context tree, the
+  mental-health screeners, the inbound-document vault and the MCP credential
+  surface all shipped an API tree the check never looked at. Nothing was
+  leaking — every route in those trees already refuses when the module is off,
+  and the doctor-report export was gated too — but a green run was saying
+  something narrower than it appeared to say, which is how the FHIR routes once
+  sat in a green bucket while serving the whole record. The trees are declared
+  per module now, so a new module cannot be added without saying where its
+  routes live, and a directory named after a module is found on disk rather
+  than remembered. For a self-hoster this changes no behaviour today; it is the
+  difference between a module switch that is enforced and one that is only
+  believed to be.
+
+### Security
+
+- **Every webhook verb that checks the shared secret is rate-limited now, not
+  just the one that carries data.** The Withings entrypoints, the Telegram bot
+  webhook and the Coolify deploy hook all limited their POST and left the
+  reachability verbs — the GET and HEAD a webhook UI sends to confirm the URL
+  before saving it — comparing the same secret with nothing in front of them.
+  Those verbs answer 200 for the right secret and 401 for a wrong one, so
+  unlimited they were a free guessing machine against the callback token of an
+  instance whose URL is known, and a free load channel besides. The comparison
+  was already constant-time, which hides how long the check took but not what
+  it answered. Each verb now runs the per-source limit its POST sibling used,
+  on the same bucket, before it looks at the secret. Nothing changes for a
+  legitimate subscription: Withings, Telegram and Coolify send one or two
+  probes, far below the limit. A new guard walks every webhook route and fails
+  the build if a verb reaches a secret comparison without the limiter in front
+  of it, so the next verb added to one of these files cannot repeat this.
 
 ## [1.38.4] — 2026-09-02
 

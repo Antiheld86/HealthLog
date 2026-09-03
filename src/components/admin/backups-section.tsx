@@ -48,6 +48,7 @@ import { ListRow } from "@/components/ui/list-row";
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import type { BackupRow, BackupsList } from "@/types/backups";
+import type { BackupScheduleStatus } from "@/lib/jobs/backup-schedule-status";
 import type {
   MissingBackupSection,
   RestoreSkipSummary,
@@ -560,6 +561,71 @@ export function RestoreSkipReport({
   );
 }
 
+/**
+ * Says out loud whether the SCHEDULE is still alive.
+ *
+ * The weekly pass on the maintainer's own instance stopped producing copies
+ * and nothing surfaced it for a month and a half: the table listed the rows it
+ * had, each with an ordinary timestamp, and a copy from six weeks ago reads
+ * exactly like one made on Sunday until somebody does the subtraction. Two
+ * independent facts are shown, because they fail at different times — the age
+ * of the newest scheduled copy never ages out, while the run's own outcome
+ * carries the reason ("job timed out") and survives only as long as pg-boss
+ * keeps the row.
+ *
+ * Not dismissible: it reflects live state, so the only way to clear it is to
+ * make a backup succeed.
+ */
+function ScheduleHealthNotice({
+  schedule,
+}: {
+  schedule: BackupScheduleStatus;
+}) {
+  const { t } = useTranslations();
+  const fmt = useFormatters();
+  if (!schedule.stale && !schedule.lastRunFailed) return null;
+
+  return (
+    <div
+      role="alert"
+      data-slot="backup-schedule-notice"
+      className="border-destructive/40 bg-destructive/10 rounded-md border px-3 py-2 text-sm"
+    >
+      <div className="flex items-start gap-2">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+        <div>
+          <p className="font-medium">
+            {schedule.stale
+              ? t("admin.section.backups.scheduleStaleTitle")
+              : t("admin.section.backups.scheduleFailedTitle")}
+          </p>
+          {schedule.stale ? (
+            <p className="text-xs">
+              {t("admin.section.backups.scheduleStaleDescription", {
+                days: schedule.lastSuccessAgeDays ?? 0,
+                threshold: schedule.staleAfterDays,
+              })}
+            </p>
+          ) : null}
+          {schedule.lastRunFailed && schedule.lastRun ? (
+            <p className="text-xs">
+              {t("admin.section.backups.scheduleFailedDescription", {
+                when: fmt.dateTime(schedule.lastRun.at),
+                reason:
+                  schedule.lastRun.error ||
+                  t("admin.section.backups.scheduleFailedNoReason"),
+              })}
+            </p>
+          ) : null}
+          <p className="text-muted-foreground mt-2 text-xs">
+            {t("admin.section.backups.scheduleRemedy")}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function BackupsSection() {
   const { t } = useTranslations();
   const fmt = useFormatters();
@@ -832,6 +898,10 @@ export function BackupsSection() {
           </p>
         }
       />
+
+      {data?.schedule ? (
+        <ScheduleHealthNotice schedule={data.schedule} />
+      ) : null}
 
       {/* Upload card — separate from the table so admins can ingest a
           backup file independently of any existing rows. The visible

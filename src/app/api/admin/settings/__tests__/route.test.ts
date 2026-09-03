@@ -482,3 +482,134 @@ describe("PUT /api/admin/settings", () => {
     });
   });
 });
+
+/**
+ * The five assistant flags were accepted by `adminSettingsSchema` and then
+ * dropped on the floor: sending one alone answered 422 ("No valid fields"),
+ * sending it alongside a real field answered 200 and stored nothing. The
+ * schema comment promised the opposite, so the route was brought up to the
+ * contract rather than the contract down to the route.
+ */
+describe("PUT /api/admin/settings — assistant flags", () => {
+  const STORED = {
+    registrationEnabled: true,
+    mfaRequired: false,
+    defaultLocale: "de",
+    telegramGlobal: true,
+    ntfyGlobal: true,
+    webPushGlobal: true,
+    webPushVapidPublicKey: null,
+    webPushVapidPrivateKeyEncrypted: null,
+    webPushVapidSubject: null,
+    apiGlobal: true,
+    umamiEnabled: false,
+    umamiScriptUrl: null,
+    umamiWebsiteId: null,
+    glitchtipEnabled: false,
+    glitchtipDsn: null,
+    glitchtipEnvironment: null,
+    reminderLateMinutes: 120,
+    reminderMissedMinutes: 240,
+    documentMaxFileBytes: 26_214_400,
+    documentQuotaBytes: BigInt(1_073_741_824),
+    defaultUserTimezone: null,
+    assistantEnabled: true,
+    assistantCoachEnabled: false,
+    assistantBriefingEnabled: true,
+    assistantInsightStatusEnabled: true,
+    assistantCorrelationsEnabled: true,
+  };
+
+  beforeEach(() => {
+    vi.mocked(prisma.appSettings.upsert).mockResolvedValue(STORED as never);
+  });
+
+  it("persists a lone assistant flag instead of answering 'No valid fields'", async () => {
+    const res = await PUT(jsonReq({ assistantCoachEnabled: false }));
+
+    expect(res.status).toBe(200);
+    expect(prisma.appSettings.upsert).toHaveBeenCalledTimes(1);
+    const args = vi.mocked(prisma.appSettings.upsert).mock.calls[0]?.[0] as {
+      update: Record<string, unknown>;
+    };
+    expect(args.update).toEqual({ assistantCoachEnabled: false });
+  });
+
+  it("persists an assistant flag sent alongside an unrelated field", async () => {
+    const res = await PUT(
+      jsonReq({ registrationEnabled: false, assistantCoachEnabled: false }),
+    );
+
+    expect(res.status).toBe(200);
+    const args = vi.mocked(prisma.appSettings.upsert).mock.calls[0]?.[0] as {
+      update: Record<string, unknown>;
+    };
+    expect(args.update).toEqual({
+      registrationEnabled: false,
+      assistantCoachEnabled: false,
+    });
+  });
+
+  it("echoes the stored flags so a scripted write reads back", async () => {
+    const res = await PUT(jsonReq({ assistantCoachEnabled: false }));
+    const body = (await res.json()) as { data: Record<string, unknown> };
+
+    expect(body.data).toMatchObject({
+      assistantEnabled: true,
+      assistantCoachEnabled: false,
+      assistantBriefingEnabled: true,
+      assistantInsightStatusEnabled: true,
+      assistantCorrelationsEnabled: true,
+    });
+  });
+
+  it("audits the flag it changed", async () => {
+    await PUT(jsonReq({ assistantCorrelationsEnabled: false }));
+
+    expect(auditLog).toHaveBeenCalledWith(
+      "admin.settings.update",
+      expect.objectContaining({
+        details: expect.objectContaining({
+          assistantCorrelationsEnabled: false,
+        }),
+      }),
+    );
+  });
+
+  it("still refuses an unknown flag-shaped key", async () => {
+    const res = await PUT(jsonReq({ assistantNotAThing: false }));
+    expect(res.status).toBe(422);
+    expect(prisma.appSettings.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/admin/settings — assistant flags", () => {
+  it("defaults every flag to enabled when the row is absent", async () => {
+    vi.mocked(prisma.appSettings.findUnique).mockResolvedValue(null);
+    const res = await GET();
+    const body = (await res.json()) as { data: Record<string, unknown> };
+
+    expect(body.data).toMatchObject({
+      assistantEnabled: true,
+      assistantCoachEnabled: true,
+      assistantBriefingEnabled: true,
+      assistantInsightStatusEnabled: true,
+      assistantCorrelationsEnabled: true,
+    });
+  });
+
+  it("surfaces the stored flags", async () => {
+    vi.mocked(prisma.appSettings.findUnique).mockResolvedValue({
+      assistantEnabled: false,
+      assistantCoachEnabled: false,
+    } as never);
+    const res = await GET();
+    const body = (await res.json()) as { data: Record<string, unknown> };
+
+    expect(body.data).toMatchObject({
+      assistantEnabled: false,
+      assistantCoachEnabled: false,
+      assistantBriefingEnabled: true,
+    });
+  });
+});

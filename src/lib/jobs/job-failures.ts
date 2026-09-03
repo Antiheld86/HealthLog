@@ -98,7 +98,11 @@ export async function readFailingQueues(
         max(completed_on) AS last_failed_at,
         (
           array_agg(
-            COALESCE(output->>'message', output::text)
+            COALESCE(
+              output->>'message',
+              output->'value'->>'message',
+              output::text
+            )
             ORDER BY completed_on DESC NULLS LAST
           )
         )[1] AS last_error
@@ -120,6 +124,75 @@ export async function readFailingQueues(
   } catch {
     // No `pgboss` schema (web-only deployment) or no permission to read it.
     // Absence of a queue is not a failing queue, and it is not zero either.
+    return null;
+  }
+}
+
+/** The terminal state pg-boss recorded for the newest run of one queue. */
+export interface LastQueueRun {
+  /** ISO instant the run reached its terminal state. */
+  at: string;
+  /** `failed` covers both a thrown handler and an expired (killed) job. */
+  state: "completed" | "failed" | "cancelled";
+  /** The failure text, redacted and truncated. Null when the run succeeded. */
+  error: string | null;
+}
+
+/**
+ * The newest terminal run of one queue, whatever its outcome.
+ *
+ * `readFailingQueues` answers "what broke recently" and is deliberately scoped
+ * to a 72-hour window, which is the right shape for a status page watching
+ * thirty queues that tick by the minute. It is the wrong shape for a WEEKLY
+ * pass: a Sunday-night failure has fallen out of the window by Wednesday, so a
+ * job that fails every single week is visible for three days in seven and
+ * invisible for four. This reader takes the newest run instead of a window, so
+ * a weekly queue's last outcome is readable right up until the next one.
+ *
+ * Bounded by pg-boss's own retention: terminal rows live `deletion_seconds`
+ * (seven days by default) past completion, so `null` here means "no run row
+ * survives", which is not the same as "the pass never ran". Callers pair it
+ * with a fact that does not age out — for backups, the age of the newest
+ * stored copy.
+ */
+export async function readLastQueueRun(
+  queue: string,
+): Promise<LastQueueRun | null> {
+  try {
+    const rows = await prisma.$queryRaw<
+      Array<{ state: string; completed_on: Date | null; output: string | null }>
+    >`
+      SELECT
+        state,
+        completed_on,
+        -- pg-boss wraps a thrown value: an expired job's row reads
+        -- {"value":{"message":"job timed out"}}, so a plain ->>'message'
+        -- misses it and the operator gets raw JSON instead of the sentence.
+        COALESCE(
+          output->>'message',
+          output->'value'->>'message',
+          output::text
+        ) AS output
+      FROM pgboss.job
+      WHERE name = ${queue}
+        AND state IN ('completed', 'failed', 'cancelled')
+        AND completed_on IS NOT NULL
+      ORDER BY completed_on DESC
+      LIMIT 1
+    `;
+    const row = rows[0];
+    if (!row || row.completed_on === null) return null;
+    const state =
+      row.state === "failed" || row.state === "cancelled"
+        ? row.state
+        : "completed";
+    return {
+      at: row.completed_on.toISOString(),
+      state,
+      error: state === "completed" ? null : presentError(row.output),
+    };
+  } catch {
+    // No `pgboss` schema (web-only deployment) or no permission to read it.
     return null;
   }
 }

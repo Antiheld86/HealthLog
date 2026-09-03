@@ -4,16 +4,29 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   buildFullBackupPayload: vi.fn(),
-  encrypt: vi.fn((value: string) => value),
+  packBlob: vi.fn((value: string) => value),
   getWorkerPrisma: vi.fn(),
   upsert: vi.fn(),
 }));
 
+// The handler takes the already-serialised form; the stand-in serialises
+// whatever the payload mock was told to return, so this file keeps stubbing
+// and asserting the PAYLOAD, which is what it is about.
 vi.mock("@/lib/export/full-backup-payload", () => ({
   buildFullBackupPayload: mocks.buildFullBackupPayload,
+  buildFullBackupJson: async (...args: unknown[]) =>
+    JSON.stringify(
+      ((await mocks.buildFullBackupPayload(...args)) as { payload: unknown })
+        .payload,
+    ),
 }));
 
-vi.mock("@/lib/crypto", () => ({ encrypt: mocks.encrypt }));
+// The envelope is exercised end-to-end in
+// `src/lib/export/__tests__/backup-blob.test.ts`; here it stays transparent so
+// the stored bytes can be read back as JSON.
+vi.mock("@/lib/export/backup-blob", () => ({
+  packBackupBlob: mocks.packBlob,
+}));
 
 vi.mock("@/lib/logging/background", () => ({
   withBackgroundEvent: vi.fn(

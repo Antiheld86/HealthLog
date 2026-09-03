@@ -15,10 +15,12 @@ import { auditLog } from "@/lib/auth/audit";
 import { annotate } from "@/lib/logging/context";
 import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { checkRateLimit } from "@/lib/rate-limit";
+import {
+  DATA_BACKUP_QUEUE,
+  DATA_BACKUP_SEND_OPTIONS,
+} from "@/lib/jobs/data-backup-policy";
 
 export const dynamic = "force-dynamic";
-
-const DATA_BACKUP_QUEUE = "data-backup";
 
 export const POST = apiHandler(async (request: NextRequest) => {
   const { user: admin } = await requireAdmin();
@@ -57,9 +59,14 @@ export const POST = apiHandler(async (request: NextRequest) => {
     throw new HttpError(503, "Background worker is not running");
   }
 
-  const jobId = await boss.send(DATA_BACKUP_QUEUE, {
-    triggeredAt: new Date().toISOString(),
-  });
+  // Same expiration window as the weekly cron. An ad-hoc snapshot runs the
+  // identical pass over the identical record, so it must not silently keep the
+  // 15-minute queue default the cron was rescued from.
+  const jobId = await boss.send(
+    DATA_BACKUP_QUEUE,
+    { triggeredAt: new Date().toISOString() },
+    DATA_BACKUP_SEND_OPTIONS,
+  );
 
   annotate({ meta: { job_id: jobId ?? null } });
 

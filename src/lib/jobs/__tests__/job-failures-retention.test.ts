@@ -26,4 +26,16 @@ describe("pg-boss failed-row ledger retention", () => {
       PG_BOSS_FAILED_ROW_AVAILABILITY_HOURS,
     );
   });
+
+  it("pins the queue defaults the data-backup window had to escape", () => {
+    const plans = readFileSync(join(PG_BOSS_ROOT, "dist/plans.js"), "utf8");
+
+    // These two lines are the whole story behind the weekly backup's "job
+    // timed out": a pass with no send options gets fifteen minutes and two
+    // redeliveries, so a snapshot that cannot finish in fifteen minutes gives
+    // up 45 minutes later having never once completed. If a pg-boss upgrade
+    // changes either default, `DATA_BACKUP_SEND_OPTIONS` deserves a re-read.
+    expect(plans).toContain("expire_seconds: FIFTEEN_MINUTES");
+    expect(plans).toContain("retry_limit: 2");
+  });
 });

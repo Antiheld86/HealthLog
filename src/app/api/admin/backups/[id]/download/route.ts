@@ -19,7 +19,7 @@ import { prisma } from "@/lib/db";
 import { apiHandler, HttpError, requireAdmin } from "@/lib/api-handler";
 import { apiError, getClientIp } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
-import { decrypt } from "@/lib/crypto";
+import { unpackBackupBlob } from "@/lib/export/backup-blob";
 import { annotate } from "@/lib/logging/context";
 import { parseBackupPayload } from "@/lib/validations/backup";
 
@@ -52,7 +52,7 @@ export const GET = apiHandler(
 
     let plaintext: string;
     try {
-      plaintext = decrypt(backup.data);
+      plaintext = unpackBackupBlob(backup.data);
     } catch (err) {
       // Decryption failure is rare but real — a rotated/missing key, or a
       // corrupted blob from a partially-failed write. Surface it as a 500

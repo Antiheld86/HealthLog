@@ -317,6 +317,26 @@ function serialiseMoodContext(
 }
 
 /**
+ * The same payload, already serialised, with the object graph released.
+ *
+ * Its own frame on purpose, and both backup jobs go through it. The payload
+ * graph is the largest thing either job allocates — on an account with a few
+ * hundred thousand measurements it is several hundred megabytes of small
+ * objects — and neither job wants anything but the string. Returning from here
+ * makes the graph unreachable before the compress-and-encrypt step allocates
+ * anything of its own, which is part of why the weekly pass now fits in
+ * memory. Inlining these two statements back into a caller quietly undoes it.
+ */
+export async function buildFullBackupJson(
+  prisma: PrismaClient,
+  userId: string,
+  options: FullBackupOptions = {},
+): Promise<string> {
+  const { payload } = await buildFullBackupPayload(prisma, userId, options);
+  return JSON.stringify(payload);
+}
+
+/**
  * Build the canonical full-backup payload for `userId`. Portable exports omit
  * tombstones and document ciphertext; disaster-recovery payloads preserve
  * both so weekly and off-host snapshots share one restorable wire format.

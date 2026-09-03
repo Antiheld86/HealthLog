@@ -26,12 +26,19 @@ vi.mock("@/lib/api-handler", () => ({
 
 vi.mock("@/lib/db", () => ({
   prisma: {
+    // The route reads the operator's instance-wide Web Push switch before it
+    // touches the body; the default stub leaves it on so these cases keep
+    // asserting the validation refusals they were written for.
+    appSettings: { findUnique: vi.fn() },
     pushSubscription: { upsert: vi.fn(), deleteMany: vi.fn() },
     notificationChannel: { findFirst: vi.fn(), create: vi.fn() },
   },
 }));
 
-vi.mock("@/lib/logging/context", () => ({ annotate: vi.fn() }));
+vi.mock("@/lib/logging/context", () => ({
+  annotate: vi.fn(),
+  getEvent: vi.fn(() => null),
+}));
 
 vi.mock("@/lib/crypto", () => ({ encrypt: (v: string) => `enc(${v})` }));
 
@@ -67,6 +74,12 @@ type Handler = (r: Request) => Promise<Response>;
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(requireAuth).mockResolvedValue({ user: USER } as never);
+  vi.mocked(prisma.appSettings.findUnique).mockResolvedValue({
+    telegramGlobal: true,
+    ntfyGlobal: true,
+    webPushGlobal: true,
+    apiGlobal: true,
+  } as never);
 });
 
 describe("POST /api/notifications/web-push — the subscribe refusal", () => {

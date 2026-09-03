@@ -4,7 +4,7 @@
  * Verifies:
  *   - 201 + a `DataBackup` row with type prefix `MANUAL_UPLOAD_` is
  *     created when the JSON file matches the schema.
- *   - the original payload round-trips through encrypt → decrypt.
+ *   - the original payload round-trips through the stored backup envelope.
  *   - 422 when the JSON is malformed.
  *   - 422 when the schema validation fails (missing required field).
  *   - 422 when the userId on the file doesn't exist.
@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 process.env.ENCRYPTION_KEY ??=
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
-import { decrypt } from "@/lib/crypto";
+import { unpackBackupBlob } from "@/lib/export/backup-blob";
 
 import { cookieJar, headerJar } from "./mock-next-headers";
 import { getPrismaClient, truncateAllTables } from "./setup";
@@ -166,9 +166,11 @@ describe("POST /api/admin/backups/upload", () => {
     expect(row?.type).toMatch(/^MANUAL_UPLOAD_\d+$/);
     expect(row?.userId).toBe(admin.id);
 
-    // Round-trip the ciphertext to make sure we stored the same payload
-    // we received.
-    const decrypted = JSON.parse(decrypt(row!.data));
+    // Round-trip the stored blob to make sure we kept the same payload we
+    // received. Through the envelope rather than through `decrypt` alone: an
+    // uploaded file is stored exactly the way the weekly worker stores one, so
+    // the restore path reads both without knowing where the row came from.
+    const decrypted = JSON.parse(unpackBackupBlob(row!.data));
     expect(decrypted.userId).toBe(admin.id);
     expect(decrypted.measurements).toHaveLength(1);
 

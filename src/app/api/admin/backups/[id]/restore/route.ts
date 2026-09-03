@@ -19,7 +19,7 @@ import { prisma, toJson } from "@/lib/db";
 import { apiHandler, HttpError, requireAdmin } from "@/lib/api-handler";
 import { apiError, apiSuccess, getClientIp } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
-import { decrypt } from "@/lib/crypto";
+import { unpackBackupBlob } from "@/lib/export/backup-blob";
 import { encryptNote } from "@/lib/crypto/note-cipher";
 import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 import { encryptContextToBytes } from "@/lib/labs/biomarker-store";
@@ -180,7 +180,7 @@ const handler = apiHandler(
 
     let plaintext: string;
     try {
-      plaintext = decrypt(backup.data);
+      plaintext = unpackBackupBlob(backup.data);
     } catch (err) {
       await auditLog("admin.backups.restore.failed", {
         userId: admin.id,

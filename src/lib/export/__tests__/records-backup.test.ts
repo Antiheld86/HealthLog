@@ -19,6 +19,7 @@ import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 import { encryptNoteToBytes } from "@/lib/labs/store";
 import { encryptContextToBytes } from "@/lib/labs/biomarker-store";
 import { encryptDocumentSummary } from "@/lib/documents/store";
+import { UNREADABLE_EXPORT_MARKER } from "@/lib/export/unreadable-marker";
 import {
   buildRecordsBackupSection,
   countRecordsBackupSection,
@@ -450,10 +451,14 @@ describe("buildRecordsBackupSection", () => {
     });
   });
 
-  it("fails soft (null, not a throw) on an undecryptable note", async () => {
+  it("marks an undecryptable note (not a throw, and not a silent null)", async () => {
     const prisma = buildMockPrisma();
-    // Corrupt the ciphertext so decrypt throws internally — the row must
-    // still come back with `note: null`, never abort the whole backup.
+    // Corrupt the ciphertext so decrypt throws internally. The row must still
+    // come back and must never abort the whole backup — that part is
+    // unchanged. What it must NOT come back as is `null`, which this test used
+    // to require: in an export file a null note is byte-identical to a note
+    // that was never written, so the restore writes nothing and the loss is
+    // invisible. It comes back as a marker instead.
     prisma.labResult.findMany.mockResolvedValueOnce([
       {
         panel: null,
@@ -471,6 +476,6 @@ describe("buildRecordsBackupSection", () => {
     ]);
 
     const section = await buildRecordsBackupSection(prisma as never, USER_ID);
-    expect(section.labResults[0].note).toBeNull();
+    expect(section.labResults[0].note).toBe(UNREADABLE_EXPORT_MARKER);
   });
 });

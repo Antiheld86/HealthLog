@@ -1,3 +1,5 @@
+import { createCipheriv, randomBytes } from "node:crypto";
+
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   BACKUP_SCHEMA_VERSION,
@@ -8,8 +10,20 @@ const mocks = vi.hoisted(() => ({
   buildFullBackupPayload: vi.fn(),
 }));
 
+// The uploader takes the already-serialised form, so the stand-in for
+// `buildFullBackupJson` serialises whatever the payload mock was told to
+// return. Every case below keeps stubbing the PAYLOAD, which is the thing
+// these tests are actually about.
 vi.mock("@/lib/export/full-backup-payload", () => ({
   buildFullBackupPayload: mocks.buildFullBackupPayload,
+  buildFullBackupJson: async (...args: unknown[]) =>
+    JSON.stringify(
+      (
+        (await mocks.buildFullBackupPayload(...args)) as {
+          payload: unknown;
+        }
+      ).payload,
+    ),
 }));
 import {
   encryptBackup,
@@ -27,8 +41,31 @@ describe("offhost-backup envelope", () => {
     const key = Buffer.from(ENC_KEY, "hex");
     const payload = JSON.stringify({ hello: "world", n: 42 });
     const buf = encryptBackup(payload, key);
-    expect(buf.subarray(0, 5).toString("binary")).toBe("HLBK\x01");
+    // Version 2: the plaintext is gzipped before the cipher sees it. This
+    // assertion used to pin version 1, which is the version that could not
+    // encrypt a large account's dump without four full copies of it resident
+    // at once. The pin is flipped rather than dropped — the byte is the whole
+    // reason a reader can tell the two apart.
+    expect(buf.subarray(0, 5).toString("binary")).toBe("HLBK\x02");
     expect(decryptBackup(buf, key)).toBe(payload);
+  });
+
+  it("still reads a version-1 object written before compression", () => {
+    const key = Buffer.from(ENC_KEY, "hex");
+    const payload = JSON.stringify({ hello: "world", n: 42 });
+    // Hand-built v1 envelope: magic || 0x01 || iv || tag || ciphertext, the
+    // exact bytes every object already sitting in an operator's bucket has.
+    const iv = randomBytes(12);
+    const cipher = createCipheriv("aes-256-gcm", key, iv);
+    const ct = Buffer.concat([cipher.update(payload, "utf8"), cipher.final()]);
+    const legacy = Buffer.concat([
+      Buffer.from("HLBK\x01", "binary"),
+      iv,
+      cipher.getAuthTag(),
+      ct,
+    ]);
+
+    expect(decryptBackup(legacy, key)).toBe(payload);
   });
 
   it("rejects tampered ciphertext", () => {

@@ -177,8 +177,13 @@ function adherenceObservations(
   for (const [name, comp] of Object.entries(data.compliance)) {
     if (comp.total <= 0) continue;
     // Integer percent — the one canonical rounding the app card + PDF use, so
-    // a clinician sees the same adherence figure on every surface.
-    const rate = adherenceRatePercent(comp.taken, comp.total) ?? 0;
+    // a clinician sees the same adherence figure on every surface. The helper
+    // returns null exactly when nothing was expected, and a `?? 0` here would
+    // put a clinical claim of 0 % adherence into an exported bundle in that
+    // case. The `total <= 0` guard above already means it cannot happen; skip
+    // rather than coalesce so it stays impossible if that guard ever moves.
+    const rate = adherenceRatePercent(comp.taken, comp.total);
+    if (rate === null) continue;
     observations.push({
       resourceType: "Observation",
       id: nextId(),

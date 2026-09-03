@@ -9,6 +9,7 @@
  * both sides a route-handler-independent shared type home; the route
  * keeps owning the HTTP contract, the component keeps owning the UI.
  */
+import type { BackupScheduleStatus } from "@/lib/jobs/backup-schedule-status";
 
 export interface BackupRow {
   id: string;
@@ -25,6 +26,12 @@ export interface BackupRow {
 
 export interface BackupsList {
   rows: BackupRow[];
+  /**
+   * Whether the weekly schedule is still producing copies, and how the last
+   * scheduled run ended. A row's own timestamp cannot answer that — a copy
+   * made six weeks ago and one made on Sunday look identical in a table.
+   */
+  schedule: BackupScheduleStatus;
   /**
    * Soft retention hint — the worker is configured for weekly backups
    * (see `DATA_BACKUP_CRON` in `src/lib/jobs/reminder-worker.ts`), and

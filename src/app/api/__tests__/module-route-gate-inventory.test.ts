@@ -74,80 +74,125 @@ import { MODULE_KEYS, type ModuleKey } from "@/lib/modules/registry";
  * `BEHAVIOURAL_GATE_TESTS`. This test asserts those files still exist, so
  * deleting the behavioural coverage fails here with a pointer to what was
  * lost rather than silently leaving only a text-match behind.
+ *
+ * WHICH TREES GET WALKED, AND WHY THAT IS NOT A HAND-WRITTEN LIST ANY MORE
+ * -----------------------------------------------------------------------
+ * A discovery test is only worth what its discovery covers, and this one used
+ * to enumerate its trees in a flat array that grew when somebody remembered to
+ * grow it. It had stopped: `coach`, `environment`, `mentalHealth`,
+ * `inboundDocuments` and `mcp` each shipped an API tree that this file never
+ * looked at. No leak came of it — every route in the first four gates — but
+ * that was the authors' care and not this test's, and a green run was saying
+ * something narrower than it appeared to say.
+ *
+ * The trees are now declared per module key as an exhaustive
+ * `Record<ModuleKey, …>`, so the REGISTRY drives coverage: a new key does not
+ * compile without an entry, and an API directory named after a key is
+ * discovered from the filesystem and must be declared for it. A tree at a
+ * non-obvious address (`achievements` → `/api/gamification`) still has to be
+ * named by hand — that is the residual gap, and it is the reason the
+ * declaration carries a comment per key rather than a bare path.
  */
 
 /**
- * The per-domain route trees that serve a toggleable module. Each entry
- * is a directory under `src/app/api`; every `route.ts` beneath it is
- * enumerated and classified. A domain that is owned entirely by one
- * builder (doctor-report / FHIR) or one delegated gate (cycle) is still
- * walked so a NEW route in the tree must justify itself.
+ * The per-domain API route trees each toggleable module owns, keyed by the
+ * registry key.
+ *
+ * Declared as an exhaustive `Record<ModuleKey, …>` so the REGISTRY drives
+ * coverage rather than anybody's memory: adding a key to `MODULE_KEYS` without
+ * deciding which API tree it owns does not compile, and the two tests below
+ * catch the same omission at runtime — one asserting every registry key is
+ * declared, one asserting that an API directory NAMED after a module key is
+ * declared for that key.
+ *
+ * The hand-written array this replaced could only grow when a contributor
+ * remembered to grow it, and it had stopped growing: `coach`, `environment`,
+ * `mentalHealth`, `inboundDocuments` and `mcp` all shipped an API tree that
+ * this inventory never walked. Every route in the first four turned out to be
+ * gated, so nothing leaked — but that was the authors' care, not this file's
+ * doing, and the next tree would have been just as invisible.
+ *
+ * An empty array is a claim, not a gap: the module owns no API tree of its
+ * own, and the entry says where its data actually lives.
+ *
+ * A domain owned entirely by one builder (doctor-report / FHIR) or one
+ * delegated gate (cycle) is still walked, so a NEW route in the tree must
+ * justify itself.
  */
-const MODULE_ROUTE_TREES: ReadonlyArray<string> = [
-  "src/app/api/mood",
-  "src/app/api/mood-entries",
-  "src/app/api/sleep",
-  "src/app/api/workouts",
-  "src/app/api/labs",
+const MODULE_ROUTE_TREES_BY_KEY: Readonly<
+  Record<ModuleKey, readonly string[]>
+> = {
+  cycle: ["src/app/api/cycle"],
+  mood: ["src/app/api/mood", "src/app/api/mood-entries"],
+  sleep: ["src/app/api/sleep"],
+  // Glucose has no tree of its own: readings are Measurement rows on the core
+  // measurement engine, and the glucose panel is an insights surface. The
+  // module gates the surfaces, which live under trees already walked here.
+  glucose: [],
+  workouts: ["src/app/api/workouts"],
+  // Recovery, like glucose, rides the measurement engine — no dedicated tree.
+  recovery: [],
   // v1.18.1 — the user-scoped Biomarker catalog backs the Labs feature.
-  "src/app/api/biomarkers",
-  "src/app/api/cycle",
+  labs: ["src/app/api/labs", "src/app/api/biomarkers"],
   // v1.18.1 (W-B) — the illness/condition journal. Every `/api/illness/*`
   // route gates on the `illness` module via the thin
   // `requireIllnessEnabled(...)` wrapper (which re-stamps the
   // illness-specific errorCode over `requireModuleEnabled("illness")`),
-  // recognised below as a delegated gate. Walking the tree means a NEW
-  // ungated illness route fails this test BY NAME rather than leaking the
-  // surface over a Bearer token when the account turned the module off.
-  "src/app/api/illness",
-  "src/app/api/gamification",
+  // recognised below as a delegated gate.
+  illness: ["src/app/api/illness"],
+  achievements: ["src/app/api/gamification"],
+  // The Coach tree. Every route calls `requireModuleEnabled(userId, "coach")`
+  // directly, which resolves the delegated two-layer state (assistant master
+  // flag AND the per-user opt-out) through the registry — so the routes are
+  // counted as directly gated here, and the sibling
+  // `coach-route-gate-inventory.test.ts` covers the surface in depth.
+  coach: ["src/app/api/coach"],
+  // v1.18.0 (B2) — the AI-narrative insights tree, plus v1.28's unified
+  // daily-digest read (`GET /api/daily/digest`), which is the AI-narrative
+  // daily layer and gates on `insights` directly.
+  insights: ["src/app/api/insights", "src/app/api/daily"],
   // v1.18.1 (D3) — medications graduated from CORE to a toggleable module.
-  // It is SURFACE-gated (nav entry, dashboard widget, the dedicated
-  // Medikamente settings entry), not data-layer-gated: every `/api/medications/*`
-  // route is raw medication CRUD / intake / inventory / compliance over the
-  // user's own rows, so they are EXEMPT below under the same data-layer
-  // reasoning as mood/labs — disabling the module hides the surface, it does
-  // not wedge an importer / sync / the user's ability to clean up, and
-  // re-enabling finds the schedule + intake history intact. Walking the tree
-  // means a NEW medication route must justify itself (gate or document-exempt)
-  // rather than silently appearing.
-  "src/app/api/medications",
-  // v1.18.0 B3 — the legacy `/api/doctor-report` tree (JSON + server-PDF +
-  // availability probe) was orphaned dead code (no production caller) and
-  // removed. The doctor-report surface is `/api/export/health-record` plus
-  // the FHIR REST face below; both gate on `doctorReport` directly. The FHIR
-  // routes previously relied on the removed builder-mention bucket and were
-  // in practice ungated — see the header note.
-  "src/app/api/fhir",
-  // v1.18.0 (B2) — the AI-narrative insights tree. Every status / cards /
-  // correlations / derived / narrative / pregenerate / rhythm-events route
-  // gates on the `insights` module; the Coach sub-tree delegates to the
-  // coach assistant surface; the AI-settings / tile-layout / therapy-timeline
-  // infra-and-config routes are EXEMPT below. Walking the tree means a NEW
-  // ungated insights AI route fails this test BY NAME rather than leaking the
-  // surface over a Bearer token when the account turned insights off.
-  "src/app/api/insights",
-  // v1.28 — the unified daily-digest read (`GET /api/daily/digest`). The digest
-  // is the AI-narrative daily layer, so it gates on the `insights` module via
-  // `requireModuleEnabled(user.id, "insights")` directly. Walking the tree means
-  // a NEW ungated daily route fails BY NAME rather than leaking over a Bearer
-  // token when the account turned insights off.
-  "src/app/api/daily",
-  // v1.28 — the nutrient-intake sync (opt-in `nutrients` module). Unlike the
+  // SURFACE-gated (nav entry, dashboard widget, the dedicated Medikamente
+  // settings entry), not data-layer-gated: every `/api/medications/*` route is
+  // raw CRUD / intake / inventory / compliance over the user's own rows, so
+  // they are EXEMPT below under the same data-layer reasoning as mood/labs.
+  medications: ["src/app/api/medications"],
+  // v1.18.0 B3 — the legacy `/api/doctor-report` tree was orphaned dead code
+  // and removed. The doctor-report surface is `/api/export/health-record` plus
+  // the FHIR REST face; both gate on `doctorReport` directly, and both are
+  // key-pinned below so a future route cannot satisfy the inventory by gating
+  // on some other, more permissive module.
+  doctorReport: ["src/app/api/fhir", "src/app/api/export/health-record"],
+  // v1.25.0 (W-ENV) — the environmental-context tree. Every route calls
+  // `requireModuleEnabled(user.id, "environment")`, including the geocode
+  // lookup and the backfill, because each one either reads the module's data
+  // or spends the outbound weather/geocode budget on the user's behalf.
+  environment: ["src/app/api/environment"],
+  // v1.22.0 — the remote MCP endpoint is `src/app/mcp/route.ts`, OUTSIDE the
+  // `/api` tree, and it gates on the module itself. What lives under
+  // `/api/mcp` is the credential-management surface behind it, exempt below.
+  mcp: ["src/app/api/mcp"],
+  // v1.25.0 (W-DOCS-IN) — the inbound clinical-document vault. Every route
+  // gates on `inboundDocuments`; the AI READ of a document is a separate
+  // per-user opt-in on top.
+  inboundDocuments: ["src/app/api/documents/inbound"],
+  // v1.25.0 — the mental-health screeners. Both routes gate on `mentalHealth`.
+  mentalHealth: ["src/app/api/mental-health"],
+  // v1.28 — the nutrient-intake sync (opt-in module). Unlike the
   // data-layer-exempt siblings this domain is REFUSE-INGEST-WHEN-OFF (the
-  // mental-health posture): both the batch ingest and the window-summary
-  // read call `requireModuleEnabled(user.id, "nutrients")` directly, so a
-  // phone whose user never opted in cannot land rows server-side. Walking
-  // the tree means a NEW ungated nutrients route fails BY NAME.
-  "src/app/api/nutrients",
-  // v1.38.0 — the immunization log (`vaccinations` module). SURFACE-gated
-  // like medications, not data-layer-gated: every `/api/vaccinations/*` route
-  // is raw CRUD over the person's own doses, so all four are EXEMPT below
-  // under the same reasoning. Walking the tree means a NEW vaccination route
-  // must justify itself — gate or documented exemption — rather than
-  // silently appearing.
-  "src/app/api/vaccinations",
-];
+  // mental-health posture): both the batch ingest and the window-summary read
+  // gate directly, so a phone whose user never opted in cannot land rows.
+  nutrients: ["src/app/api/nutrients"],
+  // v1.38.0 — the immunization log. SURFACE-gated like medications, not
+  // data-layer-gated: every `/api/vaccinations/*` route is raw CRUD over the
+  // person's own doses, so all six are EXEMPT below under the same reasoning.
+  vaccinations: ["src/app/api/vaccinations"],
+};
+
+/** Every declared tree, de-duplicated — the set this inventory walks. */
+const MODULE_ROUTE_TREES: ReadonlyArray<string> = [
+  ...new Set(Object.values(MODULE_ROUTE_TREES_BY_KEY).flat()),
+].sort();
 
 /**
  * EXEMPT — routes that serve a toggleable domain but are deliberately
@@ -309,6 +354,33 @@ const EXEMPT_ROUTES: ReadonlyArray<string> = [
   // while the nav entry, the picker and the report leaf hide.
   "src/app/api/vaccinations/[id]/booster/route.ts",
   "src/app/api/vaccinations/suggest/route.ts",
+  // ── INFRA / CREDENTIALS (mcp) ─────────────────────────────────────
+  // The remote MCP endpoint itself is `src/app/mcp/route.ts`, outside `/api`,
+  // and it carries the gate: an account with the module off gets a 404 there
+  // regardless of the credential presented (proven by the behavioural test
+  // listed below). What lives under `/api/mcp` is the credential surface
+  // BEHIND that endpoint, and it is deliberately not gated:
+  //
+  //   - the token list / mint / revoke and the connection rows are the
+  //     cookie-session settings card. Revoking must keep working while the
+  //     module is off — that is precisely when somebody wants to revoke — and
+  //     minting happens in the same breath as switching the module on.
+  //   - the OAuth bridge mints and exchanges the same `health:read`
+  //     credential for a cloud connector. It runs on `withBackgroundEvent`
+  //     with its protections applied by hand (rate limit, body cap, kill
+  //     switch, mandatory PKCE-S256, redirect-URI allowlist) per the
+  //     documented exception, and the credential it issues is inert while the
+  //     module is off because `/mcp` refuses it.
+  //
+  // Gating these would not close a data path; it would only wedge the surface
+  // that turns the module on and off.
+  "src/app/api/mcp/tokens/route.ts",
+  "src/app/api/mcp/tokens/[id]/route.ts",
+  "src/app/api/mcp/connections/route.ts",
+  "src/app/api/mcp/connections/[id]/route.ts",
+  "src/app/api/mcp/oauth/authorize/route.ts",
+  "src/app/api/mcp/oauth/token/route.ts",
+  "src/app/api/mcp/oauth/register/route.ts",
 ];
 
 const MODULE_GATE_NEEDLE = "requireModuleEnabled(";
@@ -333,6 +405,7 @@ const ILLNESS_GATE_NEEDLE = "requireIllnessEnabled(";
  */
 const REQUIRED_TREE_MODULE: Readonly<Record<string, ModuleKey>> = {
   "src/app/api/fhir": "doctorReport",
+  "src/app/api/export/health-record": "doctorReport",
 };
 
 /**
@@ -367,6 +440,14 @@ const BEHAVIOURAL_GATE_TESTS: ReadonlyArray<{ path: string; proves: string }> =
       path: "src/app/api/dashboard/summary/__tests__/module-gate.test.ts",
       proves:
         "the dashboard summary drops disabled-module metric cards while core vitals still ship",
+    },
+    {
+      // The `mcp` module's enforcement point is outside `/api` entirely, so
+      // nothing in the tree walk above can see it. Listing the proof here is
+      // what keeps it from disappearing unnoticed.
+      path: "src/app/mcp/__tests__/route.test.ts",
+      proves:
+        "the remote MCP endpoint 404s when the mcp module is off, which is what makes the ungated /api/mcp credential surface safe",
     },
   ];
 
@@ -456,11 +537,86 @@ describe("module API route gate inventory", () => {
       "doctorReport",
       "insights",
       "medications",
+      "environment",
+      "mentalHealth",
+      "inboundDocuments",
+      "nutrients",
+      "mcp",
+      "vaccinations",
     ] as const) {
       expect(known.has(key), `unknown module key in inventory: ${key}`).toBe(
         true,
       );
     }
+  });
+
+  it("every module key declares which API trees it owns", () => {
+    // The type already makes an omission a compile error. This is the runtime
+    // half: it fails by NAME, so the message says which key was added without
+    // anybody deciding where its routes live.
+    const undeclared = MODULE_KEYS.filter(
+      (key) => !(key in MODULE_ROUTE_TREES_BY_KEY),
+    );
+
+    expect(
+      undeclared,
+      [
+        "Module keys with no entry in MODULE_ROUTE_TREES_BY_KEY:",
+        ...undeclared.map((k) => `  - ${k}`),
+        "Name the module's API tree(s), or declare [] and say in the comment",
+        "where its data actually lives.",
+      ].join("\n"),
+    ).toEqual([]);
+  });
+
+  it("every declared route tree exists on disk", () => {
+    const missing = Object.entries(MODULE_ROUTE_TREES_BY_KEY).flatMap(
+      ([key, trees]) =>
+        trees
+          .filter((tree) => !existsSync(resolve(repoRoot, tree)))
+          .map((tree) => `  - ${key}: ${tree}`),
+    );
+
+    expect(
+      missing,
+      [
+        "MODULE_ROUTE_TREES_BY_KEY names directories that do not exist —",
+        "a renamed or deleted tree silently stops being walked:",
+        ...missing,
+      ].join("\n"),
+    ).toEqual([]);
+  });
+
+  it("an API directory named after a module key is declared for that key", () => {
+    // This is the check the hand-written array could not perform. A module
+    // whose routes live at the obvious address (`/api/environment` for
+    // `environment`, `/api/mental-health` for `mentalHealth`) is discovered
+    // from the filesystem, so a tree cannot sit outside the inventory just
+    // because nobody added a line here. Trees at a NON-obvious address
+    // (`achievements` → `/api/gamification`, `inboundDocuments` →
+    // `/api/documents/inbound`) still have to be declared by hand; the
+    // declaration is what this test compares against.
+    const apiRoot = resolve(repoRoot, "src/app/api");
+    const undeclared: string[] = [];
+
+    for (const key of MODULE_KEYS) {
+      const dirName = key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+      const tree = `src/app/api/${dirName}`;
+      if (!existsSync(join(apiRoot, dirName))) continue;
+      if (MODULE_ROUTE_TREES_BY_KEY[key].includes(tree)) continue;
+      undeclared.push(`  - ${key}: ${tree} exists but is not declared`);
+    }
+
+    expect(
+      undeclared,
+      [
+        "API trees named after a module key that this inventory does not walk:",
+        ...undeclared,
+        "Declare the tree under its key in MODULE_ROUTE_TREES_BY_KEY. Every",
+        "route beneath it then has to be gated, delegated, or exempt with a",
+        "documented reason.",
+      ].join("\n"),
+    ).toEqual([]);
   });
 
   it("every toggleable-module route is gated, delegated, or explicitly exempt", () => {

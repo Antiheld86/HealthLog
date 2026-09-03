@@ -26,7 +26,7 @@ import { prisma } from "@/lib/db";
 import { apiHandler, HttpError, requireAdmin } from "@/lib/api-handler";
 import { apiError, apiSuccess, getClientIp } from "@/lib/api-response";
 import { auditLog } from "@/lib/auth/audit";
-import { encrypt } from "@/lib/crypto";
+import { packBackupBlob } from "@/lib/export/backup-blob";
 import { annotate } from "@/lib/logging/context";
 import { checkRateLimit } from "@/lib/rate-limit";
 import {
@@ -190,7 +190,7 @@ export const POST = apiHandler(async (request: NextRequest) => {
   // intact so multiple uploads can coexist for the same user without
   // overwriting each other or the rolling WEEKLY_AUTO snapshot.
   const uploadType = `MANUAL_UPLOAD_${Date.now()}`;
-  const encrypted = encrypt(JSON.stringify(payload));
+  const encrypted = packBackupBlob(JSON.stringify(payload));
 
   const created = await prisma.dataBackup.create({
     data: {

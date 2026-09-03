@@ -360,3 +360,85 @@ describe("generateMedicationComplianceStatusForUser — token-leak hardening (v1
     expect(parsed.medications[0].text).not.toContain("metric:");
   });
 });
+
+// A medication with no schedule expects no dose. `calculateCompliance` answers
+// `rate: 100, totalExpected: 0` for that case, and this surface averaged that
+// 100 into `overall.averageCompliance30` and handed it to the model as the
+// person's adherence. The doctor report has excluded the empty schedule
+// alongside PRN since it was written — "so the report never prints a
+// fabricated 100 %" — and the same reason applies wherever a rate is shown.
+describe("generateMedicationComplianceStatusForUser — no rate without an expectation", () => {
+  function scheduleless(now: Date) {
+    return {
+      id: "med-empty",
+      name: "Unscheduled",
+      dose: "5mg",
+      active: true,
+      asNeeded: false,
+      createdAt: new Date(now.getTime() - 60 * dayMs),
+      schedules: [],
+      scheduleRevisions: [],
+      pauseEras: [],
+    };
+  }
+
+  it("keeps a schedule-less medication out of the snapshot and its average", async () => {
+    const now = new Date();
+    const scheduled = { ...medFixture(now), asNeeded: false };
+    const events = Array.from({ length: 30 }, (_, day) => {
+      const scheduledFor = new Date(now.getTime() - day * dayMs);
+      // Half the doses taken, so the real medication sits well below 100 %.
+      return {
+        medicationId: "med-1",
+        scheduledFor,
+        takenAt: day % 2 === 0 ? scheduledFor : null,
+        skipped: false,
+      };
+    });
+
+    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.medication.findMany).mockResolvedValue([
+      scheduled,
+      scheduleless(now),
+    ] as never);
+    vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValue(
+      events as never,
+    );
+    vi.mocked(prisma.auditLog.create).mockResolvedValue({
+      createdAt: new Date(),
+    } as never);
+
+    const captured: { userPrompt: string | null } = { userPrompt: null };
+    stubCompletion('{"summary":"OK","medications":[]}', captured);
+
+    await generateMedicationComplianceStatusForUser("user-1", { locale: "en" });
+
+    const snapshot = JSON.parse(captured.userPrompt!.match(/\{[\s\S]*\}/)![0]);
+    const names = snapshot.medications.map((m: { name: string }) => m.name);
+    expect(names).not.toContain("Unscheduled");
+    expect(names).toContain("Ramipril");
+    expect(snapshot.overall.medicationCount).toBe(1);
+    // The fabricated 100 is no longer half of the average handed to the model.
+    expect(snapshot.overall.averageCompliance30).toBeLessThan(100);
+  });
+
+  it("reports no active medications when the only one has no schedule", async () => {
+    const now = new Date();
+    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.medication.findMany).mockResolvedValue([
+      scheduleless(now),
+    ] as never);
+    vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValue(
+      [] as never,
+    );
+
+    const outcome = (await generateMedicationComplianceStatusForUser("user-1", {
+      locale: "en",
+    })) as { summary: string | null; medications: unknown[] };
+
+    expect(outcome.medications).toEqual([]);
+    expect(outcome.summary).toContain("no active medications");
+    // Nothing to assess, so no model call and no cache row either.
+    expect(runStatusCompletion).not.toHaveBeenCalled();
+  });
+});
