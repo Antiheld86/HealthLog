@@ -202,24 +202,39 @@ async function notifyAdminsOfFailure(event: NormalizedEvent): Promise<void> {
   }
 }
 
-export const POST = apiHandler(async (request: NextRequest) => {
-  annotate({ action: { name: "deploy.webhook" } });
-
-  // Rate-limit by client IP. 60 requests / minute is comfortably above
-  // Coolify's per-event burst (typically 1-2 per deploy) but well below
-  // a hostile actor flooding to fish for a working secret.
+/**
+ * Rate-limit by client IP. 60 requests / minute is comfortably above
+ * Coolify's per-event burst (typically 1-2 per deploy) but well below a
+ * hostile actor flooding to fish for a working secret.
+ *
+ * Both verbs share the bucket, and both run it before the comparison: the
+ * reachability GET checks the same secret and answers 200 against 401, so
+ * leaving it unlimited would hand back the free guessing channel the POST
+ * limit exists to close.
+ */
+async function applyWebhookRateLimit(
+  request: NextRequest,
+): Promise<NextResponse | null> {
   const ip = getClientIp(request);
   const rl = await checkRateLimit(
     `deploy-webhook:${ip ?? "unknown"}`,
     60,
     60_000,
   );
-  if (!rl.allowed) {
-    return NextResponse.json(
-      { status: "rate_limited" },
-      { status: 429, headers: rateLimitHeaders(rl) },
-    );
-  }
+  if (rl.allowed) return null;
+  return NextResponse.json(
+    { status: "rate_limited" },
+    { status: 429, headers: rateLimitHeaders(rl) },
+  );
+}
+
+export const POST = apiHandler(async (request: NextRequest) => {
+  annotate({ action: { name: "deploy.webhook" } });
+
+  const limited = await applyWebhookRateLimit(request);
+  if (limited) return limited;
+
+  const ip = getClientIp(request);
 
   if (!hasValidSecret(request)) {
     return NextResponse.json({ status: "unauthorized" }, { status: 401 });
@@ -293,6 +308,10 @@ export const POST = apiHandler(async (request: NextRequest) => {
  */
 export const GET = apiHandler(async (request: NextRequest) => {
   annotate({ action: { name: "deploy.webhook.verify" } });
+
+  const limited = await applyWebhookRateLimit(request);
+  if (limited) return limited;
+
   if (!hasValidSecret(request)) {
     return NextResponse.json({ status: "unauthorized" }, { status: 401 });
   }
