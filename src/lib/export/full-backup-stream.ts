@@ -25,8 +25,6 @@
  * The integration suite pins it against the materialising builder rather than
  * trusting that paragraph.
  */
-import v8 from "node:v8";
-
 import type { PrismaClient } from "@/generated/prisma/client";
 import {
   buildFullBackupPayload,
@@ -48,42 +46,27 @@ export type BackupJsonSink = (chunk: string) => void | Promise<void>;
 const FLUSH_BYTES = 256 * 1024;
 
 /**
- * Fraction of V8's heap limit the writer refuses to cross.
+ * There is deliberately no heap reading in this writer.
  *
- * The point is not to make an oversized account succeed — it is to make it
- * FAIL AS A JOB. A backup that runs out of heap takes the process with it, and
- * a pg-boss worker sharing the app process means one account's record can
- * restart the instance for everybody. Because the work is now incremental
- * there is a checkpoint every few hundred kilobytes, so the guard actually
- * gets to run before V8 hits the wall; the old single `JSON.stringify` had no
- * point at which anything could intervene.
+ * There used to be: every flush compared the process's live heap usage against
+ * 80 % of V8's heap limit and aborted the backup above it. That reading is not
+ * the backup's footprint — it is the whole process's, garbage included, and a
+ * long-lived Next.js server sits at 400 MB of largely COLLECTABLE heap. On a
+ * 1 GB container (a 524 MB V8 limit, so a 419 MB budget) the check therefore
+ * fired on the first flush of every account: a weekly pass over four accounts
+ * aborted all four in seven seconds, and the smallest of them was a demo
+ * record whose entire stored copy is 1.2 MB. It turned "this process has been
+ * up a while" into "your record is too large", and then told the operator to
+ * buy memory.
+ *
+ * What this writer holds is bounded by its own shape and needs no gauge to
+ * prove: the three tables that scale with a record are pulled a page at a
+ * time, every other section is released as soon as its JSON is in the sink,
+ * and at most `FLUSH_BYTES` of text is ever pending. The one copy that DOES
+ * grow with the record is the sink's — the stored blob — so that is where the
+ * bound belongs, and `packBackupBlobStreaming` enforces it there against bytes
+ * it counted itself rather than against a heap the rest of the process shares.
  */
-const HEAP_HIGH_WATER = 0.8;
-
-/** Thrown when the writer stops itself short of the heap limit. */
-export class BackupHeapBudgetExceededError extends Error {
-  constructor(usedBytes: number, ceilingBytes: number) {
-    super(
-      `Backup aborted at ${Math.round(usedBytes / 1024 / 1024)} MB of heap ` +
-        `(budget ${Math.round(ceilingBytes / 1024 / 1024)} MB). The record is ` +
-        `too large for this container's memory limit; raise the container's ` +
-        `memory or NODE_OPTIONS=--max-old-space-size.`,
-    );
-    this.name = "BackupHeapBudgetExceededError";
-  }
-}
-
-export interface StreamFullBackupOptions extends FullBackupOptions {
-  /**
-   * Heap ceiling in bytes. Defaults to 80 % of V8's limit for this process.
-   * Tests pass an explicit value; nothing else should need to.
-   */
-  heapCeilingBytes?: number;
-}
-
-function defaultHeapCeiling(): number {
-  return Math.floor(v8.getHeapStatistics().heap_size_limit * HEAP_HIGH_WATER);
-}
 
 /**
  * Write the full-backup JSON for `userId` into `sink`, and answer the counts.
@@ -95,9 +78,8 @@ export async function streamFullBackupJson(
   prisma: PrismaClient,
   userId: string,
   sink: BackupJsonSink,
-  options: StreamFullBackupOptions = {},
+  options: FullBackupOptions = {},
 ): Promise<FullBackupCounts> {
-  const ceiling = options.heapCeilingBytes ?? defaultHeapCeiling();
   const { payload, counts } = await buildFullBackupPayload(prisma, userId, {
     ...options,
     deferBulk: true,
@@ -112,8 +94,6 @@ export async function streamFullBackupJson(
     pending = "";
     pendingBytes = 0;
     await sink(chunk);
-    const used = process.memoryUsage().heapUsed;
-    if (used > ceiling) throw new BackupHeapBudgetExceededError(used, ceiling);
   };
 
   const write = async (piece: string): Promise<void> => {

@@ -150,15 +150,28 @@ Two things changed, and both matter to an operator:
   released as soon as its JSON exists. On the same fixture doubled to 890 000
   measurements, the pass completes inside a 296 MB heap limit; before the
   change, half that record did not fit in 546 MB.
-- **It stops itself.** The writer watches its own live heap and aborts at 80 %
-  of V8's limit. That backup then fails for that one account, is counted in the
-  run's `users_failed` and `heap_budget_trips` meta, and the pass carries on
-  with everybody else. A memory failure is now a failed job rather than a
-  restart for every user on the host.
+- **It stops itself, on its own size.** The envelope writer counts the
+  encrypted bytes it has produced for an account and gives up on the account
+  whose stored copy would not fit this process — a fifth of V8's heap limit,
+  which is 105 MB on the 524 MB limit a 1 GB container gets. That backup then
+  fails for that one account, is counted in the run's `users_failed` and
+  `records_oversized` meta, and the pass carries on with everybody else. A
+  memory failure is a failed job rather than a restart for every user on the
+  host.
 
-If `heap_budget_trips` is non-zero in `job.data_backup`, the answer is more
+If `records_oversized` is non-zero in `job.data_backup`, the answer is more
 memory, not a retry: raise the container's limit, or set
-`NODE_OPTIONS=--max-old-space-size=<MB>` to something under it.
+`NODE_OPTIONS=--max-old-space-size=<MB>` to something under it. The limit is
+derived from the heap limit, so it rises with it.
+
+The check deliberately reads bytes it produced and not the process's heap. A
+version that read the heap shipped in v1.38.6 and compared the whole process's
+live usage — garbage included — against 80 % of the limit. A Next.js server
+that has been up for a week sits at 400 MB of largely collectable heap, so the
+weekly pass aborted every account on the first chunk, including one whose whole
+stored copy is 1.2 MB, and reported success while doing it. If you are on
+v1.38.6, a `data-backup` run that finishes in seconds having backed up nothing
+is that defect and not your record.
 
 ### The stored column is the remaining ceiling
 
@@ -167,10 +180,11 @@ exist as one value before it can be written — that copy cannot be streamed
 away. It is the only thing left in the job that grows with the record: at a
 compressed blob of ~42 MB the pass peaks around 236 MB, and the growth from
 there is roughly twice the blob's size (the base64 answer, plus the driver's
-copy of it on the way to the wire). A blob past roughly 150 MB — an account
-several times larger than any seen so far — will hit a 524 MB limit again, and
-the fix at that point is to stop storing the artifact in one column: chunk it
-across rows, or keep only the off-host copy. Reading it back has the same
+copy of it on the way to the wire). That is the ceiling the size check is set
+against — a fifth of the heap limit, so two copies plus the process's own live
+set still fit — and an account that reaches it fails as a job with a message
+naming both numbers. The fix at that point is to stop storing the artifact in
+one column: chunk it across rows, or keep only the off-host copy. Reading it back has the same
 shape, and worse: a restore parses the whole document, so the read path needs
 several times the blob in heap. An operator restoring a very large account
 should give the container more memory for the duration.

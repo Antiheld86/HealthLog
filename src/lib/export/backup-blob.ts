@@ -36,6 +36,7 @@
  * usable copy predates any of this is exactly the person who needs it to work.
  */
 import { Buffer } from "node:buffer";
+import v8 from "node:v8";
 import { createGzip, gunzipSync, gzipSync } from "node:zlib";
 
 import {
@@ -60,6 +61,64 @@ export function packBackupBlob(json: string): string {
 }
 
 /**
+ * The share of this process's heap limit one stored backup may become.
+ *
+ * The blob is the single copy this pipeline cannot stream away:
+ * `data_backups.data` is one `text` column, so the row has to be one value,
+ * and the driver makes a second copy of it on its way to the wire. Two copies
+ * of the answer plus whatever the process legitimately holds is what has to
+ * fit at once, so a fifth of the heap limit is one account's share.
+ *
+ * It is a share of the LIMIT, not of what is currently used. How large a
+ * single value this process can hold depends on how it was started; it does
+ * not depend on how long it has been running or on how much garbage is
+ * waiting to be collected. The check this replaced read the latter, and so
+ * aborted a 1.2 MB record on a server that had merely been up for a week.
+ */
+const BLOB_HEAP_SHARE = 0.2;
+
+/** Bytes as an operator reads them. Kilobytes below a megabyte. */
+function size(bytes: number): string {
+  const mb = bytes / 1024 / 1024;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return mb < 100 ? `${mb.toFixed(1)} MB` : `${Math.round(mb)} MB`;
+}
+
+/** Default cap for one stored blob, in bytes. */
+export function defaultBackupBlobLimit(): number {
+  return Math.floor(v8.getHeapStatistics().heap_size_limit * BLOB_HEAP_SHARE);
+}
+
+/**
+ * Thrown when one account's encrypted backup outgrows what this process can
+ * hold as a single value.
+ *
+ * The message states what was counted — the ciphertext written so far — and
+ * the limit it crossed, because that is the pair an operator can act on. It
+ * is about the record, and it is true: raising the heap raises the limit with
+ * it, since the limit is derived from the heap.
+ */
+export class BackupBlobTooLargeError extends Error {
+  readonly bytes: number;
+  readonly limitBytes: number;
+
+  constructor(bytes: number, limitBytes: number) {
+    super(
+      `Backup stopped after ${size(bytes)} of encrypted backup for one ` +
+        `account, over the ${size(limitBytes)} a single stored copy may ` +
+        `occupy here (a fifth of this process's ` +
+        `${size(v8.getHeapStatistics().heap_size_limit)} heap limit). This ` +
+        `account's record is genuinely too large to store as one row on this ` +
+        `host; raise the container's memory or NODE_OPTIONS=` +
+        `--max-old-space-size and the limit rises with it.`,
+    );
+    this.name = "BackupBlobTooLargeError";
+    this.bytes = bytes;
+    this.limitBytes = limitBytes;
+  }
+}
+
+/**
  * Produces the backup JSON in pieces. Every piece is written in order.
  *
  * Whatever it resolves to is ignored — the writer's own return value (the row
@@ -68,6 +127,15 @@ export function packBackupBlob(json: string): string {
 export type BackupJsonProducer = (
   write: (chunk: string) => Promise<void>,
 ) => Promise<unknown>;
+
+export interface PackBackupBlobOptions {
+  /**
+   * Largest stored blob this call may produce, in bytes. Defaults to
+   * `defaultBackupBlobLimit()`. Tests pass an explicit value; nothing else
+   * should need to.
+   */
+  maxBytes?: number;
+}
 
 /**
  * Serialised backup JSON, produced in pieces → the stored string.
@@ -80,20 +148,33 @@ export type BackupJsonProducer = (
  *
  * The one copy that cannot be avoided is the answer itself. `data_backups.data`
  * is a single `text` column, so the row has to be one value, and one value has
- * to exist as one string before the driver can bind it.
+ * to exist as one string before the driver can bind it. That copy is therefore
+ * also the only thing here that grows without bound as a record grows, which
+ * is why the size check lives on it: `maxBytes` counts the ciphertext this
+ * call has actually produced and stops on the account whose backup does not
+ * fit, rather than reading a heap gauge every account shares.
  */
 export async function packBackupBlobStreaming(
   producer: BackupJsonProducer,
+  options: PackBackupBlobOptions = {},
 ): Promise<string> {
+  const limitBytes = options.maxBytes ?? defaultBackupBlobLimit();
   const encryptor = createStreamEncryptor();
   const pieces: string[] = [encryptor.header];
+  let heldBytes = encryptor.header.length;
   const gzip = createGzip();
 
   let failure: unknown = null;
   gzip.on("data", (chunk: Buffer) => {
     try {
       const piece = encryptor.update(chunk);
-      if (piece !== "") pieces.push(piece);
+      if (piece === "") return;
+      // Base64 is ASCII, so a character counted here is a byte held here.
+      heldBytes += piece.length;
+      if (heldBytes > limitBytes) {
+        throw new BackupBlobTooLargeError(heldBytes, limitBytes);
+      }
+      pieces.push(piece);
     } catch (err) {
       failure ??= err;
       gzip.destroy(err as Error);
@@ -104,6 +185,12 @@ export async function packBackupBlobStreaming(
     gzip.on("end", resolve);
     gzip.on("error", reject);
   });
+  // A failure raised inside the `data` handler destroys the stream, which
+  // rejects this promise — and the producer's own `write` rethrows the same
+  // failure first, so nothing ever awaits it. Marking it handled keeps a
+  // failure that IS being reported from also surfacing as an unhandled
+  // rejection; `await finished` below still sees the rejection.
+  finished.catch(() => {});
 
   const write = async (chunk: string): Promise<void> => {
     if (failure) throw failure;
