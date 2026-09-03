@@ -292,23 +292,41 @@ describe("computeHeatmapCells", () => {
 
 describe("computeMoodMetricCorrelation", () => {
   it("pairs on dayOffset and returns scatter points + a coefficient", () => {
-    const moodDaily = [
-      { dayOffset: 0, value: 5 },
-      { dayOffset: 1, value: 4 },
-      { dayOffset: 2, value: 3 },
-      { dayOffset: 3, value: 2 },
-      { dayOffset: 4, value: 1 },
-    ];
+    // Twenty days, not five. This test used to run on five and assert a
+    // coefficient came back, which pinned the very thing the significance
+    // gate exists to refuse: five points that happen to line up are not a
+    // finding. The pairing and the scatter projection are what it is asking
+    // about, and they are unchanged — it just has to ask above the bar.
+    const moodDaily = Array.from({ length: 20 }, (_, i) => ({
+      dayOffset: i,
+      value: 5 - (i % 5),
+    }));
     // Perfectly positively correlated metric.
     const metricDaily = moodDaily.map((b) => ({
       dayOffset: b.dayOffset,
       value: b.value * 10,
     }));
     const corr = computeMoodMetricCorrelation(moodDaily, metricDaily, NOW);
-    expect(corr.n).toBe(5);
-    expect(corr.points).toHaveLength(5);
+    expect(corr.n).toBe(20);
+    expect(corr.points).toHaveLength(20);
     expect(corr.result?.r).toBe(1);
+    expect(corr.suppressed).toBeUndefined();
     expect(corr.points[0]).toEqual({ x: 5, y: 50 });
+  });
+
+  it("refuses the same shape at five days", () => {
+    const moodDaily = Array.from({ length: 5 }, (_, i) => ({
+      dayOffset: i,
+      value: 5 - i,
+    }));
+    const metricDaily = moodDaily.map((b) => ({
+      dayOffset: b.dayOffset,
+      value: b.value * 10,
+    }));
+    const corr = computeMoodMetricCorrelation(moodDaily, metricDaily, NOW);
+    expect(corr.n).toBe(5);
+    expect(corr.result).toBeNull();
+    expect(corr.suppressed).toBe("insufficientPairs");
   });
 
   it("returns a null coefficient below the minimum pair count", () => {

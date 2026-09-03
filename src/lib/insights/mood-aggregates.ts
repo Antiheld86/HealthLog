@@ -20,10 +20,11 @@
 
 import { prisma } from "@/lib/db";
 import {
-  pearsonCorrelation,
+  significantPearsonCorrelation,
   type CorrelationResult,
   type PairedPoint,
 } from "@/lib/analytics/correlations";
+import { MIN_PAIRED_N } from "@/lib/insights/correlations";
 import {
   applyPayloadBudget,
   dayOffsetToBerlinDayKey,
@@ -384,11 +385,20 @@ export interface CorrelationScatterPoint {
   [key: string]: number;
 }
 
+/** Why a pairing produced no coefficient. */
+export type MoodCorrelationSuppression = "insufficientPairs" | "notSignificant";
+
 export interface MoodMetricCorrelation {
   result: CorrelationResult | null;
   /** Mood (x) vs metric (y) scatter points, paired by day. */
   points: CorrelationScatterPoint[];
   n: number;
+  /**
+   * Which bar the pairing fell short of, so the card can name it rather
+   * than showing a blank that reads the same whether nothing was logged or
+   * a full year of days simply did not line up. Absent when `result` is set.
+   */
+  suppressed?: MoodCorrelationSuppression;
 }
 
 /**
@@ -396,6 +406,14 @@ export interface MoodMetricCorrelation {
  * series, paired on `dayOffset`. Returns the scatter points so the
  * caller can paint a `<ScatterCorrelationChart>` from the same pairing
  * the coefficient was computed over.
+ *
+ * This routes through `significantPearsonCorrelation` — n >= 20 AND
+ * p < 0.05 — for the same reason the weight, blood-pressure and
+ * mood-status surfaces do: the plain `pearsonCorrelation` bands from |r|
+ * alone above a floor of five pairs, so five days of noise sloping the
+ * right way arrive at the reader labelled "strong". A mood page is where
+ * that costs the most, because the reader is looking for something to
+ * change about their week.
  */
 export function computeMoodMetricCorrelation(
   moodDaily: DailyPoint[],
@@ -404,9 +422,16 @@ export function computeMoodMetricCorrelation(
   tz: string = DEFAULT_TIMEZONE,
 ): MoodMetricCorrelation {
   const pairs = pairDailyBuckets(moodDaily, metricDaily, now, tz);
-  const result = pearsonCorrelation(pairs);
   const points = pairs.map((p) => ({ x: p.a, y: p.b }));
-  return { result, points, n: pairs.length };
+  const result = significantPearsonCorrelation(pairs);
+  if (result) return { result, points, n: pairs.length };
+  return {
+    result: null,
+    points,
+    n: pairs.length,
+    suppressed:
+      pairs.length < MIN_PAIRED_N ? "insufficientPairs" : "notSignificant",
+  };
 }
 
 // --- Orchestrated aggregate shape ---
