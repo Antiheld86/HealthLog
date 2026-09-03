@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Internal
+
+- The column-reader sweep was wrong in both directions and had been for as long as it existed. It answers "does this column have a consumer" for every column in the schema, and it is the tool this project leans on to catch a schema change that ships its writer and forgets its reader. Its idea of a write was any `field:` key anywhere, so `where: { ticketHash }` counted as writing `ticketHash`: all twelve columns it reported were a lookup key or a cron's discovery predicate being filtered on, every one a false alarm. And because it only ever reported a column that HAD a write, a column with no write at all was the one thing it could not see. It now understands which Prisma argument a key sits in, follows a payload assembled into a variable before the call, credits raw SQL against the mapped column name, and reports a column no code touches at all as its own category. Twelve false alarms became nineteen findings that each hold up, four of them worth acting on. The matcher underneath is pinned by a test that was checked by breaking it three ways.
+- **Two columns have a reader and no writer.** The glucose unit preference is read across twenty-nine files, the dashboard and both exports and the doctor report and the FHIR resources among them, and no surface anywhere writes it, so an account cannot leave mg/dL. An import job's export date is described in the schema as parsed during unpack, is returned by the import status endpoint and is in the published contract, but the parser skips Apple's `ExportDate` element outright: the field has always been null.
+- **Two columns have a writer and no reader.** The provider-health ledger records the HTTP status of a failed call and nothing reads it back, and the known-device ledger stamps a first-seen date that no query, page or export ever asks for.
+
 ## [1.38.5] — 2026-09-03
 
 The weekly backup finishes again, the dashboard stops scanning the two
