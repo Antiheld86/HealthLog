@@ -9,7 +9,15 @@
 
 export type GlucoseUnit = "mg/dL" | "mmol/L";
 
-const MGDL_PER_MMOL = 18.0182;
+/**
+ * mg/dL per mmol/L, per the DGIM / DDG S3 guideline. Exported because it is
+ * the one factor for this conversion in the tree: the inbound alias resolver
+ * normalises a mmol/L cell with it, the glucose insight page scales its chart
+ * by its reciprocal, and the helpers below round with it. Two nearly-equal
+ * copies of a health conversion is how the same reading comes out as two
+ * different numbers on two screens.
+ */
+export const MGDL_PER_MMOL = 18.0182;
 
 export function mgdlToMmol(mgdl: number): number {
   return Math.round((mgdl / MGDL_PER_MMOL) * 10) / 10;

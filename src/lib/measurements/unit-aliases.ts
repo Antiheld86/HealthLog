@@ -17,9 +17,7 @@
  * Pure + side-effect-free; safe to import from an API route or a script.
  */
 import { getUnitForType } from "@/lib/validations/measurement";
-
-/** Glucose mmol/L → mg/dL. */
-const GLUCOSE_MMOL_TO_MGDL = 18.016;
+import { MGDL_PER_MMOL } from "@/lib/glucose";
 /** Exact pound → kilogram (1 lb = 0.45359237 kg). */
 const LB_TO_KG = 0.45359237;
 /** Exact inch → centimetre (1 in = 2.54 cm). */
@@ -87,7 +85,7 @@ export function resolveToCanonicalUnit(
 
   // Glucose: mmol/L → mg/dL.
   if (type === "BLOOD_GLUCOSE" && MMOL_ALIASES.has(lower)) {
-    return { value: value * GLUCOSE_MMOL_TO_MGDL, unit: canonical };
+    return { value: value * MGDL_PER_MMOL, unit: canonical };
   }
 
   // Body mass: lb → kg.

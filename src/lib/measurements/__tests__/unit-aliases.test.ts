@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import { resolveToCanonicalUnit } from "../unit-aliases";
+import { MGDL_PER_MMOL, mgdlToMmol } from "@/lib/glucose";
 
 describe("resolveToCanonicalUnit", () => {
   it("passes the canonical unit through case-insensitively", () => {
@@ -53,10 +54,17 @@ describe("resolveToCanonicalUnit", () => {
     });
   });
 
-  it("converts glucose mmol/L to canonical mg/dL", () => {
+  it("converts glucose mmol/L to canonical mg/dL on the app's one factor", () => {
+    // This used to assert 18.016 while every display path divided by
+    // 18.0182, so a reading imported as mmol/L and read back as mmol/L did
+    // not return the number it went in as. Both ends take the same factor
+    // now, and the assertion names it rather than repeating a literal —
+    // pinning the constant twice is how the two drifted apart.
     const out = resolveToCanonicalUnit("BLOOD_GLUCOSE", 5.3, "mmol/L");
     expect(out?.unit).toBe("mg/dL");
-    expect(out?.value).toBeCloseTo(5.3 * 18.016, 3);
+    expect(out?.value).toBeCloseTo(5.3 * MGDL_PER_MMOL, 3);
+    // The round trip a mmol/L reader actually experiences.
+    expect(mgdlToMmol(out?.value ?? 0)).toBe(5.3);
   });
 
   it("refuses an unrecognised or type-mismatched unit (never mis-stores)", () => {

@@ -59,6 +59,7 @@ vi.mock("@/lib/rollups/measurement-rollups", async () => {
 
 import { NextRequest } from "next/server";
 import { POST } from "../route";
+import { MGDL_PER_MMOL } from "@/lib/glucose";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/db";
 import { recomputeBucketsForMeasurement } from "@/lib/rollups/measurement-rollups";
@@ -369,7 +370,7 @@ describe("POST /api/import/csv — contextless blood glucose", () => {
       externalId: "sensor-1",
       glucoseContext: null,
     });
-    expect(row.value).toBeCloseTo(95.4848, 3);
+    expect(row.value).toBeCloseTo(5.3 * MGDL_PER_MMOL, 3);
     expect((row.measuredAt as Date).toISOString()).toBe(
       "2024-04-03T02:15:00.000Z",
     );

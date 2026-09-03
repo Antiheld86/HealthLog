@@ -5681,6 +5681,12 @@
         "imperial": "Imperial",
         "saved": "Unit preference saved",
         "saveError": "Could not save your unit preference."
+      },
+      "glucoseUnit": {
+        "title": "Blood glucose",
+        "description": "Which unit blood-glucose readings are shown in. Readings are stored the same way either way.",
+        "saved": "Glucose unit saved",
+        "saveError": "Could not save your glucose unit."
       }
     },
     "withings": "Withings",
@@ -6501,6 +6507,7 @@
       "trackedUsers": "{count} users tracked",
       "lastOk": "last success {at}",
       "lastFailure": "last failure {at}",
+      "lastFailureStatus": "HTTP {status}",
       "statusHealthy": "Healthy",
       "statusFailing": "{failing} of {tracked} failing, {run} in a row",
       "typeAdminOpenai": "Server key (operator)",

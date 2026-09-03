@@ -7,7 +7,7 @@ import { GlucoseClinicalPanel } from "@/components/insights/glucose/glucose-clin
 import { useAuth } from "@/hooks/use-auth";
 import { useModulePageGuard } from "@/hooks/use-module-page-guard";
 import { useTranslations } from "@/lib/i18n/context";
-import { resolveGlucoseUnit } from "@/lib/glucose";
+import { MGDL_PER_MMOL, resolveGlucoseUnit } from "@/lib/glucose";
 
 /**
  * v1.7.0 — `/insights/blood-glucose`.
@@ -25,8 +25,6 @@ import { resolveGlucoseUnit } from "@/lib/glucose";
  * exports. mg/dL-preference users are unaffected (scale = 1, integer
  * precision).
  */
-const MGDL_PER_MMOL = 18.0182;
-
 export default function InsightsBlutzuckerPage() {
   const { user } = useAuth();
   const { t } = useTranslations();

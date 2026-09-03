@@ -26,6 +26,7 @@ import {
   injectionSitePrefsPatchSchema,
   labsLocalOcrPatchSchema,
   unitPreferencePatchSchema,
+  glucoseUnitPatchSchema,
   useCentralCodexPatchSchema,
 } from "@/lib/validations/user-prefs";
 import {
@@ -554,6 +555,16 @@ const unitPreferencePatchRequest = unitPreferencePatchSchema.meta({
 const unitPreferenceResponse = z
   .object({ unitPreference: z.enum(["metric", "imperial"]) })
   .meta({ id: "UnitPreferenceResponse" });
+
+const glucoseUnitPatchRequest = glucoseUnitPatchSchema.meta({
+  id: "GlucoseUnitPatchRequest",
+  description:
+    "Which unit blood-glucose readings are rendered in. Presentation only — every stored reading is mg/dL either way.",
+});
+
+const glucoseUnitResponse = z
+  .object({ glucoseUnit: z.enum(["mg/dL", "mmol/L"]) })
+  .meta({ id: "GlucoseUnitResponse" });
 
 const documentsAutoAiReadPatchRequest = documentsAutoAiReadPatchSchema.meta({
   id: "DocumentsAutoAiReadPatchRequest",
@@ -1565,6 +1576,60 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
               schema: dataEnvelope(
                 unitPreferenceResponse,
                 "PatchUnitPreferenceEnvelope",
+              ),
+            },
+          },
+        },
+        "413": {
+          description: "Request body exceeds 1024 bytes. Nothing was written.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        ...stdResponses,
+      },
+    },
+  },
+  "/api/auth/me/glucose-unit": {
+    get: {
+      tags: ["Auth"],
+      summary: "Read the blood-glucose display unit",
+      description:
+        "Which unit blood-glucose readings are rendered in — `mg/dL` or `mmol/L`. A separate choice from the metric/imperial preference, because metric countries are split on which one they read glucose in. Canonical storage is mg/dL on every reading and every ingest path; this changes presentation only. Any stored value other than `mmol/L` resolves to `mg/dL`, including a null on an account that never set it.",
+      responses: {
+        "200": {
+          description: "The resolved unit.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                glucoseUnitResponse,
+                "GetGlucoseUnitEnvelope",
+              ),
+            },
+          },
+        },
+        ...stdResponses,
+      },
+    },
+    patch: {
+      tags: ["Auth"],
+      summary: "Set the blood-glucose display unit",
+      description:
+        "Hard-set, idempotent, audit-logged. Rate-limited 60 / min per user.\n\n" +
+        "Nothing already stored is converted or reinterpreted: readings stay mg/dL, and a value typed into the entry form in mmol/L is inverted to mg/dL before it is written.\n\n" +
+        "The body is capped at 1 KB and must carry `Content-Type: application/json`. Anything larger is 413, a wrong content type is 415, and a body that is not JSON at all is 400 — the same three the other scalars in this group answer.",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": { schema: glucoseUnitPatchRequest },
+        },
+      },
+      responses: {
+        "200": {
+          description: "The resolved next unit.",
+          content: {
+            "application/json": {
+              schema: dataEnvelope(
+                glucoseUnitResponse,
+                "PatchGlucoseUnitEnvelope",
               ),
             },
           },
