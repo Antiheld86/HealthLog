@@ -32,7 +32,9 @@ they say.
   a generous heap, went from dying of memory to finishing in about twenty
   seconds, with a stored copy of 25 MB instead of 322 MB. The pass also has an
   explicit two-hour window now, so a genuinely slow disk cannot be mistaken for
-  a broken run.
+  a broken run. The nightly off-host copy is built the same way and got the
+  same treatment; files written before this still restore, and so do backups
+  already sitting in the database.
 
   **That measurement does not carry to a small container, and this entry
   originally over-claimed from it.** A container capped at 1 GB gives the
@@ -41,9 +43,8 @@ they say.
   Worse, it takes the whole process down with it, so a failed backup becomes an
   outage for everyone else on the instance. Building the record incrementally
   rather than whole is the actual fix and has not landed yet. Until it does, an
-  instance backing up a large record wants more than 1 GB. The nightly off-host copy is
-  built the same way and got the same treatment; files written before this
-  still restore, and so do backups already sitting in the database.
+  instance backing up a large record wants more than 1 GB.
+
 - **A failed backup run is now visible on the backups page.** The weekly pass
   can stop and leave no trace: the page listed whatever copies existed, and a
   copy from six weeks ago carries a timestamp exactly like Sunday's. The page
