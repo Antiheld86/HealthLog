@@ -130,7 +130,8 @@ export {
 } from "@/lib/dashboard/widget-modules";
 import {
   WIDGET_MODULE_BY_ID,
-  disabledSummaryTypes,
+  gateSummariesByModules,
+  unavailableWidgetIds,
 } from "@/lib/dashboard/widget-modules";
 
 const GLUCOSE_CONTEXTS = [
@@ -1078,7 +1079,16 @@ function isThickPhaseWarm(coverage: RollupCoverageMap): boolean {
 function gateLayoutByModules(
   layout: DashboardLayout,
   modules: Record<ModuleKey, boolean>,
+  summaries: Record<string, DataSummary>,
 ): DashboardLayout {
+  // Widgets that cannot paint for THIS account, on the same rule the
+  // Settings screen hides their toggle with — so the layout the dashboard
+  // renders and the switches the user is offered never disagree.
+  const unavailable = new Set(
+    unavailableWidgetIds(modules, {
+      hasSdnn: (summaries.HEART_RATE_VARIABILITY?.count ?? 0) > 0,
+    }),
+  );
   return {
     ...layout,
     widgets: layout.widgets.map((w) => {
@@ -1086,38 +1096,12 @@ function gateLayoutByModules(
       if (moduleKey && modules[moduleKey] === false) {
         return { ...w, visible: false, tileVisible: false };
       }
+      if (unavailable.has(w.id)) {
+        return { ...w, visible: false, tileVisible: false };
+      }
       return w;
     }),
   };
-}
-
-/**
- * v1.18.0 — strip disabled-module measurement types from the slim slice
- * so neither `tiles.summaries` / `tiles.lastSeenByType` nor the derived
- * `metricStates` carry data for a module the user turned off. Returns a
- * shallow copy; the inputs are not mutated.
- */
-function gateSummariesByModules(
-  summaries: Record<string, DataSummary>,
-  lastSeenByType: Record<string, { lastSeenAt: string } | null>,
-  modules: Record<ModuleKey, boolean>,
-): {
-  summaries: Record<string, DataSummary>;
-  lastSeenByType: Record<string, { lastSeenAt: string } | null>;
-} {
-  // The drop decision is shared with `GET /api/dashboard/summary` — see
-  // `disabledSummaryTypes`. Only the filtering below is snapshot-shaped.
-  const dropped = disabledSummaryTypes(modules);
-  if (dropped.size === 0) return { summaries, lastSeenByType };
-  const outSummaries: Record<string, DataSummary> = {};
-  for (const [type, summary] of Object.entries(summaries)) {
-    if (!dropped.has(type)) outSummaries[type] = summary;
-  }
-  const outLastSeen: Record<string, { lastSeenAt: string } | null> = {};
-  for (const [type, slot] of Object.entries(lastSeenByType)) {
-    if (!dropped.has(type)) outLastSeen[type] = slot;
-  }
-  return { summaries: outSummaries, lastSeenByType: outLastSeen };
 }
 
 /**
@@ -1372,7 +1356,7 @@ export async function buildDashboardSnapshot(
     });
   }
 
-  const layout = gateLayoutByModules(storedLayout, modules);
+  const layout = gateLayoutByModules(storedLayout, modules, slim.summaries);
   // v1.18.0 — the Daily Briefing is the dashboard's AI-narrative surface,
   // so the `insights` module gates it alongside the operator briefing
   // flag + per-user coach opt-out. Disabling `insights` yields the same

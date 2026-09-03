@@ -14,6 +14,30 @@
   and a couple of scripts sits at three or four, so the limit is there to
   catch a runaway rather than to ration.
 
+### Fixed
+
+- **The heart-rate-variability tile never appeared on the dashboard for
+  people whose HRV comes from a ring or a strap.** Turning the widget on
+  under Settings → Dashboard did nothing and said nothing, while the same
+  readings charted perfectly on the HRV page — which made it look as though
+  the layout itself was broken. HRV is stored two ways: Apple Health, Fitbit
+  and Google Health record SDNN, whereas Oura, Polar and WHOOP record nightly
+  RMSSD, as does anything pushed in through a bridge from a watch that
+  reports it that way. Every other place HRV appears already accepted both;
+  the dashboard tile looked only for SDNN, so an account that had only RMSSD
+  had nothing for the tile to show. It now uses whichever series you actually
+  have, and the tile is titled "HRV (RMSSD)" when that is the one on screen,
+  so a reading of 40 is not mistaken for a collapsed SDNN figure. An account
+  with both keeps seeing SDNN, and the two are never blended — they are
+  different measures that happen to share a unit.
+- Turning the Recovery module off now takes RMSSD off the dashboard on every
+  path, not just the default one. That series belongs to Recovery everywhere
+  else in the app, and the dashboard snapshot already dropped it — but the
+  analytics endpoint that feeds the same tiles when the snapshot is switched
+  off filtered nothing at all, so a disabled module still reached the client
+  there. Both feeds now strip the same set, from the same map, so the gate no
+  longer depends on which path served the page.
+
 ## [1.38.7] — 2026-09-03
 
 The weekly backup actually produces a backup again. v1.38.6 stopped it

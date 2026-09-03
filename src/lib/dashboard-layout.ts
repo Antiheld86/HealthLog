@@ -709,6 +709,13 @@ export function mergePreservedLayoutFields(
  */
 export type DashboardLayoutWithToken = DashboardLayout & {
   updatedAt?: string;
+  /**
+   * Widget ids the server resolved as unavailable for this account — a
+   * toggle that cannot do anything, which Settings must not offer. See
+   * `unavailableWidgetIds`. Optional and additive: a client that ignores
+   * it behaves exactly as before.
+   */
+  unavailableWidgetIds?: string[];
 };
 
 const DASHBOARD_LAYOUT_VERSION = 1;
