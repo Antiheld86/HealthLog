@@ -136,7 +136,6 @@
     "testcontainers",
     "tw-animate-css",
     "@napi-rs/canvas",
-    "@openai/codex-security",
     "postcss",
   ],
   "ignoreBinaries": [

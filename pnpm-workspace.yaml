@@ -65,6 +65,15 @@ overrides:
   # dragged onto a new one.
   "valibot@<1.4.2": "^1.4.2"
 
+  # GHSA-p498-v437-472g. eslint's filesystem layer; development-only, but the
+  # floor costs nothing and keeps the advisory list at zero so a real one is
+  # not lost in the noise.
+  "@humanfs/node@<0.16.8": "^0.16.8"
+
+  # GHSA-g7r4-m6w7-qqqr. Reached through the test tooling, never shipped. The
+  # patched line is the same minor, so nothing downstream moves.
+  "esbuild@>=0.27.3 <0.28.1": "^0.28.1"
+
 allowBuilds:
   "@prisma/engines": true
   prisma: true
@@ -82,5 +91,4 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - "@next/bundle-analyzer@16.2.12"
   - lucide-react@1.27.0
-  - "@openai/codex-security@0.1.1"
   - undici@8.10.0
