@@ -37,12 +37,17 @@ vi.mock("@/lib/logging/context", () => ({
   getEvent: vi.fn(() => null),
 }));
 
+vi.mock("@/lib/db", () => ({
+  prisma: { apiToken: { count: vi.fn() } },
+}));
+
 import { POST } from "../route";
 import { requireCookieAuth } from "@/lib/api-handler";
 import { issueApiToken } from "@/lib/auth/issue-token";
 import { isApiGloballyEnabled } from "@/lib/app-settings";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { auditLog } from "@/lib/auth/audit";
+import { prisma } from "@/lib/db";
 import { MEASUREMENTS_WRITE_SCOPE } from "@/lib/measurements/scopes";
 
 const USER = { id: "user-1", role: "USER" as const };
@@ -62,6 +67,8 @@ beforeEach(() => {
   vi.mocked(isApiGloballyEnabled).mockResolvedValue(true);
   vi.mocked(checkRateLimit).mockResolvedValue({ allowed: true } as never);
   vi.mocked(auditLog).mockResolvedValue(undefined as never);
+  // Below the ceiling by default; the cases that care set their own count.
+  vi.mocked(prisma.apiToken.count).mockResolvedValue(0 as never);
   vi.mocked(issueApiToken).mockResolvedValue({
     token: "hlk_" + "a".repeat(64),
     expiresAt: EXPIRES,
@@ -114,6 +121,25 @@ describe("what it mints", () => {
       }),
     );
   });
+
+  it("counts only live tokens carrying this scope", async () => {
+    // The whole shape of the query, asserted rather than assumed. Counting
+    // every row would let the `["*"]` tokens a login mints consume the budget
+    // and refuse a mint for a reason the person cannot see; counting revoked
+    // or expired rows would mean revoking never frees a slot.
+    await POST(req({ name: "Scale" }) as never);
+
+    const where = vi.mocked(prisma.apiToken.count).mock.calls[0][0]?.where;
+    expect(where).toMatchObject({
+      userId: USER.id,
+      revoked: false,
+      permissions: { has: MEASUREMENTS_WRITE_SCOPE },
+    });
+    expect(where?.OR).toEqual([
+      { expiresAt: null },
+      { expiresAt: { gt: expect.any(Date) } },
+    ]);
+  });
 });
 
 describe("when it refuses", () => {
@@ -143,6 +169,36 @@ describe("when it refuses", () => {
     );
     expect(res.status).toBe(422);
     expect(issueApiToken).not.toHaveBeenCalled();
+  });
+
+  it("409s at the live-token ceiling, without minting", async () => {
+    vi.mocked(prisma.apiToken.count).mockResolvedValue(10 as never);
+    const res = await POST(req({ name: "Scale" }) as never);
+
+    // 409, not 429: a conflict with the account's current state, whose remedy
+    // is revoking rather than waiting. A 429 would say the opposite.
+    expect(res.status).toBe(409);
+    expect((await res.json()).meta?.errorCode).toBe(
+      "tokens.measurements.ceiling_reached",
+    );
+    expect(issueApiToken).not.toHaveBeenCalled();
+  });
+
+  it("still mints on the last free slot", async () => {
+    // The off-by-one that would make the ceiling nine. Worth pinning, because
+    // `>=` versus `>` is invisible in review and only one of them is right.
+    vi.mocked(prisma.apiToken.count).mockResolvedValue(9 as never);
+    const res = await POST(req({ name: "Scale" }) as never);
+    expect(res.status).toBe(201);
+  });
+
+  it("checks the ceiling only after the body validates", async () => {
+    // A malformed request should hear about the malformation, not the
+    // ceiling — and should not spend a query establishing it.
+    vi.mocked(prisma.apiToken.count).mockResolvedValue(10 as never);
+    const res = await POST(req({}) as never);
+    expect(res.status).toBe(422);
+    expect(prisma.apiToken.count).not.toHaveBeenCalled();
   });
 
   it("ignores a scope the body tries to smuggle in", async () => {
