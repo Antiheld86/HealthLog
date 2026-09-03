@@ -108,6 +108,27 @@ const dashboardLayoutResult = dashboardLayoutSchema
       "Resolved dashboard layout plus the optimistic-concurrency `updatedAt` token.",
   });
 
+/**
+ * The GET-only shape. `unavailableWidgetIds` is resolved per request from
+ * the caller's module state and their data, so it belongs to the read and
+ * never to the PUT echo — hence a separate schema rather than widening
+ * `dashboardLayoutResult`, which both verbs share.
+ */
+const dashboardLayoutReadResult = dashboardLayoutResult
+  .extend({
+    unavailableWidgetIds: z
+      .array(z.string())
+      .optional()
+      .describe(
+        "Widget ids whose toggle cannot do anything for this account, and which a settings UI should therefore not offer — a switch over a tile that can never paint. Resolved per request from the caller's enabled modules and the data they actually have: `hrv` appears here when the Recovery module is off and the account has no SDNN series, because its only remaining HRV source (nightly RMSSD) is recovery-owned and withheld. Absent when nothing is unavailable. Additive: a client that ignores it behaves exactly as before.",
+      ),
+  })
+  .meta({
+    id: "DashboardLayoutReadResult",
+    description:
+      "Resolved dashboard layout, its `updatedAt` token, and any widget toggles that are unavailable for this account.",
+  });
+
 // ── The native-client dashboard aggregator ───────────────────────────
 //
 // `GET /api/dashboard/summary` predates the registry and is the shape the iOS
@@ -372,7 +393,7 @@ export const dashboardWidgetPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Dashboard"],
       summary: "Read the calling user's dashboard widget layout",
       description:
-        "Returns the resolved effective layout (defaults merged in if the user has not customised it) plus the optimistic-concurrency `updatedAt` token.",
+        "Returns the resolved effective layout (defaults merged in if the user has not customised it), the optimistic-concurrency `updatedAt` token, and `unavailableWidgetIds` — any widget whose toggle cannot do anything for this account, which a settings UI should not offer.",
       responses: {
         ...recordRefusal(),
         "200": {
@@ -380,7 +401,10 @@ export const dashboardWidgetPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             "The resolved layout (custom or default) plus its token.",
           content: {
             "application/json": {
-              schema: dataEnvelope(dashboardLayoutResult, "DashboardLayout"),
+              schema: dataEnvelope(
+                dashboardLayoutReadResult,
+                "DashboardLayout",
+              ),
             },
           },
         },
