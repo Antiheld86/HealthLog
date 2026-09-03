@@ -22,6 +22,14 @@ Tokens expire after a year by default. They appear in the API Tokens list on
 the same page alongside every other credential on the account, and are revoked
 there.
 
+An account can hold at most ten live measurement tokens at once — across every
+automation platform combined, not ten per platform. Past that, minting another
+is refused with a 409 until you revoke one; revoking frees the slot
+immediately, and an expired token stops counting on its own. It is not a
+security boundary, just a backstop against a script stuck minting in a retry
+loop, so a household running a scale, a watch bridge and a couple of scripts
+will never come close.
+
 ## What the token can and cannot do
 
 It can add readings, on your own record, through:

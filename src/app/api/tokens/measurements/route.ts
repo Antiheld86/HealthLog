@@ -40,6 +40,7 @@ import {
 } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
+import { prisma } from "@/lib/db";
 import { issueApiToken } from "@/lib/auth/issue-token";
 import { isApiGloballyEnabled } from "@/lib/app-settings";
 import { checkRateLimit } from "@/lib/rate-limit";
@@ -61,6 +62,23 @@ const DEFAULT_EXPIRY_DAYS = 365;
 /** Mints per user per minute. A credential mint is worth its own bucket. */
 const MINT_RATE_LIMIT_MAX = 10;
 const MINT_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+
+/**
+ * How many ingest tokens an account may hold at once.
+ *
+ * The rate limit above and this are different guards and neither substitutes
+ * for the other. The bucket bounds a burst; it does nothing about
+ * accumulation, and a stuck automation retrying politely inside its allowance
+ * still reaches several hundred live credentials in an afternoon. This bounds
+ * the standing set, so a runaway script meets a refusal rather than leaving a
+ * thousand rows for somebody to revoke by hand.
+ *
+ * Ten is meant to be a number nobody legitimately reaches: a household running
+ * Home Assistant, a scale bridge and a couple of scripts sits at three or four.
+ * It is not a security boundary — the person can revoke and mint freely — so
+ * it is set to catch a loop, not to ration.
+ */
+const MAX_LIVE_TOKENS = 10;
 
 export const POST = apiHandler(async (request: NextRequest) => {
   // Cookie-only, and the reason is lifetime rather than reach.
@@ -100,6 +118,56 @@ export const POST = apiHandler(async (request: NextRequest) => {
   const parsed = createMeasurementTokenSchema.safeParse(body);
   if (!parsed.success) {
     return returnAllZodIssues(parsed.error, 422);
+  }
+
+  // Counted LIVE, not minted-ever, so revoking frees a slot and an expired
+  // token stops occupying one — the ceiling bounds what currently exists
+  // rather than what the account has ever done. Scoped to this grant for the
+  // same reason: a login mints a `["*"]` access token per session and those
+  // accumulate on their own, so counting every row would let ordinary browser
+  // use exhaust the budget and then refuse a mint for a reason invisible to
+  // the person hitting it.
+  //
+  // Placed after validation and before the create: a request that is going to
+  // be refused should not cost a credential, and one that is malformed should
+  // hear about the malformation rather than the ceiling.
+  //
+  // Count-then-create is NOT atomic, and deliberately so. Two mints racing at
+  // nine both read nine, both pass, and the account lands eleven. Nothing here
+  // prevents that; what bounds it is the rate limit above, which is a single
+  // `INSERT … ON CONFLICT DO UPDATE … RETURNING` (`lib/rate-limit.ts`) and so
+  // admits at most `MINT_RATE_LIMIT_MAX` mints per user per window. The race
+  // can overshoot the ceiling; it cannot run away from it.
+  //
+  // Left unserialised because of what this limit is for: catching a runaway
+  // automation, not metering a quota anybody is billed against. The holder can
+  // revoke and mint freely, so eleven tokens instead of ten costs nothing,
+  // while a lock on a credential mint is a contention point on a write that
+  // must not hang. If it ever does need to be exact, the house pattern is
+  // `pg_advisory_xact_lock(hashtextextended(<key>, 0))` inside the
+  // transaction — see `lib/managed-profiles/lifecycle.ts:47` or
+  // `lib/integrations/oauth-refresh.ts:89`.
+  const live = await prisma.apiToken.count({
+    where: {
+      userId: user.id,
+      revoked: false,
+      permissions: { has: MEASUREMENTS_WRITE_SCOPE },
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+    },
+  });
+  if (live >= MAX_LIVE_TOKENS) {
+    annotate({
+      action: { name: "tokens.measurements.create" },
+      meta: { outcome: "ceiling_reached", live_token_count: live },
+    });
+    // 409 rather than 429: this is a conflict with the account's current
+    // state, not a rate, and the remedy is to revoke one rather than to wait.
+    // A 429 would tell the caller the opposite of what is true.
+    return apiError(
+      `You already have ${MAX_LIVE_TOKENS} measurement tokens. Revoke one before creating another.`,
+      409,
+      { errorCode: "tokens.measurements.ceiling_reached" },
+    );
   }
 
   const issued = await issueApiToken({

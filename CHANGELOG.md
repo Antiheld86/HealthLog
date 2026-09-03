@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- **You can hold up to ten measurement tokens at a time.** Past that, minting
+  another is refused until you revoke one, so a script stuck in a retry loop
+  meets a wall instead of leaving you hundreds of live credentials to clear
+  out by hand. Only tokens that are actually alive count: revoking one frees
+  a slot immediately, an expired one stops taking up space on its own, and
+  the ordinary tokens your browser and phone use to sign in are counted
+  separately and never eat into it. A household with a scale, a watch bridge
+  and a couple of scripts sits at three or four, so the limit is there to
+  catch a runaway rather than to ration.
+
 ## [1.38.7] — 2026-09-03
 
 The weekly backup actually produces a backup again. v1.38.6 stopped it
