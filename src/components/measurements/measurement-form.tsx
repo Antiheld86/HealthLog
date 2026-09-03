@@ -26,6 +26,8 @@ import { Loader2, MoreHorizontal, Plus, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslations } from "@/lib/i18n/context";
 import { useUnitDisplay } from "@/hooks/use-unit-display";
+import { useAuth } from "@/hooks/use-auth";
+import { resolveGlucoseUnit, toCanonicalMgdl } from "@/lib/glucose";
 import {
   entryValueToCanonical,
   parseDecimalEntry,
@@ -246,6 +248,14 @@ export function MeasurementForm({
   const recordName = useActiveRecordName();
   const queryClient = useQueryClient();
   const unitDisplay = useUnitDisplay();
+  const { user } = useAuth();
+  // Glucose is its own display axis, separate from metric/imperial: it is
+  // stored in mg/dL and rendered in whichever of mg/dL and mmol/L the
+  // account chose. The form has to ask in the same unit it labels, and
+  // invert on the way out, or a reader on mmol/L would file "5.5" as five
+  // and a half mg/dL — a number the plausibility band happily accepts and
+  // every surface then reads back as a severe hypo.
+  const glucoseUnit = resolveGlucoseUnit(user?.glucoseUnit);
 
   // Normalize legacy BP types to combined mode
   const normalizedDefault =
@@ -359,7 +369,9 @@ export function MeasurementForm({
           return;
         }
         let canonicalValue = typed;
-        if (unitDisplay.isTransformed(type)) {
+        if (isGlucoseMode) {
+          canonicalValue = toCanonicalMgdl(typed, glucoseUnit);
+        } else if (unitDisplay.isTransformed(type)) {
           const inverted = unitDisplay.fromDisplay(type, typed);
           canonicalValue =
             unitDisplay.preference === "imperial"
@@ -537,13 +549,15 @@ export function MeasurementForm({
             // For a type with a metric/imperial transform the label follows the
             // user's preference (kg↔lb, cm↔in, °C↔°F); everything else keeps
             // its static catalogue unit.
-            unit: typeInfo
-              ? unitDisplay.isTransformed(type)
-                ? unitDisplay.unitFor(type)
-                : "unitKey" in typeInfo
-                  ? t(typeInfo.unitKey)
-                  : typeInfo.unit
-              : "",
+            unit: isGlucoseMode
+              ? glucoseUnit
+              : typeInfo
+                ? unitDisplay.isTransformed(type)
+                  ? unitDisplay.unitFor(type)
+                  : "unitKey" in typeInfo
+                    ? t(typeInfo.unitKey)
+                    : typeInfo.unit
+                : "",
           })}
         >
           <Input
@@ -558,14 +572,16 @@ export function MeasurementForm({
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder={
-              typeInfo
-                ? unitDisplay.preference === "imperial" &&
-                  "placeholderImperial" in typeInfo
-                  ? typeInfo.placeholderImperial
-                  : "placeholder" in typeInfo
-                    ? typeInfo.placeholder
-                    : undefined
-                : undefined
+              isGlucoseMode && glucoseUnit === "mmol/L"
+                ? "5.3"
+                : typeInfo
+                  ? unitDisplay.preference === "imperial" &&
+                    "placeholderImperial" in typeInfo
+                    ? typeInfo.placeholderImperial
+                    : "placeholder" in typeInfo
+                      ? typeInfo.placeholder
+                      : undefined
+                  : undefined
             }
             required
             aria-required="true"

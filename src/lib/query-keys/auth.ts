@@ -31,6 +31,15 @@ export const authKeys = {
    * without a manual reload.
    */
   userUnitPreference: () => ["user", "unit-preference"] as const,
+  /**
+   * The mg/dL vs mmol/L glucose display control behind
+   * `GET /api/auth/me/glucose-unit`. A separate axis from the
+   * metric/imperial preference above — metric countries are split on
+   * which one they read glucose in — so it carries its own key. The
+   * PATCH also invalidates `authMe()`, since every glucose surface
+   * resolves the unit from the account payload rather than from here.
+   */
+  userGlucoseUnit: () => ["user", "glucose-unit"] as const,
 
   passkeys: () => ["passkeys"] as const,
 

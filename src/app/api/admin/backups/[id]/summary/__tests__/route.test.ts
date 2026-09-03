@@ -30,8 +30,12 @@ vi.mock("@/lib/db", () => ({
 }));
 
 const decryptMock = vi.fn();
+// The envelope reader asks which of the stored shapes it was handed before it
+// decrypts anything, so a stub of this module has to answer that too.
 vi.mock("@/lib/crypto", () => ({
   decrypt: (...a: unknown[]) => decryptMock(...a),
+  isStreamCiphertext: () => false,
+  decryptStream: vi.fn(),
 }));
 
 const parseMock = vi.fn();

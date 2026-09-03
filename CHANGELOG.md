@@ -1,6 +1,25 @@
 # Changelog
 
-## [Unreleased]
+## [1.38.6] — 2026-09-03
+
+Blood glucose can be shown in mmol/L, which it never could before, and the
+weekly backup finally sits inside key rotation. Text the server writes now
+arrives in the language you actually read the app in.
+
+### Changed
+
+- `greetingHour` is no longer part of the dashboard snapshot response. Any
+  client that decoded it as a required field needs the field made optional or
+  dropped; the `timezone` it sits beside is unchanged and is what the greeting
+  should be derived from.
+- The rotation script says what it did NOT look at. A zero that means "nothing
+  left" and a zero that means "never looked" read the same on a summary, and an
+  operator acts on that zero by dropping a key. Each run now ends with the
+  count of registered columns it walked, names any it skipped, and exits
+  non-zero when the two disagree. The runbook's retire-the-key step was
+  rewritten around that signal instead of around "the script ran cleanly", and
+  it tells an operator who already rotated on an older release how to get their
+  backups back.
 
 ### Fixed
 
@@ -28,8 +47,150 @@
   endpoints are required by their specifications to ignore parameters they do
   not recognise, and an import file comes from another version or another tool
   by definition.
+- **The greeting could contradict the rest of the page.** Three separate
+  pieces of code answered the question "what hour is it" for the time-of-day
+  salutation. The dashboard snapshot computed one server-side and put it on
+  the payload so that clients would not have to; no client ever read it. The
+  insights hero worked it out from the profile timezone. The dashboard header
+  worked it out from a helper of its own that quietly fell back to the
+  device's clock whenever the runtime could not resolve the configured zone,
+  which is what happens to a zone the browser's timezone data does not yet
+  carry. At one instant, for one account, those three returned 20, 21 and 05,
+  so the header said good morning while the hero said good evening and every
+  date beneath them belonged to a third zone. The two greetings now read the
+  same helper, which stays on the configured zone and falls back to the same
+  default as the rest of the app rather than to the device. The server value
+  is gone: it is a clock reading, not a fact about the record, and the
+  snapshot body is served from cache for up to an hour, long enough for a
+  stored hour to name a salutation the clock had already left behind. What
+  the server resolves and every client reads is the timezone itself, which
+  travels on the same payload as before.
+- **Some accounts had their generated text written in a language they do not
+  read.** Everything the app writes without a request in front of it — the
+  nightly briefing, the Coach nudge, the reminder messages — resolves its
+  language from one column on the user row, because a background pass has no
+  cookie and no browser to ask. Everything the user looks at resolves from the
+  request instead, and the request prefers the language cookie, then the
+  column, then what the browser asked for. So the two can disagree, and while
+  they do, nothing on screen looks wrong: the menus, the buttons and the
+  labels are all correct, and the disagreement shows up as a single generated
+  paragraph in the wrong language sitting inside an otherwise correct page.
+  That is how it was reported, on a page where the sentence above the health
+  score came back in English on an account read entirely in German.
+  Keeping the column in step was the browser's job, through a best-effort
+  request sent once when a page mounted and never checked. Anything that
+  interrupts it — the paint before sign-in, an offline moment, a tab closed
+  while it was still in flight — loses the write, and the next page load makes
+  the same unchecked attempt rather than noticing the column is still wrong,
+  so the wrong language can stand for the life of the account. The server now
+  keeps the two in step itself: when a request arrives carrying a language the
+  column does not agree with, the column is corrected, once, on the spot. It
+  needs nothing from the browser, it cannot be dropped in transit, and it
+  fixes accounts that have been diverged for months on their next page load.
+  Accounts that never opened the language picker at all are covered the same
+  way. Nobody's stored preference is guessed at: only a language the app was
+  actually being read in can reach the column.
+- **The dashboard aggregate greeted some users in English on a German
+  instance.** The salutation and the streak label are translated on the
+  server for the native client, and that request carries no language cookie,
+  so the stored preference is the only signal. When an account had never
+  opened the language picker the column is empty, and the fallback stopped at
+  English instead of asking what language the instance is configured for.
+  It now follows the same order every background writer uses: the user's own
+  preference, then the operator's default, then English. This was the last
+  copy of the fallback that the nightly writers were moved off earlier.
+
+- **A failing AI provider says what came back.** The provider health card in
+  the operator console could report a provider as failing without saying
+  whose problem it was. The ledger has recorded the HTTP status of every
+  failure since v1.11 and nothing read it. The card names it beside the
+  failure it belongs to now, which is the difference between a dead key the
+  operator has to replace and a provider having a bad afternoon. Blank where
+  there was no status to record, as with a connection that never completed.
+- **Blood glucose can be shown in mmol/L. It never could before.** The
+  account has carried a glucose display unit since v1.2 and about thirty
+  places read it: the dashboard tiles, the glucose page, the targets panel,
+  the CSV and FHIR exports, the doctor report, the Coach's own notes, the
+  low-reading alert. Nothing could ever set it. There was no control, no
+  endpoint and no field on any form, so every account sat on the mg/dL
+  default and anyone who reads glucose in mmol/L got a number they had to
+  convert in their head on every screen. The unit is now a dropdown in
+  Settings under your profile, beside the metric/imperial one and
+  deliberately not folded into it, because metric countries are split on
+  which unit they read glucose in and one control would get half of them
+  wrong. Nothing already recorded changes: readings are stored in mg/dL and
+  stay stored in mg/dL, and the unit only picks how they are shown. The
+  entry form moved with it, which is the half that mattered. It now asks in
+  the unit you chose and converts on the way in, so a 5.3 typed by an mmol/L
+  reader is filed as 95 mg/dL instead of as 5.3, which is inside the
+  plausible range, passes without a word, and reads back on every surface as
+  a severe hypo. The measurements list and its edit sheet moved with it for
+  the same reason, so correcting a typo cannot rewrite a reading into the
+  other unit.
+- **The same reading converted two different ways.** A glucose value
+  imported in mmol/L was multiplied by 18.016; one displayed in mmol/L was
+  divided by 18.0182. A value imported in mmol/L therefore did not come back
+  out as the number it went in as. Both ends take the same factor now, and
+  the test names the constant rather than repeating the digits, which is how
+  the two came apart to begin with.
+- **An Apple Health import records which export it came from.** The import
+  status has always carried the instant the Health app stamped on the
+  archive, the API contract has always promised it, and it was always empty:
+  the element sat on the parser's list of things to skip. The parser reads
+  it now and writes it the moment it goes past, so a run that later fails
+  still says which export it was working from.
+- **The weekly backup no longer takes the instance down with it.** The
+  compression that went out last release was real, and it was measured in the
+  wrong place. On a development machine with a multi-gigabyte heap the pass
+  finished; the container it actually runs in is capped at 1 GB, which gives
+  Node a 524 MB heap, and there the same pass died with
+  `Reached heap limit — JavaScript heap out of memory` about fifteen seconds
+  in. Because the job shares the application process, that was not one failed
+  backup: it was a restart, and every signed-in session on the host went with
+  it. The document is now written incrementally. The three tables that grow
+  without bound — readings, doses, mood entries — are read a page at a time and
+  serialised straight into the compressor and the cipher, every other section
+  is released as soon as its own JSON exists, and nothing between the database
+  rows and the stored value is ever held whole. On a seeded account of 445 000
+  readings the pass used to exhaust a 546 MB heap; the same account doubled to
+  890 000 now finishes inside 296 MB. The writer also watches its own memory
+  and stops at 80 percent of the limit, so an account too large for its host is
+  a backup that failed for that one account and is counted in the run's meta,
+  not a restart for everybody. Backups written under either older shape still
+  restore, which is checked both ways rather than asserted.
+- **Backups were outside key rotation.** `DataBackup.data` holds every weekly
+  disaster-recovery snapshot and every uploaded pack, encrypted at rest like
+  everything else — but under a column called `data`, and the rotation registry
+  was keyed on the `*Encrypted` naming convention. So the rotation script never
+  read a backup, reported zero rows remaining, and the runbook told the
+  operator that zero meant the previous key was safe to retire. Following those
+  instructions to the letter made every stored backup permanently
+  undecryptable, which is the last thing that should break. The registry now
+  covers it, rotation walks it in bounded batches (one row is a whole
+  compressed account), and it re-seals the ciphertext without reading the
+  plaintext, so both stored envelopes — the plain JSON and the compressed one —
+  come back byte-identical, as will any later one. The same sweep found one
+  more: the idempotent-replay response cache, now rotated too.
+- **Rotation crashed a third of the way through and said nothing.** Running the
+  script against a seeded database — rather than reading it — showed it dying
+  on the mood day-context note. That table is keyed on the entry it belongs to,
+  not on an `id`, and the walk asked for a column the database does not have.
+  Everything after it in the pass, the backups included, was never reached. The
+  walk now takes the model's actual key, and a check fails the build if a
+  registered column's key does not match the schema.
+- The document index's verbatim text was rotating but never appeared in the
+  summary, so the new coverage check read it as skipped. It has its own line
+  now, with its own counts.
 
 ### Internal
+
+- A column holding ciphertext is now recognised by what the code writes into
+  it, not by what it is called. A new guard traces the encryption helpers
+  through their wrappers, walks every Prisma write payload, and fails when a
+  column receives ciphertext without being registered for rotation — the
+  check that would have caught the backup blob nine releases ago. It asserts a
+  non-zero, anchored match count, so a matcher that quietly stops matching
+  fails instead of passing, and it was verified by breaking it three ways.
 
 - The column-reader sweep was wrong in both directions and had been for as long as it existed. It answers "does this column have a consumer" for every column in the schema, and it is the tool this project leans on to catch a schema change that ships its writer and forgets its reader. Its idea of a write was any `field:` key anywhere, so `where: { ticketHash }` counted as writing `ticketHash`: all twelve columns it reported were a lookup key or a cron's discovery predicate being filtered on, every one a false alarm. And because it only ever reported a column that HAD a write, a column with no write at all was the one thing it could not see. It now understands which Prisma argument a key sits in, follows a payload assembled into a variable before the call, credits raw SQL against the mapped column name, and reports a column no code touches at all as its own category. Twelve false alarms became nineteen findings that each hold up, four of them worth acting on. The matcher underneath is pinned by a test that was checked by breaking it three ways.
 - **Two columns have a reader and no writer.** The glucose unit preference is read across twenty-nine files, the dashboard and both exports and the doctor report and the FHIR resources among them, and no surface anywhere writes it, so an account cannot leave mg/dL. An import job's export date is described in the schema as parsed during unpack, is returned by the import status endpoint and is in the published contract, but the parser skips Apple's `ExportDate` element outright: the field has always been null.
@@ -37,8 +198,9 @@
 
 ## [1.38.5] — 2026-09-03
 
-The weekly backup finishes again, the dashboard stops scanning the two
-largest tables, and several settings now do what they say.
+The weekly backup costs a fraction of the memory it did, the dashboard
+stops scanning the two largest tables, and several settings now do what
+they say.
 
 ### Security
 
@@ -62,12 +224,23 @@ largest tables, and several settings now do what they say.
   which is four full copies of the record at the same moment. The stored copy
   is now compressed before it is encrypted, which takes an order of magnitude
   off everything after it, and the pass releases each stage before allocating
-  the next. A seeded 445 000-reading account went from dying of memory to
-  finishing in about twenty seconds, with a stored copy of 25 MB instead of
-  322 MB. The pass also has an explicit two-hour window now, so a genuinely
-  slow disk cannot be mistaken for a broken run. The nightly off-host copy is
-  built the same way and got the same treatment; files written before this
-  still restore, and so do backups already sitting in the database.
+  the next. A seeded 445 000-reading account, on a machine with
+  a generous heap, went from dying of memory to finishing in about twenty
+  seconds, with a stored copy of 25 MB instead of 322 MB. The pass also has an
+  explicit two-hour window now, so a genuinely slow disk cannot be mistaken for
+  a broken run. The nightly off-host copy is built the same way and got the
+  same treatment; files written before this still restore, and so do backups
+  already sitting in the database.
+
+  **That measurement does not carry to a small container, and this entry
+  originally over-claimed from it.** A container capped at 1 GB gives the
+  runtime a 524 MB heap, and against one of those the pass still runs out of
+  memory, roughly three times further along than before but short of the end.
+  Worse, it takes the whole process down with it, so a failed backup becomes an
+  outage for everyone else on the instance. Building the record incrementally
+  rather than whole is the actual fix and has not landed yet. Until it does, an
+  instance backing up a large record wants more than 1 GB.
+
 - **A failed backup run is now visible on the backups page.** The weekly pass
   can stop and leave no trace: the page listed whatever copies existed, and a
   copy from six weeks ago carries a timestamp exactly like Sunday's. The page

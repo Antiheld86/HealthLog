@@ -73,6 +73,11 @@ import { rawDisplayFractionDigits } from "@/lib/measurements/display-transform";
 import { getUnitForType } from "@/lib/validations/measurement";
 import { useUnitDisplay } from "@/hooks/use-unit-display";
 import {
+  convertGlucose,
+  resolveGlucoseUnit,
+  toCanonicalMgdl,
+} from "@/lib/glucose";
+import {
   invalidateKeys,
   measurementDependentKeys,
   queryKeys,
@@ -303,17 +308,40 @@ export function MeasurementList({
   // transform; a legacy non-canonical row (an old MCP write whose `unit` ≠ the
   // type's canonical unit) is shown verbatim so its stored unit is never
   // silently relabelled. Metric users take the identity path — unchanged.
+  // Glucose sits on its own display axis: stored mg/dL, rendered in whichever
+  // of mg/dL and mmol/L the account chose. It is not part of the
+  // metric/imperial registry, so it needs its own branch or a reader on
+  // mmol/L would see the dashboard tile and this list disagree about the
+  // same reading.
+  const glucoseUnit = resolveGlucoseUnit(user?.glucoseUnit);
+  // An edit whose input is NOT in the stored unit. Only the mmol/L branch
+  // qualifies: an mg/dL account edits in the unit the column holds, and
+  // routing it through the converter anyway would quantise a stored 95.48 to
+  // 95 the moment somebody opened the sheet to fix a note.
+  const editsConvertedGlucose = useCallback(
+    (m: { type: string; unit: string }) =>
+      m.type === "BLOOD_GLUCOSE" &&
+      glucoseUnit === "mmol/L" &&
+      m.unit === getUnitForType(m.type),
+    [glucoseUnit],
+  );
   const rowDisplay = useCallback(
     (m: { type: string; value: number; unit: string }) => {
       if (m.unit !== getUnitForType(m.type)) {
         return { value: m.value, unit: m.unit };
+      }
+      if (m.type === "BLOOD_GLUCOSE") {
+        return {
+          value: convertGlucose(m.value, glucoseUnit),
+          unit: glucoseUnit,
+        };
       }
       return {
         value: unitDisplay.toDisplay(m.type, m.value),
         unit: unitDisplay.unitFor(m.type),
       };
     },
-    [unitDisplay],
+    [unitDisplay, glucoseUnit],
   );
   // v1.28.42 (H3) — the desktop table and the mobile card list used to BOTH
   // render (only CSS `display` hid one), so a dense cumulative (up to ~5000
@@ -791,10 +819,11 @@ export function MeasurementList({
     // stored value, unchanged. Round the converted imperial seed so the input
     // shows "210" rather than a long float.
     const rd = rowDisplay(measurement);
-    const seedValue =
-      unitDisplay.preference === "imperial" &&
-      unitDisplay.isTransformed(measurement.type) &&
-      measurement.unit === getUnitForType(measurement.type)
+    const seedValue = editsConvertedGlucose(measurement)
+      ? rd.value
+      : unitDisplay.preference === "imperial" &&
+          unitDisplay.isTransformed(measurement.type) &&
+          measurement.unit === getUnitForType(measurement.type)
         ? Math.round(rd.value * 100) / 100
         : measurement.value;
     const seed = {
@@ -852,7 +881,11 @@ export function MeasurementList({
     // the PATCH so an imperial edit persists in the stored unit. Metric users
     // and legacy non-canonical rows are the identity path — value unchanged.
     let canonicalValue = parsedValue;
-    if (
+    if (editsConvertedGlucose(editing)) {
+      // The label above the input said mmol/L, so the number in it is
+      // mmol/L. Sending it on would rewrite a 95 mg/dL reading as 5.3.
+      canonicalValue = toCanonicalMgdl(parsedValue, "mmol/L");
+    } else if (
       unitDisplay.isTransformed(editing.type) &&
       editing.unit === getUnitForType(editing.type)
     ) {

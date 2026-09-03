@@ -9,6 +9,16 @@
  *
  * The decrypted notes are surfaced here (the backup is the human-readable
  * artefact); an admin restore re-encrypts them on re-insert.
+ *
+ * Two writers read this file, not one. `buildFullBackupPayload` materialises
+ * the whole payload, which is what the two export routes and every test want.
+ * `streamFullBackupJson` (`full-backup-stream.ts`) asks for the same payload
+ * with `deferBulk`, which leaves the three unbounded tables as markers and
+ * pulls their rows through itself — the weekly job takes that path because
+ * materialising a large record is what used to exhaust the container's heap.
+ * Both go through the same per-row serialisers below, so a column that reaches
+ * one reaches the other; the integration suite pins the two outputs byte for
+ * byte rather than trusting that sentence.
  */
 import { Buffer } from "node:buffer";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
@@ -146,6 +156,14 @@ export interface FullBackupResult {
 export interface FullBackupOptions {
   purpose?: "portable-export" | "disaster-recovery";
   exportedAt?: Date;
+  /**
+   * Declare the three unbounded tables instead of reading them.
+   *
+   * `measurements`, `intakeEvents` and `moodEntries` come back as
+   * `DeferredRows` markers and their counts as 0. Only `streamFullBackupJson`
+   * sets this; every other caller wants the arrays and gets them.
+   */
+  deferBulk?: boolean;
 }
 /**
  * Every restorable `Measurement` scalar. `userId` is deliberately absent — the
@@ -266,6 +284,35 @@ type BackupMoodContext = Prisma.MoodContextGetPayload<{
   select: typeof MOOD_CONTEXT_BACKUP_SELECT;
 }>;
 
+type BackupMeasurement = Prisma.MeasurementGetPayload<{
+  select: typeof MEASUREMENT_BACKUP_SELECT;
+}>;
+
+type BackupIntakeEvent = Prisma.MedicationIntakeEventGetPayload<{
+  include: { medication: { select: { name: true } } };
+}>;
+
+/**
+ * The mood read, select and joins together. Named because two readers issue
+ * it — the materialising one and the paged one — and a select that lived in
+ * only one of them is exactly the drift the completeness guard cannot see.
+ */
+const MOOD_ENTRY_QUERY_SELECT = {
+  ...MOOD_ENTRY_BACKUP_SELECT,
+  // Every link, not only the rated ones. This read used to filter
+  // `rating: { not: null }`, and a BINARY link carries a NULL rating by
+  // definition — so the present/absent tags, the kind most people pick,
+  // were absent from the file and could not come back from it.
+  tagLinks: { select: MOOD_ENTRY_TAG_LINK_SELECT },
+  // The day context, when the entry has one. Sparse by design — most
+  // entries carry none, and the join answers null on those.
+  context: { select: MOOD_CONTEXT_BACKUP_SELECT },
+} as const satisfies Prisma.MoodEntrySelect;
+
+type BackupMoodEntry = Prisma.MoodEntryGetPayload<{
+  select: typeof MOOD_ENTRY_QUERY_SELECT;
+}>;
+
 /**
  * One context row, in whichever of the two wire shapes the caller asked for.
  *
@@ -317,23 +364,338 @@ function serialiseMoodContext(
 }
 
 /**
+ * One measurement, in whichever of the two wire shapes the caller asked for.
+ *
+ * Named rather than inlined so the paged reader below and the materialising
+ * reader beside it cannot drift: both call this, so a column that reaches one
+ * shape reaches the other by construction. `measurement-backup-completeness.
+ * test.ts` proves a selected column reaches a payload by matching
+ * `<key>: measurement.`, which is why the parameter keeps that spelling.
+ */
+function serialiseMeasurement(
+  measurement: BackupMeasurement,
+  disasterRecovery: boolean,
+) {
+  return disasterRecovery
+    ? {
+        id: measurement.id,
+        type: measurement.type,
+        value: measurement.value,
+        valueMin: measurement.valueMin,
+        valueMax: measurement.valueMax,
+        unit: measurement.unit,
+        measuredAt: measurement.measuredAt.toISOString(),
+        source: measurement.source,
+        notes: measurement.notes,
+        notesEncrypted: measurement.notesEncrypted
+          ? Buffer.from(measurement.notesEncrypted).toString("base64")
+          : null,
+        externalId: measurement.externalId,
+        externalSourceVersion: measurement.externalSourceVersion,
+        aggregationProvenance: measurement.aggregationProvenance,
+        glucoseContext: measurement.glucoseContext,
+        sleepStage: measurement.sleepStage,
+        rhythmClassification: measurement.rhythmClassification,
+        deviceType: measurement.deviceType,
+        syncVersion: measurement.syncVersion,
+        deletedAt: measurement.deletedAt?.toISOString() ?? null,
+        createdAt: measurement.createdAt.toISOString(),
+        updatedAt: measurement.updatedAt.toISOString(),
+      }
+    : {
+        id: measurement.id,
+        type: measurement.type,
+        value: measurement.value,
+        unit: measurement.unit,
+        measuredAt: measurement.measuredAt.toISOString(),
+        source: measurement.source,
+        notes: readNote(measurement.notesEncrypted, measurement.notes),
+        deletedAt: measurement.deletedAt?.toISOString() ?? null,
+      };
+}
+
+/** One intake event, as it rides the wire. */
+function serialiseIntakeEvent(e: BackupIntakeEvent, disasterRecovery: boolean) {
+  return {
+    ...(disasterRecovery
+      ? {
+          id: e.id,
+          medicationId: e.medicationId,
+          autoMissed: e.autoMissed,
+          attributionSource: e.attributionSource,
+          idempotencyKey: e.idempotencyKey,
+          createdAt: e.createdAt.toISOString(),
+          injectionSite: e.injectionSite,
+          doseTaken: e.doseTaken,
+          inventoryConsumption: e.inventoryConsumption,
+          externalId: e.externalId,
+          updatedAt: e.updatedAt.toISOString(),
+          syncVersion: e.syncVersion,
+          deletedAt: e.deletedAt?.toISOString() ?? null,
+        }
+      : {}),
+    medication: e.medication.name,
+    scheduledFor: e.scheduledFor.toISOString(),
+    takenAt: e.takenAt?.toISOString() ?? null,
+    skipped: e.skipped,
+    source: e.source,
+  };
+}
+
+/**
+ * One mood entry, with its links partitioned and its day context folded in.
+ *
+ * The parameter is spelled out rather than the `e` every other mapper here
+ * uses, and deliberately: `mood-backup-completeness.test.ts` proves a
+ * selected column reaches a payload by matching `: moodEntry.`. A matcher
+ * on `: e.` would also match the intake-event mapper above it and could
+ * therefore never fail.
+ */
+function serialiseMoodEntry(
+  moodEntry: BackupMoodEntry,
+  disasterRecovery: boolean,
+) {
+  // The two link arms partition the entry's links exhaustively: a link is
+  // a rated factor when its tag is RATED and it actually carries a score,
+  // and a structured tag otherwise. Total on purpose — a malformed link
+  // (a RATED tag whose rating went missing) rides as a tag key and comes
+  // back NAMED as unresolvable on restore, rather than falling between the
+  // two arms and disappearing the way every BINARY link used to.
+  const isRatedFactor = (link: (typeof moodEntry.tagLinks)[number]) =>
+    link.moodTag.kind === "RATED" && link.rating !== null;
+
+  const factors = moodEntry.tagLinks.filter(isRatedFactor).map((tagLink) => ({
+    key: tagLink.moodTag.key,
+    rating: tagLink.rating as number,
+  }));
+  // BINARY link keys. Their own array rather than a nullable rating inside
+  // `factors`: the restore resolves `factors` against `kind: "RATED"` and
+  // reports what it cannot resolve, so a rating-less entry in that array
+  // would collide with both. A separate key leaves every backup file
+  // written before this parsing and restoring exactly as it did.
+  const structuredTags = moodEntry.tagLinks
+    .filter((link) => !isRatedFactor(link))
+    .map((tagLink) => tagLink.moodTag.key);
+
+  return {
+    ...(disasterRecovery
+      ? {
+          note: moodEntry.note,
+          noteEncrypted: moodEntry.noteEncrypted
+            ? Buffer.from(moodEntry.noteEncrypted).toString("base64")
+            : null,
+          syncedAt: moodEntry.syncedAt.toISOString(),
+          syncVersion: moodEntry.syncVersion,
+          createdAt: moodEntry.createdAt.toISOString(),
+          updatedAt: moodEntry.updatedAt.toISOString(),
+        }
+      : { note: readNote(moodEntry.noteEncrypted, moodEntry.note) }),
+    id: moodEntry.id,
+    date: moodEntry.date,
+    mood: moodEntry.mood,
+    score: moodEntry.score,
+    // The five level-A values, under the keys the write path takes. Both
+    // arms carry them: they are the entry's own answers, not a storage
+    // detail, and a portable export that dropped them would hand back a
+    // file describing the day less well than the row it came from.
+    a1: moodEntry.moodA1,
+    a2: moodEntry.stressA2,
+    a3: moodEntry.energyA3,
+    a4: moodEntry.connectionA4,
+    a5: moodEntry.stabilityA5,
+    tags: moodEntry.tags,
+    source: moodEntry.source,
+    loggedAt: moodEntry.moodLoggedAt.toISOString(),
+    externalId: moodEntry.externalId,
+    // The zone the `date` string is anchored to. Without it a restored row
+    // falls back to the legacy Europe/Berlin reading and an account that
+    // logged elsewhere gets its day boundaries quietly moved.
+    tz: moodEntry.tz,
+    deletedAt: moodEntry.deletedAt?.toISOString() ?? null,
+    factors,
+    structuredTags,
+    // The day context, or null. Null rather than an empty object, because
+    // "no context" and "a context whose every field is empty" are
+    // different facts and the restore has to keep them apart.
+    context: moodEntry.context
+      ? serialiseMoodContext(moodEntry.context, disasterRecovery)
+      : null,
+  };
+}
+
+/**
+ * How many rows one page of a bulk table carries.
+ *
+ * Smaller than the measurement pager's 10 000 on purpose: an intake event
+ * drags its medication's name along and a mood entry drags its links and its
+ * day context, so a page of either costs several times what a page of
+ * measurements costs. The number is a memory budget, not a throughput knob.
+ */
+const BULK_PAGE_SIZE = 5_000;
+
+/**
+ * Every backup measurement, one serialised row at a time.
+ *
+ * Keyset-paged through `iterateMeasurementPages`, so the caller decides
+ * whether to keep the rows (the materialising payload does) or hand each
+ * straight to a writer and forget it (the streaming writer does). Nothing here
+ * holds more than one page.
+ */
+export async function* iterateBackupMeasurements(
+  prisma: PrismaClient,
+  userId: string,
+  disasterRecovery: boolean,
+): AsyncGenerator<Record<string, unknown>, void, void> {
+  const pages = iterateMeasurementPages(
+    prisma,
+    disasterRecovery ? { userId } : { userId, deletedAt: null },
+    MEASUREMENT_BACKUP_SELECT,
+  );
+  for await (const page of pages) {
+    for (const measurement of page) {
+      yield serialiseMeasurement(measurement, disasterRecovery);
+    }
+  }
+}
+
+/**
+ * Every backup intake event, one serialised row at a time.
+ *
+ * The sort is TOTAL — `scheduledFor desc` then `id desc` — where the
+ * materialising read used to order by the timestamp alone. A keyset cursor
+ * needs a total order to page correctly, and a partial one also let two
+ * exports of the same account emit two different files whenever two doses
+ * shared a scheduled minute, which every multi-dose day has.
+ */
+export async function* iterateBackupIntakeEvents(
+  prisma: PrismaClient,
+  userId: string,
+  disasterRecovery: boolean,
+): AsyncGenerator<Record<string, unknown>, void, void> {
+  let cursorId: string | null = null;
+  for (;;) {
+    const page: BackupIntakeEvent[] =
+      await prisma.medicationIntakeEvent.findMany({
+        where: disasterRecovery ? { userId } : { userId, deletedAt: null },
+        include: { medication: { select: { name: true } } },
+        orderBy: [{ scheduledFor: "desc" }, { id: "desc" }],
+        take: BULK_PAGE_SIZE,
+        ...(cursorId !== null ? { cursor: { id: cursorId }, skip: 1 } : {}),
+      });
+    if (page.length === 0) return;
+    for (const e of page) yield serialiseIntakeEvent(e, disasterRecovery);
+    if (page.length < BULK_PAGE_SIZE) return;
+    cursorId = page[page.length - 1]!.id;
+  }
+}
+
+/**
+ * Every backup mood entry, one serialised row at a time.
+ *
+ * Same total-order argument as the intake events above: `moodLoggedAt desc`
+ * alone is not a cursor, and two entries logged in the same millisecond are
+ * exactly what a bulk import produces.
+ */
+export async function* iterateBackupMoodEntries(
+  prisma: PrismaClient,
+  userId: string,
+  disasterRecovery: boolean,
+): AsyncGenerator<Record<string, unknown>, void, void> {
+  let cursorId: string | null = null;
+  for (;;) {
+    const page: BackupMoodEntry[] = await prisma.moodEntry.findMany({
+      where: disasterRecovery ? { userId } : { userId, deletedAt: null },
+      orderBy: [{ moodLoggedAt: "desc" }, { id: "desc" }],
+      take: BULK_PAGE_SIZE,
+      ...(cursorId !== null ? { cursor: { id: cursorId }, skip: 1 } : {}),
+      select: MOOD_ENTRY_QUERY_SELECT,
+    });
+    if (page.length === 0) return;
+    for (const moodEntry of page) {
+      yield serialiseMoodEntry(moodEntry, disasterRecovery);
+    }
+    if (page.length < BULK_PAGE_SIZE) return;
+    cursorId = page[page.length - 1]!.id;
+  }
+}
+
+/** Drain an async row source into an array. The materialising arm's only use. */
+async function collect<T>(rows: AsyncIterable<T>): Promise<T[]> {
+  const out: T[] = [];
+  for await (const row of rows) out.push(row);
+  return out;
+}
+
+/**
+ * A bulk table the payload declares but has NOT read.
+ *
+ * `buildFullBackupPayload({ deferBulk: true })` puts one of these where the
+ * row array would sit. The streaming writer recognises it, opens the JSON
+ * array itself and pulls rows through page by page, so a table with half a
+ * million rows never exists as an array at all. Every other caller leaves
+ * `deferBulk` unset and gets the arrays, unchanged.
+ *
+ * The marker key is a symbol so it cannot collide with a payload field and so
+ * the deferred payload can never be handed to `JSON.stringify` by accident and
+ * come back looking merely empty — `streamFullBackupJson` is the only reader.
+ */
+const DEFERRED_ROWS = Symbol("healthlog.backup.deferredRows");
+
+export interface DeferredRows {
+  readonly [DEFERRED_ROWS]: true;
+  /** Open the row source. Called exactly once, by the streaming writer. */
+  rows(): AsyncIterable<Record<string, unknown>>;
+}
+
+function deferredRows(
+  rows: () => AsyncIterable<Record<string, unknown>>,
+): DeferredRows {
+  return { [DEFERRED_ROWS]: true, rows };
+}
+
+/** True when a payload value is a deferred bulk table rather than an array. */
+export function isDeferredRows(value: unknown): value is DeferredRows {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    (value as Record<symbol, unknown>)[DEFERRED_ROWS] === true
+  );
+}
+
+/**
  * The same payload, already serialised, with the object graph released.
  *
- * Its own frame on purpose, and both backup jobs go through it. The payload
- * graph is the largest thing either job allocates — on an account with a few
- * hundred thousand measurements it is several hundred megabytes of small
- * objects — and neither job wants anything but the string. Returning from here
- * makes the graph unreachable before the compress-and-encrypt step allocates
- * anything of its own, which is part of why the weekly pass now fits in
- * memory. Inlining these two statements back into a caller quietly undoes it.
+ * Built through the streaming writer rather than by stringifying a finished
+ * payload, so the object graph and the string never coexist: the three
+ * unbounded tables go past a page at a time and every other section is
+ * released as soon as its JSON exists. What is left is the answer itself,
+ * which a caller that wants a string necessarily holds.
+ *
+ * A caller that does NOT need the string — the weekly job, which only wants
+ * the compressed ciphertext — should go through `packBackupBlobStreaming` and
+ * `streamFullBackupJson` directly and never let the whole document exist at
+ * all. This function is for the callers that genuinely hand a JSON body on.
  */
 export async function buildFullBackupJson(
   prisma: PrismaClient,
   userId: string,
   options: FullBackupOptions = {},
 ): Promise<string> {
-  const { payload } = await buildFullBackupPayload(prisma, userId, options);
-  return JSON.stringify(payload);
+  // Imported here rather than at the top of the file: the writer imports this
+  // module for `buildFullBackupPayload`, and a static edge in both directions
+  // is a cycle. The call is once per backup, so the cost is nil.
+  const { streamFullBackupJson } =
+    await import("@/lib/export/full-backup-stream");
+  const pieces: string[] = [];
+  await streamFullBackupJson(
+    prisma,
+    userId,
+    (chunk) => {
+      pieces.push(chunk);
+    },
+    options,
+  );
+  return pieces.join("");
 }
 
 /**
@@ -347,6 +709,7 @@ export async function buildFullBackupPayload(
   options: FullBackupOptions = {},
 ): Promise<FullBackupResult> {
   const disasterRecovery = options.purpose === "disaster-recovery";
+  const deferBulk = options.deferBulk === true;
   const [
     appSettings,
     measurements,
@@ -376,60 +739,9 @@ export async function buildFullBackupPayload(
     disasterRecovery
       ? prisma.appSettings.findUnique({ where: { id: "singleton" } })
       : Promise.resolve(null),
-    (async () => {
-      const rows: Array<Record<string, unknown>> = [];
-      const pages = iterateMeasurementPages(
-        prisma,
-        disasterRecovery ? { userId } : { userId, deletedAt: null },
-        MEASUREMENT_BACKUP_SELECT,
-      );
-      for await (const page of pages) {
-        for (const measurement of page) {
-          rows.push(
-            disasterRecovery
-              ? {
-                  id: measurement.id,
-                  type: measurement.type,
-                  value: measurement.value,
-                  valueMin: measurement.valueMin,
-                  valueMax: measurement.valueMax,
-                  unit: measurement.unit,
-                  measuredAt: measurement.measuredAt.toISOString(),
-                  source: measurement.source,
-                  notes: measurement.notes,
-                  notesEncrypted: measurement.notesEncrypted
-                    ? Buffer.from(measurement.notesEncrypted).toString("base64")
-                    : null,
-                  externalId: measurement.externalId,
-                  externalSourceVersion: measurement.externalSourceVersion,
-                  aggregationProvenance: measurement.aggregationProvenance,
-                  glucoseContext: measurement.glucoseContext,
-                  sleepStage: measurement.sleepStage,
-                  rhythmClassification: measurement.rhythmClassification,
-                  deviceType: measurement.deviceType,
-                  syncVersion: measurement.syncVersion,
-                  deletedAt: measurement.deletedAt?.toISOString() ?? null,
-                  createdAt: measurement.createdAt.toISOString(),
-                  updatedAt: measurement.updatedAt.toISOString(),
-                }
-              : {
-                  id: measurement.id,
-                  type: measurement.type,
-                  value: measurement.value,
-                  unit: measurement.unit,
-                  measuredAt: measurement.measuredAt.toISOString(),
-                  source: measurement.source,
-                  notes: readNote(
-                    measurement.notesEncrypted,
-                    measurement.notes,
-                  ),
-                  deletedAt: measurement.deletedAt?.toISOString() ?? null,
-                },
-          );
-        }
-      }
-      return rows;
-    })(),
+    deferBulk
+      ? null
+      : collect(iterateBackupMeasurements(prisma, userId, disasterRecovery)),
     prisma.medication.findMany({
       where: { userId },
       // Side effects ride INSIDE their medication, exactly as the schedules
@@ -469,26 +781,12 @@ export async function buildFullBackupPayload(
         },
       },
     }),
-    prisma.medicationIntakeEvent.findMany({
-      where: disasterRecovery ? { userId } : { userId, deletedAt: null },
-      include: { medication: { select: { name: true } } },
-      orderBy: { scheduledFor: "desc" },
-    }),
-    prisma.moodEntry.findMany({
-      where: disasterRecovery ? { userId } : { userId, deletedAt: null },
-      orderBy: { moodLoggedAt: "desc" },
-      select: {
-        ...MOOD_ENTRY_BACKUP_SELECT,
-        // Every link, not only the rated ones. This read used to filter
-        // `rating: { not: null }`, and a BINARY link carries a NULL rating by
-        // definition — so the present/absent tags, the kind most people pick,
-        // were absent from the file and could not come back from it.
-        tagLinks: { select: MOOD_ENTRY_TAG_LINK_SELECT },
-        // The day context, when the entry has one. Sparse by design — most
-        // entries carry none, and the join answers null on those.
-        context: { select: MOOD_CONTEXT_BACKUP_SELECT },
-      },
-    }),
+    deferBulk
+      ? null
+      : collect(iterateBackupIntakeEvents(prisma, userId, disasterRecovery)),
+    deferBulk
+      ? null
+      : collect(iterateBackupMoodEntries(prisma, userId, disasterRecovery)),
     // The account's OWN mood tags. The seeded catalogue is reference data every
     // instance has; a tag the user made lives only here. Without it the restore
     // cannot resolve the entry's factor keys — and unlike the cycle path, which
@@ -646,6 +944,27 @@ export async function buildFullBackupPayload(
   const environmentSection: EnvironmentBackupSection = environment;
   const ecgSection: EcgBackupSection = ecg;
 
+  // The three unbounded tables, either read into arrays or left as markers
+  // the streaming writer will pull through. One place decides, so the payload
+  // literal below reads the same in both modes.
+  const bulk = {
+    measurements: deferBulk
+      ? deferredRows(() =>
+          iterateBackupMeasurements(prisma, userId, disasterRecovery),
+        )
+      : measurements!,
+    intakeEvents: deferBulk
+      ? deferredRows(() =>
+          iterateBackupIntakeEvents(prisma, userId, disasterRecovery),
+        )
+      : intakeEvents!,
+    moodEntries: deferBulk
+      ? deferredRows(() =>
+          iterateBackupMoodEntries(prisma, userId, disasterRecovery),
+        )
+      : moodEntries!,
+  };
+
   // Where each archived era sits in its OWN drug's ordered list. Built once
   // here rather than per row, and scoped per medication because the supersede
   // pointer never crosses a drug — every route that writes it scopes the
@@ -674,7 +993,7 @@ export async function buildFullBackupPayload(
             documentQuotaBytes: appSettings.documentQuotaBytes.toString(),
           }
         : null,
-    measurements,
+    measurements: bulk.measurements,
     medications: medications.map((m) => ({
       ...(disasterRecovery
         ? {
@@ -903,105 +1222,8 @@ export async function buildFullBackupPayload(
         primary: t.primary,
       })),
     })),
-    intakeEvents: intakeEvents.map((e) => ({
-      ...(disasterRecovery
-        ? {
-            id: e.id,
-            medicationId: e.medicationId,
-            autoMissed: e.autoMissed,
-            attributionSource: e.attributionSource,
-            idempotencyKey: e.idempotencyKey,
-            createdAt: e.createdAt.toISOString(),
-            injectionSite: e.injectionSite,
-            doseTaken: e.doseTaken,
-            inventoryConsumption: e.inventoryConsumption,
-            externalId: e.externalId,
-            updatedAt: e.updatedAt.toISOString(),
-            syncVersion: e.syncVersion,
-            deletedAt: e.deletedAt?.toISOString() ?? null,
-          }
-        : {}),
-      medication: e.medication.name,
-      scheduledFor: e.scheduledFor.toISOString(),
-      takenAt: e.takenAt?.toISOString() ?? null,
-      skipped: e.skipped,
-      source: e.source,
-    })),
-    // The parameter is spelled out rather than the `e` every other mapper here
-    // uses, and deliberately: `mood-backup-completeness.test.ts` proves a
-    // selected column reaches a payload by matching `: moodEntry.`. A matcher
-    // on `: e.` would also match the intake-event mapper above it and could
-    // therefore never fail.
-    moodEntries: moodEntries.map((moodEntry) => {
-      // The two link arms partition the entry's links exhaustively: a link is
-      // a rated factor when its tag is RATED and it actually carries a score,
-      // and a structured tag otherwise. Total on purpose — a malformed link
-      // (a RATED tag whose rating went missing) rides as a tag key and comes
-      // back NAMED as unresolvable on restore, rather than falling between the
-      // two arms and disappearing the way every BINARY link used to.
-      const isRatedFactor = (link: (typeof moodEntry.tagLinks)[number]) =>
-        link.moodTag.kind === "RATED" && link.rating !== null;
-
-      const factors = moodEntry.tagLinks
-        .filter(isRatedFactor)
-        .map((tagLink) => ({
-          key: tagLink.moodTag.key,
-          rating: tagLink.rating as number,
-        }));
-      // BINARY link keys. Their own array rather than a nullable rating inside
-      // `factors`: the restore resolves `factors` against `kind: "RATED"` and
-      // reports what it cannot resolve, so a rating-less entry in that array
-      // would collide with both. A separate key leaves every backup file
-      // written before this parsing and restoring exactly as it did.
-      const structuredTags = moodEntry.tagLinks
-        .filter((link) => !isRatedFactor(link))
-        .map((tagLink) => tagLink.moodTag.key);
-
-      return {
-        ...(disasterRecovery
-          ? {
-              note: moodEntry.note,
-              noteEncrypted: moodEntry.noteEncrypted
-                ? Buffer.from(moodEntry.noteEncrypted).toString("base64")
-                : null,
-              syncedAt: moodEntry.syncedAt.toISOString(),
-              syncVersion: moodEntry.syncVersion,
-              createdAt: moodEntry.createdAt.toISOString(),
-              updatedAt: moodEntry.updatedAt.toISOString(),
-            }
-          : { note: readNote(moodEntry.noteEncrypted, moodEntry.note) }),
-        id: moodEntry.id,
-        date: moodEntry.date,
-        mood: moodEntry.mood,
-        score: moodEntry.score,
-        // The five level-A values, under the keys the write path takes. Both
-        // arms carry them: they are the entry's own answers, not a storage
-        // detail, and a portable export that dropped them would hand back a
-        // file describing the day less well than the row it came from.
-        a1: moodEntry.moodA1,
-        a2: moodEntry.stressA2,
-        a3: moodEntry.energyA3,
-        a4: moodEntry.connectionA4,
-        a5: moodEntry.stabilityA5,
-        tags: moodEntry.tags,
-        source: moodEntry.source,
-        loggedAt: moodEntry.moodLoggedAt.toISOString(),
-        externalId: moodEntry.externalId,
-        // The zone the `date` string is anchored to. Without it a restored row
-        // falls back to the legacy Europe/Berlin reading and an account that
-        // logged elsewhere gets its day boundaries quietly moved.
-        tz: moodEntry.tz,
-        deletedAt: moodEntry.deletedAt?.toISOString() ?? null,
-        factors,
-        structuredTags,
-        // The day context, or null. Null rather than an empty object, because
-        // "no context" and "a context whose every field is empty" are
-        // different facts and the restore has to keep them apart.
-        context: moodEntry.context
-          ? serialiseMoodContext(moodEntry.context, disasterRecovery)
-          : null,
-      };
-    }),
+    intakeEvents: bulk.intakeEvents,
+    moodEntries: bulk.moodEntries,
     customMoodTagCategories: customMoodTagCategories.map((category) => ({
       id: category.id,
       key: category.key,
@@ -1079,9 +1301,9 @@ export async function buildFullBackupPayload(
   return {
     payload,
     counts: {
-      measurements: measurements.length,
+      measurements: measurements?.length ?? 0,
       medications: medications.length,
-      intakeEvents: intakeEvents.length,
+      intakeEvents: intakeEvents?.length ?? 0,
       medicationSideEffects: medications.reduce(
         (total, m) => total + m.sideEffects.length,
         0,
@@ -1111,7 +1333,7 @@ export async function buildFullBackupPayload(
         (total, m) => total + m.scheduleRevisions.length,
         0,
       ),
-      moodEntries: moodEntries.length,
+      moodEntries: moodEntries?.length ?? 0,
       customMoodTagCategories: customMoodTagCategories.length,
       hiddenMoodTags: hiddenMoodTags.length,
       cycles: cycle.cycles.length,

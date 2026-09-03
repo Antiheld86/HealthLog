@@ -417,6 +417,16 @@ export async function handleAppleHealthImport(
             },
           });
         },
+        // The instant the Health app stamped on the archive. Persisted as
+        // soon as the parser reads it, so the status endpoint answers with
+        // it for the rest of the run and a job that later fails still
+        // records which export it was working from. Best-effort: the
+        // stamp is provenance, and losing it must not fail an import.
+        onExportDate: async (exportedAt) => {
+          await prisma.importJob
+            .update({ where: { id: importJobId }, data: { exportedAt } })
+            .catch(() => {});
+        },
       })),
       ecg: {
         discovered: 0,

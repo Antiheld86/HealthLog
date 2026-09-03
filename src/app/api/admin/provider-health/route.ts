@@ -15,6 +15,12 @@ export const dynamic = "force-dynamic";
  * folds the ledger into one row per provider type so the console can show
  * it. Read-only, admin-cookie-only, and it exposes counts and timestamps
  * only — never which user a row belongs to.
+ *
+ * The ledger also records the HTTP status each failure came back with, and
+ * that is the difference between the two questions an operator actually has
+ * when a provider goes red: a 401 means the key is dead and only the operator
+ * can fix it, a 429 or a 5xx means the provider is having a day and waiting is
+ * the right move. The fold carries it beside the instant it belongs to.
  */
 
 interface ProviderHealthSummary {
@@ -27,6 +33,13 @@ interface ProviderHealthSummary {
   maxConsecutiveFailures: number;
   lastOkAt: string | null;
   lastFailureAt: string | null;
+  /**
+   * HTTP status the failure at `lastFailureAt` came back with. Null when
+   * that failure was a network-class one (no response to read a status
+   * from), and null when the user it belongs to has since recovered — a
+   * success clears the status along with the rest of the failure state.
+   */
+  lastFailureStatus: number | null;
 }
 
 /** The two operator-managed tags sort first — they affect every user on the chain. */
@@ -37,7 +50,11 @@ export const GET = apiHandler(async () => {
   annotate({ action: { name: "admin.provider-health.get" } });
 
   const groups = await prisma.providerHealth.groupBy({
-    by: ["providerType", "lastResult"],
+    // `lastStatus` joins the grouping key rather than an aggregate: the
+    // MAX of two HTTP statuses is not a status, it is arithmetic on a
+    // label. Grouping by it splits each result bucket per status and the
+    // fold below picks the one belonging to the newest failure.
+    by: ["providerType", "lastResult", "lastStatus"],
     _count: { _all: true },
     _max: {
       consecutiveFailures: true,
@@ -55,6 +72,7 @@ export const GET = apiHandler(async () => {
       maxConsecutiveFailures: 0,
       lastOkAt: null,
       lastFailureAt: null,
+      lastFailureStatus: null,
     };
     row.tracked += g._count._all;
     if (g.lastResult !== "ok") {
@@ -69,6 +87,10 @@ export const GET = apiHandler(async () => {
     const fail = g._max.lastFailureAt?.toISOString() ?? null;
     if (fail && (!row.lastFailureAt || fail > row.lastFailureAt)) {
       row.lastFailureAt = fail;
+      // Tied to the instant, not taken from whichever group happens to
+      // have one: a status that describes a different failure than the
+      // one on screen is worse than no status at all.
+      row.lastFailureStatus = g.lastStatus;
     }
     byType.set(g.providerType, row);
   }

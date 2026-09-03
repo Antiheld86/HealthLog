@@ -46,24 +46,6 @@ export function toHoursSummary(s: DataSummary): DataSummary {
   };
 }
 
-export function getHourForTimeZone(timeZone?: string): number {
-  const now = new Date();
-  if (!timeZone) return now.getHours();
-
-  try {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      hour: "2-digit",
-      hour12: false,
-      timeZone,
-    }).formatToParts(now);
-    const hourPart = parts.find((part) => part.type === "hour")?.value;
-    const parsed = hourPart ? Number(hourPart) : Number.NaN;
-    return Number.isNaN(parsed) ? now.getHours() : parsed;
-  } catch {
-    return now.getHours();
-  }
-}
-
 export function getRangeColorClass(
   value: number | null | undefined,
   config: RangeDisplayConfig,

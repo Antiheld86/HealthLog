@@ -41,35 +41,76 @@ under `v1` (the synthetic id assigned to the existing `ENCRYPTION_KEY`).
    Restart the app. New writes are now encrypted under `v2`; existing
    `v1`-keyed and legacy bare rows still decrypt because the `v1` entry is
    retained.
-3. **Run the rotation script** to re-encrypt every existing encrypted column
+3. **Run the rotation script** to re-encrypt every registered encrypted column
    under the new active key:
+
    ```
    pnpm dlx tsx scripts/rotate-encryption-key.ts v2
    ```
+
    The script is idempotent — running it again is a no-op for rows already
-   prefixed with `v2.`. It rotates every registered encrypted column across
-   all models, plus the two non-`*Encrypted` members:
-   `IntegrationStatus.lastError` and `CoachMessage.encryptedContent`
-   (Bytes). The canonical registry lives in
-   `src/lib/crypto/encrypted-columns.ts`; a guard test fails CI if any
-   `*Encrypted` column in the schema is missing from the registry or not
-   referenced by the script. The summary line at the
-   end shows `scanned`, `rotated`, and `errors` per table+field; treat
-   `errors > 0` as a hard failure and re-run after fixing the cause.
-4. **Drop the old key (optional, recommended).** Once the script has run
-   cleanly:
+   prefixed with `v2.`. It rotates every column in the canonical registry
+   (`src/lib/crypto/encrypted-columns.ts`), which covers the `*Encrypted`
+   columns plus the ones whose names say nothing about their contents:
+   `IntegrationStatus.lastError`, `CoachMessage.encryptedContent`,
+   `NotificationChannel.config`, the OAuth `accessToken` / `refreshToken`
+   columns, the web-push `p256dh` / `auth` secrets, the idempotent-replay
+   `IdempotencyKey.responseBody`, and `DataBackup.data` — the whole-account
+   backup blob.
+
+   Read three things off the output before going further:
+
+   - the per-column line, `scanned` / `rotated` / `errors` / `dropped`. Treat
+     `errors > 0` as a hard failure and re-run after fixing the cause. A
+     `dropped` count is only ever a cache row the run could not read and
+     deleted rather than leave unreadable.
+   - `Columns walked: N/M registered`. The two numbers must match.
+   - a `NOT WALKED` block, if one appears. It lists registered columns this
+     run skipped, and the run exits non-zero. Rotation is incomplete; do not
+     go on to step 4.
+
+   Two guard tests keep the registry honest in CI: one scans the schema for
+   `*Encrypted` columns, the other derives the ciphertext-bearing columns from
+   the Prisma write payloads, which is what catches a column that holds
+   ciphertext under an ordinary name.
+
+4. **Confirm nothing is left on the old key, THEN drop it.** This is the step
+   that destroys data if it is taken on a bad signal, so check the corpus
+   rather than the absence of complaints. Either re-run the script — a clean
+   second pass reports `rotated=0`, `errors=0` and a full `Columns walked`
+   line — or open **Admin → Encryption** and confirm the status view reports
+   zero rows outside the active key. Both read the same registry the rotation
+   walks.
+
+   A zero only means "nothing left" when the run also says it walked every
+   registered column. A zero from a run that skipped columns means "never
+   looked", and dropping the old key on it makes those rows permanently
+   undecryptable — `decrypt()` is fail-closed and there is no recovery path.
+   Only once the corpus reads clean:
+
    ```
    ENCRYPTION_KEYS='{"v2":"<new key>"}'
    ENCRYPTION_ACTIVE_KEY_ID="v2"
    # ENCRYPTION_KEY can now be removed
    ```
+
    Restart. The legacy single-key fallback is now disconnected; only `v2`
    exists.
 
+> **Backups are covered, and were not always.** `DataBackup.data` holds every
+> weekly disaster-recovery snapshot and every uploaded pack, encrypted like
+> everything else but under a column called `data`. It was outside the
+> registry until v1.38.6, so a rotation before that release reported zero
+> rows remaining without ever reading a backup. If you rotated on an older
+> release and dropped the previous key, the stored backups are encrypted
+> under the key you removed: put that key back into `ENCRYPTION_KEYS` and
+> re-run the rotation on this release before removing it again.
+
 ## Adding a third key (v2 → v3)
 
-Same procedure, just shift the labels — keep `v2` in the map until the
-script reports zero `v2.`-prefixed rows remaining.
+Same procedure, just shift the labels — keep `v2` in the map until a full
+run (every registered column walked) reports zero `v2.`-prefixed rows
+remaining.
 
 ```
 ENCRYPTION_KEYS='{"v2":"<old>","v3":"<new>"}'

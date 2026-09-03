@@ -45,9 +45,17 @@ function makeClient(seed: Record<string, Row[]>): {
     if (client[key]) continue;
     const model = col.model;
     client[key] = {
-      findMany: async ({ select }) => {
+      // `take` / `cursor` are honoured so the batched-column walk terminates
+      // here the way it does against Postgres.
+      findMany: async ({ select, take, cursor, skip }) => {
         const fields = Object.keys(select);
-        return store[model].map((row) => {
+        let rows = store[model];
+        if (cursor) {
+          const at = rows.findIndex((r) => r.id === cursor.id);
+          rows = at < 0 ? [] : rows.slice(at + (skip ?? 0));
+        }
+        if (take !== undefined) rows = rows.slice(0, take);
+        return rows.map((row) => {
           const out: Record<string, unknown> = {};
           for (const f of fields) out[f] = row[f];
           return out;
@@ -57,6 +65,10 @@ function makeClient(seed: Record<string, Row[]>): {
         const row = store[model].find((r) => r.id === where.id);
         if (row) Object.assign(row, data);
         return row;
+      },
+      delete: async ({ where }) => {
+        const at = store[model].findIndex((r) => r.id === where.id);
+        return at < 0 ? null : store[model].splice(at, 1)[0];
       },
     };
   }

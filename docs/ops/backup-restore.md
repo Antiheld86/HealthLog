@@ -122,6 +122,59 @@ The full per-model reasoning lives in `src/lib/export/backup-plan.ts`, where
 every excluded model carries a written verdict and a structural test refuses to
 let a new model land without one.
 
+## The weekly in-database backup (`data-backup`)
+
+Separate from the off-host job above, and easy to confuse with it. A second
+pg-boss job writes one `WEEKLY_AUTO` row per user into `data_backups.data` —
+the same JSON document, gzipped and then encrypted under `ENCRYPTION_KEY` /
+`ENCRYPTION_KEYS`, staying inside the instance. It is what
+`/api/admin/backups/<id>/restore` reads.
+
+### Container memory
+
+This is the part that bites. The job runs inside the app process, so V8's heap
+limit is the app's heap limit, and a container capped at 1 GB gives Node a
+524 MB old-space limit by default. A long-lived record is bigger than it looks:
+several hundred thousand measurements serialise to a JSON document of a few
+hundred megabytes, and the writer used to need the object graph and that
+document resident at the same time. On a seeded account of 445 000 measurements
+under a 546 MB limit that is `FATAL ERROR: Reached heap limit` about thirty
+seconds in — and since the job shares the process, the whole instance restarted
+and every signed-in session on it went with it.
+
+Two things changed, and both matter to an operator:
+
+- **The writer streams.** The three tables that grow without bound —
+  measurements, intake events, mood entries — are read a page at a time and
+  serialised straight into gzip and the cipher, and every other section is
+  released as soon as its JSON exists. On the same fixture doubled to 890 000
+  measurements, the pass completes inside a 296 MB heap limit; before the
+  change, half that record did not fit in 546 MB.
+- **It stops itself.** The writer watches its own live heap and aborts at 80 %
+  of V8's limit. That backup then fails for that one account, is counted in the
+  run's `users_failed` and `heap_budget_trips` meta, and the pass carries on
+  with everybody else. A memory failure is now a failed job rather than a
+  restart for every user on the host.
+
+If `heap_budget_trips` is non-zero in `job.data_backup`, the answer is more
+memory, not a retry: raise the container's limit, or set
+`NODE_OPTIONS=--max-old-space-size=<MB>` to something under it.
+
+### The stored column is the remaining ceiling
+
+`data_backups.data` is a single `text` column, so the finished artifact has to
+exist as one value before it can be written — that copy cannot be streamed
+away. It is the only thing left in the job that grows with the record: at a
+compressed blob of ~42 MB the pass peaks around 236 MB, and the growth from
+there is roughly twice the blob's size (the base64 answer, plus the driver's
+copy of it on the way to the wire). A blob past roughly 150 MB — an account
+several times larger than any seen so far — will hit a 524 MB limit again, and
+the fix at that point is to stop storing the artifact in one column: chunk it
+across rows, or keep only the off-host copy. Reading it back has the same
+shape, and worse: a restore parses the whole document, so the read path needs
+several times the blob in heap. An operator restoring a very large account
+should give the container more memory for the duration.
+
 ## Monthly restore drill (automatic)
 
 Since v1.16.4 a pg-boss job (`data-restore-drill`, cron `11 4 1 * *` —

@@ -258,7 +258,6 @@ export function buildMockSnapshot(
       gender: "MALE",
       glucoseUnit: "mg/dL",
       onboardingTourCompleted: true,
-      greetingHour: 9,
     },
     layout: DEFAULT_DASHBOARD_LAYOUT,
     layoutCatalogue: buildLayoutCatalogue(),

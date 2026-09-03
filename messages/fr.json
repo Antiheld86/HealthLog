@@ -5681,6 +5681,12 @@
         "imperial": "Impérial",
         "saved": "Préférence d'unités enregistrée",
         "saveError": "Impossible d'enregistrer votre préférence d'unités."
+      },
+      "glucoseUnit": {
+        "title": "Glycémie",
+        "description": "L'unité dans laquelle les mesures de glycémie sont affichées. L'enregistrement est le même dans les deux cas.",
+        "saved": "Unité de glycémie enregistrée",
+        "saveError": "Impossible d'enregistrer l'unité de glycémie."
       }
     },
     "withings": "Withings",
@@ -6501,6 +6507,7 @@
       "trackedUsers": "{count} utilisateurs suivis",
       "lastOk": "dernier succès {at}",
       "lastFailure": "dernier échec {at}",
+      "lastFailureStatus": "HTTP {status}",
       "statusHealthy": "En bon état",
       "statusFailing": "{failing} sur {tracked} en échec, {run} d'affilée",
       "typeAdminOpenai": "Clé du serveur (opérateur)",

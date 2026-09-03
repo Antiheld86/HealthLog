@@ -109,13 +109,19 @@ function persistLocale(newLocale: Locale) {
   document.documentElement.lang = newLocale;
 }
 
-// v1.25.0 — mirror the active locale onto `User.locale` so server-side
-// background work (the proactive Coach nudge, the Telegram test message)
-// renders in the user's language. The cookie/localStorage choice is
-// invisible to a cron that has no request context; without this write the
-// column stays null and those messages fall back to English. Fire-and-forget
-// and idempotent on the server: a 401 on a public page, an offline blip or a
-// no-op equal value all fail silently and never block the UI flip.
+// Mirror the active locale onto `User.locale` so server-side background work
+// (the proactive Coach nudge, the Telegram test message) renders in the
+// user's language. The cookie/localStorage choice is invisible to a cron that
+// has no request context.
+//
+// This is no longer what the column depends on. Being fire-and-forget, it
+// loses the write on a 401, an offline blip or a tab closed mid-flight, and
+// nothing retried — the column then held a language the user had left behind
+// for good. `getSession` reconciles the column from the locale cookie on the
+// next request instead, which is ordered by the request pipeline and needs no
+// cooperation from the client. What this call still earns its place for is
+// the server-set cookie the route emits in reply: Safari's ITP caps the
+// script-written copy at 7 days, and a Set-Cookie is exempt.
 function persistLocaleToServer(newLocale: Locale) {
   void apiFetchRaw("/api/auth/me/locale", {
     method: "PUT",

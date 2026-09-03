@@ -48,6 +48,7 @@ export async function runEncryptionKeyRotation(): Promise<{
   totalScanned: number;
   totalRotated: number;
   totalErrors: number;
+  totalDropped: number;
 }> {
   const prisma = getWorkerPrisma();
   const out = await rotateCorpus(prisma as unknown as CorpusClient);
@@ -56,6 +57,7 @@ export async function runEncryptionKeyRotation(): Promise<{
     totalScanned: out.totalScanned,
     totalRotated: out.totalRotated,
     totalErrors: out.totalErrors,
+    totalDropped: out.totalDropped,
   };
 }
 
@@ -70,6 +72,7 @@ export async function handleEncryptionKeyRotate(
       evt.addMeta("rotate_scanned", result.totalScanned);
       evt.addMeta("rotate_rotated", result.totalRotated);
       evt.addMeta("rotate_errors", result.totalErrors);
+      evt.addMeta("rotate_dropped", result.totalDropped);
       await auditLog("admin.encryption.rotate.completed", {
         userId: requestedBy,
         details: {
@@ -77,6 +80,7 @@ export async function handleEncryptionKeyRotate(
           scanned: result.totalScanned,
           rotated: result.totalRotated,
           errors: result.totalErrors,
+          dropped: result.totalDropped,
         },
       });
       // Per-row errors are the fail-closed skip of a row under a key the
@@ -86,6 +90,7 @@ export async function handleEncryptionKeyRotate(
         rotate_scanned: result.totalScanned,
         rotate_rotated: result.totalRotated,
         rotate_errors: result.totalErrors,
+        rotate_dropped: result.totalDropped,
       });
     } catch (err) {
       evt.addWarning(`encryption-key-rotate failed: ${err}`);

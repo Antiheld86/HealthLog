@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { MGDL_PER_MMOL, mgdlToMmol } from "@/lib/glucose";
 
 import {
   parseCsvMeasurements,
@@ -98,7 +99,12 @@ describe("parseCsvMeasurements — unit conversion", () => {
     ]);
     expect(out.rows[0].status).toBe("ok");
     expect(out.rows[0].row?.unit).toBe("mg/dL");
-    expect(out.rows[0].row?.value).toBeCloseTo(5.3 * 18.016, 3);
+    // The one factor the app converts glucose by, both directions. The
+    // literal that used to sit here was 18.016 while every display path
+    // divided by 18.0182, so a reading imported in mmol/L did not read back
+    // as the number it went in as.
+    expect(out.rows[0].row?.value).toBeCloseTo(5.3 * MGDL_PER_MMOL, 3);
+    expect(mgdlToMmol(out.rows[0].row?.value ?? 0)).toBe(5.3);
   });
 
   it("converts weight lb to canonical kg", () => {
@@ -176,7 +182,7 @@ describe("parseCsvMeasurements — glucose context", () => {
     for (const result of out.rows) {
       expect(result.row).not.toHaveProperty("glucoseContext");
       expect(result.row?.unit).toBe("mg/dL");
-      expect(result.row?.value).toBeCloseTo(95.4848, 3);
+      expect(result.row?.value).toBeCloseTo(5.3 * MGDL_PER_MMOL, 3);
     }
     expect(out.rows[0].row?.measuredAt.toISOString()).toBe(
       "2024-04-03T02:15:00.000Z",

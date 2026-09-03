@@ -45,6 +45,12 @@ vi.mock("@/lib/db", () => ({
     user: {
       findUnique: vi.fn(),
     },
+    // The greeting salutation is one of the two strings this route still
+    // translates server-side; `resolveJobLocale` reads the operator's
+    // configured default from here when the user's column is NULL.
+    appSettings: {
+      findUnique: vi.fn(async () => null),
+    },
     // v1.4.38 W-F — the route now uses `$queryRaw` for the per-type
     // latest reading, the 7-day rollup-bucket sparkline, and the
     // 365-day distinct-day streak set. Three raw calls per request,
@@ -1089,6 +1095,46 @@ describe("GET /api/dashboard/summary", () => {
  * source — `buildMoodDailySeries` for mood, `computeBmi` for BMI — so the
  * client consumes a finished figure instead of re-deriving one.
  */
+describe("GET /api/dashboard/summary — greeting locale", () => {
+  // The salutation and the streak label are translated on the server, and
+  // the native client is this route's only caller: a Bearer request carries
+  // no locale cookie, so `User.locale` is the sole per-user signal. When it
+  // is NULL the operator's configured default is the answer — the same
+  // fallback order every background writer uses. The coercion this replaces
+  // stopped at English, so a German instance greeted a user who never opened
+  // the language picker in English while the rest of their screen was German.
+  it("falls back to the operator default, not to English", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    vi.mocked(prisma.appSettings.findUnique).mockResolvedValue({
+      defaultLocale: "de",
+    } as never);
+
+    const res = await callGet(makeReq());
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { greeting: { salutation: string } };
+    };
+    expect(body.data.greeting.salutation).toBe("Hallo, testuser");
+  });
+
+  it("still prefers the user's own stored locale", async () => {
+    vi.mocked(getSession).mockResolvedValue({
+      ...SESSION_OK,
+      user: { ...SESSION_OK.user, locale: "en" },
+    } as never);
+    vi.mocked(prisma.appSettings.findUnique).mockResolvedValue({
+      defaultLocale: "de",
+    } as never);
+
+    const res = await callGet(makeReq());
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { greeting: { salutation: string } };
+    };
+    expect(body.data.greeting.salutation).toBe("Hi, testuser");
+  });
+});
+
 describe("GET /api/dashboard/summary — mood + BMI cards", () => {
   function cardsOf(body: unknown): Array<Record<string, unknown>> {
     return (body as { data: { metrics: Array<Record<string, unknown>> } }).data

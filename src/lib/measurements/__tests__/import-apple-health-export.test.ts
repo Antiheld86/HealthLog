@@ -1226,3 +1226,55 @@ describe("streamParseExportXml — cycle module off", () => {
     expect(result.totals.recordsRead).toBe(2);
   });
 });
+
+/**
+ * `ImportJob.exportedAt` — the instant the Health app stamped on the
+ * archive. The status endpoint and the published contract have both
+ * promised it since v1.4.34, but `<ExportDate>` sat on the parser's
+ * ignore list, so the column could only ever answer null. These pin the
+ * capture: remove the `onExportDate` call from the parser and the first
+ * case goes red; drop the NaN guard and the third does.
+ */
+describe("streamParseExportXml — the archive's own export stamp", () => {
+  async function parseFor(xml: string) {
+    const tmp = mkdtempSync(join(tmpdir(), "healthlog-parser-export-date-"));
+    const xmlPath = join(tmp, "export.xml");
+    writeFileSync(xmlPath, xml);
+    const stamps: Date[] = [];
+    await streamParseExportXml({
+      xmlPath,
+      userId: "user-1",
+      userTimezone: "Europe/Berlin",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      prisma: makeFakePrisma() as any,
+      onExportDate: (exportedAt) => {
+        stamps.push(exportedAt);
+      },
+    });
+    return stamps;
+  }
+
+  it("hands the caller the instant Apple wrote on the export", async () => {
+    const stamps = await parseFor(tinyExportXml());
+
+    expect(stamps).toHaveLength(1);
+    // "2026-05-15 14:32:01 +0200" — the fixture's own stamp.
+    expect(stamps[0]?.toISOString()).toBe("2026-05-15T12:32:01.000Z");
+  });
+
+  it("stays silent for an archive that carries no stamp", async () => {
+    const stamps = await parseFor(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<HealthData locale="en_US"></HealthData>`,
+    );
+
+    expect(stamps).toEqual([]);
+  });
+
+  it("stays silent rather than guessing at an unreadable stamp", async () => {
+    const stamps = await parseFor(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<HealthData locale="en_US">\n  <ExportDate value="not a date"/>\n</HealthData>`,
+    );
+
+    expect(stamps).toEqual([]);
+  });
+});

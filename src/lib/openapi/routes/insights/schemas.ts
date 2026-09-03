@@ -1030,7 +1030,6 @@ export const dashboardSnapshotResponse = z
       gender: z.enum(["MALE", "FEMALE", "OTHER"]).nullable(),
       glucoseUnit: z.string().nullable(),
       onboardingTourCompleted: z.boolean(),
-      greetingHour: z.number().int(),
     }),
     layout: z.record(z.string(), z.unknown()),
     // v1.7.0 — full 27-id widget catalogue (16 server-known + 11

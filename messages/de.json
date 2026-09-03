@@ -5681,6 +5681,12 @@
         "imperial": "Imperial",
         "saved": "Einheiten-Einstellung gespeichert",
         "saveError": "Einheiten-Einstellung konnte nicht gespeichert werden."
+      },
+      "glucoseUnit": {
+        "title": "Blutzucker",
+        "description": "In welcher Einheit Blutzuckerwerte angezeigt werden. Gespeichert werden sie so oder so gleich.",
+        "saved": "Blutzucker-Einheit gespeichert",
+        "saveError": "Die Blutzucker-Einheit konnte nicht gespeichert werden."
       }
     },
     "withings": "Withings",
@@ -6501,6 +6507,7 @@
       "trackedUsers": "{count} Nutzer erfasst",
       "lastOk": "letzter Erfolg {at}",
       "lastFailure": "letzter Fehlschlag {at}",
+      "lastFailureStatus": "HTTP {status}",
       "statusHealthy": "In Ordnung",
       "statusFailing": "{failing} von {tracked} scheitern, {run} in Folge",
       "typeAdminOpenai": "Server-Schlüssel (Betreiber)",
