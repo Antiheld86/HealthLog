@@ -14,6 +14,51 @@
 
 ### Fixed
 
+- **Mood correlations no longer call five days of noise a strong finding.** The
+  mood page painted a "Strong" or "Moderate" badge on a mood-versus-sleep,
+  activity, pulse, weight or blood-pressure card as soon as five days had been
+  paired, with the day count and the coefficient tucked behind an info icon.
+  Five points sloping the right way by chance is not a finding, and the rest of
+  the app has refused to call it one for a while: the weight, blood-pressure
+  and mood status surfaces all require at least twenty paired days and a result
+  that a significance test says is unlikely to be chance. The mood page now
+  requires the same. Fewer cards will show a coefficient, and the ones that do
+  mean something. A card that cannot show one says which of the two it is: how
+  many of the twenty days you have so far, or that twenty days went by and
+  nothing stood out. Those used to look identical.
+- **A medication with no schedule no longer reports perfect adherence.** If you
+  saved a medication without a dose time, the insights list, the blood-pressure
+  read and the medication-compliance summary all showed it at 100 percent and
+  folded that into your average, because nothing was expected of it so nothing
+  could be missed. It was never an adherence figure, and it made every other
+  medication's average look better than it was. Such a medication is now left
+  out of adherence entirely, which is what the doctor report has always done.
+  Add a schedule and it comes back.
+- **A day you never logged is no longer counted as a day you took nothing.** The
+  chart pairing blood-pressure medication continuity against your systolic
+  readings treated every day without an intake record as a measured zero, so a
+  week away from the app read as a week off your medication and dragged the
+  relationship between the two around. Only days that carry an intake record
+  are used now. A dose you marked as skipped is still a real zero and still
+  counts; a day you simply did not open the app is not in the chart at all.
+- **A lab note this instance cannot decrypt survives an export instead of
+  vanishing.** If your encryption key was rotated and the old one dropped
+  before every row had moved, a lab note or a biomarker context written under
+  the old key came out of a data export as empty. In the file that is
+  indistinguishable from a note you never wrote, so restoring the export
+  finished the job and the text was gone with nothing to show it had been
+  there. Both now export as a short marker saying the text was encrypted with
+  a key this instance no longer holds, and the marker survives a restore. The
+  original text is still unrecoverable without the old key; what changes is
+  that you can see something was lost.
+- **A deleted mood entry or custom-metric reading now counts as deleted in the
+  AI surfaces.** Deleting a reading left it in place with a tombstone, and
+  three reads had not been told to skip tombstones: the correlation channel
+  built from a custom metric kept using deleted readings, and the check that
+  decides whether an AI assessment is still current could not see a mood
+  deletion or a custom-metric deletion at all, so yesterday's text was re-dated
+  and served as today's over data you had removed. All three now skip deleted
+  rows.
 - **Twenty-eight settings a self-hoster could write down but not actually
   change.** The `environment:` block in `docker-compose.yml` is a whitelist:
   compose reads `.env` for `${VAR}` substitution, so a value set there looks

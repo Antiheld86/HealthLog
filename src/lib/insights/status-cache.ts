@@ -324,7 +324,12 @@ export async function computeStatusInputFingerprint(args: {
     }),
     args.includeMood
       ? prisma.moodEntry.aggregate({
-          where: { userId: args.userId },
+          // Tombstoned rows are excluded here for the same reason they are in
+          // the measurement arm above: this aggregate IS the freshness
+          // fingerprint, so a deletion that leaves the count and the newest
+          // timestamp untouched cannot invalidate the cached assessment, and
+          // yesterday's text gets re-dated as today's over data that is gone.
+          where: { userId: args.userId, deletedAt: null },
           _count: { _all: true },
           _max: { moodLoggedAt: true },
         })
@@ -342,8 +347,9 @@ export async function computeStatusInputFingerprint(args: {
             id: true,
             unit: true,
             updatedAt: true,
-            _count: { select: { entries: true } },
+            _count: { select: { entries: { where: { deletedAt: null } } } },
             entries: {
+              where: { deletedAt: null },
               orderBy: [{ measuredAt: "desc" }, { id: "desc" }],
               take: 1,
               select: { measuredAt: true, unit: true },

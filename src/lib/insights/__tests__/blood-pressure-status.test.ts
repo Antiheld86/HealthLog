@@ -260,3 +260,76 @@ describe("generateBloodPressureStatusForUser — token-leak hardening (v1.4.27 F
     expect(parsed.text).not.toContain("metric:");
   });
 });
+
+// The BP-status gate reads its medications' adherence to decide what to say
+// about a reading. `calculateCompliance` answers `rate: 100, totalExpected: 0`
+// for a medication with no schedule, so a blood-pressure medication saved
+// without one told the model the person was perfectly adherent — the exact
+// fabrication the doctor report has excluded since it was written.
+describe("generateBloodPressureStatusForUser — no rate without an expectation", () => {
+  const SCHEDULE = {
+    id: "sch-1",
+    windowStart: "07:00",
+    windowEnd: "08:00",
+    timesOfDay: ["07:00"],
+    daysOfWeek: null,
+    rrule: null,
+    rollingIntervalDays: null,
+    reminderGraceMinutes: null,
+    scheduleType: "SCHEDULED",
+    cyclicOnWeeks: null,
+    cyclicOffWeeks: null,
+    doseWindows: [],
+  };
+
+  function bpMed(id: string, name: string, schedules: unknown[]) {
+    return {
+      id,
+      name,
+      dose: "5mg",
+      active: true,
+      asNeeded: false,
+      createdAt: new Date(Date.now() - 60 * dayMs),
+      schedules,
+      scheduleRevisions: [],
+      pauseEras: [],
+    };
+  }
+
+  it("omits a blood-pressure medication that expects no dose", async () => {
+    const now = new Date();
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      dateOfBirth: null,
+    } as never);
+    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.measurement.findMany).mockResolvedValue([
+      { type: "BLOOD_PRESSURE_SYS", value: 132, measuredAt: now },
+      { type: "BLOOD_PRESSURE_DIA", value: 84, measuredAt: now },
+    ] as never);
+    vi.mocked(prisma.medication.findMany).mockResolvedValue([
+      bpMed("med-empty", "Unscheduled", []),
+      bpMed("med-real", "Amlodipine", [SCHEDULE]),
+    ] as never);
+    vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValue(
+      [] as never,
+    );
+    vi.mocked(prisma.moodEntry.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.auditLog.create).mockResolvedValue({
+      createdAt: new Date(),
+    } as never);
+    vi.mocked(getMedicationCategories).mockResolvedValue({
+      "med-empty": "BLOOD_PRESSURE",
+      "med-real": "BLOOD_PRESSURE",
+    });
+
+    const captured: { userPrompt: string | null } = { userPrompt: null };
+    stubCompletion('{"summary":"OK"}', captured);
+
+    await generateBloodPressureStatusForUser("user-1", { locale: "en" });
+
+    const snapshot = JSON.parse(captured.userPrompt!.match(/\{[\s\S]*\}/)![0]);
+    const names = snapshot.bpMedications.map((m: { name: string }) => m.name);
+    expect(names).not.toContain("Unscheduled");
+    expect(names).toContain("Amlodipine");
+  });
+});

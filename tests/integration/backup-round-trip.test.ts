@@ -63,6 +63,9 @@ import {
   encryptWaveformToBytes,
 } from "@/lib/withings/ecg-waveform-codec";
 import { buildFullBackupPayload } from "@/lib/export/full-backup-payload";
+import { UNREADABLE_EXPORT_MARKER } from "@/lib/export/unreadable-marker";
+import { decryptNoteFromBytes } from "@/lib/labs/store";
+import { decryptContextFromBytes } from "@/lib/labs/biomarker-store";
 import { TWO_ENDED_MODELS, type TwoEndedModel } from "@/lib/export/backup-plan";
 import { POST } from "@/app/api/admin/backups/[id]/restore/route";
 
@@ -2618,5 +2621,104 @@ describe("every model the plan claims two-ended survives a real restore", () => 
         effectiveDate: "2026-06-30",
       },
     });
+  });
+
+  /**
+   * A note this instance can no longer decrypt leaves the export as a marker,
+   * not as nothing.
+   *
+   * A fail-soft decrypt answers `null` on a wrong or dropped key, and in a
+   * portable file `null` is byte-for-byte what a note that was never written
+   * looks like. The restore importer then writes no note, so a note the person
+   * did write is gone and no one is told — the whole loss fits inside a
+   * fail-soft `catch` written for a list view, where returning null is right.
+   *
+   * The Coach transcript and the doctor report both refuse that trade, one
+   * with a placeholder sentence and one with a rendered flag. This asserts the
+   * lab note now does the same, and that the marker is still there after the
+   * file has been through a real restore: the ciphertext is unreadable either
+   * way, but a person opening the restored account can see that something was
+   * there rather than believing they never wrote it.
+   */
+  it("carries a lab note it cannot decrypt through the round trip as a visible marker", async () => {
+    const prisma = getPrismaClient();
+    await seedAdminSession(prisma);
+    await createOwner(prisma);
+
+    const biomarker = await prisma.biomarker.create({
+      data: { userId: OWNER_ID, name: "Ferritin", unit: "ng/mL" },
+    });
+    // Ciphertext under a key id this instance does not hold — the shape a row
+    // written before a key rotation that dropped its key has. `decrypt` is
+    // fail-closed on an unknown key id, so this throws rather than returning
+    // garbage, which is the case the soft helper swallowed.
+    const unreadable = new Uint8Array(
+      Buffer.from("v9.AAAAAAAAAAAAAAAAAAAAAAAA", "utf8"),
+    );
+    await prisma.labResult.create({
+      data: {
+        userId: OWNER_ID,
+        biomarkerId: biomarker.id,
+        analyte: "Ferritin",
+        value: 91,
+        unit: "ng/mL",
+        takenAt: AT("2026-06-30T09:00:00.000Z"),
+        noteEncrypted: unreadable,
+      },
+    });
+    await prisma.biomarker.update({
+      where: { id: biomarker.id },
+      data: { contextEncrypted: unreadable },
+    });
+
+    const { payload } = await buildFullBackupPayload(prisma, OWNER_ID, {
+      purpose: "portable-export",
+    });
+
+    const exported = payload.labResults as Array<{ note: string | null }>;
+    expect(exported).toHaveLength(1);
+    expect(exported[0].note).toContain("unreadable");
+    const exportedBiomarkers = payload.biomarkers as Array<{
+      context: string | null;
+    }>;
+    expect(exportedBiomarkers[0].context).toContain("unreadable");
+
+    await prisma.user.delete({ where: { id: OWNER_ID } });
+    await createOwner(prisma);
+
+    const backup = await prisma.dataBackup.create({
+      data: {
+        userId: OWNER_ID,
+        type: "TWO_ENDED_ROUND_TRIP",
+        data: encrypt(JSON.stringify(payload)),
+      },
+    });
+    const response = await POST(
+      new Request(`http://localhost/api/admin/backups/${backup.id}/restore`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ confirm: "RESTORE" }),
+      }) as never,
+      { params: Promise.resolve({ id: backup.id }) },
+    );
+    const body = await response.json();
+    expect(response.status, JSON.stringify(body)).toBe(200);
+
+    const restoredLab = await prisma.labResult.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+    });
+    // Back in the column it came from, readable again because the restore
+    // re-encrypted it under the CURRENT key — and saying what happened.
+    expect(restoredLab.noteEncrypted).not.toBeNull();
+    expect(decryptNoteFromBytes(restoredLab.noteEncrypted!)).toBe(
+      UNREADABLE_EXPORT_MARKER,
+    );
+
+    const restoredBiomarker = await prisma.biomarker.findFirstOrThrow({
+      where: { userId: OWNER_ID },
+    });
+    expect(decryptContextFromBytes(restoredBiomarker.contextEncrypted!)).toBe(
+      UNREADABLE_EXPORT_MARKER,
+    );
   });
 });

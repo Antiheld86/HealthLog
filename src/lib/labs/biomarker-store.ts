@@ -33,10 +33,12 @@ export function decryptContextFromBytes(buf: Uint8Array): string {
 
 /** Decrypt a stored `Bytes` context note, fail-soft to `null` on any error.
  *
- * Mirrors `decryptNoteSoft` in the illness DTO layer: a single bad-key /
- * malformed row must not 500 the whole catalog list. The single-resource GET
- * path uses the throwing `decryptContextFromBytes` so a genuine decrypt
- * failure there surfaces instead of silently masking a key-rotation gap. */
+ * A single bad-key / malformed row must not 500 the whole catalog list, and
+ * the list surface renders a missing context as nothing either way. The
+ * single-resource GET path uses the throwing `decryptContextFromBytes` so a
+ * genuine decrypt failure there surfaces instead of silently masking a
+ * key-rotation gap, and the backup export reads through its own helper that
+ * marks the row rather than blanking it. */
 export function decryptContextSoft(buf: Uint8Array | null): string | null {
   if (!buf) return null;
   try {

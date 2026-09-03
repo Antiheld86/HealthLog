@@ -20,7 +20,9 @@ import { MoodExplainerIcon } from "./mood-explainer-icon";
  * pulse) pair. The Pearson math comes pre-computed from
  * `/api/mood/insights` (single source of truth with the LLM snapshot).
  * Below-threshold pairs render an EmptyState rather than a misleading
- * near-zero scatter.
+ * near-zero scatter — and the EmptyState names which threshold, because a
+ * pairing that is still building and one that found nothing are different
+ * answers and used to read as the same blank.
  */
 
 const ScatterCorrelationChart = dynamic(
@@ -46,7 +48,16 @@ export interface MoodMetricCorrelationData {
   result: CorrelationResult | null;
   points: MoodCorrelationPoint[];
   n: number;
+  /** Which bar the pairing fell short of, when there is no coefficient. */
+  suppressed?: "insufficientPairs" | "notSignificant";
 }
+
+/**
+ * The paired-day floor the server's significance gate enforces. Repeated
+ * here only to tell the reader how far off they are; the decision itself is
+ * the server's and arrives as `suppressed`.
+ */
+const MIN_PAIRED_DAYS = 20;
 
 type MetricKind = "sleep" | "steps" | "pulse" | "weight" | "bloodPressure";
 
@@ -95,7 +106,33 @@ function MoodCorrelationCard({
   className?: string;
 }) {
   const { t } = useTranslations();
-  const hasResult = data.result != null && data.n >= 5;
+  const hasResult = data.result != null;
+
+  // Three different silences, and the reader deserves to know which one they
+  // are looking at: nothing paired yet, some days paired but not enough to
+  // separate a pattern from chance, or enough days and no pattern in them.
+  // The last one is a finding, not a gap, and used to render as the same
+  // "not enough data" blank as the first.
+  const emptyCopy =
+    data.suppressed === "notSignificant"
+      ? {
+          title: t("insights.mood.correlation.noLinkTitle"),
+          description: t("insights.mood.correlation.noLinkDescription", {
+            n: data.n,
+          }),
+        }
+      : data.n > 0
+        ? {
+            title: t("insights.mood.correlation.emptyTitle"),
+            description: t("insights.mood.correlation.pendingDescription", {
+              n: data.n,
+              needed: MIN_PAIRED_DAYS,
+            }),
+          }
+        : {
+            title: t("insights.mood.correlation.emptyTitle"),
+            description: t("insights.mood.correlation.emptyDescription"),
+          };
 
   return (
     <Card
@@ -168,8 +205,8 @@ function MoodCorrelationCard({
             variant="plain"
             size="compact"
             icon={<Activity className="size-5" />}
-            title={t("insights.mood.correlation.emptyTitle")}
-            description={t("insights.mood.correlation.emptyDescription")}
+            title={emptyCopy.title}
+            description={emptyCopy.description}
           />
         )}
       </CardContent>

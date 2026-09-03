@@ -5,11 +5,15 @@
  * free-text note is the only sensitive column on the model; it shares the
  * `encrypt()` string format (`"<keyId>.<base64>"`) every other `*Encrypted`
  * column uses, encoded as UTF-8 bytes.
+ *
+ * There is one decrypt here and it throws. A fail-soft twin used to sit
+ * beside it for bulk reads; the list DTO never carries the note (it reports
+ * `hasNote` only) and the export now writes a visible marker instead of a
+ * null, so nothing was left that wanted a silent one.
  */
 import { Buffer } from "node:buffer";
 
 import { decrypt, encrypt } from "@/lib/crypto";
-import { getEvent } from "@/lib/logging/context";
 
 /** Encrypt a UTF-8 note into the `Bytes` payload the schema stores. */
 export function encryptNoteToBytes(plaintext: string): Uint8Array<ArrayBuffer> {
@@ -25,27 +29,4 @@ export function encryptNoteToBytes(plaintext: string): Uint8Array<ArrayBuffer> {
 /** Decrypt a stored `Bytes` note back to plaintext. Throws on a bad key id. */
 export function decryptNoteFromBytes(buf: Uint8Array): string {
   return decrypt(Buffer.from(buf).toString("utf8"));
-}
-
-/**
- * Decrypt a stored `Bytes` note, fail-soft to `null` on any error.
- *
- * Mirrors `decryptContextSoft` in the biomarker store: a single bad-key /
- * malformed row must not fail a bulk read (list view, backup export) that
- * spans many rows. The single-resource GET path uses the throwing
- * `decryptNoteFromBytes` so a genuine decrypt failure there surfaces instead
- * of silently masking a key-rotation gap.
- */
-export function decryptNoteSoft(buf: Uint8Array | null): string | null {
-  if (!buf || buf.byteLength === 0) return null;
-  try {
-    return decryptNoteFromBytes(buf);
-  } catch (err) {
-    getEvent()?.addWarning(
-      `lab note decrypt failed: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    );
-    return null;
-  }
 }

@@ -776,15 +776,20 @@ describe("GET /api/insights/comprehensive — mood × metric local-day pairing (
       scheduleRevisions: [],
       pauseEras: [],
     };
-    // Intake taken on the first three days, missed on the last two → a
-    // non-degenerate continuity series.
-    const intakeEvents = days.slice(0, 3).map((d) => ({
+    // Intake taken on the first three days, logged as skipped on the last
+    // two → a non-degenerate continuity series. The skips used to be absent
+    // rows: a day with no record read as a measured 0 % continuity, which is
+    // the fabrication the route no longer makes, and a fixture that relies on
+    // it would be pinning the defect rather than the timezone question this
+    // test asks. Recording the two days as skips keeps five paired days AND
+    // keeps every one of them a thing the person actually logged.
+    const intakeEvents = days.map((d, i) => ({
       medicationId: "med-bp",
       userId: "user-comp-1",
       deletedAt: null,
       scheduledFor: new Date(`${d}T07:00:00Z`),
-      takenAt: new Date(`${d}T07:05:00Z`),
-      skipped: false,
+      takenAt: i < 3 ? new Date(`${d}T07:05:00Z`) : null,
+      skipped: i >= 3,
     }));
 
     function primeMocks() {
@@ -825,5 +830,229 @@ describe("GET /api/insights/comprehensive — mood × metric local-day pairing (
     // output to compare.
     expect(utcBody.data.scatterData).toHaveLength(5);
     expect(utcBody.data.bpMedicationCorrelation).not.toBeNull();
+  });
+});
+
+// A medication with no schedule expects no dose, so it has no adherence to
+// report. `calculateCompliance` answers `rate: 100, totalExpected: 0` for that
+// case — arithmetically true and a lie on a surface that reads the number as
+// adherence. The doctor report has excluded both the PRN arm and the empty
+// schedule since it was written, with the reason beside it; this envelope
+// filtered only PRN, so a scheduled medication saved without a schedule (which
+// `POST /api/medications` accepts) reported perfect adherence to the reader and
+// to the prompt built from the same array.
+describe("GET /api/insights/comprehensive — no adherence without an expectation", () => {
+  const EMPTY_AGGREGATE = {
+    summaries: {},
+    bpRawRows: { sys: [], dia: [] },
+    weightRawRows: [],
+    dailyByType: {},
+    firstMeasurementAt: null,
+    totalMeasurements: 0,
+  };
+
+  type MedBody = {
+    data: {
+      medications: Array<{
+        id: string;
+        name: string;
+        compliance7: number;
+        compliance30: number;
+      }>;
+    };
+  };
+
+  function scheduledMed(id: string, name: string, schedules: unknown[]) {
+    return {
+      id,
+      name,
+      dose: "5mg",
+      active: true,
+      asNeeded: false,
+      createdAt: new Date("2026-04-01T00:00:00Z"),
+      schedules,
+      scheduleRevisions: [],
+      pauseEras: [],
+    };
+  }
+
+  const SCHEDULE = {
+    id: "sch-1",
+    windowStart: "07:00",
+    windowEnd: "08:00",
+    timesOfDay: ["07:00"],
+    daysOfWeek: null,
+    rrule: null,
+    rollingIntervalDays: null,
+    reminderGraceMinutes: null,
+    scheduleType: "SCHEDULED",
+    cyclicOnWeeks: null,
+    cyclicOffWeeks: null,
+    doseWindows: [],
+  };
+
+  it("leaves a scheduled medication with no schedule out of the compliance list", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    (buildComprehensiveAggregate as ReturnType<typeof vi.fn>).mockResolvedValue(
+      EMPTY_AGGREGATE,
+    );
+    (prisma.medication.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      scheduledMed("med-none", "Unscheduled", []),
+      scheduledMed("med-real", "Amlodipine", [SCHEDULE]),
+    ]);
+
+    const body = (await (await callGet(makeReq())).json()) as MedBody;
+
+    const names = body.data.medications.map((m) => m.name);
+    expect(names).not.toContain("Unscheduled");
+    // The medication that DOES expect a dose still reports, so this is a
+    // filter and not a blanket suppression.
+    expect(names).toContain("Amlodipine");
+  });
+
+  it("never reports 100 % for a medication with nothing expected of it", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    (buildComprehensiveAggregate as ReturnType<typeof vi.fn>).mockResolvedValue(
+      EMPTY_AGGREGATE,
+    );
+    (prisma.medication.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      scheduledMed("med-none", "Unscheduled", []),
+    ]);
+
+    const body = (await (await callGet(makeReq())).json()) as MedBody;
+
+    expect(body.data.medications).toEqual([]);
+  });
+});
+
+// The medication-continuity correlation joined every day that had a systolic
+// reading against `takenByDay.get(day) ?? 0`. A day the reader simply never
+// logged an intake for therefore entered the scatter and the coefficient as a
+// measured 0 % continuity. Absence is not zero anywhere else in this project
+// and it is not zero here: a day with a logged skip is a real zero and stays,
+// a day with no record at all drops out.
+describe("GET /api/insights/comprehensive — an unlogged day is not a zero", () => {
+  type BpBody = {
+    data: {
+      bpMedicationScatterData: Array<{ continuityPct: number; sysBP: number }>;
+      bpMedicationCorrelation: { n: number } | null;
+    };
+  };
+
+  const DAYS = [
+    "2026-05-01",
+    "2026-05-02",
+    "2026-05-03",
+    "2026-05-04",
+    "2026-05-05",
+  ];
+
+  const MEDICATION = {
+    id: "med-bp",
+    name: "Amlodipine",
+    dose: "5mg",
+    active: true,
+    asNeeded: false,
+    createdAt: new Date("2026-04-01T00:00:00Z"),
+    schedules: [
+      {
+        id: "sch-1",
+        windowStart: "07:00",
+        windowEnd: "08:00",
+        timesOfDay: ["07:00"],
+        daysOfWeek: null,
+        rrule: null,
+        rollingIntervalDays: null,
+        reminderGraceMinutes: null,
+        scheduleType: "SCHEDULED",
+        cyclicOnWeeks: null,
+        cyclicOffWeeks: null,
+        doseWindows: [],
+      },
+    ],
+    scheduleRevisions: [],
+    pauseEras: [],
+  };
+
+  function primeBp(
+    events: Array<{ day: string; takenAt: Date | null; skipped: boolean }>,
+  ) {
+    (buildComprehensiveAggregate as ReturnType<typeof vi.fn>).mockResolvedValue(
+      {
+        summaries: {},
+        bpRawRows: { sys: [], dia: [] },
+        weightRawRows: [],
+        dailyByType: {
+          BLOOD_PRESSURE_SYS: DAYS.map((d, i) => ({
+            day: d,
+            value: 120 + i * 2,
+          })),
+        },
+        firstMeasurementAt: new Date(),
+        totalMeasurements: 10,
+      },
+    );
+    (prisma.medication.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      MEDICATION,
+    ]);
+    (
+      prisma.medicationIntakeEvent.findMany as ReturnType<typeof vi.fn>
+    ).mockResolvedValue(
+      events.map((e) => ({
+        medicationId: "med-bp",
+        userId: "user-comp-1",
+        deletedAt: null,
+        scheduledFor: new Date(`${e.day}T07:00:00Z`),
+        takenAt: e.takenAt,
+        skipped: e.skipped,
+      })),
+    );
+    vi.mocked(getMedicationCategories).mockResolvedValue({
+      "med-bp": "BLOOD_PRESSURE",
+    });
+  }
+
+  it("keeps only the days that carry an intake record", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    // Three days logged; the last two were never touched.
+    primeBp(
+      DAYS.slice(0, 3).map((day) => ({
+        day,
+        takenAt: new Date(`${day}T07:05:00Z`),
+        skipped: false,
+      })),
+    );
+
+    const body = (await (await callGet(makeReq())).json()) as BpBody;
+
+    expect(body.data.bpMedicationScatterData).toHaveLength(3);
+    // The two unlogged days would have entered as 0 % against their own
+    // systolic reading; both are gone.
+    expect(body.data.bpMedicationScatterData.map((p) => p.sysBP)).not.toContain(
+      126,
+    );
+    expect(
+      body.data.bpMedicationScatterData.every((p) => p.continuityPct === 100),
+    ).toBe(true);
+  });
+
+  it("keeps a logged skip, which is a real zero", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    primeBp([
+      ...DAYS.slice(0, 3).map((day) => ({
+        day,
+        takenAt: new Date(`${day}T07:05:00Z`),
+        skipped: false,
+      })),
+      { day: DAYS[3], takenAt: null, skipped: true },
+    ]);
+
+    const body = (await (await callGet(makeReq())).json()) as BpBody;
+
+    expect(body.data.bpMedicationScatterData).toHaveLength(4);
+    expect(body.data.bpMedicationScatterData).toContainEqual({
+      continuityPct: 0,
+      sysBP: 126,
+    });
   });
 });

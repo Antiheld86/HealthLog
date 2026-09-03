@@ -7,14 +7,16 @@
  * verbatim. The DR path never decrypts document content or summaries.
  *
  * Every read is scoped to the owner. Soft-deleted rows are excluded so a
- * restore cannot resurrect tombstones. Other encrypted free-text fields keep
- * the established fail-soft portable representation and are re-encrypted by
- * the restore importer.
+ * restore cannot resurrect tombstones. Other encrypted free-text fields are
+ * carried as plaintext and re-encrypted by the restore importer; one this
+ * instance cannot decrypt is carried as a visible marker rather than as
+ * nothing (see `readForExport` below).
  */
 import { Buffer } from "node:buffer";
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
-import { decryptNoteSoft } from "@/lib/labs/store";
-import { decryptContextSoft } from "@/lib/labs/biomarker-store";
+import { decryptNoteFromBytes } from "@/lib/labs/store";
+import { decryptContextFromBytes } from "@/lib/labs/biomarker-store";
+import { UNREADABLE_EXPORT_MARKER } from "./unreadable-marker";
 import { decryptDocumentSummary } from "@/lib/documents/store";
 import { getEvent } from "@/lib/logging/context";
 import {
@@ -43,6 +45,39 @@ export const WORKOUTS_MANIFEST_NOTE =
   "Workout summary records (duration, distance, heart rate, calories, " +
   "steps) are included. GPS routes and per-sample heart-rate/pace time " +
   "series are not included in this export.";
+
+/**
+ * Decrypt an encrypted free-text column for a portable export, or say plainly
+ * that this one could not be read.
+ *
+ * A fail-soft decrypt answers `null` on a wrong or dropped key. In a list view
+ * that is right — one bad row must not take the page down. In an export it is
+ * not: `null` is exactly what a column that was never written looks like, so
+ * the restore importer writes nothing and a note the person did write
+ * disappears without anyone being told. The Coach transcript and the doctor
+ * report both refuse that trade, one with a placeholder sentence and one with
+ * a rendered flag; this follows the same rule.
+ *
+ * The warning the soft helpers emitted is kept, so a systemic key gap still
+ * shows up in the wide event rather than only in the file.
+ */
+function readForExport(
+  buf: Uint8Array | null,
+  label: string,
+  decode: (bytes: Uint8Array) => string,
+): string | null {
+  if (!buf || buf.byteLength === 0) return null;
+  try {
+    return decode(buf);
+  } catch (err) {
+    getEvent()?.addWarning(
+      `${label} decrypt failed: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+    return UNREADABLE_EXPORT_MARKER;
+  }
+}
 
 export interface LabResultBackupEntry {
   /** Present in canonical DR payloads so rows keep a stable identity. */
@@ -339,7 +374,13 @@ export async function buildRecordsBackupSection(
           deletedAt: r.deletedAt?.toISOString() ?? null,
           note: null,
         }
-      : { note: decryptNoteSoft(r.noteEncrypted) }),
+      : {
+          note: readForExport(
+            r.noteEncrypted,
+            "lab note",
+            decryptNoteFromBytes,
+          ),
+        }),
     panel: r.panel,
     analyte: r.analyte,
     value: r.value,
@@ -369,7 +410,11 @@ export async function buildRecordsBackupSection(
     upperBound: b.upperBound,
     panel: b.panel,
     hidden: b.hidden,
-    context: decryptContextSoft(b.contextEncrypted),
+    context: readForExport(
+      b.contextEncrypted,
+      "biomarker context",
+      decryptContextFromBytes,
+    ),
   }));
 
   const illnessEpisodes: CanonicalIllnessEpisode[] = disasterRecovery
