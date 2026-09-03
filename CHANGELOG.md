@@ -2,6 +2,68 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `greetingHour` is no longer part of the dashboard snapshot response. Any
+  client that decoded it as a required field needs the field made optional or
+  dropped; the `timezone` it sits beside is unchanged and is what the greeting
+  should be derived from.
+
+### Fixed
+
+- **The greeting could contradict the rest of the page.** Three separate
+  pieces of code answered the question "what hour is it" for the time-of-day
+  salutation. The dashboard snapshot computed one server-side and put it on
+  the payload so that clients would not have to; no client ever read it. The
+  insights hero worked it out from the profile timezone. The dashboard header
+  worked it out from a helper of its own that quietly fell back to the
+  device's clock whenever the runtime could not resolve the configured zone,
+  which is what happens to a zone the browser's timezone data does not yet
+  carry. At one instant, for one account, those three returned 20, 21 and 05,
+  so the header said good morning while the hero said good evening and every
+  date beneath them belonged to a third zone. The two greetings now read the
+  same helper, which stays on the configured zone and falls back to the same
+  default as the rest of the app rather than to the device. The server value
+  is gone: it is a clock reading, not a fact about the record, and the
+  snapshot body is served from cache for up to an hour, long enough for a
+  stored hour to name a salutation the clock had already left behind. What
+  the server resolves and every client reads is the timezone itself, which
+  travels on the same payload as before.
+- **Some accounts had their generated text written in a language they do not
+  read.** Everything the app writes without a request in front of it — the
+  nightly briefing, the Coach nudge, the reminder messages — resolves its
+  language from one column on the user row, because a background pass has no
+  cookie and no browser to ask. Everything the user looks at resolves from the
+  request instead, and the request prefers the language cookie, then the
+  column, then what the browser asked for. So the two can disagree, and while
+  they do, nothing on screen looks wrong: the menus, the buttons and the
+  labels are all correct, and the disagreement shows up as a single generated
+  paragraph in the wrong language sitting inside an otherwise correct page.
+  That is how it was reported, on a page where the sentence above the health
+  score came back in English on an account read entirely in German.
+  Keeping the column in step was the browser's job, through a best-effort
+  request sent once when a page mounted and never checked. Anything that
+  interrupts it — the paint before sign-in, an offline moment, a tab closed
+  while it was still in flight — loses the write, and the next page load makes
+  the same unchecked attempt rather than noticing the column is still wrong,
+  so the wrong language can stand for the life of the account. The server now
+  keeps the two in step itself: when a request arrives carrying a language the
+  column does not agree with, the column is corrected, once, on the spot. It
+  needs nothing from the browser, it cannot be dropped in transit, and it
+  fixes accounts that have been diverged for months on their next page load.
+  Accounts that never opened the language picker at all are covered the same
+  way. Nobody's stored preference is guessed at: only a language the app was
+  actually being read in can reach the column.
+- **The dashboard aggregate greeted some users in English on a German
+  instance.** The salutation and the streak label are translated on the
+  server for the native client, and that request carries no language cookie,
+  so the stored preference is the only signal. When an account had never
+  opened the language picker the column is empty, and the fallback stopped at
+  English instead of asking what language the instance is configured for.
+  It now follows the same order every background writer uses: the user's own
+  preference, then the operator's default, then English. This was the last
+  copy of the fallback that the nightly writers were moved off earlier.
+
 ### Internal
 
 - The column-reader sweep was wrong in both directions and had been for as long as it existed. It answers "does this column have a consumer" for every column in the schema, and it is the tool this project leans on to catch a schema change that ships its writer and forgets its reader. Its idea of a write was any `field:` key anywhere, so `where: { ticketHash }` counted as writing `ticketHash`: all twelve columns it reported were a lookup key or a cron's discovery predicate being filtered on, every one a false alarm. And because it only ever reported a column that HAD a write, a column with no write at all was the one thing it could not see. It now understands which Prisma argument a key sits in, follows a payload assembled into a variable before the call, credits raw SQL against the mapped column name, and reports a column no code touches at all as its own category. Twelve false alarms became nineteen findings that each hold up, four of them worth acting on. The matcher underneath is pinned by a test that was checked by breaking it three ways.
