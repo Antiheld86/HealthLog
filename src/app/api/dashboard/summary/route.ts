@@ -61,7 +61,8 @@ import type { MeasurementType } from "@/generated/prisma/client";
 import { measurementTypeEnum } from "@/lib/validations/measurement";
 import { CUMULATIVE_HK_TYPES } from "@/lib/measurements/apple-health-mapping";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
-import { defaultLocale, locales, type Locale } from "@/lib/i18n/config";
+import { type Locale } from "@/lib/i18n/config";
+import { resolveJobLocale } from "@/lib/i18n/job-locale";
 import { userDayKey, DEFAULT_TIMEZONE } from "@/lib/tz/resolver";
 import { cachedSwr, caches, type ServerCache } from "@/lib/cache/server-cache";
 import { buildMedsTodayBlock } from "@/lib/dashboard/meds-today";
@@ -343,7 +344,8 @@ export const GET = apiHandler(async () => {
       Awaited<ReturnType<typeof buildDashboardSummary>>
     >,
     `${user.id}|dashboard-summary`,
-    () => buildDashboardSummary(user.id, userTz, buildContext(user)),
+    async () =>
+      buildDashboardSummary(user.id, userTz, await buildContext(user)),
     annotate,
   );
 
@@ -383,23 +385,22 @@ interface SummaryBuilderContext {
   locale: Locale;
 }
 
-function buildContext(user: {
+async function buildContext(user: {
   displayName: string | null;
   username: string;
   locale: string | null;
-}): SummaryBuilderContext {
+}): Promise<SummaryBuilderContext> {
   const greetingName = user.displayName ?? user.username;
-  // v1.5.x — accept every shipped locale (de / en / es / fr / it / pl)
-  // so the greeting + streak label resolve against the user's
-  // configured language. The legacy narrowing dropped fr/es/it/pl back
-  // to the default; that bug is masked for the title/unit fields by
-  // the new key-based wire shape but still mattered for the strings
-  // that stay translated server-side.
-  const locale: Locale = (locales as readonly string[]).includes(
-    user.locale ?? "",
-  )
-    ? (user.locale as Locale)
-    : defaultLocale;
+  // The greeting salutation and the streak label are the two strings this
+  // route still translates server-side, and the native client is its only
+  // caller — a Bearer request carries no locale cookie and no meaningful
+  // Accept-Language, so the stored column is the only per-user signal.
+  // That is exactly the shape `resolveJobLocale` exists for: stored user
+  // locale, then the operator's configured default, then English. The
+  // hand-rolled coercion this replaces stopped at English, so a German
+  // instance whose user never touched the language picker greeted them in
+  // English while every other string on the same screen was German.
+  const locale: Locale = await resolveJobLocale(user.locale);
   return { greetingName, locale };
 }
 
