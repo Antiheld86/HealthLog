@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useId, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
   LayoutDashboard,
@@ -257,6 +257,17 @@ export function DashboardLayoutSection({ id }: { id: string }) {
     // the settings query authoritative for its own tokened read.
     refetchOnMount: "always",
   });
+
+  // Toggles the SERVER resolved as unavailable for this account — a switch
+  // that is on but can never paint a tile is exactly the confusion this
+  // screen must not create. Decided server-side (see `unavailableWidgetIds`)
+  // so this screen needs no dashboard data of its own. Absent field, or a
+  // query still in flight, means nothing is dead: the row shows, which is
+  // the fail-open direction the module gate below also takes.
+  const unavailableIds = useMemo(
+    () => new Set(remote?.unavailableWidgetIds ?? []),
+    [remote?.unavailableWidgetIds],
+  );
 
   /**
    * v1.32.16 (issue #581) — the freshest optimistic-concurrency token the
@@ -602,6 +613,7 @@ export function DashboardLayoutSection({ id }: { id: string }) {
                 const moduleKey = WIDGET_MODULE_BY_ID[w.id];
                 return !moduleKey || modules?.[moduleKey] !== false;
               })
+              .filter((w) => !unavailableIds.has(w.id))
               .sort((a, b) => a.order - b.order);
             const sortedIds = sortedWidgets.map((w) => w.id);
             return (
@@ -677,6 +689,7 @@ export function DashboardLayoutSection({ id }: { id: string }) {
                 const moduleKey = WIDGET_MODULE_BY_ID[w.id];
                 return !moduleKey || modules?.[moduleKey] !== false;
               })
+              .filter((w) => !unavailableIds.has(w.id))
               .sort((a, b) => a.order - b.order);
             if (nativeWidgets.length === 0) return null;
             return (

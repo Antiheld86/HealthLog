@@ -114,6 +114,72 @@ export function disabledSummaryTypes(
 }
 
 /**
+ * Strip disabled-module types from a summaries slice. Lifted out of
+ * `@/lib/dashboard/snapshot`, where it was private, once a second
+ * dashboard feed needed it: with `NEXT_PUBLIC_DASHBOARD_SNAPSHOT=false`
+ * the tile strip hydrates from `/api/analytics` instead of the snapshot,
+ * and that route filtered nothing — so a module the user had turned off
+ * still reached the client, and the tile it owns still painted. The gate
+ * has to sit on every feed that carries summaries, not just the default
+ * one, or it is only as strong as a rollout flag.
+ *
+ * Pure over its inputs and browser-safe (string keys + the map above), so
+ * the snapshot builder, the analytics route and any future feed share one
+ * implementation rather than each carrying a copy that can drift.
+ * Returns shallow copies; the inputs are not mutated.
+ */
+/**
+ * Widget ids whose toggle cannot do anything for THIS account, and so must
+ * not be offered at all. `WIDGET_MODULE_BY_ID` above answers the same
+ * question for widgets a module owns outright; this answers it for the one
+ * widget whose deadness also depends on the account's data.
+ *
+ * `hrv` is that widget. The tile takes SDNN when the account has it and
+ * falls back to nightly RMSSD otherwise (see `pickHrvSummary`). RMSSD is
+ * recovery-owned, so with Recovery off it is stripped from every feed —
+ * which leaves a ring / strap account, whose only HRV is RMSSD, holding a
+ * switch that is on and a tile that can never paint, with nothing saying
+ * why. That is precisely the defect the RMSSD fallback exists to remove, so
+ * it must not survive one step further on. An account WITH SDNN keeps the
+ * row: its tile still works with Recovery off, because SDNN is a plain
+ * vital that no module owns.
+ *
+ * Decided from server-resolved facts and handed to the client, so the
+ * Settings screen does not have to fetch dashboard data to find out.
+ */
+export function unavailableWidgetIds(
+  modules: Partial<Record<ModuleKey, boolean>>,
+  facts: { hasSdnn: boolean },
+): string[] {
+  const out: string[] = [];
+  if (modules.recovery === false && !facts.hasSdnn) out.push("hrv");
+  return out;
+}
+
+export function gateSummariesByModules<
+  S extends Record<string, unknown>,
+  L extends Record<string, unknown>,
+>(
+  summaries: S,
+  lastSeenByType: L,
+  modules: Partial<Record<ModuleKey, boolean>>,
+): { summaries: S; lastSeenByType: L } {
+  const dropped = disabledSummaryTypes(modules);
+  if (dropped.size === 0) return { summaries, lastSeenByType };
+  const outSummaries = {} as S;
+  for (const [type, summary] of Object.entries(summaries)) {
+    if (!dropped.has(type))
+      (outSummaries as Record<string, unknown>)[type] = summary;
+  }
+  const outLastSeen = {} as L;
+  for (const [type, slot] of Object.entries(lastSeenByType)) {
+    if (!dropped.has(type))
+      (outLastSeen as Record<string, unknown>)[type] = slot;
+  }
+  return { summaries: outSummaries, lastSeenByType: outLastSeen };
+}
+
+/**
  * iOS `MetricKind` (the `kind` on a `GET /api/dashboard/summary` metric
  * card) → the `MeasurementType` it is built from. The summary route emits
  * cards by kind, but module membership is defined per measurement type in

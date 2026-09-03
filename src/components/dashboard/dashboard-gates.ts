@@ -135,6 +135,19 @@ export function resolveChartRowPlaceholderCount(
 export type HrvSummaryType = "HEART_RATE_VARIABILITY" | "HRV_RMSSD";
 
 /**
+ * The i18n key naming each HRV series. One key per series, never a base
+ * label with the measure concatenated on: the tile label paints truncated,
+ * uppercase and on a single line, so an appended marker is the first thing
+ * dropped in the longer locales — and the marker is the part a reader needs
+ * to tell a 40 ms RMSSD night from a collapsed SDNN one. Both keys are
+ * translated in all seven locales.
+ */
+export const HRV_LABEL_KEY: Record<HrvSummaryType, string> = {
+  HEART_RATE_VARIABILITY: "measurements.typeHeartRateVariability",
+  HRV_RMSSD: "measurements.typeHrvRmssd",
+};
+
+/**
  * Which HRV series backs the dashboard tile.
  *
  * HRV is stored under two types and they are not the same measure: Apple
@@ -167,18 +180,30 @@ export type HrvSummaryType = "HEART_RATE_VARIABILITY" | "HRV_RMSSD";
  */
 export function pickHrvSummary(
   summaries: Record<string, DataSummary> | undefined,
-): { summary: DataSummary | null; type: HrvSummaryType } {
+): { summary: DataSummary | null; type: HrvSummaryType; labelKey: string } {
+  const pick = (
+    summary: DataSummary | null,
+    type: HrvSummaryType,
+  ): {
+    summary: DataSummary | null;
+    type: HrvSummaryType;
+    labelKey: string;
+  } => ({
+    summary,
+    type,
+    labelKey: HRV_LABEL_KEY[type],
+  });
   const primary = summaries?.HEART_RATE_VARIABILITY;
   if ((primary?.count ?? 0) > 0) {
-    return { summary: primary ?? null, type: "HEART_RATE_VARIABILITY" };
+    return pick(primary ?? null, "HEART_RATE_VARIABILITY");
   }
   const fallback = summaries?.HRV_RMSSD;
   if ((fallback?.count ?? 0) > 0) {
-    return { summary: fallback ?? null, type: "HRV_RMSSD" };
+    return pick(fallback ?? null, "HRV_RMSSD");
   }
   // Neither has rows. Report the primary type so the caller's stale-days
   // lookup and label stay on SDNN for the empty case — the tile is hidden
   // either way, and reporting the fallback here would make an account with
   // no HRV at all look like a ring user.
-  return { summary: primary ?? null, type: "HEART_RATE_VARIABILITY" };
+  return pick(primary ?? null, "HEART_RATE_VARIABILITY");
 }

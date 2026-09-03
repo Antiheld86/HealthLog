@@ -14,13 +14,17 @@
   reports it that way. Every other place HRV appears already accepted both;
   the dashboard tile looked only for SDNN, so an account that had only RMSSD
   had nothing for the tile to show. It now uses whichever series you actually
-  have, and says "RMSSD" beside the name when that is the one on screen, so a
-  reading of 40 is not mistaken for a collapsed SDNN figure. An account with
-  both keeps seeing SDNN, and the two are never blended — they are different
-  measures that happen to share a unit. Turning the Recovery module off still
-  takes the RMSSD reading off the dashboard, which it should have done all
-  along: that series belongs to Recovery everywhere else in the app, and the
-  dashboard was the one place not checking.
+  have, and the tile is titled "HRV (RMSSD)" when that is the one on screen,
+  so a reading of 40 is not mistaken for a collapsed SDNN figure. An account
+  with both keeps seeing SDNN, and the two are never blended — they are
+  different measures that happen to share a unit.
+- Turning the Recovery module off now takes RMSSD off the dashboard on every
+  path, not just the default one. That series belongs to Recovery everywhere
+  else in the app, and the dashboard snapshot already dropped it — but the
+  analytics endpoint that feeds the same tiles when the snapshot is switched
+  off filtered nothing at all, so a disabled module still reached the client
+  there. Both feeds now strip the same set, from the same map, so the gate no
+  longer depends on which path served the page.
 
 ## [1.38.6] — 2026-09-03
 

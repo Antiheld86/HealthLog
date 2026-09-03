@@ -14,6 +14,8 @@ import {
   sanitiseZodIssues,
 } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
+import { resolveModuleMap } from "@/lib/modules/gate";
+import { unavailableWidgetIds } from "@/lib/dashboard/widget-modules";
 import { prisma, toJson } from "@/lib/db";
 import {
   takeBaseToken,
@@ -218,7 +220,36 @@ export const GET = apiHandler(async () => {
     () => buildDashboardLayout(user.id),
     annotate,
   );
-  return apiSuccess(layout);
+
+  // Which toggles cannot do anything for this account. Resolved here, on
+  // the server, so the Settings screen never has to fetch dashboard data
+  // to find out whether a switch it is about to draw is dead.
+  //
+  // Deliberately OUTSIDE the cached layout above: the layout cell is keyed
+  // on the user and holds their arrangement, which does not change when a
+  // module is toggled. Folding a module-dependent answer into it would
+  // serve a stale one for the rest of the 5-minute TTL — the switch would
+  // linger for minutes after Recovery went off, which is the confusion this
+  // is removing.
+  //
+  // The SDNN probe is an index-only existence check
+  // (`@@index([userId, type, measuredAt])`), not a summaries read; it runs
+  // only when Recovery is off, so the common account pays nothing.
+  const modules = await resolveModuleMap(user.id);
+  let hasSdnn = true;
+  if (modules.recovery === false) {
+    const sdnnRow = await prisma.measurement.findFirst({
+      where: { userId: user.id, type: "HEART_RATE_VARIABILITY" },
+      select: { id: true },
+    });
+    hasSdnn = sdnnRow !== null;
+  }
+  const unavailable = unavailableWidgetIds(modules, { hasSdnn });
+  return apiSuccess(
+    unavailable.length > 0
+      ? { ...layout, unavailableWidgetIds: unavailable }
+      : layout,
+  );
 });
 
 export const PUT = apiHandler(async (request: NextRequest) => {

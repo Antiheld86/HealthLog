@@ -22,7 +22,8 @@ import {
   type BpInTargetEnvelope,
 } from "@/lib/analytics/bp-in-target-fast-path";
 import { computeAndRecordUserHealthScore } from "@/lib/analytics/score/record";
-import { isModuleEnabled } from "@/lib/modules/gate";
+import { isModuleEnabled, resolveModuleMap } from "@/lib/modules/gate";
+import { gateSummariesByModules } from "@/lib/dashboard/widget-modules";
 import { resolveRestMode } from "@/lib/illness/rest-mode";
 import { deriveBpWindow90 } from "@/lib/analytics/window-confidence";
 import { computeCorrelationHypothesesFastPath } from "@/lib/analytics/correlations-fast-path";
@@ -109,10 +110,32 @@ export const GET = apiHandler(async (request?: Request) => {
       () => computeSummariesSlice(user.id),
       annotate,
     );
+    // Drop the types whose module the user turned off, from the SAME map
+    // the snapshot builder gates on (`SUMMARY_TYPE_MODULE`, via
+    // `gateSummariesByModules`). With `NEXT_PUBLIC_DASHBOARD_SNAPSHOT=false`
+    // this slice — not the snapshot — feeds the dashboard tile strip, and
+    // it used to hand back every type regardless: recovery off plus an
+    // RMSSD-only account still painted the HRV tile, because nothing on
+    // this path had ever filtered.
+    //
+    // Gated AFTER the cache read on purpose. The cached cell stays
+    // module-independent, so toggling a module takes effect on the next
+    // request instead of waiting out the TTL, and two users' module states
+    // can never share a cached answer.
+    const slimModules = await resolveModuleMap(user.id);
+    const slimGated = gateSummariesByModules(
+      slim.summaries,
+      slim.lastSeenByType,
+      slimModules,
+    );
     // v1.4.34 IW-B — bfcache-friendly directive on the slim slice too
     // so a back-forward navigation that landed on the dashboard tile
     // strip can restore from memory instead of paying a full reload.
-    const slimRes = apiSuccess(slim);
+    const slimRes = apiSuccess({
+      ...slim,
+      summaries: slimGated.summaries,
+      lastSeenByType: slimGated.lastSeenByType,
+    });
     slimRes.headers.set("Cache-Control", NO_STORE_BUT_BFCACHE);
     return slimRes;
   }
@@ -269,8 +292,18 @@ async function buildAnalyticsResponse(user: AuthedUser, locale: Locale) {
   // pre-fix behaviour for tenants whose year-ago window happened to
   // fall outside the 425-day floor.
   const slim = await computeSummariesSlice(user.id);
-  const results = slim.summaries;
-  const lastSeenByType = slim.lastSeenByType;
+  // Same module gate as the slim slice and the snapshot builder — the
+  // default slice feeds the dashboard too (it is the thick half of the
+  // legacy two-cell path), so it cannot be the one feed that leaks a
+  // disabled module's types.
+  const thickModules = await resolveModuleMap(user.id);
+  const thickGated = gateSummariesByModules(
+    slim.summaries,
+    slim.lastSeenByType,
+    thickModules,
+  );
+  const results = thickGated.summaries;
+  const lastSeenByType = thickGated.lastSeenByType;
 
   // `computeSummariesSlice` annotates `action: "analytics.get.slim"`
   // for telemetry on the slim route. Restore the default-slice action

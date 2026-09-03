@@ -498,9 +498,11 @@ export default function DashboardPageClient({
   // rendered nothing while `/insights/hrv` charted the same data. The
   // helper keeps the union in one place and hands back which type won, so
   // the freshness caption and the label below follow the series shown.
-  const { summary: hrvSummary, type: hrvType } = pickHrvSummary(
-    data?.summaries,
-  );
+  const {
+    summary: hrvSummary,
+    type: hrvType,
+    labelKey: hrvLabelKey,
+  } = pickHrvSummary(data?.summaries);
   const spo2Summary = data?.summaries?.OXYGEN_SATURATION;
   const respRateSummary = data?.summaries?.RESPIRATORY_RATE;
   const wristTempSummary = data?.summaries?.WRIST_TEMPERATURE;
@@ -1319,16 +1321,18 @@ export default function DashboardPageClient({
             node: (
               <TrendCard
                 key="hrv"
-                // Name the measure when the RMSSD series is the one on show,
-                // the way `/insights/hrv` appends `· RMSSD` to its chart
-                // title. Without it a ring / strap reading (typically 20-60
-                // ms) sits under the same label as an SDNN one and reads as
-                // a collapse rather than a different measure.
-                label={
-                  hrvType === "HRV_RMSSD"
-                    ? `${t("measurements.typeHeartRateVariability")} · RMSSD`
-                    : t("measurements.typeHeartRateVariability")
-                }
+                // Name the measure when the RMSSD series is the one on show.
+                // Without it a ring / strap reading (typically 20-60 ms) sits
+                // under the same label as an SDNN one and reads as a collapse
+                // rather than a different measure.
+                //
+                // Each series gets its OWN key, never a base label with the
+                // measure concatenated on. The tile label renders truncated,
+                // uppercase and on one line, so an appended marker is the
+                // first thing dropped in the longer locales — exactly the
+                // part a reader needs. `typeHrvRmssd` is translated in all
+                // seven locales and carries the measure inside the label.
+                label={t(hrvLabelKey)}
                 latest={hrvSummary?.latest ?? null}
                 unit="ms"
                 avg7={hrvSummary?.avg7 ?? null}
