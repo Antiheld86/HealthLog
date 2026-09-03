@@ -17,6 +17,7 @@ import {
   unavailableWidgetIds,
 } from "@/lib/dashboard/widget-modules";
 import { moduleForMeasurementType } from "@/lib/modules/measurement-scope";
+import { locales } from "@/lib/i18n/config";
 import type { DataSummary } from "@/lib/analytics/trends";
 
 /**
@@ -319,5 +320,52 @@ describe("a switch that cannot do anything is not offered", () => {
     // Fail-open on an unresolved map, like the module gate beside it: only
     // an explicit `false` takes a row away.
     expect(unavailableWidgetIds({}, { hasSdnn: false })).toEqual([]);
+  });
+});
+
+describe("both HRV label keys are translated everywhere", () => {
+  // The tile now calls `t(hrvLabelKey)` with a value looked up from
+  // HRV_LABEL_KEY, and `i18n-call-site-coverage.test.ts` only sees literal
+  // `t("ns.key")` arguments. So the moment the label became per-series it
+  // left the guard's field of view: dropping either key from a bundle would
+  // ship a raw `measurements.typeHrvRmssd` into the dashboard of whichever
+  // locale lost it, and nothing in the gate would say so.
+  //
+  // Read from the map rather than from two literals, so a third HRV series
+  // added later is covered by construction instead of by remembering.
+  const bundles = locales.map((locale) => ({
+    locale,
+    messages: JSON.parse(
+      readFileSync(join(process.cwd(), "messages", `${locale}.json`), "utf8"),
+    ) as Record<string, Record<string, string>>,
+  }));
+
+  it("covers every key the tile can ask for, in all seven locales", () => {
+    const keys = Object.values(HRV_LABEL_KEY);
+    // Anchor the count: an empty map would satisfy every assertion below by
+    // matching nothing, which is the failure mode this project keeps finding.
+    expect(keys.length).toBeGreaterThanOrEqual(2);
+    expect(bundles).toHaveLength(7);
+
+    for (const { locale, messages } of bundles) {
+      for (const key of keys) {
+        const [namespace, name] = key.split(".");
+        const value = messages[namespace]?.[name];
+        expect(
+          typeof value === "string" && value.trim().length > 0,
+          `${locale}.json is missing ${key}`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("names the measure in the RMSSD label, in every locale", () => {
+    // The whole point of the second key. A label that reads plain "HRV" in
+    // some locale puts a 40 ms RMSSD night under the same words as an SDNN
+    // reading, which is the misreading this change exists to prevent.
+    for (const { locale, messages } of bundles) {
+      const [ns, name] = HRV_LABEL_KEY.HRV_RMSSD.split(".");
+      expect(messages[ns]?.[name], `${locale}.json`).toMatch(/RMSSD/i);
+    }
   });
 });
