@@ -25,7 +25,7 @@ import { useTranslations } from "@/lib/i18n/context";
 import { useAuth } from "@/hooks/use-auth";
 import { useMounted } from "@/hooks/use-mounted";
 import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
-import { getHourForTimeZone } from "@/components/dashboard/range-display";
+import { hourInTz } from "@/lib/tz/format";
 import type { QuickEntryDialog } from "@/components/dashboard/quick-entry-sheets";
 
 export function DashboardHeader({
@@ -47,9 +47,16 @@ export function DashboardHeader({
   // hydrates — the text must match the name-less SSR output during
   // hydration (React #418) and may only personalise from the first
   // client re-render.
+  //
+  // The hour comes from the shared `hourInTz`, the same helper the
+  // insights hero greeting uses. Its predecessor fell back to the
+  // DEVICE clock whenever the runtime could not resolve the profile
+  // zone, so a zone this browser's ICU does not carry (a recently added
+  // one, an older engine) split the two greetings by hours while every
+  // other date on the page stayed on the profile zone.
   const userTimezone = mounted ? user?.timezone : undefined;
   const hour = useMemo(
-    () => (userTimezone ? getHourForTimeZone(userTimezone) : null),
+    () => (userTimezone ? hourInTz(new Date(), userTimezone) : null),
     [userTimezone],
   );
   const timeGreeting =

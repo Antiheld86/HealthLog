@@ -76,7 +76,6 @@ const SNAPSHOT_BODY = {
     gender: "MALE",
     glucoseUnit: "mg/dL",
     onboardingTourCompleted: true,
-    greetingHour: 9,
   },
   layout: { version: 1, widgets: [] },
   tiles: {
@@ -121,7 +120,12 @@ describe("GET /api/dashboard/snapshot", () => {
     expect(json.data.briefingState).toBe("preparing");
     expect(json.data.tiles).toBeDefined();
     expect(json.data.extras).toBeNull();
-    expect(json.data.user.greetingHour).toBe(9);
+    // Inverted 2026-09: the payload no longer carries a wall-clock hour.
+    // The body is served stale for up to an hour, so a baked-in hour could
+    // name a salutation the clock had long left behind. Clients read the
+    // resolved `timezone` and their own live clock instead.
+    expect(json.data.user).not.toHaveProperty("greetingHour");
+    expect(json.data.user.timezone).toBe("Europe/Berlin");
     // bfcache-friendly directive present.
     expect(res.headers.get("Cache-Control")).toContain("private");
   });

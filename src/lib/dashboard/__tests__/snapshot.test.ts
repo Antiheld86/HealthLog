@@ -258,9 +258,11 @@ describe("buildDashboardSnapshot — envelope shape", () => {
     expect(snap.user.timezone).toBe("Europe/Berlin");
     expect(snap.user.heightCm).toBe(180);
     expect(snap.user.gender).toBe("MALE");
-    expect(typeof snap.user.greetingHour).toBe("number");
-    expect(snap.user.greetingHour).toBeGreaterThanOrEqual(0);
-    expect(snap.user.greetingHour).toBeLessThan(24);
+    // Inverted 2026-09: the builder used to compute a wall-clock hour for
+    // the greeting that no client ever read, and that a stale-while-
+    // revalidate serve could carry an hour past its bucket. The zone is
+    // the resolved value; the hour belongs to whoever holds a live clock.
+    expect(snap.user).not.toHaveProperty("greetingHour");
 
     // tiles (fast phase) always present
     expect(snap.tiles.summaries.WEIGHT.latest).toBe(80);

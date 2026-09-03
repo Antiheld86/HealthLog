@@ -212,6 +212,14 @@ export type BriefingState = "ready" | "preparing" | "disabled" | "no-provider";
 
 export interface DashboardSnapshotUser {
   username: string;
+  /**
+   * The user's configured zone — the ONE server-resolved input the
+   * greeting needs. The wall-clock hour itself is deliberately not on
+   * this payload: the body is served stale-while-revalidate for up to an
+   * hour, so a baked-in hour can name the wrong salutation long after
+   * the boundary passed, and every client already reads a live clock.
+   * Resolve the zone here, read the hour there.
+   */
   timezone: string;
   heightCm: number | null;
   dateOfBirth: string | null;
@@ -223,12 +231,6 @@ export interface DashboardSnapshotUser {
   gender: ProfileSex;
   glucoseUnit: string | null;
   onboardingTourCompleted: boolean;
-  /**
-   * Server-computed wall-clock hour in the user's timezone so the
-   * client greeting never has to run its own `Intl.DateTimeFormat`
-   * before first paint.
-   */
-  greetingHour: number;
 }
 
 /**
@@ -528,22 +530,6 @@ export interface SnapshotUserInput {
    * would show a score composed from someone else's rules.
    */
   healthScoreConfigJson: unknown;
-}
-
-/** Wall-clock hour in `tz`, used for the server-side greeting. */
-function hourInTimezone(now: Date, tz: string): number {
-  try {
-    const fmt = new Intl.DateTimeFormat("en-US", {
-      hour: "numeric",
-      hour12: false,
-      timeZone: tz,
-    });
-    const parsed = parseInt(fmt.format(now), 10);
-    // Intl emits "24" for midnight under hour12:false on some ICU builds.
-    return Number.isFinite(parsed) ? parsed % 24 : now.getUTCHours();
-  } catch {
-    return now.getUTCHours();
-  }
 }
 
 function enrichLastSeen(
@@ -1457,7 +1443,6 @@ export async function buildDashboardSnapshot(
       gender,
       glucoseUnit: user.glucoseUnit ?? null,
       onboardingTourCompleted: user.onboardingTourCompleted,
-      greetingHour: hourInTimezone(now, userTz),
     },
     layout,
     layoutCatalogue: buildLayoutCatalogue(layout),

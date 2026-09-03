@@ -48650,10 +48650,6 @@ components:
                 - type: "null"
             onboardingTourCompleted:
               type: boolean
-            greetingHour:
-              type: integer
-              minimum: -9007199254740991
-              maximum: 9007199254740991
           required:
             - username
             - timezone
@@ -48662,7 +48658,6 @@ components:
             - gender
             - glucoseUnit
             - onboardingTourCompleted
-            - greetingHour
           additionalProperties: false
         layout:
           type: object
