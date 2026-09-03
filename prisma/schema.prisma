@@ -1302,6 +1302,20 @@ model UserKnownDevice {
   userId      String   @map("user_id")
   deviceHash  String   @map("device_hash")
   label       String?
+  /// @internal: the row's own creation instant, supplied by this default —
+  /// `recordSignInDevice` (`src/lib/auth/login-alert.ts`) inserts the
+  /// fingerprint and the label and passes no timestamp. Nothing reads it. The
+  /// first sighting a USER sees is the `auth.login.new_device` audit row the
+  /// same function writes, rendered by the security-activity card, and that
+  /// row is removed on the audit-retention schedule. This column is the
+  /// ledger's own copy of the same instant, kept because the ledger outlives
+  /// the audit trail and an operator asking when a device first appeared on an
+  /// account has nowhere else to look. Deliberately reachable through the
+  /// database only: the ledger stores salted hashes and a coarse label
+  /// precisely so it has no user-facing surface. The backup does NOT select it
+  /// — the whole model is excluded (`src/lib/export/backup-plan.ts`), because
+  /// restoring a device-recognition ledger would pre-trust devices on a host
+  /// that has never seen them.
   firstSeenAt DateTime @default(now()) @map("first_seen_at")
   lastSeenAt  DateTime @default(now()) @map("last_seen_at")
 
