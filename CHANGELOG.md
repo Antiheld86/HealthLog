@@ -1,5 +1,33 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **The weekly backup refused every account because the server had been up a
+  while.** The writer added in v1.38.6 watched the process's live heap and gave
+  up above 80 % of V8's limit. That reading is not the backup's footprint; it
+  is the whole process's, garbage included, and a long-running app sits at
+  400 MB of heap that a collection would take back. On a 1 GB container the
+  budget is 419 MB, so the pass aborted the first chunk it wrote for every
+  account: four out of four in seven seconds, one of them a demo record whose
+  entire stored copy is 1.2 MB, all of them told that their record was too
+  large and that the operator should buy memory. An affected instance can
+  sit for a month and a half with no usable copy. The heap gauge is gone. What is bounded instead
+  is the one copy the pipeline cannot stream away: the stored blob, counted in
+  the bytes it actually produced, against a fifth of this process's heap limit.
+  An account whose backup genuinely does not fit still fails as a job rather
+  than taking the instance down with it, and the message now names what was
+  measured and what it crossed.
+- **A backup pass that wrote nothing for anybody reported success.** `backed: 0`
+  came back as a completed job, so the failing-queue panel stayed empty and the
+  backups page listed the copies it already had with their perfectly ordinary
+  timestamps. A pass that protected nobody is now a failed run, which is what
+  the backups page reads back when it says the last scheduled run did not
+  finish. A pass where some accounts were written and others were not still
+  passes, with the per-account failures carried as counts, because failing the
+  queue over one record would re-run the whole cohort on every retry.
+
 ## [1.38.6] — 2026-09-03
 
 Blood glucose can be shown in mmol/L, which it never could before, and the

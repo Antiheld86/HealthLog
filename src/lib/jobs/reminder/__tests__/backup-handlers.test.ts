@@ -21,18 +21,25 @@ vi.mock("@/lib/export/full-backup-payload", () => ({
 
 // The envelope is exercised end-to-end in
 // `src/lib/export/__tests__/backup-blob.test.ts`; here it stays transparent so
-// the stored bytes can be read back as JSON.
-vi.mock("@/lib/export/backup-blob", () => ({
-  packBackupBlobStreaming: async (
-    produce: (write: (chunk: string) => Promise<void>) => Promise<void>,
-  ) => {
-    let out = "";
-    await produce(async (chunk) => {
-      out += chunk;
-    });
-    return mocks.packBlob(out);
-  },
-}));
+// the stored bytes can be read back as JSON. The size error is the real class
+// so the handler's `instanceof` arm is the one that runs.
+vi.mock("@/lib/export/backup-blob", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/lib/export/backup-blob")
+  >("@/lib/export/backup-blob");
+  return {
+    BackupBlobTooLargeError: actual.BackupBlobTooLargeError,
+    packBackupBlobStreaming: async (
+      produce: (write: (chunk: string) => Promise<void>) => Promise<void>,
+    ) => {
+      let out = "";
+      await produce(async (chunk) => {
+        out += chunk;
+      });
+      return mocks.packBlob(out);
+    },
+  };
+});
 
 vi.mock("@/lib/logging/background", () => ({
   withBackgroundEvent: vi.fn(
@@ -50,17 +57,19 @@ vi.mock("../shared", () => ({
   getWorkerPrisma: mocks.getWorkerPrisma,
 }));
 
+import { BackupBlobTooLargeError } from "@/lib/export/backup-blob";
+
 import { handleDataBackup } from "../backup-handlers";
 
 const documentCiphertext = Buffer.from([1, 2, 3, 4]).toString("base64");
 
-function buildPrismaMock() {
+function buildPrismaMock(
+  users: Array<{ id: string; username: string }> = [
+    { id: "user-dr", username: "backup-owner" },
+  ],
+) {
   return {
-    user: {
-      findMany: vi
-        .fn()
-        .mockResolvedValue([{ id: "user-dr", username: "backup-owner" }]),
-    },
+    user: { findMany: vi.fn().mockResolvedValue(users) },
     dataBackup: { upsert: mocks.upsert },
   };
 }
@@ -131,5 +140,81 @@ describe("handleDataBackup canonical DR payload", () => {
         contentCodec: "binary2",
       }),
     ]);
+  });
+});
+
+/**
+ * What the pass says about itself when it protected nobody.
+ *
+ * The weekly job used to report `ok: true` with `backed: 0` — a completed
+ * pg-boss job, an untouched failing-queue panel, and a backups page listing
+ * copies from six weeks earlier with perfectly ordinary timestamps. Every
+ * surface an operator could look at agreed that a pass which wrote nothing
+ * had gone fine.
+ */
+describe("handleDataBackup outcome", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.upsert.mockResolvedValue({});
+    mocks.buildFullBackupPayload.mockResolvedValue({
+      payload: { schemaVersion: "1", userId: "user-dr" },
+      counts: {},
+    });
+  });
+
+  it("fails the run when not one account got a copy", async () => {
+    mocks.getWorkerPrisma.mockReturnValue(buildPrismaMock());
+    mocks.upsert.mockRejectedValue(new Error("write failed"));
+
+    const outcome = await handleDataBackup([]);
+
+    expect(outcome.ok).toBe(false);
+    expect(outcome).toMatchObject({
+      ok: false,
+      reason: "no account could be backed up",
+      did: { backed: 0, total: 1, users_failed: 1, records_oversized: 0 },
+    });
+  });
+
+  it("counts an oversized record as the reason it could not", async () => {
+    mocks.getWorkerPrisma.mockReturnValue(buildPrismaMock());
+    mocks.upsert.mockRejectedValue(new BackupBlobTooLargeError(9_000, 4_096));
+
+    const outcome = await handleDataBackup([]);
+
+    expect(outcome).toMatchObject({
+      ok: false,
+      did: { backed: 0, users_failed: 1, records_oversized: 1 },
+    });
+  });
+
+  it("still passes when one account failed and another was written", async () => {
+    // The fan-out rule: a pass is judged on the pass. Failing the queue over
+    // one account's record would re-run the whole cohort on every retry, and
+    // that account's own copy ages on the backups page either way.
+    mocks.getWorkerPrisma.mockReturnValue(
+      buildPrismaMock([
+        { id: "user-a", username: "a" },
+        { id: "user-b", username: "b" },
+      ]),
+    );
+    mocks.upsert
+      .mockRejectedValueOnce(new Error("write failed"))
+      .mockResolvedValueOnce({});
+
+    const outcome = await handleDataBackup([]);
+
+    expect(outcome).toMatchObject({
+      ok: true,
+      did: { backed: 1, total: 2, users_failed: 1 },
+    });
+  });
+
+  it("passes on an instance with no accounts at all", async () => {
+    mocks.getWorkerPrisma.mockReturnValue(buildPrismaMock([]));
+
+    const outcome = await handleDataBackup([]);
+
+    expect(outcome).toMatchObject({ ok: true, did: { backed: 0, total: 0 } });
   });
 });

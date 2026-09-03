@@ -17,10 +17,14 @@
 process.env.ENCRYPTION_KEY ??=
   "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
+import v8 from "node:v8";
+
 import { describe, expect, it } from "vitest";
 
 import { encrypt } from "@/lib/crypto";
 import {
+  BackupBlobTooLargeError,
+  defaultBackupBlobLimit,
   packBackupBlob,
   packBackupBlobStreaming,
   unpackBackupBlob,
@@ -132,5 +136,80 @@ describe("backup blob envelope", () => {
         throw new Error("row source failed");
       }),
     ).rejects.toThrow("row source failed");
+  });
+
+  it("stops the account whose stored copy would not fit this process", async () => {
+    // The stored blob is the one copy the pipeline has to hold whole, so it is
+    // the one thing here that grows without bound as a record grows. 4 KB is
+    // an absurd limit; the point is that the writer counts what it produced
+    // and stops on that, not on how full the heap happened to be.
+    const err = await packBackupBlobStreaming(
+      async (write) => {
+        await write(sampleJson(5_000));
+      },
+      { maxBytes: 4_096 },
+    ).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(BackupBlobTooLargeError);
+    const failure = err as BackupBlobTooLargeError;
+    expect(failure.limitBytes).toBe(4_096);
+    expect(failure.bytes).toBeGreaterThan(4_096);
+    // The message has to describe what was measured. It says how much
+    // ciphertext this account produced and what it may occupy — not how full
+    // the process's heap was, which is what the check this replaced reported.
+    expect(failure.message).toContain("of encrypted backup for one account");
+    expect(failure.message).toContain("over the 4 KB");
+    // The check this replaced reported "aborted at N MB of heap", which was a
+    // reading of the whole process and said nothing about the account.
+    expect(failure.message).not.toContain("of heap");
+  });
+
+  it("does not stop a record that fits, however dirty the heap is", async () => {
+    // Collectable garbage past 419 MB: 80 % of the 524 MB V8 limit a 1 GB
+    // container gets, which is the exact budget that aborted all four accounts
+    // on the live instance — the smallest of them a 1.2 MB demo record.
+    const CONTAINER_BUDGET = Math.floor(524 * 1024 * 1024 * 0.8);
+    // Capped against this process's own limit, so a runner started with a
+    // smaller heap measures a backup rather than an out-of-memory abort.
+    const target = Math.min(
+      CONTAINER_BUDGET + 8 * 1024 * 1024,
+      Math.floor(v8.getHeapStatistics().heap_size_limit * 0.6),
+    );
+    let garbage: unknown[] = [];
+    for (
+      let round = 0;
+      round < 2_000 && process.memoryUsage().heapUsed < target;
+      round++
+    ) {
+      const chunk = new Array(30_000);
+      for (let at = 0; at < 30_000; at++) chunk[at] = { k: round * at };
+      garbage.push(chunk);
+    }
+    const dirty = process.memoryUsage().heapUsed;
+    garbage = [];
+    void garbage;
+
+    const blob = await packStreamed(sampleJson(200));
+    expect(unpackBackupBlob(blob)).toBe(sampleJson(200));
+    // Not a vacuous pass: the heap really was carrying the pile it aimed at
+    // — a 1 GB container's whole budget where the runner has room for it —
+    // when the backup ran.
+    expect(dirty).toBeGreaterThanOrEqual(target);
+    expect(dirty).toBeGreaterThan(64 * 1024 * 1024);
+  });
+
+  it("derives the default limit from the heap limit, not from heap usage", async () => {
+    const limit = defaultBackupBlobLimit();
+    const before = limit;
+    // Allocate and hold: usage moves, the limit must not.
+    const held: unknown[] = [];
+    for (let round = 0; round < 40; round++) {
+      const chunk = new Array(30_000);
+      for (let at = 0; at < 30_000; at++) chunk[at] = { k: round * at };
+      held.push(chunk);
+    }
+    expect(defaultBackupBlobLimit()).toBe(before);
+    expect(held).toHaveLength(40);
+    expect(limit).toBeGreaterThan(16 * 1024 * 1024);
   });
 });

@@ -33,19 +33,42 @@ import vm from "node:vm";
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
 
 import {
+  BackupBlobTooLargeError,
   packBackupBlobStreaming,
   unpackBackupBlob,
 } from "@/lib/export/backup-blob";
-import {
-  BackupHeapBudgetExceededError,
-  streamFullBackupJson,
-} from "@/lib/export/full-backup-stream";
+import { streamFullBackupJson } from "@/lib/export/full-backup-stream";
 import { buildFullBackupPayload } from "@/lib/export/full-backup-payload";
 import { getPrismaClient, truncateAllTables } from "./setup";
 
 const OWNER_ID = "backup-streaming-owner";
+/** A second account with almost nothing in it — the demo-record case. */
+const TINY_OWNER_ID = "backup-streaming-tiny";
 const MEASUREMENT_ROWS = 120_000;
 const MOOD_ROWS = 8_000;
+
+/**
+ * 80 % of the 524 MB V8 limit a 1 GB container gets.
+ *
+ * The number the weekly pass aborted every account against on the live
+ * instance, including one whose entire stored backup is 1.2 MB.
+ */
+const CONTAINER_BUDGET_BYTES = Math.floor(524 * 1024 * 1024 * 0.8);
+
+/**
+ * How much garbage to leave lying about before a backup runs.
+ *
+ * A container's whole budget where the runner has room for it, and a majority
+ * share of the heap where it does not — this file is also run under
+ * `--max-old-space-size=450`, and a target above that heap's own limit would
+ * measure an out-of-memory abort rather than a backup.
+ */
+function dirtyTargetBytes(): number {
+  return Math.min(
+    CONTAINER_BUDGET_BYTES + 8 * 1024 * 1024,
+    Math.floor(v8.getHeapStatistics().heap_size_limit * 0.6),
+  );
+}
 
 /**
  * What the streaming writer may hold on top of the process's own baseline.
@@ -73,6 +96,20 @@ const forceGc = ((): (() => void) => {
   return gc;
 })();
 
+/**
+ * The one number this file exists to produce, on stderr where a gate run keeps
+ * it. Peaks are the evidence, and evidence that only prints on failure is not
+ * evidence.
+ */
+function reportPeak(label: string, heldBytes: number, liveBytes: number): void {
+  const mb = (bytes: number): number => Math.round(bytes / 1024 / 1024);
+  process.stderr.write(
+    `[backup-memory] ${label}: peak ${mb(heldBytes)} MB held by the backup, ` +
+      `${mb(liveBytes)} MB live in the process, ` +
+      `${mb(v8.getHeapStatistics().heap_size_limit)} MB heap limit\n`,
+  );
+}
+
 /** Heap held after a forced collection. Garbage is not a measurement. */
 function liveHeapBytes(): number {
   // Twice: the first pass frees the objects, the second collects what the
@@ -80,6 +117,42 @@ function liveHeapBytes(): number {
   forceGc();
   forceGc();
   return process.memoryUsage().heapUsed;
+}
+
+/** Leave the heap carrying `targetBytes` of garbage nothing holds any more. */
+function dirtyHeap(targetBytes: number): number {
+  let garbage: unknown[] = [];
+  for (
+    let round = 0;
+    round < 2_000 && process.memoryUsage().heapUsed < targetBytes;
+    round++
+  ) {
+    const chunk = new Array(30_000);
+    for (let at = 0; at < 30_000; at++) chunk[at] = { k: round * at };
+    garbage.push(chunk);
+  }
+  const reached = process.memoryUsage().heapUsed;
+  // Dropped. Every byte counted above is collectable from here on, which is
+  // exactly what a long-lived Next.js server's heap looks like.
+  garbage = [];
+  void garbage;
+  return reached;
+}
+
+async function seedTinyRecord(): Promise<void> {
+  await prisma.user.create({
+    data: { id: TINY_OWNER_ID, username: "backup-streaming-tiny" },
+  });
+  await prisma.measurement.create({
+    data: {
+      userId: TINY_OWNER_ID,
+      type: "WEIGHT",
+      value: 80,
+      unit: "kg",
+      source: "MANUAL",
+      measuredAt: new Date("2026-01-01T00:00:00Z"),
+    },
+  });
 }
 
 async function seedLargeRecord(): Promise<void> {
@@ -144,6 +217,7 @@ describe("weekly backup under a memory budget", () => {
     ).toBe("function");
     await truncateAllTables(prisma);
     await seedLargeRecord();
+    await seedTinyRecord();
   }, 240_000);
 
   afterAll(async () => {
@@ -151,6 +225,10 @@ describe("weekly backup under a memory budget", () => {
   });
 
   it("writes a restorable blob while holding a bounded amount of the record", async () => {
+    // Dirtied first, and only then measured: the baseline is taken after a
+    // forced collection, so what is compared below is what the writer HOLDS,
+    // not what the process happens to have lying about.
+    dirtyHeap(dirtyTargetBytes());
     const baseline = liveHeapBytes();
     let peakHeld = 0;
     let chunks = 0;
@@ -176,6 +254,7 @@ describe("weekly backup under a memory budget", () => {
       expect(counts.moodEntries).toBe(MOOD_ROWS);
     });
     peakHeld = Math.max(peakHeld, liveHeapBytes() - baseline);
+    reportPeak("large record", peakHeld, liveHeapBytes());
 
     expect(
       peakHeld,
@@ -215,17 +294,62 @@ describe("weekly backup under a memory budget", () => {
     ).toBeGreaterThan(STREAM_BUDGET_BYTES * 2);
   }, 300_000);
 
-  it("fails as a job rather than as a process when the record does not fit", async () => {
-    // The budget the writer enforces on itself is the reason an oversized
-    // account is now a failed backup for that account instead of a restart
-    // for every account on the host.
+  it("backs up a one-row record on a heap already full of garbage", async () => {
+    // The second way this pass has failed. The writer used to compare the
+    // process's whole heap usage against a fraction of the heap limit, so on a
+    // server that had been up a week it aborted the FIRST chunk of every
+    // account — 422, 447, 448 and 441 MB read against a 419 MB budget, for
+    // records from 445 000 measurements down to 1.2 MB. None of what it read
+    // was the backup's.
+    const target = dirtyTargetBytes();
+    const dirty = dirtyHeap(target);
+    const baseline = process.memoryUsage().heapUsed;
+    let peak = baseline;
+
+    let jsonBytes = 0;
+    const blob = await packBackupBlobStreaming(async (write) => {
+      const counts = await streamFullBackupJson(
+        prisma,
+        TINY_OWNER_ID,
+        async (chunk) => {
+          jsonBytes += chunk.length;
+          peak = Math.max(peak, process.memoryUsage().heapUsed);
+          await write(chunk);
+        },
+        { purpose: "disaster-recovery" },
+      );
+      expect(counts.measurements).toBe(1);
+    });
+
+    const restored = JSON.parse(unpackBackupBlob(blob)) as {
+      measurements: unknown[];
+    };
+    expect(restored.measurements).toHaveLength(1);
+    // The record really is tiny and the heap really was carrying the pile it
+    // aimed at — without both halves this passes vacuously.
+    expect(jsonBytes).toBeLessThan(64 * 1024);
+    expect(dirty).toBeGreaterThanOrEqual(target);
+    expect(dirty).toBeGreaterThan(64 * 1024 * 1024);
+    // The backup itself moved the heap by a rounding error next to the pile of
+    // garbage it ran on top of.
+    expect(peak - baseline).toBeLessThan(32 * 1024 * 1024);
+    reportPeak("tiny record", peak - baseline, liveHeapBytes());
+  }, 180_000);
+
+  it("fails as a job rather than as a process when the stored copy does not fit", async () => {
+    // The bound that remains is on the one copy the pipeline cannot stream
+    // away: the blob itself, counted in bytes it produced. An account whose
+    // backup outgrows what this process can hold as a single value is now a
+    // failed backup for that account instead of a restart for every account
+    // on the host.
     await expect(
-      packBackupBlobStreaming((write) =>
-        streamFullBackupJson(prisma, OWNER_ID, write, {
-          purpose: "disaster-recovery",
-          heapCeilingBytes: 1,
-        }),
+      packBackupBlobStreaming(
+        (write) =>
+          streamFullBackupJson(prisma, OWNER_ID, write, {
+            purpose: "disaster-recovery",
+          }),
+        { maxBytes: 64 * 1024 },
       ),
-    ).rejects.toBeInstanceOf(BackupHeapBudgetExceededError);
+    ).rejects.toBeInstanceOf(BackupBlobTooLargeError);
   }, 120_000);
 });
