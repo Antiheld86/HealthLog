@@ -14,6 +14,38 @@
 
 ### Fixed
 
+- **A dismissed correlation finding comes back when its evidence has really
+  moved.** Dismissing a finding stores a fingerprint of the evidence behind it,
+  and the check that decides whether to raise it again never read that
+  fingerprint; it compared two of the numbers instead. A dismissal restored
+  from a backup that carried the fingerprint but not those numbers could not be
+  released by anything and stayed hidden for good. The fingerprint is read now:
+  evidence that has not moved at all is settled without going further, and a
+  dismissal with no numbers to measure against is released once the fingerprint
+  stops matching. A dismissal still survives ordinary sampling noise, which is
+  the whole point of it.
+- **The five assistant switches save when they are sent to the general admin
+  settings endpoint.** That endpoint accepted them, answered 200 and stored
+  nothing; sent on their own they came back as "no valid fields". An operator
+  scripting their settings over the one endpoint had no way to tell the
+  difference between a switch that was written and one that was dropped. They
+  are written now, and echoed in the response so the write reads back. The
+  dedicated endpoint the admin console uses was never affected.
+
+### Security
+
+- **A notification channel the operator switched off stops delivering.**
+  Telegram, ntfy and Web Push each carry an instance-wide switch in admin
+  settings. Switching one off only hid its setup card: every account that had
+  already configured the channel kept receiving on it, for as long as the
+  channel was configured. The switch now holds where it has to, at delivery. A
+  dispatch on a channel that is off sends nothing and writes the skip to the
+  delivery ledger with a reason, so the admin notification diagnostics name the
+  cause instead of showing a gap. Accounts keep their own channel settings
+  untouched, so switching a channel back on restores delivery without anyone
+  re-enabling anything. Turning such a channel on from the user side is now
+  refused with a message that says why, rather than a toggle that flips and
+  then delivers nothing.
 - **The dashboard opens faster on accounts with years of readings.** Two of the
   reads behind the metric tiles were doing far more work than the handful of
   rows they return. The first asked for the newest reading of every metric by

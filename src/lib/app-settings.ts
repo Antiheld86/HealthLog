@@ -42,6 +42,56 @@ export async function isApiGloballyEnabled(): Promise<boolean> {
   return settings.apiGlobal;
 }
 
+/**
+ * The notification channels an operator can switch off instance-wide, mapped
+ * to the `AppSettings` column that carries the switch. A channel absent from
+ * this map (APNs, generic webhook, email) has no instance-wide switch and is
+ * never gated by it — the operator turns those off at their source (the APNs
+ * credentials, the SMTP env) instead.
+ */
+const GLOBAL_CHANNEL_SWITCHES = {
+  TELEGRAM: "telegramGlobal",
+  NTFY: "ntfyGlobal",
+  WEB_PUSH: "webPushGlobal",
+} as const;
+
+export type GloballySwitchableChannel = keyof typeof GLOBAL_CHANNEL_SWITCHES;
+
+export function hasGlobalChannelSwitch(
+  channelType: string,
+): channelType is GloballySwitchableChannel {
+  return Object.hasOwn(GLOBAL_CHANNEL_SWITCHES, channelType);
+}
+
+/**
+ * Resolve one channel's instance-wide switch out of an availability snapshot
+ * the caller already holds. Split from the async form so a dispatch that
+ * walks several channels reads the settings row once.
+ */
+export function resolveChannelGloballyEnabled(
+  availability: GlobalServiceAvailability,
+  channelType: string,
+): boolean {
+  if (!hasGlobalChannelSwitch(channelType)) return true;
+  return availability[GLOBAL_CHANNEL_SWITCHES[channelType]];
+}
+
+/**
+ * Whether a notification channel may deliver on this instance. Same shape and
+ * same posture as `isApiGloballyEnabled()`: the switch is the operator's and
+ * sits above every per-user channel setting, and an unreadable settings row
+ * resolves to "enabled" so a storage blip never silently mutes an instance.
+ */
+export async function isChannelGloballyEnabled(
+  channelType: string,
+): Promise<boolean> {
+  if (!hasGlobalChannelSwitch(channelType)) return true;
+  return resolveChannelGloballyEnabled(
+    await getGlobalServiceAvailability(),
+    channelType,
+  );
+}
+
 export interface ReminderThresholds {
   lateMinutes: number;
   missedMinutes: number;

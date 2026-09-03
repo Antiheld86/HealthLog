@@ -61,6 +61,16 @@ export const GET = apiHandler(async () => {
     // resolver"; surfacing the raw value lets the admin UI render
     // an empty picker placeholder until they opt in.
     defaultUserTimezone: settings?.defaultUserTimezone ?? null,
+    // Raw column values, not the resolved matrix — the master flag is
+    // applied to the sub-flags by `/settings/assistant-flags`, which owns
+    // that shape. Echoed here so a write over this route reads back.
+    assistantEnabled: settings?.assistantEnabled ?? true,
+    assistantCoachEnabled: settings?.assistantCoachEnabled ?? true,
+    assistantBriefingEnabled: settings?.assistantBriefingEnabled ?? true,
+    assistantInsightStatusEnabled:
+      settings?.assistantInsightStatusEnabled ?? true,
+    assistantCorrelationsEnabled:
+      settings?.assistantCorrelationsEnabled ?? true,
   });
 });
 
@@ -83,7 +93,13 @@ export const PUT = apiHandler(async (request: NextRequest) => {
   const updates: Record<string, unknown> = {};
   const auditDetails: Record<string, unknown> = {};
 
-  // Boolean fields — direct mapping
+  // Boolean fields — direct mapping.
+  //
+  // The five assistant flags belong here and not only on the dedicated
+  // `/settings/assistant-flags` endpoint: `adminSettingsSchema` accepts them
+  // so an operator scripting their settings over a single route can carry
+  // them, and a schema that accepts a field and then drops it is worse than
+  // one that refuses it.
   const booleanFields = [
     "registrationEnabled",
     "mfaRequired",
@@ -93,6 +109,11 @@ export const PUT = apiHandler(async (request: NextRequest) => {
     "apiGlobal",
     "umamiEnabled",
     "glitchtipEnabled",
+    "assistantEnabled",
+    "assistantCoachEnabled",
+    "assistantBriefingEnabled",
+    "assistantInsightStatusEnabled",
+    "assistantCorrelationsEnabled",
   ] as const;
   for (const field of booleanFields) {
     if (data[field] !== undefined) {
@@ -258,5 +279,10 @@ export const PUT = apiHandler(async (request: NextRequest) => {
     documentMaxFileBytes: settings.documentMaxFileBytes,
     documentQuotaBytes: Number(settings.documentQuotaBytes),
     defaultUserTimezone: settings.defaultUserTimezone,
+    assistantEnabled: settings.assistantEnabled,
+    assistantCoachEnabled: settings.assistantCoachEnabled,
+    assistantBriefingEnabled: settings.assistantBriefingEnabled,
+    assistantInsightStatusEnabled: settings.assistantInsightStatusEnabled,
+    assistantCorrelationsEnabled: settings.assistantCorrelationsEnabled,
   });
 });

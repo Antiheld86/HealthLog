@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
+import { isChannelGloballyEnabled } from "@/lib/app-settings";
 import { annotate } from "@/lib/logging/context";
 import { apiSuccess, apiError, returnAllZodIssues } from "@/lib/api-response";
 import { encrypt } from "@/lib/crypto";
@@ -42,6 +43,18 @@ const unsubscribeSchema = z.object({
 export const POST = apiHandler(async (request: NextRequest) => {
   const { user } = await requireAuth();
   annotate({ action: { name: "notifications.web-push.subscribe" } });
+
+  // Subscribing IS the enable step for this channel — it creates the
+  // WEB_PUSH `NotificationChannel` row. An operator who switched Web Push
+  // off instance-wide (`AppSettings.webPushGlobal`) gets a refusal that says
+  // so rather than a subscription that stores fine and delivers nothing.
+  if (!(await isChannelGloballyEnabled("WEB_PUSH"))) {
+    annotate({ meta: { refused: "globally_disabled" } });
+    return apiError(
+      "Web Push is disabled on this instance by the operator",
+      403,
+    );
+  }
 
   let body: unknown;
   try {

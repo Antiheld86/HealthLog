@@ -375,7 +375,8 @@ export const settingsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Notifications"],
       summary: "Update the caller's ntfy channel config",
       description:
-        "Upserts the channel. Accepts either the toggle-only body or the full config. The response is `{ saved: true }` and carries no config echo, so re-read the GET if the client needs the resolved state. Auth via cookie or Bearer.",
+        "Upserts the channel. Accepts either the toggle-only body or the full config. The response is `{ saved: true }` and carries no config echo, so re-read the GET if the client needs the resolved state. Auth via cookie or Bearer.\n\n" +
+        "An operator can switch ntfy off for the whole instance. While that switch is off, a body that sets `enabled` to true is refused with 403 and nothing is stored — the channel would not deliver, so the toggle does not pretend otherwise. Disabling the channel keeps working either way. Read the switch from `GET /api/settings/global-services`.",
       requestBody: {
         required: true,
         content: { "application/json": { schema: ntfyPutRequest } },
@@ -388,6 +389,11 @@ export const settingsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
               schema: dataEnvelope(channelSaved, "PutNtfySettingsResponse"),
             },
           },
+        },
+        "403": {
+          description:
+            "The operator switched ntfy off for this instance and the body asked to enable it. Nothing was stored.",
+          content: { "application/json": { schema: errorEnvelope } },
         },
         ...jsonBodyRefusals,
         ...stdResponses,
@@ -424,7 +430,8 @@ export const settingsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Notifications"],
       summary: "Update the caller's Telegram channel config",
       description:
-        "Accepts either the toggle-only body or the full config, then registers (on enable) or deletes (on disable) the Telegram webhook for the bot before persisting. Webhook deletion is best-effort and its failure does not fail the write; webhook REGISTRATION is not — a rejected registration aborts the whole call and nothing is stored. The response is `{ updated: true }` with no config echo. Auth via cookie or Bearer.",
+        "Accepts either the toggle-only body or the full config, then registers (on enable) or deletes (on disable) the Telegram webhook for the bot before persisting. Webhook deletion is best-effort and its failure does not fail the write; webhook REGISTRATION is not — a rejected registration aborts the whole call and nothing is stored. The response is `{ updated: true }` with no config echo. Auth via cookie or Bearer.\n\n" +
+        "An operator can switch Telegram off for the whole instance. While that switch is off, a body that sets `enabled` to true is refused with 403 before any webhook call and nothing is stored. Disabling the channel keeps working either way. Read the switch from `GET /api/settings/global-services`.",
       requestBody: {
         required: true,
         content: { "application/json": { schema: telegramPutRequest } },
@@ -440,6 +447,11 @@ export const settingsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
               ),
             },
           },
+        },
+        "403": {
+          description:
+            "The operator switched Telegram off for this instance and the body asked to enable it. No webhook was registered and nothing was stored.",
+          content: { "application/json": { schema: errorEnvelope } },
         },
         "404": {
           description: "The session's user row no longer exists.",

@@ -26,6 +26,12 @@ import {
 } from "@/lib/notifications/channel-state";
 import { getEvent } from "@/lib/logging/context";
 import {
+  getGlobalServiceAvailability,
+  hasGlobalChannelSwitch,
+  resolveChannelGloballyEnabled,
+  type GlobalServiceAvailability,
+} from "@/lib/app-settings";
+import {
   CLIENT_MANAGED_APNS_EVENTS,
   hasClientManagedApnsGate,
 } from "@/lib/notifications/client-managed-apns";
@@ -43,11 +49,12 @@ import {
  *
  * For each channel:
  *  1. Skip if `enabled=false` (manually or auto-disabled).
- *  2. Skip if currently in retry-cooldown (`nextRetryAt > now`).
- *  3. Check the per-channel preference for this eventType (default: enabled).
- *  4. Skip the APNs channel — and only that one — when the user's iOS
+ *  2. Check the per-channel preference for this eventType (default: enabled).
+ *  3. Skip if the operator switched the channel off instance-wide.
+ *  4. Skip if currently in retry-cooldown (`nextRetryAt > now`).
+ *  5. Skip the APNs channel — and only that one — when the user's iOS
  *     client owns the local reminder for this event type.
- *  5. Call the appropriate sender — which now returns a `SendOutcome` so
+ *  6. Call the appropriate sender — which now returns a `SendOutcome` so
  *     the dispatcher can classify hard rejects (410, blocked-by-user) vs
  *     soft errors (5xx, 429, network) and update channel state accordingly.
  *
@@ -231,6 +238,16 @@ export async function dispatchNotification(
       });
       defaultEnabled = user?.moodReminderEnabled === true;
     }
+    // Operator kill switches for the three channels that carry one, read at
+    // most once per dispatch and only when such a channel is actually in the
+    // cascade — a cascade of APNs + webhook + email pays nothing for it.
+    let globalAvailability: GlobalServiceAvailability | null = null;
+    const resolveGlobalAvailability =
+      async (): Promise<GlobalServiceAvailability> => {
+        globalAvailability ??= await getGlobalServiceAvailability();
+        return globalAvailability;
+      };
+
     // Client-managed APNs suppression, resolved at most once per dispatch
     // and only when an APNs channel is actually in the cascade. `null`
     // means "not applicable"; the read is lazy so the common event types
@@ -256,6 +273,37 @@ export async function dispatchNotification(
       if (pref) {
         if (!pref.enabled) continue;
       } else if (!defaultEnabled) {
+        continue;
+      }
+
+      // The operator's instance-wide switch for this channel
+      // (`AppSettings.{telegram,ntfy,webPush}Global`). It sits above every
+      // per-user setting: a channel switched off here delivers nothing, no
+      // matter what the account has configured. Not counted as an attempt —
+      // nothing was sent — but the ledger carries a `globally_disabled` row
+      // so the operator reads a reason instead of inferring silence.
+      const globalSwitch = hasGlobalChannelSwitch(channel.type)
+        ? channel.type
+        : null;
+      if (
+        globalSwitch &&
+        !resolveChannelGloballyEnabled(
+          await resolveGlobalAvailability(),
+          globalSwitch,
+        )
+      ) {
+        getEvent()?.addMeta(
+          `notification_skip_${globalSwitch.toLowerCase()}_globally_disabled`,
+          recipientPayload.eventType,
+        );
+        recordPushAttempt({
+          recordUserId: delivery.recordUserId,
+          recipientUserId: delivery.recipientUserId,
+          channel: globalSwitch,
+          eventType: recipientPayload.eventType,
+          result: "skipped",
+          reason: "globally_disabled",
+        });
         continue;
       }
 
