@@ -1,6 +1,9 @@
 # Changelog
 
-## [Unreleased]
+## [1.38.5] — 2026-09-03
+
+The weekly backup finishes again, the dashboard stops scanning the two
+largest tables, and several settings now do what they say.
 
 ### Security
 
