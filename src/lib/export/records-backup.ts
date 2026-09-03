@@ -50,13 +50,13 @@ export const WORKOUTS_MANIFEST_NOTE =
  * Decrypt an encrypted free-text column for a portable export, or say plainly
  * that this one could not be read.
  *
- * `decryptNoteSoft` / `decryptContextSoft` answer `null` on a wrong or dropped
- * key. In a list view that is right — one bad row must not take the page down.
- * In an export it is not: `null` is exactly what a column that was never
- * written looks like, so the restore importer writes nothing and a note the
- * person did write disappears without anyone being told. The Coach transcript
- * and the doctor report both refuse that trade, one with a placeholder
- * sentence and one with a rendered flag; this follows the same rule.
+ * A fail-soft decrypt answers `null` on a wrong or dropped key. In a list view
+ * that is right — one bad row must not take the page down. In an export it is
+ * not: `null` is exactly what a column that was never written looks like, so
+ * the restore importer writes nothing and a note the person did write
+ * disappears without anyone being told. The Coach transcript and the doctor
+ * report both refuse that trade, one with a placeholder sentence and one with
+ * a rendered flag; this follows the same rule.
  *
  * The warning the soft helpers emitted is kept, so a systemic key gap still
  * shows up in the wide event rather than only in the file.

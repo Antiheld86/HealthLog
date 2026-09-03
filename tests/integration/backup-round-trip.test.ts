@@ -2627,7 +2627,7 @@ describe("every model the plan claims two-ended survives a real restore", () => 
    * A note this instance can no longer decrypt leaves the export as a marker,
    * not as nothing.
    *
-   * `decryptNoteSoft` answers `null` on a wrong or dropped key, and in a
+   * A fail-soft decrypt answers `null` on a wrong or dropped key, and in a
    * portable file `null` is byte-for-byte what a note that was never written
    * looks like. The restore importer then writes no note, so a note the person
    * did write is gone and no one is told — the whole loss fits inside a
