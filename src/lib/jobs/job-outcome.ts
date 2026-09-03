@@ -172,6 +172,7 @@ export const JOB_FACT_ALLOWLIST: ReadonlySet<string> = new Set([
   "retried",
   "reviewed",
   "rollup_failed",
+  "rotate_dropped",
   "rotate_errors",
   "rotate_rotated",
   "rotate_scanned",
