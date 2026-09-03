@@ -5681,6 +5681,12 @@
         "imperial": "Imperial",
         "saved": "Einheiten-Einstellung gespeichert",
         "saveError": "Einheiten-Einstellung konnte nicht gespeichert werden."
+      },
+      "glucoseUnit": {
+        "title": "Blutzucker",
+        "description": "In welcher Einheit Blutzuckerwerte angezeigt werden. Gespeichert werden sie so oder so gleich.",
+        "saved": "Blutzucker-Einheit gespeichert",
+        "saveError": "Die Blutzucker-Einheit konnte nicht gespeichert werden."
       }
     },
     "withings": "Withings",

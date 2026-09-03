@@ -5681,6 +5681,12 @@
         "imperial": "Imperial",
         "saved": "Unit preference saved",
         "saveError": "Could not save your unit preference."
+      },
+      "glucoseUnit": {
+        "title": "Blood glucose",
+        "description": "Which unit blood-glucose readings are shown in. Readings are stored the same way either way.",
+        "saved": "Glucose unit saved",
+        "saveError": "Could not save your glucose unit."
       }
     },
     "withings": "Withings",

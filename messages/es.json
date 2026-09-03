@@ -5681,6 +5681,12 @@
         "imperial": "Imperial",
         "saved": "Preferencia de unidades guardada",
         "saveError": "No se pudo guardar tu preferencia de unidades."
+      },
+      "glucoseUnit": {
+        "title": "Glucosa en sangre",
+        "description": "La unidad en la que se muestran las lecturas de glucosa. Se guardan igual en ambos casos.",
+        "saved": "Unidad de glucosa guardada",
+        "saveError": "No se pudo guardar la unidad de glucosa."
       }
     },
     "withings": "Withings",

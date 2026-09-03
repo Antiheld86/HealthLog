@@ -5681,6 +5681,12 @@
         "imperial": "야드파운드법",
         "saved": "단위 설정을 저장했어요",
         "saveError": "단위 설정을 저장하지 못했어요."
+      },
+      "glucoseUnit": {
+        "title": "혈당",
+        "description": "혈당 수치를 표시할 단위입니다. 어느 쪽을 골라도 저장 방식은 같습니다.",
+        "saved": "혈당 단위를 저장했습니다",
+        "saveError": "혈당 단위를 저장하지 못했습니다."
       }
     },
     "withings": "Withings",

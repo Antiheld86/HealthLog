@@ -32,6 +32,7 @@ import { storeTimezone } from "@/lib/timezone-mirror";
 import { TimeFormatSelect } from "@/components/settings/time-format-select";
 import { DateFormatSelect } from "@/components/settings/date-format-select";
 import { UnitPreferenceSelect } from "@/components/settings/unit-preference-select";
+import { GlucoseUnitSelect } from "@/components/settings/glucose-unit-select";
 import { detectBrowserTimezone } from "@/lib/tz/format";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
 import {
@@ -421,14 +422,17 @@ export function AccountSection() {
             </div>
           </div>
 
-          {/* Timezone + unit system + hour format share one grid block —
-              all personal display preferences (like language above). The
-              unit and time-format dropdowns PATCH their own endpoints on
-              change; the timezone saves through the form's submit
-              handler. */}
+          {/* Timezone, unit system, glucose unit and the date/hour formats
+              share one grid block — all personal display preferences (like
+              language above). The glucose unit is its own dropdown rather
+              than a branch of the unit system because metric countries are
+              split on which unit they read glucose in. Every dropdown here
+              PATCHes its own endpoint on change; the timezone saves through
+              the form's submit handler. */}
           <div className="grid gap-4 sm:grid-cols-2">
             <TimezonePicker value={timezone} onChange={setTimezone} />
             <UnitPreferenceSelect isAuthenticated={isAuthenticated} />
+            <GlucoseUnitSelect isAuthenticated={isAuthenticated} />
             <TimeFormatSelect isAuthenticated={isAuthenticated} />
             <DateFormatSelect isAuthenticated={isAuthenticated} />
           </div>

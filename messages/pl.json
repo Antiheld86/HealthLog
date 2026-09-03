@@ -5681,6 +5681,12 @@
         "imperial": "Imperialne",
         "saved": "Zapisano preferencję jednostek",
         "saveError": "Nie udało się zapisać preferencji jednostek."
+      },
+      "glucoseUnit": {
+        "title": "Glukoza we krwi",
+        "description": "Jednostka, w której pokazywane są pomiary glukozy. Zapis pozostaje taki sam w obu przypadkach.",
+        "saved": "Zapisano jednostkę glukozy",
+        "saveError": "Nie udało się zapisać jednostki glukozy."
       }
     },
     "withings": "Withings",

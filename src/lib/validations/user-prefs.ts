@@ -20,6 +20,17 @@ export const unitPreferencePatchSchema = z.object({
   unitPreference: z.enum(["metric", "imperial"]),
 });
 
+/**
+ * `PATCH /api/auth/me/glucose-unit` — mg/dL vs mmol/L display branch.
+ *
+ * Not the metric/imperial preference: the two split along different lines.
+ * Germany is metric and reads glucose in mg/dL; the UK and the Nordics read
+ * it in mmol/L. Canonical storage stays mg/dL either way.
+ */
+export const glucoseUnitPatchSchema = z.object({
+  glucoseUnit: z.enum(["mg/dL", "mmol/L"]),
+});
+
 /** `PATCH /api/auth/me/documents-auto-ai-read` — the auto-read opt-in. */
 export const documentsAutoAiReadPatchSchema = z.object({
   documentsAutoAiRead: z.boolean(),

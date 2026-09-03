@@ -5681,6 +5681,12 @@
         "imperial": "Imperiale",
         "saved": "Preferenza unità salvata",
         "saveError": "Impossibile salvare la preferenza delle unità."
+      },
+      "glucoseUnit": {
+        "title": "Glicemia",
+        "description": "L'unità in cui vengono mostrate le misurazioni della glicemia. Il salvataggio resta lo stesso in entrambi i casi.",
+        "saved": "Unità della glicemia salvata",
+        "saveError": "Impossibile salvare l'unità della glicemia."
       }
     },
     "withings": "Withings",

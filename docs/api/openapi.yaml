@@ -7759,6 +7759,62 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "422": *a4
         "429": *a5
+  /api/auth/me/glucose-unit:
+    get:
+      tags:
+        - Auth
+      summary: Read the blood-glucose display unit
+      description: Which unit blood-glucose readings are rendered in — `mg/dL` or `mmol/L`. A separate choice from the
+        metric/imperial preference, because metric countries are split on which one they read glucose in. Canonical
+        storage is mg/dL on every reading and every ingest path; this changes presentation only. Any stored value other
+        than `mmol/L` resolves to `mg/dL`, including a null on an account that never set it.
+      responses:
+        "200":
+          description: The resolved unit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetGlucoseUnitEnvelope"
+        "401": *a1
+        "422": *a4
+        "429": *a5
+    patch:
+      tags:
+        - Auth
+      summary: Set the blood-glucose display unit
+      description: >-
+        Hard-set, idempotent, audit-logged. Rate-limited 60 / min per user.
+
+
+        Nothing already stored is converted or reinterpreted: readings stay mg/dL, and a value typed into the entry form
+        in mmol/L is inverted to mg/dL before it is written.
+
+
+        The body is capped at 1 KB and must carry `Content-Type: application/json`. Anything larger is 413, a wrong
+        content type is 415, and a body that is not JSON at all is 400 — the same three the other scalars in this group
+        answer.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GlucoseUnitPatchRequest"
+      responses:
+        "200":
+          description: The resolved next unit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PatchGlucoseUnitEnvelope"
+        "401": *a1
+        "413":
+          description: Request body exceeds 1024 bytes. Nothing was written.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422": *a4
+        "429": *a5
   /api/auth/me/documents-auto-ai-read:
     get:
       tags:
@@ -23141,6 +23197,17 @@ components:
       required:
         - unitPreference
       description: Which display-unit branch to render. Presentation only — the stored measurement rows stay SI either way.
+    GlucoseUnitPatchRequest:
+      type: object
+      properties:
+        glucoseUnit:
+          type: string
+          enum:
+            - mg/dL
+            - mmol/L
+      required:
+        - glucoseUnit
+      description: Which unit blood-glucose readings are rendered in. Presentation only — every stored reading is mg/dL either way.
     DocumentsAutoAiReadPatchRequest:
       type: object
       properties:
@@ -45787,6 +45854,51 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/UnitPreferenceResponse"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    GetGlucoseUnitEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/GlucoseUnitResponse"
+        error:
+          type: "null"
+        meta:
+          type: object
+          properties:
+            requestId:
+              type: string
+          additionalProperties: false
+      required:
+        - data
+        - error
+      additionalProperties: false
+    GlucoseUnitResponse:
+      type: object
+      properties:
+        glucoseUnit:
+          type: string
+          enum:
+            - mg/dL
+            - mmol/L
+      required:
+        - glucoseUnit
+      additionalProperties: false
+    PatchGlucoseUnitEnvelope:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/GlucoseUnitResponse"
         error:
           type: "null"
         meta:
