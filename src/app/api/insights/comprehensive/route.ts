@@ -504,14 +504,23 @@ export async function buildComprehensiveResponse(user: AuthedUser) {
     }
 
     const takenByDay = new Map<string, number>();
+    // Days that carry an intake record of ANY kind. A logged skip is a real
+    // zero and belongs in the series; a day the person never touched is not a
+    // zero, it is nothing, and pairing it against that day's systolic reading
+    // invented a data point they never produced. Absence is not zero, here as
+    // everywhere else in this project, so the unlogged day drops out of both
+    // the scatter and the coefficient rather than dragging continuity down.
+    const loggedDays = new Set<string>();
     for (const event of bpMedicationEvents) {
-      if (event.skipped || !event.takenAt) continue;
       const dayKey = event.scheduledFor.toISOString().slice(0, 10);
+      loggedDays.add(dayKey);
+      if (event.skipped || !event.takenAt) continue;
       takenByDay.set(dayKey, (takenByDay.get(dayKey) ?? 0) + 1);
     }
 
     const pairs: Array<{ a: number; b: number; date: Date }> = [];
     for (const [dayKey, avgSys] of sysByDay.entries()) {
+      if (!loggedDays.has(dayKey)) continue;
       const taken = takenByDay.get(dayKey) ?? 0;
       const continuity = Math.min(1, taken / expectedBpIntakesPerDay);
       pairs.push({
