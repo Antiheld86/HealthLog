@@ -53,6 +53,7 @@
 import type { Prisma, PrismaClient } from "@/generated/prisma/client";
 
 import { decryptFromBytes, encryptToBytes } from "@/lib/ai/coach/bytes-codec";
+import { UNREADABLE_EXPORT_MARKER } from "./unreadable-marker";
 import {
   recordUnknownKeys,
   type RestoreSkipLog,
@@ -169,7 +170,7 @@ function decryptTurnSoft(bytes: Uint8Array | null): string | null {
   try {
     return decryptFromBytes(bytes);
   } catch {
-    return "[unreadable: encrypted with a key this instance no longer holds]";
+    return UNREADABLE_EXPORT_MARKER;
   }
 }
 
