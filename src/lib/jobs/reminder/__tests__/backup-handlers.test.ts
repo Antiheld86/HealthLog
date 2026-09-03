@@ -9,23 +9,29 @@ const mocks = vi.hoisted(() => ({
   upsert: vi.fn(),
 }));
 
-// The handler takes the already-serialised form; the stand-in serialises
-// whatever the payload mock was told to return, so this file keeps stubbing
-// and asserting the PAYLOAD, which is what it is about.
+// Only the payload builder is stubbed. The REAL streaming writer runs on top
+// of it, so this file keeps stubbing and asserting the PAYLOAD — which is what
+// it is about — while the framing that turns it into stored bytes is the
+// framing the job actually uses. `isDeferredRows` rides along because the
+// writer asks it about every section; nothing here defers.
 vi.mock("@/lib/export/full-backup-payload", () => ({
   buildFullBackupPayload: mocks.buildFullBackupPayload,
-  buildFullBackupJson: async (...args: unknown[]) =>
-    JSON.stringify(
-      ((await mocks.buildFullBackupPayload(...args)) as { payload: unknown })
-        .payload,
-    ),
+  isDeferredRows: () => false,
 }));
 
 // The envelope is exercised end-to-end in
 // `src/lib/export/__tests__/backup-blob.test.ts`; here it stays transparent so
 // the stored bytes can be read back as JSON.
 vi.mock("@/lib/export/backup-blob", () => ({
-  packBackupBlob: mocks.packBlob,
+  packBackupBlobStreaming: async (
+    produce: (write: (chunk: string) => Promise<void>) => Promise<void>,
+  ) => {
+    let out = "";
+    await produce(async (chunk) => {
+      out += chunk;
+    });
+    return mocks.packBlob(out);
+  },
 }));
 
 vi.mock("@/lib/logging/background", () => ({
@@ -95,7 +101,12 @@ describe("handleDataBackup canonical DR payload", () => {
     expect(mocks.buildFullBackupPayload).toHaveBeenCalledWith(
       prisma,
       "user-dr",
-      { purpose: "disaster-recovery" },
+      // `deferBulk` is the writer's own ask: it declares the unbounded tables
+      // rather than reading them, and pulls their rows through itself.
+      expect.objectContaining({
+        purpose: "disaster-recovery",
+        deferBulk: true,
+      }),
     );
     expect(mocks.upsert).toHaveBeenCalledOnce();
     const encrypted = mocks.upsert.mock.calls[0]![0].create.data as string;

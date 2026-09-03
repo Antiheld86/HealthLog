@@ -127,6 +127,25 @@
   the element sat on the parser's list of things to skip. The parser reads
   it now and writes it the moment it goes past, so a run that later fails
   still says which export it was working from.
+- **The weekly backup no longer takes the instance down with it.** The
+  compression that went out last release was real, and it was measured in the
+  wrong place. On a development machine with a multi-gigabyte heap the pass
+  finished; the container it actually runs in is capped at 1 GB, which gives
+  Node a 524 MB heap, and there the same pass died with
+  `Reached heap limit — JavaScript heap out of memory` about fifteen seconds
+  in. Because the job shares the application process, that was not one failed
+  backup: it was a restart, and every signed-in session on the host went with
+  it. The document is now written incrementally. The three tables that grow
+  without bound — readings, doses, mood entries — are read a page at a time and
+  serialised straight into the compressor and the cipher, every other section
+  is released as soon as its own JSON exists, and nothing between the database
+  rows and the stored value is ever held whole. On a seeded account of 445 000
+  readings the pass used to exhaust a 546 MB heap; the same account doubled to
+  890 000 now finishes inside 296 MB. The writer also watches its own memory
+  and stops at 80 percent of the limit, so an account too large for its host is
+  a backup that failed for that one account and is counted in the run's meta,
+  not a restart for everybody. Backups written under either older shape still
+  restore, which is checked both ways rather than asserted.
 
 ### Internal
 
