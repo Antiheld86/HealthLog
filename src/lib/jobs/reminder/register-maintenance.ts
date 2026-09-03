@@ -138,6 +138,10 @@ import {
 } from "@/lib/jobs/environment-fetch";
 import { recordError } from "@/lib/jobs/worker-status";
 import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
+import {
+  DATA_BACKUP_QUEUE,
+  DATA_BACKUP_SEND_OPTIONS,
+} from "@/lib/jobs/data-backup-policy";
 import { workerLog, BOOT_BACKFILL_STAGGER_SECONDS } from "./shared";
 import {
   createAndSchedule,
@@ -220,8 +224,6 @@ import {
   handleAchievementUnlockSweep,
   type AchievementUnlockSweepPayload,
 } from "@/lib/jobs/achievement-unlock-sweep";
-
-const DATA_BACKUP_QUEUE = "data-backup";
 
 const DATA_BACKUP_CRON = "0 3 * * 0"; // weekly Sunday at 03:00
 
@@ -478,7 +480,11 @@ const schedules: ScheduleEntry[] = [
   // v1.25 (W-ENV) — daily 02:10 Europe/Berlin discovery tick (empty payload)
   // that fans out one per-user environment fetch per opted-in account.
   [ENVIRONMENT_FETCH_QUEUE, ENVIRONMENT_FETCH_CRON],
-  [DATA_BACKUP_QUEUE, DATA_BACKUP_CRON],
+  // The send options are the point of this tuple: without them the weekly
+  // snapshot inherits pg-boss's 15-minute expiration and is killed mid-run on
+  // any sizeable record. See `data-backup-policy.ts` for why the window rides
+  // the schedule rather than the queue.
+  [DATA_BACKUP_QUEUE, DATA_BACKUP_CRON, DATA_BACKUP_SEND_OPTIONS],
   [RATE_LIMIT_CLEANUP_QUEUE, RATE_LIMIT_CLEANUP_CRON, cronIsTheRetry],
   [IDEMPOTENCY_CLEANUP_QUEUE, IDEMPOTENCY_CLEANUP_CRON, cronIsTheRetry],
   [AUDIT_LOG_CLEANUP_QUEUE, AUDIT_LOG_CLEANUP_CRON],

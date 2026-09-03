@@ -18,8 +18,9 @@
  * the backup history. See docs/ops/backup-restore.md.
  */
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { gunzipSync, gzipSync } from "node:zlib";
 import type { PrismaClient } from "@/generated/prisma/client";
-import { buildFullBackupPayload } from "@/lib/export/full-backup-payload";
+import { buildFullBackupJson } from "@/lib/export/full-backup-payload";
 import { getEvent } from "@/lib/logging/context";
 
 const ALGORITHM = "aes-256-gcm";
@@ -84,20 +85,43 @@ export function loadOffhostConfig(): OffhostBackupConfig | null {
  * Encrypt a JSON payload with the dedicated backup key.
  *
  * Wire format (binary):
- *   magic(4)="HLBK" || version(1)=0x01 || iv(12) || tag(16) || ciphertext
+ *   magic(4)="HLBK" || version(1) || iv(12) || tag(16) || ciphertext
+ *
+ * Version 1 encrypts the JSON directly. Version 2 gzips it first, which is
+ * what the version byte was there for: a large account's dump is hundreds of
+ * megabytes of extremely repetitive JSON, and encrypting it whole means the
+ * string, the cipher's input copy, the ciphertext and the concatenation are
+ * all resident at once — the same arithmetic that made the in-database weekly
+ * backup unfinishable. Gzip takes an order of magnitude off every one of them
+ * and off the object in the bucket. Objects written under version 1 stay
+ * readable; both the restore drill and `scripts/restore-backup.ts` come
+ * through `decryptBackup`, so neither needs to know which it got.
  */
+const BACKUP_ENVELOPE_PLAIN = 0x01;
+const BACKUP_ENVELOPE_GZIP = 0x02;
+
 export function encryptBackup(plaintext: string, key: Buffer): Buffer {
   const iv = randomBytes(IV_LENGTH);
   const cipher = createCipheriv(ALGORITHM, key, iv);
-  const ct = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const ct = Buffer.concat([
+    cipher.update(gzipSync(plaintext)),
+    cipher.final(),
+  ]);
   const tag = cipher.getAuthTag();
-  return Buffer.concat([Buffer.from("HLBK\x01", "binary"), iv, tag, ct]);
+  const header = Buffer.from([
+    ...Buffer.from("HLBK", "binary"),
+    BACKUP_ENVELOPE_GZIP,
+  ]);
+  return Buffer.concat([header, iv, tag, ct]);
 }
 
 export function decryptBackup(buf: Buffer, key: Buffer): string {
   const magic = buf.subarray(0, 4).toString("binary");
   const version = buf[4];
-  if (magic !== "HLBK" || version !== 0x01) {
+  if (
+    magic !== "HLBK" ||
+    (version !== BACKUP_ENVELOPE_PLAIN && version !== BACKUP_ENVELOPE_GZIP)
+  ) {
     throw new Error("Invalid backup envelope (bad magic or version)");
   }
   const iv = buf.subarray(5, 5 + IV_LENGTH);
@@ -105,7 +129,10 @@ export function decryptBackup(buf: Buffer, key: Buffer): string {
   const ct = buf.subarray(5 + IV_LENGTH + TAG_LENGTH);
   const dec = createDecipheriv(ALGORITHM, key, iv);
   dec.setAuthTag(tag);
-  return Buffer.concat([dec.update(ct), dec.final()]).toString("utf8");
+  const plaintext = Buffer.concat([dec.update(ct), dec.final()]);
+  return version === BACKUP_ENVELOPE_GZIP
+    ? gunzipSync(plaintext).toString("utf8")
+    : plaintext.toString("utf8");
 }
 
 export interface S3Like {
@@ -215,12 +242,13 @@ export async function runOffhostBackup(
   const evt = getEvent();
   for (const user of users) {
     try {
-      const { payload } = await buildFullBackupPayload(prisma, user.id, {
-        purpose: "disaster-recovery",
-        exportedAt: now,
-      });
-      const plaintext = JSON.stringify(payload);
-      const ciphertext = encryptBackup(plaintext, cfg.encryptionKey);
+      const ciphertext = encryptBackup(
+        await buildFullBackupJson(prisma, user.id, {
+          purpose: "disaster-recovery",
+          exportedAt: now,
+        }),
+        cfg.encryptionKey,
+      );
       const key = `${dateKey}/user-${user.id}.json.enc`;
       await s3.putObject(key, ciphertext);
       uploaded++;

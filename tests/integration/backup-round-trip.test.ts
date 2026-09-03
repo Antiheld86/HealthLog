@@ -63,9 +63,13 @@ import {
   encryptWaveformToBytes,
 } from "@/lib/withings/ecg-waveform-codec";
 import { buildFullBackupPayload } from "@/lib/export/full-backup-payload";
+<<<<<<< HEAD
 import { UNREADABLE_EXPORT_MARKER } from "@/lib/export/unreadable-marker";
 import { decryptNoteFromBytes } from "@/lib/labs/store";
 import { decryptContextFromBytes } from "@/lib/labs/biomarker-store";
+=======
+import { packBackupBlob } from "@/lib/export/backup-blob";
+>>>>>>> origin/fix/backup-timeout
 import { TWO_ENDED_MODELS, type TwoEndedModel } from "@/lib/export/backup-plan";
 import { POST } from "@/app/api/admin/backups/[id]/restore/route";
 
@@ -260,6 +264,27 @@ async function seedEveryTwoEndedModel(prisma: PrismaClient): Promise<void> {
       unit: "kg",
       measuredAt: AT("2026-07-01T07:00:00.000Z"),
       source: "MANUAL",
+    },
+  });
+  // A DELETED reading, kept as a tombstone. It is here because the obvious way
+  // to make the weekly backup cheaper — stop exporting soft-deleted rows, which
+  // on a real record is four rows in five — is wrong, and nothing in the tree
+  // said so out loud. A tombstone inside the retention window is what tells a
+  // synced client the row is gone (`/api/sync/changes` reads exactly these) and
+  // what makes a re-sent Apple Health sample a no-op instead of a resurrection.
+  // Drop them from a disaster-recovery file and a restore quietly brings back
+  // every measurement the account ever deleted on the next device sync.
+  await prisma.measurement.create({
+    data: {
+      userId: OWNER_ID,
+      type: "PULSE",
+      value: 61,
+      unit: "bpm",
+      measuredAt: AT("2026-07-02T06:30:00.000Z"),
+      source: "APPLE_HEALTH",
+      externalId: "round-trip-deleted-sample",
+      syncVersion: 4,
+      deletedAt: AT("2026-07-20T09:15:00.000Z"),
     },
   });
   // The EVENT row an ECG strip is filed against, and the strip itself. The
@@ -1234,6 +1259,26 @@ describe("every model the plan claims two-ended survives a real restore", () => 
       purpose: "disaster-recovery",
     });
 
+    // The tombstone has to be IN the file. A disaster-recovery payload that
+    // carries only live rows is smaller and cheaper and wrong: the restore
+    // wipes the account first, so a deletion that is not in the file is a
+    // deletion the account no longer knows it made, and the next device sync
+    // re-inserts every one of those samples as fresh readings.
+    const exportedMeasurements = payload.measurements as Array<{
+      externalId: string | null;
+      deletedAt: string | null;
+      syncVersion: number;
+    }>;
+    expect(
+      exportedMeasurements.find(
+        (row) => row.externalId === "round-trip-deleted-sample",
+      ),
+      "a soft-deleted reading is missing from the disaster-recovery payload",
+    ).toMatchObject({
+      deletedAt: "2026-07-20T09:15:00.000Z",
+      syncVersion: 4,
+    });
+
     // Cascade rather than a hand-listed sweep — see the file comment.
     await prisma.user.delete({ where: { id: OWNER_ID } });
     await createOwner(prisma);
@@ -1250,7 +1295,12 @@ describe("every model the plan claims two-ended survives a real restore", () => 
       data: {
         userId: OWNER_ID,
         type: "TWO_ENDED_ROUND_TRIP",
-        data: encrypt(JSON.stringify(payload)),
+        // The envelope the weekly worker actually writes: gzip, then
+        // encrypt. The three cases further down deliberately keep the plain
+        // `encrypt(json)` form, which is what every row written before this
+        // envelope existed looks like — an operator's newest usable copy may
+        // well be one of those, so both arms have to reach the restore route.
+        data: packBackupBlob(JSON.stringify(payload)),
       },
     });
     const response = await POST(
@@ -2029,6 +2079,18 @@ describe("every model the plan claims two-ended survives a real restore", () => 
     // measurement pointer is asserted against the row the RESTORE wrote rather
     // than against the id the fixture used, because resolving to something
     // that exists is the property the reference owes.
+    const restoredTombstone = await prisma.measurement.findFirstOrThrow({
+      where: { userId: OWNER_ID, externalId: "round-trip-deleted-sample" },
+    });
+    expect(
+      {
+        deletedAt: restoredTombstone.deletedAt?.toISOString() ?? null,
+        syncVersion: restoredTombstone.syncVersion,
+      },
+      "the deleted reading came back, but not as a deletion — a tombstone " +
+        "restored without its `deletedAt` is a resurrected measurement",
+    ).toEqual({ deletedAt: "2026-07-20T09:15:00.000Z", syncVersion: 4 });
+
     const restoredMeasurement = await prisma.measurement.findFirstOrThrow({
       where: { userId: OWNER_ID, type: "WEIGHT" },
     });

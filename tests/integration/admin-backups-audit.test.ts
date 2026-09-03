@@ -197,3 +197,69 @@ describe("backup endpoints — AuditLog contract", () => {
     expect(restore?.details ?? "").toContain(seeded.id);
   });
 });
+
+/**
+ * The listing route is what an operator looks at to answer "are my backups
+ * still being made". It could not answer that: it returned rows and a
+ * retention hint, and a copy from six weeks ago carries a timestamp exactly
+ * like Sunday's. It now carries the schedule's own health, and the size comes
+ * from `octet_length` in the database rather than from pulling every blob into
+ * the web process to measure it.
+ */
+describe("GET /api/admin/backups — schedule health", () => {
+  it("calls a stalled weekly schedule out, and a fresh manual upload does not hide it", async () => {
+    const prisma = getPrismaClient();
+    const admin = await seedAdminSession();
+    const blob = encrypt(JSON.stringify(payloadFor(admin.id)));
+
+    const stalled = new Date(Date.now() - 46 * 24 * 60 * 60 * 1000);
+    await prisma.dataBackup.create({
+      data: {
+        userId: admin.id,
+        type: "WEEKLY_AUTO",
+        data: blob,
+        createdAt: stalled,
+      },
+    });
+    // Uploaded by hand today. It must not make the dead cron look alive.
+    await prisma.dataBackup.create({
+      data: { userId: admin.id, type: "MANUAL_UPLOAD_1", data: blob },
+    });
+
+    // The listing handler declares no parameters; `apiHandler` reads the
+    // request defensively out of its arguments, so calling it bare is what a
+    // zero-argument handler supports.
+    const { GET } = await import("@/app/api/admin/backups/route");
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: {
+        rows: Array<{ type: string; sizeBytes: number; username: string }>;
+        schedule: {
+          stale: boolean;
+          lastSuccessAgeDays: number | null;
+          lastRun: unknown;
+          lastRunFailed: boolean;
+        };
+      };
+    };
+
+    expect(body.data.rows).toHaveLength(2);
+    // Sizes are read in SQL now; a wrong column or a wrong cast shows up here
+    // as a zero or a NaN rather than as a plausible-looking number.
+    expect(body.data.rows.every((row) => row.sizeBytes === blob.length)).toBe(
+      true,
+    );
+    expect(body.data.rows.every((row) => row.username === admin.username)).toBe(
+      true,
+    );
+
+    expect(body.data.schedule.lastSuccessAgeDays).toBe(46);
+    expect(body.data.schedule.stale).toBe(true);
+    // No `pgboss` schema in the test database — the run reader fails soft to
+    // null rather than taking the whole page down, which is the arm a web-only
+    // deployment lives on permanently.
+    expect(body.data.schedule.lastRun).toBeNull();
+    expect(body.data.schedule.lastRunFailed).toBe(false);
+  });
+});
