@@ -14,7 +14,7 @@ import {
   sanitiseZodIssues,
 } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
-import { resolveModuleMap } from "@/lib/modules/gate";
+import { isModuleEnabled } from "@/lib/modules/gate";
 import { unavailableWidgetIds } from "@/lib/dashboard/widget-modules";
 import { prisma, toJson } from "@/lib/db";
 import {
@@ -235,16 +235,22 @@ export const GET = apiHandler(async () => {
   // The SDNN probe is an index-only existence check
   // (`@@index([userId, type, measuredAt])`), not a summaries read; it runs
   // only when Recovery is off, so the common account pays nothing.
-  const modules = await resolveModuleMap(user.id);
+  // One flag, read the way this codebase reads one flag — not the whole
+  // module map. `hrv` is the only conditionally-dead widget and `recovery`
+  // is the only module that decides it.
+  const recoveryEnabled = await isModuleEnabled(user.id, "recovery");
   let hasSdnn = true;
-  if (modules.recovery === false) {
+  if (!recoveryEnabled) {
     const sdnnRow = await prisma.measurement.findFirst({
       where: { userId: user.id, type: "HEART_RATE_VARIABILITY" },
       select: { id: true },
     });
     hasSdnn = sdnnRow !== null;
   }
-  const unavailable = unavailableWidgetIds(modules, { hasSdnn });
+  const unavailable = unavailableWidgetIds(
+    { recovery: recoveryEnabled },
+    { hasSdnn },
+  );
   return apiSuccess(
     unavailable.length > 0
       ? { ...layout, unavailableWidgetIds: unavailable }

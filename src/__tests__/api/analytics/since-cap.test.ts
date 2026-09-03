@@ -50,6 +50,19 @@ vi.mock("@/lib/db-compat", () => ({
 
 vi.mock("@/lib/logging/transports", () => ({ emitIfSampled: vi.fn() }));
 
+// The slim slice now strips disabled-module types before answering, from
+// the same map the snapshot builder gates on — so it resolves the module
+// map. Spread the real module so only that call is stubbed.
+vi.mock("@/lib/modules/gate", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/modules/gate")>();
+  return {
+    ...actual,
+    resolveModuleMap: vi.fn(async () =>
+      Object.fromEntries(actual.MODULE_KEYS.map((k) => [k, true])),
+    ),
+  };
+});
+
 vi.mock("next/headers", () => ({
   headers: vi.fn(async () => ({ get: () => null })),
   cookies: vi.fn(async () => ({

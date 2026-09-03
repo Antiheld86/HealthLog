@@ -27,9 +27,22 @@ vi.mock("@/lib/db", () => ({
     auditLog: {
       create: vi.fn(),
     },
+    // The GET probes for an SDNN row to decide whether the `hrv` toggle is
+    // a dead switch for this account. Only reached when recovery is off.
+    measurement: {
+      findFirst: vi.fn(),
+    },
     $transaction: vi.fn(),
   },
   toJson: (v: unknown) => v,
+}));
+
+// The GET reads one module flag to decide whether a toggle can do anything.
+// Spread the real module so only that one call is stubbed — every other
+// export stays live for whatever else pulls this in.
+vi.mock("@/lib/modules/gate", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/modules/gate")>()),
+  isModuleEnabled: vi.fn(async () => true),
 }));
 
 vi.mock("@/lib/auth/session", () => ({
@@ -66,6 +79,7 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { annotate } from "@/lib/logging/context";
 import { __resetAllCachesForTests } from "@/lib/cache/server-cache";
+import { isModuleEnabled } from "@/lib/modules/gate";
 import {
   DASHBOARD_WIDGET_IDS,
   DASHBOARD_IOS_ONLY_WIDGET_IDS,
@@ -104,6 +118,10 @@ beforeEach(() => {
   __resetAuditDedupMemoForTests();
   vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
   vi.mocked(prisma.auditLog.create).mockResolvedValue({} as never);
+  // `resetAllMocks` strips the factory's implementation, so state the
+  // default here beside the others: modules on, which is the shape every
+  // test below the dead-switch block assumes.
+  vi.mocked(isModuleEnabled).mockResolvedValue(true as never);
   vi.mocked(prisma.$transaction).mockImplementation((async (
     callback: (tx: { user: typeof transactionUser }) => Promise<unknown>,
   ) => callback({ user: transactionUser })) as never);
@@ -1055,5 +1073,59 @@ describe("dashboard widgets — hero primary content", () => {
 
     const body = (await res.json()) as { data: { hero?: string } };
     expect(body.data.hero).toBeUndefined();
+  });
+});
+
+describe("a toggle that cannot do anything is not offered", () => {
+  // A switch that is on over a tile that can never paint, with nothing
+  // saying why, is the defect the HRV fallback exists to remove — so the
+  // GET tells the client which toggles are dead rather than leaving the
+  // Settings screen to draw one.
+  //
+  // `hrv` falls back to nightly RMSSD when an account has no SDNN, and
+  // RMSSD is recovery-owned. Recovery off + no SDNN = a dead switch.
+  function storeLayout() {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      dashboardWidgetsJson: serializeDashboardLayout(DEFAULT_DASHBOARD_LAYOUT),
+    } as never);
+  }
+
+  async function getBody() {
+    const res = await callGet();
+    expect(res.status).toBe(200);
+    return (await res.json()) as {
+      data: { unavailableWidgetIds?: string[] };
+    };
+  }
+
+  it("marks hrv unavailable for a ring account with recovery off", async () => {
+    storeLayout();
+    vi.mocked(isModuleEnabled).mockResolvedValue(false);
+    vi.mocked(prisma.measurement.findFirst).mockResolvedValue(null as never);
+
+    expect((await getBody()).data.unavailableWidgetIds).toEqual(["hrv"]);
+  });
+
+  it("leaves hrv available when the account has SDNN", async () => {
+    // SDNN is a plain vital no module owns, so the tile still works with
+    // recovery off. Taking this row away would be a new bug.
+    storeLayout();
+    vi.mocked(isModuleEnabled).mockResolvedValue(false);
+    vi.mocked(prisma.measurement.findFirst).mockResolvedValue({
+      id: "m1",
+    } as never);
+
+    expect((await getBody()).data.unavailableWidgetIds).toBeUndefined();
+  });
+
+  it("does not probe for SDNN at all when recovery is on", async () => {
+    // The probe is the only added read on this hot, cached route; it must
+    // not run for the common account.
+    storeLayout();
+    vi.mocked(isModuleEnabled).mockResolvedValue(true);
+    vi.mocked(prisma.measurement.findFirst).mockClear();
+
+    expect((await getBody()).data.unavailableWidgetIds).toBeUndefined();
+    expect(prisma.measurement.findFirst).not.toHaveBeenCalled();
   });
 });
