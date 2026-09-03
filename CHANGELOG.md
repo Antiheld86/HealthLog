@@ -2,6 +2,51 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **A failing AI provider says what came back.** The provider health card in
+  the operator console could report a provider as failing without saying
+  whose problem it was. The ledger has recorded the HTTP status of every
+  failure since v1.11 and nothing read it. The card names it beside the
+  failure it belongs to now, which is the difference between a dead key the
+  operator has to replace and a provider having a bad afternoon. Blank where
+  there was no status to record, as with a connection that never completed.
+
+### Fixed
+
+- **Blood glucose can be shown in mmol/L. It never could before.** The
+  account has carried a glucose display unit since v1.2 and about thirty
+  places read it: the dashboard tiles, the glucose page, the targets panel,
+  the CSV and FHIR exports, the doctor report, the Coach's own notes, the
+  low-reading alert. Nothing could ever set it. There was no control, no
+  endpoint and no field on any form, so every account sat on the mg/dL
+  default and anyone who reads glucose in mmol/L got a number they had to
+  convert in their head on every screen. The unit is now a dropdown in
+  Settings under your profile, beside the metric/imperial one and
+  deliberately not folded into it, because metric countries are split on
+  which unit they read glucose in and one control would get half of them
+  wrong. Nothing already recorded changes: readings are stored in mg/dL and
+  stay stored in mg/dL, and the unit only picks how they are shown. The
+  entry form moved with it, which is the half that mattered. It now asks in
+  the unit you chose and converts on the way in, so a 5.3 typed by an mmol/L
+  reader is filed as 95 mg/dL instead of as 5.3, which is inside the
+  plausible range, passes without a word, and reads back on every surface as
+  a severe hypo. The measurements list and its edit sheet moved with it for
+  the same reason, so correcting a typo cannot rewrite a reading into the
+  other unit.
+- **The same reading converted two different ways.** A glucose value
+  imported in mmol/L was multiplied by 18.016; one displayed in mmol/L was
+  divided by 18.0182. A value imported in mmol/L therefore did not come back
+  out as the number it went in as. Both ends take the same factor now, and
+  the test names the constant rather than repeating the digits, which is how
+  the two came apart to begin with.
+- **An Apple Health import records which export it came from.** The import
+  status has always carried the instant the Health app stamped on the
+  archive, the API contract has always promised it, and it was always empty:
+  the element sat on the parser's list of things to skip. The parser reads
+  it now and writes it the moment it goes past, so a run that later fails
+  still says which export it was working from.
+
 ### Internal
 
 - The column-reader sweep was wrong in both directions and had been for as long as it existed. It answers "does this column have a consumer" for every column in the schema, and it is the tool this project leans on to catch a schema change that ships its writer and forgets its reader. Its idea of a write was any `field:` key anywhere, so `where: { ticketHash }` counted as writing `ticketHash`: all twelve columns it reported were a lookup key or a cron's discovery predicate being filtered on, every one a false alarm. And because it only ever reported a column that HAD a write, a column with no write at all was the one thing it could not see. It now understands which Prisma argument a key sits in, follows a payload assembled into a variable before the call, credits raw SQL against the mapped column name, and reports a column no code touches at all as its own category. Twelve false alarms became nineteen findings that each hold up, four of them worth acting on. The matcher underneath is pinned by a test that was checked by breaking it three ways.
