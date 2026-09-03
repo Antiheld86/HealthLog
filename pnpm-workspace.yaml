@@ -18,7 +18,14 @@ overrides:
   "hono@<4.12.25": "^4.12.25"
   "picomatch@<4.0.4": "^4.0.4"
   "body-parser@<2.3.0": "^2.3.0"
-  "fast-uri@<3.1.5": "^3.1.5"
+  # Array-limit bypass through bracket-key comma parsing, and a denial of
+  # service through an attacker-controlled isBuffer. 6.16.0 covers both.
+  "qs@<6.16.0": "^6.16.0"
+  # GHSA-jqff-g426-hqxp and three siblings: host confusion and request
+  # forgery through percent-encoded schemes, skipped IDN canonicalisation and
+  # malformed authorities. It arrives under ajv, including the connector SDK's
+  # copy, so it sits on a path this app exposes.
+  "fast-uri@<3.1.6": "^3.1.6"
   "flatted@<3.4.2": "^3.4.2"
   # The advisory covers 4.x only; the bound keeps a hypothetical 3.x consumer
   # off a major it never asked for.
