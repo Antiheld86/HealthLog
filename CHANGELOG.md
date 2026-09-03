@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **A misspelled field in a request is no longer accepted and thrown away.**
+  Send `disableCoachh` where the server expects `disableCoach` and the answer
+  used to be 200: the unrecognised key was dropped, whatever else the body
+  carried was saved, and the caller was told its request had been honoured.
+  Twenty-two endpoints now refuse a field they do not recognise, and the
+  422 names the key that was wrong instead of only saying the body failed. The
+  settings toggles, the restore and bulk-delete endpoints, message feedback,
+  the admin user update, the diabetes and Coach switches, the onboarding
+  acknowledgements, the provider chain, the chart overlay preferences and the
+  two client-side reporters are the ones affected. A key name is bounded and
+  stripped of anything that is not a plain identifier before it is echoed, so
+  a hostile one cannot ride the error message back out.
+- Sync, layout, import and the read filters deliberately keep accepting a field
+  they do not know, and now have a test saying so. The phone app ships optional
+  fields ahead of the servers that will eventually read them, and a self-hosted
+  install runs whichever release its operator last pulled, so a server quietly
+  ignoring a field it has never heard of is what keeps an updated app working
+  against an older install. Refusing there would turn one dropped field into a
+  refused batch: a year of history lost to a single row, a dashboard that will
+  not save, or a phone that silently stops registering for notifications. On a
+  read filter a stray query parameter discards nothing at all, the OAuth
+  endpoints are required by their specifications to ignore parameters they do
+  not recognise, and an import file comes from another version or another tool
+  by definition.
+
 ### Internal
 
 - The column-reader sweep was wrong in both directions and had been for as long as it existed. It answers "does this column have a consumer" for every column in the schema, and it is the tool this project leans on to catch a schema change that ships its writer and forgets its reader. Its idea of a write was any `field:` key anywhere, so `where: { ticketHash }` counted as writing `ticketHash`: all twelve columns it reported were a lookup key or a cron's discovery predicate being filtered on, every one a false alarm. And because it only ever reported a column that HAD a write, a column with no write at all was the one thing it could not see. It now understands which Prisma argument a key sits in, follows a payload assembled into a variable before the call, credits raw SQL against the mapped column name, and reports a column no code touches at all as its own category. Twelve false alarms became nineteen findings that each hold up, four of them worth acting on. The matcher underneath is pinned by a test that was checked by breaking it three ways.

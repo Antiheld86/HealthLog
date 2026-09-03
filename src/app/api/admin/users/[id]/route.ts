@@ -12,24 +12,26 @@ import { annotate } from "@/lib/logging/context";
 import { NextRequest } from "next/server";
 import { z } from "zod/v4";
 
-const updateUserSchema = z.object({
-  username: z.string().min(3).max(30).optional(),
-  email: z.string().email().nullable().optional(),
-  role: z.enum(["ADMIN", "USER"]).optional(),
-  // v1.23 — per-user "require a second factor" override. Effective requirement
-  // is the OR of this and the instance-wide AppSettings.mfaRequired policy.
-  mfaEnforced: z.boolean().optional(),
-  // Document vault — per-user storage-quota override in bytes. Null clears
-  // the override (the instance default applies again). Same bounds as the
-  // instance-wide setting.
-  documentQuotaBytes: z
-    .number()
-    .int()
-    .min(10_485_760)
-    .max(1_099_511_627_776)
-    .nullable()
-    .optional(),
-});
+const updateUserSchema = z
+  .object({
+    username: z.string().min(3).max(30).optional(),
+    email: z.string().email().nullable().optional(),
+    role: z.enum(["ADMIN", "USER"]).optional(),
+    // v1.23 — per-user "require a second factor" override. Effective requirement
+    // is the OR of this and the instance-wide AppSettings.mfaRequired policy.
+    mfaEnforced: z.boolean().optional(),
+    // Document vault — per-user storage-quota override in bytes. Null clears
+    // the override (the instance default applies again). Same bounds as the
+    // instance-wide setting.
+    documentQuotaBytes: z
+      .number()
+      .int()
+      .min(10_485_760)
+      .max(1_099_511_627_776)
+      .nullable()
+      .optional(),
+  })
+  .strict();
 
 export const PUT = apiHandler(
   async (

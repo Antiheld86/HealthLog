@@ -41,6 +41,7 @@ const tourBodySchema = z
     outcome: z.enum(["completed", "skipped"]).optional(),
     progress: tourProgressSchema.optional(),
   })
+  .strict()
   .refine((b) => b.completed !== undefined || b.progress !== undefined, {
     message: "Provide `completed` and/or `progress`.",
   });

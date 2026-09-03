@@ -38,9 +38,11 @@ const MAX_IDS_PER_BATCH = 200;
 const RATE_LIMIT_MAX = 60;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
-const restoreSchema = z.object({
-  ids: z.array(z.string().min(1)).min(1).max(MAX_IDS_PER_BATCH),
-});
+const restoreSchema = z
+  .object({
+    ids: z.array(z.string().min(1)).min(1).max(MAX_IDS_PER_BATCH),
+  })
+  .strict();
 
 export const POST = apiHandler(withIdempotency<[NextRequest]>(postRestore));
 

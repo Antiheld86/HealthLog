@@ -35,23 +35,27 @@ import { invalidateUserDashboardWidgets } from "@/lib/cache/invalidate";
 import { z } from "zod/v4";
 import type { NextRequest } from "next/server";
 
-const prefsSchema = z.object({
-  chartKey: z.enum(CHART_OVERLAY_KEYS),
-  prefs: z.object({
-    showTrendIndicator: z.boolean(),
-    showTrendArrow: z.boolean(),
-    showTargetRange: z.boolean(),
-    comparisonBaseline: z
-      .enum(["none", "lastMonth", "lastYear"])
-      .default("none"),
-    // v1.30.1 — persisted range-tab selection (M2 QoL fix). Optional so
-    // a client on an older cached bundle that never sends it doesn't
-    // 422. Literal set mirrors `CHART_RANGE_POINTS` in dashboard-layout.
-    rangePoints: z
-      .union([z.literal(0), z.literal(7), z.literal(30), z.literal(90)])
-      .optional(),
-  }),
-});
+const prefsSchema = z
+  .object({
+    chartKey: z.enum(CHART_OVERLAY_KEYS),
+    prefs: z
+      .object({
+        showTrendIndicator: z.boolean(),
+        showTrendArrow: z.boolean(),
+        showTargetRange: z.boolean(),
+        comparisonBaseline: z
+          .enum(["none", "lastMonth", "lastYear"])
+          .default("none"),
+        // v1.30.1 — persisted range-tab selection (M2 QoL fix). Optional so
+        // a client on an older cached bundle that never sends it doesn't
+        // 422. Literal set mirrors `CHART_RANGE_POINTS` in dashboard-layout.
+        rangePoints: z
+          .union([z.literal(0), z.literal(7), z.literal(30), z.literal(90)])
+          .optional(),
+      })
+      .strict(),
+  })
+  .strict();
 
 export const PUT = apiHandler(async (request: NextRequest) => {
   const { user } = await requireAuth();

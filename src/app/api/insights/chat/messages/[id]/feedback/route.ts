@@ -45,10 +45,12 @@ import { requireAssistantSurface } from "@/lib/feature-flags";
 import { annotate } from "@/lib/logging/context";
 import { checkRateLimit } from "@/lib/rate-limit";
 
-const coachMessageFeedbackSchema = z.object({
-  rating: z.enum(["helpful", "unhelpful"]),
-  reason: z.string().min(1).max(200).optional(),
-});
+const coachMessageFeedbackSchema = z
+  .object({
+    rating: z.enum(["helpful", "unhelpful"]),
+    reason: z.string().min(1).max(200).optional(),
+  })
+  .strict();
 
 interface RouteContext {
   params: Promise<{ id: string }>;

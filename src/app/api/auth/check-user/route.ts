@@ -48,9 +48,11 @@ import type { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const bodySchema = z.object({
-  identifier: z.string().trim().min(1).max(254),
-});
+const bodySchema = z
+  .object({
+    identifier: z.string().trim().min(1).max(254),
+  })
+  .strict();
 
 export type CheckUserBranch =
   "not_found" | "passkey_only" | "email_fallback" | "exists";

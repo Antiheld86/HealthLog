@@ -88,21 +88,23 @@ const MAX_TEXT_LENGTH = 2000;
  */
 const MAX_OUTPUT_TOKENS = 600;
 
-const requestSchema = z.object({
-  text: z.string().min(1).max(MAX_TEXT_LENGTH),
-  /** Optional UI locale; informational hint for the model. */
-  locale: z.enum(["en", "de", "es", "fr", "it", "pl", "ko"]).optional(),
-  /**
-   * Optional override of the reference date used to resolve relative
-   * phrases ("tomorrow", "next Monday"). Defaults to the server's
-   * UTC `YYYY-MM-DD`. Bounded format so a hostile client cannot
-   * inject prose into the prompt body.
-   */
-  today: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional(),
-});
+const requestSchema = z
+  .object({
+    text: z.string().min(1).max(MAX_TEXT_LENGTH),
+    /** Optional UI locale; informational hint for the model. */
+    locale: z.enum(["en", "de", "es", "fr", "it", "pl", "ko"]).optional(),
+    /**
+     * Optional override of the reference date used to resolve relative
+     * phrases ("tomorrow", "next Monday"). Defaults to the server's
+     * UTC `YYYY-MM-DD`. Bounded format so a hostile client cannot
+     * inject prose into the prompt body.
+     */
+    today: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+  })
+  .strict();
 
 /**
  * Strip leading code-fence noise that some chat models wrap around

@@ -7,8 +7,9 @@ export function apiSuccess<T>(data: T, status = 200) {
 }
 
 /**
- * Sanitised view of a single Zod issue. We surface `path`, `code` and
- * `message` only — `issue.params` may echo the offending user input
+ * Sanitised view of a single Zod issue. We surface `path`, `code`,
+ * `message` and — for `unrecognized_keys` only — the bounded `keys`
+ * list; `issue.params` may echo the offending user input
  * (e.g. a too-long string, a regex source) and we do not want that
  * round-tripped to mobile callers or persisted into the audit ledger.
  */
@@ -16,6 +17,58 @@ export interface SanitisedZodIssue {
   path: string;
   code: string;
   message: string;
+  /**
+   * Only set for `unrecognized_keys`: the rejected key names, sanitised
+   * and bounded by {@link sanitiseKeyName}. A key name is structure, not
+   * content, so naming it is what makes the rejection actionable — the
+   * caller learns which field it got wrong instead of only that the body
+   * had a field too many. It survives `stripValuesFromMessage` for the
+   * same reason: it carries no user-typed value.
+   */
+  keys?: string[];
+}
+
+/** Cap on how many rejected key names one issue reports. */
+const MAX_REPORTED_KEYS = 10;
+/** Cap on the length of a single reported key name. */
+const MAX_KEY_NAME_LENGTH = 64;
+
+/**
+ * A key name arrives straight from the request body, so it is caller-
+ * controlled and unbounded: a client can post a 100 KB key, or one
+ * carrying markup, and Zod's own `unrecognized_keys` message echoes it
+ * verbatim. That message reaches the client, the wide event and — at the
+ * `stripValuesFromMessage` call sites — the audit ledger, so it is bounded
+ * and character-restricted here rather than at each of those boundaries.
+ * Anything outside `[A-Za-z0-9_.-]` collapses to `_`, which keeps a typo
+ * like `measuredAtt` perfectly readable while leaving nothing that could
+ * be mistaken for markup or a control sequence downstream.
+ */
+function sanitiseKeyName(key: string): string {
+  return key.slice(0, MAX_KEY_NAME_LENGTH).replace(/[^A-Za-z0-9_.-]/g, "_");
+}
+
+/**
+ * Zod reports every unknown key of one object in a single issue whose
+ * `path` is the object itself, so the offending keys live in `issue.keys`
+ * and nowhere in `path`. Without this the sanitised issue read
+ * `{ path: "", code: "unrecognized_keys" }` and named nothing at all.
+ */
+function unrecognisedKeys(issue: ZodIssue): string[] | undefined {
+  if (issue.code !== "unrecognized_keys") return undefined;
+  return issue.keys.slice(0, MAX_REPORTED_KEYS).map(sanitiseKeyName);
+}
+
+/**
+ * Rebuilt from the sanitised key names rather than passed through from
+ * Zod, so the wording stays the one callers already parse while the
+ * unbounded verbatim echo does not ship.
+ */
+function unrecognisedKeysMessage(keys: string[]): string {
+  const rendered = keys.map((key) => `"${key}"`).join(", ");
+  return keys.length === 1
+    ? `Unrecognized key: ${rendered}`
+    : `Unrecognized keys: ${rendered}`;
 }
 
 /**
@@ -29,8 +82,9 @@ export interface SanitisedZodIssue {
 export interface SanitiseZodIssueOptions {
   /**
    * When true, drop `issue.message` from the returned shape entirely.
-   * Only `path` + `code` survive — enough for an operator to triage
-   * the rejection without persisting user-typed content. Default is
+   * Only `path`, `code` and (for `unrecognized_keys`) the sanitised
+   * `keys` survive — enough for an operator to triage the rejection
+   * without persisting user-typed content. Default is
    * `false` so the additive multi-issue envelope keeps its existing
    * client contract.
    */
@@ -60,6 +114,13 @@ export interface SanitiseZodIssueOptions {
  * the audit ledger would leak user content. The opt-in is additive —
  * the default behaviour is unchanged so existing clients reading
  * `details.issues[*].message` over the wire keep working.
+ *
+ * `unrecognized_keys` is rendered rather than passed through. A caller
+ * that sends `measuredAtt` for `measuredAt` has to be told which key was
+ * refused, and Zod puts that in `issue.keys` while leaving `path` empty —
+ * so the key names are lifted onto `keys`, bounded and character-
+ * restricted, and the message is rebuilt from them rather than echoing
+ * the raw request key back.
  */
 export function sanitiseZodIssues(
   issues: readonly ZodIssue[],
@@ -73,16 +134,24 @@ export function sanitiseZodIssues(
   options?: SanitiseZodIssueOptions,
 ): SanitisedZodIssue[] | Array<Omit<SanitisedZodIssue, "message">> {
   if (options?.stripValuesFromMessage) {
-    return issues.map((issue) => ({
+    return issues.map((issue) => {
+      const keys = unrecognisedKeys(issue);
+      return {
+        path: issue.path.join("."),
+        code: issue.code,
+        ...(keys ? { keys } : {}),
+      };
+    });
+  }
+  return issues.map((issue) => {
+    const keys = unrecognisedKeys(issue);
+    return {
       path: issue.path.join("."),
       code: issue.code,
-    }));
-  }
-  return issues.map((issue) => ({
-    path: issue.path.join("."),
-    code: issue.code,
-    message: issue.message,
-  }));
+      message: keys ? unrecognisedKeysMessage(keys) : issue.message,
+      ...(keys ? { keys } : {}),
+    };
+  });
 }
 
 /**
