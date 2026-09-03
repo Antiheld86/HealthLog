@@ -16,7 +16,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { apiHandler, HttpError, requireAdmin } from "@/lib/api-handler";
 import { apiError, apiSuccess } from "@/lib/api-response";
-import { decrypt } from "@/lib/crypto";
+import { unpackBackupBlob } from "@/lib/export/backup-blob";
 import { annotate } from "@/lib/logging/context";
 import {
   isCompatibleSchemaVersion,
@@ -44,7 +44,7 @@ export const GET = apiHandler(
 
     let plaintext: string;
     try {
-      plaintext = decrypt(backup.data);
+      plaintext = unpackBackupBlob(backup.data);
     } catch {
       return apiError("Failed to decrypt backup payload", 500);
     }
