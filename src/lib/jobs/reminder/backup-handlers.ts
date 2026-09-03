@@ -6,11 +6,11 @@
  */
 import { type Job } from "pg-boss";
 import { recordError } from "@/lib/jobs/worker-status";
-import { packBackupBlobStreaming } from "@/lib/export/backup-blob";
 import {
-  BackupHeapBudgetExceededError,
-  streamFullBackupJson,
-} from "@/lib/export/full-backup-stream";
+  BackupBlobTooLargeError,
+  packBackupBlobStreaming,
+} from "@/lib/export/backup-blob";
+import { streamFullBackupJson } from "@/lib/export/full-backup-stream";
 import { jobDone, jobFailed, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import {
@@ -82,8 +82,12 @@ export async function handleDataBackup(
 
       let backed = 0;
       let usersFailed = 0;
-      let heapBudgetTrips = 0;
+      let oversized = 0;
       let largestBlobBytes = 0;
+      // Kept for the failure report: without it the run that failed for
+      // everybody names no reason at all, which is the shape this pass spent
+      // six weeks in.
+      let lastError: unknown;
       for (const user of users) {
         try {
           // Streamed, compressed, then encrypted (the record contains
@@ -123,13 +127,14 @@ export async function handleDataBackup(
           // it rides out as a count so the weekly run is not retried for the
           // whole cohort.
           //
-          // A record too large for this container's heap lands here too, and
-          // that is the whole point of the budget the writer enforces: before
-          // it existed the same condition was an uncatchable V8 abort that
-          // restarted the instance, so one account's size was a denial of
-          // service on every other account on the host.
+          // A record whose stored copy does not fit this process lands here
+          // too, and that is the point of the size limit the envelope writer
+          // enforces: before it existed the same condition was an uncatchable
+          // V8 abort that restarted the instance, so one account's size was a
+          // denial of service on every other account on the host.
           usersFailed++;
-          if (err instanceof BackupHeapBudgetExceededError) heapBudgetTrips++;
+          lastError = err;
+          if (err instanceof BackupBlobTooLargeError) oversized++;
           evt.addWarning(`Failed for user ${user.id}: ${err}`);
         }
       }
@@ -137,19 +142,34 @@ export async function handleDataBackup(
       // The stored size is the one number that says whether this pass is
       // heading back towards the wall it hit before: it tracks the record.
       evt.addMeta("data_backup_largest_blob_bytes", largestBlobBytes);
-      // How many accounts the writer stopped rather than let the process die.
-      // Non-zero means this host needs more memory, not a retry.
-      evt.addMeta("data_backup_heap_budget_trips", heapBudgetTrips);
+      // How many accounts the envelope writer stopped rather than let the
+      // process die. Non-zero means this host needs more memory, not a retry.
+      evt.addMeta("data_backup_records_oversized", oversized);
       evt.setBackground({
         task_name: "job.data_backup",
-        result: { backed, total: users.length },
+        result: { backed, total: users.length, failed: usersFailed },
       });
-      return jobDone({
+
+      const did = {
         backed,
         total: users.length,
         users_failed: usersFailed,
-        heap_budget_trips: heapBudgetTrips,
-      });
+        records_oversized: oversized,
+      };
+
+      // A pass that wrote nothing for anybody protected nobody, and saying
+      // `ok: true` about it is how an instance goes a month and a half without
+      // a usable copy while every surface reads healthy. Per-account failures
+      // still ride out as counts when SOME account got a copy — that is the
+      // fan-out rule, and that account's own row ages on the backups page —
+      // but zero out of a non-empty cohort is the pass failing rather than a
+      // leg of it, so pg-boss records a failed run and the backups page reads
+      // it back through `readLastQueueRun`.
+      if (users.length > 0 && backed === 0) {
+        return jobFailed("no account could be backed up", lastError, did);
+      }
+
+      return jobDone(did);
     } catch (err) {
       evt.setError(err);
       recordError();
