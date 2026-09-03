@@ -24,6 +24,7 @@ import {
 import {
   buildComplianceMedicationContext,
   calculateCompliance,
+  expectsDoses,
   lastNonSkippedTakenAt,
   SCHEDULE_COMPLIANCE_SELECT,
 } from "@/lib/analytics/compliance";
@@ -324,7 +325,7 @@ export async function prepareBloodPressureStatusForUser(
     weightVsSystolicPairs,
   );
 
-  const activeMedications = await prisma.medication.findMany({
+  const activeMedicationRows = await prisma.medication.findMany({
     // v1.16.11 — as-needed (PRN) medications never feed the BP-status
     // compliance gate (no expected doses, no rate).
     where: { userId, active: true, asNeeded: false },
@@ -338,6 +339,12 @@ export async function prepareBloodPressureStatusForUser(
       pauseEras: { select: { pausedAt: true, resumedAt: true } },
     },
   });
+
+  // A medication with no schedule expects no dose, and `calculateCompliance`
+  // answers 100 % for that case. The `asNeeded: false` filter above catches
+  // only the PRN arm; the empty schedule is reachable on a scheduled
+  // medication and would otherwise report perfect adherence.
+  const activeMedications = activeMedicationRows.filter(expectsDoses);
 
   const categoryMap = await getMedicationCategories(
     activeMedications.map((medication) => medication.id),

@@ -243,6 +243,28 @@ export function buildComplianceDisplay(
  *                       can be driven deterministically from a caller
  *                       that already pinned its own `now`.
  */
+/**
+ * Whether a medication expects any dose at all, and so has an adherence rate
+ * worth showing.
+ *
+ * `calculateCompliance` below answers `rate: 100, totalExpected: 0` for a
+ * medication with no schedule. That is arithmetically honest — nothing was
+ * expected, so nothing was missed — and it is a lie on every surface that
+ * reads the number as adherence. PRN is the obvious arm and every caller
+ * already filtered it; the empty schedule on a NON-PRN medication is the arm
+ * that got through, and it is reachable: `POST /api/medications` accepts
+ * `schedules ?? []` on a scheduled medication. The doctor report has excluded
+ * both arms since it was written, so the report never prints a fabricated
+ * 100 %; the same reason applies to every other surface, so the two arms live
+ * in one predicate rather than being re-derived at each call site.
+ */
+export function expectsDoses(medication: {
+  asNeeded: boolean;
+  schedules: readonly unknown[];
+}): boolean {
+  return !medication.asNeeded && medication.schedules.length > 0;
+}
+
 export function calculateCompliance(
   events: IntakeEvent[],
   schedules: ComplianceSchedule[],

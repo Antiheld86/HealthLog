@@ -9,6 +9,7 @@ import {
   buildComplianceMedicationContext,
   buildMedicationComplianceBundle,
   dailyComplianceRatesFromLedger,
+  expectsDoses,
   lastNonSkippedTakenAt,
   SCHEDULE_COMPLIANCE_SELECT,
 } from "@/lib/analytics/compliance";
@@ -208,7 +209,7 @@ export async function prepareMedicationComplianceStatusForUser(
     };
   }
 
-  const medications = await prisma.medication.findMany({
+  const medicationRows = await prisma.medication.findMany({
     // v1.16.11 — as-needed (PRN) medications never surface a compliance
     // rate (no expected doses).
     where: { userId, active: true, asNeeded: false },
@@ -223,6 +224,12 @@ export async function prepareMedicationComplianceStatusForUser(
     },
     orderBy: { name: "asc" },
   });
+
+  // A medication with no schedule expects no dose, and `calculateCompliance`
+  // answers 100 % for that case. The `asNeeded: false` filter above catches
+  // only the PRN arm; the empty schedule is reachable on a scheduled
+  // medication and would otherwise report perfect adherence.
+  const medications = medicationRows.filter(expectsDoses);
 
   if (medications.length === 0) {
     return {

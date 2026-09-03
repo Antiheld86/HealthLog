@@ -21,6 +21,7 @@ import { userDayKey } from "@/lib/tz/resolver";
 import { resolveCanonicalRecovery } from "@/lib/insights/derived/recovery-resolve";
 import {
   buildComplianceMedicationContext,
+  expectsDoses,
   lastNonSkippedTakenAt,
   tallyComplianceFromLedger,
 } from "@/lib/analytics/compliance";
@@ -363,9 +364,9 @@ export function buildLedgerCompliance(
   const compliance: Record<string, DoctorReportCompliance> = {};
   for (const med of medications) {
     // PRN / as-needed carry no schedule and no expected dose — excluded so
-    // the report never prints a fabricated 100 %.
-    if (med.asNeeded) continue;
-    if (med.schedules.length === 0) continue;
+    // the report never prints a fabricated 100 %. Both arms now live in the
+    // shared predicate, which is what the other adherence surfaces read.
+    if (!expectsDoses(med)) continue;
 
     const events = eventsByMedId.get(med.id) ?? [];
     const ctx = buildComplianceMedicationContext(
