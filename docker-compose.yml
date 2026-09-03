@@ -64,7 +64,23 @@ x-healthlog-env: &healthlog_env
   # docker-compose reads .env for `${VAR}` substitution at compose-up time).
   SESSION_COOKIE_SECURE: "${SESSION_COOKIE_SECURE:-}"
   NATIVE_CANVAS: "${NATIVE_CANVAS:-}"
+  # Read-only showcase instance. DEMO_MODE=true makes the proxy refuse every
+  # mutation except login and paints the demo banner. Leave it unset on a
+  # real self-host — it is a public-demo switch, not a safety belt.
+  DEMO_MODE: "${DEMO_MODE:-}"
+  # Statement timeout applied to every database session, in milliseconds
+  # (default 60000; 0 disables it and restores the unbounded behaviour).
+  # Raise it if a very large account's analytics fallback is being cut off.
+  DATABASE_STATEMENT_TIMEOUT_MS: "${DATABASE_STATEMENT_TIMEOUT_MS:-}"
   WITHINGS_WEBHOOK_SECRET: "${WITHINGS_WEBHOOK_SECRET:-}"
+  # Overrides the derived `${NEXT_PUBLIC_APP_URL}/api/withings/callback`;
+  # set it when the URL registered with Withings differs from the app's own
+  # public URL. The WHOOP / Polar / Oura / Strava equivalents are below.
+  WITHINGS_REDIRECT_URI: "${WITHINGS_REDIRECT_URI:-}"
+  # Path-segment + HMAC secret for the Telegram bot webhook. Set it to the
+  # same value you register with BotFather; without it the settings page
+  # cannot install the webhook and inbound updates are refused.
+  TELEGRAM_WEBHOOK_SECRET: "${TELEGRAM_WEBHOOK_SECRET:-}"
   # v1.18.11 (W3) — client-IP resolution + geo lookup. Behind Cloudflare
   # the real visitor IP is in `cf-connecting-ip`; set
   # TRUST_CF_CONNECTING_IP=1 ONLY when Cloudflare is in front (off by
@@ -125,6 +141,22 @@ x-healthlog-env: &healthlog_env
   # the block exists: `environment:` is a whitelist, and a value in .env that
   # is not named here never arrives.
   AUDIT_LOG_RETENTION_DAYS: "${AUDIT_LOG_RETENTION_DAYS:-}"
+  # How long Coach conversations are kept, in days (default 365, floor 30).
+  # Like the audit window this number is PUBLISHED to the user on the Data &
+  # Privacy page, so an instance running 90 has to be able to say 90.
+  COACH_MESSAGE_RETENTION_DAYS: "${COACH_MESSAGE_RETENTION_DAYS:-}"
+  # How long the host CPU/memory samples behind the admin charts are kept,
+  # in days (default 7). Raise it for a longer trend, lower it on a small
+  # disk.
+  HOST_METRIC_RETENTION_DAYS: "${HOST_METRIC_RETENTION_DAYS:-}"
+  # Thinning of dense intraday samples (heart rate, glucose) once they age
+  # out of the detail window. On by default; set "false" to keep every raw
+  # sample forever, at the cost of table growth.
+  DENSE_INTRADAY_RETENTION_ENABLED: "${DENSE_INTRADAY_RETENTION_ENABLED:-}"
+  # Consecutive failures before an integration is reported as persistently
+  # failing and notified about (default 3, minimum 1). Raise it if a flaky
+  # upstream is noisy.
+  INTEGRATION_FAILURE_ALERT_THRESHOLD: "${INTEGRATION_FAILURE_ALERT_THRESHOLD:-}"
   # Per-export ceiling on MedicationAdministration rows in the FHIR
   # health-record Bundle. Bounded 1..50000, default 5000. Listed here so
   # an operator override in .env actually reaches the container (the
@@ -161,6 +193,23 @@ x-healthlog-env: &healthlog_env
   STRAVA_CLIENT_ID: "${STRAVA_CLIENT_ID:-}"
   STRAVA_CLIENT_SECRET: "${STRAVA_CLIENT_SECRET:-}"
   STRAVA_REDIRECT_URI: "${STRAVA_REDIRECT_URI:-}"
+  # Fitbit + Google Health are per-user BYO-key integrations, so there is no
+  # client id/secret env for either. These override the derived
+  # `${NEXT_PUBLIC_APP_URL}/api/{fitbit,google-health}/callback` when the URL
+  # registered with the provider differs from the app's public URL. Both are
+  # asserted same-origin with NEXT_PUBLIC_APP_URL, so they cannot redirect
+  # the authorization code somewhere else.
+  FITBIT_REDIRECT_URI: "${FITBIT_REDIRECT_URI:-}"
+  GOOGLE_HEALTH_REDIRECT_URI: "${GOOGLE_HEALTH_REDIRECT_URI:-}"
+  # Nightscout origins on your own network that the per-user connection
+  # validator should accept, comma-separated (e.g. "http://nightscout.lan").
+  # Without it a LAN/private Nightscout URL is refused as an SSRF target.
+  NIGHTSCOUT_PRIVATE_ORIGINS: "${NIGHTSCOUT_PRIVATE_ORIGINS:-}"
+  # Open-Meteo endpoints for the environment/weather correlation. Default to
+  # the hosted service; point them at your own Open-Meteo deployment to keep
+  # the coordinate lookups off a third party.
+  OPENMETEO_BASE_URL: "${OPENMETEO_BASE_URL:-}"
+  OPENMETEO_GEOCODING_URL: "${OPENMETEO_GEOCODING_URL:-}"
   # OIDC SSO login (self-hosted IdP: Authentik/Keycloak/Authelia/etc).
   # All three of ISSUER_URL/CLIENT_ID/CLIENT_SECRET together enable the
   # "Sign in with SSO" button; set none to leave it disabled. OIDC_ONLY
@@ -201,6 +250,22 @@ x-healthlog-env: &healthlog_env
   # in .env reaches the container (the `environment:` block is a whitelist).
   # See docs/integrations/ai-providers.md.
   ALLOW_LOCAL_AI_PRIVATE_HOSTS: "${ALLOW_LOCAL_AI_PRIVATE_HOSTS:-}"
+  # Extra hosts the admin-configured AI base URL may point at, on top of the
+  # built-in public providers. Comma-separated bare hostnames. Set it when
+  # you run a gateway this instance should trust; it widens only the admin
+  # setting, never the per-user BYO-key posture.
+  ADMIN_AI_BASE_URL_ALLOWLIST: "${ADMIN_AI_BASE_URL_ALLOWLIST:-}"
+  # Codex (ChatGPT sign-in) model slugs. Set CODEX_MODEL to pin one slug
+  # ahead of the built-in chain, or CODEX_MODEL_FALLBACK_CHAIN (comma-
+  # separated) to replace the chain outright. Reach for these when the
+  # provider rotates a slug and every request starts coming back 503 —
+  # without them a rotation needs a new release to fix.
+  CODEX_MODEL: "${CODEX_MODEL:-}"
+  CODEX_MODEL_FALLBACK_CHAIN: "${CODEX_MODEL_FALLBACK_CHAIN:-}"
+  # Surfaces reviewed n-of-1 experiment outcomes in the Coach snapshot.
+  # Off by default — the read-back is the most overclaim-prone Coach
+  # surface, so it is an explicit operator opt-in. Set to "1" to enable.
+  COACH_EXPERIMENT_VERDICT: "${COACH_EXPERIMENT_VERDICT:-}"
   # Daily-briefing output-token ceiling (optional; default 2500, clamped
   # 500-8000). Raise when a verbose model's briefing JSON is cut off.
   # Listed here so an operator value in .env reaches the container (the
@@ -244,12 +309,46 @@ x-healthlog-env: &healthlog_env
   # PWA users need none of this (Web Push covers them). See
   # docs/self-hosting/notifications.md.
   APNS_KEY_B64: "${APNS_KEY_B64:-}"
+  # The other two key sources, in precedence order after APNS_KEY_B64:
+  # APNS_KEY is the raw PEM body, APNS_KEY_FILE a path to the .p8 inside the
+  # container (mount it yourself). Both are documented in
+  # .env.production.example and in the manifest check-env reads, and both
+  # were absent from this whitelist — so an operator who followed the
+  # documented precedence chain got a silently disabled APNs.
+  APNS_KEY: "${APNS_KEY:-}"
+  APNS_KEY_FILE: "${APNS_KEY_FILE:-}"
   APNS_KEY_ID: "${APNS_KEY_ID:-}"
   APNS_TEAM_ID: "${APNS_TEAM_ID:-}"
   APNS_BUNDLE_ID: "${APNS_BUNDLE_ID:-}"
+  # Force the production APNs gateway. Normally derived from NODE_ENV; set
+  # "true" when a production-signed build has to reach the production
+  # gateway from a non-production deployment.
+  APNS_PRODUCTION: "${APNS_PRODUCTION:-}"
   # Set "true" only if your own iOS build carries Apple's Critical Alerts
   # entitlement; otherwise urgent alerts use the time-sensitive level.
   APNS_CRITICAL_ENTITLEMENT: "${APNS_CRITICAL_ENTITLEMENT:-}"
+  # Structured logging. LOG_LEVEL is one of debug/info/warn/error (default
+  # info) — drop to debug while chasing a problem, raise to warn on a busy
+  # instance. LOG_SAMPLE_RATE keeps that fraction of successful events
+  # (default 1.0 = all; 0.1 thins a chatty log without losing errors).
+  # LOG_SLOW_THRESHOLD_MS is the duration above which a request is flagged
+  # slow (default 3000). LOG_INCLUDE_STACK="false" strips stack traces from
+  # the emitted events.
+  LOG_LEVEL: "${LOG_LEVEL:-}"
+  LOG_SAMPLE_RATE: "${LOG_SAMPLE_RATE:-}"
+  LOG_SLOW_THRESHOLD_MS: "${LOG_SLOW_THRESHOLD_MS:-}"
+  LOG_INCLUDE_STACK: "${LOG_INCLUDE_STACK:-}"
+  # Optional log shipping to a Loki instance. Set LOKI_ENDPOINT to the push
+  # URL to turn it on; the username/password pair is only needed when your
+  # Loki is behind basic auth. Leave all three unset and logs stay on stdout
+  # for the Docker log driver to rotate.
+  LOKI_ENDPOINT: "${LOKI_ENDPOINT:-}"
+  LOKI_USERNAME: "${LOKI_USERNAME:-}"
+  LOKI_PASSWORD: "${LOKI_PASSWORD:-}"
+  # Server-side prefetch for the dashboard, insights, coach and checkups
+  # pages. On by default; set "false" to fall back to pure client fetching,
+  # which is the escape hatch when a prefetch is misbehaving on your host.
+  DASHBOARD_SSR_PREFETCH: "${DASHBOARD_SSR_PREFETCH:-}"
 
 services:
   # Single-container default (HEALTHLOG_PROCESS_TYPE=all). Existing
