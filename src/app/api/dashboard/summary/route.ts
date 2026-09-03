@@ -22,14 +22,16 @@
  *   - the set of YYYY-MM-DD day-keys with any activity in 365 days
  *
  * v1.4.38 swaps the two unbounded reads for SQL aggregates:
- *   - `DISTINCT ON (type)` → one row per type carrying the latest
- *     value + measuredAt (≤ N_metrics rows). REG-11 (v1.4.44) dropped
- *     the trailing-7-day window from the WHERE clause; the tile now
- *     surfaces the all-time-latest reading per type so a 60-day-old BP
- *     measurement still feeds the tile (paired with the stale-caption
- *     hint built off `lastSeenAt`).
- *   - `measurement_rollups` DAY buckets keyed `(user_id, granularity,
- *     bucketStart)` → at most 7 buckets per metric × N_metrics rows.
+ *   - one row per type carrying the latest value + measuredAt
+ *     (≤ N_metrics rows). REG-11 (v1.4.44) dropped the trailing-7-day
+ *     window from the WHERE clause; the tile now surfaces the all-time-
+ *     latest reading per type so a 60-day-old BP measurement still feeds
+ *     the tile (paired with the stale-caption hint built off
+ *     `lastSeenAt`). v1.38.5 replaced the `DISTINCT ON (type)` that
+ *     produced those rows with a LATERAL join over the type list; both
+ *     per-type reads now live in `@/lib/dashboard/summary-reads`.
+ *   - `measurement_rollups` DAY buckets keyed `(user_id, type,
+ *     granularity, bucketStart)` → at most 7 buckets per metric × N_metrics rows.
  *     Sparkline points become the bucket means rather than individual
  *     raw samples, which is a *smoother* trend signal for high-volume
  *     metrics like ACTIVITY_STEPS and bounded for every other metric.
@@ -63,6 +65,10 @@ import { defaultLocale, locales, type Locale } from "@/lib/i18n/config";
 import { userDayKey, DEFAULT_TIMEZONE } from "@/lib/tz/resolver";
 import { cachedSwr, caches, type ServerCache } from "@/lib/cache/server-cache";
 import { buildMedsTodayBlock } from "@/lib/dashboard/meds-today";
+import {
+  readLatestEver,
+  readSparkBuckets,
+} from "@/lib/dashboard/summary-reads";
 import { resolveModuleMap } from "@/lib/modules/gate";
 import { gateMetricCardsByModules } from "@/lib/dashboard/widget-modules";
 import {
@@ -295,48 +301,6 @@ function computeStreak(activityDays: Set<string>, userTz: string): StreakInfo {
   return { currentDays, longest };
 }
 
-/** v1.4.38 W-F — `DISTINCT ON (type)` row for the single most recent
- *  reading per measurement type, irrespective of age. One row per
- *  metric the user has ever touched; replaces the legacy unbounded
- *  `prisma.measurement.findMany`.
- *
- *  REG-11 (v1.4.44): dropped the trailing-7-day window from the WHERE
- *  clause. The old shape returned `latestValue: null` + an empty
- *  sparkline for accounts whose last BP / pulse reading was older than
- *  7 days, leaving the iOS tile blank even though the historical row
- *  was still in the database. The all-time aggregate (`groupBy` on
- *  `measurements`) already proves the row exists; the row count is
- *  still bounded by `|measurementTypes|` via `DISTINCT ON`. */
-interface LatestEverRow {
-  type: MeasurementType;
-  value: number;
-  measured_at: Date;
-}
-
-/** v1.4.38 W-F — per-day measurement_rollup bucket feeding the dashboard
- *  sparkline. At most 7 buckets per metric × N metrics — bounded by
- *  `SPARK_DAYS * |measurementTypes|` rather than the raw row count.
- *
- *  v1.4.39 W-SUM — `sum_value` rides along so the cumulative tile
- *  (ACTIVITY_STEPS) renders the daily SUM rather than the per-bucket
- *  MEAN. Spot metrics ignore the column; cumulative tiles fall back to
- *  `mean * count` when the legacy NULL hits (boot-backfill convergence
- *  window).
- *
- *  REG-11 (v1.4.44): switched from a calendar-window filter
- *  (`bucket_start >= sevenDaysAgo`) to a `ROW_NUMBER() OVER (PARTITION
- *  BY type ORDER BY bucket_start DESC)` window so the sparkline takes
- *  the last `SPARK_DAYS` daily buckets per type regardless of age. An
- *  account whose last BP reading is 60 days old now still gets the
- *  trailing 7 days of historical buckets feeding the tile chart. */
-interface SparklineRow {
-  type: MeasurementType;
-  bucket_start: Date;
-  mean: number;
-  count: number;
-  sum_value: number | null;
-}
-
 /** v1.4.38 W-F — distinct activity day-keys from the streak window.
  *  The route only needs YYYY-MM-DD strings, so the aggregate runs
  *  `date_trunc('day', m.measured_at AT TIME ZONE $userTz)` and returns
@@ -478,9 +442,9 @@ async function buildDashboardSummary(
 
   // v1.4.38 W-F — six bounded sub-queries replace the legacy 4
   // unbounded ones. Row counts are now:
-  //   - latestEver: ≤ N metric types (one row per type via DISTINCT ON,
-  //                 REG-11: dropped the 7-day window so a stale-but-
-  //                 valid historical reading still feeds the tile)
+  //   - latestEver: ≤ N metric types (one indexed lookup per type via
+  //                 LATERAL, REG-11: dropped the 7-day window so a
+  //                 stale-but-valid historical reading still feeds the tile)
   //   - sparkBuckets: ≤ SPARK_DAYS × N metric types (typically <80,
   //                  REG-11: taken via ROW_NUMBER window, no calendar
   //                  filter, so a 60-day-old metric still paints a chart)
@@ -498,43 +462,15 @@ async function buildDashboardSummary(
     measurementStreakDays,
     sleepStageRows,
   ] = await Promise.all([
-    time(
-      "latestEver",
-      () =>
-        prisma.$queryRaw<LatestEverRow[]>`
-        SELECT DISTINCT ON (m."type")
-          m."type"                                  AS type,
-          m."value"::double precision               AS value,
-          m."measured_at"                           AS measured_at
-        FROM measurements m
-        WHERE m."user_id" = ${userId}
-          AND m."deleted_at" IS NULL
-        ORDER BY m."type", m."measured_at" DESC
-      `,
-    ),
-    time(
-      "sparkline",
-      () =>
-        prisma.$queryRaw<SparklineRow[]>`
-        SELECT type, bucket_start, mean, count, sum_value
-        FROM (
-          SELECT
-            r."type"                                  AS type,
-            r."bucket_start"                          AS bucket_start,
-            r."mean"::double precision                AS mean,
-            r."count"::int                            AS count,
-            r."sum_value"::double precision           AS sum_value,
-            ROW_NUMBER() OVER (
-              PARTITION BY r."type"
-              ORDER BY r."bucket_start" DESC
-            ) AS rn
-          FROM measurement_rollups r
-          WHERE r."user_id" = ${userId}
-            AND r."granularity" = 'DAY'
-        ) sub
-        WHERE rn <= ${SPARK_DAYS}
-        ORDER BY type, bucket_start ASC
-      `,
+    // Both reads live in `@/lib/dashboard/summary-reads` — the SQL is a
+    // contract the integration suite exercises directly against Postgres,
+    // and each carries the reason it names the type list at its
+    // definition. Short version: PostgreSQL 16 has no index skip scan, so
+    // "one row per type" has to be driven FROM the type list or it
+    // degrades to a full pass over the account.
+    time("latestEver", () => readLatestEver(prisma, userId, measurementTypes)),
+    time("sparkline", () =>
+      readSparkBuckets(prisma, userId, measurementTypes, SPARK_DAYS),
     ),
     time("allTime", () =>
       prisma.measurement.groupBy({
