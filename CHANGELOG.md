@@ -1,6 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [1.38.6] — 2026-09-03
+
+Blood glucose can be shown in mmol/L, which it never could before, and the
+weekly backup finally sits inside key rotation. Text the server writes now
+arrives in the language you actually read the app in.
 
 ### Changed
 
