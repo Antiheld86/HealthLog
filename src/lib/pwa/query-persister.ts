@@ -32,6 +32,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 
+import { trackBackgroundTask } from "@/lib/logging/background-tasks";
 import { queryKeys } from "@/lib/query-keys";
 import { isReadingSharedRecord } from "@/lib/query-keys/record-scope";
 
@@ -283,20 +284,25 @@ export function startPersistingQueryCache(
       return;
     }
 
-    void idbSet(payload).catch((err) => {
-      // Don't silently swallow a full-disk failure: a quota error means the
-      // offline cache stopped updating, and a clear signal beats a stale
-      // snapshot the user can't explain. Drop the persisted blob so the next
-      // flush has room rather than failing again against a full store.
-      if (isQuotaError(err)) {
-        console.warn(
-          "[query-persister] IndexedDB quota exceeded; dropping persisted cache",
-        );
-        void clearPersistedQueryCache();
-        return;
-      }
-      console.warn("[query-persister] persist failed", err);
-    });
+    // Registered so the test suite can await it: the warns below are console
+    // writes on a detached handle, and one that lands while a vitest worker is
+    // closing its RPC channel fails the whole run. No-op outside test.
+    trackBackgroundTask(
+      idbSet(payload).catch((err) => {
+        // Don't silently swallow a full-disk failure: a quota error means the
+        // offline cache stopped updating, and a clear signal beats a stale
+        // snapshot the user can't explain. Drop the persisted blob so the next
+        // flush has room rather than failing again against a full store.
+        if (isQuotaError(err)) {
+          console.warn(
+            "[query-persister] IndexedDB quota exceeded; dropping persisted cache",
+          );
+          void clearPersistedQueryCache();
+          return;
+        }
+        console.warn("[query-persister] persist failed", err);
+      }),
+    );
   };
 
   const unsubscribe = queryClient.getQueryCache().subscribe(() => {

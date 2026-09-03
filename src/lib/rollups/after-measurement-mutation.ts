@@ -23,6 +23,7 @@ import {
   recomputeBucketsForMeasurement,
 } from "@/lib/rollups/measurement-rollups";
 import { invalidateStatusInsightsForTypes } from "@/lib/insights/status-invalidation";
+import { trackBackgroundTask } from "@/lib/logging/background-tasks";
 import type { MeasurementType } from "@/generated/prisma/client";
 
 export async function afterMeasurementMutation(
@@ -48,8 +49,13 @@ export async function afterMeasurementMutation(
   // the rollup leg above failed, so the two legs never gate each other.
   const types = Array.from(new Set(keys.map((k) => k.type)));
   if (types.length > 0) {
-    invalidateStatusInsightsForTypes(userId, types).catch((err) => {
-      console.warn(`[${label}] status-insight invalidate failed`, err);
-    });
+    // Registered so the test suite can await it: the warn below is a console
+    // write on a detached handle, and one that lands while a vitest worker is
+    // closing its RPC channel fails the whole run. No-op outside test.
+    trackBackgroundTask(
+      invalidateStatusInsightsForTypes(userId, types).catch((err) => {
+        console.warn(`[${label}] status-insight invalidate failed`, err);
+      }),
+    );
   }
 }
