@@ -1,5 +1,58 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **Twenty-eight settings a self-hoster could write down but not actually
+  change.** The `environment:` block in `docker-compose.yml` is a whitelist:
+  compose reads `.env` for `${VAR}` substitution, so a value set there looks
+  configured, but a variable the block does not name never reaches the app.
+  Everything below was read by the server and missing from that list, so the
+  default silently stood no matter what was in `.env`. Now forwarded, each
+  with a line in `.env.production.example` saying what it does and when to
+  reach for it: `DEMO_MODE`; the four log knobs (`LOG_LEVEL`,
+  `LOG_SAMPLE_RATE`, `LOG_SLOW_THRESHOLD_MS`, `LOG_INCLUDE_STACK`) and log
+  shipping (`LOKI_ENDPOINT`, `LOKI_USERNAME`, `LOKI_PASSWORD`);
+  `DATABASE_STATEMENT_TIMEOUT_MS`; four retention and alerting windows
+  (`COACH_MESSAGE_RETENTION_DAYS`, `HOST_METRIC_RETENTION_DAYS`,
+  `DENSE_INTRADAY_RETENTION_ENABLED`, `INTEGRATION_FAILURE_ALERT_THRESHOLD`);
+  `TELEGRAM_WEBHOOK_SECRET`; `NIGHTSCOUT_PRIVATE_ORIGINS`; the three callback
+  overrides `WITHINGS_REDIRECT_URI`, `FITBIT_REDIRECT_URI` and
+  `GOOGLE_HEALTH_REDIRECT_URI`; both Open-Meteo endpoints;
+  `ADMIN_AI_BASE_URL_ALLOWLIST`, `CODEX_MODEL`, `CODEX_MODEL_FALLBACK_CHAIN`
+  and `COACH_EXPERIMENT_VERDICT`; `APNS_KEY`, `APNS_KEY_FILE` and
+  `APNS_PRODUCTION`; and `DASHBOARD_SSR_PREFETCH`. The Coach retention window
+  matters twice over — the Data & Privacy page quotes it back to the user, so
+  an instance keeping conversations for 90 days now says 90 instead of
+  repeating the default. A Codex slug rotation is likewise something an
+  operator can now ride out by pinning a model, rather than waiting for a
+  release.
+- **`APNS_KEY` and `APNS_KEY_FILE` work where the documentation always said
+  they did.** The example file and the manifest both describe a precedence
+  chain of `APNS_KEY_B64` before `APNS_KEY` before `APNS_KEY_FILE`, but only
+  the first ever reached the container, so an operator who chose either of the
+  other two got a silently disabled APNs and no explanation.
+- **The Web Push key loader no longer advertises names it cannot read.** Six
+  `WEB_PUSH_*` aliases and a `NEXT_PUBLIC_VAPID_PUBLIC_KEY` one sat behind the
+  three real `VAPID_*` variables. None was ever on the compose whitelist and
+  none appeared in any example file, so under the bundled stack a value set
+  under those names could not arrive — an escape hatch that had never been
+  open. They are gone, and the self-hosting guide no longer mentions them. The
+  VAPID section of the example file also carried a note saying the three real
+  names were absent from the whitelist; they have been on it since v1.17.1.
+- **A test now answers the question instead of a comment on each entry.** The
+  whitelist is derived from the compose file and the read set from the source
+  — including the four modules that resolve a variable name through a helper,
+  which a plain search for `process.env.` does not see at all. A variable read
+  without being forwarded fails the build unless it carries a written reason
+  why forwarding it would be wrong. Thirteen do: build stamps, values the
+  runtime supplies, two spellings of a knob that already reaches the container
+  through `DATABASE_URL`, three that only ever run in CI, and the dashboard
+  snapshot flag, which is compiled into the client bundle and so cannot be
+  steered from a running container at all. This is the second time the class
+  has shipped; v1.5.2 closed one instance of it by hand.
+
 ## [1.38.4] — 2026-09-02
 
 The shared AI key reaches the provider its address names, and the image
