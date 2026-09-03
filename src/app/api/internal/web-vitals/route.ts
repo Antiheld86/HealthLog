@@ -44,28 +44,30 @@ import { annotate } from "@/lib/logging/context";
 import { getClientIp } from "@/lib/api-response";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 
-const webVitalsBodySchema = z.object({
-  // Locked to the web-vitals library's documented metric identifiers.
-  // FCP is included for parity with the iOS WebView client; INP super-
-  // sedes FID under the new Core Web Vitals contract.
-  name: z.enum(["CLS", "LCP", "FID", "INP", "TTFB", "FCP"]),
-  value: z.number().finite(),
-  // Web Vitals client builds `id` from `${navigation-uuid}-${index}`
-  // — bounded length keeps a hostile peer from logging arbitrary text
-  // under the identifier slot.
-  id: z.string().max(50),
-  delta: z.number().finite().optional(),
-  rating: z.enum(["good", "needs-improvement", "poor"]).optional(),
-  navigationType: z
-    .enum([
-      "navigate",
-      "reload",
-      "back-forward",
-      "back-forward-cache",
-      "prerender",
-    ])
-    .optional(),
-});
+const webVitalsBodySchema = z
+  .object({
+    // Locked to the web-vitals library's documented metric identifiers.
+    // FCP is included for parity with the iOS WebView client; INP super-
+    // sedes FID under the new Core Web Vitals contract.
+    name: z.enum(["CLS", "LCP", "FID", "INP", "TTFB", "FCP"]),
+    value: z.number().finite(),
+    // Web Vitals client builds `id` from `${navigation-uuid}-${index}`
+    // — bounded length keeps a hostile peer from logging arbitrary text
+    // under the identifier slot.
+    id: z.string().max(50),
+    delta: z.number().finite().optional(),
+    rating: z.enum(["good", "needs-improvement", "poor"]).optional(),
+    navigationType: z
+      .enum([
+        "navigate",
+        "reload",
+        "back-forward",
+        "back-forward-cache",
+        "prerender",
+      ])
+      .optional(),
+  })
+  .strict();
 
 function isSameOriginReferer(request: NextRequest): boolean {
   // When `NEXT_PUBLIC_APP_URL` is unset (test / unconfigured dev) skip

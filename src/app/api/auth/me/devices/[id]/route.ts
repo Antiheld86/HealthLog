@@ -45,9 +45,11 @@ interface RouteContext {
  * v1.7.0 — per-device medication-delivery override. NULL clears the
  * override (the device inherits the user-level roaming default).
  */
-const devicePatchSchema = z.object({
-  medicationDelivery: deviceDeliverySchema,
-});
+const devicePatchSchema = z
+  .object({
+    medicationDelivery: deviceDeliverySchema,
+  })
+  .strict();
 
 export const PATCH = apiHandler(
   async (request: NextRequest, context: RouteContext) => {

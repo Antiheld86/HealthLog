@@ -46,12 +46,14 @@ import { afterMeasurementMutation } from "@/lib/rollups/after-measurement-mutati
 
 const MAX_BATCH_ENTRIES = 500;
 
-const payloadSchema = z.object({
-  externalIds: z
-    .array(z.string().min(1).max(120))
-    .min(0)
-    .max(MAX_BATCH_ENTRIES),
-});
+const payloadSchema = z
+  .object({
+    externalIds: z
+      .array(z.string().min(1).max(120))
+      .min(0)
+      .max(MAX_BATCH_ENTRIES),
+  })
+  .strict();
 
 export const DELETE = apiHandler(deleteByExternalIds);
 

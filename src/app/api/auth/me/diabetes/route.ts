@@ -32,9 +32,11 @@ import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 
-const patchBodySchema = z.object({
-  hasDiabetes: z.boolean(),
-});
+const patchBodySchema = z
+  .object({
+    hasDiabetes: z.boolean(),
+  })
+  .strict();
 
 export const dynamic = "force-dynamic";
 

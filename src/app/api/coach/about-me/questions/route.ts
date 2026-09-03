@@ -22,10 +22,12 @@ import {
 } from "@/lib/ai/coach/about-me";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 
-const dismissSchema = z.object({
-  /** Exact question text to dismiss. Omitted = dismiss all. */
-  question: z.string().max(PENDING_QUESTION_MAX_CHARS).optional(),
-});
+const dismissSchema = z
+  .object({
+    /** Exact question text to dismiss. Omitted = dismiss all. */
+    question: z.string().max(PENDING_QUESTION_MAX_CHARS).optional(),
+  })
+  .strict();
 
 export const GET = apiHandler(async () => {
   const { user } = await requireAuth();

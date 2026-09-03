@@ -7,14 +7,16 @@ import { sendGlitchtipEvent } from "@/lib/monitoring/glitchtip";
 import { apiHandler } from "@/lib/api-handler";
 import { annotate, getEvent } from "@/lib/logging/context";
 
-const clientErrorSchema = z.object({
-  message: z.string().min(1).max(2000),
-  stack: z.string().max(20000).optional(),
-  level: z.enum(["error", "warning", "info"]).optional(),
-  type: z.string().max(120).optional(),
-  url: z.string().max(2000).optional(),
-  userAgent: z.string().max(1000).optional(),
-});
+const clientErrorSchema = z
+  .object({
+    message: z.string().min(1).max(2000),
+    stack: z.string().max(20000).optional(),
+    level: z.enum(["error", "warning", "info"]).optional(),
+    type: z.string().max(120).optional(),
+    url: z.string().max(2000).optional(),
+    userAgent: z.string().max(1000).optional(),
+  })
+  .strict();
 
 export const POST = apiHandler(async (request: NextRequest) => {
   annotate({ action: { name: "monitoring.glitchtip.report" } });

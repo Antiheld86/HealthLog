@@ -33,7 +33,7 @@ import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 
-const patchBodySchema = z.object({ disableCoach: z.boolean() });
+const patchBodySchema = z.object({ disableCoach: z.boolean() }).strict();
 
 export const dynamic = "force-dynamic";
 

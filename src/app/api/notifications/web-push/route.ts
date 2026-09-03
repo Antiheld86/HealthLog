@@ -15,9 +15,11 @@ import { z } from "zod/v4";
 // the same check again at egress time as defence-in-depth.
 const subscribeSchema = webPushSubscriptionSchema;
 
-const unsubscribeSchema = z.object({
-  endpoint: z.string().url(),
-});
+const unsubscribeSchema = z
+  .object({
+    endpoint: z.string().url(),
+  })
+  .strict();
 
 /*
  * Both parses below answer with the multi-issue envelope, like every other

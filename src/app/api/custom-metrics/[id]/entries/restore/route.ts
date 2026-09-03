@@ -30,9 +30,11 @@ import { annotate } from "@/lib/logging/context";
 
 const MAX_IDS_PER_BATCH = 200;
 
-const restoreSchema = z.object({
-  ids: z.array(z.string().min(1)).min(1).max(MAX_IDS_PER_BATCH),
-});
+const restoreSchema = z
+  .object({
+    ids: z.array(z.string().min(1)).min(1).max(MAX_IDS_PER_BATCH),
+  })
+  .strict();
 
 type RouteParams = { params: Promise<{ id: string }> };
 

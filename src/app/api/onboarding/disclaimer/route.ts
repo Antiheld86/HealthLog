@@ -19,12 +19,14 @@ import { DISCLAIMER_VERSION } from "@/lib/onboarding/disclaimer";
  * privacy page. Never auto-set; the onboarding welcome step is the one writer.
  */
 
-const bodySchema = z.object({
-  // Echoed back from the client so a stale shell cannot silently record an
-  // acknowledgment of copy it never rendered. Bounded; the server pins the
-  // canonical version it persists regardless.
-  version: z.string().min(1).max(64),
-});
+const bodySchema = z
+  .object({
+    // Echoed back from the client so a stale shell cannot silently record an
+    // acknowledgment of copy it never rendered. Bounded; the server pins the
+    // canonical version it persists regardless.
+    version: z.string().min(1).max(64),
+  })
+  .strict();
 
 export const POST = apiHandler(async (request) => {
   const { user } = await requireAuth();

@@ -77,24 +77,28 @@ export const GET = apiHandler(async () => {
   });
 });
 
-const chainEntrySchema = z.object({
-  providerType: z.enum(
-    PROVIDER_CHAIN_TYPES as unknown as [string, ...string[]],
-  ),
-  // Priority is recomputed server-side from insertion order so a stale
-  // client cannot persist a chain whose displayed order disagrees with
-  // its priority field. The number is accepted (and may be present) but
-  // ignored on the wire.
-  priority: z.number().int().optional(),
-  enabled: z.boolean(),
-});
+const chainEntrySchema = z
+  .object({
+    providerType: z.enum(
+      PROVIDER_CHAIN_TYPES as unknown as [string, ...string[]],
+    ),
+    // Priority is recomputed server-side from insertion order so a stale
+    // client cannot persist a chain whose displayed order disagrees with
+    // its priority field. The number is accepted (and may be present) but
+    // ignored on the wire.
+    priority: z.number().int().optional(),
+    enabled: z.boolean(),
+  })
+  .strict();
 
-const chainBodySchema = z.object({
-  chain: z
-    .array(chainEntrySchema)
-    .min(1, "Chain must contain at least one provider")
-    .max(PROVIDER_CHAIN_TYPES.length, "Too many providers"),
-});
+const chainBodySchema = z
+  .object({
+    chain: z
+      .array(chainEntrySchema)
+      .min(1, "Chain must contain at least one provider")
+      .max(PROVIDER_CHAIN_TYPES.length, "Too many providers"),
+  })
+  .strict();
 
 export const PUT = apiHandler(async (request: NextRequest) => {
   const { user } = await requireAuth();
