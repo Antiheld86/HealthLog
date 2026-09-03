@@ -18,6 +18,12 @@ import { formatDateTime } from "@/lib/format";
  * read the database. The card shows one row per provider type: how many
  * users' chains touch it, how many of them are currently failing, the worst
  * uninterrupted failure run, and the last success / failure instants.
+ *
+ * The failure line also carries the HTTP status the ledger recorded for that
+ * failure, because "failing" on its own does not say whose problem it is. A
+ * 401 is a dead credential and waiting will not fix it; a 429 or a 503 is the
+ * provider's day and waiting is exactly right. Absent for a network-class
+ * failure, which never had a status to record.
  */
 
 interface ProviderHealthRow {
@@ -27,6 +33,7 @@ interface ProviderHealthRow {
   maxConsecutiveFailures: number;
   lastOkAt: string | null;
   lastFailureAt: string | null;
+  lastFailureStatus: number | null;
 }
 
 export function ProviderHealthSection() {
@@ -104,6 +111,13 @@ export function ProviderHealthSection() {
                   {p.failing > 0 && p.lastFailureAt
                     ? ` · ${t("admin.providerHealth.lastFailure", {
                         at: formatDateTime(p.lastFailureAt),
+                      })}`
+                    : ""}
+                  {p.failing > 0 &&
+                  p.lastFailureAt &&
+                  p.lastFailureStatus !== null
+                    ? ` · ${t("admin.providerHealth.lastFailureStatus", {
+                        status: p.lastFailureStatus,
                       })}`
                     : ""}
                 </span>

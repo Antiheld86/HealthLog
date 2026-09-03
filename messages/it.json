@@ -6501,6 +6501,7 @@
       "trackedUsers": "{count} utenti tracciati",
       "lastOk": "ultimo successo {at}",
       "lastFailure": "ultimo errore {at}",
+      "lastFailureStatus": "HTTP {status}",
       "statusHealthy": "Regolare",
       "statusFailing": "{failing} su {tracked} in errore, {run} di fila",
       "typeAdminOpenai": "Chiave del server (operatore)",

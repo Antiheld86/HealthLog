@@ -5,6 +5,11 @@
  * provider type, failing counted from the LAST result only, the worst
  * uninterrupted failure run taken across failing users, central types
  * sorted first, and no per-user data in the response.
+ *
+ * It also pins the HTTP status the ledger has recorded on every failure
+ * since v1.11.0 and nothing read until now: it must describe the SAME
+ * failure the row's instant names, or the card tells the operator to go
+ * looking at the wrong thing.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
@@ -49,11 +54,13 @@ function group(
     consecutiveFailures?: number;
     lastFailureAt?: Date | null;
     lastOkAt?: Date | null;
+    lastStatus?: number | null;
   } = {},
 ) {
   return {
     providerType,
     lastResult,
+    lastStatus: max.lastStatus ?? null,
     _count: { _all: count },
     _max: {
       consecutiveFailures: max.consecutiveFailures ?? 0,
@@ -86,6 +93,7 @@ describe("GET /api/admin/provider-health", () => {
       group("admin-openai", "hard_failed", 2, {
         consecutiveFailures: 3334,
         lastFailureAt: new Date("2026-08-27T06:00:00Z"),
+        lastStatus: 503,
       }),
     ] as never);
 
@@ -99,8 +107,62 @@ describe("GET /api/admin/provider-health", () => {
         maxConsecutiveFailures: 3334,
         lastOkAt: "2026-08-27T07:00:00.000Z",
         lastFailureAt: "2026-08-27T06:00:00.000Z",
+        lastFailureStatus: 503,
       },
     ]);
+  });
+
+  it("reports the status of the newest failure, not the highest number", async () => {
+    // A 500 an hour ago and a 401 a minute ago: the operator needs the
+    // 401, because that is the one that will not clear on its own. Taking
+    // a MAX over the column would hand back the 500.
+    groupBy.mockResolvedValue([
+      group("openai", "hard_failed", 4, {
+        consecutiveFailures: 2,
+        lastFailureAt: new Date("2026-08-27T05:00:00Z"),
+        lastStatus: 500,
+      }),
+      group("openai", "auth_failed", 1, {
+        consecutiveFailures: 1,
+        lastFailureAt: new Date("2026-08-27T06:59:00Z"),
+        lastStatus: 401,
+      }),
+    ] as never);
+
+    const res = await GET();
+    const body = await res.json();
+    expect(body.data.providers[0]).toMatchObject({
+      lastFailureAt: "2026-08-27T06:59:00.000Z",
+      lastFailureStatus: 401,
+    });
+  });
+
+  it("leaves the status out for a network-class failure that never had one", async () => {
+    groupBy.mockResolvedValue([
+      group("local", "hard_failed", 1, {
+        consecutiveFailures: 9,
+        lastFailureAt: new Date("2026-08-27T06:00:00Z"),
+        lastStatus: null,
+      }),
+    ] as never);
+
+    const res = await GET();
+    const body = await res.json();
+    expect(body.data.providers[0]).toMatchObject({
+      lastFailureAt: "2026-08-27T06:00:00.000Z",
+      lastFailureStatus: null,
+    });
+  });
+
+  it("asks the ledger to split the fold by status rather than aggregate it", async () => {
+    groupBy.mockResolvedValue([] as never);
+    await GET();
+
+    expect(groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        by: ["providerType", "lastResult", "lastStatus"],
+      }),
+    );
   });
 
   it("counts auth_failed as failing and keeps an all-ok type at zero", async () => {

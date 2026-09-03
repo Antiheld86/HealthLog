@@ -6501,6 +6501,7 @@
       "trackedUsers": "Śledzeni użytkownicy: {count}",
       "lastOk": "ostatni sukces {at}",
       "lastFailure": "ostatnia awaria {at}",
+      "lastFailureStatus": "HTTP {status}",
       "statusHealthy": "Sprawny",
       "statusFailing": "{failing} z {tracked} zawodzi, {run} z rzędu",
       "typeAdminOpenai": "Klucz serwera (operator)",

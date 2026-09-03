@@ -6501,6 +6501,7 @@
       "trackedUsers": "{count} users tracked",
       "lastOk": "last success {at}",
       "lastFailure": "last failure {at}",
+      "lastFailureStatus": "HTTP {status}",
       "statusHealthy": "Healthy",
       "statusFailing": "{failing} of {tracked} failing, {run} in a row",
       "typeAdminOpenai": "Server key (operator)",

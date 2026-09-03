@@ -5070,7 +5070,13 @@ model ProviderHealth {
   userId              String    @map("user_id")
   providerType        String    @map("provider_type") // ProviderChainType tag
   lastResult          String    @map("last_result") // "ok" | "hard_failed" | "auth_failed"
-  lastStatus          Int?      @map("last_status") // HTTP status of the last failure; null on ok/network
+  /// HTTP status the last failure came back with; null on a success and on
+  /// a network-class failure that never had a response to read one from.
+  /// Consumer: the operator readout (`src/app/api/admin/provider-health/
+  /// route.ts`), which carries it beside the failure instant it belongs to —
+  /// it is what separates a dead credential the operator has to replace from
+  /// a provider having a bad afternoon.
+  lastStatus          Int?      @map("last_status")
   consecutiveFailures Int       @default(0) @map("consecutive_failures")
   lastOkAt            DateTime? @map("last_ok_at")
   lastFailureAt       DateTime? @map("last_failure_at")
