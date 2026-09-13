@@ -10389,7 +10389,7 @@
       "accessManageLabel": "Puede gestionar",
       "accessManageCapability": "Puede añadir, cambiar y eliminar entradas, incluidas las que has escrito tú.",
       "accessManageDetail": "También puede leer los análisis generados a partir de tu ficha. No puede cambiar tu inicio de sesión, tus ajustes de seguridad, tus servicios conectados ni quién más tiene acceso. Puedes terminarlo cuando quieras.",
-      "manageStepUpNote": "Ofrecerlo pide tu segundo factor, así que solo se puede hacer en un navegador.",
+      "manageStepUpNote": "Solo se puede hacer en un navegador, y pide tu segundo factor si tienes uno.",
       "scopeLegend": "Qué puede abrir",
       "scopeAllLabel": "Todo el historial",
       "scopeAllCapability": "Todas sus partes, tal y como ha funcionado siempre el uso compartido.",
@@ -10413,7 +10413,7 @@
       "errorRateLimited": "Demasiadas invitaciones. Inténtalo más tarde.",
       "errorFailed": "No se pudo enviar la invitación. Inténtalo de nuevo.",
       "errorScope": "Esas secciones no se pueden compartir así. Elige al menos una sección o comparte todo el historial.",
-      "errorManageBrowserOnly": "El acceso de gestión solo se puede ofrecer desde un navegador, porque pide tu segundo factor.",
+      "errorManageBrowserOnly": "El acceso de gestión solo se puede ofrecer desde un navegador.",
       "errorStepUp": "Confirma tu segundo factor y vuelve a intentarlo.",
       "errorOffline": "Esto no llegó al servidor. Tu invitación sigue aquí: comprueba tu conexión e inténtalo de nuevo."
     },

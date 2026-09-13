@@ -10389,7 +10389,7 @@
       "accessManageLabel": "관리 가능",
       "accessManageCapability": "내가 직접 입력한 것까지 포함해 기록을 추가·수정·삭제할 수 있어요.",
       "accessManageDetail": "내 기록에서 만들어진 인사이트도 볼 수 있어요. 내 로그인, 보안 설정, 연동, 다른 사람의 권한은 바꿀 수 없어요. 언제든 이 권한을 끝낼 수 있어요.",
-      "manageStepUpNote": "이 권한을 주려면 2단계 인증이 필요해서 브라우저에서만 할 수 있어요.",
+      "manageStepUpNote": "브라우저에서만 할 수 있고, 2단계 인증을 설정했다면 인증을 요청해요.",
       "scopeLegend": "상대가 열 수 있는 범위",
       "scopeAllLabel": "기록 전체",
       "scopeAllCapability": "기록의 모든 부분. 지금까지의 공유 방식 그대로예요.",
@@ -10413,7 +10413,7 @@
       "errorRateLimited": "초대가 너무 많아요. 잠시 후 다시 시도해 주세요.",
       "errorFailed": "초대를 보내지 못했어요. 다시 시도해 주세요.",
       "errorScope": "그 섹션들은 그렇게 공유할 수 없어요. 섹션을 하나 이상 고르거나 기록 전체를 공유하세요.",
-      "errorManageBrowserOnly": "관리 권한은 2단계 인증이 필요해서 브라우저에서만 줄 수 있어요.",
+      "errorManageBrowserOnly": "관리 권한은 브라우저에서만 줄 수 있어요.",
       "errorStepUp": "2단계 인증을 확인한 뒤 다시 시도해 주세요.",
       "errorOffline": "서버에 닿지 못했어요. 초대 내용은 그대로 있으니 연결을 확인하고 다시 시도해 주세요."
     },

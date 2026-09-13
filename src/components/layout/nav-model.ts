@@ -20,6 +20,12 @@ import {
 } from "lucide-react";
 
 import type { ModuleKey } from "@/lib/modules/registry";
+// The leaf module, not the `@/lib/record-settings` barrel, for the reason
+// `auth-shell.tsx` gives: the barrel drags server-side schemas into the chrome.
+import {
+  recordSettingsLandingDestination,
+  type SettingsRecordContext,
+} from "@/lib/record-settings/classification";
 import { isSharedRecordPathPresentable } from "@/lib/navigation/shared-record";
 import type { ShareDomain } from "@/lib/sharing/scope";
 
@@ -277,19 +283,18 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
 /**
  * v1.17.1 (F-1 residue) — the shared UTILITY tail.
  *
- * Settings and Notifications are reachable on both bars but are not feature
- * destinations: on desktop they live in the sidebar footer + avatar menu, on
- * mobile at the tail of the "More" hub. They used to be a second hand-curated
- * list on each bar — the exact drift the one-model contract above set out to
- * kill, just pushed down a level. This list is the single source both bars
- * consume for the tail, so the two surfaces can no longer disagree on which
- * utility links exist or in which order.
+ * Settings and Notifications are account utilities, not feature destinations:
+ * on desktop they live in the sidebar footer + avatar menu, on mobile in the
+ * top-bar user menu (UI-STANDARDS §10; the More hub carries features only).
+ * They used to be a second hand-curated list on each bar — the exact drift the
+ * one-model contract above set out to kill, just pushed down a level. This
+ * list is the single source both bars consume, so the two surfaces can no
+ * longer disagree on which utility links exist or in which order.
  *
- * Order is the footer/hub order: Settings → Notifications.
+ * Order is the footer/menu order: Settings → Notifications.
  *
- * Admin is intentionally NOT here: it is a role-gated, desktop-sidebar-only
- * surface (the mobile bar never exposes it), so it is not a shared tail
- * destination and stays local to the sidebar.
+ * Admin is intentionally NOT here: it is a role-gated surface that never
+ * appears under a switch, so it stays local to each bar.
  */
 export interface NavUtilityDestination {
   href: string;
@@ -303,21 +308,41 @@ export const NAV_UTILITY_DESTINATIONS: ReadonlyArray<NavUtilityDestination> = [
   { href: "/notifications", tKey: "nav.notifications", icon: Bell },
 ];
 
+/** Is this utility entry the Settings door, wherever it lands. */
+export function isSettingsUtilityDestination(
+  d: Pick<NavUtilityDestination, "href">,
+): boolean {
+  return d.href.startsWith("/settings/");
+}
+
 /**
- * The utility tail visible to this account. Both bars consume this for their
- * tail (the sidebar footer + avatar menu, the bottom-nav More hub) so the two
- * surfaces share one definition of the utility links.
+ * The utility tail visible to this session. Both bars consume it, so the
+ * sidebar footer and the mobile user menu share one definition.
+ *
+ * `record` is the shared record the browser is acting on, as its
+ * server-resolved kind and grant level; absent or null is one's own record.
+ *
+ * Under a switch, Notifications is never offered: it is the delegate's own
+ * device business, and its routes refuse. Settings is offered exactly when
+ * the Settings shell would list at least one section for that record, and
+ * it lands on the first section the shell lists — a managed profile at MANAGE
+ * opens on its profile card, an adult share at MANAGE on the anamnesis page.
+ * Both answers come from `recordSettingsLandingDestination`, which reads the
+ * predicate the shell filters its own list with, so the entry cannot lead to
+ * a page the shell refuses and cannot be missing where the shell has pages.
+ * Every other shared context — READ, WRITE, a refused or pending switch —
+ * gets no utility at all.
  */
 export function visibleUtilityDestinations(
-  opts: { sharedRecord?: boolean } = {},
+  opts: { record?: SettingsRecordContext | null } = {},
 ): NavUtilityDestination[] {
-  // v1.36.0 — the utility tail is account configuration by definition:
-  // Settings holds credentials, integrations, notification channels and grant
-  // management, and Notifications is the delegate's own device business. Every
-  // route behind both refuses under a switch; the tail simply stops being
-  // offered so nobody walks into the refusal.
-  if (opts.sharedRecord) return [];
-  return [...NAV_UTILITY_DESTINATIONS];
+  const record = opts.record ?? null;
+  if (record === null) return [...NAV_UTILITY_DESTINATIONS];
+  const landing = recordSettingsLandingDestination(record);
+  if (landing === null) return [];
+  return NAV_UTILITY_DESTINATIONS.filter(isSettingsUtilityDestination).map(
+    (d) => ({ ...d, href: `/settings/${landing}` }),
+  );
 }
 
 /**

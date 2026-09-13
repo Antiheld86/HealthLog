@@ -10389,7 +10389,7 @@
       "accessManageLabel": "Può gestire",
       "accessManageCapability": "Può aggiungere, modificare ed eliminare voci, comprese quelle inserite da te.",
       "accessManageDetail": "Può anche leggere le analisi generate dalla tua cartella. Non può cambiare il tuo accesso, le tue impostazioni di sicurezza, i tuoi servizi collegati né chi altro ha accesso. Puoi terminare tutto questo in qualsiasi momento.",
-      "manageStepUpNote": "Per offrirlo viene richiesto il tuo secondo fattore, quindi si può fare solo da browser.",
+      "manageStepUpNote": "Si può fare solo da browser, e viene richiesto il tuo secondo fattore se ne hai uno.",
       "scopeLegend": "Che cosa può aprire",
       "scopeAllLabel": "Intera cartella",
       "scopeAllCapability": "Ogni sua parte, come la condivisione ha sempre funzionato.",
@@ -10413,7 +10413,7 @@
       "errorRateLimited": "Troppi inviti. Riprova più tardi.",
       "errorFailed": "Non è stato possibile inviare l'invito. Riprova.",
       "errorScope": "Queste sezioni non si possono condividere così. Scegli almeno una sezione oppure condividi l'intera cartella.",
-      "errorManageBrowserOnly": "L'accesso di gestione si può offrire solo da un browser, perché richiede il tuo secondo fattore.",
+      "errorManageBrowserOnly": "L'accesso di gestione si può offrire solo da un browser.",
       "errorStepUp": "Conferma il tuo secondo fattore e riprova.",
       "errorOffline": "La richiesta non ha raggiunto il server. Il tuo invito è ancora qui: controlla la connessione e riprova."
     },

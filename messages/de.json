@@ -10389,7 +10389,7 @@
       "accessManageLabel": "Darf verwalten",
       "accessManageCapability": "Sie kann Einträge anlegen, ändern und löschen, auch solche, die du selbst erfasst hast.",
       "accessManageDetail": "Sie kann außerdem die daraus erzeugten Auswertungen lesen. Deine Anmeldung, deine Sicherheitseinstellungen, deine Verbindungen und den Zugriff anderer Personen kann sie nicht ändern. Du kannst das jederzeit beenden.",
-      "manageStepUpNote": "Dafür wird dein zweiter Faktor abgefragt, deshalb geht das nur im Browser.",
+      "manageStepUpNote": "Das geht nur im Browser, und falls du einen zweiten Faktor eingerichtet hast, wird er abgefragt.",
       "scopeLegend": "Was die Person öffnen darf",
       "scopeAllLabel": "Gesamte Akte",
       "scopeAllCapability": "Jeder Teil davon, so wie das Teilen bisher funktioniert hat.",
@@ -10413,7 +10413,7 @@
       "errorRateLimited": "Zu viele Einladungen. Bitte später noch einmal versuchen.",
       "errorFailed": "Die Einladung konnte nicht gesendet werden. Bitte noch einmal versuchen.",
       "errorScope": "So lassen sich diese Bereiche nicht teilen. Wähle mindestens einen Bereich aus oder teile die gesamte Akte.",
-      "errorManageBrowserOnly": "Verwaltenden Zugriff kannst du nur im Browser vergeben, weil dabei dein zweiter Faktor abgefragt wird.",
+      "errorManageBrowserOnly": "Verwaltenden Zugriff kannst du nur im Browser vergeben.",
       "errorStepUp": "Bestätige deinen zweiten Faktor und versuche es erneut.",
       "errorOffline": "Das hat den Server nicht erreicht. Deine Einladung steht noch hier — prüfe deine Verbindung und versuche es erneut."
     },

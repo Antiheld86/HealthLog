@@ -10389,7 +10389,7 @@
       "accessManageLabel": "Peut gérer",
       "accessManageCapability": "Elle peut ajouter, modifier et supprimer des entrées, y compris celles que vous avez saisies vous-même.",
       "accessManageDetail": "Elle peut aussi lire les analyses tirées de votre dossier. Elle ne peut modifier ni votre connexion, ni vos paramètres de sécurité, ni vos services connectés, ni la liste des personnes qui ont accès. Vous pouvez y mettre fin à tout moment.",
-      "manageStepUpNote": "Cette offre demande votre deuxième facteur, elle n'est donc possible que dans un navigateur.",
+      "manageStepUpNote": "Cette offre n'est possible que dans un navigateur, et demande votre deuxième facteur si vous en avez un.",
       "scopeLegend": "Ce que cette personne peut ouvrir",
       "scopeAllLabel": "Dossier complet",
       "scopeAllCapability": "Toutes ses parties, comme le partage a toujours fonctionné.",
@@ -10413,7 +10413,7 @@
       "errorRateLimited": "Trop d'invitations. Veuillez réessayer plus tard.",
       "errorFailed": "L'invitation n'a pas pu être envoyée. Veuillez réessayer.",
       "errorScope": "Ces rubriques ne peuvent pas être partagées ainsi. Choisissez au moins une rubrique, ou partagez le dossier complet.",
-      "errorManageBrowserOnly": "Un accès de gestion ne peut être proposé que depuis un navigateur, car il demande votre deuxième facteur.",
+      "errorManageBrowserOnly": "Un accès de gestion ne peut être proposé que depuis un navigateur.",
       "errorStepUp": "Confirmez votre deuxième facteur, puis réessayez.",
       "errorOffline": "Cela n'a pas atteint le serveur. Votre invitation est toujours là — vérifiez votre connexion et réessayez."
     },
