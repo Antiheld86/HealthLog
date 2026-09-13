@@ -13,24 +13,26 @@ Migrations land **before** the new app container takes traffic. The
 canonical command sequence on a single-instance host:
 
 ```sh
-# 1. Pull the new image.
-docker pull ghcr.io/mbombeck/healthlog:vX.Y.Z
+# 1. Pull the new image. If you pin a version with HEALTHLOG_IMAGE_REF,
+#    set it to the new one first.
+docker compose pull app
 
-# 2. Run migrations against the live DB using the new image. The
-#    production image strips pnpm/npm; use the entrypoint's node
-#    invocation of the bundled Prisma CLI instead.
-docker run --rm --env-file .env.production \
-  ghcr.io/mbombeck/healthlog:vX.Y.Z \
-  sh -c 'NODE_PATH=/opt/prisma-cli/node_modules node /opt/prisma-cli/node_modules/prisma/build/index.js migrate deploy'
+# 2. Run the migrations with the new image before it takes traffic. The
+#    one-off container starts inside the stack, so it reaches the database
+#    as `db` and gets the same environment as the app. Its entrypoint
+#    applies the migrations and exits; a failed migration stops here.
+docker compose run --rm app sh -c 'exit 0'
 
 # 3. Recreate the app container so it picks up the new image.
 docker compose up -d app
 ```
 
-The entrypoint also runs `prisma migrate deploy` on container boot, so
-step 2 is redundant in normal Coolify flow. It's listed explicitly for
-the manual case so an operator can verify the migration result before
-flipping traffic.
+Use `docker compose run` rather than a plain `docker run` for step 2. A
+plain `docker run` starts outside the stack's network, where `db` does not
+resolve, and the entrypoint gives up after thirty seconds with "Database
+not reachable". The entrypoint also runs the migrations on every boot, so
+step 2 is optional; it is there for when you want to see the migration
+result before the new container takes traffic.
 
 ### v1.11.0 notes
 
