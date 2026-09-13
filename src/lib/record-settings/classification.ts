@@ -1,4 +1,11 @@
-import type { SettingsSectionSlug } from "@/components/settings/section-slugs";
+import {
+  SETTINGS_SECTION_SLUGS,
+  type SettingsSectionSlug,
+} from "@/components/settings/section-slugs";
+import type {
+  AccountAccessLevel,
+  AccountRecordKind,
+} from "@/lib/sharing/account-access-view";
 
 export type SettingsDestinationKind =
   | "personal"
@@ -137,4 +144,70 @@ export function isManageDelegateSettingsDestination(
   destination: string,
 ): boolean {
   return classifySettingsDestination(destination).kind === "manage-writable";
+}
+
+/**
+ * The record a Settings listing is drawn for: the server-resolved kind of the
+ * record on screen and the level of the grant that opened it. `level` is null
+ * in one's own record and in a context the client could not prove.
+ */
+export interface SettingsRecordContext {
+  recordKind: AccountRecordKind;
+  level: AccountAccessLevel | null;
+}
+
+/**
+ * Does the Settings shell list this destination inside a shared record.
+ *
+ * The one answer both the shell's section list and the app navigation read,
+ * so the navigation cannot offer a Settings entry the shell has nothing
+ * behind, nor withhold one the shell would list.
+ *
+ *   * A managed profile at MANAGE lists its guardian configuration and the
+ *     record content a MANAGE holder may write. The guardian holds MANAGE, so
+ *     the second set is theirs as well.
+ *   * An ordinary shared record at MANAGE lists only the record content. A
+ *     delegate manages somebody's health record, not their account: modules,
+ *     thresholds and notification routing stay with the owner.
+ *   * Every other context lists nothing.
+ *
+ * Every destination on either list needs MANAGE, so the level is checked once
+ * for both record kinds. A guardian grant is always MANAGE today, which is
+ * exactly why the check was easy to leave out, and a managed entry that ever
+ * arrived below it would have listed destinations the section gate refuses.
+ *
+ * Paint only. The section gate still refuses any direct URL on its own.
+ */
+export function isSettingsDestinationListedForRecord(
+  destination: string,
+  record: SettingsRecordContext,
+): boolean {
+  if (record.level !== "manage") return false;
+  const kind = classifySettingsDestination(destination).kind;
+  if (record.recordKind === "managed") {
+    return kind === "managed-guardian" || kind === "manage-writable";
+  }
+  if (record.recordKind === "shared") return kind === "manage-writable";
+  return false;
+}
+
+/**
+ * The Settings page a navigation entry opens inside a shared record, or null
+ * when the shell would list nothing there and no entry should be offered.
+ *
+ * `order` is the order the shell lists its sections in. The navigation passes
+ * the slug registry, whose order differs from the shell's in general; the
+ * parity test in `nav-model-shared-record.test.ts` holds the first answer
+ * equal to the first section the shell actually lists, for every record kind,
+ * so a reorder on either side fails there rather than landing somebody on a
+ * page the shell does not open with.
+ */
+export function recordSettingsLandingDestination(
+  record: SettingsRecordContext,
+  order: readonly SettingsSectionSlug[] = SETTINGS_SECTION_SLUGS,
+): SettingsSectionSlug | null {
+  return (
+    order.find((slug) => isSettingsDestinationListedForRecord(slug, record)) ??
+    null
+  );
 }
