@@ -6133,6 +6133,7 @@
     },
     "testConnection": {
       "test": "Prova connessione",
+      "saveFirst": "Salva prima le modifiche. La prova usa le impostazioni salvate.",
       "testing": "Test in corso…",
       "ok": "Connesso (latenza {latency} ms)",
       "errors": {

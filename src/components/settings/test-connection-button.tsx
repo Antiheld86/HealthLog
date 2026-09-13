@@ -25,6 +25,12 @@ export interface TestConnectionButtonProps {
   disabled?: boolean;
   /** Label override for the button (defaults to settings.testConnection.test). */
   label?: string;
+  /**
+   * The card's form differs from what is saved. The test route sends through
+   * the saved config, so the button waits for a save and says so instead of
+   * testing something other than what is on screen.
+   */
+  unsavedChanges?: boolean;
 }
 
 interface TestResponse {
@@ -128,6 +134,7 @@ export function TestConnectionButton({
   endpoint,
   disabled = false,
   label,
+  unsavedChanges = false,
 }: TestConnectionButtonProps) {
   const { t } = useTranslations();
   const [testing, setTesting] = useState(false);
@@ -161,7 +168,7 @@ export function TestConnectionButton({
         size="sm"
         className="min-h-11"
         onClick={handleClick}
-        disabled={disabled || testing}
+        disabled={disabled || testing || unsavedChanges}
       >
         {testing ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />
@@ -173,7 +180,16 @@ export function TestConnectionButton({
           : (label ?? t("settings.testConnection.test"))}
       </Button>
 
-      {result?.kind === "ok" && (
+      {unsavedChanges && (
+        <p
+          data-slot="test-connection-save-first"
+          className="text-muted-foreground text-xs"
+        >
+          {t("settings.testConnection.saveFirst")}
+        </p>
+      )}
+
+      {!unsavedChanges && result?.kind === "ok" && (
         <p
           role="status"
           className="text-success flex items-center gap-1.5 text-xs"
@@ -183,7 +199,7 @@ export function TestConnectionButton({
         </p>
       )}
 
-      {result?.kind === "error" && (
+      {!unsavedChanges && result?.kind === "error" && (
         <TestConnectionFailure
           message={describeError(result.errorCode)}
           upstreamStatus={result.upstreamStatus}

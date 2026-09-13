@@ -62,11 +62,47 @@ export async function acceptAndSetUp(page: Page): Promise<void> {
   await expectScreen(page, "who");
 }
 
+/**
+ * One call on the browser's own session, sent with the page's own fetch.
+ *
+ * Every Playwright API context in the runner shares one keep-alive agent,
+ * and it can hand out a socket the server already closed on its idle
+ * timeout; the call then dies with `read ECONNRESET` and CI counts the retry
+ * as a failure. The page opens its own connection. Before the first
+ * navigation there is no origin to fetch against, so that case keeps the
+ * API context.
+ */
+async function sessionCall(
+  page: Page,
+  method: "GET" | "POST" | "PATCH",
+  path: string,
+  body?: unknown,
+): Promise<{ status: number; json: unknown }> {
+  if (!page.url().startsWith("http")) {
+    const res = await page.request.fetch(path, { method, data: body });
+    return { status: res.status(), json: await res.json().catch(() => null) };
+  }
+  return page.evaluate(
+    async ({ method, path, body }) => {
+      const res = await fetch(path, {
+        method,
+        headers:
+          body === undefined
+            ? undefined
+            : { "Content-Type": "application/json" },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      return { status: res.status, json: await res.json().catch(() => null) };
+    },
+    { method, path, body },
+  );
+}
+
 /** The account payload, as the browser's session sees it. */
 export async function readMe(page: Page): Promise<MePayload> {
-  const res = await page.request.get("/api/auth/me");
-  expect(res.status(), "reading the account payload").toBe(200);
-  return ((await res.json()) as { data: MePayload }).data;
+  const res = await sessionCall(page, "GET", "/api/auth/me");
+  expect(res.status, "reading the account payload").toBe(200);
+  return (res.json as { data: MePayload }).data;
 }
 
 export interface MePayload {
@@ -84,9 +120,9 @@ export interface MePayload {
 
 /** The dashboard layout's tile ids, in order. */
 export async function readTileOrder(page: Page): Promise<string[]> {
-  const res = await page.request.get("/api/dashboard/widgets");
-  expect(res.status(), "reading the dashboard layout").toBe(200);
-  const { data } = (await res.json()) as {
+  const res = await sessionCall(page, "GET", "/api/dashboard/widgets");
+  expect(res.status, "reading the dashboard layout").toBe(200);
+  const { data } = res.json as {
     data: { widgets: Array<{ id: string; order: number }> };
   };
   return [...data.widgets].sort((a, b) => a.order - b.order).map((w) => w.id);
@@ -94,15 +130,13 @@ export async function readTileOrder(page: Page): Promise<string[]> {
 
 /** One answer through the answers route, on the browser's own session. */
 export async function answer(page: Page, body: unknown): Promise<void> {
-  const res = await page.request.patch("/api/onboarding/answers", {
-    data: body,
-  });
-  expect(res.status(), `answering ${JSON.stringify(body)}`).toBe(200);
+  const res = await sessionCall(page, "PATCH", "/api/onboarding/answers", body);
+  expect(res.status, `answering ${JSON.stringify(body)}`).toBe(200);
 }
 
 export async function complete(page: Page): Promise<void> {
-  const res = await page.request.post("/api/onboarding/complete", { data: {} });
-  expect(res.status(), "completing the flow").toBe(200);
+  const res = await sessionCall(page, "POST", "/api/onboarding/complete", {});
+  expect(res.status, "completing the flow").toBe(200);
 }
 
 /**
