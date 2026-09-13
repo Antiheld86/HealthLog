@@ -191,7 +191,7 @@ and surface on the lock screen.
 
 The generic webhook POSTs every enabled event as JSON to a URL you own —
 wire it into your own automation (Home Assistant, n8n, a Discord/Slack
-relay, whatever routes the payload). You supply a public URL and,
+relay, whatever routes the payload). You supply the URL and,
 optionally, one custom header (e.g. an auth token).
 
 1. In HealthLog open `/settings/notifications`, fill the Webhook card's

@@ -5587,7 +5587,7 @@
     "webhookDescription": "Envía notificaciones por POST a cualquier URL: Gotify, Discord, Slack, Matrix o Home Assistant.",
     "webhookEnable": "Activar webhook",
     "webhookUrl": "URL del webhook",
-    "webhookUrlHint": "La URL completa para el POST. Debe ser accesible públicamente.",
+    "webhookUrlHint": "La URL completa para el POST. Una dirección de una red privada necesita la aprobación del administrador del servidor.",
     "webhookHeaderName": "Nombre de cabecera (opcional)",
     "webhookHeaderValue": "Valor de cabecera (opcional)",
     "webhookFormat": "Formato del mensaje",
