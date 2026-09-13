@@ -82,6 +82,48 @@ export function TestConnectionFailure({
   );
 }
 
+export type ConnectionTestResult =
+  | { kind: "ok"; latency: number }
+  | {
+      kind: "error";
+      errorCode: string;
+      upstreamStatus?: number;
+      smtpCode?: number;
+      upstreamBody?: string;
+    };
+
+/**
+ * The button's probe: POST the endpoint and read the envelope into what the
+ * button shows. Exported so the reading of a real failure response can be
+ * tested without a DOM.
+ */
+export async function runConnectionTest(
+  endpoint: string,
+): Promise<ConnectionTestResult> {
+  try {
+    const res = await apiFetchRaw(endpoint, { method: "POST" });
+    const json = (await res.json().catch(() => ({}))) as TestResponse;
+
+    if (res.ok && json.data?.ok !== false) {
+      return { kind: "ok", latency: json.data?.latencyMs ?? 0 };
+    }
+    const meta = json.meta;
+    return {
+      kind: "error",
+      errorCode: meta?.errorCode ?? "generic",
+      upstreamStatus:
+        typeof meta?.upstreamStatus === "number"
+          ? meta.upstreamStatus
+          : undefined,
+      smtpCode: typeof meta?.smtpCode === "number" ? meta.smtpCode : undefined,
+      upstreamBody:
+        typeof meta?.upstreamBody === "string" ? meta.upstreamBody : undefined,
+    };
+  } catch {
+    return { kind: "error", errorCode: "connection_failed" };
+  }
+}
+
 export function TestConnectionButton({
   endpoint,
   disabled = false,
@@ -89,49 +131,13 @@ export function TestConnectionButton({
 }: TestConnectionButtonProps) {
   const { t } = useTranslations();
   const [testing, setTesting] = useState(false);
-  const [result, setResult] = useState<
-    | { kind: "ok"; latency: number }
-    | {
-        kind: "error";
-        errorCode: string;
-        upstreamStatus?: number;
-        smtpCode?: number;
-        upstreamBody?: string;
-      }
-    | null
-  >(null);
+  const [result, setResult] = useState<ConnectionTestResult | null>(null);
 
   async function handleClick() {
     setTesting(true);
     setResult(null);
     try {
-      const res = await apiFetchRaw(endpoint, { method: "POST" });
-      const json = (await res.json().catch(() => ({}))) as TestResponse;
-
-      if (res.ok && json.data?.ok !== false) {
-        setResult({
-          kind: "ok",
-          latency: json.data?.latencyMs ?? 0,
-        });
-      } else {
-        const meta = json.meta;
-        setResult({
-          kind: "error",
-          errorCode: meta?.errorCode ?? "generic",
-          upstreamStatus:
-            typeof meta?.upstreamStatus === "number"
-              ? meta.upstreamStatus
-              : undefined,
-          smtpCode:
-            typeof meta?.smtpCode === "number" ? meta.smtpCode : undefined,
-          upstreamBody:
-            typeof meta?.upstreamBody === "string"
-              ? meta.upstreamBody
-              : undefined,
-        });
-      }
-    } catch {
-      setResult({ kind: "error", errorCode: "connection_failed" });
+      setResult(await runConnectionTest(endpoint));
     } finally {
       setTesting(false);
     }
