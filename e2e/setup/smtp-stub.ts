@@ -33,9 +33,16 @@ import { createServer, type Server, type Socket } from "node:net";
  * into the web server's environment before any worker process exists, and the
  * stub itself does not start until the spec's `beforeAll` — so by the time a
  * kernel-assigned port would be known, the server it has to reach is already
- * running. The port is therefore CHOSEN once per run, at config load, from the
- * IANA dynamic range, and published through `SMTP_STUB_PORT` in the
- * environment so the config, the server and the spec all read the one value.
+ * running. The port is therefore CHOSEN once per run, at config load, and
+ * published through `SMTP_STUB_PORT` in the environment so the config, the
+ * server and the spec all read the one value.
+ *
+ * It is drawn from 20000-32767, not from the IANA dynamic range. The kernel
+ * hands out local ports for OUTGOING connections from its ephemeral range
+ * (32768-60999 on Linux, 49152-65535 on macOS), so a number drawn from the
+ * dynamic range can already be held by a client socket the runner opened to
+ * Postgres or the browser, and `listen` then fails with EADDRINUSE although no
+ * other stub exists. Below 32768 no outgoing connection lands on it.
  * Two suites on one machine draw different numbers instead of colliding on a
  * constant, and a collision that does happen fails by name in `listen` below
  * rather than as a missing form field thirty lines into a test.
@@ -47,8 +54,8 @@ import { createServer, type Server, type Socket } from "node:net";
 export function resolveSmtpStubPort(): number {
   const pinned = Number(process.env.SMTP_STUB_PORT);
   if (Number.isInteger(pinned) && pinned > 0 && pinned < 65_536) return pinned;
-  // 49152–65535, the dynamic/private range no registered service claims.
-  const chosen = 49_152 + Math.floor(Math.random() * (65_536 - 49_152));
+  // 20000-32767: below every default ephemeral range, see the comment above.
+  const chosen = 20_000 + Math.floor(Math.random() * (32_768 - 20_000));
   process.env.SMTP_STUB_PORT = String(chosen);
   return chosen;
 }
