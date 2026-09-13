@@ -6136,6 +6136,7 @@
         "rate_limited": "Ograniczone przez usługę nadrzędną",
         "timeout": "Przekroczono limit czasu żądania",
         "upstream_error": "Usługa nadrzędna zwróciła błąd",
+        "upstream_rejected": "Usługa docelowa odrzuciła wiadomość",
         "connection_failed": "Połączenie nie powiodło się",
         "not_configured": "Nieskonfigurowano",
         "url_not_public": "Adres URL nie jest publicznym punktem końcowym",

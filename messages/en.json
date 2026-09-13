@@ -6136,6 +6136,7 @@
         "rate_limited": "Rate-limited by the upstream",
         "timeout": "Request timed out",
         "upstream_error": "Upstream returned an error",
+        "upstream_rejected": "The other end refused the message",
         "connection_failed": "Connection failed",
         "not_configured": "Not configured",
         "url_not_public": "URL is not a public endpoint",

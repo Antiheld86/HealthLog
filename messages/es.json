@@ -6136,6 +6136,7 @@
         "rate_limited": "Limitado por el servidor remoto",
         "timeout": "La solicitud agotó el tiempo de espera",
         "upstream_error": "El servidor remoto devolvió un error",
+        "upstream_rejected": "El servidor remoto rechazó el mensaje",
         "connection_failed": "Falló la conexión",
         "not_configured": "No configurado",
         "url_not_public": "La URL no es un endpoint público",
