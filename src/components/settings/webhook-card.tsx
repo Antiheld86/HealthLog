@@ -14,6 +14,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { TestConnectionButton } from "@/components/settings/test-connection-button";
+import { isWebhookFormDirty } from "@/components/settings/channel-form-dirty";
 import {
   optimisticallySetChannelEnabled,
   persistChannelEnabled,
@@ -63,6 +64,10 @@ export function WebhookCard({ isAuthenticated }: { isAuthenticated: boolean }) {
     setHeaderName(settings!.headerName);
     setFormat(settings!.format === "gotify" ? "gotify" : "generic");
   }
+  const dirty = isWebhookFormDirty(
+    { url, headerName, headerValue, format },
+    settings,
+  );
 
   const save = useMutation({
     mutationFn: async (enabled: boolean) => {
@@ -238,7 +243,7 @@ export function WebhookCard({ isAuthenticated }: { isAuthenticated: boolean }) {
             </div>
           </div>
 
-          {saveMsg && (
+          {saveMsg && (saveMsgType === "error" || !dirty) && (
             <p
               role="alert"
               className={`text-sm ${saveMsgType === "success" ? "text-success" : "text-destructive"}`}
@@ -251,6 +256,7 @@ export function WebhookCard({ isAuthenticated }: { isAuthenticated: boolean }) {
             <TestConnectionButton
               endpoint="/api/settings/webhook/test"
               disabled={!settings?.enabled}
+              unsavedChanges={dirty}
             />
             <Button
               type="submit"

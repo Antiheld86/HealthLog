@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
     onError?: (error: Error, enabled: boolean, previous: unknown) => void;
   }>,
   apiFetchRaw: vi.fn(),
+  testButtonProps: [] as Array<{ endpoint: string; unsavedChanges?: boolean }>,
   queryClient: {
     cancelQueries: vi.fn(),
     getQueryData: vi.fn(),
@@ -70,7 +71,13 @@ vi.mock("@/lib/api/api-fetch", () => ({
 }));
 
 vi.mock("../test-connection-button", () => ({
-  TestConnectionButton: () => null,
+  TestConnectionButton: (props: {
+    endpoint: string;
+    unsavedChanges?: boolean;
+  }) => {
+    mocks.testButtonProps.push(props);
+    return null;
+  },
 }));
 
 import { I18nProvider } from "@/lib/i18n/context";
@@ -88,6 +95,7 @@ function render(card: ReactElement) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.mutationOptions.length = 0;
+  mocks.testButtonProps.length = 0;
   mocks.queryClient.cancelQueries.mockResolvedValue(undefined);
   mocks.apiFetchRaw.mockResolvedValue(
     new Response(JSON.stringify({ data: { saved: true }, error: null }), {
@@ -97,6 +105,21 @@ beforeEach(() => {
 });
 
 describe("notification channel cards", () => {
+  it.each([
+    ["webhook", <WebhookCard key="webhook" isAuthenticated />],
+    ["ntfy", <NtfyCard key="ntfy" isAuthenticated />],
+    ["email", <EmailCard key="email" isAuthenticated />],
+    ["telegram", <TelegramCard key="telegram" isAuthenticated />],
+  ] as const)(
+    "%s hands its unsaved-change state to the test button, clean once seeded from the server",
+    (channel, card) => {
+      render(card);
+      const props = mocks.testButtonProps.at(-1);
+      expect(props?.endpoint).toBe(`/api/settings/${channel}/test`);
+      expect(props?.unsavedChanges).toBe(false);
+    },
+  );
+
   it.each([
     ["webhook", <WebhookCard key="webhook" isAuthenticated />, 1],
     ["ntfy", <NtfyCard key="ntfy" isAuthenticated />, 1],

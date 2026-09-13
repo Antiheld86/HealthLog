@@ -14,6 +14,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { TestConnectionButton } from "@/components/settings/test-connection-button";
+import { isTelegramFormDirty } from "@/components/settings/channel-form-dirty";
 import {
   optimisticallySetChannelEnabled,
   persistChannelEnabled,
@@ -60,6 +61,7 @@ export function TelegramCard({
     setSeededKey(settingsKey);
     if (settings!.chatId) setChatId(settings!.chatId);
   }
+  const dirty = isTelegramFormDirty({ botToken, chatId }, settings);
 
   const toggleEnabled = useMutation<
     void,
@@ -200,7 +202,7 @@ export function TelegramCard({
             </ol>
           </SettingsInfoTile>
 
-          {msg && (
+          {msg && (msgType === "error" || !dirty) && (
             <p
               role="alert"
               className={`text-sm ${
@@ -215,6 +217,7 @@ export function TelegramCard({
             <TestConnectionButton
               endpoint="/api/settings/telegram/test"
               disabled={!settings?.hasBotToken}
+              unsavedChanges={dirty}
             />
             <Button
               type="submit"

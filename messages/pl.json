@@ -6133,6 +6133,7 @@
     },
     "testConnection": {
       "test": "Testuj połączenie",
+      "saveFirst": "Najpierw zapisz zmiany. Test używa zapisanych ustawień.",
       "testing": "Testowanie…",
       "ok": "Połączono (opóźnienie {latency} ms)",
       "errors": {

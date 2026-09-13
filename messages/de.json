@@ -6133,6 +6133,7 @@
     },
     "testConnection": {
       "test": "Verbindung testen",
+      "saveFirst": "Speichere zuerst deine Änderungen. Der Test nutzt die gespeicherten Einstellungen.",
       "testing": "Teste…",
       "ok": "Verbunden (Latenz {latency} ms)",
       "errors": {
