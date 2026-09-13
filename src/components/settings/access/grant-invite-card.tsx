@@ -724,8 +724,9 @@ export function inviteErrorKey(err: unknown): string {
       return "recordSharing.invite.errorInvalid";
     case "sharing.invite.invalid_scope":
       return "recordSharing.invite.errorScope";
-    // The decided consequence of gating Manage on a fresh second factor: the
-    // step-up is cookie-only, so this reaches a native caller and nobody else.
+    // Manage access is offered from a browser session only: the route refuses
+    // a Bearer caller before any second-factor check, so this reaches a native
+    // caller and nobody else.
     // Named rather than folded into the generic failure, because "use a
     // browser for this one" is a next step and "the invitation could not be
     // sent" is not.
