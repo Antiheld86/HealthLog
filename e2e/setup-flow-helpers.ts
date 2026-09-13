@@ -68,9 +68,11 @@ export async function acceptAndSetUp(page: Page): Promise<void> {
  * Every Playwright API context in the runner shares one keep-alive agent,
  * and it can hand out a socket the server already closed on its idle
  * timeout; the call then dies with `read ECONNRESET` and CI counts the retry
- * as a failure. The page opens its own connection. Before the first
- * navigation there is no origin to fetch against, so that case keeps the
- * API context.
+ * as a failure. The page opens its own connection. A page that has not
+ * navigated yet has no origin to fetch against, so it first opens the public
+ * version endpoint: the specs call these helpers before their first real
+ * navigation, and routing that case back through the API context is what
+ * kept the flake alive.
  */
 async function sessionCall(
   page: Page,
@@ -79,8 +81,7 @@ async function sessionCall(
   body?: unknown,
 ): Promise<{ status: number; json: unknown }> {
   if (!page.url().startsWith("http")) {
-    const res = await page.request.fetch(path, { method, data: body });
-    return { status: res.status(), json: await res.json().catch(() => null) };
+    await page.goto("/api/version", { waitUntil: "domcontentloaded" });
   }
   return page.evaluate(
     async ({ method, path, body }) => {
