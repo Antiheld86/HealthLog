@@ -244,6 +244,26 @@ const LEGACY_ADMIN_ANCHORS: Record<string, string> = {
   "/admin/section-danger-zone": "/admin/danger-zone",
 };
 
+/**
+ * Presence marker on every HealthLog page response, read by `public/sw.js`.
+ *
+ * The service worker is registered with scope `/` and serves `/_next/static/*`
+ * cache-first. When HealthLog is stopped and a different app starts on the
+ * same origin (`localhost:3000` on a developer machine is the usual case), the
+ * worker went on serving HealthLog's cached chunks to that app (#847). It
+ * needs a way to tell a HealthLog page from someone else's, and nothing
+ * HealthLog already sends is specific enough: `x-request-id`, the nonce CSP
+ * and the COOP/COEP set are headers any Next.js app may emit. So the proxy
+ * adds one of its own.
+ *
+ * Presence only, value `1`: no version and no build id, because a version on
+ * every page is a free fingerprint for anyone scanning for an outdated
+ * instance and the worker does not need it. Pages only, not `/api/*`: the
+ * worker checks navigations and nothing else. Keep the name in lockstep with
+ * `HEALTHLOG_PAGE_MARKER_HEADER` in `public/sw.js`.
+ */
+export const HEALTHLOG_PAGE_MARKER_HEADER = "X-HealthLog-Page";
+
 function generateNonce(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   let binary = "";
@@ -483,6 +503,10 @@ export function proxy(request: NextRequest) {
 
   // Request ID for log correlation
   response.headers.set("x-request-id", requestId);
+
+  if (!isApiRoute) {
+    response.headers.set(HEALTHLOG_PAGE_MARKER_HEADER, "1");
+  }
 
   // The document vault's decrypt-and-serve route is framed SAME-ORIGIN by
   // the document detail preview (an <iframe> for inline-class PDFs). The

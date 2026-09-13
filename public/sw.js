@@ -61,6 +61,15 @@ const CURRENT_HEALTHLOG_CACHES = new Set([
   PAGE_CACHE,
   DATA_CACHE,
 ]);
+// Presence marker `src/proxy.ts` sets on every HealthLog page response. See
+// `isForeignNavigationResponse` for why the worker needs it and the proxy for
+// why it carries no version. Keep the name in lockstep with
+// `HEALTHLOG_PAGE_MARKER_HEADER` there.
+const HEALTHLOG_PAGE_MARKER_HEADER = "X-HealthLog-Page";
+// Set once a navigation proves the origin no longer serves HealthLog. From
+// then on the fetch handler declines every request for the rest of this
+// worker's life, so the other app's page and its assets come from the network.
+let foreignOrigin = false;
 const MAX_STATIC_ENTRIES = 150;
 const MAX_PAGE_ENTRIES = 30;
 const MAX_DATA_ENTRIES = 60;
@@ -168,6 +177,10 @@ self.addEventListener("activate", (event) => {
 
 // ── Fetch: strategy per resource type ────────────────────────────────────────
 self.addEventListener("fetch", (event) => {
+  // The origin serves another app now (see `retireFromForeignOrigin`): no
+  // `respondWith`, no cache, the browser's own fetch for everything.
+  if (foreignOrigin) return;
+
   const { request } = event;
   const url = new URL(request.url);
 
@@ -336,6 +349,61 @@ function isCacheableNavigation(request, response) {
 }
 
 /**
+ * Does this navigation response come from something other than HealthLog?
+ *
+ * The worker is registered with scope `/` because HealthLog serves everything
+ * from `/`. When HealthLog is stopped and a different app starts on the same
+ * origin (the usual case is `localhost:3000` on a developer machine), this
+ * worker kept answering: `/_next/static/*` is cache-first, so the other app
+ * ran on HealthLog's cached chunks, and the only way out was unregistering by
+ * hand in the browser's developer tools.
+ *
+ * Only a response that positively looks like another app counts:
+ *
+ *   - a redirect is opaque to the worker (`opaqueredirect`, status 0, no
+ *     readable headers), and HealthLog redirects every signed-out page, so it
+ *     proves nothing; status 0 fails the `ok` check below;
+ *   - a non-2xx answer proves nothing either: a reverse proxy or auth gateway
+ *     in front of a stopped HealthLog answers 502 or 401 without the marker,
+ *     and unregistering there would also drop the Web Push subscription;
+ *   - a network failure never reaches this check (it throws into the offline
+ *     fallback in `networkFirst`).
+ *
+ * What is left is a successful page without the marker HealthLog's proxy puts
+ * on every page response.
+ */
+function isForeignNavigationResponse(response) {
+  if (!response || !response.ok) return false;
+  return !response.headers.has(HEALTHLOG_PAGE_MARKER_HEADER);
+}
+
+/**
+ * Leave an origin that no longer serves HealthLog: delete every HealthLog
+ * cache (only ours, matched by name, never another app's CacheStorage) and
+ * unregister, so the next load of that origin runs without this worker. The
+ * `foreignOrigin` flag set by the caller covers the requests the current page
+ * still makes before it unloads. Each step is best-effort and independent: a
+ * failed cache delete must not keep the worker registered.
+ */
+async function retireFromForeignOrigin() {
+  try {
+    const keys = await caches.keys();
+    await Promise.all(
+      keys
+        .filter((k) => HEALTHLOG_CACHE_NAME_RE.test(k))
+        .map((k) => caches.delete(k)),
+    );
+  } catch {
+    // CacheStorage unavailable; unregistering still matters more.
+  }
+  try {
+    await self.registration.unregister();
+  } catch {
+    // Nothing further to do from inside the worker.
+  }
+}
+
+/**
  * Network-first: try network (preferring the navigation-preload response
  * when the browser already started it), fall back to cache.
  *
@@ -351,6 +419,11 @@ async function networkFirst(event, cacheName) {
     const response =
       (event.preloadResponse ? await event.preloadResponse : null) ||
       (await fetch(request));
+    if (isForeignNavigationResponse(response)) {
+      foreignOrigin = true;
+      event.waitUntil(retireFromForeignOrigin());
+      return response;
+    }
     if (response.ok && isCacheableNavigation(request, response)) {
       event.waitUntil(
         bestEffortCacheWrite(
