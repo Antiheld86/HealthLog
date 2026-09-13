@@ -316,6 +316,10 @@ export function SidebarNav() {
     recordKind,
     level,
   } = useRecordCapabilities();
+  // The sections the grant may manage, bound from the server-resolved entry.
+  // The Settings entry needs them: a record-content page is offered only when
+  // the grant manages the section its forms write.
+  const manageableDomains = user?.accountAccess?.active?.manageableDomains;
   const visibleNavItems = useMemo(
     () =>
       visibleNavDestinations(user?.modules, mounted, sharedRecord, sections),
@@ -367,9 +371,11 @@ export function SidebarNav() {
   const footerUtilityItems = useMemo(
     () =>
       visibleUtilityDestinations({
-        record: sharedRecord ? { recordKind, level } : null,
+        record: sharedRecord
+          ? { recordKind, level, manageableDomains: manageableDomains ?? [] }
+          : null,
       }).filter((d) => d.href !== "/notifications"),
-    [sharedRecord, recordKind, level],
+    [sharedRecord, recordKind, level, manageableDomains],
   );
 
   function isUtilityActive(href: string) {

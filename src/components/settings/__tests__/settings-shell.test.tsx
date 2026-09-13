@@ -25,7 +25,11 @@ const mockModulesRef: { value: Record<string, boolean> | undefined } = {
 // server has already resolved which record is active, so it applies on the SSR
 // pass and is assertable from a static render.
 const mockActiveRecordRef: {
-  value: { recordKind: "managed" | "shared"; level: string } | null;
+  value: {
+    recordKind: "managed" | "shared";
+    level: string;
+    manageableDomains: string[];
+  } | null;
 } = { value: null };
 vi.mock("@/hooks/use-auth", () => ({
   useAuth: () => ({
@@ -48,6 +52,7 @@ vi.mock("@/hooks/use-auth", () => ({
 }));
 
 import { I18nProvider } from "@/lib/i18n/context";
+import { delegatedDomains } from "@/lib/sharing/domain-write-support";
 import {
   SETTINGS_SECTION_SLUGS,
   SETTINGS_SECTIONS,
@@ -60,7 +65,11 @@ function renderShell(props: {
   pathname?: string;
   locale?: "en" | "de";
   modules?: Record<string, boolean>;
-  activeRecord?: { recordKind: "managed" | "shared"; level: string } | null;
+  activeRecord?: {
+    recordKind: "managed" | "shared";
+    level: string;
+    manageableDomains: string[];
+  } | null;
 }) {
   mockPathnameRef.value = props.pathname ?? "/settings/account";
   mockModulesRef.value = props.modules;
@@ -358,7 +367,11 @@ describe("<SettingsShell>", () => {
     it("offers the Modules destination to a guardian on a managed record", () => {
       const html = renderShell({
         active: "account",
-        activeRecord: { recordKind: "managed", level: "manage" },
+        activeRecord: {
+          recordKind: "managed",
+          level: "manage",
+          manageableDomains: delegatedDomains("manage", null, "manage"),
+        },
       });
       expect(html).toContain('href="/settings/modules"');
       // Its own configuration is not the record's, and stays away.
@@ -372,11 +385,35 @@ describe("<SettingsShell>", () => {
       // here — both are `managed-guardian`, which an adult record never opens.
       const html = renderShell({
         active: "account",
-        activeRecord: { recordKind: "shared", level: "manage" },
+        activeRecord: {
+          recordKind: "shared",
+          level: "manage",
+          manageableDomains: delegatedDomains("manage", null, "manage"),
+        },
       });
       expect(html).not.toContain('href="/settings/modules"');
       expect(html).not.toContain('href="/settings/integrations"');
       expect(html).toContain('href="/settings/anamnesis"');
+    });
+
+    it("lists nothing for a MANAGE grant that does not manage profile", () => {
+      // The anamnesis forms write through `requireRecordAuth("manage",
+      // "profile")`, which refuses a grant whose sections miss `profile`, so
+      // the shell does not list the page. The navigation reads the same
+      // predicate and offers no Settings entry either.
+      const html = renderShell({
+        active: "account",
+        activeRecord: {
+          recordKind: "shared",
+          level: "manage",
+          manageableDomains: ["labs"],
+        },
+      });
+      expect(html).not.toContain('href="/settings/anamnesis"');
+      expect(html).not.toContain('href="/settings/modules"');
+      // Non-zero: the shell rendered, and still names the active section in
+      // its heading, which it resolves from the unfiltered list.
+      expect(html).toContain('id="settings-section-account-title"');
     });
   });
 

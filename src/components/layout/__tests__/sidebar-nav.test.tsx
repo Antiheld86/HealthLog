@@ -50,6 +50,7 @@ import { I18nProvider } from "@/lib/i18n/context";
 import { SidebarNav } from "../sidebar-nav";
 import { ADMIN_SECTIONS } from "@/components/admin/admin-shell";
 import { visibleUtilityDestinations } from "../nav-model";
+import { delegatedDomains } from "@/lib/sharing/domain-write-support";
 
 function render({
   pathname = "/",
@@ -293,8 +294,7 @@ describe("<SidebarNav> inside somebody else's record (#939)", () => {
             canWrite: active.level !== "read",
             sections: null,
             writableDomains: [],
-            manageableDomains:
-              active.level === "manage" ? ["measurements"] : [],
+            manageableDomains: delegatedDomains(active.level, null, "manage"),
           },
         }
       : undefined;
