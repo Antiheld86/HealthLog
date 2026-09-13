@@ -79,19 +79,48 @@ function classifySmtpError(err: unknown): {
   hardReject: boolean;
   reason: string;
   message: string;
+  failureCode?: string;
+  smtpCode?: number;
 } {
   const message = err instanceof Error ? err.message : "smtp_send_failed";
   // nodemailer attaches `responseCode` (the SMTP reply code) on protocol-level
-  // rejections. 5xx = permanent (bad mailbox, relay denied) → hard reject so
-  // the channel auto-disables. 4xx / connection errors = transient → retry.
+  // rejections and a `code` string on transport faults. 5xx = permanent (bad
+  // mailbox, relay denied) → hard reject so the channel auto-disables.
+  // 4xx / connection errors = transient → retry.
   const responseCode =
     typeof err === "object" && err !== null && "responseCode" in err
       ? (err as { responseCode?: number }).responseCode
       : undefined;
-  if (typeof responseCode === "number" && responseCode >= 500) {
-    return { hardReject: true, reason: "email_smtp_5xx", message };
+  const code =
+    typeof err === "object" && err !== null && "code" in err
+      ? (err as { code?: unknown }).code
+      : undefined;
+  const smtpCode = typeof responseCode === "number" ? responseCode : undefined;
+  // The test card's vocabulary, so the test route can say which it was.
+  // Anything unrecognised stays without a code.
+  const failureCode =
+    code === "EAUTH"
+      ? "credentials_rejected"
+      : code === "ETIMEDOUT"
+        ? "timeout"
+        : code === "ECONNECTION" ||
+            code === "ESOCKET" ||
+            code === "EDNS" ||
+            code === "ECONNREFUSED"
+          ? "connection_failed"
+          : smtpCode !== undefined && smtpCode >= 500
+            ? "upstream_rejected"
+            : smtpCode !== undefined && smtpCode >= 400
+              ? "upstream_error"
+              : undefined;
+  const extras = {
+    ...(failureCode ? { failureCode } : {}),
+    ...(smtpCode !== undefined ? { smtpCode } : {}),
+  };
+  if (smtpCode !== undefined && smtpCode >= 500) {
+    return { hardReject: true, reason: "email_smtp_5xx", message, ...extras };
   }
-  return { hardReject: false, reason: "email_smtp_error", message };
+  return { hardReject: false, reason: "email_smtp_error", message, ...extras };
 }
 
 export async function sendViaEmail(
@@ -169,6 +198,12 @@ export async function sendViaEmail(
       hardReject: classified.hardReject,
       reason: classified.reason,
       message: classified.message,
+      ...(classified.failureCode
+        ? { failureCode: classified.failureCode }
+        : {}),
+      ...(classified.smtpCode !== undefined
+        ? { smtpCode: classified.smtpCode }
+        : {}),
     };
   }
 }

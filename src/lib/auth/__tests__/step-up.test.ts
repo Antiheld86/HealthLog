@@ -172,8 +172,16 @@ describe("the credential prefix lists do not drift apart", () => {
     // Two parallel denylists guard the same class of value. They were already
     // one prefix out of step (`hls_` was in one and not the other), which is
     // how the next one gets missed.
+    // The cache refuses through the shared matcher, so the matcher is what
+    // has to know the prefix, and the cache has to be using it rather than a
+    // private copy of the pattern.
+    const { looksSecretShaped } = await import("@/lib/secret-shape");
+    expect(looksSecretShaped(`elevation=hle_${"a".repeat(64)}`)).toBe(true);
     const idempotency = readFileSync("src/lib/idempotency.ts", "utf8");
-    expect(idempotency).toContain("hle_");
+    expect(idempotency).toMatch(
+      /import \{ looksSecretShaped \} from "@\/lib\/secret-shape"/,
+    );
+    expect(idempotency).toMatch(/looksSecretShaped\(text\)/);
 
     const { redactSecrets } = await import("@/lib/logging/redact");
     const secret = `hle_${"a".repeat(64)}`;

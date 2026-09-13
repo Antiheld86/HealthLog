@@ -7,6 +7,7 @@ import { checkRateLimit } from "@/lib/rate-limit";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { isEmailConfigured } from "@/lib/notifications/senders/email-config";
+import { answerTestDeliveryFailure } from "@/lib/notifications/test-delivery-failure";
 
 /**
  * POST: send a test email to the configured recipient.
@@ -46,7 +47,13 @@ export const POST = apiHandler(async () => {
   });
 
   if (!result.ok) {
-    return apiError("Failed to send test email", 500);
+    // The mail server, or the way to it, failed: 502 with the code and the
+    // SMTP reply code. Only an unnamed internal fault is a 500.
+    return answerTestDeliveryFailure(result, {
+      channel: "email",
+      label: "The mail server",
+      fallbackMessage: "Failed to send test email",
+    });
   }
 
   annotate({

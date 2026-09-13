@@ -6,6 +6,7 @@ import type { NtfyChannelConfig } from "@/lib/notifications/types";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
+import { answerTestDeliveryFailure } from "@/lib/notifications/test-delivery-failure";
 
 /**
  * POST: Send a test notification via ntfy.
@@ -58,7 +59,13 @@ export const POST = apiHandler(async () => {
         { errorCode: result.errorCode },
       );
     }
-    return apiError("Failed to send test message", 500);
+    // The server, or the way to it, failed: 502 with the upstream status
+    // and what it said (#947). Only an unnamed internal fault is a 500.
+    return answerTestDeliveryFailure(result, {
+      channel: "ntfy",
+      label: "The ntfy server",
+      fallbackMessage: "Failed to send test message",
+    });
   }
 
   annotate({ action: { name: "settings.ntfy.test" }, meta: { success: true } });

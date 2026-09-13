@@ -233,3 +233,38 @@ describe("sendViaNtfy", () => {
     });
   });
 });
+
+describe("sendViaNtfy — what the server said (#947)", () => {
+  it("carries a short error body on a non-2xx", async () => {
+    safeFetchMock.mockResolvedValue(
+      new Response('{"code":40009,"http":400,"error":"invalid request"}', {
+        status: 400,
+      }),
+    );
+
+    const result = await sendViaNtfy(config, payload());
+
+    expect(result).toMatchObject({
+      ok: false,
+      statusCode: 400,
+      upstreamBody: '{"code":40009,"http":400,"error":"invalid request"}',
+    });
+  });
+
+  it("drops a body that echoes the auth token or the topic", async () => {
+    safeFetchMock.mockResolvedValueOnce(
+      new Response("token tk_secret rejected", { status: 403 }),
+    );
+    expect((await sendViaNtfy(config, payload())).upstreamBody).toBeUndefined();
+
+    safeFetchMock.mockResolvedValueOnce(
+      new Response("topic health is reserved", { status: 403 }),
+    );
+    expect((await sendViaNtfy(config, payload())).upstreamBody).toBeUndefined();
+  });
+
+  it("names a timeout", async () => {
+    safeFetchMock.mockRejectedValue(new SafeFetchError("timed out", "timeout"));
+    expect((await sendViaNtfy(config, payload())).failureCode).toBe("timeout");
+  });
+});

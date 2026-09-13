@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { PasswordInput } from "@/components/ui/password-input";
+import { NativeSelect } from "@/components/ui/native-select";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { TestConnectionButton } from "@/components/settings/test-connection-button";
@@ -21,12 +22,14 @@ import {
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { apiFetchRaw, apiGet } from "@/lib/api/api-fetch";
+import type { WebhookPayloadFormat } from "@/lib/notifications/types";
 
 interface WebhookSettings {
   enabled: boolean;
   url: string;
   headerName: string;
   hasHeaderValue: boolean;
+  format?: WebhookPayloadFormat;
 }
 
 export function WebhookCard({ isAuthenticated }: { isAuthenticated: boolean }) {
@@ -35,6 +38,7 @@ export function WebhookCard({ isAuthenticated }: { isAuthenticated: boolean }) {
   const [url, setUrl] = useState("");
   const [headerName, setHeaderName] = useState("");
   const [headerValue, setHeaderValue] = useState("");
+  const [format, setFormat] = useState<WebhookPayloadFormat>("generic");
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [saveMsgType, setSaveMsgType] = useState<"success" | "error" | null>(
     null,
@@ -50,13 +54,14 @@ export function WebhookCard({ isAuthenticated }: { isAuthenticated: boolean }) {
 
   // React-recommended sync-from-server pattern (no setState-in-effect).
   const settingsKey = settings
-    ? `${settings.url}|${settings.headerName}`
+    ? `${settings.url}|${settings.headerName}|${settings.format ?? "generic"}`
     : null;
   const [seededKey, setSeededKey] = useState<string | null>(null);
   if (settingsKey && settingsKey !== seededKey) {
     setSeededKey(settingsKey);
     setUrl(settings!.url);
     setHeaderName(settings!.headerName);
+    setFormat(settings!.format === "gotify" ? "gotify" : "generic");
   }
 
   const save = useMutation({
@@ -68,6 +73,7 @@ export function WebhookCard({ isAuthenticated }: { isAuthenticated: boolean }) {
           url,
           headerName: headerName || undefined,
           headerValue: headerValue || undefined,
+          format,
           enabled,
         }),
       });
@@ -179,6 +185,30 @@ export function WebhookCard({ isAuthenticated }: { isAuthenticated: boolean }) {
               <p className="text-muted-foreground text-xs">
                 {t("settings.webhookUrlHint")}
               </p>
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="webhook-format">
+                {t("settings.webhookFormat")}
+              </Label>
+              <NativeSelect
+                id="webhook-format"
+                value={format}
+                onChange={(e) =>
+                  setFormat(e.target.value === "gotify" ? "gotify" : "generic")
+                }
+              >
+                <option value="generic">
+                  {t("settings.webhookFormatGeneric")}
+                </option>
+                <option value="gotify">
+                  {t("settings.webhookFormatGotify")}
+                </option>
+              </NativeSelect>
+              {format === "gotify" && (
+                <p className="text-muted-foreground text-xs">
+                  {t("settings.webhookFormatGotifyHint")}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="webhook-header-name">

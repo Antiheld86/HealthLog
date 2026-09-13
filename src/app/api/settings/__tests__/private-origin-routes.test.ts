@@ -8,7 +8,9 @@
  * of a generic "Invalid data", and a listed literal address saves although
  * the plain public floor would refuse it. The test routes forward the
  * sender's own refusal as a 422 with the same code instead of the bare 500
- * that made the reporter read the wide-event log to learn it was policy.
+ * that made the reporter read the wide-event log to learn it was policy, and
+ * answer a relay's error status with a 502 that carries the status and what
+ * the relay said.
  *
  * The last block is the structural half: the test button and the dispatcher
  * must reach the SAME sender function, so the decision cannot differ between
@@ -351,20 +353,99 @@ describe("POST /api/settings/{webhook,ntfy}/test — the refusal names itself", 
   it.each([
     ["webhook", sendViaWebhookMock],
     ["ntfy", sendViaNtfyMock],
-  ])("%s: a plain delivery failure is still a 500", async (path, sender) => {
-    sender.mockResolvedValue({
-      ok: false,
-      hardReject: false,
-      reason: `${path}_503`,
-      statusCode: 503,
-    });
+  ])(
+    "%s: a relay that answered 400 is a 502 naming the status and what it said, not a bare 500 (#947: the card could only say Test failed)",
+    async (path, sender) => {
+      sender.mockResolvedValue({
+        ok: false,
+        hardReject: false,
+        reason: `${path}_400`,
+        statusCode: 400,
+        upstreamBody: '{"error":"Bad Request","errorCode":400}',
+      });
 
-    const response = await post(path);
+      const response = await post(path);
 
-    expect(response.status).toBe(500);
-    const json = await response.json();
-    expect(json.meta).toBeUndefined();
-  });
+      expect(response.status).toBe(502);
+      const json = await response.json();
+      expect(json.meta).toEqual({
+        errorCode: "upstream_rejected",
+        upstreamStatus: 400,
+        upstreamBody: '{"error":"Bad Request","errorCode":400}',
+      });
+      expect(json.error).toContain("HTTP 400");
+    },
+  );
+
+  it.each([
+    [401, "credentials_rejected"],
+    [403, "credentials_rejected"],
+    [404, "endpoint_not_found"],
+    [410, "endpoint_not_found"],
+    [415, "upstream_rejected"],
+    [422, "upstream_rejected"],
+    [429, "rate_limited"],
+    [503, "upstream_error"],
+    [307, "redirected"],
+  ])(
+    "webhook: an upstream %i maps to %s, without a body when the sender dropped it",
+    async (status, code) => {
+      sendViaWebhookMock.mockResolvedValue({
+        ok: false,
+        hardReject: false,
+        reason: `webhook_${status}`,
+        statusCode: status,
+      });
+
+      const response = await post("webhook");
+
+      expect(response.status).toBe(502);
+      const json = await response.json();
+      expect(json.meta).toEqual({ errorCode: code, upstreamStatus: status });
+    },
+  );
+
+  it.each([
+    ["webhook", sendViaWebhookMock],
+    ["ntfy", sendViaNtfyMock],
+  ])(
+    "%s: a timeout without a status is a 502 with the timeout code",
+    async (path, sender) => {
+      sender.mockResolvedValue({
+        ok: false,
+        hardReject: false,
+        reason: `${path}_network_error`,
+        failureCode: "timeout",
+      });
+
+      const response = await post(path);
+
+      expect(response.status).toBe(502);
+      await expect(response.json()).resolves.toMatchObject({
+        meta: { errorCode: "timeout" },
+      });
+    },
+  );
+
+  it.each([
+    ["webhook", sendViaWebhookMock],
+    ["ntfy", sendViaNtfyMock],
+  ])(
+    "%s: only a failure the sender could not name stays a 500",
+    async (path, sender) => {
+      sender.mockResolvedValue({
+        ok: false,
+        hardReject: false,
+        reason: `${path}_network_error`,
+      });
+
+      const response = await post(path);
+
+      expect(response.status).toBe(500);
+      const json = await response.json();
+      expect(json.meta).toBeUndefined();
+    },
+  );
 
   it.each([
     ["webhook", sendViaWebhookMock],

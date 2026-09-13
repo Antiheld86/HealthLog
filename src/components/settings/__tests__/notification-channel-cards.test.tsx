@@ -154,4 +154,27 @@ describe("notification channel cards", () => {
       );
     },
   );
+
+  it("webhook card offers the payload format and sends it with the full save (#947)", async () => {
+    const html = render(<WebhookCard isAuthenticated />);
+
+    expect(html).toContain('id="webhook-format"');
+    expect(html).toMatch(/<option value="generic" selected="">/);
+    expect(html).toContain('<option value="gotify">');
+
+    // The full save is the first mutation of the last render, whose closure
+    // holds the values seeded from the server.
+    const save = mocks.mutationOptions[mocks.mutationOptions.length - 2]!;
+    await save.mutationFn(false);
+
+    const [, init] = mocks.apiFetchRaw.mock.calls[0] as [
+      string,
+      { body: string },
+    ];
+    expect(JSON.parse(init.body)).toMatchObject({
+      url: "https://saved.example/hook",
+      format: "generic",
+      enabled: false,
+    });
+  });
 });

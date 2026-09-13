@@ -11,7 +11,10 @@ import { apiFetchRaw } from "@/lib/api/api-fetch";
  * Shared "Test connection" UX for the settings integrations + notifications
  * sections (A8-UI). POSTs to the given endpoint, expects a `{ data, error,
  * meta }` envelope, and surfaces success (latency) or a translated
- * `meta.errorCode` callout.
+ * `meta.errorCode` callout. When the route reports what the other end
+ * answered (`meta.upstreamStatus` / `meta.smtpCode` / `meta.upstreamBody`,
+ * the notification test routes since #947), the callout shows the status and
+ * the relay's own words beneath it, as plain text.
  *
  * Endpoints are user-scoped, so the button intentionally does NOT send an
  * Idempotency-Key — each click probes the upstream live.
@@ -27,7 +30,56 @@ export interface TestConnectionButtonProps {
 interface TestResponse {
   data?: { latencyMs?: number; ok?: boolean; sent?: number };
   error?: string;
-  meta?: { errorCode?: string };
+  meta?: {
+    errorCode?: string;
+    upstreamStatus?: number;
+    smtpCode?: number;
+    upstreamBody?: string;
+  };
+}
+
+export interface TestConnectionFailureProps {
+  /** The translated error sentence. */
+  message: string;
+  upstreamStatus?: number;
+  smtpCode?: number;
+  /** What the other end answered, already bounded and cleaned by the server. */
+  upstreamBody?: string;
+}
+
+/**
+ * The failure callout. Hook-free so it renders without a provider. The
+ * relay's body is a React text child, never markup: whatever it contains is
+ * shown as characters.
+ */
+export function TestConnectionFailure({
+  message,
+  upstreamStatus,
+  smtpCode,
+  upstreamBody,
+}: TestConnectionFailureProps) {
+  const code =
+    typeof upstreamStatus === "number"
+      ? ` (HTTP ${upstreamStatus})`
+      : typeof smtpCode === "number"
+        ? ` (SMTP ${smtpCode})`
+        : "";
+  return (
+    <div role="alert" className="space-y-1">
+      <p className="text-destructive flex items-center gap-1.5 text-sm">
+        <XCircle className="size-3.5 shrink-0" />
+        {`${message}${code}`}
+      </p>
+      {upstreamBody ? (
+        <p
+          data-testid="test-connection-upstream-body"
+          className="text-foreground font-mono text-xs break-all"
+        >
+          {upstreamBody}
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 export function TestConnectionButton({
@@ -39,7 +91,13 @@ export function TestConnectionButton({
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<
     | { kind: "ok"; latency: number }
-    | { kind: "error"; errorCode: string }
+    | {
+        kind: "error";
+        errorCode: string;
+        upstreamStatus?: number;
+        smtpCode?: number;
+        upstreamBody?: string;
+      }
     | null
   >(null);
 
@@ -56,9 +114,20 @@ export function TestConnectionButton({
           latency: json.data?.latencyMs ?? 0,
         });
       } else {
+        const meta = json.meta;
         setResult({
           kind: "error",
-          errorCode: json.meta?.errorCode ?? "generic",
+          errorCode: meta?.errorCode ?? "generic",
+          upstreamStatus:
+            typeof meta?.upstreamStatus === "number"
+              ? meta.upstreamStatus
+              : undefined,
+          smtpCode:
+            typeof meta?.smtpCode === "number" ? meta.smtpCode : undefined,
+          upstreamBody:
+            typeof meta?.upstreamBody === "string"
+              ? meta.upstreamBody
+              : undefined,
         });
       }
     } catch {
@@ -109,13 +178,12 @@ export function TestConnectionButton({
       )}
 
       {result?.kind === "error" && (
-        <p
-          role="alert"
-          className="text-destructive flex items-center gap-1.5 text-sm"
-        >
-          <XCircle className="h-3.5 w-3.5" />
-          {describeError(result.errorCode)}
-        </p>
+        <TestConnectionFailure
+          message={describeError(result.errorCode)}
+          upstreamStatus={result.upstreamStatus}
+          smtpCode={result.smtpCode}
+          upstreamBody={result.upstreamBody}
+        />
       )}
     </div>
   );

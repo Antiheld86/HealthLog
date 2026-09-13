@@ -22,6 +22,7 @@ import {
   SHARING_NOT_PERMITTED_DESCRIPTION,
   stdResponses,
 } from "./shared";
+import { WEBHOOK_PAYLOAD_FORMATS } from "@/lib/notifications/types";
 
 // v1.16.11 — the one threshold read every dose-status consumer makes
 // (cards, table, take-all-due derivation). `lateMinutes` /
@@ -255,7 +256,7 @@ const telegramSettingsRequest = telegramSettingsSchema.meta({
 const webhookSettingsRequest = webhookSettingsSchema.meta({
   id: "WebhookSettingsRequest",
   description:
-    "Generic-webhook channel config — one channel covering Gotify, Discord, Slack, a Matrix bridge, Home Assistant, or any relay accepting an inbound JSON POST. `url` must pass the SSRF floor at input time and is re-checked at dispatch time; a private origin passes both only when the operator listed it in `NOTIFICATION_PRIVATE_ORIGINS`. An EMPTY OR OMITTED `headerValue` preserves the stored one, for the same reason as ntfy's `authToken`: the GET never returns it. There is no way to clear a stored header value through this endpoint.",
+    "Generic-webhook channel config — one channel covering Gotify, Discord, Slack, a Matrix bridge, Home Assistant, or any relay accepting an inbound JSON POST. `url` must pass the SSRF floor at input time and is re-checked at dispatch time; a private origin passes both only when the operator listed it in `NOTIFICATION_PRIVATE_ORIGINS`. An EMPTY OR OMITTED `headerValue` preserves the stored one, for the same reason as ntfy's `authToken`: the GET never returns it. There is no way to clear a stored header value through this endpoint. An omitted `format` keeps the stored body shape.",
 });
 
 /**
@@ -342,6 +343,11 @@ const webhookSettingsResponse = z
       .boolean()
       .describe(
         "Whether a header value (the shared secret) is stored. The value itself is never returned.",
+      ),
+    format: z
+      .enum(WEBHOOK_PAYLOAD_FORMATS)
+      .describe(
+        "Body shape the webhook sends. `generic` when no channel row exists or the config predates the choice.",
       ),
   })
   .meta({
@@ -685,7 +691,7 @@ export const settingsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Send a test email to the saved recipient",
       description:
         "Fires one message through the operator's SMTP transport to the address saved on this account. Takes no body. Rate-limited 5 per 5 minutes per user.\n\n" +
-        "Refuses with 400 when the instance has no SMTP transport, when the account has no email channel, or when the channel carries no recipient — three distinguishable prose messages on one status. A transport failure is a 500.",
+        "Refuses with 400 when the instance has no SMTP transport, when the account has no email channel, or when the channel carries no recipient — three distinguishable prose messages on one status. A failure at the mail server or on the way to it is a 502 that names its cause; only a failure the server cannot name is a 500.",
       responses: {
         "200": {
           description:
@@ -697,6 +703,16 @@ export const settingsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           },
         },
         ...stdResponses,
+        "502": {
+          description:
+            "The mail server, or the way to it, failed. `meta.errorCode` names the cause: `credentials_rejected` (the server refused the SMTP login), `upstream_rejected` (a permanent 5xx rejection, e.g. an unknown mailbox or relay denied), `upstream_error` (a temporary 4xx rejection), `timeout`, or `connection_failed`. `meta.smtpCode` carries the SMTP reply code when the mail server sent one.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "500": {
+          description:
+            "The send failed in a way the server could not name. An internal fault, not a statement about the mail server.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
       },
     },
   },
@@ -705,7 +721,7 @@ export const settingsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Notifications"],
       summary: "Send a test message to the saved ntfy topic",
       description:
-        "Publishes one message to the account's configured ntfy server and topic. Takes no body. Rate-limited 5 per 5 minutes per user. Refuses with 400 when no ntfy channel is saved or when the saved config is missing a server URL or topic; a publish failure is a 500. A server on a private network is refused with 422 and `meta.errorCode` = `private_origin_not_approved` unless the operator listed its exact origin in `NOTIFICATION_PRIVATE_ORIGINS`; the test and the scheduled delivery take the same decision.",
+        "Publishes one message to the account's configured ntfy server and topic. Takes no body. Rate-limited 5 per 5 minutes per user. Refuses with 400 when no ntfy channel is saved or when the saved config is missing a server URL or topic. A failure at the ntfy server or on the way to it is a 502 that carries the upstream status and, when safe, what the server answered; only a failure the server cannot name is a 500. A server on a private network is refused with 422 and `meta.errorCode` = `private_origin_not_approved` unless the operator listed its exact origin in `NOTIFICATION_PRIVATE_ORIGINS`; the test and the scheduled delivery take the same decision.",
       responses: {
         "200": {
           description:
@@ -717,6 +733,16 @@ export const settingsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           },
         },
         ...stdResponses,
+        "502": {
+          description:
+            "The ntfy server, or the way to it, failed. `meta.errorCode` names the cause: `upstream_rejected` (the other end refused the payload, e.g. 400/409/415/422), `credentials_rejected` (401/403), `endpoint_not_found` (404/410), `rate_limited` (429), `upstream_error` (5xx), `redirected` (3xx, never followed), `timeout`, or `connection_failed`. `meta.upstreamStatus` carries the HTTP status whenever one arrived, and `meta.upstreamBody` up to 200 characters of what the other end answered, with control characters removed; it is omitted when the body was empty or could carry a credential (a token-shaped string, or the saved header value, auth token, topic or URL token).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "500": {
+          description:
+            "The send failed in a way the server could not name. An internal fault, not a statement about the ntfy server.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
         "422": {
           description:
             "The saved server is on a private network the operator has not approved (`meta.errorCode` = `private_origin_not_approved`), or is a link-local, metadata or unspecified address that no grant can open (`private_origin_not_grantable`). The resolved address is never echoed.",
@@ -751,7 +777,7 @@ export const settingsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Notifications"],
       summary: "Send a test payload to the saved webhook",
       description:
-        "Posts one payload to the account's configured webhook URL. Takes no body. Rate-limited 5 per 5 minutes per user. Refuses with 400 when no webhook channel is saved or the saved config has no URL; a delivery failure is a 500. The URL was checked against the SSRF floor when it was saved, so a test cannot be used to reach an internal host. A URL on a private network is refused with 422 and `meta.errorCode` = `private_origin_not_approved` unless the operator listed its exact origin in `NOTIFICATION_PRIVATE_ORIGINS`; the test and the scheduled delivery take the same decision.",
+        "Posts one payload to the account's configured webhook URL. Takes no body. Rate-limited 5 per 5 minutes per user. Refuses with 400 when no webhook channel is saved or the saved config has no URL. A failure at the relay or on the way to it is a 502 that carries the upstream status and, when safe, what the relay answered; only a failure the server cannot name is a 500. The URL was checked against the SSRF floor when it was saved, so a test cannot be used to reach an internal host. A URL on a private network is refused with 422 and `meta.errorCode` = `private_origin_not_approved` unless the operator listed its exact origin in `NOTIFICATION_PRIVATE_ORIGINS`; the test and the scheduled delivery take the same decision.",
       responses: {
         "200": {
           description:
@@ -763,6 +789,16 @@ export const settingsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           },
         },
         ...stdResponses,
+        "502": {
+          description:
+            "The relay, or the way to it, failed. `meta.errorCode` names the cause: `upstream_rejected` (the other end refused the payload, e.g. 400/409/415/422), `credentials_rejected` (401/403), `endpoint_not_found` (404/410), `rate_limited` (429), `upstream_error` (5xx), `redirected` (3xx, never followed), `timeout`, or `connection_failed`. `meta.upstreamStatus` carries the HTTP status whenever one arrived, and `meta.upstreamBody` up to 200 characters of what the other end answered, with control characters removed; it is omitted when the body was empty or could carry a credential (a token-shaped string, or the saved header value, auth token, topic or URL token).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "500": {
+          description:
+            "The send failed in a way the server could not name. An internal fault, not a statement about the relay.",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
         "422": {
           description:
             "The saved URL is on a private network the operator has not approved (`meta.errorCode` = `private_origin_not_approved`), or is a link-local, metadata or unspecified address that no grant can open (`private_origin_not_grantable`). The resolved address is never echoed.",

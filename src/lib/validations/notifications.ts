@@ -1,6 +1,9 @@
 import { z } from "zod/v4";
 import { isIP } from "node:net";
-import { EVENT_TYPES } from "@/lib/notifications/types";
+import {
+  EVENT_TYPES,
+  WEBHOOK_PAYLOAD_FORMATS,
+} from "@/lib/notifications/types";
 
 export const notificationPreferenceSchema = z.object({
   channelId: z.string().min(1),
@@ -391,6 +394,12 @@ export function webhookSettingsSchemaWith(
       .or(z.literal("")),
     headerName: z.string().max(100).optional().or(z.literal("")),
     headerValue: z.string().max(500).optional().or(z.literal("")),
+    format: z
+      .enum(WEBHOOK_PAYLOAD_FORMATS)
+      .optional()
+      .describe(
+        "Body shape. `generic` sends HealthLog's own JSON envelope; `gotify` sends the body Gotify's `POST /message` expects, with an integer priority. Omitted keeps the stored choice, which is `generic` for a config saved before the choice existed.",
+      ),
     enabled: z.boolean(),
   });
 }

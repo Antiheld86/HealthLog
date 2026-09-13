@@ -16,6 +16,10 @@ import {
   PRIVATE_ORIGIN_NOT_APPROVED_CODE,
 } from "@/lib/notifications/egress-policy";
 import type { OriginReason } from "@/lib/private-origin-policy";
+import {
+  readUpstreamBody,
+  secretsInUrl,
+} from "@/lib/notifications/upstream-body";
 
 /**
  * Send notification via ntfy (simple HTTP POST).
@@ -129,11 +133,19 @@ export async function sendViaNtfy(
       result: "error",
       reason: classified.reason,
     });
+    // What the server said, for the test button. The topic is treated as a
+    // secret too: on a public ntfy server it is the only access control.
+    const upstreamBody = await readUpstreamBody(res, [
+      config.authToken,
+      config.topic,
+      ...secretsInUrl(config.serverUrl),
+    ]);
     return {
       ok: false,
       statusCode: res.status,
       hardReject: classified.hardReject,
       reason: classified.reason,
+      ...(upstreamBody ? { upstreamBody } : {}),
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "request_failed";
@@ -144,6 +156,12 @@ export async function sendViaNtfy(
     const reason = policyRefused
       ? "ntfy_private_origin_refused"
       : "ntfy_network_error";
+    const failureCode =
+      err instanceof SafeFetchError && !policyRefused
+        ? err.kind === "timeout"
+          ? "timeout"
+          : "connection_failed"
+        : undefined;
     getEvent()?.addExternalCall({
       service: "ntfy",
       method: "sendNotification",
@@ -165,6 +183,7 @@ export async function sendViaNtfy(
       ...(policyRefused
         ? { errorCode: policyReason ?? PRIVATE_ORIGIN_NOT_APPROVED_CODE }
         : {}),
+      ...(failureCode ? { failureCode } : {}),
     };
   }
 }

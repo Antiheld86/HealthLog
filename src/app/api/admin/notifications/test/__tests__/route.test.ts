@@ -65,6 +65,12 @@ vi.mock("@/lib/notifications/senders/web-push", () => ({
 vi.mock("@/lib/notifications/senders/apns", () => ({
   sendViaApns: vi.fn(),
 }));
+vi.mock("@/lib/notifications/senders/webhook", () => ({
+  sendViaWebhook: vi.fn(),
+}));
+vi.mock("@/lib/notifications/senders/email", () => ({
+  sendViaEmail: vi.fn(),
+}));
 
 vi.mock("@/lib/i18n/server-translator", () => ({
   getServerTranslator: vi.fn(() => ({
@@ -78,6 +84,8 @@ import { requireAdmin } from "@/lib/api-handler";
 import { sendViaApns } from "@/lib/notifications/senders/apns";
 import { sendViaWebPush } from "@/lib/notifications/senders/web-push";
 import { sendViaNtfy } from "@/lib/notifications/senders/ntfy";
+import { sendViaWebhook } from "@/lib/notifications/senders/webhook";
+import { sendViaEmail } from "@/lib/notifications/senders/email";
 
 const ADMIN_USER_ID = "admin-1";
 const ADMIN_CTX = {
@@ -92,7 +100,7 @@ const ADMIN_CTX = {
 interface FakeChannelRow {
   id: string;
   userId: string;
-  type: "TELEGRAM" | "NTFY" | "WEB_PUSH" | "APNS";
+  type: "TELEGRAM" | "NTFY" | "WEB_PUSH" | "APNS" | "WEBHOOK" | "EMAIL";
   enabled: boolean;
   config: string;
   preferences: Array<{ eventType: string; enabled: boolean }>;
@@ -119,6 +127,10 @@ interface ResultEnvelope {
       channel: string;
       success: boolean;
       error?: string;
+      errorCode?: string;
+      upstreamStatus?: number;
+      smtpCode?: number;
+      upstreamBody?: string;
     }>;
   };
 }
@@ -297,5 +309,129 @@ describe("POST /api/admin/notifications/test — preserved branches", () => {
       channel: "NTFY",
       success: true,
     });
+  });
+});
+
+describe("POST /api/admin/notifications/test — a failure keeps its cause (#947)", () => {
+  function channel(
+    type: FakeChannelRow["type"],
+    config: string,
+  ): FakeChannelRow {
+    return {
+      id: `ch-${type}`,
+      userId: ADMIN_USER_ID,
+      type,
+      enabled: true,
+      config,
+      preferences: [],
+    };
+  }
+
+  it("carries the ntfy status and code instead of a bare sentence", async () => {
+    vi.mocked(prisma.notificationChannel.findMany).mockResolvedValue([
+      channel("NTFY", 'enc({"topic":"hl-test"})'),
+    ] as never);
+    vi.mocked(sendViaNtfy).mockResolvedValue({
+      ok: false,
+      hardReject: false,
+      reason: "ntfy_400",
+      statusCode: 400,
+    });
+
+    const body = (await (await POST()).json()) as ResultEnvelope;
+
+    expect(body.data.results[0]).toMatchObject({
+      channel: "NTFY",
+      success: false,
+      errorCode: "upstream_rejected",
+      upstreamStatus: 400,
+    });
+    expect(body.data.results[0].error).toContain("HTTP 400");
+  });
+
+  it("tests the webhook channel rather than calling it unknown", async () => {
+    vi.mocked(prisma.notificationChannel.findMany).mockResolvedValue([
+      channel("WEBHOOK", 'enc({"url":"https://relay.example.com/message"})'),
+    ] as never);
+    vi.mocked(sendViaWebhook).mockResolvedValue({
+      ok: false,
+      hardReject: false,
+      reason: "webhook_400",
+      statusCode: 400,
+      upstreamBody: "priority must be an integer",
+    });
+
+    const body = (await (await POST()).json()) as ResultEnvelope;
+
+    expect(sendViaWebhook).toHaveBeenCalledWith(
+      { url: "https://relay.example.com/message" },
+      expect.objectContaining({ eventType: "SYSTEM_ALERT" }),
+    );
+    expect(body.data.results[0]).toMatchObject({
+      channel: "WEBHOOK",
+      success: false,
+      errorCode: "upstream_rejected",
+      upstreamStatus: 400,
+      upstreamBody: "priority must be an integer",
+    });
+  });
+
+  it("tests the email channel and forwards the SMTP code", async () => {
+    vi.mocked(prisma.notificationChannel.findMany).mockResolvedValue([
+      channel("EMAIL", 'enc({"recipient":"admin@example.com"})'),
+    ] as never);
+    vi.mocked(sendViaEmail).mockResolvedValue({
+      ok: false,
+      hardReject: true,
+      reason: "email_smtp_5xx",
+      failureCode: "upstream_rejected",
+      smtpCode: 550,
+    });
+
+    const body = (await (await POST()).json()) as ResultEnvelope;
+
+    expect(body.data.results[0]).toMatchObject({
+      channel: "EMAIL",
+      success: false,
+      errorCode: "upstream_rejected",
+      smtpCode: 550,
+    });
+    expect(body.data.results[0].error).toContain("SMTP 550");
+  });
+
+  it("forwards a private-origin refusal with its own code", async () => {
+    vi.mocked(prisma.notificationChannel.findMany).mockResolvedValue([
+      channel("WEBHOOK", 'enc({"url":"http://10.0.0.5/message"})'),
+    ] as never);
+    vi.mocked(sendViaWebhook).mockResolvedValue({
+      ok: false,
+      hardReject: false,
+      reason: "webhook_private_origin_refused",
+      errorCode: "private_origin_not_approved",
+    });
+
+    const body = (await (await POST()).json()) as ResultEnvelope;
+
+    expect(body.data.results[0]).toMatchObject({
+      channel: "WEBHOOK",
+      success: false,
+      errorCode: "private_origin_not_approved",
+    });
+  });
+
+  it("reports a delivered webhook and email as successes", async () => {
+    vi.mocked(prisma.notificationChannel.findMany).mockResolvedValue([
+      channel("WEBHOOK", 'enc({"url":"https://relay.example.com"})'),
+      channel("EMAIL", 'enc({"recipient":"admin@example.com"})'),
+    ] as never);
+    vi.mocked(sendViaWebhook).mockResolvedValue({ ok: true, statusCode: 200 });
+    vi.mocked(sendViaEmail).mockResolvedValue({ ok: true });
+
+    const body = (await (await POST()).json()) as ResultEnvelope;
+
+    expect(body.data.results).toEqual([
+      { channel: "WEBHOOK", success: true },
+      { channel: "EMAIL", success: true },
+    ]);
   });
 });
