@@ -53,6 +53,36 @@ async function readBounded(res: Response): Promise<string | undefined> {
 }
 
 /**
+ * The ways a relay can echo a secret back: literally, JSON-escaped (with and
+ * without the `\/` form some serialisers write for a slash, common inside a
+ * base64 value), and percent-encoded.
+ */
+function echoForms(secret: string): string[] {
+  const json = JSON.stringify(secret).slice(1, -1);
+  return [
+    ...new Set([
+      secret,
+      json,
+      json.replaceAll("/", "\\/"),
+      encodeURIComponent(secret),
+    ]),
+  ];
+}
+
+/** A value and its decoded form; a malformed escape keeps the raw value. */
+function withDecoded(part: string): string[] {
+  try {
+    const decoded = decodeURIComponent(part.replaceAll("+", " "));
+    return decoded === part ? [part] : [part, decoded];
+  } catch {
+    return [part];
+  }
+}
+
+/** Path segments this long are credentials in Discord, Slack and n8n URLs. */
+const MIN_SECRET_PATH_SEGMENT_LENGTH = 16;
+
+/**
  * Read what a relay answered on a non-2xx, in a form safe to hand back to
  * the person who pressed the test button.
  *
@@ -87,9 +117,16 @@ export async function readUpstreamBody(
   if (!cleaned) return undefined;
 
   if (looksSecretShaped(raw) || looksSecretShaped(cleaned)) return undefined;
+  const rawLower = raw.toLowerCase();
   for (const secret of knownSecrets) {
     if (!secret || secret.length < MIN_KNOWN_SECRET_LENGTH) continue;
-    if (raw.includes(secret) || cleaned.includes(secret)) return undefined;
+    for (const form of echoForms(secret)) {
+      if (raw.includes(form) || cleaned.includes(form)) return undefined;
+    }
+    // Percent-encoding is case-insensitive in its hex digits.
+    if (rawLower.includes(encodeURIComponent(secret).toLowerCase())) {
+      return undefined;
+    }
   }
 
   const characters = Array.from(cleaned);
@@ -98,19 +135,33 @@ export async function readUpstreamBody(
 }
 
 /**
- * The secrets a URL can carry on its own: userinfo and every query value
- * (Gotify's `?token=` form).
+ * The secrets a URL can carry on its own: userinfo, every query value
+ * (Gotify's `?token=` form) and every path segment of 16 or more characters
+ * (a Discord or Slack webhook token, an n8n webhook id). Each part is decoded
+ * on its own, so one malformed escape cannot drop the others.
  */
 export function secretsInUrl(url: string): string[] {
+  let parsed: URL;
   try {
-    const parsed = new URL(url);
-    const found = [...parsed.searchParams.values()];
-    if (parsed.username) found.push(decodeURIComponent(parsed.username));
-    if (parsed.password) found.push(decodeURIComponent(parsed.password));
-    return found;
+    parsed = new URL(url);
   } catch {
     return [];
   }
+  const found: string[] = [];
+  if (parsed.username) found.push(...withDecoded(parsed.username));
+  if (parsed.password) found.push(...withDecoded(parsed.password));
+  for (const pair of parsed.search.replace(/^\?/, "").split("&")) {
+    const eq = pair.indexOf("=");
+    if (eq < 0) continue;
+    const value = pair.slice(eq + 1);
+    if (value) found.push(...withDecoded(value));
+  }
+  for (const segment of parsed.pathname.split("/")) {
+    if (segment.length >= MIN_SECRET_PATH_SEGMENT_LENGTH) {
+      found.push(...withDecoded(segment));
+    }
+  }
+  return [...new Set(found)];
 }
 
 /** A header value and, for the `<scheme> <token>` form, the token alone. */

@@ -95,7 +95,7 @@ describe("secret extraction", () => {
       secretsInUrl(
         "https://user:pa%20ss@gotify.example.com/message?token=Abc123",
       ),
-    ).toEqual(["Abc123", "user", "pa ss"]);
+    ).toEqual(expect.arrayContaining(["Abc123", "user", "pa%20ss", "pa ss"]));
     expect(secretsInUrl("not a url")).toEqual([]);
   });
 
@@ -106,5 +106,67 @@ describe("secret extraction", () => {
     ]);
     expect(secretsInHeaderValue("AppToken")).toEqual(["AppToken"]);
     expect(secretsInHeaderValue(undefined)).toEqual([]);
+  });
+});
+
+describe("secret matching survives encoding and malformed parts (review L4)", () => {
+  it("keeps the query token when the userinfo holds a malformed escape", () => {
+    const found = secretsInUrl(
+      "https://us%ZZer:pw@gotify.example.com/message?token=Abc12345",
+    );
+    expect(found).toContain("Abc12345");
+    expect(found).toContain("us%ZZer");
+  });
+
+  it("keeps the other query values when one holds a malformed escape", () => {
+    const found = secretsInUrl(
+      "https://gotify.example.com/message?a=%ZZ&token=Abc12345",
+    );
+    expect(found).toContain("Abc12345");
+    expect(found).toContain("%ZZ");
+  });
+
+  it("treats long path segments as secrets and short ones not", () => {
+    const found = secretsInUrl(
+      "https://discord.com/api/webhooks/123456789012345678/AbCdEfGhIjKlMnOpQrSt",
+    );
+    expect(found).toContain("123456789012345678");
+    expect(found).toContain("AbCdEfGhIjKlMnOpQrSt");
+    expect(found).not.toContain("webhooks");
+    expect(found).not.toContain("api");
+  });
+
+  it("refuses a body echoing a path token", async () => {
+    await expect(
+      readUpstreamBody(
+        res('{"message":"Unknown Webhook AbCdEfGhIjKlMnOpQrSt"}', 404),
+        secretsInUrl(
+          "https://discord.com/api/webhooks/123/AbCdEfGhIjKlMnOpQrSt",
+        ),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it("refuses a JSON-escaped echo with an escaped slash", async () => {
+    await expect(
+      readUpstreamBody(res('{"auth":"Basic dXNlcj\\/wYXNz"}'), [
+        "dXNlcj/wYXNz",
+      ]),
+    ).resolves.toBeUndefined();
+  });
+
+  it("refuses a JSON-escaped echo with an escaped quote", async () => {
+    await expect(
+      readUpstreamBody(res('{"got":"ab\\"cd1234"}'), ['ab"cd1234']),
+    ).resolves.toBeUndefined();
+  });
+
+  it("refuses a percent-encoded echo, in either hex case", async () => {
+    await expect(
+      readUpstreamBody(res("bad token p%40ss%20word!"), ["p@ss word!"]),
+    ).resolves.toBeUndefined();
+    await expect(
+      readUpstreamBody(res("bad token a%2fb%2Bc1234"), ["a/b+c1234"]),
+    ).resolves.toBeUndefined();
   });
 });
