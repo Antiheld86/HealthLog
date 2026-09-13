@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.38.22] — 2026-09-13
+
+A channel test no longer runs on settings you have not saved.
+
+### Fixed
+
+- **The Test button waits until you save.** On the webhook, ntfy, email and
+  Telegram cards, Test always sends through the settings that are saved,
+  not what is in the form. After you changed a field, the card still showed
+  "Saved" from the last save, and Test quietly used the old settings. That
+  is how a webhook switched to the Gotify format kept failing with the old
+  message body. Now the "Saved" note goes away as soon as you change
+  something, and Test stays off with a short "Save your changes first"
+  until you save. Thanks to @sreeramachandramurthy for the screenshot in
+  #947 that showed it.
+
 ## [1.38.21] — 2026-09-13
 
 A channel test says why it failed, a Gotify server gets the message it
