@@ -106,13 +106,20 @@ function classifySmtpError(err: unknown): {
         : code === "ECONNECTION" ||
             code === "ESOCKET" ||
             code === "EDNS" ||
-            code === "ECONNREFUSED"
+            code === "ECONNREFUSED" ||
+            // STARTTLS or TLS handshake failure (typically port 465 set up
+            // as 587 or the reverse) and a server that does not speak SMTP.
+            code === "ETLS" ||
+            code === "EPROTOCOL"
           ? "connection_failed"
           : smtpCode !== undefined && smtpCode >= 500
             ? "upstream_rejected"
             : smtpCode !== undefined && smtpCode >= 400
               ? "upstream_error"
-              : undefined;
+              : // An envelope or message refused without a reply code.
+                code === "EENVELOPE" || code === "EMESSAGE"
+                ? "upstream_rejected"
+                : undefined;
   const extras = {
     ...(failureCode ? { failureCode } : {}),
     ...(smtpCode !== undefined ? { smtpCode } : {}),

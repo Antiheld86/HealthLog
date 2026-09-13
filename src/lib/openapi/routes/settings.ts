@@ -705,7 +705,7 @@ export const settingsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         ...stdResponses,
         "502": {
           description:
-            "The mail server, or the way to it, failed. `meta.errorCode` names the cause: `credentials_rejected` (the server refused the SMTP login), `upstream_rejected` (a permanent 5xx rejection, e.g. an unknown mailbox or relay denied), `upstream_error` (a temporary 4xx rejection), `timeout`, or `connection_failed`. `meta.smtpCode` carries the SMTP reply code when the mail server sent one.",
+            "The mail server, or the way to it, failed. `meta.errorCode` names the cause: `credentials_rejected` (the server refused the SMTP login), `upstream_rejected` (a permanent 5xx rejection, e.g. an unknown mailbox or relay denied, or an envelope or message refused without a reply code), `upstream_error` (a temporary 4xx rejection), `timeout`, or `connection_failed` (including a TLS handshake or protocol failure). `meta.smtpCode` carries the SMTP reply code when the mail server sent one.",
           content: { "application/json": { schema: errorEnvelope } },
         },
         "500": {
@@ -735,7 +735,7 @@ export const settingsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         ...stdResponses,
         "502": {
           description:
-            "The ntfy server, or the way to it, failed. `meta.errorCode` names the cause: `upstream_rejected` (the other end refused the payload, e.g. 400/409/415/422), `credentials_rejected` (401/403), `endpoint_not_found` (404/410), `rate_limited` (429), `upstream_error` (5xx), `redirected` (3xx, never followed), `timeout`, or `connection_failed`. `meta.upstreamStatus` carries the HTTP status whenever one arrived, and `meta.upstreamBody` up to 200 characters of what the other end answered, with control characters removed; it is omitted when the body was empty or could carry a credential (a token-shaped string, or the saved header value, auth token, topic or URL token).",
+            "The ntfy server, or the way to it, failed. `meta.errorCode` names the cause: `upstream_rejected` (the other end refused the payload, e.g. 400/409/415/422), `credentials_rejected` (401/403), `endpoint_not_found` (404/410), `rate_limited` (429), `upstream_error` (5xx), `redirected` (3xx, never followed), `timeout`, or `connection_failed`. `meta.upstreamStatus` carries the HTTP status whenever one arrived, and `meta.upstreamBody` up to 200 characters of what the other end answered, with control characters removed; it is omitted when the body was empty or could carry a credential: a token-shaped string, or the saved auth token, the topic, or a credential in the server URL (userinfo, a query value, a path segment of 16 or more characters), literal, JSON-escaped or percent-encoded.",
           content: { "application/json": { schema: errorEnvelope } },
         },
         "500": {
@@ -791,7 +791,7 @@ export const settingsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         ...stdResponses,
         "502": {
           description:
-            "The relay, or the way to it, failed. `meta.errorCode` names the cause: `upstream_rejected` (the other end refused the payload, e.g. 400/409/415/422), `credentials_rejected` (401/403), `endpoint_not_found` (404/410), `rate_limited` (429), `upstream_error` (5xx), `redirected` (3xx, never followed), `timeout`, or `connection_failed`. `meta.upstreamStatus` carries the HTTP status whenever one arrived, and `meta.upstreamBody` up to 200 characters of what the other end answered, with control characters removed; it is omitted when the body was empty or could carry a credential (a token-shaped string, or the saved header value, auth token, topic or URL token).",
+            "The relay, or the way to it, failed. `meta.errorCode` names the cause: `upstream_rejected` (the other end refused the payload, e.g. 400/409/415/422), `credentials_rejected` (401/403), `endpoint_not_found` (404/410), `rate_limited` (429), `upstream_error` (5xx), `redirected` (3xx, never followed), `timeout`, or `connection_failed`. `meta.upstreamStatus` carries the HTTP status whenever one arrived, and `meta.upstreamBody` up to 200 characters of what the other end answered, with control characters removed; it is omitted when the body was empty or could carry a credential: a token-shaped string, or the saved header value (and its token part), the URL's userinfo, a query value, or a path segment of 16 or more characters (the token in a Discord or Slack webhook URL), literal, JSON-escaped or percent-encoded.",
           content: { "application/json": { schema: errorEnvelope } },
         },
         "500": {

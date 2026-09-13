@@ -237,3 +237,43 @@ describe("sendViaEmail — the failure names itself for the test button", () => 
     expect(result.smtpCode).toBeUndefined();
   });
 });
+
+describe("sendViaEmail — transport and envelope faults are named too", () => {
+  it.each([
+    ["a TLS handshake failure", "ETLS", undefined, "connection_failed"],
+    ["a protocol error", "EPROTOCOL", undefined, "connection_failed"],
+    [
+      "an envelope refused without a code",
+      "EENVELOPE",
+      undefined,
+      "upstream_rejected",
+    ],
+    [
+      "a message refused without a code",
+      "EMESSAGE",
+      undefined,
+      "upstream_rejected",
+    ],
+    [
+      "an envelope refused with a temporary code",
+      "EENVELOPE",
+      451,
+      "upstream_error",
+    ],
+  ])("%s", async (_label, code, responseCode, failureCode) => {
+    loadEmailConfigMock.mockReturnValue(transport);
+    sendMailMock.mockRejectedValue(
+      Object.assign(new Error(String(code)), {
+        code,
+        ...(responseCode !== undefined ? { responseCode } : {}),
+      }),
+    );
+
+    const result = await sendViaEmail(
+      { recipient: "you@example.com" },
+      payload(),
+    );
+
+    expect(result.failureCode).toBe(failureCode);
+  });
+});

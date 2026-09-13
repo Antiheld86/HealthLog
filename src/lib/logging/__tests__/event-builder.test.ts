@@ -110,3 +110,33 @@ describe("WideEventBuilder.setHttp", () => {
     expect(evt.toJSON().http).toBeUndefined();
   });
 });
+
+describe("WideEventBuilder.capStatusLevel", () => {
+  it("derives error from a 5xx by default", () => {
+    const evt = new WideEventBuilder("http");
+    evt.finish(502);
+    expect(evt.toJSON().level).toBe("error");
+  });
+
+  it("keeps a capped 5xx at warn", () => {
+    const evt = new WideEventBuilder("http");
+    evt.capStatusLevel("warn");
+    evt.finish(502);
+    expect(evt.toJSON().level).toBe("warn");
+  });
+
+  it("does not lower an explicit elevation", () => {
+    const evt = new WideEventBuilder("http");
+    evt.capStatusLevel("warn");
+    evt.elevateLevel("error");
+    evt.finish(502);
+    expect(evt.toJSON().level).toBe("error");
+  });
+
+  it("leaves a 4xx at warn under the cap", () => {
+    const evt = new WideEventBuilder("http");
+    evt.capStatusLevel("warn");
+    evt.finish(422);
+    expect(evt.toJSON().level).toBe("warn");
+  });
+});

@@ -347,6 +347,7 @@ describe("POST /api/admin/notifications/test — a failure keeps its cause (#947
       upstreamStatus: 400,
     });
     expect(body.data.results[0].error).toContain("HTTP 400");
+    expect(body.data.results[0].error).not.toContain("hl-test");
   });
 
   it("tests the webhook channel rather than calling it unknown", async () => {
@@ -372,8 +373,9 @@ describe("POST /api/admin/notifications/test — a failure keeps its cause (#947
       success: false,
       errorCode: "upstream_rejected",
       upstreamStatus: 400,
-      upstreamBody: "priority must be an integer",
     });
+    // The relay body belongs to the settings card, not the admin toast.
+    expect(body.data.results[0].upstreamBody).toBeUndefined();
   });
 
   it("tests the email channel and forwards the SMTP code", async () => {

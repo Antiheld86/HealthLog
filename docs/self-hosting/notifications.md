@@ -274,6 +274,13 @@ short, Gotify's own error text. A `401` means the token is wrong. A `400`
 means Gotify could not read the body; check that the format is set to
 Gotify. A Gotify on your own network also needs the operator grant below.
 
+The detail reaches the card inside the server's `502` response. A reverse
+proxy that replaces error pages for 5xx responses, such as Traefik's
+`errors` middleware or nginx with `proxy_intercept_errors on`, swaps that
+response for its own page, and the card can then only say "Test failed".
+Exclude the `/api/` paths from the error-page rule to keep the detail. This
+applies to the ntfy and email tests too.
+
 ## Notification targets on a private network
 
 Every webhook and ntfy target is resolved at send time and refused when

@@ -72,11 +72,12 @@ async function ensureTelegramChannel(userId: string): Promise<boolean> {
   return true;
 }
 
+/** The admin toast renders `errorCode` and the status; the relay body stays on the settings card. */
 type TestResult = {
   channel: string;
   success: boolean;
   error?: string;
-} & TestFailureDetail;
+} & Omit<TestFailureDetail, "upstreamBody">;
 
 /**
  * A failed HTTP or SMTP send, with the code, status and SMTP reply code the
@@ -87,21 +88,26 @@ function failedSend(
   channel: string,
   label: string,
   result: SendOutcome,
-  context?: string,
 ): TestResult {
-  const detail: TestFailureDetail = result.errorCode
-    ? { errorCode: result.errorCode }
+  const { errorCode, upstreamStatus, smtpCode } = result.errorCode
+    ? {
+        errorCode: result.errorCode,
+        upstreamStatus: undefined,
+        smtpCode: undefined,
+      }
     : testFailureDetail(result);
   const cause = result.errorCode
     ? `refused by the private-origin policy (${result.errorCode})`
-    : detail.errorCode
-      ? testFailureSentence(label, detail)
+    : errorCode
+      ? testFailureSentence(label, { errorCode, upstreamStatus, smtpCode })
       : (result.reason ?? "send failed");
   return {
     channel,
     success: false,
-    error: context ? `${cause} (${context})` : cause,
-    ...detail,
+    error: cause,
+    ...(errorCode ? { errorCode } : {}),
+    ...(upstreamStatus !== undefined ? { upstreamStatus } : {}),
+    ...(smtpCode !== undefined ? { smtpCode } : {}),
   };
 }
 
@@ -205,14 +211,8 @@ export const POST = apiHandler(async () => {
           const ntfyResult = await sendViaNtfy(config, payload);
           success = ntfyResult.ok;
           if (!success) {
-            results.push(
-              failedSend(
-                "NTFY",
-                "The ntfy server",
-                ntfyResult,
-                `topic: ${config.topic}`,
-              ),
-            );
+            // The topic is not echoed: on a public server it is the secret.
+            results.push(failedSend("NTFY", "The ntfy server", ntfyResult));
             continue;
           }
           break;

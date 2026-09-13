@@ -22,6 +22,10 @@ import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { useAdminSettings, useUpdateSettings } from "./_shared";
 import { apiGet, apiPost } from "@/lib/api/api-fetch";
+import {
+  describeChannelTestFailures,
+  type ChannelTestResult,
+} from "./notification-test-failures";
 
 interface NotificationHealth {
   windowHours: number;
@@ -132,19 +136,23 @@ export function RemindersSection() {
       return apiPost<
         | {
             message?: string;
-            results?: Array<{
-              channel: string;
-              success: boolean;
-              error?: string;
-            }>;
+            results?: ChannelTestResult[];
           }
         | undefined
       >("/api/admin/notifications/test");
     },
     onSuccess: (data) => {
-      const hasFailures = data?.results?.some((r) => !r.success);
-      if (hasFailures) {
-        toast.error(data?.message ?? t("admin.notificationTestFailed"));
+      const failures = describeChannelTestFailures(data?.results ?? [], t);
+      if (failures.length > 0) {
+        toast.error(data?.message ?? t("admin.notificationTestFailed"), {
+          description: (
+            <ul className="space-y-0.5">
+              {failures.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          ),
+        });
       } else {
         toast.success(data?.message ?? t("admin.notificationTestSuccess"));
       }

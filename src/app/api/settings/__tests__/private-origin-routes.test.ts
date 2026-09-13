@@ -52,7 +52,10 @@ vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/auth/audit", () => ({
   auditLog: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("@/lib/logging/transports", () => ({ emitIfSampled: vi.fn() }));
+const emitIfSampledMock = vi.fn();
+vi.mock("@/lib/logging/transports", () => ({
+  emitIfSampled: (...args: unknown[]) => emitIfSampledMock(...args),
+}));
 vi.mock("@/lib/db-compat", () => ({
   ensureDbCompatibility: vi.fn().mockResolvedValue(undefined),
 }));
@@ -374,6 +377,10 @@ describe("POST /api/settings/{webhook,ntfy}/test — the refusal names itself", 
         upstreamBody: '{"error":"Bad Request","errorCode":400}',
       });
       expect(json.error).toContain("HTTP 400");
+      // A user's relay refusing is not an operator error: the event is warn.
+      expect(emitIfSampledMock).toHaveBeenCalledWith(
+        expect.objectContaining({ level: "warn" }),
+      );
     },
   );
 
@@ -444,6 +451,9 @@ describe("POST /api/settings/{webhook,ntfy}/test — the refusal names itself", 
       expect(response.status).toBe(500);
       const json = await response.json();
       expect(json.meta).toBeUndefined();
+      expect(emitIfSampledMock).toHaveBeenCalledWith(
+        expect.objectContaining({ level: "error" }),
+      );
     },
   );
 
