@@ -345,10 +345,11 @@ x-healthlog-env: &healthlog_env
   LOG_SAMPLE_RATE: "${LOG_SAMPLE_RATE:-}"
   LOG_SLOW_THRESHOLD_MS: "${LOG_SLOW_THRESHOLD_MS:-}"
   LOG_INCLUDE_STACK: "${LOG_INCLUDE_STACK:-}"
-  # Optional log shipping to a Loki instance. Set LOKI_ENDPOINT to the push
-  # URL to turn it on; the username/password pair is only needed when your
-  # Loki is behind basic auth. Leave all three unset and logs stay on stdout
-  # for the Docker log driver to rotate.
+  # Optional log shipping to a Loki instance. Set LOKI_ENDPOINT to the base
+  # URL or the full push URL to turn it on; a Loki on your own network works.
+  # The username/password pair is only needed when your Loki is behind basic
+  # auth. Push failures show up as a rate-limited line on stderr. Leave all
+  # three unset and logs stay on stdout for the Docker log driver to rotate.
   LOKI_ENDPOINT: "${LOKI_ENDPOINT:-}"
   LOKI_USERNAME: "${LOKI_USERNAME:-}"
   LOKI_PASSWORD: "${LOKI_PASSWORD:-}"

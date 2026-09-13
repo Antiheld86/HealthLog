@@ -14,6 +14,11 @@
  *      `event.preloadResponse` when the browser supplies it;
  *   4. `trimCache` reads the key list once and deletes the excess prefix
  *      in a single pass (the previous loop re-fetched all keys per delete).
+ *
+ * A HealthLog page response carries the `X-HealthLog-Page` marker the proxy
+ * sets, so the navigation fixtures below build pages with `healthlogPage()`.
+ * A successful page without it is another app on the same origin (#847),
+ * which the "foreign origin" block covers.
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
@@ -37,6 +42,15 @@ const FALLBACK_VERSION = /\/\* @sw-version-fallback \*\/\s*"(v[^"]*)"/.exec(
 const CURRENT_PAGE_CACHE = `healthlog-pages-${FALLBACK_VERSION}`;
 const CURRENT_STATIC_CACHE = `healthlog-static-${FALLBACK_VERSION}`;
 const CURRENT_DATA_CACHE = `healthlog-data-${FALLBACK_VERSION}`;
+
+const PAGE_MARKER = "X-HealthLog-Page";
+
+/** A page response as HealthLog's proxy delivers it: marker included. */
+function healthlogPage(body: string, init: ResponseInit = {}): Response {
+  const headers = new Headers(init.headers);
+  headers.set(PAGE_MARKER, "1");
+  return new Response(body, { ...init, headers });
+}
 
 class FakeCache {
   map = new Map<string, Response>();
@@ -121,6 +135,7 @@ interface SwHarness {
   listeners: Map<string, (event: unknown) => void>;
   cacheStorage: FakeCacheStorage;
   navPreload: { enabled: boolean; enable: () => Promise<void> };
+  unregisterCalls: { count: number };
   lifetimePromises: Promise<unknown>[];
   context: Record<string, unknown>;
 }
@@ -129,6 +144,7 @@ function bootServiceWorker(): SwHarness {
   const listeners = new Map<string, (event: unknown) => void>();
   const cacheStorage = new FakeCacheStorage();
   const lifetimePromises: Promise<unknown>[] = [];
+  const unregisterCalls = { count: 0 };
   const navPreload = {
     enabled: false,
     enable: async () => {
@@ -147,6 +163,10 @@ function bootServiceWorker(): SwHarness {
     clients: { claim: async () => {} },
     registration: {
       navigationPreload: navPreload,
+      unregister: async () => {
+        unregisterCalls.count += 1;
+        return true;
+      },
       showNotification: async (title: string, opts: { tag?: string }) => {
         shown.push({ title, tag: opts?.tag, closed: false });
       },
@@ -194,7 +214,14 @@ function bootServiceWorker(): SwHarness {
   };
   vm.createContext(context);
   vm.runInContext(SW_SOURCE, context);
-  return { listeners, cacheStorage, navPreload, lifetimePromises, context };
+  return {
+    listeners,
+    cacheStorage,
+    navPreload,
+    unregisterCalls,
+    lifetimePromises,
+    context,
+  };
 }
 
 async function dispatchActivate(harness: SwHarness): Promise<void> {
@@ -389,7 +416,7 @@ describe("sw.js — best-effort cache writes", () => {
     const harness = bootServiceWorker();
     const pageCache = await harness.cacheStorage.open(CURRENT_PAGE_CACHE);
     pageCache.putError = new Error("CacheStorage quota exceeded");
-    const networkResponse = new Response("network shell", {
+    const networkResponse = healthlogPage("network shell", {
       headers: { "X-Network-Response": "original" },
     });
     harness.context.fetch = async () => networkResponse;
@@ -413,7 +440,7 @@ describe("sw.js — best-effort cache writes", () => {
       notifyPutStarted = resolve;
     });
     pageCache.onPut = notifyPutStarted;
-    const networkResponse = new Response("network shell");
+    const networkResponse = healthlogPage("network shell");
     harness.context.fetch = async () => networkResponse;
 
     const responsePromise = dispatchNavigationFetch(harness, "/measurements");
@@ -572,7 +599,7 @@ describe("sw.js — networkFirst offline fallback", () => {
     const res = await dispatchNavigationFetch(
       harness,
       "/",
-      Promise.resolve(new Response("preloaded shell")),
+      Promise.resolve(healthlogPage("preloaded shell")),
     );
 
     expect(await res.clone().text()).toBe("preloaded shell");
@@ -587,7 +614,7 @@ describe("sw.js — networkFirst privacy gate", () => {
   it("does not cache a navigation response that carries Cache-Control: no-store", async () => {
     const harness = bootServiceWorker();
     harness.context.fetch = async () =>
-      new Response("private shell", {
+      healthlogPage("private shell", {
         headers: { "Cache-Control": "no-store" },
       });
 
@@ -600,7 +627,7 @@ describe("sw.js — networkFirst privacy gate", () => {
 
   it("does not cache the /c/ clinician-share view even without no-store", async () => {
     const harness = bootServiceWorker();
-    harness.context.fetch = async () => new Response("share shell");
+    harness.context.fetch = async () => healthlogPage("share shell");
 
     const res = await dispatchNavigationFetch(harness, "/c/hls_abc123");
     expect(await res.clone().text()).toBe("share shell");
@@ -611,13 +638,382 @@ describe("sw.js — networkFirst privacy gate", () => {
 
   it("still caches an ordinary navigation response", async () => {
     const harness = bootServiceWorker();
-    harness.context.fetch = async () => new Response("app shell");
+    harness.context.fetch = async () => healthlogPage("app shell");
 
     const res = await dispatchNavigationFetch(harness, "/measurements");
     expect(await res.clone().text()).toBe("app shell");
 
     const pages = await harness.cacheStorage.open(CURRENT_PAGE_CACHE);
     expect(await pages.match(`${ORIGIN}/measurements`)).toBeDefined();
+  });
+});
+
+/**
+ * Dispatch any request and report whether the worker took it. Used where the
+ * assertion IS whether `respondWith` was called: a declined request goes to
+ * the network through the browser, untouched by this worker.
+ */
+function dispatchAnyFetch(
+  harness: SwHarness,
+  path: string,
+  headers: Record<string, string> = {},
+): { responded: boolean; response: Promise<Response> | null } {
+  let captured: Promise<Response> | null = null;
+  let responded = false;
+  harness.listeners.get("fetch")!({
+    request: new Request(`${ORIGIN}${path}`, { headers }),
+    respondWith: (p: Promise<Response>) => {
+      responded = true;
+      captured = p;
+    },
+    waitUntil: (p: Promise<unknown>) => {
+      harness.lifetimePromises.push(p);
+    },
+  });
+  return { responded, response: captured };
+}
+
+const HEALTHLOG_VERSION_BODY = JSON.stringify({
+  data: { version: "1.38.21", buildSha: null, builtAt: null },
+  error: null,
+});
+
+/**
+ * Route the harness `fetch`: `/api/version` (the worker's confirmation probe)
+ * gets `version`, everything else gets `page`. Records every requested path.
+ */
+function routeFetch(
+  harness: SwHarness,
+  page: () => Response,
+  version: () => Response | Promise<Response>,
+): string[] {
+  const calls: string[] = [];
+  harness.context.fetch = async (input: RequestInfo | URL) => {
+    const url = new URL(
+      typeof input === "string" || input instanceof URL ? input : input.url,
+      ORIGIN,
+    );
+    calls.push(url.pathname);
+    return url.pathname === "/api/version" ? version() : page();
+  };
+  return calls;
+}
+
+const foreignHtml = () =>
+  new Response("<html>another app</html>", {
+    headers: { "Content-Type": "text/html" },
+  });
+
+async function seedHealthlogCaches(harness: SwHarness): Promise<void> {
+  const statics = await harness.cacheStorage.open(CURRENT_STATIC_CACHE);
+  await statics.put(
+    `${ORIGIN}/_next/static/chunks/app.js`,
+    new Response("healthlog chunk"),
+  );
+  const pages = await harness.cacheStorage.open(CURRENT_PAGE_CACHE);
+  await pages.put(`${ORIGIN}/`, healthlogPage("healthlog shell"));
+  const legacy = await harness.cacheStorage.open("healthlog-data-v0.0.1");
+  await legacy.put(`${ORIGIN}/api/version`, new Response("{}"));
+  // CacheStorage the other app owns on the same origin.
+  const other = await harness.cacheStorage.open("next-app-runtime");
+  await other.put(`${ORIGIN}/x`, new Response("theirs"));
+}
+
+describe("sw.js — foreign origin (#847)", () => {
+  it("keeps serving and caching while the page carries the HealthLog marker", async () => {
+    const harness = bootServiceWorker();
+    await seedHealthlogCaches(harness);
+    harness.context.fetch = async () => healthlogPage("fresh shell");
+
+    const res = await dispatchNavigationFetch(harness, "/");
+    await Promise.all(harness.lifetimePromises);
+
+    expect(await res.text()).toBe("fresh shell");
+    expect(harness.unregisterCalls.count).toBe(0);
+    expect(harness.cacheStorage.stores.has(CURRENT_STATIC_CACHE)).toBe(true);
+    const asset = dispatchAnyFetch(harness, "/_next/static/chunks/app.js");
+    expect(asset.responded).toBe(true);
+    expect(await (await asset.response!).text()).toBe("healthlog chunk");
+  });
+
+  it("retires when the page lacks the marker and the version probe finds another app's HTML", async () => {
+    const harness = bootServiceWorker();
+    await seedHealthlogCaches(harness);
+    const foreignPage = foreignHtml();
+    const calls = routeFetch(harness, () => foreignPage, foreignHtml);
+
+    const res = await dispatchNavigationFetch(harness, "/");
+
+    // The other app's page is returned untouched, and the worker declines
+    // requests at once, before the probe has answered.
+    expect(res).toBe(foreignPage);
+    expect(
+      dispatchAnyFetch(harness, "/_next/static/chunks/app.js").responded,
+    ).toBe(false);
+
+    await Promise.all(harness.lifetimePromises);
+
+    expect(calls).toEqual(["/", "/api/version"]);
+    expect(harness.unregisterCalls.count).toBe(1);
+    // Every HealthLog cache is gone, current and legacy; the other app's is not.
+    expect([...harness.cacheStorage.stores.keys()]).toEqual([
+      "next-app-runtime",
+    ]);
+
+    // Still declining after the retire: static, HTML and API all go to the
+    // network through the browser.
+    expect(
+      dispatchAnyFetch(harness, "/_next/static/chunks/app.js").responded,
+    ).toBe(false);
+    expect(
+      dispatchAnyFetch(harness, "/about", { accept: "text/html" }).responded,
+    ).toBe(false);
+    expect(dispatchAnyFetch(harness, "/api/measurements").responded).toBe(
+      false,
+    );
+  });
+
+  it("retires when the version probe answers 404", async () => {
+    const harness = bootServiceWorker();
+    await seedHealthlogCaches(harness);
+    routeFetch(
+      harness,
+      foreignHtml,
+      () => new Response("Not Found", { status: 404 }),
+    );
+
+    await dispatchNavigationFetch(harness, "/");
+    await Promise.all(harness.lifetimePromises);
+
+    expect(harness.unregisterCalls.count).toBe(1);
+    expect(harness.cacheStorage.stores.has(CURRENT_STATIC_CACHE)).toBe(false);
+  });
+
+  it("retires when the version probe answers JSON without the HealthLog shape", async () => {
+    const harness = bootServiceWorker();
+    routeFetch(
+      harness,
+      foreignHtml,
+      () => new Response(JSON.stringify({ version: "3.0.0" })),
+    );
+
+    await dispatchNavigationFetch(harness, "/");
+    await Promise.all(harness.lifetimePromises);
+
+    expect(harness.unregisterCalls.count).toBe(1);
+  });
+
+  it("probes with no-store and a manual redirect", async () => {
+    const harness = bootServiceWorker();
+    let probeInit: RequestInit | undefined;
+    harness.context.fetch = async (
+      input: RequestInfo | URL,
+      init?: RequestInit,
+    ) => {
+      const path = new URL(
+        String(input instanceof Request ? input.url : input),
+        ORIGIN,
+      ).pathname;
+      if (path === "/api/version") {
+        probeInit = init;
+        return new Response(HEALTHLOG_VERSION_BODY);
+      }
+      return foreignHtml();
+    };
+
+    await dispatchNavigationFetch(harness, "/");
+    await Promise.all(harness.lifetimePromises);
+
+    expect(probeInit?.cache).toBe("no-store");
+    expect(probeInit?.redirect).toBe("manual");
+  });
+
+  it("does not retire when a header-stripping proxy hides the marker from a real HealthLog", async () => {
+    const harness = bootServiceWorker();
+    await seedHealthlogCaches(harness);
+    // The page is HealthLog's, minus the marker a proxy allowlist removed.
+    routeFetch(
+      harness,
+      () => new Response("healthlog page without marker"),
+      () =>
+        new Response(HEALTHLOG_VERSION_BODY, {
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+
+    const res = await dispatchNavigationFetch(harness, "/");
+    expect(await res.text()).toBe("healthlog page without marker");
+    await Promise.all(harness.lifetimePromises);
+
+    expect(harness.unregisterCalls.count).toBe(0);
+    expect(harness.cacheStorage.stores.has(CURRENT_STATIC_CACHE)).toBe(true);
+    // Normal service resumed: the cached chunk is served cache-first again.
+    const asset = dispatchAnyFetch(harness, "/_next/static/chunks/app.js");
+    expect(asset.responded).toBe(true);
+    expect(await (await asset.response!).text()).toBe("healthlog chunk");
+  });
+
+  it.each([
+    [
+      "the probe throws (network)",
+      () => Promise.reject(new TypeError("network down")),
+    ],
+    ["the probe answers 500", () => new Response("boom", { status: 500 })],
+    [
+      "the probe answers 401 from an auth gateway",
+      () => new Response("Unauthorized", { status: 401 }),
+    ],
+  ])(
+    "does not retire when %s, and resumes service",
+    async (_label, version) => {
+      const harness = bootServiceWorker();
+      await seedHealthlogCaches(harness);
+      routeFetch(harness, foreignHtml, version as () => Promise<Response>);
+
+      await dispatchNavigationFetch(harness, "/");
+      await Promise.all(harness.lifetimePromises);
+
+      expect(harness.unregisterCalls.count).toBe(0);
+      expect(harness.cacheStorage.stores.has(CURRENT_STATIC_CACHE)).toBe(true);
+      expect(
+        dispatchAnyFetch(harness, "/_next/static/chunks/app.js").responded,
+      ).toBe(true);
+    },
+  );
+
+  it("asks again on a later suspicious navigation after an inconclusive probe", async () => {
+    const harness = bootServiceWorker();
+    let probeStatus = 503;
+    const calls = routeFetch(harness, foreignHtml, () =>
+      probeStatus === 503
+        ? new Response("down", { status: 503 })
+        : new Response("Not Found", { status: 404 }),
+    );
+
+    await dispatchNavigationFetch(harness, "/");
+    await Promise.all(harness.lifetimePromises);
+    expect(harness.unregisterCalls.count).toBe(0);
+
+    probeStatus = 404;
+    await dispatchNavigationFetch(harness, "/");
+    await Promise.all(harness.lifetimePromises);
+
+    expect(calls.filter((p) => p === "/api/version")).toHaveLength(2);
+    expect(harness.unregisterCalls.count).toBe(1);
+  });
+
+  it("recognises a foreign page delivered through navigation preload", async () => {
+    const harness = bootServiceWorker();
+    await seedHealthlogCaches(harness);
+    const calls = routeFetch(
+      harness,
+      () => healthlogPage("unexpected"),
+      () => new Response("Not Found", { status: 404 }),
+    );
+
+    const res = await dispatchNavigationFetch(
+      harness,
+      "/",
+      Promise.resolve(new Response("another app")),
+    );
+    await Promise.all(harness.lifetimePromises);
+
+    expect(await res.text()).toBe("another app");
+    // The page came from the preload; the only network call is the probe.
+    expect(calls).toEqual(["/api/version"]);
+    expect(harness.unregisterCalls.count).toBe(1);
+  });
+
+  it("still unregisters when deleting the caches fails", async () => {
+    const harness = bootServiceWorker();
+    harness.cacheStorage.keys = async () => {
+      throw new Error("CacheStorage unavailable");
+    };
+    routeFetch(harness, foreignHtml, foreignHtml);
+
+    await dispatchNavigationFetch(harness, "/");
+    await Promise.all(harness.lifetimePromises);
+
+    expect(harness.unregisterCalls.count).toBe(1);
+  });
+
+  it("keeps the offline fallback when the network fails (HealthLog is down, not replaced)", async () => {
+    const harness = bootServiceWorker();
+    await seedHealthlogCaches(harness);
+    // Default harness fetch throws: network down.
+
+    const res = await dispatchNavigationFetch(harness, "/");
+    await Promise.all(harness.lifetimePromises);
+
+    expect(await res.text()).toBe("healthlog shell");
+    expect(harness.unregisterCalls.count).toBe(0);
+    expect(harness.cacheStorage.stores.has(CURRENT_STATIC_CACHE)).toBe(true);
+  });
+
+  it.each([
+    [
+      "an error page from HealthLog itself",
+      healthlogPage("boom", { status: 500 }),
+    ],
+    [
+      "a gateway error from a proxy in front of a stopped HealthLog",
+      new Response("Bad Gateway", { status: 502 }),
+    ],
+    [
+      "a 401 from an auth gateway",
+      new Response("Unauthorized", { status: 401 }),
+    ],
+  ])("does not treat %s as foreign", async (_label, response) => {
+    const harness = bootServiceWorker();
+    await seedHealthlogCaches(harness);
+    harness.context.fetch = async () => response;
+
+    const res = await dispatchNavigationFetch(harness, "/");
+    await Promise.all(harness.lifetimePromises);
+
+    expect(res).toBe(response);
+    expect(harness.unregisterCalls.count).toBe(0);
+    expect(
+      dispatchAnyFetch(harness, "/_next/static/chunks/app.js").responded,
+    ).toBe(true);
+  });
+
+  it("does not treat an opaque redirect (a signed-out HealthLog page) as foreign", async () => {
+    const harness = bootServiceWorker();
+    const redirect = Response.redirect(`${ORIGIN}/auth/login`, 307);
+    // A navigation fetched with `redirect: "manual"` surfaces as an opaque
+    // redirect in a real worker; model the type the worker sees.
+    Object.defineProperty(redirect, "type", { value: "opaqueredirect" });
+    Object.defineProperty(redirect, "headers", { value: new Headers() });
+    Object.defineProperty(redirect, "ok", { value: false });
+    harness.context.fetch = async () => redirect;
+
+    await dispatchNavigationFetch(harness, "/");
+    await Promise.all(harness.lifetimePromises);
+
+    expect(harness.unregisterCalls.count).toBe(0);
+  });
+
+  it("leaves the one-shot auth navigation path unchanged", async () => {
+    const harness = bootServiceWorker();
+    let fetchCalls = 0;
+    harness.context.fetch = async () => {
+      fetchCalls += 1;
+      return new Response("network callback");
+    };
+
+    const { responded, response } = dispatchAuthNavigation(
+      harness,
+      "/api/auth/oidc/callback?code=abc&state=xyz",
+      Promise.resolve(new Response("preloaded callback")),
+    );
+
+    expect(responded).toBe(true);
+    expect(await (await response!).text()).toBe("preloaded callback");
+    expect(fetchCalls).toBe(0);
+    // An auth response has no page marker and must not retire the worker.
+    await Promise.all(harness.lifetimePromises);
+    expect(harness.unregisterCalls.count).toBe(0);
   });
 });
 
