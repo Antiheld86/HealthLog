@@ -14,8 +14,23 @@
  * Mutation check, run: flip the default in `isNavDestinationVisible` so an
  * unflagged destination survives a switch → "hides everything that has not
  * been classified" goes red naming Insights and the Coach.
+ *
+ * Mutation checks for the utility tail, run against `visibleUtilityDestinations`:
+ *   - restore the old empty tail for every shared record → both "offers
+ *     Settings" cases and the parity case go red (3);
+ *   - point the switched entry at the fixed `/settings/account` → the adult
+ *     MANAGE case and the parity case go red (2);
+ *   - keep Notifications in the switched tail beside the remapped Settings
+ *     entry → "never offers Notifications under a switch" goes red, with the
+ *     two "offers Settings" cases and the parity case (4).
  */
 import { describe, expect, it } from "vitest";
+
+import { SETTINGS_SECTIONS } from "@/components/settings/settings-shell";
+import {
+  isSettingsDestinationListedForRecord,
+  type SettingsRecordContext,
+} from "@/lib/record-settings/classification";
 
 import {
   BOTTOM_NAV_PRIMARY_SLOT_HREFS,
@@ -116,11 +131,93 @@ describe("a module the RECORD does not track", () => {
 });
 
 describe("the utility tail under a switch", () => {
-  it("disappears entirely", () => {
-    // Settings holds credentials, integrations, notification channels and
-    // grant management; Notifications is the delegate's own device business.
-    expect(visibleUtilityDestinations({ sharedRecord: true })).toEqual([]);
-    expect(visibleUtilityDestinations().length).toBeGreaterThan(0);
+  const MANAGED_AT_MANAGE: SettingsRecordContext = {
+    recordKind: "managed",
+    level: "manage",
+  };
+  const SHARED_AT_MANAGE: SettingsRecordContext = {
+    recordKind: "shared",
+    level: "manage",
+  };
+
+  const hrefs = (record: SettingsRecordContext | null) =>
+    visibleUtilityDestinations({ record }).map((d) => d.href);
+
+  it("keeps both utilities in one's own record", () => {
+    expect(hrefs(null)).toEqual(["/settings/account", "/notifications"]);
+    expect(visibleUtilityDestinations().map((d) => d.href)).toEqual(
+      hrefs(null),
+    );
+  });
+
+  /**
+   * #939 — a self-hoster looking after a managed profile was told to open
+   * Settings → Modules inside it and could not find Settings anywhere: the
+   * tail used to be empty for every shared record, while the Settings shell
+   * lists the profile's own configuration there. The entry is offered again,
+   * and it opens on a page the shell admits.
+   */
+  it("offers Settings inside a managed profile, because the shell has pages for it there", () => {
+    const tail = visibleUtilityDestinations({ record: MANAGED_AT_MANAGE });
+    expect(tail.map((d) => d.tKey)).toEqual(["nav.settings"]);
+    // The profile card: `account` is classified managed-guardian and is the
+    // first section the shell lists for a managed record.
+    expect(tail[0].href).toBe("/settings/account");
+  });
+
+  it("offers Settings to an adult MANAGE share, landing on the only page it opens", () => {
+    // `/settings/account` is refused in an adult share; the one destination
+    // listed there is the record content, so the entry must not point at the
+    // account page the bar uses in one's own record.
+    expect(hrefs(SHARED_AT_MANAGE)).toEqual(["/settings/anamnesis"]);
+  });
+
+  it("offers nothing to a READ or WRITE share, where the shell lists nothing", () => {
+    for (const recordKind of ["shared", "managed"] as const) {
+      for (const level of ["read", "write"] as const) {
+        expect(hrefs({ recordKind, level })).toEqual([]);
+      }
+    }
+  });
+
+  it("offers nothing to a refused or pending switch, which carries no level", () => {
+    // `resolveRecordCapabilities` answers `recordKind: "shared", level: null`
+    // for both; a Settings entry there would lead into a context nobody has
+    // proven.
+    expect(hrefs({ recordKind: "shared", level: null })).toEqual([]);
+  });
+
+  it("never offers Notifications under a switch", () => {
+    // Notifications is the delegate's own device business; its routes refuse
+    // under a switch at every level and for every record kind.
+    for (const recordKind of ["shared", "managed"] as const) {
+      for (const level of ["read", "write", "manage", null] as const) {
+        expect(hrefs({ recordKind, level })).not.toContain("/notifications");
+      }
+    }
+  });
+
+  it("lands on the first section the Settings shell lists, for every record kind", () => {
+    // The parity net. The navigation walks the slug registry, the shell walks
+    // its own ordered section list; both filter with the same predicate, and
+    // this holds the first answers equal so a reorder on either side cannot
+    // land somebody on a page the shell does not open with.
+    const contexts: SettingsRecordContext[] = [
+      MANAGED_AT_MANAGE,
+      SHARED_AT_MANAGE,
+    ];
+    for (const record of contexts) {
+      const firstListed = SETTINGS_SECTIONS.find((section) =>
+        isSettingsDestinationListedForRecord(section.slug, record),
+      );
+      // Non-zero: a predicate that listed nothing would make both sides
+      // agree on "no entry" and prove nothing about the landing.
+      expect(firstListed, record.recordKind).toBeDefined();
+      // A module-gated landing could vanish from the shell when its module is
+      // off, leaving the entry pointing at a section the list no longer shows.
+      expect(firstListed?.moduleGate, record.recordKind).toBeUndefined();
+      expect(hrefs(record)).toEqual([`/settings/${firstListed?.slug}`]);
+    }
   });
 });
 

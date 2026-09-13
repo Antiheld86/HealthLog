@@ -20,6 +20,7 @@ import { AccountSwitcherMenuItems } from "@/components/layout/account-switcher-m
 import { medicationsPrefetchIntentProps } from "@/lib/queries/prefetch-medications";
 import {
   isNavDestinationActive,
+  isSettingsUtilityDestination,
   visibleNavDestinations,
   visibleUtilityDestinations,
 } from "@/components/layout/nav-model";
@@ -64,10 +65,12 @@ function getInitials(name: string): string {
  * The sidebar footer's name-and-avatar block.
  *
  * A link into the account settings normally, and a plain block while this
- * browser is acting on somebody else's record — the settings routes refuse
- * under a switch, so the link would lead only to an explanation of why it did
- * not work. It keeps naming the person at the keyboard either way, which is
- * what a switched session needs it to do.
+ * browser is acting on somebody else's record. The block names the person at
+ * the keyboard, and `/settings/account` inside a record is either refused (an
+ * adult share) or the RECORD's profile card (a managed profile) — a door on
+ * one's own name into somebody else's settings would mislabel both. A record
+ * that has Settings pages reaches them through the footer Settings entry,
+ * which is labelled as Settings and lands where the shell opens.
  */
 function FooterIdentity({
   sharedRecord,
@@ -307,7 +310,12 @@ export function SidebarNav() {
   // v1.36.0 — while this browser is acting on somebody else's record, the nav
   // shows only what sharing covers. The server refuses the rest regardless;
   // dropping the entries spares a delegate a click that ends in a 403.
-  const { inSharedRecord: sharedRecord, sections } = useRecordCapabilities();
+  const {
+    inSharedRecord: sharedRecord,
+    sections,
+    recordKind,
+    level,
+  } = useRecordCapabilities();
   const visibleNavItems = useMemo(
     () =>
       visibleNavDestinations(user?.modules, mounted, sharedRecord, sections),
@@ -347,22 +355,26 @@ export function SidebarNav() {
   }
 
   // v1.17.1 (F-1 residue) — the sidebar footer utility links derive from
-  // the SAME shared list the mobile More-hub tail consumes, so the two
-  // surfaces can no longer drift into two hand-curated utility lists.
-  // Notifications is surfaced in the avatar menu (not the footer), so the
-  // footer takes every utility entry except `/notifications`; Admin is the
-  // role-gated, sidebar-only surface and is inserted separately below.
+  // the SAME shared list the mobile user menu consumes, so the two surfaces
+  // can no longer drift into two hand-curated utility lists. Notifications is
+  // surfaced in the avatar menu (not the footer), so the footer takes every
+  // utility entry except `/notifications`; Admin is the role-gated,
+  // sidebar-only surface and is inserted separately below.
+  //
+  // Under a switch the list answers for the record on screen: a Settings
+  // entry exactly when the Settings shell lists a section for it, pointing at
+  // the first one (see `visibleUtilityDestinations`).
   const footerUtilityItems = useMemo(
     () =>
-      visibleUtilityDestinations({ sharedRecord }).filter(
-        (d) => d.href !== "/notifications",
-      ),
-    [sharedRecord],
+      visibleUtilityDestinations({
+        record: sharedRecord ? { recordKind, level } : null,
+      }).filter((d) => d.href !== "/notifications"),
+    [sharedRecord, recordKind, level],
   );
 
   function isUtilityActive(href: string) {
     // Settings matches the whole `/settings/*` shell; the rest match exact.
-    return href === "/settings/account"
+    return isSettingsUtilityDestination({ href })
       ? pathname.startsWith("/settings")
       : pathname === href;
   }
@@ -374,8 +386,10 @@ export function SidebarNav() {
   }) {
     const Icon = item.icon;
     const isActive = isUtilityActive(item.href);
-    const tourId =
-      item.href === "/settings/account" ? "nav-settings" : undefined;
+    const isSettings = isSettingsUtilityDestination(item);
+    const tourId = isSettingsUtilityDestination(item)
+      ? "nav-settings"
+      : undefined;
     if (collapsed) {
       return (
         <Tooltip key={item.href}>
@@ -384,6 +398,7 @@ export function SidebarNav() {
               href={item.href}
               aria-current={isActive ? "page" : undefined}
               data-tour-id={tourId}
+              data-slot={isSettings ? "nav-settings-link" : undefined}
               className={cn(
                 "flex items-center justify-center rounded-lg p-2.5 transition-colors",
                 isActive
@@ -406,6 +421,7 @@ export function SidebarNav() {
         href={item.href}
         aria-current={isActive ? "page" : undefined}
         data-tour-id={tourId}
+        data-slot={isSettings ? "nav-settings-link" : undefined}
         className={cn(
           "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
           isActive
@@ -607,11 +623,11 @@ export function SidebarNav() {
             role-gated Admin entry inserted before Settings. */}
         <div className={cn("space-y-1 pb-1", collapsed ? "px-1.5" : "px-3")}>
           {footerUtilityItems
-            .filter((item) => item.href !== "/settings/account")
+            .filter((item) => !isSettingsUtilityDestination(item))
             .map((item) => renderUtilityLink(item))}
           {renderAdminLink()}
           {footerUtilityItems
-            .filter((item) => item.href === "/settings/account")
+            .filter((item) => isSettingsUtilityDestination(item))
             .map((item) => renderUtilityLink(item))}
         </div>
 
