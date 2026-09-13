@@ -54,7 +54,14 @@ export function TopBar() {
     level,
   } = useRecordCapabilities();
   const utilityItems = visibleUtilityDestinations({
-    record: sharedRecord ? { recordKind, level } : null,
+    record: sharedRecord
+      ? {
+          recordKind,
+          level,
+          manageableDomains:
+            user?.accountAccess?.active?.manageableDomains ?? [],
+        }
+      : null,
   });
   const logout = useLogout();
   const { theme, setTheme } = useTheme();
