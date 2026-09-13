@@ -66,10 +66,16 @@ const CURRENT_HEALTHLOG_CACHES = new Set([
 // why it carries no version. Keep the name in lockstep with
 // `HEALTHLOG_PAGE_MARKER_HEADER` there.
 const HEALTHLOG_PAGE_MARKER_HEADER = "X-HealthLog-Page";
-// Set once a navigation proves the origin no longer serves HealthLog. From
-// then on the fetch handler declines every request for the rest of this
-// worker's life, so the other app's page and its assets come from the network.
+// Set as soon as a navigation looks like another app (see
+// `isForeignNavigationResponse`). While it is set the fetch handler declines
+// every request, so the page and its assets come from the network. It is
+// cleared again when `confirmForeignOrigin` finds HealthLog after all, and
+// stays set for the rest of the worker's life when the origin is confirmed
+// foreign and the worker retires.
 let foreignOrigin = false;
+// One confirmation at a time: a burst of navigations must not fire a burst of
+// probes, or race one probe's "HealthLog after all" against another's retire.
+let foreignOriginCheck = null;
 const MAX_STATIC_ENTRIES = 150;
 const MAX_PAGE_ENTRIES = 30;
 const MAX_DATA_ENTRIES = 60;
@@ -370,11 +376,84 @@ function isCacheableNavigation(request, response) {
  *     fallback in `networkFirst`).
  *
  * What is left is a successful page without the marker HealthLog's proxy puts
- * on every page response.
+ * on every page response. That is a suspicion, not a verdict: a reverse proxy
+ * with a response-header allowlist strips the marker from every genuine page.
+ * `confirmForeignOrigin` settles it before anything is deleted.
  */
 function isForeignNavigationResponse(response) {
   if (!response || !response.ok) return false;
   return !response.headers.has(HEALTHLOG_PAGE_MARKER_HEADER);
+}
+
+/**
+ * Is the origin positively not HealthLog? Asked of `/api/version`, which is
+ * public (on the proxy's `PUBLIC_PATHS` list, no session needed) and answers
+ * `{ data: { version, buildSha, ... } }`. A body check survives any proxy that
+ * rewrites headers.
+ *
+ * Retire only on a positive answer from something else: a 404, a 2xx that is
+ * not JSON (another app's HTML fallback), or JSON without the HealthLog shape.
+ * `buildSha` is `null` on an image not built by the release workflow, so the
+ * shape is "`version` is a string and `buildSha` is present", not "both are
+ * strings". Anything that is not an answer (a thrown fetch, a 5xx, a 401 from
+ * an auth gateway, a redirect) proves nothing, and the worker resumes normal
+ * service.
+ *
+ * The probe is the worker's own `fetch`, which never passes through this
+ * worker's fetch handler; `no-store` keeps the HTTP cache out of it and
+ * `redirect: "manual"` keeps a login redirect from reading as an answer.
+ */
+async function confirmForeignOrigin() {
+  let response;
+  try {
+    response = await fetch("/api/version", {
+      cache: "no-store",
+      redirect: "manual",
+      credentials: "omit",
+    });
+  } catch {
+    return false;
+  }
+  if (response.status === 404) return true;
+  if (!response.ok) return false;
+  let body;
+  try {
+    body = JSON.parse(await response.text());
+  } catch {
+    return true;
+  }
+  const data = body && typeof body === "object" ? body.data : null;
+  const isHealthlog =
+    !!data &&
+    typeof data === "object" &&
+    typeof data.version === "string" &&
+    "buildSha" in data;
+  return !isHealthlog;
+}
+
+/**
+ * Confirm, then either retire or resume. Shared by concurrent navigations.
+ */
+function checkForeignOrigin() {
+  if (!foreignOriginCheck) {
+    foreignOriginCheck = (async () => {
+      let foreign = false;
+      try {
+        foreign = await confirmForeignOrigin();
+      } catch {
+        foreign = false;
+      }
+      if (foreign) {
+        await retireFromForeignOrigin();
+        return;
+      }
+      // HealthLog after all, or no answer: serve normally again, and let a
+      // later suspicious navigation ask again.
+      foreignOrigin = false;
+      foreignOriginCheck = null;
+    })();
+  }
+  return foreignOriginCheck;
 }
 
 /**
@@ -420,8 +499,10 @@ async function networkFirst(event, cacheName) {
       (event.preloadResponse ? await event.preloadResponse : null) ||
       (await fetch(request));
     if (isForeignNavigationResponse(response)) {
+      // Step aside at once (declining a request only sends it to the
+      // network), but delete nothing until the origin is confirmed foreign.
       foreignOrigin = true;
-      event.waitUntil(retireFromForeignOrigin());
+      event.waitUntil(checkForeignOrigin());
       return response;
     }
     if (response.ok && isCacheableNavigation(request, response)) {
