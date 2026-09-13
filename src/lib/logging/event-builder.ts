@@ -43,6 +43,7 @@ export class WideEventBuilder {
   private event: Partial<WideEvent>;
   private startTime: number;
   private highestLevel: LogLevel = "info";
+  private statusLevelCeiling: LogLevel = "error";
 
   constructor(kind: EventKind = "http") {
     this.startTime = performance.now();
@@ -239,6 +240,18 @@ export class WideEventBuilder {
     return this;
   }
 
+  /**
+   * Ceiling for the level `finish()` derives from the HTTP status. A route
+   * whose 5xx reports someone else's refusal (a user's relay answering a
+   * test with 400) caps it at `warn`, so a user's configuration does not
+   * raise an operator-facing error. `elevateLevel` calls and thrown errors
+   * are unaffected.
+   */
+  capStatusLevel(level: LogLevel): this {
+    this.statusLevelCeiling = level;
+    return this;
+  }
+
   /** Request/Operation beenden, Duration berechnen */
   finish(httpStatus?: number): this {
     this.event.duration_ms = Math.round(performance.now() - this.startTime);
@@ -256,8 +269,16 @@ export class WideEventBuilder {
       this.event.http.status = httpStatus;
     }
     if (httpStatus !== undefined) {
-      if (httpStatus >= 500) this.elevateLevel("error");
-      else if (httpStatus >= 400) this.elevateLevel("warn");
+      const derived: LogLevel | null =
+        httpStatus >= 500 ? "error" : httpStatus >= 400 ? "warn" : null;
+      if (derived) {
+        this.elevateLevel(
+          LOG_LEVEL_PRIORITY[derived] >
+            LOG_LEVEL_PRIORITY[this.statusLevelCeiling]
+            ? this.statusLevelCeiling
+            : derived,
+        );
+      }
     }
     this.event.level = this.highestLevel;
     return this;

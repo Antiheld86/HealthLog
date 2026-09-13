@@ -1,5 +1,5 @@
 import { apiError } from "@/lib/api-response";
-import { annotate } from "@/lib/logging/context";
+import { annotate, getEvent } from "@/lib/logging/context";
 import type { SendOutcome } from "@/lib/notifications/retry-policy";
 
 /**
@@ -78,7 +78,8 @@ export function testFailureSentence(
  * The other end, or the way to it, failed: 502 with `meta.errorCode`, the
  * upstream status or SMTP code, and what the relay said when it is short
  * and holds no secret. A failure the sender could not name is an internal
- * fault and stays a 500 with `fallbackMessage`.
+ * fault and stays a 500 with `fallbackMessage`. The 502 is recorded at
+ * `warn`, the 500 at `error`.
  */
 export function answerTestDeliveryFailure(
   result: SendOutcome,
@@ -105,5 +106,9 @@ export function answerTestDeliveryFailure(
   if (!detail.errorCode) {
     return apiError(opts.fallbackMessage, 500);
   }
+  // 502 is the honest status: the other end failed, not this request. But
+  // the cause is the user's relay or mail setup, so the wide event stays at
+  // warn rather than raising an operator-facing error on every test press.
+  getEvent()?.capStatusLevel("warn");
   return apiError(testFailureSentence(opts.label, detail), 502, { ...detail });
 }
