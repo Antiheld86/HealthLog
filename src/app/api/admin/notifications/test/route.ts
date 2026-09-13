@@ -7,9 +7,19 @@ import { sendViaTelegram } from "@/lib/notifications/senders/telegram";
 import { sendViaNtfy } from "@/lib/notifications/senders/ntfy";
 import { sendViaWebPush } from "@/lib/notifications/senders/web-push";
 import { sendViaApns } from "@/lib/notifications/senders/apns";
+import { sendViaWebhook } from "@/lib/notifications/senders/webhook";
+import { sendViaEmail } from "@/lib/notifications/senders/email";
+import type { SendOutcome } from "@/lib/notifications/retry-policy";
+import {
+  testFailureDetail,
+  testFailureSentence,
+  type TestFailureDetail,
+} from "@/lib/notifications/test-delivery-failure";
 import type {
   TelegramChannelConfig,
   NtfyChannelConfig,
+  WebhookChannelConfig,
+  EmailChannelConfig,
   ChannelType,
   NotificationPayload,
 } from "@/lib/notifications/types";
@@ -60,6 +70,39 @@ async function ensureTelegramChannel(userId: string): Promise<boolean> {
   });
 
   return true;
+}
+
+type TestResult = {
+  channel: string;
+  success: boolean;
+  error?: string;
+} & TestFailureDetail;
+
+/**
+ * A failed HTTP or SMTP send, with the code, status and SMTP reply code the
+ * user-facing test routes answer with, instead of a sentence that drops
+ * them. A private-origin refusal forwards its own code.
+ */
+function failedSend(
+  channel: string,
+  label: string,
+  result: SendOutcome,
+  context?: string,
+): TestResult {
+  const detail: TestFailureDetail = result.errorCode
+    ? { errorCode: result.errorCode }
+    : testFailureDetail(result);
+  const cause = result.errorCode
+    ? `refused by the private-origin policy (${result.errorCode})`
+    : detail.errorCode
+      ? testFailureSentence(label, detail)
+      : (result.reason ?? "send failed");
+  return {
+    channel,
+    success: false,
+    error: context ? `${cause} (${context})` : cause,
+    ...detail,
+  };
 }
 
 function isLocale(value: string | null | undefined): value is Locale {
@@ -121,11 +164,7 @@ export const POST = apiHandler(async () => {
     message: t("notifications.admin.testNotificationBody"),
   };
 
-  const results: Array<{
-    channel: string;
-    success: boolean;
-    error?: string;
-  }> = [];
+  const results: TestResult[] = [];
 
   for (const channel of channels) {
     const pref = channel.preferences[0];
@@ -166,11 +205,40 @@ export const POST = apiHandler(async () => {
           const ntfyResult = await sendViaNtfy(config, payload);
           success = ntfyResult.ok;
           if (!success) {
-            results.push({
-              channel: "NTFY",
-              success: false,
-              error: `Send failed (topic: ${config.topic})`,
-            });
+            results.push(
+              failedSend(
+                "NTFY",
+                "The ntfy server",
+                ntfyResult,
+                `topic: ${config.topic}`,
+              ),
+            );
+            continue;
+          }
+          break;
+        }
+        // The generic webhook and email are first-class channels in the
+        // dispatcher; without these arms they reported "Unknown channel type".
+        case "WEBHOOK": {
+          const config = JSON.parse(
+            decrypt(channel.config),
+          ) as WebhookChannelConfig;
+          const webhookResult = await sendViaWebhook(config, payload);
+          success = webhookResult.ok;
+          if (!success) {
+            results.push(failedSend("WEBHOOK", "The webhook", webhookResult));
+            continue;
+          }
+          break;
+        }
+        case "EMAIL": {
+          const config = JSON.parse(
+            decrypt(channel.config),
+          ) as EmailChannelConfig;
+          const emailResult = await sendViaEmail(config, payload);
+          success = emailResult.ok;
+          if (!success) {
+            results.push(failedSend("EMAIL", "The mail server", emailResult));
             continue;
           }
           break;
