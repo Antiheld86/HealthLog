@@ -238,12 +238,26 @@ export interface NtfyChannelConfig {
 }
 
 /**
- * Generic-webhook channel config (v1.17.1). The user supplies a public URL and
- * an OPTIONAL custom header (e.g. `Authorization: Bearer <token>` for Gotify,
- * or a Discord/Slack incoming-webhook URL needs no header). The dispatcher
- * POSTs a JSON body — see `sendViaWebhook` — through `safeFetch` with
- * `requirePublicHost: true` so the SSRF floor + DNS-rebinding pin apply to the
- * user-supplied host exactly as they do for ntfy.
+ * The body shapes the generic webhook can send.
+ *
+ *  - `generic`: HealthLog's own JSON envelope (`title`, `message`,
+ *    `eventType`, `priority` as a word), for Home Assistant, n8n, a Discord
+ *    or Slack relay, or anything that reads arbitrary JSON.
+ *  - `gotify`: the body Gotify's `POST /message` binds, with `priority` as
+ *    the integer Gotify types it as. The generic body is refused there with
+ *    a 400.
+ */
+export const WEBHOOK_PAYLOAD_FORMATS = ["generic", "gotify"] as const;
+export type WebhookPayloadFormat = (typeof WEBHOOK_PAYLOAD_FORMATS)[number];
+
+/**
+ * Generic-webhook channel config (v1.17.1). The user supplies a URL and an
+ * OPTIONAL custom header (Gotify accepts its app token as `X-Gotify-Key`, or
+ * as a `token` query parameter on the URL; a Discord or Slack incoming-webhook
+ * URL needs no header). The dispatcher POSTs a JSON body — see
+ * `sendViaWebhook` — through `safeFetch` with the connect-time pin, so the
+ * SSRF floor and the DNS-rebinding defence apply to the user-supplied host
+ * exactly as they do for ntfy.
  */
 export interface WebhookChannelConfig {
   url: string;
@@ -251,6 +265,11 @@ export interface WebhookChannelConfig {
   headerName?: string;
   /** Optional header value (e.g. "Bearer <token>"). Encrypted at rest. */
   headerValue?: string;
+  /**
+   * Body shape. Absent means `generic`, which is every config saved before
+   * the choice existed; only `gotify` is written to the stored config.
+   */
+  format?: WebhookPayloadFormat;
 }
 
 /**
@@ -314,7 +333,7 @@ export interface NotificationPayload {
    *    does not).
    *  - ntfy    → `Priority: 5` (max) + an `urgent` tag.
    *  - WebPush → `Urgency: high` header + `requireInteraction`.
-   *  - Webhook → `priority: "urgent"` in the JSON body.
+   *  - Webhook → `priority: "urgent"` in the generic body, `10` in Gotify's.
    *  - Telegram → normal delivery (no urgency tier exists; never silent).
    * Normal events leave `urgent` unset and behave exactly as before.
    */

@@ -25917,6 +25917,14 @@ components:
               maxLength: 500
             - type: string
               const: ""
+        format:
+          description: Body shape. `generic` sends HealthLog's own JSON envelope; `gotify` sends the body Gotify's `POST /message`
+            expects, with an integer priority. Omitted keeps the stored choice, which is `generic` for a config saved
+            before the choice existed.
+          type: string
+          enum:
+            - generic
+            - gotify
         enabled:
           type: boolean
       required:
@@ -25926,7 +25934,7 @@ components:
         re-checked at dispatch time; a private origin passes both only when the operator listed it in
         `NOTIFICATION_PRIVATE_ORIGINS`. An EMPTY OR OMITTED `headerValue` preserves the stored one, for the same reason
         as ntfy's `authToken`: the GET never returns it. There is no way to clear a stored header value through this
-        endpoint."
+        endpoint. An omitted `format` keeps the stored body shape."
     DeleteAccountRequest:
       type: object
       properties:
@@ -57501,11 +57509,18 @@ components:
         hasHeaderValue:
           type: boolean
           description: Whether a header value (the shared secret) is stored. The value itself is never returned.
+        format:
+          type: string
+          enum:
+            - generic
+            - gotify
+          description: Body shape the webhook sends. `generic` when no channel row exists or the config predates the choice.
       required:
         - enabled
         - url
         - headerName
         - hasHeaderValue
+        - format
       additionalProperties: false
       description: Stored generic-webhook channel config, with the secret header value reduced to a presence flag.
     PutWebhookSettingsResponse:

@@ -340,3 +340,119 @@ describe("sendViaWebhook — what the relay said (#947)", () => {
     ).toBeUndefined();
   });
 });
+
+function sentBody(): string {
+  return (safeFetchMock.mock.calls[0][1] as { body: string }).body;
+}
+
+describe("sendViaWebhook — generic body stays byte for byte", () => {
+  // Literal strings, not re-parsed objects: a Home Assistant or n8n rule
+  // that matches on the raw body must keep matching after the format choice
+  // was added.
+  it.each([
+    [
+      "a routine event",
+      {},
+      '{"title":"Title","message":"Body","eventType":"SYSTEM_ALERT","priority":"default"}',
+    ],
+    [
+      "a medication reminder",
+      { eventType: "MEDICATION_REMINDER" },
+      '{"title":"Title","message":"Body","eventType":"MEDICATION_REMINDER","priority":"high"}',
+    ],
+    [
+      "an urgent event",
+      { urgent: true },
+      '{"title":"Title","message":"Body","eventType":"SYSTEM_ALERT","priority":"urgent"}',
+    ],
+    [
+      "a discreet cycle event",
+      { eventType: "CYCLE_PERIOD_SOON", discreet: true },
+      '{"title":"Title","message":"Body","eventType":"reminder","priority":"default"}',
+    ],
+  ])("%s", async (_label, over, expected) => {
+    safeFetchMock.mockResolvedValue({ ok: true, status: 200 });
+
+    await sendViaWebhook(
+      { url: "https://relay.example.com/hook" },
+      payload(over),
+    );
+
+    expect(sentBody()).toBe(expected);
+  });
+});
+
+describe("sendViaWebhook — Gotify format (#947)", () => {
+  const gotify = {
+    url: "https://gotify.example.com/message",
+    headerName: "X-Gotify-Key",
+    headerValue: "AbCdEfGh123",
+    format: "gotify" as const,
+  };
+
+  it("sends the body Gotify binds, with an integer priority and no eventType field", async () => {
+    safeFetchMock.mockResolvedValue({ ok: true, status: 200 });
+
+    await sendViaWebhook(gotify, payload({ message: "<b>Body</b>" }));
+
+    expect(JSON.parse(sentBody())).toEqual({
+      title: "Title",
+      message: "Body",
+      priority: 5,
+      extras: {
+        "client::display": { contentType: "text/plain" },
+        "healthlog::event": { type: "SYSTEM_ALERT" },
+      },
+    });
+    const [url, init] = safeFetchMock.mock.calls[0] as [
+      string,
+      { headers: Record<string, string> },
+    ];
+    expect(url).toBe("https://gotify.example.com/message");
+    expect(init.headers["X-Gotify-Key"]).toBe("AbCdEfGh123");
+  });
+
+  it.each([
+    ["a routine event", 5, {}],
+    ["a medication reminder", 8, { eventType: "MEDICATION_REMINDER" }],
+    ["an urgent event", 10, { urgent: true }],
+    [
+      "an urgent medication reminder",
+      10,
+      { eventType: "MEDICATION_REMINDER", urgent: true },
+    ],
+  ])("maps %s to priority %i", async (_label, priority, over) => {
+    safeFetchMock.mockResolvedValue({ ok: true, status: 200 });
+
+    await sendViaWebhook(gotify, payload(over));
+
+    const body = JSON.parse(sentBody());
+    expect(body.priority).toBe(priority);
+    expect(Number.isInteger(body.priority)).toBe(true);
+  });
+
+  it("keeps the cycle event name out of a discreet message", async () => {
+    safeFetchMock.mockResolvedValue({ ok: true, status: 200 });
+
+    await sendViaWebhook(
+      gotify,
+      payload({ eventType: "CYCLE_PERIOD_SOON", discreet: true }),
+    );
+
+    expect(sentBody()).not.toContain("CYCLE");
+    expect(JSON.parse(sentBody()).extras["healthlog::event"]).toEqual({
+      type: "reminder",
+    });
+  });
+
+  it("treats an unknown stored format as generic", async () => {
+    safeFetchMock.mockResolvedValue({ ok: true, status: 200 });
+
+    await sendViaWebhook(
+      { url: "https://relay.example.com/hook", format: "bogus" as never },
+      payload(),
+    );
+
+    expect(JSON.parse(sentBody()).priority).toBe("default");
+  });
+});

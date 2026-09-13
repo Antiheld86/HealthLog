@@ -22,6 +22,7 @@ import {
   SHARING_NOT_PERMITTED_DESCRIPTION,
   stdResponses,
 } from "./shared";
+import { WEBHOOK_PAYLOAD_FORMATS } from "@/lib/notifications/types";
 
 // v1.16.11 — the one threshold read every dose-status consumer makes
 // (cards, table, take-all-due derivation). `lateMinutes` /
@@ -255,7 +256,7 @@ const telegramSettingsRequest = telegramSettingsSchema.meta({
 const webhookSettingsRequest = webhookSettingsSchema.meta({
   id: "WebhookSettingsRequest",
   description:
-    "Generic-webhook channel config — one channel covering Gotify, Discord, Slack, a Matrix bridge, Home Assistant, or any relay accepting an inbound JSON POST. `url` must pass the SSRF floor at input time and is re-checked at dispatch time; a private origin passes both only when the operator listed it in `NOTIFICATION_PRIVATE_ORIGINS`. An EMPTY OR OMITTED `headerValue` preserves the stored one, for the same reason as ntfy's `authToken`: the GET never returns it. There is no way to clear a stored header value through this endpoint.",
+    "Generic-webhook channel config — one channel covering Gotify, Discord, Slack, a Matrix bridge, Home Assistant, or any relay accepting an inbound JSON POST. `url` must pass the SSRF floor at input time and is re-checked at dispatch time; a private origin passes both only when the operator listed it in `NOTIFICATION_PRIVATE_ORIGINS`. An EMPTY OR OMITTED `headerValue` preserves the stored one, for the same reason as ntfy's `authToken`: the GET never returns it. There is no way to clear a stored header value through this endpoint. An omitted `format` keeps the stored body shape.",
 });
 
 /**
@@ -342,6 +343,11 @@ const webhookSettingsResponse = z
       .boolean()
       .describe(
         "Whether a header value (the shared secret) is stored. The value itself is never returned.",
+      ),
+    format: z
+      .enum(WEBHOOK_PAYLOAD_FORMATS)
+      .describe(
+        "Body shape the webhook sends. `generic` when no channel row exists or the config predates the choice.",
       ),
   })
   .meta({

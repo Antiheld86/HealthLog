@@ -21,15 +21,88 @@ import {
   secretsInUrl,
 } from "@/lib/notifications/upstream-body";
 
+type PriorityBand = "urgent" | "high" | "default";
+
+/**
+ * v1.18.4: an explicitly urgent event is `urgent` so a relay rule can
+ * escalate; MEDICATION_REMINDER keeps `high`; the rest `default`.
+ */
+function priorityBand(payload: NotificationPayload): PriorityBand {
+  if (payload.urgent === true) return "urgent";
+  if (payload.eventType === "MEDICATION_REMINDER") return "high";
+  return "default";
+}
+
+/**
+ * Gotify's priority is an integer, and its Android client files a message
+ * into a notification channel by it (`convertPriorityToChannel` in
+ * gotify/android): below 1 minimum importance, 1-3 low (no sound), 4-7
+ * default (sound), 8 and above high (sound, vibration, and a heads-up banner).
+ *
+ * The bands mirror what the ntfy sender asks for:
+ *  - `default` → 5: audible, like ntfy's default. Not 1-3, which would
+ *    make every routine reminder silent.
+ *  - `high` (medication reminders) → 8: the lowest value that reaches the
+ *    heads-up channel, as ntfy's `high` pops over.
+ *  - `urgent` → 10: the same Android channel as 8, and the top of the scale
+ *    for any client or rule that orders or filters by priority, as ntfy's 5.
+ */
+const GOTIFY_PRIORITY: Record<PriorityBand, number> = {
+  default: 5,
+  high: 8,
+  urgent: 10,
+};
+
+/**
+ * The request body for the configured format.
+ *
+ * Discreet mode (cycle privacy) is honoured the same way in both: the title
+ * and message arrive already masked upstream, and the event name a relay
+ * could route on is replaced by the generic `reminder`.
+ */
+export function buildWebhookBody(
+  config: Pick<WebhookChannelConfig, "format">,
+  payload: NotificationPayload,
+): string {
+  const title = plainPushText(payload.title, payload.eventType);
+  const message = plainPushText(stripHtml(payload.message), payload.eventType);
+  const eventType = payload.discreet ? "reminder" : payload.eventType;
+  const band = priorityBand(payload);
+
+  if (config.format === "gotify") {
+    return JSON.stringify({
+      title,
+      message,
+      priority: GOTIFY_PRIORITY[band],
+      extras: {
+        // Plain text, stated rather than left to the client default: the
+        // body is never markdown (hard rule).
+        "client::display": { contentType: "text/plain" },
+        "healthlog::event": { type: eventType },
+      },
+    });
+  }
+
+  // Generic envelope. Discord and Slack ignore unknown keys, so one shape
+  // covers the common JSON relays. Unchanged since v1.18.4: an existing
+  // Home Assistant or n8n rule parses these exact fields.
+  return JSON.stringify({
+    title,
+    message,
+    eventType,
+    priority: band,
+  });
+}
+
 /**
  * Send a notification via a generic outbound webhook (v1.17.1).
  *
- * The user supplies a public URL (and optionally one custom header — e.g.
- * `Authorization: Bearer <token>` for Gotify). We POST a small JSON envelope
- * that Gotify / Discord / Slack / Matrix-bridge / Home Assistant / any homelab
- * relay can consume. The body is plain text (no markdown — hard rule); the
- * `title`/`message` fields are stripped of HTML + decorative emoji on routine
- * reminders exactly like the ntfy sender.
+ * The user supplies a URL and optionally one custom header, and chooses the
+ * body shape: HealthLog's generic JSON envelope, or the body Gotify's
+ * `POST /message` binds (see `buildWebhookBody`). Gotify takes its app token
+ * as an `X-Gotify-Key` header or a `token` query parameter. The body is plain
+ * text (no markdown — hard rule); `title`/`message` are stripped of HTML and
+ * decorative emoji on routine reminders exactly like the ntfy sender.
  *
  * Outbound goes through `safeFetch` with the connect-time DNS-rebinding pin
  * because the host is user-supplied; the optional shared-secret header would
@@ -63,25 +136,7 @@ export async function sendViaWebhook(
       headers[config.headerName] = config.headerValue;
     }
 
-    // Plain-text envelope. The `title` field doubles as Gotify's `title` and
-    // Discord/Slack ignore unknown keys, so a single shape covers the common
-    // relays. Discreet mode (cycle privacy) is honoured by the title/body
-    // already being masked upstream; we also send a generic `eventType` tag so
-    // a relay rule can route without leaking the cycle event name.
-    const body = JSON.stringify({
-      title: plainPushText(payload.title, payload.eventType),
-      message: plainPushText(stripHtml(payload.message), payload.eventType),
-      eventType: payload.discreet ? "reminder" : payload.eventType,
-      // v1.18.4 — an explicitly urgent event maps to `urgent` so a relay
-      // rule (Gotify priority, Discord mention, Home Assistant automation)
-      // can escalate; MEDICATION_REMINDER keeps `high`; the rest `default`.
-      priority:
-        payload.urgent === true
-          ? "urgent"
-          : payload.eventType === "MEDICATION_REMINDER"
-            ? "high"
-            : "default",
-    });
+    const body = buildWebhookBody(config, payload);
 
     const policy = evaluateNotificationTarget(config.url);
     if (!policy.allowed || !policy.canonicalOrigin) {

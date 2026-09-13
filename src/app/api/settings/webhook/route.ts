@@ -20,6 +20,7 @@ import { encrypt, decrypt } from "@/lib/crypto";
 import { NextRequest } from "next/server";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
+import type { WebhookChannelConfig } from "@/lib/notifications/types";
 
 /**
  * The save-time schema evaluates the same policy the sender does: the public
@@ -61,22 +62,23 @@ export const GET = apiHandler(async () => {
       url: "",
       headerName: "",
       hasHeaderValue: false,
+      format: "generic",
     });
   }
 
-  const config = JSON.parse(decrypt(channel.config)) as {
-    url: string;
-    headerName?: string;
-    headerValue?: string;
-  };
+  const config = JSON.parse(
+    decrypt(channel.config),
+  ) as Partial<WebhookChannelConfig>;
 
   annotate({ action: { name: "settings.webhook.get" } });
 
   return apiSuccess({
     enabled: channel.enabled,
-    url: config.url,
+    url: config.url ?? "",
     headerName: config.headerName ?? "",
     hasHeaderValue: !!config.headerValue,
+    // A config saved before the choice existed carries no format: generic.
+    format: config.format === "gotify" ? "gotify" : "generic",
   });
 });
 
@@ -166,7 +168,7 @@ export const PUT = apiHandler(async (request: NextRequest) => {
     return apiValidationError("Invalid data", issues, 422);
   }
 
-  const { url, headerName, headerValue, enabled } = parsed.data;
+  const { url, headerName, headerValue, format, enabled } = parsed.data;
 
   if (enabled && !url) {
     return apiError("Webhook URL is required when the webhook is enabled", 422);
@@ -174,24 +176,30 @@ export const PUT = apiHandler(async (request: NextRequest) => {
 
   // Preserve an existing header value when the client sends an empty one (the
   // GET path never returns the secret, so a save round-trip would otherwise
-  // wipe it). A non-empty value replaces it.
+  // wipe it). A non-empty value replaces it. An omitted format keeps the
+  // stored one too, so a client that does not know the field cannot flip a
+  // Gotify channel back to the generic body by saving.
   let nextHeaderValue = headerValue || undefined;
-  if (!nextHeaderValue) {
+  let nextFormat = format;
+  if (!nextHeaderValue || nextFormat === undefined) {
     const existing = await prisma.notificationChannel.findUnique({
       where: { userId_type: { userId: user.id, type: "WEBHOOK" } },
     });
     if (existing) {
-      const prev = JSON.parse(decrypt(existing.config)) as {
-        headerValue?: string;
-      };
-      nextHeaderValue = prev.headerValue || undefined;
+      const prev = JSON.parse(
+        decrypt(existing.config),
+      ) as Partial<WebhookChannelConfig>;
+      if (!nextHeaderValue) nextHeaderValue = prev.headerValue || undefined;
+      if (nextFormat === undefined) nextFormat = prev.format;
     }
   }
 
+  // Absent means generic, so only the Gotify choice is written.
   const config = JSON.stringify({
     url: url || "",
     ...(headerName ? { headerName } : {}),
     ...(nextHeaderValue ? { headerValue: nextHeaderValue } : {}),
+    ...(nextFormat === "gotify" ? { format: "gotify" } : {}),
   });
 
   const encryptedConfig = encrypt(config);
@@ -207,7 +215,10 @@ export const PUT = apiHandler(async (request: NextRequest) => {
     update: { enabled, config: encryptedConfig },
   });
 
-  annotate({ action: { name: "settings.webhook.update" }, meta: { enabled } });
+  annotate({
+    action: { name: "settings.webhook.update" },
+    meta: { enabled, format: nextFormat === "gotify" ? "gotify" : "generic" },
+  });
 
   return apiSuccess({ saved: true });
 });
