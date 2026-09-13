@@ -171,7 +171,15 @@ async function leaveRecord(page: Page) {
   );
 }
 
-function withDivergentActiveAccountAccess(body: unknown): unknown {
+/**
+ * The switched `/api/auth/me` payload with a write level the grant never had,
+ * or `undefined` when the payload is not a switched one yet. The route is
+ * installed before the switch is clicked, and the owner session can read its
+ * own `/api/auth/me` again in that window; that response must pass through
+ * untouched instead of throwing inside the route handler, where the error
+ * fails the test and leaves `page.unroute` running against a closed page.
+ */
+function withDivergentActiveAccountAccess(body: unknown): unknown | undefined {
   if (body === null || typeof body !== "object") {
     throw new Error("Expected an object from /api/auth/me");
   }
@@ -192,7 +200,7 @@ function withDivergentActiveAccountAccess(body: unknown): unknown {
     };
   };
   if (!auth.accountAccess?.active) {
-    throw new Error("Expected a switched account-access payload");
+    return undefined;
   }
 
   const corrupted = {
@@ -303,6 +311,7 @@ test.describe.serial("scoped sharing browser journeys", () => {
     });
 
     let corruptAuthPayload = true;
+    let corruptedResponses = 0;
     await page.route("**/api/auth/me", async (route) => {
       // The switch this test drives ends in a full reload, and the reload
       // cancels whatever `/api/auth/me` call is in flight. Playwright then
@@ -324,12 +333,13 @@ test.describe.serial("scoped sharing browser journeys", () => {
         await route.fulfill({ response }).catch(() => {});
         return;
       }
-      await route
-        .fulfill({
-          response,
-          json: withDivergentActiveAccountAccess(await response.json()),
-        })
-        .catch(() => {});
+      const corrupted = withDivergentActiveAccountAccess(await response.json());
+      if (corrupted === undefined) {
+        await route.fulfill({ response }).catch(() => {});
+        return;
+      }
+      corruptedResponses += 1;
+      await route.fulfill({ response, json: corrupted }).catch(() => {});
     });
 
     const ownerOnlyReads: string[] = [];
@@ -376,6 +386,12 @@ test.describe.serial("scoped sharing browser journeys", () => {
       await expect(
         page.locator('[data-slot="invalid-record-access-refusal"]'),
       ).toBeVisible();
+      // The refusal has to come from the corrupted payload, not from a read
+      // that happened to pass through before the switch landed.
+      expect(
+        corruptedResponses,
+        "the switched /api/auth/me was never corrupted",
+      ).toBeGreaterThan(0);
       await expect(
         page.locator('[data-slot="shared-record-unavailable-leave"]'),
       ).toBeVisible();
