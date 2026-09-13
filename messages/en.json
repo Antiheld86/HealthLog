@@ -10389,7 +10389,7 @@
       "accessManageLabel": "Can manage",
       "accessManageCapability": "They can add, change and remove entries, including ones you entered yourself.",
       "accessManageDetail": "They can also read the insights generated from your record. They cannot change your login, your security settings, your connections, or who else has access. You can end this at any time.",
-      "manageStepUpNote": "Offering this asks for your second factor, so it can only be done in a browser.",
+      "manageStepUpNote": "Offering this only works in a browser, and asks for your second factor if you have one.",
       "scopeLegend": "What they can open",
       "scopeAllLabel": "Entire record",
       "scopeAllCapability": "Every part of it, the way sharing has always worked.",
@@ -10413,7 +10413,7 @@
       "errorRateLimited": "Too many invitations. Please try again later.",
       "errorFailed": "The invitation could not be sent. Please try again.",
       "errorScope": "Those sections cannot be shared like that. Pick at least one section, or share the entire record.",
-      "errorManageBrowserOnly": "Manage access can only be offered in a browser, because it asks for your second factor.",
+      "errorManageBrowserOnly": "Manage access can only be offered in a browser.",
       "errorStepUp": "Confirm your second factor, then try again.",
       "errorOffline": "That did not reach the server. Your invitation is still here — check your connection and try again."
     },

@@ -10389,7 +10389,7 @@
       "accessManageLabel": "Może zarządzać",
       "accessManageCapability": "Może dodawać, zmieniać i usuwać wpisy, także te, które wprowadziłeś samodzielnie.",
       "accessManageDetail": "Może też czytać analizy wygenerowane na podstawie Twojej kartoteki. Nie może zmienić Twojego logowania, ustawień bezpieczeństwa, połączonych usług ani tego, kto jeszcze ma dostęp. Możesz to zakończyć w dowolnym momencie.",
-      "manageStepUpNote": "Przy takim zaproszeniu prosimy o drugi składnik logowania, dlatego można to zrobić tylko w przeglądarce.",
+      "manageStepUpNote": "Można to zrobić tylko w przeglądarce, a jeśli masz drugi składnik logowania, poprosimy o niego.",
       "scopeLegend": "Co ta osoba może otworzyć",
       "scopeAllLabel": "Cała kartoteka",
       "scopeAllCapability": "Każda jej część, tak jak udostępnianie działało do tej pory.",
@@ -10413,7 +10413,7 @@
       "errorRateLimited": "Zbyt wiele zaproszeń. Spróbuj później.",
       "errorFailed": "Nie udało się wysłać zaproszenia. Spróbuj ponownie.",
       "errorScope": "Tych sekcji nie da się udostępnić w ten sposób. Wybierz co najmniej jedną sekcję albo udostępnij całą kartotekę.",
-      "errorManageBrowserOnly": "Dostęp zarządzający można przyznać tylko w przeglądarce, ponieważ wymaga drugiego składnika logowania.",
+      "errorManageBrowserOnly": "Dostęp zarządzający można przyznać tylko w przeglądarce.",
       "errorStepUp": "Potwierdź drugi składnik logowania i spróbuj ponownie.",
       "errorOffline": "To nie dotarło do serwera. Twoje zaproszenie nadal tu jest — sprawdź połączenie i spróbuj ponownie."
     },
