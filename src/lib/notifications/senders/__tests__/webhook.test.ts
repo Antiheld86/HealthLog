@@ -281,3 +281,62 @@ describe("sendViaWebhook", () => {
     });
   });
 });
+
+describe("sendViaWebhook — what the relay said (#947)", () => {
+  it("carries a short error body on a non-2xx", async () => {
+    safeFetchMock.mockResolvedValue(
+      new Response('{"error":"Bad Request","errorCode":400}', { status: 400 }),
+    );
+
+    const result = await sendViaWebhook(config, payload());
+
+    expect(result).toMatchObject({
+      ok: false,
+      statusCode: 400,
+      reason: "webhook_400",
+      upstreamBody: '{"error":"Bad Request","errorCode":400}',
+    });
+    // The ledger row keeps the reason only, never the body.
+    expect(recordPushAttemptMock).toHaveBeenCalledWith(
+      expect.not.objectContaining({ upstreamBody: expect.anything() }),
+    );
+  });
+
+  it("drops a body that echoes the header token or a query token", async () => {
+    safeFetchMock.mockResolvedValueOnce(
+      new Response("invalid token secret", { status: 401 }),
+    );
+    const viaHeader = await sendViaWebhook(config, payload());
+    expect(viaHeader.upstreamBody).toBeUndefined();
+
+    safeFetchMock.mockResolvedValueOnce(
+      new Response("unknown token Q1w2E3r4", { status: 401 }),
+    );
+    const viaQuery = await sendViaWebhook(
+      { url: "https://relay.example.com/message?token=Q1w2E3r4" },
+      payload(),
+    );
+    expect(viaQuery.upstreamBody).toBeUndefined();
+  });
+
+  it("names a timeout and a refused connection, and leaves an unknown fault uncoded", async () => {
+    safeFetchMock.mockRejectedValueOnce(
+      new SafeFetchError("timed out", "timeout"),
+    );
+    expect((await sendViaWebhook(config, payload())).failureCode).toBe(
+      "timeout",
+    );
+
+    safeFetchMock.mockRejectedValueOnce(
+      new SafeFetchError("ECONNREFUSED", "network"),
+    );
+    expect((await sendViaWebhook(config, payload())).failureCode).toBe(
+      "connection_failed",
+    );
+
+    safeFetchMock.mockRejectedValueOnce(new TypeError("boom"));
+    expect(
+      (await sendViaWebhook(config, payload())).failureCode,
+    ).toBeUndefined();
+  });
+});

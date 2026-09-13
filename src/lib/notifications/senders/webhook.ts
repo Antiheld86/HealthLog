@@ -15,6 +15,11 @@ import {
   PRIVATE_ORIGIN_NOT_APPROVED_CODE,
 } from "@/lib/notifications/egress-policy";
 import type { OriginReason } from "@/lib/private-origin-policy";
+import {
+  readUpstreamBody,
+  secretsInHeaderValue,
+  secretsInUrl,
+} from "@/lib/notifications/upstream-body";
 
 /**
  * Send a notification via a generic outbound webhook (v1.17.1).
@@ -130,11 +135,18 @@ export async function sendViaWebhook(
       result: "error",
       reason: classified.reason,
     });
+    // What the relay said, for the test button (Gotify names the field it
+    // could not bind). Refused when it echoes the header or a URL token.
+    const upstreamBody = await readUpstreamBody(res, [
+      ...secretsInHeaderValue(config.headerValue),
+      ...secretsInUrl(config.url),
+    ]);
     return {
       ok: false,
       statusCode: res.status,
       hardReject: classified.hardReject,
       reason: classified.reason,
+      ...(upstreamBody ? { upstreamBody } : {}),
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "request_failed";
@@ -147,6 +159,12 @@ export async function sendViaWebhook(
     const reason = policyRefused
       ? "webhook_private_origin_refused"
       : "webhook_network_error";
+    const failureCode =
+      err instanceof SafeFetchError && !policyRefused
+        ? err.kind === "timeout"
+          ? "timeout"
+          : "connection_failed"
+        : undefined;
     getEvent()?.addExternalCall({
       service: "webhook",
       method: "sendNotification",
@@ -168,6 +186,7 @@ export async function sendViaWebhook(
       ...(policyRefused
         ? { errorCode: policyReason ?? PRIVATE_ORIGIN_NOT_APPROVED_CODE }
         : {}),
+      ...(failureCode ? { failureCode } : {}),
     };
   }
 }
