@@ -213,8 +213,11 @@ test.describe("mobile-viewport smoke", () => {
     for (const kind of ["measurement", "medication", "mood"]) {
       await expect(page.getByTestId(`capture-picker-${kind}`)).toBeVisible();
     }
-    // Dismiss the picker before opening the hub.
+    // Dismiss the picker before opening the hub, and wait until it is gone:
+    // while its close animation runs, the overlay still covers the bottom
+    // nav and swallows the tap on "More", so the hub never opens.
     await page.keyboard.press("Escape");
+    await expect(page.getByTestId("capture-picker-options")).toBeHidden();
 
     // 2) The More hub keeps Mood + Measurements reachable (additive
     //    middle-path — they left the strip but are NOT orphaned).
