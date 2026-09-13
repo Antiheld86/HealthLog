@@ -28,6 +28,7 @@ import { isP2002 } from "@/lib/prisma-errors";
 import { findActiveGrant } from "@/lib/sharing/grants";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { createHash } from "node:crypto";
+import { looksSecretShaped } from "@/lib/secret-shape";
 
 const TTL_MS = 24 * 60 * 60 * 1000;
 /**
@@ -641,21 +642,11 @@ export function withIdempotency<
       // Defence-in-depth: never persist a body that carries a freshly-issued
       // bearer / refresh token or a third-party AI provider key. Auth and
       // settings routes shouldn't be wrapped in withIdempotency to begin
-      // with, but if a future caller forgets we refuse to leak.
-      //   `hlk_`    = our access tokens
-      //   `hlr_`    = our refresh tokens
-      //   `hls_`    = clinician share-link tokens (v1.11)
-      //   `hlv_`    = registration invite tokens (v1.16 — the admin mint
-      //               response is the one place the raw token appears)
-      //   `sk-…`    = OpenAI / Anthropic keys (full token form, not the
-      //               raw substring — a 422 body explaining "task-id…"
-      //               or any other word containing `sk-` would otherwise
-      //               silently break idempotency for benign retries).
-      const SECRET_PATTERN =
-        /(?:\b(?:hlk_|hlr_|hls_|hlv_|hle_)[A-Za-z0-9_-]+|\bsk-(?:ant-)?[A-Za-z0-9_-]{8,})/;
+      // with, but if a future caller forgets we refuse to leak. The prefixes
+      // are listed where the matcher lives (`src/lib/secret-shape.ts`).
       const cloned = response.clone();
       const text = await cloned.text();
-      if (!SECRET_PATTERN.test(text)) {
+      if (!looksSecretShaped(text)) {
         await persistCached(ctx, response, text);
       } else {
         // Secret-shaped body — drop the claim so the key isn't left
