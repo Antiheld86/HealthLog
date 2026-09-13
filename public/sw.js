@@ -399,6 +399,14 @@ function isForeignNavigationResponse(response) {
  * an auth gateway, a redirect) proves nothing, and the worker resumes normal
  * service.
  *
+ * One gateway shape still reads as "another app": a same-origin auth gateway
+ * that answers an expired session with its sign-in page and status 200 (nginx
+ * `auth_request` with `error_page 401 = /oauth2/sign_in` does this). Both the
+ * navigation and this probe then come back as HTML. The probe sends the
+ * gateway cookie (`credentials: "same-origin"`), so a valid gateway session
+ * reaches HealthLog; with an expired one the verdict is wrong, which is why
+ * `retireFromForeignOrigin` never unregisters while a push subscription exists.
+ *
  * The probe is the worker's own `fetch`, which never passes through this
  * worker's fetch handler; `no-store` keeps the HTTP cache out of it and
  * `redirect: "manual"` keeps a login redirect from reading as an answer.
@@ -409,7 +417,7 @@ async function confirmForeignOrigin() {
     response = await fetch("/api/version", {
       cache: "no-store",
       redirect: "manual",
-      credentials: "omit",
+      credentials: "same-origin",
     });
   } catch {
     return false;
@@ -457,12 +465,37 @@ function checkForeignOrigin() {
 }
 
 /**
+ * Whether this registration holds a Web Push subscription. Unregistering
+ * destroys the subscription and nothing in the app re-creates it (the push
+ * card only reads it), so reminders would stop without notice. A missing
+ * `pushManager` or a throwing lookup counts as "has one": keeping a worker
+ * that only passes requests through costs nothing, losing reminders does.
+ */
+async function hasPushSubscription() {
+  try {
+    const pushManager = self.registration.pushManager;
+    if (!pushManager || typeof pushManager.getSubscription !== "function") {
+      return true;
+    }
+    return (await pushManager.getSubscription()) !== null;
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Leave an origin that no longer serves HealthLog: delete every HealthLog
  * cache (only ours, matched by name, never another app's CacheStorage) and
  * unregister, so the next load of that origin runs without this worker. The
- * `foreignOrigin` flag set by the caller covers the requests the current page
- * still makes before it unloads. Each step is best-effort and independent: a
- * failed cache delete must not keep the worker registered.
+ * `foreignOrigin` flag set by the caller stays set, so the requests the
+ * current page still makes go to the network. Each step is best-effort and
+ * independent: a failed cache delete must not keep the worker registered.
+ *
+ * With a push subscription the worker does not unregister: the verdict may
+ * be a gateway's 200 sign-in page (see `confirmForeignOrigin`), and
+ * unregistering would destroy the subscription. It deletes the caches and
+ * stays in pass-through for the rest of its life instead, so another app on
+ * the origin still gets network content. The next worker start probes again.
  */
 async function retireFromForeignOrigin() {
   try {
@@ -475,6 +508,7 @@ async function retireFromForeignOrigin() {
   } catch {
     // CacheStorage unavailable; unregistering still matters more.
   }
+  if (await hasPushSubscription()) return;
   try {
     await self.registration.unregister();
   } catch {

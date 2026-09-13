@@ -136,6 +136,8 @@ interface SwHarness {
   cacheStorage: FakeCacheStorage;
   navPreload: { enabled: boolean; enable: () => Promise<void> };
   unregisterCalls: { count: number };
+  /** What `pushManager.getSubscription()` does; default: no subscription. */
+  push: { getSubscription: () => Promise<unknown> };
   lifetimePromises: Promise<unknown>[];
   context: Record<string, unknown>;
 }
@@ -145,6 +147,7 @@ function bootServiceWorker(): SwHarness {
   const cacheStorage = new FakeCacheStorage();
   const lifetimePromises: Promise<unknown>[] = [];
   const unregisterCalls = { count: 0 };
+  const push = { getSubscription: async (): Promise<unknown> => null };
   const navPreload = {
     enabled: false,
     enable: async () => {
@@ -166,6 +169,9 @@ function bootServiceWorker(): SwHarness {
       unregister: async () => {
         unregisterCalls.count += 1;
         return true;
+      },
+      pushManager: {
+        getSubscription: () => push.getSubscription(),
       },
       showNotification: async (title: string, opts: { tag?: string }) => {
         shown.push({ title, tag: opts?.tag, closed: false });
@@ -219,6 +225,7 @@ function bootServiceWorker(): SwHarness {
     cacheStorage,
     navPreload,
     unregisterCalls,
+    push,
     lifetimePromises,
     context,
   };
@@ -803,7 +810,7 @@ describe("sw.js — foreign origin (#847)", () => {
     expect(harness.unregisterCalls.count).toBe(1);
   });
 
-  it("probes with no-store and a manual redirect", async () => {
+  it("probes with no-store, a manual redirect and same-origin credentials", async () => {
     const harness = bootServiceWorker();
     let probeInit: RequestInit | undefined;
     harness.context.fetch = async (
@@ -826,6 +833,8 @@ describe("sw.js — foreign origin (#847)", () => {
 
     expect(probeInit?.cache).toBe("no-store");
     expect(probeInit?.redirect).toBe("manual");
+    // A valid same-origin gateway cookie must reach /api/version.
+    expect(probeInit?.credentials).toBe("same-origin");
   });
 
   it("does not retire when a header-stripping proxy hides the marker from a real HealthLog", async () => {
@@ -922,6 +931,59 @@ describe("sw.js — foreign origin (#847)", () => {
     // The page came from the preload; the only network call is the probe.
     expect(calls).toEqual(["/api/version"]);
     expect(harness.unregisterCalls.count).toBe(1);
+  });
+
+  it("keeps a worker that holds a push subscription: caches deleted, no unregister, pass-through", async () => {
+    const harness = bootServiceWorker();
+    await seedHealthlogCaches(harness);
+    harness.push.getSubscription = async () => ({
+      endpoint: "https://push.example/abc",
+    });
+    // A gateway's 200 sign-in page for both the navigation and the probe.
+    routeFetch(harness, foreignHtml, foreignHtml);
+
+    await dispatchNavigationFetch(harness, "/");
+    await Promise.all(harness.lifetimePromises);
+
+    expect(harness.unregisterCalls.count).toBe(0);
+    expect([...harness.cacheStorage.stores.keys()]).toEqual([
+      "next-app-runtime",
+    ]);
+    expect(
+      dispatchAnyFetch(harness, "/_next/static/chunks/app.js").responded,
+    ).toBe(false);
+    expect(
+      dispatchAnyFetch(harness, "/about", { accept: "text/html" }).responded,
+    ).toBe(false);
+  });
+
+  it.each([
+    [
+      "the subscription lookup throws",
+      (h: SwHarness) => {
+        h.push.getSubscription = async () => {
+          throw new Error("push service unavailable");
+        };
+      },
+    ],
+    [
+      "pushManager is missing",
+      (h: SwHarness) => {
+        delete (h.context.self as { registration: { pushManager?: unknown } })
+          .registration.pushManager;
+      },
+    ],
+  ])("does not unregister when %s", async (_label, arrange) => {
+    const harness = bootServiceWorker();
+    await seedHealthlogCaches(harness);
+    arrange(harness);
+    routeFetch(harness, foreignHtml, foreignHtml);
+
+    await dispatchNavigationFetch(harness, "/");
+    await Promise.all(harness.lifetimePromises);
+
+    expect(harness.unregisterCalls.count).toBe(0);
+    expect(harness.cacheStorage.stores.has(CURRENT_STATIC_CACHE)).toBe(false);
   });
 
   it("still unregisters when deleting the caches fails", async () => {
