@@ -191,7 +191,7 @@ and surface on the lock screen.
 
 The generic webhook POSTs every enabled event as JSON to a URL you own —
 wire it into your own automation (Home Assistant, n8n, a Discord/Slack
-relay, whatever routes the payload). You supply a public URL and,
+relay, whatever routes the payload). You supply the URL and,
 optionally, one custom header (e.g. an auth token).
 
 1. In HealthLog open `/settings/notifications`, fill the Webhook card's
@@ -206,6 +206,80 @@ user-supplied (`src/lib/notifications/senders/webhook.ts`). A Gotify or
 Home Assistant on your own network needs the operator grant described in
 the next section. The webhook carries the event's urgency flag so you can
 route urgent events differently.
+
+### What the webhook sends
+
+Every event is one `POST` with `Content-Type: application/json` and the
+one header you configured. It goes to the URL exactly as you saved it:
+nothing is added to the path or the query. The body depends on the
+**Payload format** you choose on the card. The examples below are what the
+Test button sends.
+
+**Generic JSON** is the default, and what every webhook saved before the
+choice existed keeps sending:
+
+```json
+{
+  "title": "HealthLog Test",
+  "message": "HealthLog: Connection successful! Webhook notifications are active.",
+  "eventType": "SYSTEM_ALERT",
+  "priority": "default"
+}
+```
+
+- `title` and `message` are plain text. HTML tags are stripped, and routine
+  reminders lose their decorative emoji.
+- `eventType` is the event name, for routing rules. With discreet cycle
+  notifications on, a cycle event arrives as `reminder`, and its title and
+  message are masked as they are on every other channel.
+- `priority` is a word: `urgent` for an event flagged urgent, `high` for
+  medication reminders, `default` for everything else.
+
+**Gotify** sends the body Gotify's `POST /message` endpoint expects:
+
+```json
+{
+  "title": "HealthLog Test",
+  "message": "HealthLog: Connection successful! Webhook notifications are active.",
+  "priority": 5,
+  "extras": {
+    "client::display": { "contentType": "text/plain" },
+    "healthlog::event": { "type": "SYSTEM_ALERT" }
+  }
+}
+```
+
+- `priority` is an integer: `5` for most events, `8` for medication
+  reminders, `10` for urgent events. The Gotify Android app plays a sound
+  from 4 and shows a heads-up banner from 8, so routine events are audible
+  and reminders pop up on screen.
+- `extras` tells Gotify clients to show the message as plain text and
+  carries the event name, which is `reminder` for a discreet cycle event.
+
+The generic body does not work with Gotify. Gotify reads `priority` as a
+number, so the word `default` makes it answer `400 Bad Request`.
+
+### Sending to Gotify
+
+1. In Gotify, create an application and copy its token.
+2. On the Webhook card, set **URL** to your Gotify address ending in
+   `/message`, for example `https://gotify.example.com/message`.
+3. Set **Header name** to `X-Gotify-Key` and **Header value** to the
+   application token. Gotify also accepts the token as `?token=` on the URL,
+   but in a header it stays out of proxy access logs.
+4. Set **Payload format** to **Gotify**, save, and press Test.
+
+If the test fails, the card shows the status Gotify answered and, when it is
+short, Gotify's own error text. A `401` means the token is wrong. A `400`
+means Gotify could not read the body; check that the format is set to
+Gotify. A Gotify on your own network also needs the operator grant below.
+
+The detail reaches the card inside the server's `502` response. A reverse
+proxy that replaces error pages for 5xx responses, such as Traefik's
+`errors` middleware or nginx with `proxy_intercept_errors on`, swaps that
+response for its own page, and the card can then only say "Test failed".
+Exclude the `/api/` paths from the error-page rule to keep the detail. This
+applies to the ntfy and email tests too.
 
 ## Notification targets on a private network
 

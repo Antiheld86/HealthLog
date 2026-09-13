@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { I18nProvider } from "@/lib/i18n/context";
 import { classifySettingsDestination } from "@/lib/record-settings";
+import { delegatedDomains } from "@/lib/sharing/domain-write-support";
 
 const pathnameRef = { value: "/settings/security" };
 const activeRecordRef = { value: true };
@@ -31,6 +32,12 @@ vi.mock("@/hooks/use-auth", () => ({
               recordKind: recordRef.value.kind,
               sections: null,
               canWrite: true,
+              // Bound as the server publishes it for a whole-record grant.
+              manageableDomains: delegatedDomains(
+                recordRef.value.level as "read" | "write" | "manage",
+                null,
+                "manage",
+              ),
             },
             accounts: [],
             canSwitch: true,

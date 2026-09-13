@@ -6,6 +6,7 @@ import type { WebhookChannelConfig } from "@/lib/notifications/types";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
+import { answerTestDeliveryFailure } from "@/lib/notifications/test-delivery-failure";
 
 /**
  * POST: send a test notification via the configured generic webhook.
@@ -57,7 +58,14 @@ export const POST = apiHandler(async () => {
         { errorCode: result.errorCode },
       );
     }
-    return apiError("Failed to send test message", 500);
+    // The relay, or the way to it, failed: 502 with the upstream status and
+    // what it said, so the card can show "the relay answered 400" instead
+    // of "Test failed" (#947). Only an unnamed internal fault is a 500.
+    return answerTestDeliveryFailure(result, {
+      channel: "webhook",
+      label: "The webhook",
+      fallbackMessage: "Failed to send test message",
+    });
   }
 
   annotate({

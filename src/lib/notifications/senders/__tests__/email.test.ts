@@ -170,3 +170,110 @@ describe("sendViaEmail", () => {
     );
   });
 });
+
+describe("sendViaEmail — the failure names itself for the test button", () => {
+  it.each([
+    [
+      "an authentication refusal",
+      Object.assign(new Error("Invalid login"), {
+        code: "EAUTH",
+        responseCode: 535,
+      }),
+      "credentials_rejected",
+      535,
+    ],
+    [
+      "a timeout",
+      Object.assign(new Error("Connection timeout"), { code: "ETIMEDOUT" }),
+      "timeout",
+      undefined,
+    ],
+    [
+      "a refused connection",
+      Object.assign(new Error("connect ECONNREFUSED"), {
+        code: "ECONNECTION",
+      }),
+      "connection_failed",
+      undefined,
+    ],
+    [
+      "a permanent SMTP rejection",
+      Object.assign(new Error("550 mailbox unavailable"), {
+        responseCode: 550,
+      }),
+      "upstream_rejected",
+      550,
+    ],
+    [
+      "a transient SMTP rejection",
+      Object.assign(new Error("451 try later"), { responseCode: 451 }),
+      "upstream_error",
+      451,
+    ],
+  ])("%s", async (_label, err, failureCode, smtpCode) => {
+    loadEmailConfigMock.mockReturnValue(transport);
+    sendMailMock.mockRejectedValue(err);
+
+    const result = await sendViaEmail(
+      { recipient: "you@example.com" },
+      payload(),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.failureCode).toBe(failureCode);
+    expect(result.smtpCode).toBe(smtpCode);
+  });
+
+  it("leaves an unrecognised fault without a code", async () => {
+    loadEmailConfigMock.mockReturnValue(transport);
+    sendMailMock.mockRejectedValue(new Error("something else"));
+
+    const result = await sendViaEmail(
+      { recipient: "you@example.com" },
+      payload(),
+    );
+
+    expect(result.failureCode).toBeUndefined();
+    expect(result.smtpCode).toBeUndefined();
+  });
+});
+
+describe("sendViaEmail — transport and envelope faults are named too", () => {
+  it.each([
+    ["a TLS handshake failure", "ETLS", undefined, "connection_failed"],
+    ["a protocol error", "EPROTOCOL", undefined, "connection_failed"],
+    [
+      "an envelope refused without a code",
+      "EENVELOPE",
+      undefined,
+      "upstream_rejected",
+    ],
+    [
+      "a message refused without a code",
+      "EMESSAGE",
+      undefined,
+      "upstream_rejected",
+    ],
+    [
+      "an envelope refused with a temporary code",
+      "EENVELOPE",
+      451,
+      "upstream_error",
+    ],
+  ])("%s", async (_label, code, responseCode, failureCode) => {
+    loadEmailConfigMock.mockReturnValue(transport);
+    sendMailMock.mockRejectedValue(
+      Object.assign(new Error(String(code)), {
+        code,
+        ...(responseCode !== undefined ? { responseCode } : {}),
+      }),
+    );
+
+    const result = await sendViaEmail(
+      { recipient: "you@example.com" },
+      payload(),
+    );
+
+    expect(result.failureCode).toBe(failureCode);
+  });
+});

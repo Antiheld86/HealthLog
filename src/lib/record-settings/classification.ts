@@ -1,4 +1,12 @@
-import type { SettingsSectionSlug } from "@/components/settings/section-slugs";
+import {
+  SETTINGS_SECTION_SLUGS,
+  type SettingsSectionSlug,
+} from "@/components/settings/section-slugs";
+import type {
+  AccountAccessLevel,
+  AccountRecordKind,
+} from "@/lib/sharing/account-access-view";
+import type { ShareDomain } from "@/lib/sharing/scope";
 
 export type SettingsDestinationKind =
   | "personal"
@@ -137,4 +145,111 @@ export function isManageDelegateSettingsDestination(
   destination: string,
 ): boolean {
   return classifySettingsDestination(destination).kind === "manage-writable";
+}
+
+/**
+ * The section each record-content destination writes to.
+ *
+ * A `manage-writable` destination is a page of forms whose routes resolve
+ * `requireRecordAuth("manage", <section>)`, and that call refuses a grant
+ * whose sections do not reach the section (`grantCoversDomain`). Level alone
+ * therefore does not say the page works: the grant must manage that section.
+ * The anamnesis forms post to `/api/allergies` and `/api/family-history`, both
+ * declared on `profile`.
+ *
+ * A `manage-writable` destination missing here is never listed, so a new one
+ * cannot appear in a shared record until somebody names what it writes.
+ */
+export const RECORD_CONTENT_WRITE_DOMAINS = {
+  anamnesis: "profile",
+} as const satisfies Partial<Record<SettingsSectionSlug, ShareDomain>>;
+
+/**
+ * The record a Settings listing is drawn for: the server-resolved kind of the
+ * record on screen, the level of the grant that opened it, and the sections
+ * that grant may manage. `level` is null in one's own record and in a context
+ * the client could not prove. `manageableDomains` is bound from
+ * `accountAccess.active.manageableDomains`, never derived here.
+ */
+export interface SettingsRecordContext {
+  recordKind: AccountRecordKind;
+  level: AccountAccessLevel | null;
+  manageableDomains: readonly ShareDomain[];
+}
+
+function managesRecordContentSection(
+  destination: string,
+  record: SettingsRecordContext,
+): boolean {
+  const section = (
+    RECORD_CONTENT_WRITE_DOMAINS as Partial<Record<string, ShareDomain>>
+  )[destination];
+  return section !== undefined && record.manageableDomains.includes(section);
+}
+
+/**
+ * Does the Settings shell list this destination inside a shared record.
+ *
+ * The one answer both the shell's section list and the app navigation read,
+ * so the navigation cannot offer a Settings entry the shell has nothing
+ * behind, nor withhold one the shell would list.
+ *
+ *   * A managed profile at MANAGE lists its guardian configuration and the
+ *     record content a MANAGE holder may write. The guardian holds MANAGE, so
+ *     the second set is theirs as well.
+ *   * An ordinary shared record at MANAGE lists only the record content. A
+ *     delegate manages somebody's health record, not their account: modules,
+ *     thresholds and notification routing stay with the owner.
+ *   * Every other context lists nothing.
+ *
+ * A record-content destination is listed only when the grant manages the
+ * section it writes ({@link RECORD_CONTENT_WRITE_DOMAINS}). Today a MANAGE
+ * grant is whole-record at every layer (`inviteGrant` refuses a scope on a
+ * MANAGE invitation, no endpoint raises a live grant, and the account-access
+ * schema rejects a manage entry with sections), so this changes nothing for a
+ * managed profile or an adult MANAGE share as they exist. It keeps the list
+ * true if a scoped MANAGE grant ever reaches the client, rather than offering a
+ * page whose writes answer 403.
+ *
+ * Every destination on either list needs MANAGE, so the level is checked once
+ * for both record kinds. A guardian grant is always MANAGE today, which is
+ * exactly why the check was easy to leave out, and a managed entry that ever
+ * arrived below it would have listed destinations the section gate refuses.
+ *
+ * Paint only. The section gate still refuses any direct URL on its own.
+ */
+export function isSettingsDestinationListedForRecord(
+  destination: string,
+  record: SettingsRecordContext,
+): boolean {
+  if (record.level !== "manage") return false;
+  const kind = classifySettingsDestination(destination).kind;
+  if (kind === "manage-writable") {
+    return (
+      (record.recordKind === "managed" || record.recordKind === "shared") &&
+      managesRecordContentSection(destination, record)
+    );
+  }
+  return record.recordKind === "managed" && kind === "managed-guardian";
+}
+
+/**
+ * The Settings page a navigation entry opens inside a shared record, or null
+ * when the shell would list nothing there and no entry should be offered.
+ *
+ * `order` is the order the shell lists its sections in. The navigation passes
+ * the slug registry, whose order differs from the shell's in general; the
+ * parity test in `nav-model-shared-record.test.ts` holds the first answer
+ * equal to the first section the shell actually lists, for every record kind,
+ * so a reorder on either side fails there rather than landing somebody on a
+ * page the shell does not open with.
+ */
+export function recordSettingsLandingDestination(
+  record: SettingsRecordContext,
+  order: readonly SettingsSectionSlug[] = SETTINGS_SECTION_SLUGS,
+): SettingsSectionSlug | null {
+  return (
+    order.find((slug) => isSettingsDestinationListedForRecord(slug, record)) ??
+    null
+  );
 }

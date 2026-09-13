@@ -42,6 +42,22 @@ export interface SendOutcome {
    * instead of a bare 500.
    */
   errorCode?: string;
+  /**
+   * Why a delivery failed when there is no HTTP status to say it: a timeout,
+   * a refused connection, an SMTP reply. The value is a code from the test
+   * card's vocabulary (`settings.testConnection.errors`), so a test route can
+   * forward it as `meta.errorCode` without translating. Absent when the
+   * sender cannot tell, which the test routes treat as an internal failure.
+   */
+  failureCode?: string;
+  /** SMTP reply code of a rejected send (email only). */
+  smtpCode?: number;
+  /**
+   * What the other end answered on a non-2xx, bounded and cleaned by
+   * `readUpstreamBody`, and absent when it might carry a secret. Only the
+   * test routes read it; neither the ledger nor the channel state stores it.
+   */
+  upstreamBody?: string;
 }
 
 /**

@@ -56,9 +56,10 @@ interface NavLink {
 // (`nav-model.ts`), the same ordered list the desktop sidebar renders.
 // The bar keeps its ergonomic 5-slot shape, but the hub is computed by the
 // model's `mobileMoreHubDestinations()` (feature list minus the primary
-// slots, plus the shared utility tail) — so the two surfaces tell one story
-// instead of two hand-curated ones that drift, and the headline invariant
-// is a tested model function rather than inline bar logic.
+// slots; Settings and Notifications live in the top-bar menu) — so the two
+// surfaces tell one story instead of two hand-curated ones that drift,
+// and the headline invariant is a tested model function rather than
+// inline bar logic.
 // The Meds slot is module-gated exactly like the Insights slot below:
 // `/medications` renders nothing when the medications module is off, so a
 // pinned tab would be a visible control over a blank page.

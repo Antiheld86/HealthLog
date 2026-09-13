@@ -1,17 +1,19 @@
 "use client";
 
 import {
-  Bell,
   ChevronDown,
   LogIn,
   LogOut,
   Monitor,
   Moon,
-  Settings,
   Shield,
   Sun,
 } from "lucide-react";
 import { AccountSwitcherMenuItems } from "@/components/layout/account-switcher-menu";
+import {
+  isSettingsUtilityDestination,
+  visibleUtilityDestinations,
+} from "@/components/layout/nav-model";
 import { SHELL_HEADER_BAND } from "@/components/layout/shell-metrics";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/logo";
@@ -19,6 +21,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { useAuth, useLogout } from "@/hooks/use-auth";
+import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useTheme } from "@/components/providers";
 import { useTranslations } from "@/lib/i18n/context";
 import {
@@ -42,8 +45,24 @@ function getInitials(name: string): string {
 
 export function TopBar() {
   const { user, isLoading } = useAuth();
-  // v1.36.0 — acting on somebody else's record; see the menu below.
-  const sharedRecord = user?.accountAccess?.active != null;
+  // v1.36.0 — acting on somebody else's record; see the menu below. Read from
+  // the capability hook, as the sidebar does, so a refused or pending switch
+  // counts as switched here too and both bars offer the same utilities.
+  const {
+    inSharedRecord: sharedRecord,
+    recordKind,
+    level,
+  } = useRecordCapabilities();
+  const utilityItems = visibleUtilityDestinations({
+    record: sharedRecord
+      ? {
+          recordKind,
+          level,
+          manageableDomains:
+            user?.accountAccess?.active?.manageableDomains ?? [],
+        }
+      : null,
+  });
   const logout = useLogout();
   const { theme, setTheme } = useTheme();
   const { t } = useTranslations();
@@ -115,34 +134,38 @@ export function TopBar() {
               <ChevronDown className="h-3 w-3 opacity-60" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-60">
-              {/* v1.36.0 — the account utilities drop out while this browser is
-                  acting on somebody else's record. Every route behind them
-                  refuses under a switch, and a control that leads only to an
-                  explanation of why it does not work is worse than no control.
-                  The switcher below is how the person gets back. */}
-              {!sharedRecord && (
-                <>
-                  <DropdownMenuItem asChild>
-                    <Link href="/settings/account" className="cursor-pointer">
-                      <Settings className="mr-2 h-4 w-4" />
-                      {t("nav.settings")}
+              {/* The account utilities come from the list the desktop sidebar
+                  reads. Inside somebody else's record Notifications and Admin
+                  drop out — every route behind them refuses under a switch —
+                  and Settings stays only where the record has Settings pages,
+                  pointing at the first one the shell opens. The switcher
+                  below is how the person gets back. */}
+              {utilityItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <DropdownMenuItem key={item.href} asChild>
+                    <Link
+                      href={item.href}
+                      className="cursor-pointer"
+                      data-slot={
+                        isSettingsUtilityDestination(item)
+                          ? "nav-settings-link"
+                          : undefined
+                      }
+                    >
+                      <Icon className="mr-2 h-4 w-4" />
+                      {t(item.tKey)}
                     </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/notifications" className="cursor-pointer">
-                      <Bell className="mr-2 h-4 w-4" />
-                      {t("nav.notifications")}
-                    </Link>
-                  </DropdownMenuItem>
-                  {isAdmin && (
-                    <DropdownMenuItem asChild>
-                      <Link href="/admin" className="cursor-pointer">
-                        <Shield className="mr-2 h-4 w-4" />
-                        {t("nav.admin")}
-                      </Link>
-                    </DropdownMenuItem>
-                  )}
-                </>
+                );
+              })}
+              {!sharedRecord && isAdmin && (
+                <DropdownMenuItem asChild>
+                  <Link href="/admin" className="cursor-pointer">
+                    <Shield className="mr-2 h-4 w-4" />
+                    {t("nav.admin")}
+                  </Link>
+                </DropdownMenuItem>
               )}
               {/* v1.4.36 W4e — About moved into the Admin Console
                   (`/admin/about`). The dropdown entry was redundant

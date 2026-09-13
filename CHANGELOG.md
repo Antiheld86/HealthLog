@@ -1,5 +1,95 @@
 # Changelog
 
+## [1.38.21] — 2026-09-13
+
+A channel test says why it failed, a Gotify server gets the message it
+expects, and Settings is back inside a profile you look after.
+
+### Added
+
+- **The webhook can send in Gotify's format.** Gotify expects the priority
+  as a number and refused HealthLog's messages, which carry it as a word.
+  Choose Gotify under Payload format on the webhook card and the message
+  arrives the way Gotify wants it: routine events with sound, medication
+  reminders as a banner on Gotify's Android app, urgent events at the top
+  of the scale. Existing webhooks keep sending exactly what they sent
+  before. The notifications guide now shows both message formats and how
+  to set up Gotify, with the URL ending in `/message` and the token in the
+  `X-Gotify-Key` header. Thanks to @sreeramachandramurthy for #947.
+
+### Fixed
+
+- **Pressing Test on the webhook, ntfy or email card now tells you what
+  went wrong.** When the other end refused the message, the card said
+  "Test failed" and nothing else, although the server knew the answer; one
+  self-hoster had to dig through the container log to learn that their
+  relay had answered 400. The card now names the cause, such as a refused
+  token, a wrong address, a relay that rejected the message or a mail
+  server that did not answer in time, with the status code. For webhook
+  and ntfy it also quotes the first part of the relay's own error message,
+  unless it looks like a token or contains one of your saved secrets. Real
+  deliveries were never affected; only the test button hid the reason.
+  The notification test in the admin area shows the same cause for each
+  channel, and a relay refusing a test no longer counts as a server error
+  in the operator's log. Thanks to @sreeramachandramurthy for #947.
+- **The hint under the webhook address no longer says it must be public.**
+  A target on your own network works when the server operator lists it in
+  `NOTIFICATION_PRIVATE_ORIGINS`, which has been possible since 1.38.17.
+
+- **Settings is back in the menu while you are inside a profile you look
+  after.** Switching into a managed profile removed Settings from the menu
+  entirely, on the desktop and on the phone, even though the profile's own
+  settings page existed and worked: which modules it tracks, its targets and
+  where its notifications go. The only way there was typing the address.
+  The menu now offers Settings inside that profile and opens the profile's
+  own page. If someone gave you manage access to their own account, Settings
+  opens their medical history, the one settings page that access covers.
+  Notifications stays out of the menu while you are inside someone else's
+  record. Thanks to @sreeramachandramurthy for asking in #939.
+- **The note on a manage invitation says when a second factor is needed.**
+  It said offering manage access always asks for your second factor. It
+  asks only if you have one set up; that it works only in a browser is true
+  either way.
+
+- **A different app on the address where HealthLog used to run now loads
+  normally.** If you stopped HealthLog and started something else on the
+  same address and port, HealthLog's offline worker in your browser kept
+  answering: the other app got HealthLog's cached files and your changes to
+  it never showed up, until you removed the worker by hand in the browser's
+  developer tools. The worker now checks whether the page still comes from
+  HealthLog, and when it does not, it clears its cache and removes itself.
+  When HealthLog is only down, or a reverse proxy in front of it answers
+  with an error, nothing changes and the offline page still appears. If
+  you had push notifications switched on in that browser, the worker stays
+  registered and keeps them, and only stops serving its cached files. Thanks
+  to @el-abcd for describing this in #847.
+- **If you ship logs to Loki, a Loki on your own network works now, and a
+  failed push says so.** Only public addresses were allowed, so a Loki on
+  the same Docker network or on your LAN was refused without a word, and
+  events were dropped. `LOKI_ENDPOINT` comes from your server environment,
+  so the address you set there is now trusted as it is; link-local and
+  cloud metadata addresses stay refused. It also takes either the base URL
+  or the full push URL ending in `/loki/api/v1/push`; pasting the full URL
+  used to break shipping just as quietly. When a push fails, the container
+  log gets one line with the Loki address, the reason and how many events
+  were lost, at most every five minutes per reason, and never the password.
+  Thanks to @sreeramachandramurthy for the empty Grafana in #947.
+
+### Changed
+
+- **If you write against the API, a failed channel test answers 502 with
+  the cause.** `POST /api/settings/webhook/test`, `/ntfy/test` and
+  `/email/test` used to answer 500 for every refusal from the other end.
+  They answer 502 now, with `meta.errorCode` (one of
+  `credentials_rejected`, `endpoint_not_found`, `rate_limited`,
+  `upstream_error`, `upstream_rejected`, `redirected`, `timeout`,
+  `connection_failed`), `meta.upstreamStatus`, and for webhook and ntfy
+  `meta.upstreamBody` with at most 200 characters of the relay's reply;
+  email carries `meta.smtpCode` instead. The 422 for a private address
+  that is not allowed is unchanged, and 500 is left for failures the
+  server cannot name. `GET /api/settings/webhook` gains `format`
+  (`generic` or `gotify`); a `PUT` without it keeps the stored value.
+
 ## [1.38.20] — 2026-09-11
 
 Signing in no longer tells anybody which addresses have an account here.

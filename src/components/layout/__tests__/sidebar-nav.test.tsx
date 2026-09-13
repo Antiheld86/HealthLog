@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 
 // `<SidebarNav>` reads the active route from `usePathname()`. Stub
@@ -48,6 +50,7 @@ import { I18nProvider } from "@/lib/i18n/context";
 import { SidebarNav } from "../sidebar-nav";
 import { ADMIN_SECTIONS } from "@/components/admin/admin-shell";
 import { visibleUtilityDestinations } from "../nav-model";
+import { delegatedDomains } from "@/lib/sharing/domain-write-support";
 
 function render({
   pathname = "/",
@@ -241,5 +244,96 @@ describe("<SidebarNav> admin entry mirrors Settings (no sub-item expansion)", ()
     // Settings-bearing nav surface is intact (sectionsNav label belongs
     // to `<AdminShell>`, which the sidebar must NOT echo).
     expect(html).not.toMatch(/aria-label="Admin sections"/);
+  });
+});
+
+describe("<SidebarNav> inside somebody else's record (#939)", () => {
+  /**
+   * A self-hoster looking after a managed profile could not find Settings
+   * anywhere after switching into it, although the Settings shell lists the
+   * profile's own configuration there. The footer entry is back wherever the
+   * shell has pages for the record, and points at the first of them; the
+   * identity block stays a plain block, because it names the person at the
+   * keyboard and must not open somebody else's settings under that name.
+   *
+   * Mutation checks, run:
+   *   - `FooterIdentity` always rendering the link → all three switched cases
+   *     go red: the managed case on the account-settings label, the adult
+   *     MANAGE and READ cases on the identity link's `/settings/account` href;
+   *   - the empty tail restored for shared records in
+   *     `visibleUtilityDestinations` → both MANAGE cases go red on the missing
+   *     Settings link, while the READ case stays green.
+   */
+  const accountSettingsLabel = (
+    JSON.parse(
+      readFileSync(join(process.cwd(), "messages/en.json"), "utf8"),
+    ) as { nav: { accountSettings: string } }
+  ).nav.accountSettings;
+
+  function renderInRecord(
+    active: {
+      recordKind: "managed" | "shared";
+      level: "read" | "write" | "manage";
+    } | null,
+  ) {
+    const user = mockUserRef.value as typeof mockUserRef.value & {
+      accountAccess?: unknown;
+    };
+    user.accountAccess = active
+      ? {
+          accounts: [],
+          canSwitch: true,
+          active: {
+            accountId: "record-1",
+            username: "record",
+            displayName: null,
+            fullName: null,
+            recordKind: active.recordKind,
+            level: active.level,
+            accessLevel: active.level === "read" ? "read" : "write",
+            canWrite: active.level !== "read",
+            sections: null,
+            writableDomains: [],
+            manageableDomains: delegatedDomains(active.level, null, "manage"),
+          },
+        }
+      : undefined;
+    try {
+      return render();
+    } finally {
+      delete user.accountAccess;
+    }
+  }
+
+  const settingsLinks = (html: string) =>
+    [...html.matchAll(/<a\b[^>]*data-slot="nav-settings-link"[^>]*>/g)].map(
+      (match) => /href="([^"]+)"/.exec(match[0])?.[1],
+    );
+
+  it("keeps the account settings door in one's own record", () => {
+    const html = renderInRecord(null);
+    expect(settingsLinks(html)).toEqual(["/settings/account"]);
+    expect(html).toContain(`aria-label="${accountSettingsLabel}"`);
+  });
+
+  it("offers Settings inside a managed profile and keeps the identity block a plain block", () => {
+    const html = renderInRecord({ recordKind: "managed", level: "manage" });
+    expect(settingsLinks(html)).toEqual(["/settings/account"]);
+    expect(html).not.toContain(`aria-label="${accountSettingsLabel}"`);
+    expect(html).not.toContain('href="/notifications"');
+  });
+
+  it("lands an adult MANAGE share on the one Settings page it opens", () => {
+    const html = renderInRecord({ recordKind: "shared", level: "manage" });
+    expect(settingsLinks(html)).toEqual(["/settings/anamnesis"]);
+    expect(html).not.toContain('href="/settings/account"');
+  });
+
+  it("offers no Settings entry to a READ share", () => {
+    const html = renderInRecord({ recordKind: "shared", level: "read" });
+    // Non-zero proof that the sidebar rendered at all.
+    expect(html).toContain('href="/measurements"');
+    expect(settingsLinks(html)).toEqual([]);
+    expect(html).not.toContain('href="/settings/');
   });
 });

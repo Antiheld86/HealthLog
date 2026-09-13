@@ -16,6 +16,12 @@
  *     control is absent and the page says why, in a sentence, where the
  *     control would have been.
  *
+ * A third journey reaches the profile's Settings from the navigation (#939).
+ * The Settings shell has always listed a managed profile's own configuration,
+ * and the section gate has always admitted it, but no navigation led there:
+ * the utility entries disappeared for every shared record. It walks the
+ * desktop sidebar and the mobile user menu to the Modules card.
+ *
  * Modelled on `v137-sharing-managed-profiles.spec.ts`; the switch helpers are
  * the same ones, for the same reasons written there.
  */
@@ -134,6 +140,73 @@ test.describe.serial("a guardian's controls inside a managed profile", () => {
       timeout: 30_000,
     });
 
+    await leaveRecord(page);
+  });
+
+  test("reaches the profile's Modules settings from the navigation on both widths", async ({
+    page,
+  }) => {
+    await openRecord(page, managed.username);
+    const banner = page.locator('[data-slot="shared-record-banner"]');
+    await expect(banner).toHaveAttribute("data-record-kind", "managed");
+    await expect(banner).toHaveAttribute("data-access-level", "manage");
+    const accountId = await banner.getAttribute("data-account-id");
+    expect(accountId).toBeTruthy();
+
+    // The banner renders from the same `/api/auth/me` answer the navigation
+    // reads, and the shell paints nothing before it resolves. Waiting on it
+    // above is what makes every presence and absence below a statement about
+    // the loaded shell rather than about the hydration gate.
+    const sidebar = page.locator('aside[aria-label="Sidebar"]');
+    const settings = sidebar.locator('[data-slot="nav-settings-link"]');
+    await expect(settings).toHaveCount(1);
+    await expect(settings).toHaveAttribute("href", "/settings/account");
+    await expect(sidebar.locator('a[href="/notifications"]')).toHaveCount(0);
+
+    await settings.click();
+    await expect(page).toHaveURL(/\/settings\/account$/);
+    await expect(
+      page.locator('[data-record-settings-family="profile"]'),
+    ).toHaveAttribute("data-record-id", accountId as string, {
+      timeout: 30_000,
+    });
+
+    await page
+      .locator('a[href="/settings/modules"]')
+      .filter({ visible: true })
+      .first()
+      .click();
+    await expect(page).toHaveURL(/\/settings\/modules$/);
+    const modules = page.locator(
+      '[data-record-settings-family="modules"][aria-busy="false"]',
+    );
+    await expect(modules).toBeVisible({ timeout: 30_000 });
+    await expect(modules).toHaveAttribute(
+      "data-record-id",
+      accountId as string,
+    );
+
+    // The phone layout: the utilities live in the top-bar user menu there.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    await expect(banner).toBeVisible({ timeout: 30_000 });
+    const topBar = page.locator('[data-slot="top-bar"]');
+    await expect(topBar).toBeVisible();
+    await topBar.getByRole("button", { name: "User menu" }).click();
+    const menu = page.getByRole("menu");
+    const menuSettings = menu.locator('[data-slot="nav-settings-link"]');
+    await expect(menuSettings).toHaveAttribute("href", "/settings/account");
+    // The menu is open and populated, so this absence is the menu's answer.
+    await expect(menu.locator('a[href="/notifications"]')).toHaveCount(0);
+    await menuSettings.click();
+    await expect(page).toHaveURL(/\/settings\/account$/);
+    await expect(
+      page.locator('[data-record-settings-family="profile"]'),
+    ).toHaveAttribute("data-record-id", accountId as string, {
+      timeout: 30_000,
+    });
+
+    await page.setViewportSize({ width: 1280, height: 720 });
     await leaveRecord(page);
   });
 

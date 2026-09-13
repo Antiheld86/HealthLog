@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HealthLog API
-  version: 1.38.20
+  version: 1.38.21
   description: >-
     Self-hosted personal-health-tracking PWA — public API surface for the iOS native client and external ingest.
 
@@ -12354,7 +12354,8 @@ paths:
 
 
         Refuses with 400 when the instance has no SMTP transport, when the account has no email channel, or when the
-        channel carries no recipient — three distinguishable prose messages on one status. A transport failure is a 500.
+        channel carries no recipient — three distinguishable prose messages on one status. A failure at the mail server
+        or on the way to it is a 502 that names its cause; only a failure the server cannot name is a 500.
       responses:
         "200":
           description: The provider accepted the message. Not proof it was delivered.
@@ -12365,6 +12366,22 @@ paths:
         "401": *a1
         "422": *a4
         "429": *a5
+        "500":
+          description: The send failed in a way the server could not name. An internal fault, not a statement about the mail server.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "502":
+          description: "The mail server, or the way to it, failed. `meta.errorCode` names the cause: `credentials_rejected` (the
+            server refused the SMTP login), `upstream_rejected` (a permanent 5xx rejection, e.g. an unknown mailbox or
+            relay denied, or an envelope or message refused without a reply code), `upstream_error` (a temporary 4xx
+            rejection), `timeout`, or `connection_failed` (including a TLS handshake or protocol failure).
+            `meta.smtpCode` carries the SMTP reply code when the mail server sent one."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
   /api/settings/ntfy/test:
     post:
       tags:
@@ -12372,9 +12389,10 @@ paths:
       summary: Send a test message to the saved ntfy topic
       description: Publishes one message to the account's configured ntfy server and topic. Takes no body. Rate-limited 5 per
         5 minutes per user. Refuses with 400 when no ntfy channel is saved or when the saved config is missing a server
-        URL or topic; a publish failure is a 500. A server on a private network is refused with 422 and `meta.errorCode`
-        = `private_origin_not_approved` unless the operator listed its exact origin in `NOTIFICATION_PRIVATE_ORIGINS`;
-        the test and the scheduled delivery take the same decision.
+        URL or topic. A failure at the ntfy server or on the way to it is a 502 that carries the upstream status and,
+        when safe, what the server answered; only a failure the server cannot name is a 500. A server on a private
+        network is refused with 422 and `meta.errorCode` = `private_origin_not_approved` unless the operator listed its
+        exact origin in `NOTIFICATION_PRIVATE_ORIGINS`; the test and the scheduled delivery take the same decision.
       responses:
         "200":
           description: The provider accepted the message. Not proof it was delivered.
@@ -12392,6 +12410,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "429": *a5
+        "500":
+          description: The send failed in a way the server could not name. An internal fault, not a statement about the ntfy server.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "502":
+          description: "The ntfy server, or the way to it, failed. `meta.errorCode` names the cause: `upstream_rejected` (the
+            other end refused the payload, e.g. 400/409/415/422), `credentials_rejected` (401/403), `endpoint_not_found`
+            (404/410), `rate_limited` (429), `upstream_error` (5xx), `redirected` (3xx, never followed), `timeout`, or
+            `connection_failed`. `meta.upstreamStatus` carries the HTTP status whenever one arrived, and
+            `meta.upstreamBody` up to 200 characters of what the other end answered, with control characters removed; it
+            is omitted when the body was empty or could carry a credential: a token-shaped string, or the saved auth
+            token, the topic, or a credential in the server URL (userinfo, a query value, a path segment of 16 or more
+            characters), literal, JSON-escaped or percent-encoded."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
   /api/settings/telegram/test:
     post:
       tags:
@@ -12421,11 +12458,12 @@ paths:
         - Notifications
       summary: Send a test payload to the saved webhook
       description: Posts one payload to the account's configured webhook URL. Takes no body. Rate-limited 5 per 5 minutes per
-        user. Refuses with 400 when no webhook channel is saved or the saved config has no URL; a delivery failure is a
-        500. The URL was checked against the SSRF floor when it was saved, so a test cannot be used to reach an internal
-        host. A URL on a private network is refused with 422 and `meta.errorCode` = `private_origin_not_approved` unless
-        the operator listed its exact origin in `NOTIFICATION_PRIVATE_ORIGINS`; the test and the scheduled delivery take
-        the same decision.
+        user. Refuses with 400 when no webhook channel is saved or the saved config has no URL. A failure at the relay
+        or on the way to it is a 502 that carries the upstream status and, when safe, what the relay answered; only a
+        failure the server cannot name is a 500. The URL was checked against the SSRF floor when it was saved, so a test
+        cannot be used to reach an internal host. A URL on a private network is refused with 422 and `meta.errorCode` =
+        `private_origin_not_approved` unless the operator listed its exact origin in `NOTIFICATION_PRIVATE_ORIGINS`; the
+        test and the scheduled delivery take the same decision.
       responses:
         "200":
           description: The provider accepted the message. Not proof it was delivered.
@@ -12443,6 +12481,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "429": *a5
+        "500":
+          description: The send failed in a way the server could not name. An internal fault, not a statement about the relay.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "502":
+          description: "The relay, or the way to it, failed. `meta.errorCode` names the cause: `upstream_rejected` (the other end
+            refused the payload, e.g. 400/409/415/422), `credentials_rejected` (401/403), `endpoint_not_found`
+            (404/410), `rate_limited` (429), `upstream_error` (5xx), `redirected` (3xx, never followed), `timeout`, or
+            `connection_failed`. `meta.upstreamStatus` carries the HTTP status whenever one arrived, and
+            `meta.upstreamBody` up to 200 characters of what the other end answered, with control characters removed; it
+            is omitted when the body was empty or could carry a credential: a token-shaped string, or the saved header
+            value (and its token part), the URL's userinfo, a query value, or a path segment of 16 or more characters
+            (the token in a Discord or Slack webhook URL), literal, JSON-escaped or percent-encoded."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
   /api/settings/data:
     delete:
       tags:
@@ -25863,6 +25920,14 @@ components:
               maxLength: 500
             - type: string
               const: ""
+        format:
+          description: Body shape. `generic` sends HealthLog's own JSON envelope; `gotify` sends the body Gotify's `POST /message`
+            expects, with an integer priority. Omitted keeps the stored choice, which is `generic` for a config saved
+            before the choice existed.
+          type: string
+          enum:
+            - generic
+            - gotify
         enabled:
           type: boolean
       required:
@@ -25872,7 +25937,7 @@ components:
         re-checked at dispatch time; a private origin passes both only when the operator listed it in
         `NOTIFICATION_PRIVATE_ORIGINS`. An EMPTY OR OMITTED `headerValue` preserves the stored one, for the same reason
         as ntfy's `authToken`: the GET never returns it. There is no way to clear a stored header value through this
-        endpoint."
+        endpoint. An omitted `format` keeps the stored body shape."
     DeleteAccountRequest:
       type: object
       properties:
@@ -57447,11 +57512,18 @@ components:
         hasHeaderValue:
           type: boolean
           description: Whether a header value (the shared secret) is stored. The value itself is never returned.
+        format:
+          type: string
+          enum:
+            - generic
+            - gotify
+          description: Body shape the webhook sends. `generic` when no channel row exists or the config predates the choice.
       required:
         - enabled
         - url
         - headerName
         - hasHeaderValue
+        - format
       additionalProperties: false
       description: Stored generic-webhook channel config, with the secret header value reduced to a presence flag.
     PutWebhookSettingsResponse:
