@@ -270,7 +270,7 @@ describe("POST /authorize — decision", () => {
     expect(res.status).toBe(401);
   });
 
-  it("mints a code and 302s back on allow", async () => {
+  it("mints a code and 303s back on allow (a form POST is followed with GET)", async () => {
     signedIn();
     const res = await POST(
       postReq({
@@ -285,7 +285,7 @@ describe("POST /authorize — decision", () => {
         decision: "allow",
       }) as never,
     );
-    expect(res.status).toBe(302);
+    expect(res.status).toBe(303);
     const loc = res.headers.get("location") ?? "";
     expect(loc.startsWith(REDIRECT)).toBe(true);
     const code = new URL(loc).searchParams.get("code");
@@ -295,7 +295,7 @@ describe("POST /authorize — decision", () => {
     expect(new URL(loc).searchParams.get("iss")).toBe("https://health.example");
   });
 
-  it("302s with access_denied on deny", async () => {
+  it("303s with access_denied on deny", async () => {
     signedIn();
     const res = await POST(
       postReq({
@@ -309,10 +309,85 @@ describe("POST /authorize — decision", () => {
         decision: "deny",
       }) as never,
     );
-    expect(res.status).toBe(302);
+    expect(res.status).toBe(303);
     const loc = res.headers.get("location") ?? "";
     expect(new URL(loc).searchParams.get("error")).toBe("access_denied");
     // RFC 9207 — the issuer is echoed on the error redirect too.
     expect(new URL(loc).searchParams.get("iss")).toBe("https://health.example");
+  });
+});
+
+describe("authorize CSP — the consent form may lead only to the validated redirect", () => {
+  function csp(res: Response): string {
+    return res.headers.get("content-security-policy") ?? "";
+  }
+
+  it("allows the registered client's redirect origin on the consent page", async () => {
+    signedIn();
+    const res = await GET(getReq(authorizeUrl()) as never);
+    expect(res.status).toBe(200);
+    expect(csp(res)).toContain("form-action 'self' https://claude.ai;");
+    expect(csp(res)).toContain("default-src 'none'");
+    expect(csp(res)).toContain("frame-ancestors 'none'");
+  });
+
+  it("uses the requested loopback port the client is allowed to vary", async () => {
+    const loopback = registerDcrClient({
+      clientName: "Desktop client",
+      redirectUris: ["http://127.0.0.1:4000/callback"],
+    });
+    signedIn();
+    const res = await GET(
+      getReq(
+        authorizeUrl({
+          client_id: loopback.clientId,
+          redirect_uri: "http://127.0.0.1:53682/callback",
+        }),
+      ) as never,
+    );
+    expect(res.status).toBe(200);
+    expect(csp(res)).toContain("form-action 'self' http://127.0.0.1:53682;");
+  });
+
+  it("never names a redirect origin that failed validation", async () => {
+    signedIn();
+    const res = await GET(
+      getReq(
+        authorizeUrl({ redirect_uri: "https://evil.example/cb" }),
+      ) as never,
+    );
+    expect(res.status).toBe(400);
+    expect(csp(res)).toContain("form-action 'self';");
+    expect(csp(res)).not.toContain("evil.example");
+  });
+
+  it("keeps form-action to 'self' on the sign-in prompt", async () => {
+    const res = await GET(getReq(authorizeUrl()) as never);
+    expect(res.status).toBe(200);
+    expect(csp(res)).toContain("form-action 'self';");
+    expect(csp(res)).not.toContain("claude.ai");
+  });
+
+  it("sets the policy on the decision redirect and on refusals", async () => {
+    signedIn();
+    const allow = await POST(
+      postReq({
+        response_type: "code",
+        client_id: CLIENT.clientId,
+        redirect_uri: REDIRECT,
+        code_challenge: CHALLENGE,
+        code_challenge_method: "S256",
+        scope: "health:read",
+        resource: RESOURCE,
+        decision: "allow",
+      }) as never,
+    );
+    expect(allow.status).toBe(303);
+    expect(csp(allow)).toContain("form-action 'self';");
+
+    vi.mocked(isApiGloballyEnabled).mockResolvedValue(false);
+    const unavailable = await GET(getReq(authorizeUrl()) as never);
+    expect(unavailable.status).toBe(503);
+    expect(csp(unavailable)).toContain("default-src 'none'");
   });
 });

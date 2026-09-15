@@ -13,7 +13,7 @@
  *   POST — the consent decision. Requires a session, re-validates every
  *          parameter, and on "Allow" mints a single-use, short-lived,
  *          self-describing authorization code bound to this user + client +
- *          redirect URI + PKCE challenge + scope + audience, then 302s back.
+ *          redirect URI + PKCE challenge + scope + audience, then 303s back.
  *
  * Mandatory gates, every request: PKCE `S256` (a missing / non-S256 challenge is
  * rejected), audience binding (`resource` MUST equal the canonical `/mcp` URI —
@@ -43,6 +43,7 @@ import {
 import { redirectUriAllowed, resolveClient } from "@/lib/mcp/oauth/clients";
 import { isValidChallenge } from "@/lib/mcp/oauth/pkce";
 import { signArtifact } from "@/lib/mcp/oauth/artifacts";
+import { withAuthorizeCsp } from "@/lib/mcp/oauth/consent-csp";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -269,13 +270,21 @@ function consentOriginAllowed(request: NextRequest): boolean {
   return true;
 }
 
+/**
+ * Send the browser back to the validated redirect URI. 303, not 302: the
+ * decision arrives as a form POST, and 303 is the status that tells every user
+ * agent to follow with a GET (RFC 9700, section 4.12).
+ */
 function redirectBack(
   redirectUri: string,
   query: Record<string, string>,
 ): Response {
   const url = new URL(redirectUri);
   for (const [k, v] of Object.entries(query)) url.searchParams.set(k, v);
-  return Response.redirect(url.toString(), 302);
+  return new Response(null, {
+    status: 303,
+    headers: { Location: url.toString() },
+  });
 }
 
 /** Whether the surface is available (M1 origin pinned + M4 kill-switch off). */
@@ -283,7 +292,26 @@ async function surfaceAvailable(): Promise<boolean> {
   return isMcpOriginConfigured() && (await isApiGloballyEnabled());
 }
 
+/**
+ * Every response from this route carries the route's own CSP; the proxy leaves
+ * this path alone (see `consent-csp.ts`). A response that already set one, the
+ * consent page with its validated redirect origin, keeps it.
+ */
+function ensureAuthorizeCsp(response: Response): Response {
+  return response.headers.has("content-security-policy")
+    ? response
+    : withAuthorizeCsp(response);
+}
+
 export async function GET(request: NextRequest): Promise<Response> {
+  return ensureAuthorizeCsp(await authorizeGet(request));
+}
+
+export async function POST(request: NextRequest): Promise<Response> {
+  return ensureAuthorizeCsp(await authorizePost(request));
+}
+
+async function authorizeGet(request: NextRequest): Promise<Response> {
   return withBackgroundEvent("mcp.oauth.authorize", async () => {
     if (!(await surfaceAvailable())) {
       return Response.json(
@@ -347,8 +375,11 @@ export async function GET(request: NextRequest): Promise<Response> {
     const accessSummary = writeGranted
       ? `<p><strong>This grants read AND write access:</strong> the application will be able to read your own health records <strong>and log new measurements and mood entries</strong> to your account on your behalf. It cannot delete or change existing entries, edit medications, or reach admin functions.</p>`
       : `<p>Scope: <code>${htmlEscape(v.scope)}</code> — read-only access to your own health records.</p>`;
-    return html(
-      `<main>
+    // The one response whose form may lead off-origin: allow exactly the
+    // redirect URI `validate()` just matched against the resolved client.
+    return withAuthorizeCsp(
+      html(
+        `<main>
         <h1>Authorize access</h1>
         <p><strong>${htmlEscape(v.clientName)}</strong> is requesting access to your HealthLog data.</p>
         ${provenance}
@@ -367,11 +398,13 @@ export async function GET(request: NextRequest): Promise<Response> {
           <button type="submit" name="decision" value="deny">Deny</button>
         </form>
       </main>`,
+      ),
+      v.redirectUri,
     );
   });
 }
 
-export async function POST(request: NextRequest): Promise<Response> {
+async function authorizePost(request: NextRequest): Promise<Response> {
   return withBackgroundEvent("mcp.oauth.authorize", async () => {
     if (!(await surfaceAvailable())) {
       return Response.json(

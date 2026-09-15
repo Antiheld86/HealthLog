@@ -683,7 +683,18 @@ export function proxy(request: NextRequest) {
       isDev
       ? `default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src 'self' blob:; connect-src 'self'; font-src 'self';`
       : `default-src 'self'; script-src 'self' 'nonce-${nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src 'self' blob:; connect-src 'self'${aiConnectSrc}${withingsConnectSrc}${whoopConnectSrc}${stravaConnectSrc}; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self'; report-uri ${cspReportEndpoint}; report-to csp-endpoint;`;
-  response.headers.set("Content-Security-Policy", csp);
+  // The MCP OAuth authorization endpoint sets its own CSP. Its consent form
+  // posts to this origin and the server then redirects to the connecting
+  // client's `redirect_uri`; Chromium applies `form-action` to that redirect,
+  // so the app-wide `form-action 'self'` would strand the user after the
+  // grant. The route allows exactly the redirect origin it validated for the
+  // request (`src/lib/mcp/oauth/consent-csp.ts`). Middleware headers override
+  // route headers, so the proxy must leave the header unset on this exact
+  // path; every other header above still applies.
+  const isMcpAuthorizeRoute = pathname === "/api/mcp/oauth/authorize";
+  if (!isMcpAuthorizeRoute) {
+    response.headers.set("Content-Security-Policy", csp);
+  }
 
   // Production-only headers. HSTS carries `preload` so the domain stays
   // eligible for the Chromium preload list — closes the first-visit MITM
