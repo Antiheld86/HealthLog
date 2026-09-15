@@ -290,6 +290,12 @@ x-healthlog-env: &healthlog_env
   # (the `environment:` block is a whitelist). See
   # docs/integrations/ai-providers.md.
   DOCUMENT_AI_LIMIT_PER_HOUR: "${DOCUMENT_AI_LIMIT_PER_HOUR:-}"
+  # Per-user hourly ceiling for lab-report scans (photo/PDF and browser-OCR
+  # text share one bucket; optional; default 6, clamped 1-1000). A scan that
+  # fails before the provider is called hands its slot back. Listed here so an
+  # operator value in .env reaches the container. See
+  # docs/integrations/ai-providers.md.
+  LABS_OCR_LIMIT_PER_HOUR: "${LABS_OCR_LIMIT_PER_HOUR:-}"
   # v1.17.1 — SMTP transport for the email notification channel (optional,
   # all-or-none: HOST + PORT + FROM enable it; USER/PASS optional; SECURE
   # toggles implicit TLS). Listed here so operator values in .env reach the
