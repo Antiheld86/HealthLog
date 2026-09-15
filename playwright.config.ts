@@ -298,10 +298,15 @@ export default defineConfig({
         // rebuilt it. The suite could not see it, because with the prefetch
         // off both sides paint the same skeleton.
         //
-        // One extra server on 3100 closes that. Only
-        // `dashboard-ssr-prefetch-hydration.spec.ts` talks to it, and it
-        // asserts the one thing the mocked specs cannot: that the page the
-        // server streamed is the page the browser keeps.
+        // One extra server on 3100 closes that. It asserts the one thing the
+        // mocked specs cannot: that the page the server streamed is the page
+        // the browser keeps (`dashboard-ssr-prefetch-hydration.spec.ts`).
+        //
+        // It also carries `APP_URL`, as a real deployment does. The MCP OAuth
+        // surface fails closed without a configured origin, so the consent
+        // journey (`mcp-oauth-consent-redirect.spec.ts`) runs here. The shared
+        // server stays without it, because `APP_URL` also narrows the accepted
+        // passkey origins and shapes invite links for every other spec.
         {
           command: `PORT=${SSR_PREFETCH_PORT} HOSTNAME=127.0.0.1 ${JSON.stringify(process.execPath)} .next/standalone/server.js`,
           url: `${SSR_PREFETCH_BASE_URL}/api/version`,
@@ -313,6 +318,7 @@ export default defineConfig({
             ...process.env,
             NATIVE_CANVAS: "off",
             DASHBOARD_SSR_PREFETCH: "true",
+            APP_URL: SSR_PREFETCH_BASE_URL,
           },
         },
         // The mail-configured, scheduler-free server, on its own port.
