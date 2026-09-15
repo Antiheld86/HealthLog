@@ -18,8 +18,10 @@
  *     `labsLocalOcrEnabled` preference.
  *
  * Guards mirror the Coach's discipline in both modes:
- *   requireAuth → resolve provider → assertConsentForChain → rate-limit (6/h)
- *   → reserveBudget → run extraction → reconcile budget.
+ *   requireAuth → resolve provider → assertConsentForChain → rate-limit
+ *   (`LABS_OCR_LIMIT_PER_HOUR`, default 6/h) → reserveBudget → run extraction
+ *   → reconcile budget. A slot is charged early so a 429 stays cheap, and it is
+ *   handed back when the scan fails before the provider is called.
  *
  * Extracted text is UNTRUSTED (prompt-injection): the server never acts on an
  * instruction inside the document — the human review step is the safety
@@ -58,14 +60,14 @@ import {
   readBoundedBody,
 } from "@/lib/labs/ocr-upload";
 import { annotate } from "@/lib/logging/context";
-import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
+import {
+  checkLabsOcrRateLimit,
+  labsOcrRateLimited,
+  refundLabsOcrSlot,
+} from "@/lib/labs/ocr-rate-limit";
 import { ocrTextExtractSchema } from "@/lib/validations/labs-ocr";
 
 export const dynamic = "force-dynamic";
-
-/** 6 extraction calls per hour — they are expensive (vision) / metered (text). */
-const EXTRACT_LIMIT_PER_HOUR = 6;
-const EXTRACT_WINDOW_MS = 60 * 60 * 1000;
 
 /** OCR'd text is bounded in the schema; cap the JSON body proportionally. */
 const TEXT_BODY_MAX_BYTES = 512 * 1024;
@@ -138,29 +140,23 @@ async function handleTextExtract(
   // egress is the user's own act (the toggle is the consent for local OCR).
   await assertConsentForChain({ userId, chain, surface: "insights" });
 
-  const rl = await checkRateLimit(
-    `labs-ocr:${userId}`,
-    EXTRACT_LIMIT_PER_HOUR,
-    EXTRACT_WINDOW_MS,
-  );
+  const rl = await checkLabsOcrRateLimit(userId);
   if (!rl.allowed) {
     annotate({ action: { name: "labs.ocr.rateLimited" } });
-    const response = apiError("Too many scans. Try again later.", 429, {
-      errorCode: "labs.ocr.rateLimited",
-    });
-    for (const [k, v] of Object.entries(rateLimitHeaders(rl))) {
-      response.headers.set(k, v);
-    }
-    return response;
+    return labsOcrRateLimited(rl);
   }
 
   const { data: body, error: jsonError } = await safeJson(request, {
     maxBytes: TEXT_BODY_MAX_BYTES,
   });
-  if (jsonError) return jsonError;
+  if (jsonError) {
+    await refundLabsOcrSlot(userId);
+    return jsonError;
+  }
 
   const parsed = ocrTextExtractSchema.safeParse(body);
   if (!parsed.success) {
+    await refundLabsOcrSlot(userId);
     return apiValidationError(
       "Invalid OCR text payload",
       sanitiseZodIssues(parsed.error.issues),
@@ -192,6 +188,7 @@ async function handleTextExtract(
       action: { name: "labs.ocr.budget.exceeded" },
       meta: { totalAfter: reservation.totalAfter, mode: "text" },
     });
+    await refundLabsOcrSlot(userId);
     return apiError("Your AI usage budget for today is reached.", 429, {
       errorCode: "labs.ocr.budgetExceeded",
     });
@@ -263,20 +260,10 @@ async function handleVisionExtract(
   await assertConsentForChain({ userId, chain, surface: "insights" });
 
   // 3. Rate-limit (vision calls are costly).
-  const rl = await checkRateLimit(
-    `labs-ocr:${userId}`,
-    EXTRACT_LIMIT_PER_HOUR,
-    EXTRACT_WINDOW_MS,
-  );
+  const rl = await checkLabsOcrRateLimit(userId);
   if (!rl.allowed) {
     annotate({ action: { name: "labs.ocr.rateLimited" } });
-    const response = apiError("Too many scans. Try again later.", 429, {
-      errorCode: "labs.ocr.rateLimited",
-    });
-    for (const [k, v] of Object.entries(rateLimitHeaders(rl))) {
-      response.headers.set(k, v);
-    }
-    return response;
+    return labsOcrRateLimited(rl);
   }
 
   // 4. Reserve the day's budget BEFORE the provider call (atomic, TOCTOU-safe).
@@ -297,6 +284,7 @@ async function handleVisionExtract(
       action: { name: "labs.ocr.budget.exceeded" },
       meta: { totalAfter: reservation.totalAfter },
     });
+    await refundLabsOcrSlot(userId);
     return apiError("Your AI usage budget for today is reached.", 429, {
       errorCode: "labs.ocr.budgetExceeded",
     });
@@ -317,6 +305,7 @@ async function handleVisionExtract(
         servedBy: null,
         reservedOwner: reservation.owner,
       });
+      await refundLabsOcrSlot(userId);
       return apiError("File is too large (max 12 MB).", 413, {
         errorCode: "labs.ocr.fileTooLarge",
       });
@@ -333,6 +322,7 @@ async function handleVisionExtract(
         servedBy: null,
         reservedOwner: reservation.owner,
       });
+      await refundLabsOcrSlot(userId);
       if (err instanceof BodyTooLargeError) {
         annotate({
           action: { name: "labs.ocr.fileRejected" },
@@ -351,6 +341,7 @@ async function handleVisionExtract(
         servedBy: null,
         reservedOwner: reservation.owner,
       });
+      await refundLabsOcrSlot(userId);
       return apiError("Field 'file' must be a file", 422);
     }
 
@@ -362,6 +353,7 @@ async function handleVisionExtract(
         servedBy: null,
         reservedOwner: reservation.owner,
       });
+      await refundLabsOcrSlot(userId);
       return apiError("Failed to read uploaded file", 400);
     }
 
@@ -376,6 +368,7 @@ async function handleVisionExtract(
         servedBy: null,
         reservedOwner: reservation.owner,
       });
+      await refundLabsOcrSlot(userId);
       return apiError("Upload a JPEG, PNG, WebP, or PDF.", 415, {
         errorCode: "labs.ocr.fileType",
       });
@@ -417,6 +410,7 @@ async function handleVisionExtract(
             servedBy: null,
             reservedOwner: reservation.owner,
           });
+          await refundLabsOcrSlot(userId);
           return apiError(
             "Couldn't read this PDF; upload a photo instead.",
             422,
@@ -485,6 +479,7 @@ async function handleVisionExtract(
       servedBy: null,
       reservedOwner: reservation.owner,
     }).catch(() => {});
+    await refundLabsOcrSlot(userId);
     throw err;
   }
 }

@@ -37,7 +37,8 @@ vi.mock("@/lib/ai/consent-guard", () => ({
   assertConsentForChain: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/lib/rate-limit", () => ({
-  checkRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
+  checkRateLimit: vi.fn(),
+  refundRateLimit: vi.fn().mockResolvedValue(undefined),
   rateLimitHeaders: vi.fn(() => ({})),
 }));
 vi.mock("@/lib/ai/coach/budget", () => ({
@@ -65,6 +66,7 @@ import {
 } from "@/lib/labs/ocr-capability";
 import { rasterizePdf } from "@/lib/documents/rasterize-pdf";
 import { reserveBudget, reconcileSpend } from "@/lib/ai/coach/budget";
+import { checkRateLimit, refundRateLimit } from "@/lib/rate-limit";
 import { OcrExtractError, runOcrExtraction } from "@/lib/labs/ocr-extract";
 
 const SESSION_OK = {
@@ -82,6 +84,12 @@ function textReq(text = "Glucose 95 mg/dL"): Request {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
+  vi.mocked(checkRateLimit).mockResolvedValue({
+    allowed: true,
+    remaining: 5,
+    resetAt: Date.now() + 3_600_000,
+  } as never);
   vi.mocked(requireAuth).mockResolvedValue(SESSION_OK as never);
   vi.mocked(prisma.user.findUnique).mockResolvedValue({
     labsLocalOcrEnabled: true,
@@ -217,6 +225,25 @@ describe("POST /api/labs/ocr/extract — vision PDF rasterization", () => {
     );
   });
 
+  it("hands the slot back when the upload is not an image or PDF", async () => {
+    const form = new FormData();
+    form.append(
+      "file",
+      new File([new TextEncoder().encode("plain text")], "note.txt", {
+        type: "text/plain",
+      }),
+    );
+    const res = await POST(
+      new Request("http://localhost/api/labs/ocr/extract", {
+        method: "POST",
+        body: form,
+      }) as never,
+    );
+    expect(res.status).toBe(415);
+    expect(refundRateLimit).toHaveBeenCalledWith("labs-ocr:user-1");
+    expect(runOcrExtraction).not.toHaveBeenCalled();
+  });
+
   it("falls back to pdfNeedsAnthropic when rasterization fails", async () => {
     vi.mocked(rasterizePdf).mockResolvedValue({
       ok: false,
@@ -237,5 +264,73 @@ describe("POST /api/labs/ocr/extract — vision PDF rasterization", () => {
       0,
       { servedBy: null, reservedOwner: "operator" },
     );
+  });
+});
+
+describe("POST /api/labs/ocr/extract — the hourly scan bucket", () => {
+  it("charges the ceiling the operator set", async () => {
+    vi.stubEnv("LABS_OCR_LIMIT_PER_HOUR", "40");
+    vi.mocked(runOcrExtraction).mockResolvedValue({ rows: [] } as never);
+    const res = await POST(textReq() as never);
+    expect(res.status).toBe(200);
+    expect(checkRateLimit).toHaveBeenCalledWith(
+      "labs-ocr:user-1",
+      40,
+      60 * 60 * 1000,
+    );
+  });
+
+  it("answers 429 with the reset instant when the bucket is spent", async () => {
+    vi.mocked(checkRateLimit).mockResolvedValue({
+      allowed: false,
+      remaining: 0,
+      resetAt: Date.parse("2026-09-15T15:00:00Z"),
+    } as never);
+    const res = await POST(textReq() as never);
+    expect(res.status).toBe(429);
+    const body = (await res.json()) as {
+      meta: { errorCode: string; retryAt: string };
+    };
+    expect(body.meta.errorCode).toBe("labs.ocr.rateLimited");
+    expect(body.meta.retryAt).toBe("2026-09-15T15:00:00.000Z");
+    expect(runOcrExtraction).not.toHaveBeenCalled();
+  });
+
+  it("hands the slot back for a malformed text body", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/labs/ocr/extract", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: "text" }),
+      }) as never,
+    );
+    expect(res.status).toBe(422);
+    expect(refundRateLimit).toHaveBeenCalledWith("labs-ocr:user-1");
+  });
+
+  it("hands the slot back when the daily budget turns the scan away", async () => {
+    vi.mocked(reserveBudget).mockResolvedValue({
+      allowed: false,
+      reserved: 0,
+      totalAfter: 999_999,
+      owner: "operator",
+      operatorAfter: 999_999,
+    } as never);
+    const res = await POST(textReq() as never);
+    expect(res.status).toBe(429);
+    expect(refundRateLimit).toHaveBeenCalledWith("labs-ocr:user-1");
+    expect(runOcrExtraction).not.toHaveBeenCalled();
+  });
+
+  it("keeps the slot once the provider was actually called", async () => {
+    vi.mocked(runOcrExtraction).mockRejectedValue(new Error("provider down"));
+    const failed = await POST(textReq() as never);
+    expect(failed.status).toBe(502);
+    expect(refundRateLimit).not.toHaveBeenCalled();
+
+    vi.mocked(runOcrExtraction).mockResolvedValue({ rows: [] } as never);
+    const ok = await POST(textReq() as never);
+    expect(ok.status).toBe(200);
+    expect(refundRateLimit).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,45 @@
 # Changelog
 
+## [1.38.23] — 2026-09-15
+
+Connecting an AI assistant through MCP works in Chrome and Edge again, and
+lab-report scans can be raised past six an hour.
+
+### Fixed
+
+- **Connecting an AI assistant through MCP works in Chrome and Edge again.**
+  After you pressed Allow on the consent screen, the grant went through but
+  the browser stayed on the page and never returned to the assistant, so
+  claude.ai and other clients waited forever. The consent page carried a
+  security policy that only allowed its own address as a form target, and
+  Chromium-based browsers apply that to the redirect back to the client as
+  well. The consent page now allows exactly the return address it has
+  checked against the connecting client, and nothing else. If you added a
+  reverse-proxy rule to work around this, you can remove it. Thanks to
+  @Mark-Milkis for tracking it down in #983.
+- **A lab scan that never reached the AI no longer uses up one of your
+  scans.** A file that was too large, not an image or PDF, a PDF that could
+  not be rendered, or a scan the daily AI budget turned away still counted
+  against the hourly limit. Only scans that are actually sent to the provider
+  count now.
+
+### Added
+
+- **If you host this yourself, you can raise the lab-scan limit.** Scanning a
+  stack of reports after a doctor's visit ran into a fixed six scans an hour.
+  Set `LABS_OCR_LIMIT_PER_HOUR` to allow more (default 6, between 1 and 1000),
+  the same way `DOCUMENT_AI_LIMIT_PER_HOUR` works for documents. The daily AI
+  budget still bounds the cost. Thanks to @rkerian for #985.
+
+### Changed
+
+- **If you write against the API**, the redirect after the MCP consent
+  decision is now `303 See Other` instead of `302`. The 429 from
+  `POST /api/labs/ocr/extract` now also carries `meta.retryAt`.
+- Prisma moves to 7.10 for the app, its client and the migration tool in the
+  image, together with updates to Playwright, lucide-react, pdfjs and the CI
+  actions. Nothing changes in how the app behaves.
+
 ## [1.38.22] — 2026-09-13
 
 A channel test no longer runs on settings you have not saved.

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: HealthLog API
-  version: 1.38.22
+  version: 1.38.23
   description: >-
     Self-hosted personal-health-tracking PWA — public API surface for the iOS native client and external ingest.
 
@@ -13489,8 +13489,10 @@ paths:
         provider; ≤ 12 MiB) is run through the user's vision-capable provider; the upload lives in memory only and is
         never persisted or logged. TEXT (`application/json`, opt-in local OCR): the browser OCR's the image
         (tesseract.js) and POSTs `{ mode: \"text\", text }` — only the extracted text reaches the server, so a text-only
-        provider (e.g. ChatGPT-OAuth) reaches the same review/commit flow. Both modes are gated by AI consent, a 6/hour
-        rate bucket, and the per-day token budget, and return proposed rows for the mandatory human review screen —
+        provider (e.g. ChatGPT-OAuth) reaches the same review/commit flow. Both modes are gated by AI consent, a
+        per-user hourly rate bucket (default 6, operator-tunable via `LABS_OCR_LIMIT_PER_HOUR`; a slot is only consumed
+        when the scan reaches the provider, and the 429 carries `Retry-After`, the `X-RateLimit-*` triple and
+        `meta.retryAt`), and the per-day token budget, and return proposed rows for the mandatory human review screen —
         nothing is written. Extracted content is treated as untrusted (prompt-injection); the review step is the safety
         boundary."
       requestBody:

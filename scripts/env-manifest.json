@@ -137,6 +137,10 @@
         {
           "name": "DOCUMENT_AI_LIMIT_PER_HOUR",
           "purpose": "Per-user hourly ceiling for the document-AI actions (read/index, extract, suggest, summarise share one bucket). Default 6, clamped to 1-1000."
+        },
+        {
+          "name": "LABS_OCR_LIMIT_PER_HOUR",
+          "purpose": "Per-user hourly ceiling for lab-report scans (photo/PDF and browser-OCR text share one bucket). Default 6, clamped to 1-1000."
         }
       ]
     },

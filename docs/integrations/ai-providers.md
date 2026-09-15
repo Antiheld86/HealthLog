@@ -412,7 +412,15 @@ many documents against a generous provider budget; lower it on a
 tight one. The 429 names the actual wait (the window is an hour) and
 carries the reset instant in `X-RateLimit-Reset`.
 
-All three variables must also be listed in the compose
+`LABS_OCR_LIMIT_PER_HOUR` (default `6`, clamped to 1–1000) does the
+same for lab-report scans. The photo or PDF scan and the browser-OCR
+text scan share one bucket per user, and a scan that fails before the
+provider is called (malformed body, file too large or not an image or
+PDF, a PDF that cannot be rendered, exhausted daily budget) hands its
+slot back. Raise it when users scan a stack of reports at once; the
+daily AI budget still bounds the cost.
+
+All four variables must also be listed in the compose
 `environment:` whitelist to reach the container; the shipped
 `docker-compose.yml` lists them.
 
