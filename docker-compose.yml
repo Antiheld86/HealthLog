@@ -482,7 +482,16 @@ services:
     # existing deployments see no image change). Minor releases share
     # the on-disk format — bumping this pin is safe without a dump /
     # restore; a major-version bump (17+) is not.
-    image: postgres:16.14-alpine
+    #
+    # The pin only works as long as something watches it: PostgreSQL
+    # publishes minor releases with security and data-corruption fixes and
+    # recommends running the current one, and this line sat two minors
+    # behind for five weeks because the Dockerfile was the only thing
+    # Dependabot looked at. The `docker-compose` ecosystem in
+    # `.github/dependabot.yml` now raises a PR for each new minor;
+    # `src/__tests__/database-pin-is-watched.test.ts` keeps both halves
+    # (concrete pin, active watch) from being dropped.
+    image: postgres:16.15-alpine
     container_name: healthlog-db
     # cap_drop: [ALL] is deliberately NOT applied here (unlike `app`): the
     # official Postgres entrypoint starts as root, chowns the data
