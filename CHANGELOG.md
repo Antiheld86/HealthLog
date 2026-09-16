@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.38.24] — 2026-09-16
+
+Insights loads when the assistant is switched off, and the bundled
+database no longer ages behind its own security fixes.
+
+### Fixed
+
+- **Insights loads with the assistant switched off.** An operator who turned
+  the assistant off on the server got an error in place of the whole Insights
+  overview. Its main read and several tiles were tied to the assistant switch
+  even though none of them uses a model, so the derived tiles, the ECG list and
+  the device-flagged rhythm events stayed dark, and a watch ECG sent from the
+  phone was refused. These reads follow the Insights module now, and the parts
+  a model writes still disappear when the assistant is off. Thanks to
+  @CritLoren for the log in #975 that showed which requests failed.
+- **The trends row leaves mood out when the mood module is off.** Switching
+  the mood module off already hid the Mood tab on Insights, but the overview
+  still drew a mood chart in its trends row. It skips mood now, the same way
+  the tab strip does.
+
+### Changed
+
+- **The bundled database moves to PostgreSQL 16.15, and stays current from
+  here.** The compose file pinned 16.14, and the pin is deliberate: a database
+  change should be something you can read before it happens. What was missing
+  was anything watching it, so it sat five weeks behind a release that carried
+  security and data-corruption fixes. New PostgreSQL minor releases now arrive
+  as an update we review and ship. Upgrading within PostgreSQL 16 needs no dump
+  or restore. If you run your own PostgreSQL instead of the bundled one,
+  nothing here affects you. Thanks to @tarantila for #987.
+- **Supply chain.** The container scanner's installer is fetched from a commit
+  and checked against its hash before it runs, PostgreSQL major versions no
+  longer arrive as automatic update proposals, and the app moves to nodemailer
+  10 along with updates to sax, sonner, jose, the canvas renderer and the
+  virtual-list helper. Nothing changes in how the app behaves.
+
 ## [1.38.23] — 2026-09-15
 
 Connecting an AI assistant through MCP works in Chrome and Edge again, and
