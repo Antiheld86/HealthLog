@@ -96,7 +96,7 @@
     "react-hook-form": "7.83.0",
     "recharts": "^3.10.1",
     "rrule": "^2.8.1",
-    "sax": "^1.6.0",
+    "sax": "^1.6.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
     "tesseract.js": "^7.0.0",
