@@ -29,3 +29,12 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3
+  # The `docker` ecosystem above reads the Dockerfile only. The bundled
+  # database lives in `docker-compose.yml`, which GitHub treats as its own
+  # ecosystem, so without this block a new PostgreSQL minor release never
+  # reaches us and the pin ages silently.
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
