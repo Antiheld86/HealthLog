@@ -36,6 +36,16 @@ describe("the bundled database pin", () => {
     expect(images[0]).toMatch(/^postgres:\d+\.\d+-alpine$/);
   });
 
+  it("lets a major version through only as a decision, never as an update PR", () => {
+    const dependabot = read(".github/dependabot.yml");
+    // The first run of the compose ecosystem proposed 16.15 -> 18.6. A
+    // PostgreSQL major changes the on-disk format, so it is a migration the
+    // project schedules, not an update an operator merges on a Tuesday.
+    expect(dependabot).toMatch(
+      /dependency-name:\s*"postgres"[\s\S]{0,200}version-update:semver-major/,
+    );
+  });
+
   it("is watched by the compose ecosystem, which is not the Dockerfile one", () => {
     const dependabot = read(".github/dependabot.yml");
     const ecosystems = [
