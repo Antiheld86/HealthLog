@@ -160,12 +160,25 @@ jobs:
       # with) answering with a corrupt index failed the step twice in a row
       # on a release commit. The installer downloads the tarball for this
       # exact version and checks it against the published checksums.
+      #
+      # The installer itself is fetched from a COMMIT and verified before it
+      # runs. A tag can be moved to other content, and piping a moving ref
+      # straight into a shell runs whatever the ref points at that morning
+      # with the runner's privileges. `TRIVY_INSTALL_COMMIT` is the commit
+      # `v0.74.0` points at; bump both together, and take the new checksum
+      # from the file at that commit.
       - name: Install Trivy
         env:
           TRIVY_VERSION: v0.74.0
+          TRIVY_INSTALL_COMMIT: e1fd17a0ea4a8cf24bc4b4dd7e2cfbf4bb31b994
+          TRIVY_INSTALL_SHA256: e00df553be558995b994758bc8995956554a16937f456dc6615b0cc411bfec7a
         run: |
-          curl -sfL "https://raw.githubusercontent.com/aquasecurity/trivy/${TRIVY_VERSION}/contrib/install.sh" \
-            | sh -s -- -b /usr/local/bin "${TRIVY_VERSION}"
+          curl -sfL \
+            "https://raw.githubusercontent.com/aquasecurity/trivy/${TRIVY_INSTALL_COMMIT}/contrib/install.sh" \
+            -o trivy-install.sh
+          echo "${TRIVY_INSTALL_SHA256}  trivy-install.sh" | sha256sum -c -
+          sh trivy-install.sh -b /usr/local/bin "${TRIVY_VERSION}"
+          rm trivy-install.sh
           trivy --version
 
       # Blocking since v1.15.20 — a HIGH/CRITICAL finding in the built
