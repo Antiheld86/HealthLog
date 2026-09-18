@@ -9,7 +9,10 @@ import {
   hkIdentifierForType,
   mapAppleHealthEntry,
 } from "../apple-health-mapping";
-import { measurementTypeEnum } from "@/lib/validations/measurement";
+import {
+  measurementTypeEnum,
+  validateMeasurementRange,
+} from "@/lib/validations/measurement";
 import type { MeasurementType } from "@/generated/prisma/client";
 
 /**
@@ -1011,5 +1014,70 @@ describe("v1.10.0 categorical events (WX-B)", () => {
       categoryValue: 1,
     });
     expect(out!.rhythmClassification).toBeUndefined();
+  });
+});
+
+describe("percent-shaped HealthKit types take a fraction or an already-scaled percent", () => {
+  const PERCENT_TYPES = [
+    "HKQuantityTypeIdentifierBodyFatPercentage",
+    "HKQuantityTypeIdentifierOxygenSaturation",
+    "HKQuantityTypeIdentifierAppleWalkingSteadiness",
+    "HKQuantityTypeIdentifierWalkingAsymmetryPercentage",
+    "HKQuantityTypeIdentifierWalkingDoubleSupportPercentage",
+  ] as const;
+
+  it("scales a raw HealthKit fraction, the documented wire form", () => {
+    for (const id of PERCENT_TYPES) {
+      const mapping = APPLE_HEALTH_TYPE_MAP[id];
+      expect(mapping.convertToDbUnit(0.97), id).toBeCloseTo(97);
+      expect(mapping.convertToDbUnit(0.25), id).toBeCloseTo(25);
+    }
+  });
+
+  it("passes a value a client already scaled straight through", () => {
+    // Shipped iOS builds multiply oxygen saturation and body fat by 100
+    // before upload. Scaling again put the row outside its plausibility
+    // range, the batch route skipped it, and the client advanced its anchor
+    // past a reading it then never read again.
+    for (const id of PERCENT_TYPES) {
+      const mapping = APPLE_HEALTH_TYPE_MAP[id];
+      expect(mapping.convertToDbUnit(97), id).toBeCloseTo(97);
+      expect(mapping.convertToDbUnit(25), id).toBeCloseTo(25);
+    }
+  });
+
+  it("keeps a stored oxygen saturation inside its plausibility range either way", () => {
+    const mapping =
+      APPLE_HEALTH_TYPE_MAP["HKQuantityTypeIdentifierOxygenSaturation"];
+    for (const wire of [0.97, 97]) {
+      expect(
+        validateMeasurementRange(
+          "OXYGEN_SATURATION",
+          mapping.convertToDbUnit(wire),
+        ),
+      ).toBeNull();
+    }
+  });
+
+  it("covers every mapping that declares the percent-fraction unit reason, and only those", () => {
+    // The x100 in this file is not one thing: waist circumference converts
+    // metres to centimetres with the same factor. A blanket change to the
+    // tolerant converter turned a 1.02 m waist into 1.02 cm, which is how
+    // this test came to exist.
+    for (const [id, mapping] of Object.entries(APPLE_HEALTH_TYPE_MAP)) {
+      const isPercentClass = PERCENT_TYPES.includes(
+        id as (typeof PERCENT_TYPES)[number],
+      );
+      const tolerant =
+        mapping.convertToDbUnit(2) === 2 && mapping.convertToDbUnit(0.5) === 50;
+      expect(tolerant, id).toBe(isPercentClass);
+    }
+  });
+
+  it("still converts a waist circumference from metres to centimetres", () => {
+    const mapping =
+      APPLE_HEALTH_TYPE_MAP["HKQuantityTypeIdentifierWaistCircumference"];
+    expect(mapping.convertToDbUnit(0.86)).toBeCloseTo(86);
+    expect(mapping.convertToDbUnit(1.02)).toBeCloseTo(102);
   });
 });

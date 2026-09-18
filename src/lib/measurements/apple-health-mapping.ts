@@ -218,7 +218,27 @@ const UNIT_FIXED_DIMENSIONLESS_COUNT =
 const UNIT_FIXED_PER_MINUTE =
   "Per-minute rate: Apple emits `count/min` in every locale and the Health app offers no alternative display unit, so there is nothing to convert from.";
 const UNIT_FIXED_PERCENT_FRACTION =
-  "Apple writes the percent unit but the VALUE rides as a 0..1 fraction; the x100 in `convertToDbUnit` already covers both spellings, so branching on the record unit would double-scale it.";
+  "Apple writes the percent unit but the VALUE rides as a 0..1 fraction; `percentFromFraction` in `convertToDbUnit` already covers both spellings, so branching on the record unit would double-scale it.";
+
+/**
+ * A HealthKit percent, from a fraction or from a client that already scaled.
+ *
+ * The convention is that HK values travel raw and the server scales. Shipped
+ * iOS builds break it for two identifiers: they multiply oxygen saturation and
+ * body fat by 100 before upload, so the server scaled a second time, the value
+ * left the plausibility range, the batch route skipped the row, and the client
+ * treated that skip as final and advanced its anchor. Every reading of those
+ * two types was lost, silently, on every install.
+ *
+ * The two domains do not overlap: a fraction is at most 1, and one percent
+ * oxygen saturation or body fat does not occur in a living person. So a value
+ * above 1 is already a percent and passes through, and anything at or below 1
+ * is a fraction and gets scaled. A wrong reading still meets the per-type
+ * range guard afterwards, which is what rejects the impossible either way.
+ */
+function percentFromFraction(value: number): number {
+  return value > 1 ? value : value * 100;
+}
 const UNIT_FIXED_EVENT_PIN =
   "Categorical event: `convertToDbUnit` pins the stored value to 1 fired event regardless of the reading, so no unit attribute can move it.";
 const UNIT_FIXED_AUDIO_SPL =
@@ -245,7 +265,7 @@ export const APPLE_HEALTH_TYPE_MAP: Record<string, AppleHealthMapping> = {
     unitFixedReason: UNIT_FIXED_PERCENT_FRACTION,
     dbUnit: "%",
     // Apple ships 0..1 fraction; HealthLog stores 0..100.
-    convertToDbUnit: (v) => v * 100,
+    convertToDbUnit: percentFromFraction,
     aggregation: "latest",
   },
   HKQuantityTypeIdentifierBodyTemperature: {
@@ -269,7 +289,7 @@ export const APPLE_HEALTH_TYPE_MAP: Record<string, AppleHealthMapping> = {
     hkUnit: "m",
     dbUnit: "cm",
     // Apple ships length in metres; HealthLog stores waist in cm.
-    convertToDbUnit: (v) => v * 100,
+    convertToDbUnit: (v) => v * 100, // metres to centimetres, NOT a percent
     aggregation: "latest",
   },
 
@@ -385,7 +405,7 @@ export const APPLE_HEALTH_TYPE_MAP: Record<string, AppleHealthMapping> = {
     unitFixedReason: UNIT_FIXED_PERCENT_FRACTION,
     dbUnit: "%",
     // Apple ships 0..1 fraction; HealthLog stores 0..100.
-    convertToDbUnit: (v) => v * 100,
+    convertToDbUnit: percentFromFraction,
     aggregation: "latest",
   },
 
@@ -455,7 +475,7 @@ export const APPLE_HEALTH_TYPE_MAP: Record<string, AppleHealthMapping> = {
     unitFixedReason: UNIT_FIXED_PERCENT_FRACTION,
     dbUnit: "%",
     // Apple ships 0..1 fraction; HealthLog stores 0..100.
-    convertToDbUnit: (v) => v * 100,
+    convertToDbUnit: percentFromFraction,
     aggregation: "latest",
   },
   // Environmental audio-exposure event — iOS 13+ category-type that
@@ -632,7 +652,7 @@ export const APPLE_HEALTH_TYPE_MAP: Record<string, AppleHealthMapping> = {
     hkUnit: "%",
     unitFixedReason: UNIT_FIXED_PERCENT_FRACTION,
     dbUnit: "%",
-    convertToDbUnit: (v) => v * 100,
+    convertToDbUnit: percentFromFraction,
     aggregation: "latest",
   },
   // Walking double-support percentage — gait companion metric.
@@ -643,7 +663,7 @@ export const APPLE_HEALTH_TYPE_MAP: Record<string, AppleHealthMapping> = {
     hkUnit: "%",
     unitFixedReason: UNIT_FIXED_PERCENT_FRACTION,
     dbUnit: "%",
-    convertToDbUnit: (v) => v * 100,
+    convertToDbUnit: percentFromFraction,
     aggregation: "latest",
   },
 
