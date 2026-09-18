@@ -1374,7 +1374,7 @@ enum MeasurementType {
   BLOOD_GLUCOSE // Canonical storage: mg/dL. Display unit (mg/dL or mmol/L) is user preference.
   TOTAL_BODY_WATER // Canonical storage: kilograms (kg of water). Matches Withings' hydration measure (type 77) and Health Connect's TotalBodyWaterRecord. Display can compute % from same-day weight if desired.
   BONE_MASS // Canonical storage: kilograms (kg). Matches Withings' bone mass measure (type 88).
-  OXYGEN_SATURATION // Canonical storage: percent (0..100). Withings ScanWatch reports type 54. Health Connect's OxygenSaturationRecord uses Percentage (already 0..100). HealthKit uses HKQuantityTypeIdentifierOxygenSaturation as a fraction (0..1) — iOS DTO must multiply by 100 before submitting.
+  OXYGEN_SATURATION // Canonical storage: percent (0..100). Withings ScanWatch reports type 54. Health Connect's OxygenSaturationRecord uses Percentage (already 0..100). HealthKit uses HKQuantityTypeIdentifierOxygenSaturation as a fraction (0..1); clients send the raw HealthKit reading and the server scales it at ingest (see `apple-health-mapping.ts`). This line used to say the opposite, and the iOS client built against it, which cost every user their oxygen-saturation and body-fat readings until the importer learned to take both.
   // ── v1.4.23 Apple Health additions ──
   HEART_RATE_VARIABILITY // ms — HealthKit `heartRateVariabilitySDNN` (typically one sample per night).
   RESTING_HEART_RATE // bpm — HealthKit `restingHeartRate` (one sample per day; distinct from spot PULSE).
