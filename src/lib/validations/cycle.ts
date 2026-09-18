@@ -131,7 +131,12 @@ export const cycleDayLogInputSchema = z.object({
     .array(
       z.object({
         key: z.string().min(1).max(80),
-        severity: z.number().int().min(1).max(4).optional(),
+        // NULL is the ordinary case, not an edge: picking a symptom without
+        // tapping an intensity is how most entries are logged, and the link
+        // row stores that as a plain presence. Rejecting it refused every
+        // unrated symptom with a 422 the sheet could only show as
+        // "Could not save".
+        severity: z.number().int().min(1).max(4).nullable().optional(),
       }),
     )
     .max(40)
@@ -181,7 +186,12 @@ export const cycleDayLogPatchSchema = z.object({
     .array(
       z.object({
         key: z.string().min(1).max(80),
-        severity: z.number().int().min(1).max(4).optional(),
+        // NULL is the ordinary case, not an edge: picking a symptom without
+        // tapping an intensity is how most entries are logged, and the link
+        // row stores that as a plain presence. Rejecting it refused every
+        // unrated symptom with a 422 the sheet could only show as
+        // "Could not save".
+        severity: z.number().int().min(1).max(4).nullable().optional(),
       }),
     )
     .max(40)

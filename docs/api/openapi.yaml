@@ -20721,9 +20721,11 @@ components:
                 minLength: 1
                 maxLength: 80
               severity:
-                type: integer
-                minimum: 1
-                maximum: 4
+                anyOf:
+                  - type: integer
+                    minimum: 1
+                    maximum: 4
+                  - type: "null"
             required:
               - key
         note:
@@ -20859,9 +20861,11 @@ components:
                 minLength: 1
                 maxLength: 80
               severity:
-                type: integer
-                minimum: 1
-                maximum: 4
+                anyOf:
+                  - type: integer
+                    minimum: 1
+                    maximum: 4
+                  - type: "null"
             required:
               - key
         note:
@@ -20975,9 +20979,11 @@ components:
                       minLength: 1
                       maxLength: 80
                     severity:
-                      type: integer
-                      minimum: 1
-                      maximum: 4
+                      anyOf:
+                        - type: integer
+                          minimum: 1
+                          maximum: 4
+                        - type: "null"
                   required:
                     - key
               note:
