@@ -133,6 +133,56 @@ export interface ExtractExportXmlOptions {
   preflight?: (info: ExportXmlPreflightInfo) => void | Promise<void>;
 }
 
+/** Apple ships a second, far smaller clinical-document XML beside the export. */
+const CDA_SUFFIX = /_cda\.xml$/i;
+
+function baseName(path: string): string {
+  const cut = path.lastIndexOf("/");
+  return cut === -1 ? path : path.slice(cut + 1);
+}
+
+/**
+ * Find the export XML inside an Apple Health archive.
+ *
+ * The member is not always `apple_health_export/export.xml`. iOS writes the
+ * file name in the phone's language, and some versions capitalise it, so an
+ * archive can carry `Export.xml` or a translated name instead. Matching the
+ * English lowercase spelling alone refused those archives with a message that
+ * told the reader their export was invalid, which it was not.
+ *
+ * Order matters. The basename `export.xml` in any capitalisation wins, since
+ * that is the overwhelming case and the one Apple documents. Failing that, a
+ * single XML member at the top of the archive is taken as the translated
+ * spelling. `*_cda.xml` never qualifies: Apple ships that clinical-document
+ * file beside the real export, and picking it would parse to nothing.
+ */
+export function selectExportXmlEntry<T extends { fileName: string }>(
+  entries: readonly T[],
+): { entry: T } | { candidates: readonly string[] } {
+  const usable = entries.filter(
+    (e) => !e.fileName.startsWith("__MACOSX/") && !e.fileName.endsWith("/"),
+  );
+  const exact = usable.find(
+    (e) => baseName(e.fileName).toLowerCase() === "export.xml",
+  );
+  if (exact) return { entry: exact };
+
+  const shallowXml = usable.filter(
+    (e) =>
+      /\.xml$/i.test(e.fileName) &&
+      !CDA_SUFFIX.test(baseName(e.fileName)) &&
+      e.fileName.split("/").length <= 2,
+  );
+  if (shallowXml.length === 1) return { entry: shallowXml[0] };
+
+  return {
+    candidates: usable
+      .filter((e) => /\.xml$/i.test(e.fileName))
+      .map((e) => e.fileName)
+      .slice(0, 8),
+  };
+}
+
 /**
  * Walk the central directory of `archivePath` and write the
  * `apple_health_export/export.xml` member out to a temp file.
@@ -152,15 +202,17 @@ export async function extractExportXml(
     }
     const entries = await readCentralDirectoryFromFile(handle, fileSize);
 
-    const exportXmlEntry = entries.find(
-      (e) => e.fileName.endsWith("/export.xml") || e.fileName === "export.xml",
-    );
-    if (!exportXmlEntry) {
+    const selected = selectExportXmlEntry(entries);
+    if ("candidates" in selected) {
       throw new Error(
         "Archive is missing the `apple_health_export/export.xml` member" +
-          " — is this a valid Apple Health export.zip?",
+          " — is this a valid Apple Health export.zip?" +
+          (selected.candidates.length > 0
+            ? ` XML members found: ${selected.candidates.join(", ")}`
+            : " The archive contains no XML member at all."),
       );
     }
+    const exportXmlEntry = selected.entry;
 
     if (
       exportXmlEntry.compressionMethod !== 0 &&
