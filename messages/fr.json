@@ -1208,6 +1208,8 @@
     "veryOverdue": "Très en retard",
     "complianceWindow": "Observance {days} jours",
     "complianceUnavailable": "Impossible de charger l'observance",
+    "complianceNotApplicable": "Observance non applicable",
+    "complianceNotApplicableReason": "Aucun planning local n’est enregistré dans HealthLog.",
     "complianceInfo": "Part des doses attendues que vous avez enregistrées. Les plans hebdomadaires comptent semaine par semaine.",
     "complianceInfoLabel": "Que signifie l'observance ?",
     "lastIntake": "Dernière prise :",

@@ -59,8 +59,28 @@ function seedCompliance(
     ...existing.filter((row) => row.medicationId !== medId),
     {
       medicationId: medId,
+      applicable: true,
+      notApplicableReason: null,
       compliance7: { rate: rate7, streak: 0 },
       compliance30: { rate: rate30 },
+      complianceDisplay: null,
+    },
+  ]);
+}
+
+function seedComplianceNotApplicable(client: QueryClient, medId: string) {
+  const key = ["medications", "compliance-summary"];
+  const existing =
+    (client.getQueryData(key) as Array<{ medicationId: string }>) ?? [];
+  client.setQueryData(key, [
+    ...existing.filter((row) => row.medicationId !== medId),
+    {
+      medicationId: medId,
+      applicable: false,
+      notApplicableReason: "NO_LOCAL_SCHEDULE",
+      compliance7: null,
+      compliance30: null,
+      complianceDisplay: null,
     },
   ]);
 }
@@ -195,6 +215,32 @@ describe("<MedicationTable> — structure + shared payloads", () => {
     // The cadence-window labels (7-/30-day defaults).
     expect(html).toContain("7 d");
     expect(html).toContain("30 d");
+  });
+
+  it("renders a settled not-applicable state for a scheduled mirror with no local schedule", () => {
+    const client = makeClient();
+    seedComplianceNotApplicable(client, "mirror1");
+    const html = render(
+      <MedicationTable
+        activeMedications={[
+          med({
+            id: "mirror1",
+            name: "Apple Health mirror",
+            asNeeded: false,
+            schedules: [],
+          }),
+        ]}
+        inactiveMedications={[]}
+      />,
+      client,
+    );
+
+    expect(html).toContain("Adherence not applicable");
+    expect(html).toContain(
+      'data-slot="medication-table-compliance-not-applicable"',
+    );
+    expect(html).not.toContain('data-slot="progress"');
+    expect(html).not.toContain('aria-hidden="true"><div class="space-y-1.5"');
   });
 
   it("labels the action buttons per row and keeps the 44px tap floor", () => {

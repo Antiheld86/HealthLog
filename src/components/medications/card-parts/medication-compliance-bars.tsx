@@ -220,6 +220,44 @@ export function MedicationComplianceSkeleton({
 }
 
 /**
+ * Settled empty state for a medication that has no local expected-dose grid.
+ * Unlike an error, this is not retryable; unlike loading, it must never leave
+ * the card on a skeleton. The two reserved rows mirror the other compliance
+ * states so card geometry remains stable.
+ */
+export function MedicationComplianceNotApplicable({
+  lowStockRunwayDays = null,
+}: {
+  lowStockRunwayDays?: number | null;
+}) {
+  const { t } = useTranslations();
+  return (
+    <div
+      className="space-y-2.5"
+      data-slot="medication-compliance-not-applicable"
+    >
+      <div className="space-y-1.5">
+        <div className="flex h-5 items-center text-sm">
+          <span className="text-muted-foreground min-w-0 truncate">
+            {t("medications.complianceNotApplicable")}
+          </span>
+        </div>
+        <div className="bg-muted/40 h-2 rounded" />
+      </div>
+      <div className="space-y-1.5">
+        <div className="flex h-5 items-center text-xs">
+          <span className="text-muted-foreground min-w-0 truncate">
+            {t("medications.complianceNotApplicableReason")}
+          </span>
+        </div>
+        <div className="bg-muted/40 h-2 rounded" />
+      </div>
+      <ComplianceMetaRow streak={0} lowStockRunwayDays={lowStockRunwayDays} />
+    </div>
+  );
+}
+
+/**
  * Quiet error fallback for the compliance block, shown when the batched
  * `/api/medications/compliance` query failed after its retries. Mirrors
  * the skeleton's two-row footprint exactly (same `h-5` label lines, same

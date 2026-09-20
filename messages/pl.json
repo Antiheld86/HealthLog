@@ -1208,6 +1208,8 @@
     "veryOverdue": "Mocno po terminie",
     "complianceWindow": "Przestrzeganie {days} dni",
     "complianceUnavailable": "Nie udało się wczytać danych o przestrzeganiu",
+    "complianceNotApplicable": "Przestrzeganie zaleceń nie ma zastosowania",
+    "complianceNotApplicableReason": "W HealthLog nie zapisano lokalnego harmonogramu.",
     "complianceInfo": "Udział zarejestrowanych dawek względem oczekiwanych. Plany tygodniowe liczone są tydzień po tygodniu.",
     "complianceInfoLabel": "Co oznacza przestrzeganie zaleceń?",
     "lastIntake": "Ostatnie przyjęcie:",

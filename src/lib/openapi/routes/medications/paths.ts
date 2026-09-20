@@ -1413,7 +1413,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Medications"],
       summary: "Batched adherence read for every medication of the caller",
       description:
-        "Returns one compact adherence row per medication the caller owns (active + paused), ordered by `createdAt DESC` — the single round trip the medication cards consume instead of fanning out one `/api/medications/{id}/compliance` request per card. Each row carries the 7-/30-day summaries and the cadence-scaled display block; the per-day grid stays on the per-medication endpoint. Pure computation — no writes. Served through the same per-medication server cache as the per-id read, so the two endpoints warm each other.",
+        "Returns one compact row per non-PRN medication. A scheduled medication with no local schedule remains in the array with applicable=false and reason NO_LOCAL_SCHEDULE. compliance7/compliance30 stay non-null as all-zero compatibility placeholders for released clients; aware clients must ignore those percentages when applicable=false. complianceDisplay is null.",
       responses: {
         ...recordRefusal(),
         "200": {
@@ -1436,7 +1436,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Medications"],
       summary: "Adherence read for a medication",
       description:
-        "Returns the 7- and 30-day adherence summaries, the per-day compliance grid for the history glyph track, and the two-row display block. Pure computation — no writes. Day boundaries are resolved in the user's IANA timezone, and the expected-dose denominator is cadence-aware (RRULE / rolling / one-shot / PRN / cyclic) and clamped to the medication's `createdAt`. Read `compliance30` for the headline 30-day taken-vs-expected percentage; build the per-day glyph track from `dailyCompliance` (draw a cell only where `due === true`).",
+        "Returns the cadence-aware adherence payload. A scheduled medication with no local schedule returns applicable=false, reason NO_LOCAL_SCHEDULE, non-null all-zero compliance7/compliance30 compatibility placeholders, a null display block, and an empty daily grid. Aware clients must not render the placeholder percentages. Medications with a local schedule preserve the existing arithmetic, including windows in which no dose is due.",
       requestParams: {
         path: z.object({ id: z.string() }),
       },

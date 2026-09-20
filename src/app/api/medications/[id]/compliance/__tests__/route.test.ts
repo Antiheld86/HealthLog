@@ -125,6 +125,7 @@ function medication(schedules: unknown[]) {
     startsOn: null,
     endsOn: null,
     oneShot: false,
+    asNeeded: false,
     schedules,
   };
 }
@@ -159,6 +160,43 @@ async function callRouteData(): Promise<Record<string, unknown>> {
   const body = await res.json();
   return body.data as Record<string, unknown>;
 }
+
+describe("GET /api/medications/[id]/compliance - applicability", () => {
+  it("returns not-applicable instead of 100 percent for a scheduled mirror with no local schedule", async () => {
+    vi.mocked(prisma.medication.findUnique).mockResolvedValue({
+      ...medication([]),
+      asNeeded: false,
+      externalSource: "APPLE_HEALTH",
+      externalId: "hk-concept-1",
+    } as never);
+
+    const data = await callRouteData();
+
+    expect(data).toEqual({
+      applicable: false,
+      notApplicableReason: "NO_LOCAL_SCHEDULE",
+      compliance7: {
+        totalExpected: 0,
+        taken: 0,
+        skipped: 0,
+        missed: 0,
+        rate: 0,
+        streak: 0,
+      },
+      compliance30: {
+        totalExpected: 0,
+        taken: 0,
+        skipped: 0,
+        missed: 0,
+        rate: 0,
+        streak: 0,
+      },
+      dailyCompliance: {},
+      complianceDisplay: null,
+    });
+    expect(prisma.medicationIntakeEvent.findMany).not.toHaveBeenCalled();
+  });
+});
 
 describe("GET /api/medications/[id]/compliance — per-slot timing", () => {
   it("classifies both doses of a single-row twice-daily schedule as on_time (green cell)", async () => {
@@ -334,6 +372,8 @@ describe("GET /api/medications/[id]/compliance — complianceDisplay", () => {
       short: { rate: number; streak: number };
       long: { rate: number };
     };
+    expect(data.applicable).toBe(true);
+    expect(data.notApplicableReason).toBeNull();
     expect(display.shortDays).toBe(7);
     expect(display.longDays).toBe(30);
     expect(display.expectedLong).toBeGreaterThanOrEqual(display.minStableDoses);

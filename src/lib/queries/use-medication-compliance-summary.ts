@@ -15,9 +15,11 @@ import type { ComplianceDisplay } from "@/lib/analytics/compliance";
  */
 export interface MedicationComplianceSummaryEntry {
   medicationId: string;
+  applicable: boolean;
+  notApplicableReason: "NO_LOCAL_SCHEDULE" | null;
   compliance7: { rate: number; streak: number };
   compliance30: { rate: number };
-  complianceDisplay?: ComplianceDisplay;
+  complianceDisplay: ComplianceDisplay | null;
 }
 
 /**

@@ -1208,6 +1208,8 @@
     "veryOverdue": "Molto in ritardo",
     "complianceWindow": "Aderenza {days} giorni",
     "complianceUnavailable": "Impossibile caricare l'aderenza",
+    "complianceNotApplicable": "Aderenza non applicabile",
+    "complianceNotApplicableReason": "In HealthLog non è memorizzato alcun programma locale.",
     "complianceInfo": "Quota delle dosi attese che hai registrato. I piani settimanali contano settimana per settimana.",
     "complianceInfoLabel": "Cosa significa aderenza?",
     "lastIntake": "Ultima assunzione:",

@@ -50,7 +50,10 @@ import { MedicationDetailSummary } from "@/components/medications/medication-det
 import { EfficacyTab } from "@/components/medications/detail/efficacy/efficacy-tab";
 import { resolveMedicationTargets } from "@/lib/medications/med-target-map";
 import { MedicationDetailSection } from "@/components/medications/medication-detail-section";
-import { MedicationComplianceBars } from "@/components/medications/card-parts/medication-compliance-bars";
+import {
+  MedicationComplianceBars,
+  MedicationComplianceNotApplicable,
+} from "@/components/medications/card-parts/medication-compliance-bars";
 import { DoseHistoryLedger } from "@/components/medications/dose-history-ledger";
 import { IntakeHistoryListV2 } from "@/components/medications/intake-history-list-v2";
 import { SegmentedToggle } from "@/components/medications/detail/segmented-toggle";
@@ -377,9 +380,11 @@ export function MedicationDetailTabs({
     queryFn: async () => {
       try {
         return await apiGet<{
-          compliance7?: { rate: number; streak: number };
-          compliance30?: { rate: number };
-          complianceDisplay?: ComplianceDisplay;
+          applicable: boolean;
+          notApplicableReason: "NO_LOCAL_SCHEDULE" | null;
+          compliance7: { rate: number; streak: number };
+          compliance30: { rate: number };
+          complianceDisplay: ComplianceDisplay | null;
         }>(`/api/medications/${id}/compliance`);
       } catch {
         return null;
@@ -391,7 +396,8 @@ export function MedicationDetailTabs({
     staleTime: 30_000,
   });
 
-  const display = compliance?.complianceDisplay;
+  const complianceNotApplicable = compliance?.applicable === false;
+  const display = compliance?.complianceDisplay ?? undefined;
   const rate7 = display?.short.rate ?? compliance?.compliance7?.rate ?? 0;
   const rate30 = display?.long.rate ?? compliance?.compliance30?.rate ?? 0;
   const streak = display?.short.streak ?? compliance?.compliance7?.streak ?? 0;
@@ -595,7 +601,9 @@ export function MedicationDetailTabs({
               title={t("medications.detail.uebersicht.complianceTitle")}
               dataSlot="medication-uebersicht-compliance"
             >
-              {compliance ? (
+              {complianceNotApplicable ? (
+                <MedicationComplianceNotApplicable />
+              ) : compliance ? (
                 <MedicationComplianceBars
                   rate7={rate7}
                   rate30={rate30}

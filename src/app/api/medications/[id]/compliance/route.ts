@@ -96,12 +96,17 @@ export const GET = apiHandler(
         entity_type: "medication",
         entity_id: id,
       },
-      meta: {
-        compliance7: payload.compliance7.rate,
-        compliance30: payload.compliance30.rate,
-        complianceShortDays: payload.complianceDisplay.shortDays,
-        complianceLongDays: payload.complianceDisplay.longDays,
-      },
+      meta: payload.applicable
+        ? {
+            compliance7: payload.compliance7!.rate,
+            compliance30: payload.compliance30!.rate,
+            complianceShortDays: payload.complianceDisplay!.shortDays,
+            complianceLongDays: payload.complianceDisplay!.longDays,
+          }
+        : {
+            complianceApplicable: false,
+            complianceNotApplicableReason: payload.notApplicableReason,
+          },
     });
 
     return apiSuccess(payload);

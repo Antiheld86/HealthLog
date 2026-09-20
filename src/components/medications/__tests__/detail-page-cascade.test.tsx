@@ -22,6 +22,8 @@
  * doesn't silently drift across the eight section consumers.
  */
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 import { medicationDependentKeys, queryKeys } from "@/lib/query-keys";
 
@@ -89,5 +91,28 @@ describe("medication-detail-page query-key cascade (D-3 §9)", () => {
     // alongside every other medication-scoped tile.
     const apiEndpointKey = ["medications", "med-1", "api-endpoint"] as const;
     expect(isUnderPrefix(apiEndpointKey, queryKeys.medications())).toBe(true);
+  });
+});
+
+describe("medication detail compliance applicability", () => {
+  const source = readFileSync(
+    join(
+      process.cwd(),
+      "src/components/medications/detail/medication-detail-tabs.tsx",
+    ),
+    "utf8",
+  );
+
+  it("renders the settled not-applicable state instead of a percentage or loading fallback", () => {
+    expect(source).toContain(
+      "const complianceNotApplicable = compliance?.applicable === false",
+    );
+    expect(source).toContain("<MedicationComplianceNotApplicable />");
+  });
+
+  it("keeps PRN compliance disabled at the query boundary", () => {
+    expect(source).toContain(
+      'enabled: activeTab === "uebersicht" && !asNeeded',
+    );
   });
 });

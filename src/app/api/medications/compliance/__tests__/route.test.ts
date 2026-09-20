@@ -59,6 +59,15 @@ import { checkRateLimit } from "@/lib/rate-limit";
 
 const TZ = "UTC";
 
+const LEGACY_EMPTY_COMPLIANCE = {
+  totalExpected: 0,
+  taken: 0,
+  skipped: 0,
+  missed: 0,
+  rate: 0,
+  streak: 0,
+};
+
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
   user: {
@@ -93,6 +102,7 @@ function medication(id: string) {
     startsOn: null,
     endsOn: null,
     oneShot: false,
+    asNeeded: false,
     schedules: [dailySchedule(`${id}-sched`)],
     scheduleRevisions: [],
   };
@@ -133,12 +143,75 @@ describe("GET /api/medications/compliance", () => {
     expect(items).toHaveLength(2);
     expect(items.map((i) => i.medicationId)).toEqual(["med-1", "med-2"]);
     for (const item of items) {
+      expect(item.applicable).toBe(true);
+      expect(item.notApplicableReason).toBeNull();
       expect(item.compliance7).toBeDefined();
       expect(item.compliance30).toBeDefined();
       expect(item.complianceDisplay).toBeDefined();
       // The heavy per-day grid stays on the per-id endpoint.
       expect(item).not.toHaveProperty("dailyCompliance");
     }
+  });
+
+  it("returns a settled not-applicable row for a scheduled mirror with no local schedule", async () => {
+    vi.mocked(prisma.medication.findMany).mockResolvedValue([
+      {
+        ...medication("mirror-1"),
+        asNeeded: false,
+        externalSource: "APPLE_HEALTH",
+        externalId: "hk-concept-1",
+        schedules: [],
+      },
+    ] as never);
+
+    const res = await (GET as (req: Request) => Promise<Response>)(
+      new Request("http://localhost"),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data).toEqual([
+      {
+        medicationId: "mirror-1",
+        applicable: false,
+        notApplicableReason: "NO_LOCAL_SCHEDULE",
+        compliance7: LEGACY_EMPTY_COMPLIANCE,
+        compliance30: LEGACY_EMPTY_COMPLIANCE,
+        complianceDisplay: null,
+      },
+    ]);
+    expect(prisma.medicationIntakeEvent.findMany).not.toHaveBeenCalled();
+  });
+
+  it("keeps a mixed scheduled/mirror batch decodable by the legacy non-null contract", async () => {
+    vi.mocked(prisma.medication.findMany).mockResolvedValue([
+      medication("med-1"),
+      {
+        ...medication("mirror-1"),
+        externalSource: "APPLE_HEALTH",
+        externalId: "hk-concept-1",
+        schedules: [],
+      },
+    ] as never);
+
+    const res = await (GET as (req: Request) => Promise<Response>)(
+      new Request("http://localhost"),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const items = body.data as Array<Record<string, unknown>>;
+
+    expect(items).toHaveLength(2);
+    expect(items[0]?.applicable).toBe(true);
+    expect(items[0]?.compliance7).toBeTruthy();
+    expect(items[0]?.compliance30).toBeTruthy();
+    expect(items[1]).toMatchObject({
+      medicationId: "mirror-1",
+      applicable: false,
+      notApplicableReason: "NO_LOCAL_SCHEDULE",
+      compliance7: LEGACY_EMPTY_COMPLIANCE,
+      compliance30: LEGACY_EMPTY_COMPLIANCE,
+      complianceDisplay: null,
+    });
   });
 
   it("reads each medication through the shared per-medication cache cell", async () => {
@@ -174,7 +247,10 @@ describe("GET /api/medications/compliance", () => {
     const call = vi.mocked(prisma.medication.findMany).mock.calls[0][0] as {
       where: { userId: string };
     };
-    expect(call.where.userId).toBe("user-1");
+    expect(call.where).toEqual({
+      userId: "user-1",
+      asNeeded: false,
+    });
   });
 
   it("returns 429 when the per-user rate limit is exhausted", async () => {

@@ -11,6 +11,7 @@ import {
 import {
   MedicationComplianceBars,
   MedicationComplianceError,
+  MedicationComplianceNotApplicable,
   MedicationComplianceSkeleton,
 } from "@/components/medications/card-parts/medication-compliance-bars";
 import { MedicationStatusPill } from "@/components/medications/card-parts/medication-status-pill";
@@ -114,6 +115,15 @@ describe("medication card-parts — shared presentational components", () => {
     for (const html of [withStreak, withoutStreak, skeleton, error]) {
       expect(html).toContain("min-h-4");
     }
+  });
+
+  it("not-applicable compliance is a settled empty state with no percentage or retry", () => {
+    const html = render(<MedicationComplianceNotApplicable />);
+    expect(html).toContain("Adherence not applicable");
+    expect(html).toContain("No local schedule is stored in HealthLog.");
+    expect(html).toContain('data-slot="medication-compliance-not-applicable"');
+    expect(html).not.toContain('data-slot="progress"');
+    expect(html).not.toContain("Retry");
   });
 
   it("compliance bars render the percentage only — no dose count beside it", () => {
@@ -637,6 +647,7 @@ describe("compliance error fallback (v1.16.8)", () => {
   function renderBodyCompliance(args: {
     compliance: boolean;
     complianceError?: boolean;
+    complianceNotApplicable?: boolean;
   }) {
     return render(
       <MedicationCardBody
@@ -659,6 +670,7 @@ describe("compliance error fallback (v1.16.8)", () => {
             : null
         }
         complianceError={args.complianceError}
+        complianceNotApplicable={args.complianceNotApplicable}
         onRetryCompliance={() => {}}
         currentCycle={null}
         intakeLoading={null}
@@ -692,6 +704,17 @@ describe("compliance error fallback (v1.16.8)", () => {
     expect(html).toContain("Retry");
     // Not the aria-hidden loading skeleton.
     expect(html).not.toContain('aria-hidden="true"><div class="space-y-1.5"');
+  });
+
+  it("the body renders not-applicable instead of a permanent loading skeleton", () => {
+    const html = renderBodyCompliance({
+      compliance: false,
+      complianceNotApplicable: true,
+    });
+    expect(html).toContain("Adherence not applicable");
+    expect(html).toContain('data-slot="medication-compliance-not-applicable"');
+    expect(html).not.toContain("Adherence could not be loaded");
+    expect(html).not.toContain("Retry");
   });
 
   it("the body keeps the skeleton while the query is merely in flight", () => {

@@ -1208,6 +1208,8 @@
     "veryOverdue": "Very overdue",
     "complianceWindow": "Adherence ({days} days)",
     "complianceUnavailable": "Adherence could not be loaded",
+    "complianceNotApplicable": "Adherence not applicable",
+    "complianceNotApplicableReason": "No local schedule is stored in HealthLog.",
     "complianceInfo": "Share of expected doses you logged. Weekly schedules count week by week.",
     "complianceInfoLabel": "What does adherence mean?",
     "lastIntake": "Last intake:",

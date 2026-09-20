@@ -1208,6 +1208,8 @@
     "veryOverdue": "많이 지남",
     "complianceWindow": "복약 순응도 ({days}일)",
     "complianceUnavailable": "복약 순응도를 불러오지 못했어요",
+    "complianceNotApplicable": "복약 순응도 해당 없음",
+    "complianceNotApplicableReason": "HealthLog에 로컬 복용 일정이 저장되어 있지 않습니다.",
     "complianceInfo": "예정된 복용 중 기록한 비율이에요. 주간 일정은 주 단위로 계산해요.",
     "complianceInfoLabel": "복약 순응도란?",
     "lastIntake": "마지막 복용:",
