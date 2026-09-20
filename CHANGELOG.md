@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.38.25] — 2026-09-20
+
+Three readings that never arrived, and one import that turned away a
+perfectly good export.
+
+### Fixed
+
+- **Oxygen saturation and body fat from Apple Health reach the server
+  again.** The app sent both as a percentage while the server scaled them
+  a second time, so a reading of 97 % arrived as 9700, failed the
+  plausibility check, and was dropped. Worse, the phone treated that as
+  final and moved past the reading, so it never tried again. The importer
+  now takes either spelling, which means current app versions stop losing
+  those readings without waiting for an app update. Thanks to
+  @mbreitkreuz for tracing it across both sides.
+- **A cycle symptom can be logged without an intensity again.** Picking a
+  symptom and saving without tapping the 1 to 4 selector was refused with
+  "Could not save. Try again.", and removing the symptoms made the save
+  work, which pointed at the wrong thing entirely. An unrated symptom has
+  always been a valid entry; only the check at the entrance disagreed.
+  Thanks to @sreeramachandramurthy for the report and the log.
+- **The Apple Health import accepts your export whatever iOS named it.**
+  The importer looked for `export.xml` in lowercase only. iOS writes that
+  name in the language of the phone and some versions capitalise it, so
+  ordinary exports were refused with a message claiming the archive was
+  invalid. It now matches in any capitalisation, takes a translated name
+  when it is unambiguous, and when it really cannot find the file it lists
+  what the archive does contain. Thanks to @mills1975 for the report.
+
 ## [1.38.24] — 2026-09-16
 
 Insights loads when the assistant is switched off, and the bundled
