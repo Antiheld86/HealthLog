@@ -13,6 +13,7 @@ import { prisma } from "@/lib/db";
 import {
   buildComplianceMedicationContext,
   buildMedicationComplianceBundle,
+  expectsDoses,
   lastNonSkippedTakenAt,
   type ComplianceDisplay,
   type ComplianceResult,
@@ -33,10 +34,17 @@ const EVENT_FETCH_WINDOW_DAYS = 366;
 
 /** The cached response body (the exact public wire shape). */
 export interface CompliancePayload {
-  compliance7: ComplianceResult;
-  compliance30: ComplianceResult;
+  /**
+   * False only when adherence is not meaningful for this medication.
+   * Today that means a scheduled (non-PRN) medication with no local schedule,
+   * such as an Apple Health mirror whose cadence remains source-owned.
+   */
+  applicable: boolean;
+  notApplicableReason: "NO_LOCAL_SCHEDULE" | null;
+  compliance7: ComplianceResult | null;
+  compliance30: ComplianceResult | null;
   dailyCompliance: Record<string, DailyComplianceEntry>;
-  complianceDisplay: ComplianceDisplay;
+  complianceDisplay: ComplianceDisplay | null;
 }
 
 /** The medication slice the payload builder consumes. */
@@ -46,6 +54,7 @@ export interface ComplianceMedicationInput {
   startsOn: Date | null;
   endsOn: Date | null;
   oneShot: boolean;
+  asNeeded: boolean;
   schedules: Parameters<typeof buildMedicationComplianceBundle>[1];
   /** v1.16.3 — archived schedule eras for era-aware compliance. */
   scheduleRevisions?: Parameters<
@@ -132,6 +141,27 @@ export async function buildCompliancePayload(
   userId: string,
   userTz: string,
 ): Promise<CompliancePayload> {
+  // A scheduled medication with ZERO local schedules has no local expected
+  // dose grid. This is a real shape for Apple Health mirrors: the source owns
+  // the cadence while HealthLog stores the mirrored medication itself. The
+  // legacy arithmetic intentionally answers 100 % when there are zero
+  // expected doses, which is mathematically consistent but misleading when
+  // rendered as adherence. Mark this shape explicitly not-applicable BEFORE
+  // reading intake history or invoking the arithmetic.
+  //
+  // Keep PRN behaviour unchanged. The batched endpoint already excludes PRN
+  // medications, and a direct per-id read retains its existing payload.
+  if (!medication.asNeeded && !expectsDoses(medication)) {
+    return {
+      applicable: false,
+      notApplicableReason: "NO_LOCAL_SCHEDULE",
+      compliance7: null,
+      compliance30: null,
+      dailyCompliance: {},
+      complianceDisplay: null,
+    };
+  }
+
   // v1.15.9 — pin a single `now` and thread it into every cadence
   // computation so no block can straddle a day boundary on a slow request.
   const now = new Date();
@@ -236,6 +266,8 @@ export async function buildCompliancePayload(
   }
 
   return {
+    applicable: true,
+    notApplicableReason: null,
     compliance7: bundle.compliance7,
     compliance30: bundle.compliance30,
     dailyCompliance,

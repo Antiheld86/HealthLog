@@ -1208,6 +1208,8 @@
     "veryOverdue": "Stark überfällig",
     "complianceWindow": "Therapietreue ({days} Tage)",
     "complianceUnavailable": "Therapietreue konnte nicht geladen werden",
+    "complianceNotApplicable": "Therapietreue nicht anwendbar",
+    "complianceNotApplicableReason": "In HealthLog ist kein lokaler Zeitplan gespeichert.",
     "complianceInfo": "Anteil der erfassten an den erwarteten Dosen. Wöchentliche Pläne zählen wochenweise.",
     "complianceInfoLabel": "Was bedeutet Therapietreue?",
     "lastIntake": "Letzte Einnahme:",

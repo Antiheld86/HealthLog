@@ -218,10 +218,12 @@ export function MedicationTable({
   // every row at once. Same key + fetcher as the per-row hook.
   const { data: complianceRows } = useMedicationComplianceSummaryAll();
   const shortRateById = new Map<string, number>(
-    (complianceRows ?? []).map((row) => [
-      row.medicationId,
-      row.complianceDisplay?.short.rate ?? row.compliance7?.rate ?? 0,
-    ]),
+    (complianceRows ?? []).flatMap((row) => {
+      if (row.applicable === false) return [];
+      const rate =
+        row.complianceDisplay?.short.rate ?? row.compliance7?.rate ?? null;
+      return rate === null ? [] : [[row.medicationId, rate] as const];
+    }),
   );
 
   // Re-render once a minute so the status pill tracks wall-clock
@@ -412,7 +414,8 @@ function MedicationTableRowItem({
 
   // SAME batched compliance source as the cards.
   const { data: compliance } = useMedicationComplianceSummary(medication.id);
-  const display = compliance?.complianceDisplay;
+  const complianceNotApplicable = compliance?.applicable === false;
+  const display = compliance?.complianceDisplay ?? undefined;
   const shortDays = display?.shortDays ?? 7;
   const longDays = display?.longDays ?? 30;
   const rateShort = display?.short.rate ?? compliance?.compliance7?.rate ?? 0;
@@ -568,7 +571,14 @@ function MedicationTableRowItem({
 
   // Therapietreue cell — the same two cadence-scaled windows the card
   // bars show, compacted to label + mini bar + percentage per row.
-  const complianceCell = compliance ? (
+  const complianceCell = complianceNotApplicable ? (
+    <span
+      className="text-muted-foreground text-sm"
+      data-slot="medication-table-compliance-not-applicable"
+    >
+      {t("medications.complianceNotApplicable")}
+    </span>
+  ) : compliance ? (
     <div className="flex flex-col gap-1">
       {(
         [

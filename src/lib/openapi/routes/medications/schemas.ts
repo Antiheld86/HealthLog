@@ -755,32 +755,61 @@ export const complianceDisplay = z
 
 export const medicationComplianceResponse = z
   .object({
-    compliance7: complianceResult,
-    compliance30: complianceResult,
+    applicable: z
+      .boolean()
+      .describe(
+        "Whether a local adherence percentage applies to this medication.",
+      ),
+    notApplicableReason: z
+      .literal("NO_LOCAL_SCHEDULE")
+      .nullable()
+      .describe(
+        "Reason adherence is not applicable. NO_LOCAL_SCHEDULE means the medication has no HealthLog-owned expected-dose grid.",
+      ),
+    compliance7: complianceResult
+      .nullable()
+      .describe(
+        "Seven-day adherence summary, or null when applicable is false.",
+      ),
+    compliance30: complianceResult
+      .nullable()
+      .describe(
+        "Thirty-day adherence summary, or null when applicable is false.",
+      ),
     dailyCompliance: z
       .record(z.string(), dailyComplianceEntry)
       .describe(
-        "Flat per-day map keyed `YYYY-MM-DD` in the user timezone, one entry per day for up to 90 days back, clamped to the medication's `createdAt` (so a recently-created med has fewer entries). No weekly/monthly collapse — this is the raw daily grid.",
+        "Flat per-day map keyed YYYY-MM-DD in the user timezone. Empty when adherence is not applicable.",
       ),
-    complianceDisplay,
+    complianceDisplay: complianceDisplay
+      .nullable()
+      .describe(
+        "Cadence-scaled display block, or null when adherence is not applicable.",
+      ),
   })
   .meta({
     id: "MedicationComplianceResponse",
     description:
-      "Adherence read for a single medication. `compliance30` is the authoritative 30-day taken-vs-expected summary; `dailyCompliance` is the per-day grid for the history glyph track. The graded raw→week→month→year series used elsewhere for AI prompts does NOT apply here — this response is never downsampled.",
+      "Adherence read for a single medication. A scheduled medication with no local schedule returns applicable=false and NO_LOCAL_SCHEDULE rather than a vacuous 100 percent. Scheduled medications that have a local schedule keep the existing cadence-aware arithmetic, including windows with no doses due. PRN behaviour is unchanged.",
   });
 
 export const medicationComplianceSummaryEntry = z
   .object({
     medicationId: z.string(),
-    compliance7: complianceResult,
-    compliance30: complianceResult,
-    complianceDisplay,
+    applicable: z
+      .boolean()
+      .describe(
+        "Whether this medication has a local expected-dose grid and therefore a displayable adherence percentage.",
+      ),
+    notApplicableReason: z.literal("NO_LOCAL_SCHEDULE").nullable(),
+    compliance7: complianceResult.nullable(),
+    compliance30: complianceResult.nullable(),
+    complianceDisplay: complianceDisplay.nullable(),
   })
   .meta({
     id: "MedicationComplianceSummaryEntry",
     description:
-      "Compact per-medication adherence row for the batched card read: the 7-/30-day summaries plus the cadence-scaled display block. The per-day `dailyCompliance` grid is NOT on this shape — read the per-medication `/compliance` endpoint for the history glyph track.",
+      "Compact per-medication adherence row for the batched card read. Zero-local-schedule scheduled medications remain present with applicable=false so clients render a settled not-applicable state instead of a loading skeleton.",
   });
 
 // v1.16.5 — schedule-era management (the Zeitplan-tab history timeline).

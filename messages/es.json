@@ -1208,6 +1208,8 @@
     "veryOverdue": "Muy vencida",
     "complianceWindow": "Cumplimiento {days} días",
     "complianceUnavailable": "No se pudo cargar el cumplimiento",
+    "complianceNotApplicable": "El cumplimiento no es aplicable",
+    "complianceNotApplicableReason": "No hay un horario local guardado en HealthLog.",
     "complianceInfo": "Proporción de dosis registradas respecto a las esperadas. Las pautas semanales se cuentan semana a semana.",
     "complianceInfoLabel": "¿Qué significa el cumplimiento?",
     "lastIntake": "Última toma:",

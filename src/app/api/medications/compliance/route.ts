@@ -80,6 +80,8 @@ export const GET = apiHandler(async () => {
         );
         return {
           medicationId: medication.id,
+          applicable: payload.applicable,
+          notApplicableReason: payload.notApplicableReason,
           compliance7: payload.compliance7,
           compliance30: payload.compliance30,
           complianceDisplay: payload.complianceDisplay,

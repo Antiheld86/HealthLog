@@ -226,7 +226,8 @@ export function MedicationCard({
   // v1.8.6 — the two compliance windows scale with the dosing cadence. When
   // the server supplies `complianceDisplay` the card reads its cadence-scaled
   // rows; otherwise it falls back to the static 7-/30-day fields.
-  const display = compliance?.complianceDisplay;
+  const complianceNotApplicable = compliance?.applicable === false;
+  const display = compliance?.complianceDisplay ?? undefined;
   const shortDays = display?.shortDays ?? 7;
   const longDays = display?.longDays ?? 30;
   const rate7 = display?.short.rate ?? compliance?.compliance7?.rate ?? 0;
@@ -505,11 +506,16 @@ export function MedicationCard({
       }
       asNeeded={medication.asNeeded === true}
       compliance={
-        compliance ? { rate7, rate30, streak, shortDays, longDays } : null
+        compliance && !complianceNotApplicable
+          ? { rate7, rate30, streak, shortDays, longDays }
+          : null
       }
       complianceError={complianceError}
+      complianceNotApplicable={complianceNotApplicable}
       onRetryCompliance={refetchCompliance}
-      currentCycle={display?.currentCycle ?? null}
+      currentCycle={
+        complianceNotApplicable ? null : (display?.currentCycle ?? null)
+      }
       lowStockRunwayDays={lowStockRunwayDays}
       intakeLoading={intakeLoading}
       onRecordIntake={(skipped) => recordIntake(skipped, displayedSlot)}

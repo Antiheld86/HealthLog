@@ -11,6 +11,7 @@ import { MedicationStatusPill } from "@/components/medications/card-parts/medica
 import {
   MedicationComplianceBars,
   MedicationComplianceError,
+  MedicationComplianceNotApplicable,
   MedicationComplianceSkeleton,
 } from "@/components/medications/card-parts/medication-compliance-bars";
 import { MedicationCycleStatus } from "@/components/medications/card-parts/medication-cycle-status";
@@ -112,6 +113,11 @@ export interface MedicationCardBodyProps {
    * while a failed read needs a visible (but calm) retry affordance.
    */
   complianceError?: boolean;
+  /**
+   * Settled not-applicable state for a scheduled medication with no local
+   * schedule. This state must win over the loading skeleton.
+   */
+  complianceNotApplicable?: boolean;
   /** Refetch the shared compliance query (the error fallback's retry). */
   onRetryCompliance?: () => void;
 
@@ -172,6 +178,7 @@ export function MedicationCardBody({
   lastLine,
   compliance,
   complianceError = false,
+  complianceNotApplicable = false,
   onRetryCompliance,
   currentCycle,
   asNeeded = false,
@@ -299,7 +306,11 @@ export function MedicationCardBody({
             notice now costs zero layout shift. */}
         {active &&
           !asNeeded &&
-          (compliance ? (
+          (complianceNotApplicable ? (
+            <MedicationComplianceNotApplicable
+              lowStockRunwayDays={lowStockRunwayDays}
+            />
+          ) : compliance ? (
             <MedicationComplianceBars
               rate7={compliance.rate7}
               rate30={compliance.rate30}
