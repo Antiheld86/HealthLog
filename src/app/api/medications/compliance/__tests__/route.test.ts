@@ -59,6 +59,15 @@ import { checkRateLimit } from "@/lib/rate-limit";
 
 const TZ = "UTC";
 
+const LEGACY_EMPTY_COMPLIANCE = {
+  totalExpected: 0,
+  taken: 0,
+  skipped: 0,
+  missed: 0,
+  rate: 0,
+  streak: 0,
+};
+
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
   user: {
@@ -165,12 +174,44 @@ describe("GET /api/medications/compliance", () => {
         medicationId: "mirror-1",
         applicable: false,
         notApplicableReason: "NO_LOCAL_SCHEDULE",
-        compliance7: null,
-        compliance30: null,
+        compliance7: LEGACY_EMPTY_COMPLIANCE,
+        compliance30: LEGACY_EMPTY_COMPLIANCE,
         complianceDisplay: null,
       },
     ]);
     expect(prisma.medicationIntakeEvent.findMany).not.toHaveBeenCalled();
+  });
+
+  it("keeps a mixed scheduled/mirror batch decodable by the legacy non-null contract", async () => {
+    vi.mocked(prisma.medication.findMany).mockResolvedValue([
+      medication("med-1"),
+      {
+        ...medication("mirror-1"),
+        externalSource: "APPLE_HEALTH",
+        externalId: "hk-concept-1",
+        schedules: [],
+      },
+    ] as never);
+
+    const res = await (GET as (req: Request) => Promise<Response>)(
+      new Request("http://localhost"),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const items = body.data as Array<Record<string, unknown>>;
+
+    expect(items).toHaveLength(2);
+    expect(items[0]?.applicable).toBe(true);
+    expect(items[0]?.compliance7).toBeTruthy();
+    expect(items[0]?.compliance30).toBeTruthy();
+    expect(items[1]).toMatchObject({
+      medicationId: "mirror-1",
+      applicable: false,
+      notApplicableReason: "NO_LOCAL_SCHEDULE",
+      compliance7: LEGACY_EMPTY_COMPLIANCE,
+      compliance30: LEGACY_EMPTY_COMPLIANCE,
+      complianceDisplay: null,
+    });
   });
 
   it("reads each medication through the shared per-medication cache cell", async () => {

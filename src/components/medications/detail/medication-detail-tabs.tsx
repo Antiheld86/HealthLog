@@ -382,8 +382,8 @@ export function MedicationDetailTabs({
         return await apiGet<{
           applicable: boolean;
           notApplicableReason: "NO_LOCAL_SCHEDULE" | null;
-          compliance7: { rate: number; streak: number } | null;
-          compliance30: { rate: number } | null;
+          compliance7: { rate: number; streak: number };
+          compliance30: { rate: number };
           complianceDisplay: ComplianceDisplay | null;
         }>(`/api/medications/${id}/compliance`);
       } catch {

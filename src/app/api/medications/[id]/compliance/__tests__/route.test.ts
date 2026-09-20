@@ -175,8 +175,22 @@ describe("GET /api/medications/[id]/compliance - applicability", () => {
     expect(data).toEqual({
       applicable: false,
       notApplicableReason: "NO_LOCAL_SCHEDULE",
-      compliance7: null,
-      compliance30: null,
+      compliance7: {
+        totalExpected: 0,
+        taken: 0,
+        skipped: 0,
+        missed: 0,
+        rate: 0,
+        streak: 0,
+      },
+      compliance30: {
+        totalExpected: 0,
+        taken: 0,
+        skipped: 0,
+        missed: 0,
+        rate: 0,
+        streak: 0,
+      },
       dailyCompliance: {},
       complianceDisplay: null,
     });

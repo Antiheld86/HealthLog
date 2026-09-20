@@ -5828,8 +5828,9 @@ paths:
         - Medications
       summary: Batched adherence read for every medication of the caller
       description: Returns one compact row per non-PRN medication. A scheduled medication with no local schedule remains in
-        the array with applicable=false, reason NO_LOCAL_SCHEDULE, and null percentage/display fields so card and table
-        clients do not mistake it for 100 percent or leave it loading.
+        the array with applicable=false and reason NO_LOCAL_SCHEDULE. compliance7/compliance30 stay non-null as all-zero
+        compatibility placeholders for released clients; aware clients must ignore those percentages when
+        applicable=false. complianceDisplay is null.
       responses:
         "200":
           description: One adherence row per medication.
@@ -5847,8 +5848,10 @@ paths:
         - Medications
       summary: Adherence read for a medication
       description: Returns the cadence-aware adherence payload. A scheduled medication with no local schedule returns
-        applicable=false, reason NO_LOCAL_SCHEDULE, null percentage/display fields, and an empty daily grid. Medications
-        with a local schedule preserve the existing arithmetic, including windows in which no dose is due.
+        applicable=false, reason NO_LOCAL_SCHEDULE, non-null all-zero compliance7/compliance30 compatibility
+        placeholders, a null display block, and an empty daily grid. Aware clients must not render the placeholder
+        percentages. Medications with a local schedule preserve the existing arithmetic, including windows in which no
+        dose is due.
       parameters:
         - in: path
           name: id
@@ -42941,13 +42944,11 @@ components:
               const: NO_LOCAL_SCHEDULE
             - type: "null"
         compliance7:
-          anyOf:
-            - $ref: "#/components/schemas/ComplianceResult"
-            - type: "null"
+          description: Seven-day adherence summary, or an all-zero compatibility placeholder when applicable is false.
+          $ref: "#/components/schemas/ComplianceResult"
         compliance30:
-          anyOf:
-            - $ref: "#/components/schemas/ComplianceResult"
-            - type: "null"
+          description: Thirty-day adherence summary, or an all-zero compatibility placeholder when applicable is false.
+          $ref: "#/components/schemas/ComplianceResult"
         complianceDisplay:
           anyOf:
             - $ref: "#/components/schemas/ComplianceDisplay"
@@ -43203,15 +43204,13 @@ components:
           description: Reason adherence is not applicable. NO_LOCAL_SCHEDULE means the medication has no HealthLog-owned
             expected-dose grid.
         compliance7:
-          anyOf:
-            - $ref: "#/components/schemas/ComplianceResult"
-            - type: "null"
-          description: Seven-day adherence summary, or null when applicable is false.
+          description: Seven-day adherence summary. When applicable is false, this remains a non-null all-zero compatibility
+            placeholder for released clients and must not be rendered as a percentage.
+          $ref: "#/components/schemas/ComplianceResult"
         compliance30:
-          anyOf:
-            - $ref: "#/components/schemas/ComplianceResult"
-            - type: "null"
-          description: Thirty-day adherence summary, or null when applicable is false.
+          description: Thirty-day adherence summary. When applicable is false, this remains a non-null all-zero compatibility
+            placeholder for released clients and must not be rendered as a percentage.
+          $ref: "#/components/schemas/ComplianceResult"
         dailyCompliance:
           type: object
           propertyNames:

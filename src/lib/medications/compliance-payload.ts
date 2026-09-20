@@ -41,11 +41,30 @@ export interface CompliancePayload {
    */
   applicable: boolean;
   notApplicableReason: "NO_LOCAL_SCHEDULE" | null;
-  compliance7: ComplianceResult | null;
-  compliance30: ComplianceResult | null;
+  compliance7: ComplianceResult;
+  compliance30: ComplianceResult;
   dailyCompliance: Record<string, DailyComplianceEntry>;
   complianceDisplay: ComplianceDisplay | null;
 }
+
+/**
+ * Legacy-compatible placeholder for a medication whose adherence percentage
+ * is explicitly not applicable.
+ *
+ * Released iOS 1.0.3 requires `compliance7` and `compliance30` to decode as
+ * non-null `ComplianceWindowResult` objects. Keep those fields structurally
+ * present while `applicable=false` remains the authoritative semantic signal
+ * for clients that understand the newer contract. All-zero values avoid
+ * reviving the old vacuous 100% result.
+ */
+const NOT_APPLICABLE_LEGACY_COMPLIANCE: ComplianceResult = {
+  totalExpected: 0,
+  taken: 0,
+  skipped: 0,
+  missed: 0,
+  rate: 0,
+  streak: 0,
+};
 
 /** The medication slice the payload builder consumes. */
 export interface ComplianceMedicationInput {
@@ -155,8 +174,8 @@ export async function buildCompliancePayload(
     return {
       applicable: false,
       notApplicableReason: "NO_LOCAL_SCHEDULE",
-      compliance7: null,
-      compliance30: null,
+      compliance7: NOT_APPLICABLE_LEGACY_COMPLIANCE,
+      compliance30: NOT_APPLICABLE_LEGACY_COMPLIANCE,
       dailyCompliance: {},
       complianceDisplay: null,
     };

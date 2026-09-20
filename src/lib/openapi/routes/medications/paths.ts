@@ -1413,7 +1413,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Medications"],
       summary: "Batched adherence read for every medication of the caller",
       description:
-        "Returns one compact row per non-PRN medication. A scheduled medication with no local schedule remains in the array with applicable=false, reason NO_LOCAL_SCHEDULE, and null percentage/display fields so card and table clients do not mistake it for 100 percent or leave it loading.",
+        "Returns one compact row per non-PRN medication. A scheduled medication with no local schedule remains in the array with applicable=false and reason NO_LOCAL_SCHEDULE. compliance7/compliance30 stay non-null as all-zero compatibility placeholders for released clients; aware clients must ignore those percentages when applicable=false. complianceDisplay is null.",
       responses: {
         ...recordRefusal(),
         "200": {
@@ -1436,7 +1436,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Medications"],
       summary: "Adherence read for a medication",
       description:
-        "Returns the cadence-aware adherence payload. A scheduled medication with no local schedule returns applicable=false, reason NO_LOCAL_SCHEDULE, null percentage/display fields, and an empty daily grid. Medications with a local schedule preserve the existing arithmetic, including windows in which no dose is due.",
+        "Returns the cadence-aware adherence payload. A scheduled medication with no local schedule returns applicable=false, reason NO_LOCAL_SCHEDULE, non-null all-zero compliance7/compliance30 compatibility placeholders, a null display block, and an empty daily grid. Aware clients must not render the placeholder percentages. Medications with a local schedule preserve the existing arithmetic, including windows in which no dose is due.",
       requestParams: {
         path: z.object({ id: z.string() }),
       },

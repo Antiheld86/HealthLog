@@ -766,16 +766,12 @@ export const medicationComplianceResponse = z
       .describe(
         "Reason adherence is not applicable. NO_LOCAL_SCHEDULE means the medication has no HealthLog-owned expected-dose grid.",
       ),
-    compliance7: complianceResult
-      .nullable()
-      .describe(
-        "Seven-day adherence summary, or null when applicable is false.",
-      ),
-    compliance30: complianceResult
-      .nullable()
-      .describe(
-        "Thirty-day adherence summary, or null when applicable is false.",
-      ),
+    compliance7: complianceResult.describe(
+      "Seven-day adherence summary. When applicable is false, this remains a non-null all-zero compatibility placeholder for released clients and must not be rendered as a percentage.",
+    ),
+    compliance30: complianceResult.describe(
+      "Thirty-day adherence summary. When applicable is false, this remains a non-null all-zero compatibility placeholder for released clients and must not be rendered as a percentage.",
+    ),
     dailyCompliance: z
       .record(z.string(), dailyComplianceEntry)
       .describe(
@@ -802,8 +798,12 @@ export const medicationComplianceSummaryEntry = z
         "Whether this medication has a local expected-dose grid and therefore a displayable adherence percentage.",
       ),
     notApplicableReason: z.literal("NO_LOCAL_SCHEDULE").nullable(),
-    compliance7: complianceResult.nullable(),
-    compliance30: complianceResult.nullable(),
+    compliance7: complianceResult.describe(
+      "Seven-day adherence summary, or an all-zero compatibility placeholder when applicable is false.",
+    ),
+    compliance30: complianceResult.describe(
+      "Thirty-day adherence summary, or an all-zero compatibility placeholder when applicable is false.",
+    ),
     complianceDisplay: complianceDisplay.nullable(),
   })
   .meta({
