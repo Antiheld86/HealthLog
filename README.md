@@ -12,6 +12,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-PolyForm--Noncommercial--1.0.0-blue.svg" alt="License: PolyForm Noncommercial 1.0.0" /></a>
   <a href="https://github.com/MBombeck/HealthLog/releases"><img src="https://img.shields.io/github/v/release/MBombeck/HealthLog?sort=semver&color=success&cacheSeconds=60" alt="Latest release" /></a>
   <a href="https://github.com/MBombeck/HealthLog/actions/workflows/integration.yml"><img src="https://img.shields.io/github/actions/workflow/status/MBombeck/HealthLog/integration.yml?branch=main&label=CI" alt="CI status" /></a>
+  <a href="https://apps.apple.com/app/id6769501341"><img src="https://img.shields.io/badge/iOS-App%20Store-0D96F6?logo=apple&logoColor=white" alt="HealthLog Companion App on the App Store" /></a>
   <a href="https://testflight.apple.com/join/bucuTBpa"><img src="https://img.shields.io/badge/iOS-TestFlight-007AFF?logo=apple&logoColor=white" alt="iOS app on TestFlight" /></a>
 </p>
 
@@ -19,6 +20,7 @@
   <a href="https://healthlog.dev">Website</a> &middot;
   <a href="https://demo.healthlog.dev">Live Demo</a> &middot;
   <a href="https://docs.healthlog.dev">Documentation</a> &middot;
+  <a href="https://apps.apple.com/app/id6769501341">iOS App Store</a> &middot;
   <a href="https://testflight.apple.com/join/bucuTBpa">iOS TestFlight</a>
 </p>
 
@@ -87,7 +89,9 @@ HealthLog ships releases roughly weekly. Pin a tag, back up before upgrades, and
 
 ## Native iOS app
 
-A SwiftUI companion in public beta via [TestFlight](https://testflight.apple.com/join/bucuTBpa), built on the same API as the web client: live HealthKit two-way sync, medication reminders with action buttons that work without opening the app, and an on-device coach on Apple-Intelligence-capable iPhones. Code lives in [MBombeck/healthlog-iOS](https://github.com/MBombeck/healthlog-iOS).
+A SwiftUI companion on the [App Store](https://apps.apple.com/app/id6769501341), built on the same API as the web client: live HealthKit two-way sync, medication reminders with action buttons that work without opening the app, and an on-device coach on Apple-Intelligence-capable iPhones. Code lives in [MBombeck/healthlog-iOS](https://github.com/MBombeck/healthlog-iOS).
+
+The App Store listing carries a small price, which exists to cover Apple's yearly developer fee rather than to earn anything; write to marc@healthlog.dev for a free code if that price is in your way. [TestFlight](https://testflight.apple.com/join/bucuTBpa) stays free and carries the newest builds, and the source builds on your own machine.
 
 ## Tech stack
 
@@ -132,6 +136,7 @@ HealthLog is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE):
   <a href="https://healthlog.dev">healthlog.dev</a> &middot;
   <a href="https://demo.healthlog.dev">Live Demo</a> &middot;
   <a href="https://docs.healthlog.dev">Docs</a> &middot;
+  <a href="https://apps.apple.com/app/id6769501341">iOS App Store</a> &middot;
   <a href="https://testflight.apple.com/join/bucuTBpa">iOS TestFlight</a> &middot;
   <a href="https://buymeacoffee.com/mbombeck">Buy Me a Coffee</a>
 </p>
