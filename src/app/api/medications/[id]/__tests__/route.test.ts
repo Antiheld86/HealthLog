@@ -625,6 +625,28 @@ describe("PUT /api/medications/[id] — as-needed (v1.16.11, #316)", () => {
     expect(prisma.medication.update).not.toHaveBeenCalled();
   });
 
+  it("allows a normal update on an existing zero-schedule scheduled mirror when schedules are omitted", async () => {
+    mockExisting({ asNeeded: false, scheduleCount: 0 });
+    vi.mocked(getMedicationCategories).mockResolvedValue({} as never);
+    vi.mocked(auditLog).mockResolvedValue(undefined);
+    vi.mocked(prisma.medication.update).mockResolvedValue({
+      id: "m1",
+      userId: "user-1",
+      dose: "10 mg",
+      asNeeded: false,
+      schedules: [],
+    } as never);
+
+    const res = await PUT(putReq({ dose: "10 mg" }), ROUTE_CTX);
+
+    expect(res.status).toBe(200);
+    const updateData = vi.mocked(prisma.medication.update).mock.calls[0][0] as {
+      data: Record<string, unknown>;
+    };
+    expect(updateData.data.dose).toBe("10 mg");
+    expect(updateData.data.schedules).toBeUndefined();
+  });
+
   it("flips to as-needed with schedules:[] — old rows deleted, none recreated", async () => {
     mockExisting({ scheduleCount: 1 });
     // Re-stub deps the outer beforeEach's resetAllMocks cleared.

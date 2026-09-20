@@ -229,7 +229,7 @@ export const createMedicationSchema = z
   })
   .refine(
     (b) =>
-      b.externalSource === "APPLE_HEALTH" ||
+      (b.externalSource === "APPLE_HEALTH" && b.externalId !== undefined) ||
       b.asNeeded === true ||
       (!!b.schedules && b.schedules.length >= 1),
     {
