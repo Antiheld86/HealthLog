@@ -25,6 +25,23 @@
 </p>
 
 <img width="2434" height="1247" alt="HealthLog dashboard: health metric tiles with 7-day trends, blood-pressure and weight charts, dark theme" src="docs/assets/dashboard-hero.jpeg" />
+<p align="center">
+  <img src="docs/assets/Insights.png"
+       alt="Insights"
+       width="240">
+  &nbsp;
+  <img src="docs/assets/resting-pulse.png"
+       alt="Insights RHR"
+       width="240">
+  &nbsp;
+  <img src="docs/assets/Medications.png"
+       alt="Medications"
+       width="240">
+  &nbsp;
+  <img src="docs/assets/Coach.png"
+       alt="Coach Chat"
+       width="240">
+</p>
 
 ## Why HealthLog
 
