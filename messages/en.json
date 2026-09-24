@@ -760,6 +760,7 @@
     "typeWaistToHeight": "Waist-to-height ratio",
     "unitScore": "pts",
     "unitRatio": "ratio",
+    "unitRating": "rating",
     "typeWho5Score": "WHO-5 score",
     "typeSciScore": "SCI score"
   },
@@ -8266,6 +8267,7 @@
       "saving": "Saving…",
       "cancel": "Cancel",
       "saveError": "Could not save. Try again.",
+      "emptyHint": "Pick a flow or a symptom to save this day, or use the period start button above.",
       "temperatureSection": "Temperature & ovulation",
       "intimacySection": "Intimacy & contraception",
       "testsSection": "Tests",
