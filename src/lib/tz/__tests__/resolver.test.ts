@@ -55,6 +55,24 @@ describe("isValidTimezone", () => {
   it("rejects strings longer than 64 chars", () => {
     expect(isValidTimezone("A".repeat(65))).toBe(false);
   });
+
+  // The runtime accepts UTC offsets as zone ids, but Postgres reads a bare
+  // offset in `AT TIME ZONE` with the POSIX sign (east is negative), so a day
+  // cut in SQL would land on the wrong side of UTC.
+  it("rejects bare UTC offsets", () => {
+    expect(isValidTimezone("+05:30")).toBe(false);
+    expect(isValidTimezone("-0800")).toBe(false);
+    expect(isValidTimezone("+05")).toBe(false);
+    expect(isValidTimezone("\u221205:00")).toBe(false);
+  });
+
+  it("keeps accepting named zones, aliases and the Etc family", () => {
+    expect(isValidTimezone("Asia/Kolkata")).toBe(true);
+    expect(isValidTimezone("Asia/Calcutta")).toBe(true);
+    expect(isValidTimezone("Europe/Kyiv")).toBe(true);
+    expect(isValidTimezone("Etc/UTC")).toBe(true);
+    expect(isValidTimezone("Etc/GMT+5")).toBe(true);
+  });
 });
 
 describe("resolveServerDefaultTimezone", () => {
@@ -107,6 +125,16 @@ describe("resolveUserTimezone", () => {
       timezone: "Pacific/Auckland",
     } as never);
     expect(await resolveUserTimezone("user-1")).toBe("Pacific/Auckland");
+  });
+
+  it("falls back to the server default for a stored bare offset", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      timezone: "+05:30",
+    } as never);
+    vi.mocked(prisma.appSettings.findUnique).mockResolvedValue({
+      defaultUserTimezone: "Asia/Tokyo",
+    } as never);
+    expect(await resolveUserTimezone("user-1")).toBe("Asia/Tokyo");
   });
 
   it("falls back to the server default when the user row is missing", async () => {
@@ -335,5 +363,19 @@ describe("isNearUtc", () => {
 describe("DEFAULT_TIMEZONE", () => {
   it("is Europe/Berlin", () => {
     expect(DEFAULT_TIMEZONE).toBe("Europe/Berlin");
+  });
+});
+
+describe("request schemas refuse a bare offset zone", () => {
+  it("the screener submission", async () => {
+    const { createAssessmentSchema } =
+      await import("@/lib/validations/mental-health");
+    const base = { instrument: "PHQ9", items: [0, 0, 0, 0, 0, 0, 0, 0, 0] };
+    expect(
+      createAssessmentSchema.safeParse({ ...base, tz: "Asia/Kolkata" }).success,
+    ).toBe(true);
+    expect(
+      createAssessmentSchema.safeParse({ ...base, tz: "+05:30" }).success,
+    ).toBe(false);
   });
 });

@@ -12,6 +12,7 @@ import {
   type InstrumentId,
 } from "@/lib/mental-health/instruments";
 import { assertStableExternalId } from "@/lib/validations/external-id";
+import { isValidTimezone } from "@/lib/tz/format";
 
 export const assessmentInstrumentEnum = z.enum(["PHQ9", "GAD7", "WHO5", "SCI"]);
 
@@ -38,7 +39,11 @@ export const createAssessmentSchema = z
     functionalDifficulty: z.number().int().min(0).max(3).optional(),
     /** ISO instant the screener was taken; defaults to now server-side. */
     takenAt: z.string().datetime().optional(),
-    tz: z.string().max(64).optional(),
+    tz: z
+      .string()
+      .max(64)
+      .refine(isValidTimezone, "Invalid IANA timezone")
+      .optional(),
     /** Locale of the validated wording actually presented. */
     locale: z.string().max(16).optional(),
     /** Client provenance; defaults to WEB. */

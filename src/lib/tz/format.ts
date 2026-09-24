@@ -48,9 +48,20 @@ const WALL_CLOCK_PARTS_OPTIONS: Omit<Intl.DateTimeFormatOptions, "timeZone"> =
   });
 
 /**
- * Validate a timezone string by asking `Intl.DateTimeFormat` to use it.
- * Returns `true` if the runtime accepts the zone, `false` otherwise.
- * Cheap (microseconds) — call freely at write paths.
+ * A zone id the runtime resolved to a bare UTC offset (`+05:30`, `-08:00`).
+ */
+const OFFSET_ZONE = /^[+-]\d/;
+
+/**
+ * Validate a timezone string: a named IANA zone (or `UTC`) the runtime
+ * accepts. Returns `false` for anything else. Cheap (microseconds) — call
+ * freely at write paths.
+ *
+ * Bare UTC offsets are refused although the runtime accepts them as zone ids.
+ * The zone ends up in Postgres `AT TIME ZONE`, which reads a bare offset with
+ * the POSIX sign (east of UTC is negative), so `+05:30` would cut every day
+ * eleven hours off. Named zones, their aliases and the `Etc/GMT±N` family
+ * mean the same thing to both.
  */
 export function isValidTimezone(tz: string): boolean {
   if (!tz || typeof tz !== "string" || tz.length === 0 || tz.length > 64) {
@@ -60,11 +71,27 @@ export function isValidTimezone(tz: string): boolean {
     // The memo only caches successful constructions, so probing an
     // invalid zone through it cannot poison the formatter map — and a
     // valid zone leaves its formatter warm for the real callers.
-    getDateTimeFormat("en-US", tz, VALIDATION_OPTIONS);
-    return true;
+    const resolved = getDateTimeFormat(
+      "en-US",
+      tz,
+      VALIDATION_OPTIONS,
+    ).resolvedOptions().timeZone;
+    return !OFFSET_ZONE.test(resolved);
   } catch {
     return false;
   }
+}
+
+/**
+ * `tz` when it is a valid zone, else `fallback`. For every place a stored or
+ * supplied zone reaches SQL: a value written before offsets were refused may
+ * still sit in the database, and it must never be spliced.
+ */
+export function validTimezoneOr(
+  tz: string | null | undefined,
+  fallback: string,
+): string {
+  return tz && isValidTimezone(tz) ? tz : fallback;
 }
 
 /**
