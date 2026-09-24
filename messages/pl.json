@@ -9281,6 +9281,7 @@
     "plans": {
       "title": "Plany",
       "pageDescription": "Plany typu „jeśli… to” uzgodnione w rozmowach z Coachem. Potwierdź propozycję, aby Coach ją zapamiętał.",
+      "readOnlyNote": "Coach jest teraz niedostępny, ale nadal możesz czytać i usuwać swoje plany.",
       "proposalTitle": "Propozycja planu",
       "ifThen": "Jeśli {cue}, to {action}.",
       "targetPrefix": "Cel: {target}",

@@ -16,9 +16,11 @@
  * accounts. PATCH on a 0-count match returns 404; DELETE on a 0-count match
  * returns the idempotent `{ deleted: false }`.
  *
- * Coach-gated by the same `requireModuleEnabled(userId, "coach")` kill-switch
- * as the list route (mirrors the about-me routes). Bodies are Zod-parsed; an
- * invalid body returns the multi-issue 422 envelope.
+ * PATCH is Coach use (it confirms what the Coach proposed) and is gated by
+ * `requireModuleEnabled(userId, "coach")`. DELETE is not: erasing one's own
+ * stored plan never depends on the Coach being available, the same rule as
+ * the stored facts and conversations. Bodies are Zod-parsed; an invalid body
+ * returns the multi-issue 422 envelope.
  */
 import type { NextRequest } from "next/server";
 
@@ -207,8 +209,6 @@ export const PATCH = apiHandler(async (req: NextRequest, ctx: RouteCtx) => {
 export const DELETE = apiHandler(
   async (_request: NextRequest, ctx: RouteCtx) => {
     const { user } = await requireAuth();
-    const gate = await requireModuleEnabled(user.id, "coach");
-    if (!gate.enabled) return gate.response;
 
     const limited = await enforceMutateLimit("delete", user.id);
     if (limited) return limited;

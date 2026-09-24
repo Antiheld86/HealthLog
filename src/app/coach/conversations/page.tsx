@@ -188,19 +188,17 @@ function CoachConversationsBody({ readOnly }: { readOnly: boolean }) {
           }
           actions={
             // Surface the sibling Plans ledger — otherwise it is reachable
-            // only from the composer's `+` menu. Plans need the Coach, so the
-            // link stays away while it is unavailable.
-            readOnly ? undefined : (
-              <Button asChild variant="outline" size="sm">
-                <Link
-                  href="/coach/plans"
-                  data-slot="coach-conversations-plans-link"
-                >
-                  <Target className="size-4" aria-hidden="true" />
-                  {t("coach.plans.title")}
-                </Link>
-              </Button>
-            )
+            // only from the composer's `+` menu. Plans stay readable with the
+            // Coach unavailable, so the link does too.
+            <Button asChild variant="outline" size="sm">
+              <Link
+                href="/coach/plans"
+                data-slot="coach-conversations-plans-link"
+              >
+                <Target className="size-4" aria-hidden="true" />
+                {t("coach.plans.title")}
+              </Link>
+            </Button>
           }
         />
         <div className="relative">

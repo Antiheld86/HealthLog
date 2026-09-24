@@ -1626,7 +1626,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "List the caller's Coach goal / if-then plans",
       description:
-        'v1.21.3 — returns the durable plans the Coach has proposed for the caller, newest first, each decrypted on the fly. A plan is an "if-then" implementation intention tied to one metric, with an optional target. The Coach extractor writes a plan as `proposed`; only `PATCH /api/coach/plans/{id}` activates it. Pass `?status=` to filter to one lifecycle status, or `?scope=` for a named group (open = proposed + active + review_due, past = met + abandoned + reviewed, all = every non-deleted plan) — mutually exclusive. Both omitted returns the non-terminal set (proposed + active). Coach-gated (`requireModuleEnabled("coach")`); a disabled surface 403s. Auth via cookie or Bearer; the owner is always narrowed from the session, never the body. Undecryptable rows are omitted rather than failing the read.',
+        'v1.21.3 — returns the durable plans the Coach has proposed for the caller, newest first, each decrypted on the fly. A plan is an "if-then" implementation intention tied to one metric, with an optional target. The Coach extractor writes a plan as `proposed`; only `PATCH /api/coach/plans/{id}` activates it. Pass `?status=` to filter to one lifecycle status, or `?scope=` for a named group (open = proposed + active + review_due, past = met + abandoned + reviewed, all = every non-deleted plan) — mutually exclusive. Both omitted returns the non-terminal set (proposed + active). Not gated on the Coach: the plans belong to the caller and stay readable while the Coach is unavailable (v1.39). Auth via cookie or Bearer; the owner is always narrowed from the session, never the body. Undecryptable rows are omitted rather than failing the read.',
       parameters: [
         {
           name: "status",
@@ -1653,10 +1653,6 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
               schema: dataEnvelope(coachPlansListResponse, "CoachPlansList"),
             },
           },
-        },
-        "403": {
-          description: "Coach surface disabled.",
-          content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
       },
@@ -1710,7 +1706,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Soft-delete one Coach plan",
       description:
-        "v1.21.3 — soft-deletes a single plan owned by the caller. An unknown / cross-user / already-deleted id is an idempotent no-op returning `{ deleted: false }`, never revealing whether the id exists under another account. Coach-gated. Auth via cookie or Bearer.",
+        "v1.21.3 — soft-deletes a single plan owned by the caller. An unknown / cross-user / already-deleted id is an idempotent no-op returning `{ deleted: false }`, never revealing whether the id exists under another account. Not gated on the Coach: erasing one's own plan works while the Coach is unavailable (v1.39). Auth via cookie or Bearer.",
       parameters: [
         {
           name: "id",
@@ -1883,10 +1879,6 @@ export const coachReminderPaths: NonNullable<ZodOpenApiObject["paths"]> = {
               ),
             },
           },
-        },
-        "403": {
-          description: "Coach surface disabled.",
-          content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
       },

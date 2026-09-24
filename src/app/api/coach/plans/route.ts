@@ -12,8 +12,11 @@
  * target) are decrypted on the fly; an undecryptable row (a key rotated out of
  * the map) is skipped rather than 500ing the whole list.
  *
- * Coach-gated by the same `requireModuleEnabled(userId, "coach")` kill-switch
- * the rest of the Coach management stack uses (mirrors the about-me routes).
+ * Not gated on the Coach. A plan is the person's own stored record: reading
+ * it never depends on the Coach being available, the same rule as the stored
+ * facts and conversations (a Coach switched off by the operator or hidden by
+ * the person must not lock them out of what it kept). Activating a proposed
+ * plan is Coach use and stays gated on the PATCH route.
  * The owner is always narrowed from the session, never the body.
  *
  * `?status=proposed|active|met|abandoned` optionally filters the list (e.g.
@@ -26,7 +29,6 @@ import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiSuccess, returnAllZodIssues } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { prisma } from "@/lib/db";
-import { requireModuleEnabled } from "@/lib/modules/gate";
 import { decryptFromBytes } from "@/lib/ai/coach/bytes-codec";
 import { coachPlansListQuerySchema } from "@/lib/validations/coach-plan";
 
@@ -38,11 +40,6 @@ const SCOPE_STATUSES: Record<"open" | "past", string[]> = {
 
 export const GET = apiHandler(async (req: Request) => {
   const { user } = await requireAuth();
-  // Coach module gate (operator availability + disableCoach), mirroring the
-  // about-me management routes.
-  const gate = await requireModuleEnabled(user.id, "coach");
-  if (!gate.enabled) return gate.response;
-
   const url = new URL(req.url);
   const parsed = coachPlansListQuerySchema.safeParse({
     status: url.searchParams.get("status") ?? undefined,

@@ -327,6 +327,9 @@ const EXEMPT_ROUTES: ReadonlyArray<string> = [
   "src/app/api/insights/coach/seen/route.ts",
   "src/app/api/insights/coach/facts/route.ts",
   "src/app/api/insights/coach/facts/[id]/route.ts",
+  // The stored plans list. Its sibling `[id]` route keeps the Coach gate on
+  // PATCH (confirming a proposal is Coach use) and erases without it.
+  "src/app/api/coach/plans/route.ts",
   "src/app/api/insights/chat/[id]/route.ts",
   "src/app/api/insights/chat/messages/[id]/feedback/route.ts",
   // The Today digest and its dismiss: data, with the AI parts masked by the

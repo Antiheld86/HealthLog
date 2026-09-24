@@ -276,10 +276,15 @@ describe("GET /api/coach/plans", () => {
     expect(body.data.plans[0]?.id).toBe("p2");
   });
 
-  it("invokes the coach module gate", async () => {
+  it("lists stored plans with the Coach unavailable (they are the person's record)", async () => {
+    vi.mocked(requireModuleEnabled).mockResolvedValue({
+      enabled: false,
+      response: new Response(null, { status: 403 }),
+    } as never);
     vi.mocked(prisma.coachPlan.findMany).mockResolvedValue([] as never);
-    await callGet();
-    expect(requireModuleEnabled).toHaveBeenCalledWith("user-1", "coach");
+    const res = await callGet();
+    expect(res.status).toBe(200);
+    expect(requireModuleEnabled).not.toHaveBeenCalled();
   });
 });
 
@@ -438,11 +443,16 @@ describe("DELETE /api/coach/plans/[id]", () => {
     expect(body.data.deleted).toBe(false);
   });
 
-  it("invokes the coach module gate", async () => {
-    vi.mocked(prisma.coachPlan.updateMany).mockResolvedValue({
-      count: 0,
+  it("erases a stored plan with the Coach unavailable", async () => {
+    vi.mocked(requireModuleEnabled).mockResolvedValue({
+      enabled: false,
+      response: new Response(null, { status: 403 }),
     } as never);
-    await callDeleteOne();
-    expect(requireModuleEnabled).toHaveBeenCalledWith("user-1", "coach");
+    vi.mocked(prisma.coachPlan.updateMany).mockResolvedValue({
+      count: 1,
+    } as never);
+    const res = await callDeleteOne();
+    expect(res.status).toBe(200);
+    expect(requireModuleEnabled).not.toHaveBeenCalled();
   });
 });

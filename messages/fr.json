@@ -9281,6 +9281,7 @@
     "plans": {
       "title": "Plans",
       "pageDescription": "Plans « si… alors » convenus dans vos conversations avec le Coach. Confirmez une proposition pour que le Coach s'en souvienne.",
+      "readOnlyNote": "Le Coach n'est pas disponible pour le moment, mais vous pouvez toujours lire et supprimer vos plans.",
       "proposalTitle": "Proposition de plan",
       "ifThen": "Si {cue}, alors {action}.",
       "targetPrefix": "Objectif : {target}",
