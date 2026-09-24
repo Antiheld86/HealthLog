@@ -321,6 +321,28 @@ export async function runStatusCompletion(
     return { kind: "error" };
   }
 
+  // Consent withdrawn while the call was in flight. The withdrawal purged the
+  // stored text in its own transaction; a reply persisted after it would
+  // bring that text back under a consent that no longer exists. So the rule
+  // runs once more, against the provider that actually answered, with a fresh
+  // receipt read, and a refused reply is dropped as if it had never arrived.
+  // The tokens stay on the ledger: they were spent upstream.
+  const late = await aiEgressRefusal(args.capability, userId, [
+    workingProvider.providerType,
+  ]);
+  if (late) {
+    annotate({
+      action: { name: "insights.status.capability_unavailable" },
+      meta: {
+        cacheAction,
+        capability: args.capability,
+        reason: late.reason,
+        at: "reply",
+      },
+    });
+    return { kind: "none", reason: late.reason };
+  }
+
   return {
     kind: "ok",
     content,

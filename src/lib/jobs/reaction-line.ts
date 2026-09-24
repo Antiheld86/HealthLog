@@ -710,6 +710,17 @@ export async function runReactionLine(
     return { status: "skipped", reason: "ungrounded_output" };
   }
 
+  // Consent withdrawn while the call was in flight: the withdrawal cleared
+  // stored lines in its own transaction, and this commit would write one
+  // back. The rule once more, for the provider that answered, fresh.
+  const late = await aiEgressRefusal("reactionLines", job.userId, [
+    chain[0].providerType,
+  ]);
+  if (late) {
+    await finishTerminalAttempt().catch(() => {});
+    return { status: "skipped", reason: late.reason };
+  }
+
   const committed = await prisma.arrivalReaction.updateMany({
     where: {
       id: row.id,

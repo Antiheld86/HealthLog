@@ -508,7 +508,11 @@ function failBeforeProvider(
 }
 
 type InsightCommitResult =
-  "committed" | "scope-changed" | "profile-scope-changed";
+  | "committed"
+  | "scope-changed"
+  | "profile-scope-changed"
+  | "no-consent"
+  | "unavailable";
 
 /**
  * The exact User columns (besides `insightsPrivacyMode`, guarded
@@ -530,6 +534,12 @@ type PromptScopeAtRead = {
  * was built from — without keying on the broad `updatedAt` timestamp, which
  * a provider credential refresh (e.g. `resolveProviderChain()`'s token
  * maintenance) also advances and would otherwise false-positive here.
+ *
+ * The consent rule runs once more too, against the provider that answered
+ * (`servedBy`, `null` for a timestamp-only stamp that writes no text), with a
+ * fresh receipt read: a withdrawal that landed while the
+ * call was in flight already purged the stored briefing, and this write would
+ * bring it back.
  */
 async function commitInsightUnderScope(
   userId: string,
@@ -537,8 +547,15 @@ async function commitInsightUnderScope(
   selfContextAtRead: string | null,
   promptScopeAtRead: PromptScopeAtRead,
   locale: SupportedLocale,
+  servedBy: string | null,
   data: Prisma.UserUpdateInput,
 ): Promise<InsightCommitResult> {
+  if (servedBy !== null) {
+    const late = await aiEgressRefusal("briefing", userId, [servedBy]);
+    if (late) {
+      return late.reason === "consent_required" ? "no-consent" : "unavailable";
+    }
+  }
   const currentSelfContext = await getSelfContextTextForUser(userId, locale);
   if (currentSelfContext !== selfContextAtRead) {
     return "profile-scope-changed";
@@ -930,6 +947,7 @@ export async function generateComprehensiveInsight(
           aboutMe,
           promptScopeAtRead,
           locale,
+          rerolled.providerType,
           {
             insightsCachedAt: new Date(),
             insightsCachedText: rerolled.text,
@@ -956,6 +974,7 @@ export async function generateComprehensiveInsight(
         aboutMe,
         promptScopeAtRead,
         locale,
+        null,
         {
           insightsCachedAt: new Date(),
           // The fingerprint covers the generation locale, so a matching hash
@@ -979,6 +998,7 @@ export async function generateComprehensiveInsight(
       aboutMe,
       promptScopeAtRead,
       locale,
+      null,
       {
         insightsCachedAt: new Date(),
         insightsCachedLocale: locale,
@@ -1322,6 +1342,7 @@ export async function generateComprehensiveInsight(
     aboutMe,
     promptScopeAtRead,
     locale,
+    workingProviderType,
     {
       insightsCachedAt: new Date(),
       insightsCachedText: JSON.stringify(insights),
