@@ -200,8 +200,19 @@ export function documentAiErrorKey(err: unknown): string {
         return "documents.assist.errorProvider";
       case "documents.inbound.notIndexed":
         return "documents.assist.errorNotIndexed";
+      case "consent.ai.required":
+        return "documents.assist.errorConsent";
+      case "ai.provider.none":
+        return "documents.assist.errorProvider";
+      case "ai.record.notPermitted":
+      case "module.disabled":
+        return "documents.assist.errorUnavailable";
       default:
-        return "documents.assist.errorGeneric";
+        // The operator switched reading off (`assistant.disabled.documentAi`,
+        // or the master `assistant.disabled.enabled`).
+        return code.startsWith("assistant.disabled.")
+          ? "documents.assist.errorUnavailable"
+          : "documents.assist.errorGeneric";
     }
   }
   return "documents.assist.errorGeneric";

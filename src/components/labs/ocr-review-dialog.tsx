@@ -9,6 +9,7 @@
  * confirms. Reuses the labs design language via `ResponsiveSheet` + the labs
  * row editor.
  */
+import { DocumentReadingConsentPrompt } from "@/components/ai/document-reading-consent-prompt";
 import { useId, useMemo, useState } from "react";
 
 import { Loader2, ScanLine, Upload } from "lucide-react";
@@ -81,8 +82,15 @@ function toCommitRow(row: OcrReviewRow): OcrCommitRowInput | null {
   };
 }
 
-/** Translate an extract failure into a friendly, error-code-aware message. */
-function extractErrorMessage(err: unknown, t: (key: string) => string): string {
+/**
+ * Translate an extract failure into a friendly, error-code-aware message.
+ * Refusals are read by `meta.errorCode`: a 403 is a missing consent only when
+ * the code says so, never by its status alone.
+ */
+export function extractErrorMessage(
+  err: unknown,
+  t: (key: string) => string,
+): string {
   if (err instanceof ApiError) {
     const code =
       typeof err.meta?.errorCode === "string" ? err.meta.errorCode : null;
@@ -99,10 +107,23 @@ function extractErrorMessage(err: unknown, t: (key: string) => string): string {
         return t("labs.ocr.fileType");
       case "labs.ocr.pdfNeedsAnthropic":
         return t("labs.ocr.pdfNeedsAnthropic");
+      case "consent.ai.required":
+        return t("labs.ocr.consentRequired");
+      case "ai.provider.none":
+        return t("labs.ocr.providerUnsupported");
       default:
         break;
     }
-    if (err.status === 403) return t("labs.ocr.consentRequired");
+    // The operator's switch, the module, somebody else's record: scanning is
+    // not available here right now, whatever the exact layer.
+    if (
+      code !== null &&
+      (code.startsWith("assistant.disabled.") ||
+        code === "ai.record.notPermitted" ||
+        code === "module.disabled")
+    ) {
+      return t("labs.ocr.aiUnavailable");
+    }
   }
   return t("labs.ocr.extractFailed");
 }
@@ -112,6 +133,7 @@ export function OcrReviewDialog({
   onOpenChange,
   mode,
   pdfSupported,
+  consentRequired = false,
   onCommitted,
 }: {
   open: boolean;
@@ -119,6 +141,12 @@ export function OcrReviewDialog({
   /** Native vision vs in-browser local OCR. Text mode is image-only. */
   mode: OcrMode;
   pdfSupported: boolean;
+  /**
+   * The `labsOcr` capability is missing only the document-reading consent.
+   * The pick step asks for it instead of offering the file picker; once it is
+   * granted `/api/auth/me` refreshes and the picker appears.
+   */
+  consentRequired?: boolean;
   onCommitted: () => void;
 }) {
   const { t } = useTranslations();
@@ -270,7 +298,9 @@ export function OcrReviewDialog({
         ) : undefined
       }
     >
-      {stage === "pick" ? (
+      {stage === "pick" && consentRequired ? (
+        <DocumentReadingConsentPrompt />
+      ) : stage === "pick" ? (
         <div className="relative py-2">
           <input
             id={pickerId}

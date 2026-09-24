@@ -5,7 +5,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { I18nProvider } from "@/lib/i18n/context";
 
-import { handleFilePickerChange, OcrReviewDialog } from "../ocr-review-dialog";
+import { ApiError } from "@/lib/api/api-fetch";
+
+import {
+  extractErrorMessage,
+  handleFilePickerChange,
+  OcrReviewDialog,
+} from "../ocr-review-dialog";
 
 const hookState = vi.hoisted(() => ({ extractPending: false }));
 
@@ -44,13 +50,25 @@ vi.mock("../use-ocr-extract", () => ({
   }),
 }));
 
+vi.mock("@/hooks/use-grant-document-reading-consent", () => ({
+  useGrantDocumentReadingConsent: () => ({
+    isPending: false,
+    isError: false,
+    mutate: vi.fn(),
+  }),
+}));
+
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
 function render(
   locale: "en" | "de" = "en",
-  options: { mode?: "vision" | "text"; pdfSupported?: boolean } = {},
+  options: {
+    mode?: "vision" | "text";
+    pdfSupported?: boolean;
+    consentRequired?: boolean;
+  } = {},
 ): string {
   return renderToStaticMarkup(
     <I18nProvider initialLocale={locale}>
@@ -59,6 +77,7 @@ function render(
         onOpenChange={() => {}}
         mode={options.mode ?? "vision"}
         pdfSupported={options.pdfSupported ?? true}
+        consentRequired={options.consentRequired}
         onCommitted={() => {}}
       />
     </I18nProvider>,
@@ -136,5 +155,49 @@ describe("<OcrReviewDialog> file picker", () => {
     expect(onFilePicked).toHaveBeenCalledOnce();
     expect(onFilePicked).toHaveBeenCalledWith(selected);
     expect(input.value).toBe("");
+  });
+});
+
+describe("<OcrReviewDialog> document-reading consent", () => {
+  it("asks for the reading consent in place of the picker while it is missing", () => {
+    const html = render("en", { consentRequired: true });
+    expect(html).toContain('data-slot="document-reading-consent"');
+    expect(html).not.toMatch(/<input[^>]*type="file"/);
+  });
+
+  it("shows the picker once consent is in place", () => {
+    const html = render("en", { consentRequired: false });
+    expect(html).not.toContain('data-slot="document-reading-consent"');
+    expect(html).toMatch(/<input[^>]*type="file"/);
+  });
+});
+
+describe("extractErrorMessage", () => {
+  const t = (key: string) => key;
+  const refusal = (errorCode: string, status = 403) =>
+    new ApiError("refused", status, { errorCode });
+
+  it("reads the refusal by its code, not by the status", () => {
+    expect(extractErrorMessage(refusal("consent.ai.required"), t)).toBe(
+      "labs.ocr.consentRequired",
+    );
+    expect(
+      extractErrorMessage(refusal("assistant.disabled.documentAi"), t),
+    ).toBe("labs.ocr.aiUnavailable");
+    expect(extractErrorMessage(refusal("ai.record.notPermitted"), t)).toBe(
+      "labs.ocr.aiUnavailable",
+    );
+    expect(extractErrorMessage(refusal("module.disabled"), t)).toBe(
+      "labs.ocr.aiUnavailable",
+    );
+    expect(extractErrorMessage(refusal("ai.provider.none", 422), t)).toBe(
+      "labs.ocr.providerUnsupported",
+    );
+  });
+
+  it("never calls an unrelated 403 a missing consent", () => {
+    expect(extractErrorMessage(new ApiError("forbidden", 403), t)).toBe(
+      "labs.ocr.extractFailed",
+    );
   });
 });

@@ -46,6 +46,7 @@ import { Loader2, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ResponsiveSheet } from "@/components/ui/responsive-sheet";
+import { DocumentReadingConsentPrompt } from "@/components/ai/document-reading-consent-prompt";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useTranslations } from "@/lib/i18n/context";
@@ -77,6 +78,12 @@ export interface NaturalLanguageExtractorProps {
    * point at a mock server. Defaults to the production route.
    */
   endpoint?: string;
+  /**
+   * The `medicationExtract` capability is missing only the document-reading
+   * consent. The sheet asks for it above the text field and holds the submit
+   * until `/api/auth/me` reports it granted.
+   */
+  consentRequired?: boolean;
 }
 
 type DialogError =
@@ -85,7 +92,42 @@ type DialogError =
   | { kind: "rateLimit" }
   | { kind: "noProvider" }
   | { kind: "budget" }
+  | { kind: "consent" }
+  | { kind: "unavailable" }
   | { kind: "network"; message?: string };
+
+interface ExtractFailureBody {
+  error?: string | null;
+  meta?: { errorCode?: unknown } | null;
+}
+
+/**
+ * Classify a failed extract response. The refusal's `meta.errorCode` decides
+ * first, because a status is shared by different reasons: a 429 is either
+ * the per-minute limit or the spent daily budget, and a 403 is a missing
+ * consent, the operator's switch or somebody else's record.
+ */
+export function classifyExtractFailure(
+  status: number,
+  body: ExtractFailureBody | null,
+): DialogError {
+  const code =
+    typeof body?.meta?.errorCode === "string" ? body.meta.errorCode : null;
+  if (code === "coach.budget.exceeded") return { kind: "budget" };
+  if (code === "ai.provider.none") return { kind: "noProvider" };
+  if (code === "consent.ai.required") return { kind: "consent" };
+  if (
+    code !== null &&
+    (code.startsWith("assistant.disabled.") ||
+      code === "ai.record.notPermitted" ||
+      code === "module.disabled")
+  ) {
+    return { kind: "unavailable" };
+  }
+  if (status === 429) return { kind: "rateLimit" };
+  if (status === 503) return { kind: "noProvider" };
+  return { kind: "network", message: body?.error ?? undefined };
+}
 
 const MAX_TEXT_LENGTH = 2000;
 
@@ -95,6 +137,7 @@ export function NaturalLanguageExtractor({
   onPrefill,
   locale,
   endpoint = "/api/medications/extract",
+  consentRequired = false,
 }: NaturalLanguageExtractorProps) {
   const { t } = useTranslations();
   const textareaId = useId();
@@ -143,23 +186,11 @@ export function NaturalLanguageExtractor({
         signal: controller.signal,
       });
 
-      if (res.status === 429) {
-        setError({ kind: "rateLimit" });
-        return;
-      }
-      if (res.status === 503) {
-        setError({ kind: "noProvider" });
-        return;
-      }
       if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        if (body?.error && /budget/i.test(body.error)) {
-          setError({ kind: "budget" });
-          return;
-        }
-        setError({ kind: "network", message: body?.error });
+        const body = (await res
+          .json()
+          .catch(() => null)) as ExtractFailureBody | null;
+        setError(classifyExtractFailure(res.status, body));
         return;
       }
 
@@ -228,7 +259,7 @@ export function NaturalLanguageExtractor({
           <Button
             type="button"
             onClick={handleSubmit}
-            disabled={busy || overLimit}
+            disabled={busy || overLimit || consentRequired}
             aria-busy={busy || undefined}
             className="min-h-11 sm:min-h-9"
           >
@@ -248,6 +279,7 @@ export function NaturalLanguageExtractor({
       }
     >
       <div className="flex flex-col gap-3" aria-busy={busy || undefined}>
+        {consentRequired ? <DocumentReadingConsentPrompt /> : null}
         <div>
           <Label htmlFor={textareaId} className="sr-only">
             {t("medications.scheduling.naturalLanguage.title")}
@@ -348,6 +380,10 @@ function resolveErrorMessage(
       return t("medications.scheduling.naturalLanguage.error.noProvider");
     case "budget":
       return t("medications.scheduling.naturalLanguage.error.budget");
+    case "consent":
+      return t("medications.scheduling.naturalLanguage.error.consent");
+    case "unavailable":
+      return t("medications.scheduling.naturalLanguage.error.unavailable");
     case "network":
     default:
       return t("medications.scheduling.naturalLanguage.error.network");

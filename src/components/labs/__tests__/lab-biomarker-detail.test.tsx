@@ -17,6 +17,15 @@ import type {
  * the strip, the chart placeholder, and the assessment card all paint.
  */
 
+// AI surfaces paint only while their capability is available; these tests
+// cover the painted surface, so every capability reads available here.
+vi.mock("@/hooks/use-ai-capability", () => ({
+  useAiCapability: () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
+}));
 vi.mock("@/lib/api/api-fetch", () => ({
   apiGet: () => new Promise(() => {}),
   apiDelete: vi.fn(),
@@ -29,10 +38,6 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/hooks/use-auth", () => ({
   useAuth: () => ({ isAuthenticated: true, user: { id: "u1" } }),
-}));
-
-vi.mock("@/hooks/use-feature-flags", () => ({
-  useFeatureFlags: () => ({ insightStatus: true }),
 }));
 
 import { LabBiomarkerDetail } from "../lab-biomarker-detail";

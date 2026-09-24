@@ -62,6 +62,8 @@ import {
   apiPost,
 } from "@/lib/api/api-fetch";
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
+import { useAiCapability } from "@/hooks/use-ai-capability";
+import { DocumentReadingConsentPrompt } from "@/components/ai/document-reading-consent-prompt";
 import { useCoachLaunch } from "@/lib/insights/coach-launch-context";
 import { invalidateKeys, queryKeys } from "@/lib/query-keys";
 import {
@@ -389,8 +391,15 @@ export function DocumentDetailSheet({
   // not, and both of these routes stay on the caller's own authentication. A
   // delegate would fire two queries that must 403 in order to compute an
   // affordance every branch below already withholds on `canManageDocuments`.
+  // Reading a document with AI follows the `documentAi` capability on
+  // `/api/auth/me` (the operator's "Reading documents" switch, the provider,
+  // the document-reading consent). Unavailable, the actions are simply not
+  // offered and the probe never fires; a missing consent is asked for in
+  // place instead.
+  const documentAi = useAiCapability("documentAi");
+  const coach = useAiCapability("coach");
   const capability = useDocumentAiCapability(
-    canManageDocuments && open && documentId !== null,
+    canManageDocuments && open && documentId !== null && documentAi.available,
   );
   // When auto-read is ON, reading happens automatically on upload — the manual
   // per-document AI action row is redundant and collapses away.
@@ -558,9 +567,12 @@ export function DocumentDetailSheet({
 
   // The affordance gate falls back to the capability probe when the sheet is
   // rendered without the usage-derived props (deep link before usage loads).
-  const aiEnabled = assistAvailable ?? capability.data?.available ?? false;
+  const aiEnabled =
+    documentAi.available &&
+    (assistAvailable ?? capability.data?.available ?? false);
   const indexEnabled =
-    contentIndexEnabled ?? capability.data?.available ?? false;
+    documentAi.available &&
+    (contentIndexEnabled ?? capability.data?.available ?? false);
   const autoReadEnabled = autoRead.data?.documentsAutoAiRead ?? false;
   const aiMode = capability.data?.mode === "text" ? "text" : "vision";
   const aiTarget: DocumentAiTarget | null = doc
@@ -742,7 +754,7 @@ export function DocumentDetailSheet({
                     inside somebody else's record (the shell mounts no drawer
                     there), and `/documents` is a shared-record destination, so
                     this is the Coach button a delegate actually meets. */}
-                {aiEnabled && launch ? (
+                {aiEnabled && coach.available && launch ? (
                   // v1.28.52 (Documents R3) — "Ask the Coach" opens the REAL
                   // coach conversation scoped to this document in the SIDE
                   // DRAWER (the maximize control there expands it to the full
@@ -856,7 +868,11 @@ export function DocumentDetailSheet({
               onGenerate={generateStoredSummary}
             />
 
-            {canManageDocuments && (
+            {canManageDocuments && documentAi.reason === "consent_required" ? (
+              <DocumentReadingConsentPrompt />
+            ) : null}
+
+            {canManageDocuments && documentAi.available && (
               <DocumentAiSection
                 aiEnabled={aiEnabled}
                 autoReadEnabled={autoReadEnabled}
