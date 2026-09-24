@@ -28,6 +28,8 @@ import {
   INBOUND_DOCUMENT_STATUSES,
 } from "@/lib/validations/inbound-documents";
 
+import { aiExtractionRefusals } from "./ai-extraction-refusals";
+import { aiCapabilityState } from "./profile";
 import {
   dataEnvelope,
   errorEnvelope,
@@ -208,7 +210,7 @@ const inboundDocumentDetail = inboundDocument
   .meta({
     id: "InboundDocumentDetail",
     description:
-      'A stored document plus its staged facts. `summary` is a short (3-4 sentence) plain-language description of WHAT the document is, generated once and then served from storage; it is descriptive only, never a diagnosis. `summaryGeneratedAt` is when it was generated (null until then). `summaryState` says what became of it, because a null `summary` on its own is ambiguous: NONE = never attempted (the `documentsAutoAiRead` opt-in was off at upload, or the document predates it — no backfill reaches these), PENDING = a job is enqueued or running, READY = stored and returned in `summary`, WITHHELD = generated but blocked by the outbound safety screen and therefore never returned as text, UNAVAILABLE = attempted and could not produce one (no vision provider, spent budget, withdrawn consent, unreadable file, provider error). Only PENDING may be presented as "being generated"; WITHHELD and UNAVAILABLE are both re-attemptable via POST `/api/documents/inbound/{id}/summary`. Treat an unknown value as UNAVAILABLE when decoding.',
+      'A stored document plus its staged facts. `summary` is a short (3-4 sentence) plain-language description of WHAT the document is, generated once and then served from storage; it is descriptive only, never a diagnosis. `summaryGeneratedAt` is when it was generated (null until then). `summaryState` says what became of it, because a null `summary` on its own is ambiguous: NONE = never attempted (the `documentsAutoAiRead` opt-in was off at upload, reading documents with AI was closed for the record at upload, or the document predates it — no backfill reaches these), PENDING = a job is enqueued or running, READY = stored and returned in `summary`, WITHHELD = generated but blocked by the outbound safety screen and therefore never returned as text, UNAVAILABLE = attempted and could not produce one (no vision provider, spent budget, withdrawn consent, unreadable file, provider error). Only PENDING may be presented as "being generated"; WITHHELD and UNAVAILABLE are both re-attemptable via POST `/api/documents/inbound/{id}/summary`. Treat an unknown value as UNAVAILABLE when decoding.',
   });
 
 const listResponse = z
@@ -440,7 +442,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Documents"],
       summary: "Probe document-AI availability + egress",
       description:
-        'Cheap probe (no provider call) the vault uses to decide the AI transport and whether to warn before a read leaves the machine. Resolved over the DOCUMENT provider order (local-first, ChatGPT-subscription OAuth last), so `mode` / `pdfSupported` / `egress` match exactly what the document AI routes do. `egress` is vendor-blind: `"local"` (a self-hosted model — the document never leaves the operator\'s machine) or `"external"` (a third-party AI service). The vault shows a per-egress notice before any external document read; sending a document to any external provider also requires an active AI-consent receipt.',
+        'Cheap probe (no provider call) the vault uses to decide the AI transport and whether to warn before a read leaves the machine. Resolved over the DOCUMENT provider order (local-first, ChatGPT-subscription OAuth last), so `mode` / `pdfSupported` / `egress` match exactly what the document AI routes do. `egress` is vendor-blind: `"local"` (a self-hosted model — the document never leaves the operator\'s machine) or `"external"` (a third-party AI service). The vault shows a per-egress notice before any external document read; sending a document to any external provider also requires an active `ai_extraction` or `ai_full` consent receipt. `ai` is the `documentAi` capability for the record: when the operator turned reading documents off, the module is off, or the record is somebody else\'s, `available` is false with a null `reason` and `ai.reason` says why. A missing consent receipt leaves the read offered (`ai.reason = "consent_required"`), because the read is where the person is asked for it.',
       responses: {
         "200": {
           description: "Document-AI capability flags + egress class.",
@@ -456,6 +458,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
                       .nullable(),
                     pdfSupported: z.boolean(),
                     egress: z.enum(["local", "external"]).nullable(),
+                    ai: aiCapabilityState,
                   })
                   .meta({ id: "DocumentAiCapability" }),
                 "DocumentAiCapabilityEnvelope",
@@ -492,7 +495,11 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
                         name: z.string(),
                       }),
                     ),
-                    assistAvailable: z.boolean(),
+                    assistAvailable: z
+                      .boolean()
+                      .describe(
+                        "Whether a document read can run for this record now: a provider can serve it and the `documentAi` capability is not closed by the operator, the module or the sharing grant. The same answer as `available` on GET /api/documents/inbound/capability.",
+                      ),
                     contentIndex: z.object({
                       enabled: z.boolean(),
                       indexedCount: z.number(),
@@ -739,7 +746,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Documents"],
       summary: "Extract facts from a stored document",
       description:
-        'Optional AI enhancement on an already-stored document. Runs the dedicated OCR/vision provider over the stored original and stages STRUCTURED FACTS for review. AI-consent / rate / budget gated. With no provider configured this returns 422 (`documents.inbound.providerUnsupported`) — the stored document is untouched, only the enhancement fails. Three modes: VISION (empty body) decrypts and scans the stored original (PDF needs an Anthropic vision provider); TEXT (`application/json`, opt-in local OCR) `{ mode: "text", text }` structures browser-OCR\'d text; STORED (`application/json`) `{ mode: "stored" }` structures the document\'s own stored extracted text (its content index) — the manual recovery for a skipped/failed automatic staging run, 422 `documents.inbound.notIndexed` when no stored text exists. Extraction reproduces what the document states — it never interprets. Nothing reaches the structured stores here; the confirm route is the only write path.',
+        'Optional AI enhancement on an already-stored document. Runs the dedicated OCR/vision provider over the stored original and stages STRUCTURED FACTS for review. Answers under the `documentAi` capability (403 with the capability envelope when it is closed), then rate / budget gated. With no provider configured this returns 422 (`documents.inbound.providerUnsupported`, with `meta.capability` and `meta.reason = "no_provider"`) — the stored document is untouched, only the enhancement fails. Three modes: VISION (empty body) decrypts and scans the stored original (PDF needs an Anthropic vision provider); TEXT (`application/json`, opt-in local OCR) `{ mode: "text", text }` structures browser-OCR\'d text; STORED (`application/json`) `{ mode: "stored" }` structures the document\'s own stored extracted text (its content index) — the manual recovery for a skipped/failed automatic staging run, 422 `documents.inbound.notIndexed` when no stored text exists. Extraction reproduces what the document states — it never interprets. Nothing reaches the structured stores here; the confirm route is the only write path.',
       parameters: [
         {
           name: "id",
@@ -784,6 +791,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             "Re-extraction refused: at least one fact on this document is already APPROVED. `meta.errorCode` = `documents.inbound.alreadyPartlyConfirmed`. Re-extracting would sever committed-record provenance and duplicate committed records, so the user must finish reviewing or discard the document first.",
           content: { "application/json": { schema: errorEnvelope } },
         },
+        ...aiExtractionRefusals("documentAi"),
         ...stdResponses,
       },
     },
@@ -793,7 +801,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Documents"],
       summary: "Suggest filing metadata (drafts only)",
       description:
-        'Optional AI assist on an already-stored document. Runs ONE provider call over the stored original (VISION, empty body) or browser-OCR\'d text (TEXT, `application/json` `{ mode: "text", text }`, opt-in local OCR) and returns a `{ title, kind, documentDate }` DRAFT for the edit form. AI-consent / rate / budget gated (shares the per-user document-AI bucket with extract/summary/index — default 6/hour, operator-tunable via `DOCUMENT_AI_LIMIT_PER_HOUR`; a slot is only consumed when the request reaches the provider, and the 429 carries `Retry-After`, the `X-RateLimit-Limit` / `-Remaining` / `-Reset` triple, and `meta.retryAt`). WRITES NOTHING — never stages facts, never flips status; the user reviews and saves. 422 (`documents.inbound.providerUnsupported`) with no provider configured. Never interprets or diagnoses; the title is a neutral filing label.',
+        'Optional AI assist on an already-stored document. Runs ONE provider call over the stored original (VISION, empty body) or browser-OCR\'d text (TEXT, `application/json` `{ mode: "text", text }`, opt-in local OCR) and returns a `{ title, kind, documentDate }` DRAFT for the edit form. Answers under the `documentAi` capability (403 with the capability envelope when it is closed), then rate / budget gated (shares the per-user document-AI bucket with extract/summary/index — default 6/hour, operator-tunable via `DOCUMENT_AI_LIMIT_PER_HOUR`; a slot is only consumed when the request reaches the provider, and the 429 carries `Retry-After`, the `X-RateLimit-Limit` / `-Remaining` / `-Reset` triple, and `meta.retryAt`). WRITES NOTHING — never stages facts, never flips status; the user reviews and saves. 422 (`documents.inbound.providerUnsupported`) with no provider configured. Never interprets or diagnoses; the title is a neutral filing label.',
       parameters: [
         { name: "id", in: "path", required: true, schema: { type: "string" } },
       ],
@@ -829,6 +837,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
+        ...aiExtractionRefusals("documentAi"),
         ...stdResponses,
       },
     },
@@ -838,7 +847,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Documents"],
       summary: "Summarise or transcribe a document",
       description:
-        'On-demand description of a stored document. `?mode=summary` (default) returns a short plain-language summary of WHAT the document is; it remains transient unless `persist=true` fills the empty stored-summary slot, while `persist=true&replace=true` explicitly replaces an existing summary. `?mode=text` returns transient raw transcribed text. Neither result reaches coach memory, snapshots, structured stores, or the search index. The summary is descriptive only and never a diagnosis. Same VISION (empty body) / TEXT (`application/json` `{ mode: "text", text }`, opt-in local OCR) dispatch as extract. AI-consent / rate / budget gated. 422 with no provider.',
+        'On-demand description of a stored document. `?mode=summary` (default) returns a short plain-language summary of WHAT the document is; it remains transient unless `persist=true` fills the empty stored-summary slot, while `persist=true&replace=true` explicitly replaces an existing summary. `?mode=text` returns transient raw transcribed text. Neither result reaches coach memory, snapshots, structured stores, or the search index. The summary is descriptive only and never a diagnosis. Same VISION (empty body) / TEXT (`application/json` `{ mode: "text", text }`, opt-in local OCR) dispatch as extract. Answers under the `documentAi` capability (403 with the capability envelope when it is closed), then rate / budget gated. 422 `documents.inbound.providerUnsupported` with no provider.',
       parameters: [
         { name: "id", in: "path", required: true, schema: { type: "string" } },
         {
@@ -903,6 +912,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
+        ...aiExtractionRefusals("documentAi"),
         ...stdResponses,
       },
     },
@@ -912,7 +922,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Documents"],
       summary: "Build / refresh the content-search index",
       description:
-        "Populates or refreshes one document's content-search index so search matches INSIDE its body. VISION (empty body) decrypts the stored original and runs one provider transcription (AI-consent / rate / budget gated); TEXT (`application/json` `{ mode: \"text\", text }`, opt-in local OCR) indexes browser-OCR'd text with no provider egress. Persists ONLY AES-256-GCM ciphertext of the text plus opaque HMAC token hashes — no plaintext body, no plaintext token. Gated on the existing AI consent (no separate per-user toggle). Idempotent; re-indexing overwrites in place. A successful index continues into the same lab auto-staging the background worker performs (still-STORED lab-looking document with no facts, both modules on, provider + consent eligible); `labFactsStaged` reports how many facts were staged PENDING for review — confirmation stays the only write into Labs.",
+        "Populates or refreshes one document's content-search index so search matches INSIDE its body. VISION (empty body) decrypts the stored original and runs one provider transcription (answers under the `documentAi` capability — 403 with the capability envelope when it is closed, including a missing `ai_extraction` / `ai_full` receipt for a provider that leaves the machine — then rate / budget gated); TEXT (`application/json` `{ mode: \"text\", text }`, opt-in local OCR) indexes browser-OCR'd text with no provider egress and stays available with AI off, so search keeps working. Persists ONLY AES-256-GCM ciphertext of the text plus opaque HMAC token hashes — no plaintext body, no plaintext token. Idempotent; re-indexing overwrites in place. A successful index continues into the same lab auto-staging the background worker performs (still-STORED lab-looking document with no facts, both modules on, provider + consent eligible); `labFactsStaged` reports how many facts were staged PENDING for review — confirmation stays the only write into Labs.",
       parameters: [
         { name: "id", in: "path", required: true, schema: { type: "string" } },
       ],
@@ -951,6 +961,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
+        ...aiExtractionRefusals("documentAi"),
         ...stdResponses,
       },
     },
@@ -960,7 +971,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Documents"],
       summary: "Chat about a document (streaming reply)",
       description:
-        "v1.27.33 — sends a user turn and streams a grounded prose reply about ONE stored document as Server-Sent Events (`text/event-stream`, not JSON: one `data: <json>\\n\\n` frame per event). Frame `type` is `token` (a chunk of reply text), `done` (`{ type, conversationId, messageId, usage? }`), or `error` (`{ type, code, message }`); HTTP status is 200 even for a provider/refusal outcome (dispatch on the `error` frame). The reply is grounded ONLY in the document's indexed text — NO health snapshot, NO tools, NO other document. The document text is fenced as untrusted DATA (prompt-injection defence); the inbound message + every prior turn are injection-screened and the reply is dose/risk-screened + numerically grounded against the document's own figures. Available only for a content-indexed document (422 `documents.inbound.notIndexed` otherwise). AI-consent-gated (403 `consent.ai.required` for an external provider), budget- and rate-limited. Omitting `conversationId` starts a new thread. Renders as plain text on the client (no markdown). Auth via cookie or Bearer.",
+        "v1.27.33 — sends a user turn and streams a grounded prose reply about ONE stored document as Server-Sent Events (`text/event-stream`, not JSON: one `data: <json>\\n\\n` frame per event). Frame `type` is `token` (a chunk of reply text), `done` (`{ type, conversationId, messageId, usage? }`), or `error` (`{ type, code, message }`); HTTP status is 200 even for a provider/refusal outcome (dispatch on the `error` frame). The reply is grounded ONLY in the document's indexed text — NO health snapshot, NO tools, NO other document. The document text is fenced as untrusted DATA (prompt-injection defence); the inbound message + every prior turn are injection-screened and the reply is dose/risk-screened + numerically grounded against the document's own figures. Available only for a content-indexed document (422 `documents.inbound.notIndexed` otherwise). Answers under the `documentAi` capability (403 with the capability envelope when it is closed; `consent.ai.required` for a provider that leaves the machine without an `ai_extraction` / `ai_full` receipt), budget- and rate-limited; no provider is the `documents.chat.provider.none` error frame. Reading the history (GET) stays available whatever the capability says. Omitting `conversationId` starts a new thread. Renders as plain text on the client (no markdown). Auth via cookie or Bearer.",
       parameters: [
         { name: "id", in: "path", required: true, schema: { type: "string" } },
       ],
@@ -984,11 +995,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        "403": {
-          description:
-            "AI consent required for an external provider (`errorCode: consent.ai.required`).",
-          content: { "application/json": { schema: errorEnvelope } },
-        },
+        ...aiExtractionRefusals("documentAi"),
         ...stdResponses,
       },
     },
@@ -1044,7 +1051,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Documents"],
       summary: "Index all documents for content search",
       description:
-        "Enqueues a background job that content-indexes the caller's not-yet-indexed documents (one provider transcription each, bounded + resumable). Gated on the module, a configured vision provider (422 `documents.inbound.providerUnsupported` otherwise), and the existing AI consent (403 otherwise). Returns immediately; the work runs off-request on the queue.",
+        "Enqueues a background job that content-indexes the caller's not-yet-indexed documents (one provider transcription each, bounded + resumable). Gated on the module, the `documentAi` capability (403 with the capability envelope), a configured vision provider (422 `documents.inbound.providerUnsupported` otherwise), and an `ai_extraction` / `ai_full` consent receipt when that provider leaves the machine (403 `consent.ai.required`). Returns immediately; the work runs off-request on the queue, which re-checks the capability before every read.",
       responses: {
         "200": {
           description:
@@ -1060,6 +1067,7 @@ export const inboundDocumentPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
+        ...aiExtractionRefusals("documentAi"),
         ...stdResponses,
       },
     },

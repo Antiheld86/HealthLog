@@ -12,13 +12,27 @@ vi.mock("@/lib/labs/ocr-capability", () => ({
   resolveVisionProvider: vi.fn(),
   resolveTextProvider: vi.fn(),
 }));
+vi.mock("@/lib/ai/capabilities/egress", () => ({
+  aiEgressRefusal: vi.fn(),
+}));
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  getAiCapability: vi.fn(),
+}));
 
 import {
   documentEgressClass,
   reorderChainForDocumentClass,
+  requireDocumentTextProvider,
+  requireDocumentVisionProvider,
+  resolveDocumentAiCapability,
+  resolveDocumentTextProvider,
   resolveDocumentVisionProvider,
 } from "../provider-order";
+import { aiEgressRefusal } from "@/lib/ai/capabilities/egress";
+import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import { AiUnavailableError } from "@/lib/ai/capabilities/refusal";
 import {
+  resolveTextProvider,
   resolveVisionProvider,
   type VisionProviderPick,
 } from "@/lib/labs/ocr-capability";
@@ -103,7 +117,11 @@ describe("documentEgressClass", () => {
 });
 
 describe("resolveDocumentVisionProvider", () => {
-  beforeEach(() => vi.mocked(resolveVisionProvider).mockReset());
+  beforeEach(() => {
+    vi.mocked(resolveVisionProvider).mockReset();
+    vi.mocked(aiEgressRefusal).mockReset();
+    vi.mocked(aiEgressRefusal).mockResolvedValue(null);
+  });
 
   it("invokes the shared resolver with the document reorder that demotes codex", async () => {
     vi.mocked(resolveVisionProvider).mockResolvedValue({
@@ -122,5 +140,154 @@ describe("resolveDocumentVisionProvider", () => {
     expect(
       reorder([entry("codex"), entry("local")]).map((e) => e.providerType),
     ).toEqual(["local", "codex"]);
+  });
+});
+
+function visionPick(providerType: string): VisionProviderPick {
+  return {
+    chain: [entry(providerType)],
+    localOcrEnabled: false,
+    pick: {
+      entry: entry(providerType),
+      providerType: providerType as never,
+      pdfSupported: false,
+    },
+  };
+}
+
+describe("the document pick re-checks documentAi at the wire", () => {
+  beforeEach(() => {
+    vi.mocked(resolveVisionProvider).mockReset();
+    vi.mocked(resolveTextProvider).mockReset();
+    vi.mocked(aiEgressRefusal).mockReset();
+    vi.mocked(aiEgressRefusal).mockResolvedValue(null);
+  });
+
+  it("asks about the picked provider, under documentAi", async () => {
+    vi.mocked(resolveVisionProvider).mockResolvedValue(visionPick("openai"));
+    const result = await resolveDocumentVisionProvider("u1");
+    expect(aiEgressRefusal).toHaveBeenCalledWith("documentAi", "u1", [
+      "openai",
+    ]);
+    expect(result.pick?.providerType).toBe("openai");
+    expect(result.withheld).toBeNull();
+  });
+
+  it("withholds the pick when the capability closed after the route answered", async () => {
+    // A job enqueued before the operator turned the switch off: the pick is
+    // resolved, and the wire says no. The caller sees no provider to call.
+    const refusal = new AiUnavailableError("documentAi", "operator_disabled");
+    vi.mocked(resolveVisionProvider).mockResolvedValue(visionPick("local"));
+    vi.mocked(aiEgressRefusal).mockResolvedValue(refusal);
+    const result = await resolveDocumentVisionProvider("u1");
+    expect(result.pick).toBeNull();
+    expect(result.withheld).toBe(refusal);
+  });
+
+  it("withholds a text-mode pick the same way", async () => {
+    const refusal = new AiUnavailableError("documentAi", "consent_required");
+    vi.mocked(resolveTextProvider).mockResolvedValue({
+      chain: [entry("codex")],
+      pick: { entry: entry("codex"), providerType: "codex" },
+    });
+    vi.mocked(aiEgressRefusal).mockResolvedValue(refusal);
+    const result = await resolveDocumentTextProvider("u1");
+    expect(aiEgressRefusal).toHaveBeenCalledWith("documentAi", "u1", ["codex"]);
+    expect(result.pick).toBeNull();
+    expect(result.withheld).toBe(refusal);
+  });
+
+  it("does not ask when nothing was picked", async () => {
+    vi.mocked(resolveVisionProvider).mockResolvedValue({
+      chain: [],
+      localOcrEnabled: false,
+      pick: null,
+    });
+    const result = await resolveDocumentVisionProvider("u1");
+    expect(aiEgressRefusal).not.toHaveBeenCalled();
+    expect(result.withheld).toBeNull();
+  });
+
+  it("the route form throws the refusal", async () => {
+    const refusal = new AiUnavailableError("documentAi", "operator_disabled");
+    vi.mocked(resolveVisionProvider).mockResolvedValue(visionPick("local"));
+    vi.mocked(aiEgressRefusal).mockResolvedValue(refusal);
+    await expect(requireDocumentVisionProvider("u1")).rejects.toBe(refusal);
+  });
+
+  it("the route form refuses a missing provider with the vault's own code", async () => {
+    vi.mocked(resolveTextProvider).mockResolvedValue({ chain: [], pick: null });
+    const error = await requireDocumentTextProvider("u1").catch((e) => e);
+    expect(error).toBeInstanceOf(AiUnavailableError);
+    expect(error.status).toBe(422);
+    expect(error.meta).toEqual({
+      errorCode: "documents.inbound.providerUnsupported",
+      capability: "documentAi",
+      reason: "no_provider",
+    });
+  });
+});
+
+describe("resolveDocumentAiCapability", () => {
+  beforeEach(() => {
+    vi.mocked(resolveVisionProvider).mockReset();
+    vi.mocked(aiEgressRefusal).mockReset();
+    vi.mocked(getAiCapability).mockReset();
+  });
+
+  it("reports the capability beside the provider answer", async () => {
+    vi.mocked(resolveVisionProvider).mockResolvedValue(visionPick("local"));
+    vi.mocked(getAiCapability).mockResolvedValue({
+      available: true,
+      reason: null,
+      onDeviceAllowed: true,
+    });
+    const dto = await resolveDocumentAiCapability("u1");
+    expect(dto).toMatchObject({
+      available: true,
+      mode: "vision",
+      egress: "local",
+      ai: { available: true, reason: null },
+    });
+    // A probe never runs the wire re-check: it sends nothing.
+    expect(aiEgressRefusal).not.toHaveBeenCalled();
+  });
+
+  it("is unavailable when the operator turned document reading off", async () => {
+    vi.mocked(resolveVisionProvider).mockResolvedValue(visionPick("local"));
+    vi.mocked(getAiCapability).mockResolvedValue({
+      available: false,
+      reason: "operator_disabled",
+      onDeviceAllowed: false,
+    });
+    const dto = await resolveDocumentAiCapability("u1");
+    expect(dto).toEqual({
+      available: false,
+      mode: null,
+      reason: null,
+      pdfSupported: false,
+      egress: null,
+      ai: {
+        available: false,
+        reason: "operator_disabled",
+        onDeviceAllowed: false,
+      },
+    });
+  });
+
+  it("stays available when only a consent receipt is missing, so the read can ask for it", async () => {
+    vi.mocked(resolveVisionProvider).mockResolvedValue(visionPick("openai"));
+    vi.mocked(getAiCapability).mockResolvedValue({
+      available: false,
+      reason: "consent_required",
+      onDeviceAllowed: true,
+    });
+    const dto = await resolveDocumentAiCapability("u1");
+    expect(dto).toMatchObject({
+      available: true,
+      mode: "vision",
+      egress: "external",
+      ai: { reason: "consent_required" },
+    });
   });
 });

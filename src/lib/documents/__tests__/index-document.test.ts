@@ -53,6 +53,7 @@ vi.mock("@/lib/ai/ai-budgets", () => ({
 }));
 
 import { indexDocumentContent } from "../index-document";
+import { AiUnavailableError } from "@/lib/ai/capabilities/refusal";
 import {
   loadOwnedDocument,
   prepareVisionInput,
@@ -256,6 +257,26 @@ describe("indexDocumentContent — local fallback path", () => {
     const outcome = await indexDocumentContent("user-1", "doc-1");
     expect(outcome).toEqual({ indexed: false, reason: "local-empty" });
     expect(upsertContentIndex).not.toHaveBeenCalled();
+  });
+});
+
+describe("indexDocumentContent — the documentAi capability", () => {
+  it("indexes through the provider-free text layer when the pick was withheld", async () => {
+    // The operator turned document reading off after the upload enqueued this
+    // job: the pick comes back empty with the refusal beside it, no model is
+    // called, and the text layer still makes the document searchable.
+    vi.mocked(resolveDocumentVisionProvider).mockResolvedValue({
+      chain: [],
+      pick: null,
+      withheld: new AiUnavailableError("documentAi", "operator_disabled"),
+    } as never);
+
+    const outcome = await indexDocumentContent("user-1", "doc-1");
+
+    expect(transcribeDocument).not.toHaveBeenCalled();
+    expect(reserveBudget).not.toHaveBeenCalled();
+    expect(localExtractText).toHaveBeenCalledTimes(1);
+    expect(outcome).toMatchObject({ indexed: true });
   });
 });
 

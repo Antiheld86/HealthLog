@@ -20,11 +20,10 @@ vi.mock("@/lib/jobs/document-content-index-backfill", () => ({
   enqueueContentIndexBackfill: vi.fn(),
 }));
 vi.mock("@/lib/documents/provider-order", () => ({
-  resolveDocumentVisionProvider: vi.fn(),
+  requireDocumentVisionProvider: vi.fn(),
 }));
-vi.mock("@/lib/ai/consent-guard", () => ({
-  assertDocumentEgressConsent: vi.fn().mockResolvedValue(undefined),
-  ConsentRequiredError: class ConsentRequiredError extends Error {},
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  requireAiCapability: vi.fn(),
 }));
 vi.mock("@/lib/modules/gate", () => ({
   requireModuleEnabled: vi.fn().mockResolvedValue({ enabled: true }),
@@ -54,7 +53,9 @@ import { POST } from "../route";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { enqueueContentIndexBackfill } from "@/lib/jobs/document-content-index-backfill";
-import { resolveDocumentVisionProvider } from "@/lib/documents/provider-order";
+import { requireDocumentVisionProvider } from "@/lib/documents/provider-order";
+import { requireAiCapability } from "@/lib/ai/capabilities/gate";
+import { AiUnavailableError } from "@/lib/ai/capabilities/refusal";
 
 const SESSION_OK = {
   session: { id: "s1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -78,7 +79,14 @@ const req = () =>
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
-  vi.mocked(resolveDocumentVisionProvider).mockResolvedValue(PICK as never);
+  vi.mocked(requireAiCapability).mockResolvedValue({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  });
+  vi.mocked(requireDocumentVisionProvider).mockResolvedValue(
+    PICK.pick as never,
+  );
   vi.mocked(enqueueContentIndexBackfill).mockResolvedValue({ enqueued: true });
   // 7 live documents, 4 already indexed → 3 remain.
   vi.mocked(prisma.inboundDocument.count).mockResolvedValue(7 as never);
@@ -112,5 +120,38 @@ describe("POST /api/documents/inbound/reindex", () => {
     expect(prisma.documentContentIndex.count).toHaveBeenCalledWith({
       where: { userId: "user-1", document: { deletedAt: null } },
     });
+  });
+});
+
+describe("POST /api/documents/inbound/reindex — the documentAi capability", () => {
+  it("answers the capability envelope and enqueues nothing when document reading is off", async () => {
+    vi.mocked(requireAiCapability).mockRejectedValue(
+      new AiUnavailableError("documentAi", "operator_disabled"),
+    );
+    const res = await POST(req() as never);
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.meta).toEqual({
+      errorCode: "assistant.disabled.documentAi",
+      capability: "documentAi",
+      reason: "operator_disabled",
+    });
+    expect(requireAiCapability).toHaveBeenCalledWith("documentAi", {
+      pickDecides: true,
+    });
+    expect(enqueueContentIndexBackfill).not.toHaveBeenCalled();
+  });
+
+  it("keeps the vault's own code when no provider can read documents", async () => {
+    vi.mocked(requireDocumentVisionProvider).mockRejectedValue(
+      new AiUnavailableError("documentAi", "no_provider", null, {
+        errorCode: "documents.inbound.providerUnsupported",
+      }),
+    );
+    const res = await POST(req() as never);
+    expect(res.status).toBe(422);
+    const body = await res.json();
+    expect(body.meta.errorCode).toBe("documents.inbound.providerUnsupported");
+    expect(enqueueContentIndexBackfill).not.toHaveBeenCalled();
   });
 });

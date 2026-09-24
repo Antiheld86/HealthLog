@@ -1044,7 +1044,7 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Auth"],
       summary: "Probe the AI provider connection",
       description:
-        "Sends a tiny fixed prompt to the resolved provider and reports whether it answered. The body is OPTIONAL: with no body the saved configuration is tested; with one, the unsaved selection is tested without touching the user row, so the settings surface can verify a credential before persisting it. Plaintext keys sent this way are never stored.\n\n**This route never returns 5xx, and that is deliberate.** A 5xx from the origin is rewritten to an HTML error page by a reverse proxy or CDN, and the client's `res.json()` then dies on `<!DOCTYPE`. So a provider failure comes back as **200 with `ok: false`** plus a categorised, secret-free `reasonCode`. Branch on `ok`, not on the status. The provider's own error text and body excerpt are logged for the operator and never put on the wire.\n\nThe probe is metered on the same daily AI budget every other AI surface writes to, because with an empty body it can resolve the OPERATOR's shared key — unmetered, that would be invisible spend on a surface that exists to answer 'are my settings right?'. A probe that fails is refunded.\n\nTwo ceilings: 5 per minute and 50 per day, per user.",
+        "Sends a tiny fixed prompt to the resolved provider and reports whether it answered. The body is OPTIONAL: with no body the saved configuration is tested; with one, the unsaved selection is tested without touching the user row, so the settings surface can verify a credential before persisting it. Plaintext keys sent this way are never stored.\n\n**This route never returns 5xx, and that is deliberate.** A 5xx from the origin is rewritten to an HTML error page by a reverse proxy or CDN, and the client's `res.json()` then dies on `<!DOCTYPE`. So a provider failure comes back as **200 with `ok: false`** plus a categorised, secret-free `reasonCode`. Branch on `ok`, not on the status. The provider's own error text and body excerpt are logged for the operator and never put on the wire.\n\nThe probe is metered on the same daily AI budget every other AI surface writes to, because with an empty body it can resolve the OPERATOR's shared key — unmetered, that would be invisible spend on a surface that exists to answer 'are my settings right?'. A probe that fails is refunded.\n\nTwo ceilings: 5 per minute and 50 per day, per user.\n\nWith the operator\'s master AI switch off the probe is refused (403 `assistant.disabled.enabled`, `meta.reason = \"operator_disabled\"`): no AI call leaves the server then, and this is an AI call. When the switches cannot be read the answer fails closed with 403 `ai.unavailable` (`meta.reason = \"check_failed\"`) rather than the usual 503, for the no-5xx reason above.",
       requestBody: {
         required: false,
         content: { "application/json": { schema: aiTestRequest } },
@@ -1059,6 +1059,11 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
+        "403": {
+          description:
+            'The operator\'s master AI switch is off (`meta.errorCode = "assistant.disabled.enabled"`), or the switches could not be read (`ai.unavailable`). Nothing was sent.',
+          content: { "application/json": { schema: errorEnvelope } },
+        },
         "413": {
           description: "Body exceeds 64 KiB.",
           content: { "application/json": { schema: errorEnvelope } },
@@ -1071,12 +1076,12 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
         ...stdResponses,
         "422": {
           description:
-            "Nothing could be probed. Either the override body failed validation, or the resolved configuration is not usable — no provider selected, a required key or base URL missing, a model name missing for the gateway, ChatGPT OAuth not connected, or a base URL pointing at an internal host. The message names which.",
+            'Nothing could be probed. Either the override body failed validation, or the resolved configuration is not usable — no provider selected, a required key or base URL missing, a model name missing for the gateway, ChatGPT OAuth not connected, or a base URL pointing at an internal host. The message names which; a resolved configuration with no provider at all carries `meta.errorCode = "ai.provider.none"`.',
           content: { "application/json": { schema: errorEnvelope } },
         },
         "429": {
           description:
-            "One of three ceilings: 5 probes per minute, 50 per day, or the account's daily AI token budget is exhausted. The message distinguishes them.",
+            'One of three ceilings: 5 probes per minute, 50 per day, or the account\'s daily AI token budget is exhausted. The message distinguishes them; the budget refusal also carries `meta.errorCode = "ai.budget.exceeded"`.',
           content: { "application/json": { schema: errorEnvelope } },
         },
       },
@@ -1820,7 +1825,7 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Set the automatic document-reading opt-in",
       description:
         "Hard-set, idempotent, audit-logged. Rate-limited 60 / min per user.\n\n" +
-        "Turning it ON does two further things a caller should expect. It is itself the standing consent act, so the write appends an `ai_full` `ConsentReceipt` — the same receipt POST /api/consent/ai/web mints, and one DELETE /api/consent/ai/latest revokes without touching this flag. And a genuine OFF→ON flip schedules a bounded catch-up over the documents already in the vault, because the summary job is enqueued at upload time and would otherwise only ever apply to future uploads. The catch-up is fire-and-forget and re-runs every consent and budget gate per document.\n\n" +
+        "Turning it ON does two further things a caller should expect. It is itself the standing consent act, so the write appends an `ai_extraction` `ConsentReceipt` unless one that covers document reads (`ai_extraction` or `ai_full`) is already active. The receipt covers reading documents, lab reports and medication text and nothing else: the Coach and the AI analysis keep asking for their own consent (earlier releases minted `ai_full` here, and those receipts stay valid). DELETE /api/consent/ai/latest?kind=ai_extraction revokes it without touching this flag. And a genuine OFF→ON flip schedules a bounded catch-up over the documents already in the vault, because the summary job is enqueued at upload time and would otherwise only ever apply to future uploads; it is skipped while the `documentAi` capability is closed for the record. The catch-up is fire-and-forget and re-runs every consent and budget gate per document.\n\n" +
         "The body cap here is 1 KB, far tighter than the 64 KB its siblings allow — a payload above it is refused with 413 rather than parsed.",
       requestBody: {
         required: true,

@@ -9,11 +9,19 @@
  * one place) and pair each surviving entry with the model that drives its
  * vision allowlist.
  */
+import { aiEgressRefusal } from "@/lib/ai/capabilities/egress";
+import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import {
+  AiUnavailableError,
+  type NoProviderRefusal,
+} from "@/lib/ai/capabilities/refusal";
+import { PICK_DECIDED_REASONS } from "@/lib/ai/capabilities/types";
 import type { ProviderChainResolved } from "@/lib/ai/provider-runner";
 import { resolveProvider, resolveProviderChain } from "@/lib/ai/provider";
 import { resolveCodexVisionSlug } from "@/lib/ai/codex-client";
 import { RASTERIZATION_AVAILABLE } from "@/lib/documents/rasterize-pdf";
 import { prisma } from "@/lib/db";
+import { annotate } from "@/lib/logging/context";
 import {
   supportsPdfForProvider,
   supportsVisionForConfig,
@@ -168,19 +176,90 @@ export async function resolveTextProvider(
 }
 
 /**
+ * How a lab scan refuses with no provider that can serve it. The code predates
+ * the capability envelope and a client already branches on it.
+ */
+export const LABS_OCR_NO_PROVIDER: NoProviderRefusal = {
+  errorCode: "labs.ocr.providerUnsupported",
+  status: 422,
+};
+
+/**
+ * The labs scan's wire. Resolve the provider for one scan mode and ask the
+ * `labsOcr` capability again about exactly that provider, immediately before
+ * the report is sent: the operator's switch, the labs module, the sharing
+ * grant, and a document-class consent receipt for any pick that leaves the
+ * machine (a lab report is a document). Throws the refusal for `apiHandler`
+ * to render; a missing provider keeps its `labs.ocr.providerUnsupported` code.
+ *
+ * Vision mode picks the first vision-capable entry in chain order; text mode
+ * (the person's in-browser OCR) takes the chain head, which is why the pick,
+ * not the published capability, answers the consent question.
+ */
+export async function requireLabsOcrProvider(
+  userId: string,
+  mode: "vision",
+): Promise<NonNullable<VisionProviderPick["pick"]>>;
+export async function requireLabsOcrProvider(
+  userId: string,
+  mode: "text",
+): Promise<{ entry: ProviderChainResolved; providerType: string }>;
+export async function requireLabsOcrProvider(
+  userId: string,
+  mode: "vision" | "text",
+) {
+  const { chain, pick } =
+    mode === "vision"
+      ? await resolveVisionProvider(userId)
+      : await resolveTextProvider(userId);
+  if (!pick) {
+    annotate({
+      action: { name: "labs.ocr.providerUnsupported" },
+      meta: {
+        chainLength: chain.length,
+        ...(mode === "text" ? { mode } : {}),
+      },
+    });
+    throw new AiUnavailableError(
+      "labsOcr",
+      "no_provider",
+      null,
+      LABS_OCR_NO_PROVIDER,
+    );
+  }
+  const refusal = await aiEgressRefusal("labsOcr", userId, [pick.providerType]);
+  if (refusal) throw refusal;
+  return pick;
+}
+
+/**
  * The cheap capability DTO for the probe endpoint: whether scanning is
  * available + why not + whether PDFs are accepted. Built from the same
  * resolution the extract route uses, so the UI never shows an entry the
  * extract route would 422.
+ *
+ * `ai` is the `labsOcr` capability for the request's record. A scan the
+ * operator, the labs module or the sharing grant close is not offered
+ * (`available: false`, no mode). A missing consent receipt keeps the scan
+ * offered: the scan is where the person is asked for the receipt.
  */
 export async function resolveOcrCapability(
   userId: string,
-  options?: ResolveProviderOptions,
 ): Promise<OcrCapabilityDto> {
-  const { chain, pick, localOcrEnabled } = await resolveVisionProvider(
-    userId,
-    options,
-  );
+  const [{ chain, pick, localOcrEnabled }, ai] = await Promise.all([
+    resolveVisionProvider(userId),
+    getAiCapability("labsOcr"),
+  ]);
+
+  if (ai.reason !== null && !PICK_DECIDED_REASONS.has(ai.reason)) {
+    return {
+      available: false,
+      mode: null,
+      reason: null,
+      pdfSupported: false,
+      ai,
+    };
+  }
 
   // Prefer the native vision path whenever it is available — it is more
   // accurate and the client does not download the OCR WASM. PDFs are readable
@@ -195,6 +274,7 @@ export async function resolveOcrCapability(
       mode: "vision",
       reason: null,
       pdfSupported: pick.pdfSupported || RASTERIZATION_AVAILABLE,
+      ai,
     };
   }
 
@@ -206,6 +286,7 @@ export async function resolveOcrCapability(
       mode: null,
       reason: "no-provider",
       pdfSupported: false,
+      ai,
     };
   }
 
@@ -219,6 +300,7 @@ export async function resolveOcrCapability(
       mode: "text",
       reason: null,
       pdfSupported: false,
+      ai,
     };
   }
 
@@ -229,5 +311,6 @@ export async function resolveOcrCapability(
     mode: null,
     reason: "enable-local-ocr",
     pdfSupported: false,
+    ai,
   };
 }

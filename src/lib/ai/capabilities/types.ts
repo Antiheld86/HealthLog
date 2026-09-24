@@ -85,6 +85,15 @@ export const ON_DEVICE_ALLOWED_REASONS: ReadonlySet<AiUnavailableReason> =
   new Set<AiUnavailableReason>(["no_provider", "consent_required"]);
 
 /**
+ * The reasons a route's own provider pick answers exactly: whether there is a
+ * provider, and whether sending to it needs a receipt. The resolver answers
+ * both from presence, which is right for the published payload; a route that
+ * reads the chain in its own order asks again about the provider it picked.
+ */
+export const PICK_DECIDED_REASONS: ReadonlySet<AiUnavailableReason> =
+  new Set<AiUnavailableReason>(["no_provider", "consent_required"]);
+
+/**
  * The operator's assistant switches below the master. Each maps to a cost or
  * egress profile an operator can reason about: the Coach, the daily briefing
  * and period narratives, per-reading status notes (the dominant token spend),

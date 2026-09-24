@@ -26,6 +26,8 @@
  */
 import { z } from "zod/v4";
 
+import type { AiCapabilityState } from "@/lib/ai/capabilities/types";
+
 /** Max facts a single document may stage / confirm. A dense letter is ~40. */
 export const INBOUND_MAX_FACTS = 120;
 
@@ -840,6 +842,12 @@ export interface DocumentAiCapabilityDto {
    *   - null:       no read is available (see `reason`).
    */
   egress: DocumentEgressClass | null;
+  /**
+   * The `documentAi` capability for this record. When it is closed by
+   * anything other than a missing provider or a missing consent receipt,
+   * `available` is false with a null `reason`, and this says why.
+   */
+  ai: AiCapabilityState;
 }
 
 // ─── AI assist / summary / index (Document vault P2) ────────────────────────

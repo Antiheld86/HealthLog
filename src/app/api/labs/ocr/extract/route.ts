@@ -18,7 +18,10 @@
  *     `labsLocalOcrEnabled` preference.
  *
  * Guards mirror the Coach's discipline in both modes:
- *   requireAuth → resolve provider → assertConsentForChain → rate-limit
+ *   requireAuth → requireAiCapability("labsOcr") → resolve provider and
+ *   re-check the capability for that pick (`requireLabsOcrProvider`: the
+ *   operator's switch, the labs module, and a document consent receipt for a
+ *   pick that leaves the machine) → rate-limit
  *   (`LABS_OCR_LIMIT_PER_HOUR`, default 6/h) → reserveBudget → run extraction
  *   → reconcile budget. A slot is charged early so a 429 stays cheap, and it is
  *   handed back when the scan fails before the provider is called.
@@ -38,7 +41,7 @@ import {
   sanitiseZodIssues,
 } from "@/lib/api-response";
 import { AI_BUDGETS } from "@/lib/ai/ai-budgets";
-import { assertConsentForChain } from "@/lib/ai/consent-guard";
+import { requireAiCapability } from "@/lib/ai/capabilities/gate";
 import {
   buildDateKey,
   reconcileSpend,
@@ -48,10 +51,7 @@ import {
 } from "@/lib/ai/coach/budget";
 import { prisma } from "@/lib/db";
 import { rasterizePdf } from "@/lib/documents/rasterize-pdf";
-import {
-  resolveTextProvider,
-  resolveVisionProvider,
-} from "@/lib/labs/ocr-capability";
+import { requireLabsOcrProvider } from "@/lib/labs/ocr-capability";
 import { OcrExtractError, runOcrExtraction } from "@/lib/labs/ocr-extract";
 import {
   BodyTooLargeError,
@@ -94,6 +94,11 @@ function providerFailureMeta(error: unknown, mode?: "text") {
 export const POST = apiHandler(async (request: Request) => {
   const { user } = await requireAuth();
 
+  // Reading a lab report is model work in both modes: vision sends the image,
+  // text mode sends what the browser read off it. The provider and the consent
+  // receipt are answered by the pick below, for the provider actually used.
+  await requireAiCapability("labsOcr", { pickDecides: true });
+
   // Dispatch on the body shape: a JSON body is the local-OCR text mode; a
   // multipart body is the native-vision image/PDF mode.
   const contentType = request.headers.get("content-type") ?? "";
@@ -124,21 +129,10 @@ async function handleTextExtract(
     });
   }
 
-  // Any configured provider can structure the text.
-  const { chain, pick } = await resolveTextProvider(userId);
-  if (!pick) {
-    annotate({
-      action: { name: "labs.ocr.providerUnsupported" },
-      meta: { chainLength: chain.length, mode: "text" },
-    });
-    return apiError("No AI provider is configured", 422, {
-      errorCode: "labs.ocr.providerUnsupported",
-    });
-  }
-
-  // Consent gate — only the server-managed key trips this; BYOK / local / codex
-  // egress is the user's own act (the toggle is the consent for local OCR).
-  await assertConsentForChain({ userId, chain, surface: "insights" });
+  // Any configured provider can structure the text. The pick is re-checked
+  // against `labsOcr` for exactly that provider; one that leaves the machine
+  // needs a document consent receipt.
+  const pick = await requireLabsOcrProvider(userId, "text");
 
   const rl = await checkLabsOcrRateLimit(userId);
   if (!rl.allowed) {
@@ -244,20 +238,9 @@ async function handleVisionExtract(
   request: Request,
   userId: string,
 ): Promise<Response> {
-  // 1. Resolve a vision-capable provider. 422 when none is configured.
-  const { chain, pick } = await resolveVisionProvider(userId);
-  if (!pick) {
-    annotate({
-      action: { name: "labs.ocr.providerUnsupported" },
-      meta: { chainLength: chain.length },
-    });
-    return apiError("No vision-capable AI provider is configured", 422, {
-      errorCode: "labs.ocr.providerUnsupported",
-    });
-  }
-
-  // 2. Consent gate — server-managed egress of health data requires a receipt.
-  await assertConsentForChain({ userId, chain, surface: "insights" });
+  // 1-2. Resolve a vision-capable provider (422 when none is configured) and
+  // re-check `labsOcr` for it, consent receipt included.
+  const pick = await requireLabsOcrProvider(userId, "vision");
 
   // 3. Rate-limit (vision calls are costly).
   const rl = await checkLabsOcrRateLimit(userId);

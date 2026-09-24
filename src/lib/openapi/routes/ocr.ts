@@ -17,6 +17,8 @@ import { z } from "zod/v4";
 
 import { ocrCommitSchema } from "@/lib/validations/labs-ocr";
 
+import { aiExtractionRefusals } from "./ai-extraction-refusals";
+import { aiCapabilityState } from "./profile";
 import {
   dataEnvelope,
   idempotencyKeyParameter,
@@ -40,11 +42,12 @@ const capabilityResponse = z
     mode: z.enum(["vision", "text"]).nullable(),
     reason: z.enum(["no-provider", "enable-local-ocr"]).nullable(),
     pdfSupported: z.boolean(),
+    ai: aiCapabilityState,
   })
   .meta({
     id: "OcrCapabilityResponse",
     description:
-      "Whether the caller's configured AI provider can ingest a lab report (drives the UI's scan affordance). `mode` is `vision` when the provider reads the image directly, `text` when the image is OCR'd in-browser and only the extracted text is sent (opt-in local OCR for text-only providers), or null when unavailable. `reason` explains an unavailable state; `pdfSupported` is true when the provider reads PDFs natively (Anthropic) or the server-side rasterizer can render the pages for any other vision provider. No provider call is made.",
+      "Whether the caller's configured AI provider can ingest a lab report (drives the UI's scan affordance). `mode` is `vision` when the provider reads the image directly, `text` when the image is OCR'd in-browser and only the extracted text is sent (opt-in local OCR for text-only providers), or null when unavailable. `reason` explains an unavailable state; `pdfSupported` is true when the provider reads PDFs natively (Anthropic) or the server-side rasterizer can render the pages for any other vision provider. `ai` is the `labsOcr` capability for the record: when the operator turned reading documents off, the labs module is off, or the record is somebody else\'s, `available` is false with a null `reason` and `ai.reason` says why. A missing consent receipt leaves the scan offered (`ai.reason = \"consent_required\"`), because the scan is where the person is asked for it. No provider call is made.",
   });
 
 const extractConfidence = z.object({
@@ -165,7 +168,7 @@ export const ocrPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Labs"],
       summary: "Extract lab readings from a photo, PDF, or OCR'd text",
       description:
-        "Read-only (NOT idempotent) extraction. Two modes by content-type. VISION (`multipart/form-data`): a `file` (JPEG/PNG/WebP, or PDF — read natively on Anthropic, else rasterized to page images for any other vision provider; ≤ 12 MiB) is run through the user's vision-capable provider; the upload lives in memory only and is never persisted or logged. TEXT (`application/json`, opt-in local OCR): the browser OCR's the image (tesseract.js) and POSTs `{ mode: \"text\", text }` — only the extracted text reaches the server, so a text-only provider (e.g. ChatGPT-OAuth) reaches the same review/commit flow. Both modes are gated by AI consent, a per-user hourly rate bucket (default 6, operator-tunable via `LABS_OCR_LIMIT_PER_HOUR`; a slot is only consumed when the scan reaches the provider, and the 429 carries `Retry-After`, the `X-RateLimit-*` triple and `meta.retryAt`), and the per-day token budget, and return proposed rows for the mandatory human review screen — nothing is written. Extracted content is treated as untrusted (prompt-injection); the review step is the safety boundary.",
+        "Read-only (NOT idempotent) extraction. Two modes by content-type. VISION (`multipart/form-data`): a `file` (JPEG/PNG/WebP, or PDF — read natively on Anthropic, else rasterized to page images for any other vision provider; ≤ 12 MiB) is run through the user's vision-capable provider; the upload lives in memory only and is never persisted or logged. TEXT (`application/json`, opt-in local OCR): the browser OCR's the image (tesseract.js) and POSTs `{ mode: \"text\", text }` — only the extracted text reaches the server, so a text-only provider (e.g. ChatGPT-OAuth) reaches the same review/commit flow. Both modes are model work and answer under the `labsOcr` capability (the operator's reading-documents switch, the labs module, and — because a lab report is a document — an active `ai_extraction` or `ai_full` consent receipt for any provider that leaves the machine, checked for the provider actually picked: the first vision-capable entry in vision mode, the chain head in text mode). No provider is 422 `labs.ocr.providerUnsupported`; text mode without the local-OCR opt-in is 422 `labs.ocr.localOcrDisabled`. Then both pass a per-user hourly rate bucket (default 6, operator-tunable via `LABS_OCR_LIMIT_PER_HOUR`; a slot is only consumed when the scan reaches the provider, and the 429 carries `Retry-After`, the `X-RateLimit-*` triple and `meta.retryAt`) and the per-day token budget, and return proposed rows for the mandatory human review screen — nothing is written. Extracted content is treated as untrusted (prompt-injection); the review step is the safety boundary.",
       requestBody: {
         required: true,
         content: {
@@ -200,6 +203,7 @@ export const ocrPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
+        ...aiExtractionRefusals("labsOcr"),
         ...stdResponses,
       },
     },
