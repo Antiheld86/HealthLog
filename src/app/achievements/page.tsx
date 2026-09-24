@@ -34,8 +34,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageAuthGate } from "@/components/ui/page-auth-gate";
 import { QueryErrorCard } from "@/components/ui/query-error-card";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
 import { formatDate } from "@/lib/format";
@@ -262,7 +260,6 @@ function AchievementCard({ achievement, t }: AchievementCardProps) {
 export default function AchievementsPage() {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const { t } = useTranslations();
-  const router = useRouter();
 
   // v1.18.0 — the achievements module gate. When the account has the
   // module turned off the whole page disappears: an empty state stands in
@@ -279,29 +276,13 @@ export default function AchievementsPage() {
     enabled: isAuthenticated && achievementsEnabled,
   });
 
-  useEffect(() => {
-    if (!authLoading && isAuthenticated && !achievementsEnabled) {
-      router.push("/insights");
-    }
-  }, [authLoading, isAuthenticated, achievementsEnabled, router]);
-
   if (authLoading || (achievementsEnabled && isLoading)) {
     return <PageAuthGate label={t("common.loading")} />;
   }
 
-  // v1.18.0 — module off ⇒ the surface disappears entirely. The nav entry is
-  // hidden by the same gate, so this only catches a direct URL hit. It used to
-  // render `null` and stop there, which left a blank page with no explanation
-  // and no route anywhere — a dead end rather than a gate. It now bounces to
-  // /insights, matching every other module-gated page (`useModulePageGuard`);
-  // the brief `null` is the pre-redirect frame, not the destination.
-  //
-  // The shared guard is not used wholesale here because it also redirects an
-  // unauthenticated visitor to /auth/login, and this page deliberately answers
-  // that case with a "sign in to see your achievements" header instead.
-  if (isAuthenticated && !achievementsEnabled) {
-    return null;
-  }
+  // Module off: the shell answers this URL with the module notice
+  // (`ModulePageGate`) before the page renders, so there is no branch for it
+  // here. `achievementsEnabled` above only keeps the query from firing.
 
   if (!isAuthenticated) {
     return (

@@ -5,6 +5,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 // navigation hooks the FAB uses. The pathname is mutable so the
 // hide-on-coach-page branch can be exercised.
 let mockPathname = "/insights";
+// AI surfaces paint only while their capability is available; these tests
+// cover the painted surface, so every capability reads available here.
+vi.mock("@/hooks/use-ai-capability", () => ({
+  useAiCapability: () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
+}));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
   usePathname: () => mockPathname,

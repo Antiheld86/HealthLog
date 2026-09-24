@@ -1,6 +1,7 @@
 import { expect, test } from "./setup/test";
 
 import { STORAGE_STATE_PATH } from "./setup/global-setup";
+import { aiBlockAvailable, serveAiBlock } from "./setup/ai-capabilities";
 
 /**
  * v1.4.27 F17 — insights metric-availability gating.
@@ -19,6 +20,13 @@ import { STORAGE_STATE_PATH } from "./setup/global-setup";
  * branches.
  */
 test.describe("v1.4.27 — insights empty-state with metric gating", () => {
+  // AI surfaces render from the `ai` block of `/api/auth/me`, and the suite
+  // has no reachable provider; every capability reads available here so the
+  // mocked AI routes below are what the surfaces talk to.
+  test.beforeEach(async ({ page }) => {
+    await serveAiBlock(page, aiBlockAvailable());
+  });
+
   test.use({ storageState: STORAGE_STATE_PATH });
 
   test.beforeEach(async ({ page }) => {

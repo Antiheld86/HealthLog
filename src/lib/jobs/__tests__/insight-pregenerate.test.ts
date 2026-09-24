@@ -2,7 +2,11 @@
  * v1.7.0 W6 — unit tests for the nightly insight pre-generation cron.
  *
  * Covers:
- *   - the discovery query selects only coach-enabled, stale-cache users;
+ *   - the discovery query selects stale-cache users who kept AI analysis
+ *     (the `insights` module) on;
+ *   - each half of the pass runs on its own capability (`briefing` for the
+ *     comprehensive, `statusText` for the warm), resolved before any budget
+ *     write or generation;
  *   - the per-user budget gate blocks a user already generated today;
  *   - the master assistant kill-switch short-circuits the whole run;
  *   - the generator outcomes tally correctly (generated / cached /
@@ -36,8 +40,33 @@ vi.mock("@/lib/logging/context", async () => {
     annotate: (...a: unknown[]) => annotateSpy(...a),
   };
 });
-vi.mock("@/lib/feature-flags", () => ({
-  getAssistantFlags: (...a: unknown[]) => getAssistantFlags(...a),
+vi.mock("@/lib/feature-flags", async () =>
+  (
+    await import("@/__tests__/helpers/assistant-switches-mock")
+  ).mockAssistantSwitches(() => getAssistantFlags()),
+);
+// Per-user capabilities, keyed by capability; every test starts with both
+// halves available and overrides one or both.
+type CapabilityState = {
+  available: boolean;
+  reason: string | null;
+  onDeviceAllowed: boolean;
+};
+const AVAILABLE: CapabilityState = {
+  available: true,
+  reason: null,
+  onDeviceAllowed: true,
+};
+function unavailable(reason: string): CapabilityState {
+  return { available: false, reason, onDeviceAllowed: false };
+}
+let capabilities: Record<string, CapabilityState> = {};
+const aiCapabilityForJob = vi.fn(
+  async (_userId: string, key: string) => capabilities[key] ?? AVAILABLE,
+);
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForJob: (...a: [string, string]) => aiCapabilityForJob(...a),
+  aiCapabilityForRecord: vi.fn(),
 }));
 // Never reach the real generator (which would import the provider chain).
 vi.mock("@/lib/insights/comprehensive-generate", () => ({
@@ -109,8 +138,10 @@ function makePrisma(
     locale: string | null;
     aiResponseTimeoutSeconds?: number | null;
   }>,
+  optedOut: string[] = [],
 ) {
   const findMany = vi.fn().mockResolvedValue(users);
+  const queryRaw = vi.fn().mockResolvedValue(optedOut.map((id) => ({ id })));
   // forceWarmUser reads `insightsCachedAt` / `insightsWarmFailedAt` at job
   // start and maintains the failure marker; default: never warmed, never
   // failed.
@@ -120,10 +151,11 @@ function makePrisma(
   });
   const update = vi.fn().mockResolvedValue({});
   return {
-    prisma: { user: { findMany, findUnique, update } },
+    prisma: { user: { findMany, findUnique, update }, $queryRaw: queryRaw },
     findMany,
     findUnique,
     update,
+    queryRaw,
   };
 }
 
@@ -135,18 +167,26 @@ beforeEach(() => {
     insightStatus: true,
   });
   checkRateLimit.mockResolvedValue({ allowed: true });
+  capabilities = {};
 });
 
 describe("findPregenerateCandidates", () => {
-  it("filters on disableCoach=false + stale-or-null cache, oldest-first, capped", async () => {
-    const { prisma, findMany } = makePrisma([{ id: "u1", locale: "de" }]);
+  it("filters on the insights opt-out + stale-or-null cache, oldest-first, capped", async () => {
+    const { prisma, findMany, queryRaw } = makePrisma(
+      [{ id: "u1", locale: "de" }],
+      ["opted-out"],
+    );
     const now = new Date("2026-05-31T04:30:00.000Z");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await findPregenerateCandidates(prisma as any, now, 50);
 
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    expect(queryRaw.mock.calls[0].slice(1)).toContain("insights");
     expect(findMany).toHaveBeenCalledTimes(1);
     const arg = findMany.mock.calls[0][0];
-    expect(arg.where.disableCoach).toBe(false);
+    // Hiding the Coach is not an AI opt-out any more.
+    expect(arg.where.disableCoach).toBeUndefined();
+    expect(arg.where.id).toEqual({ notIn: ["opted-out"] });
     expect(arg.where.OR).toEqual([
       { insightsCachedAt: null },
       {
@@ -157,6 +197,98 @@ describe("findPregenerateCandidates", () => {
     ]);
     expect(arg.orderBy).toEqual({ insightsCachedAt: "asc" });
     expect(arg.take).toBe(50);
+  });
+
+  it("adds no id filter when nobody opted out", async () => {
+    const { prisma, findMany } = makePrisma([{ id: "u1", locale: "de" }]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await findPregenerateCandidates(prisma as any, new Date(), 50);
+    expect(findMany.mock.calls[0][0].where.id).toBeUndefined();
+  });
+});
+
+describe("runInsightPregenerate — per-user capabilities", () => {
+  it("skips a user with neither capability before any budget write or generation", async () => {
+    capabilities = {
+      briefing: unavailable("user_disabled"),
+      statusText: unavailable("user_disabled"),
+    };
+    const { prisma } = makePrisma([{ id: "u1", locale: "de" }]);
+    const generate = vi.fn();
+    const statusGenerators = Array.from({ length: 7 }, () =>
+      vi.fn().mockResolvedValue({ hasProvider: true, cached: false }),
+    );
+    const warmGenericMetrics = vi.fn().mockResolvedValue(0);
+
+    const result = await runInsightPregenerate(prisma as never, {
+      generate,
+      statusGenerators,
+      warmGenericMetrics,
+    });
+
+    expect(aiCapabilityForJob).toHaveBeenCalledWith("u1", "briefing");
+    expect(aiCapabilityForJob).toHaveBeenCalledWith("u1", "statusText");
+    expect(result).toMatchObject({ total: 1, skipped: 1, budgetBlocked: 0 });
+    expect(checkRateLimit).not.toHaveBeenCalled();
+    expect(generate).not.toHaveBeenCalled();
+    for (const g of statusGenerators) expect(g).not.toHaveBeenCalled();
+    expect(warmGenericMetrics).not.toHaveBeenCalled();
+    expect(annotateSpy).toHaveBeenCalledWith({
+      action: { name: "insights.pregenerate.skipped" },
+      meta: { briefing: "user_disabled", status_text: "user_disabled" },
+    });
+  });
+
+  it("skips the comprehensive without a budget write when only briefing is unavailable, and still warms", async () => {
+    capabilities = { briefing: unavailable("operator_disabled") };
+    const { prisma } = makePrisma([{ id: "u1", locale: "de" }]);
+    const generate = vi.fn();
+    const statusGenerators = Array.from({ length: 7 }, () =>
+      vi.fn().mockResolvedValue({ hasProvider: true, cached: false }),
+    );
+    const warmGenericMetrics = vi.fn().mockResolvedValue(4);
+
+    const result = await runInsightPregenerate(prisma as never, {
+      generate,
+      statusGenerators,
+      warmGenericMetrics,
+    });
+
+    expect(checkRateLimit).not.toHaveBeenCalled();
+    expect(generate).not.toHaveBeenCalled();
+    expect(result.skipped).toBe(1);
+    expect(result.budgetBlocked).toBe(0);
+    for (const g of statusGenerators) {
+      expect(g).toHaveBeenCalledWith("u1", { locale: "de", force: false });
+    }
+    expect(warmGenericMetrics).toHaveBeenCalledWith("u1", ["de"]);
+    expect(result.assessmentsWarmed).toBe(7);
+    expect(result.metricAssessmentsWarmed).toBe(4);
+  });
+
+  it("generates the comprehensive but warms nothing when only statusText is unavailable", async () => {
+    capabilities = { statusText: unavailable("consent_required") };
+    const { prisma } = makePrisma([{ id: "u1", locale: "de" }]);
+    const generate = vi
+      .fn()
+      .mockResolvedValue({ status: "generated", providerType: "x" });
+    const statusGenerators = Array.from({ length: 7 }, () =>
+      vi.fn().mockResolvedValue({ hasProvider: true, cached: false }),
+    );
+    const warmGenericMetrics = vi.fn().mockResolvedValue(4);
+
+    const result = await runInsightPregenerate(prisma as never, {
+      generate,
+      statusGenerators,
+      warmGenericMetrics,
+    });
+
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(result.generated).toBe(1);
+    for (const g of statusGenerators) expect(g).not.toHaveBeenCalled();
+    expect(warmGenericMetrics).not.toHaveBeenCalled();
+    expect(result.assessmentsWarmed).toBe(0);
+    expect(result.metricAssessmentsWarmed).toBe(0);
   });
 });
 
@@ -591,7 +723,10 @@ describe("runInsightPregenerate — per-metric warm pass", () => {
     expect(result.assessmentsWarmed).toBe(7);
   });
 
-  it("does NOT warm when the comprehensive pass skipped (no provider)", async () => {
+  it("does NOT warm when the statusText capability has no provider", async () => {
+    // The warm is gated on its own capability now, not on the comprehensive
+    // outcome: no provider for the status notes → nothing to warm.
+    capabilities = { statusText: unavailable("no_provider") };
     const { prisma } = makePrisma([{ id: "u1", locale: "en" }]);
     const generate = vi
       .fn()
@@ -714,7 +849,8 @@ describe("runInsightPregenerate — generic metric warm pass (v1.8.7.1)", () => 
     expect(result.metricAssessmentsWarmed).toBe(9);
   });
 
-  it("does NOT warm the generic metric caches when the comprehensive pass skipped (no provider)", async () => {
+  it("does NOT warm the generic metric caches when the statusText capability has no provider", async () => {
+    capabilities = { statusText: unavailable("no_provider") };
     const { prisma } = makePrisma([{ id: "u1", locale: "en" }]);
     const generate = vi
       .fn()
@@ -1047,13 +1183,12 @@ describe("forceWarmUser — on-demand single-user warm (v1.8.7.1)", () => {
     }
   });
 
-  it("short-circuits to a no-op when the whole assistant is disabled globally", async () => {
-    getAssistantFlags.mockResolvedValue({
-      enabled: false,
-      briefing: false,
-      insightStatus: false,
-    });
-    const { prisma } = makePrisma([]);
+  it("short-circuits to a no-op when neither capability is available", async () => {
+    capabilities = {
+      briefing: unavailable("operator_disabled"),
+      statusText: unavailable("operator_disabled"),
+    };
+    const { prisma, findUnique } = makePrisma([]);
     const generate = vi.fn();
     const statusGenerators = Array.from({ length: 7 }, () =>
       vi.fn().mockResolvedValue({ hasProvider: true, cached: false }),
@@ -1070,18 +1205,16 @@ describe("forceWarmUser — on-demand single-user warm (v1.8.7.1)", () => {
     }
     expect(result.comprehensive).toBe("skipped");
     expect(result.assessmentsWarmed).toBe(0);
+    // Nothing read, nothing counted against the forced-warm bucket.
+    expect(checkRateLimit).not.toHaveBeenCalled();
+    expect(findUnique).not.toHaveBeenCalled();
   });
 
-  it("warms the per-status + generic caches when `briefing` is off but `insightStatus` is on (L1)", async () => {
-    // v1.9.0 — the route admits the job on the per-user `insightStatus`
-    // surface. A global `briefing` kill-switch must not suppress the
-    // assessment cards the user has enabled; only the comprehensive briefing
-    // belongs to the `briefing` surface.
-    getAssistantFlags.mockResolvedValue({
-      enabled: true,
-      briefing: false,
-      insightStatus: true,
-    });
+  it("warms the per-status + generic caches when `briefing` is unavailable but `statusText` is available (L1)", async () => {
+    // v1.9.0 — the route admits the job on the per-user status surface. An
+    // unavailable briefing must not suppress the assessment cards; only the
+    // comprehensive briefing belongs to the `briefing` capability.
+    capabilities = { briefing: unavailable("operator_disabled") };
     const { prisma } = makePrisma([]);
     const generate = vi.fn();
     const statusGenerators = Array.from({ length: 7 }, () =>
@@ -1106,6 +1239,33 @@ describe("forceWarmUser — on-demand single-user warm (v1.8.7.1)", () => {
       comprehensive: "skipped",
       assessmentsWarmed: 7,
       metricAssessmentsWarmed: 2,
+    });
+  });
+
+  it("forces the comprehensive but warms no card when `statusText` is unavailable", async () => {
+    capabilities = { statusText: unavailable("user_disabled") };
+    const { prisma } = makePrisma([]);
+    const generate = vi
+      .fn()
+      .mockResolvedValue({ status: "generated", providerType: "x" });
+    const statusGenerators = Array.from({ length: 7 }, () =>
+      vi.fn().mockResolvedValue({ hasProvider: true, cached: false }),
+    );
+    const warmGenericMetrics = vi.fn().mockResolvedValue(2);
+
+    const result = await forceWarmUser(prisma as never, "u1", "de", {
+      generate,
+      statusGenerators,
+      warmGenericMetrics,
+    });
+
+    expect(generate).toHaveBeenCalledTimes(1);
+    for (const g of statusGenerators) expect(g).not.toHaveBeenCalled();
+    expect(warmGenericMetrics).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      comprehensive: "generated",
+      assessmentsWarmed: 0,
+      metricAssessmentsWarmed: 0,
     });
   });
 

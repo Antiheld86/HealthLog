@@ -14,8 +14,15 @@
  *   DELETE /api/coach/reminders/{id}            → { data: { deleted } }
  *
  * Reads unwrap `(await res.json()).data`; every key routes through
- * `queryKeys.coachReminders()` so a mutation invalidates the list. Gated on the
- * Coach surface like the rest of the memory controls.
+ * `queryKeys.coachReminders()` so a mutation invalidates the list.
+ *
+ * v1.39 — never gated on the Coach. A reminder is the person's own record, like
+ * the stored facts and conversations: the list and delete routes ask no Coach
+ * gate, so the card stays readable and every reminder stays deletable while the
+ * Coach is unavailable for any reason. Keeping, resolving or dismissing one is
+ * Coach use (the PATCH route refuses it then), so those controls are not
+ * offered in that state. Settings → Coach always mounts this card; Settings → AI
+ * mounts it through `<StoredCoachMemory>` with `hideWhenEmpty`.
  */
 import { useMemo } from "react";
 import { BellRing, Check, Trash2, X } from "lucide-react";
@@ -28,6 +35,7 @@ import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { ConfirmButton } from "@/components/ui/confirm-button";
 import { useTranslations } from "@/lib/i18n/context";
+import { useAiCapability } from "@/hooks/use-ai-capability";
 import {
   useCoachReminders,
   useCoachReminderMutations,
@@ -38,10 +46,16 @@ const DUE_STATUSES = new Set(["due", "surfaced"]);
 
 export function CoachRemindersSection({
   isAuthenticated,
+  hideWhenEmpty = false,
 }: {
   isAuthenticated: boolean;
+  /** Render nothing while there are no stored reminders (the Coach-off mount). */
+  hideWhenEmpty?: boolean;
 }) {
   const { t } = useTranslations();
+  // Unavailable (including the loading frame) means read-only: the lifecycle
+  // controls appear only once the account says the Coach can be used.
+  const readOnly = !useAiCapability("coach").available;
   const query = useCoachReminders({ enabled: isAuthenticated });
   const { setStatus, remove } = useCoachReminderMutations();
 
@@ -87,7 +101,7 @@ export function CoachRemindersSection({
           <span>{t(`settings.ai.coachReminders.status.${r.status}`)}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {isProposed && (
+          {!readOnly && isProposed && (
             <Button
               type="button"
               variant="outline"
@@ -101,7 +115,7 @@ export function CoachRemindersSection({
               {t("settings.ai.coachReminders.confirm")}
             </Button>
           )}
-          {r.status !== "done" && (
+          {!readOnly && r.status !== "done" && (
             <Button
               type="button"
               variant="ghost"
@@ -115,7 +129,7 @@ export function CoachRemindersSection({
               {t("settings.ai.coachReminders.markDone")}
             </Button>
           )}
-          {(r.status === "due" || r.status === "surfaced") && (
+          {!readOnly && (r.status === "due" || r.status === "surfaced") && (
             <Button
               type="button"
               variant="ghost"
@@ -151,6 +165,9 @@ export function CoachRemindersSection({
     );
   };
 
+  if (hideWhenEmpty && (query.isPending || query.isError)) return null;
+  if (hideWhenEmpty && reminders.length === 0) return null;
+
   return (
     <SettingsCard
       as="section"
@@ -163,7 +180,11 @@ export function CoachRemindersSection({
         title={t("settings.ai.coachReminders.title")}
         description={t("settings.ai.coachReminders.description")}
       />
-      <p className="text-sm">{t("settings.ai.coachReminders.detail")}</p>
+      <p className="text-sm" data-slot="coach-reminders-detail">
+        {readOnly
+          ? t("settings.ai.coachReminders.readOnlyNote")
+          : t("settings.ai.coachReminders.detail")}
+      </p>
 
       {query.isError && (
         <QueryErrorRow

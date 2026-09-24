@@ -19,12 +19,29 @@
  *   consented opt-in.
  *
  * The reorder only decides WHICH configured provider is preferred; it never
- * invents a provider. Egress consent (`assertDocumentEgressConsent`) and the
- * per-egress vendor-blind UI notice sit on top of this order — the reorder
- * keeps codex from being the silent default, the consent gate keeps any
- * external egress from happening without an active receipt.
+ * invents a provider. The per-egress vendor-blind UI notice sits on top of
+ * this order — the reorder keeps codex from being the silent default.
+ *
+ * The pick is also the document class's wire: every read of a stored document
+ * resolves its provider here, the vault routes and the background jobs alike,
+ * so this is where the `documentAi` capability is asked again, about the
+ * provider actually picked, immediately before anything is sent. A switch the
+ * operator turned off after a job was enqueued stops the job here, and an
+ * external pick without an extraction consent receipt never reaches its
+ * provider. The document class is the `documentAi` capability; there is no
+ * other key a caller could pass, so the check is built in rather than taken
+ * as an argument.
  */
 import { isExternalDocumentEgress } from "@/lib/ai/consent-guard";
+import { aiEgressRefusal } from "@/lib/ai/capabilities/egress";
+import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import { PICK_DECIDED_REASONS } from "@/lib/ai/capabilities/types";
+import {
+  AiUnavailableError,
+  type NoProviderRefusal,
+} from "@/lib/ai/capabilities/refusal";
+import type { ProviderChainResolved } from "@/lib/ai/provider-runner";
+import { documentProviderRank } from "@/lib/documents/provider-rank";
 import { RASTERIZATION_AVAILABLE } from "@/lib/documents/rasterize-pdf";
 import {
   resolveTextProvider,
@@ -38,36 +55,13 @@ import type {
 } from "@/lib/validations/inbound-documents";
 
 /**
- * Preference rank for a provider when the payload is a DOCUMENT. Lower wins.
- * Local keeps the document on the machine (rank 0); BYOK no-train API keys are
- * next (rank 1, including the user's own OpenAI-compatible gateway); the
- * operator's shared no-train key follows (rank 2); the
- * ChatGPT-subscription OAuth paths are LAST (rank 3) — the user's own `codex`
- * AND the operator's shared `admin-codex`, both train on consumer content by
- * default and cannot be verified opted-out from here.
+ * How the vault refuses a read with no provider that can serve it. The code
+ * predates the capability envelope and a client already branches on it.
  */
-function documentProviderRank(providerType: string): number {
-  switch (providerType) {
-    case "local":
-      return 0;
-    case "openai":
-    case "anthropic":
-    case "admin-key":
-    // The user's own gateway (LiteLLM / OpenRouter / vLLM) is a BYO endpoint
-    // under their own contract. It may well be on their own network, but
-    // HealthLog cannot tell that from the URL, so it ranks with the BYO API
-    // keys rather than with `local` — the conservative side.
-    case "openai-compatible":
-      return 1;
-    case "admin-openai":
-      return 2;
-    case "codex":
-    case "admin-codex":
-      return 3;
-    default:
-      return 2;
-  }
-}
+export const DOCUMENT_NO_PROVIDER: NoProviderRefusal = {
+  errorCode: "documents.inbound.providerUnsupported",
+  status: 422,
+};
 
 /**
  * Reorder a resolved chain for the document class: stable sort by
@@ -84,27 +78,92 @@ export const reorderChainForDocumentClass: ChainReorder = (chain) => {
 };
 
 /**
- * Resolve the vision provider for a DOCUMENT read — local-first, codex last.
- * Same shape as `resolveVisionProvider`; the returned `chain` is already in
- * document order and the `pick` is the first vision-capable entry in it.
+ * A document pick after the wire re-check. `pick` is null when nothing can
+ * serve the read OR when the capability refused it; `withheld` says which.
+ * A job reads `pick` and skips; a route throws `withheld` so the person sees
+ * the real reason.
  */
-export function resolveDocumentVisionProvider(
+export type DocumentProviderPick<T> = T & {
+  withheld: AiUnavailableError | null;
+};
+
+async function atTheWire<T extends { pick: { providerType: string } | null }>(
   userId: string,
-): Promise<VisionProviderPick> {
-  return resolveVisionProvider(userId, {
-    reorder: reorderChainForDocumentClass,
-  });
+  resolved: T,
+): Promise<DocumentProviderPick<T>> {
+  if (!resolved.pick) return { ...resolved, withheld: null };
+  const withheld = await aiEgressRefusal("documentAi", userId, [
+    resolved.pick.providerType,
+  ]);
+  return withheld
+    ? { ...resolved, pick: null, withheld }
+    : { ...resolved, withheld: null };
 }
 
 /**
- * Resolve the text-mode (browser-OCR) structuring provider for a DOCUMENT —
- * local-first, codex last. The `pick` is the first entry of the reordered
- * chain.
+ * Resolve the vision provider for a DOCUMENT read — local-first, codex last.
+ * Same shape as `resolveVisionProvider`; the returned `chain` is already in
+ * document order and the `pick` is the first vision-capable entry in it, or
+ * null when `documentAi` refuses the wire.
  */
-export function resolveDocumentTextProvider(userId: string) {
-  return resolveTextProvider(userId, {
-    reorder: reorderChainForDocumentClass,
-  });
+export async function resolveDocumentVisionProvider(
+  userId: string,
+): Promise<DocumentProviderPick<VisionProviderPick>> {
+  return atTheWire(
+    userId,
+    await resolveVisionProvider(userId, {
+      reorder: reorderChainForDocumentClass,
+    }),
+  );
+}
+
+/**
+ * Resolve the text-mode structuring provider for a DOCUMENT — local-first,
+ * codex last. The `pick` is the first entry of the reordered chain, or null
+ * when `documentAi` refuses the wire.
+ */
+export async function resolveDocumentTextProvider(userId: string): Promise<
+  DocumentProviderPick<{
+    chain: ProviderChainResolved[];
+    pick: { entry: ProviderChainResolved; providerType: string } | null;
+  }>
+> {
+  return atTheWire(
+    userId,
+    await resolveTextProvider(userId, {
+      reorder: reorderChainForDocumentClass,
+    }),
+  );
+}
+
+function required<T>(result: {
+  pick: T | null;
+  withheld: AiUnavailableError | null;
+}): T {
+  if (result.withheld) throw result.withheld;
+  if (!result.pick) {
+    throw new AiUnavailableError(
+      "documentAi",
+      "no_provider",
+      null,
+      DOCUMENT_NO_PROVIDER,
+    );
+  }
+  return result.pick;
+}
+
+/**
+ * The route form of {@link resolveDocumentVisionProvider}: the pick, or the
+ * refusal thrown for `apiHandler` to render (`documents.inbound.providerUnsupported`
+ * when nothing can read the document, the capability envelope otherwise).
+ */
+export async function requireDocumentVisionProvider(userId: string) {
+  return required(await resolveDocumentVisionProvider(userId));
+}
+
+/** The route form of {@link resolveDocumentTextProvider}. */
+export async function requireDocumentTextProvider(userId: string) {
+  return required(await resolveDocumentTextProvider(userId));
 }
 
 /**
@@ -120,12 +179,31 @@ export function documentEgressClass(providerType: string): DocumentEgressClass {
  * Resolve the document AI capability for the vault UI. The `mode` /
  * `pdfSupported` / `egress` reflect the DOCUMENT provider order (local-first),
  * so the affordance the UI offers matches exactly what the document routes do.
+ *
+ * `ai` is the `documentAi` capability for the request's record. A read the
+ * operator, the record's modules or the sharing grant close is not offered
+ * (`available: false`, no mode). A missing consent receipt keeps the read
+ * offered: the read itself is where the person is asked for the receipt, and
+ * hiding the button would leave them no way to give it.
  */
 export async function resolveDocumentAiCapability(
   userId: string,
 ): Promise<DocumentAiCapabilityDto> {
-  const { chain, pick, localOcrEnabled } =
-    await resolveDocumentVisionProvider(userId);
+  const [{ chain, pick, localOcrEnabled }, ai] = await Promise.all([
+    resolveVisionProvider(userId, { reorder: reorderChainForDocumentClass }),
+    getAiCapability("documentAi"),
+  ]);
+
+  if (ai.reason !== null && !PICK_DECIDED_REASONS.has(ai.reason)) {
+    return {
+      available: false,
+      mode: null,
+      reason: null,
+      pdfSupported: false,
+      egress: null,
+      ai,
+    };
+  }
 
   // A vision-capable provider is available — the read runs directly over the
   // stored original. Egress follows the picked provider. PDFs are readable
@@ -139,6 +217,7 @@ export async function resolveDocumentAiCapability(
       reason: null,
       pdfSupported: pick.pdfSupported || RASTERIZATION_AVAILABLE,
       egress: documentEgressClass(pick.providerType),
+      ai,
     };
   }
 
@@ -150,6 +229,7 @@ export async function resolveDocumentAiCapability(
       reason: "no-provider",
       pdfSupported: false,
       egress: null,
+      ai,
     };
   }
 
@@ -162,6 +242,7 @@ export async function resolveDocumentAiCapability(
       reason: null,
       pdfSupported: false,
       egress: documentEgressClass(chain[0]!.providerType),
+      ai,
     };
   }
 
@@ -172,5 +253,6 @@ export async function resolveDocumentAiCapability(
     reason: "enable-local-ocr",
     pdfSupported: false,
     egress: null,
+    ai,
   };
 }

@@ -326,6 +326,39 @@ describe("extractFeatures — v1.25.1 clinical-depth aggregate blocks", () => {
   });
 });
 
+describe("extractFeatures — weight target direction (#1006)", () => {
+  const weightRows = [
+    measurementRow("WEIGHT", 60, 1),
+    measurementRow("WEIGHT", 59.6, 3),
+    measurementRow("WEIGHT", 59.2, 5),
+  ];
+
+  it("tells the model gaining is progress when the person is below their own target", async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      heightCm: 180,
+      dateOfBirth: new Date("1980-01-01"),
+      gender: "MALE",
+      thresholdsJson: { WEIGHT: { min: 65, max: 70 } },
+    });
+    prismaMock.measurement.findMany.mockResolvedValue(weightRows);
+    const f = await extractFeatures("user-1", false);
+    expect(f.weight?.target).toMatchObject({
+      minKg: 65,
+      maxKg: 70,
+      position: "below",
+      progress: "gaining",
+    });
+    expect(f.weight?.target?.reading).toMatch(/gaining weight is progress/);
+  });
+
+  it("says nothing about direction when no target is stored", async () => {
+    prismaMock.measurement.findMany.mockResolvedValue(weightRows);
+    const f = await extractFeatures("user-1", false);
+    expect(f.weight).toBeDefined();
+    expect(f.weight?.target).toBeUndefined();
+  });
+});
+
 describe("extractFeatures — v1.22 labs briefing block", () => {
   it("surfaces an abnormal (out-of-range) biomarker", async () => {
     prismaMock.labResult.findMany.mockResolvedValue([

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { Sparkles } from "lucide-react";
 import {
   useTranslations,
@@ -66,15 +65,6 @@ interface HeroStripProps {
    */
   now?: Date;
   /**
-   * v1.18.9 (#4) — true when the hero subtitle is drawn from a cached
-   * briefing that can never refresh because no AI provider is connected.
-   * The meta row then appends a discreet "connect a provider" link beside
-   * the "Generated <relative>" age, so the score-area context reads as
-   * honestly held rather than current. Consistent with the DailyBriefing
-   * footer hint below.
-   */
-  noProviderStale?: boolean;
-  /**
    * The Health Score report. Non-null paints the right column; null with
    * `scorePending` paints the reserve; null without it keeps the band
    * full-width, which is the shape an account without a score already had.
@@ -117,7 +107,6 @@ export function HeroStrip({
   updatedAt,
   userName,
   now,
-  noProviderStale = false,
   healthScore = null,
   scorePending = false,
   tension = null,
@@ -219,30 +208,6 @@ export function HeroStrip({
                 )}
                 <span data-slot="insights-hero-strip-generated">
                   {generatedLine}
-                </span>
-              </>
-            )}
-            {/* v1.18.9 (#4) — the subtitle is a cached briefing that can
-                  never refresh (no AI provider). Append a discreet hint +
-                  Settings → AI link so the relative age above reads as
-                  intentionally held, consistent with the briefing card. */}
-            {noProviderStale && (
-              <>
-                <span aria-hidden="true" className="opacity-50">
-                  ·
-                </span>
-                <span
-                  data-slot="insights-hero-strip-stale-no-provider"
-                  className="inline-flex flex-wrap items-center gap-x-1.5"
-                >
-                  <span>{t("insights.dailyBriefing.staleNoProviderHint")}</span>
-                  <Link
-                    href="/settings/ai"
-                    data-slot="insights-hero-strip-stale-no-provider-link"
-                    className="text-foreground/80 hover:text-foreground underline underline-offset-2"
-                  >
-                    {t("insights.dailyBriefing.noProviderAction")}
-                  </Link>
                 </span>
               </>
             )}

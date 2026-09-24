@@ -21,12 +21,18 @@
  * `userId` is always narrowed from the session / Bearer — never a body
  * field. Both web and the iOS client can call it; they read the same
  * cached routes afterward.
+ *
+ * The warm covers two AI capabilities: `briefing` (the comprehensive
+ * insight) and `statusText` (the assessment cards). It returns no model
+ * output, so it never refuses: with neither capability available it answers
+ * 200 `{ queued: false }` and enqueues nothing; with one available it
+ * enqueues, and the worker checks each half before it builds anything. The
+ * `ai` block says which half can run.
  */
 import { NextRequest } from "next/server";
 import { apiSuccess, apiError } from "@/lib/api-response";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
-import { requireAssistantSurface } from "@/lib/feature-flags";
-import { requireModuleEnabled } from "@/lib/modules/gate";
+import { getAiCapability } from "@/lib/ai/capabilities/gate";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { annotate } from "@/lib/logging/context";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
@@ -40,21 +46,12 @@ const WARM_WINDOW_MS = 3 * 60 * 1000;
 
 export const POST = apiHandler(async (request: NextRequest) => {
   const { user } = await requireAuth();
-  const m = await requireModuleEnabled(user.id, "insights");
-  if (!m.enabled) return m.response;
-  // Gate on the same surface as the read-only status routes: this warms
-  // the assessment cards (the `insightStatus` surface), not the Coach.
-  // A user with assessments enabled but Coach disabled can still warm.
-  await requireAssistantSurface("insightStatus");
   const userId = user.id;
-
-  // Short per-user bucket so the bypassed nightly budget can't be abused
-  // into a provider-cost amplifier by a tight POST loop. A blocked call
-  // is harmless — the caches are already being warmed by the prior call.
-  const rl = await checkRateLimit(`insights-warm:${userId}`, 1, WARM_WINDOW_MS);
-  if (!rl.allowed) {
-    return apiError("A warm is already in progress. Try again shortly.", 429);
-  }
+  const [briefing, statusText] = await Promise.all([
+    getAiCapability("briefing"),
+    getAiCapability("statusText"),
+  ]);
+  const ai = { briefing, statusText };
 
   const resolved = await resolveServerLocale({
     request,
@@ -65,6 +62,27 @@ export const POST = apiHandler(async (request: NextRequest) => {
   // German warm, so the whole warmed cache family was in the wrong language.
   const locale = normalizeLocale(resolved);
 
+  // Nothing this warm covers can run: enqueue nothing, spend no bucket.
+  if (!briefing.available && !statusText.available) {
+    annotate({
+      action: { name: "insights.pregenerate.skipped" },
+      meta: {
+        locale,
+        briefing_reason: briefing.reason,
+        status_reason: statusText.reason,
+      },
+    });
+    return apiSuccess({ queued: false, locale, ai });
+  }
+
+  // Short per-user bucket so the bypassed nightly budget can't be abused
+  // into a provider-cost amplifier by a tight POST loop. A blocked call
+  // is harmless — the caches are already being warmed by the prior call.
+  const rl = await checkRateLimit(`insights-warm:${userId}`, 1, WARM_WINDOW_MS);
+  if (!rl.allowed) {
+    return apiError("A warm is already in progress. Try again shortly.", 429);
+  }
+
   await enqueueForceWarm({ userId, locale });
 
   annotate({
@@ -74,5 +92,5 @@ export const POST = apiHandler(async (request: NextRequest) => {
 
   // The work runs on the worker; report that it was accepted, not that it
   // is done. The client polls the read-only status GETs for the text.
-  return apiSuccess({ queued: true, locale });
+  return apiSuccess({ queued: true, locale, ai });
 });

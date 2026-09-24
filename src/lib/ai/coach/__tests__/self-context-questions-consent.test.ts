@@ -14,16 +14,33 @@
  *   - the budget runs through the ATOMIC reserve/reconcile pair, not a
  *     read-then-write check.
  *
- * `@/lib/consent/receipts` is mocked rather than the consent guard itself, so
- * the real `chainRequiresServerManagedConsent` + `hasActiveConsentForSurface`
- * logic is what these tests exercise.
+ * Only the receipt read is mocked, so the real wire re-check
+ * (`aiEgressRefusal`) and the capability table's `aboutMeQuestions` row are
+ * what these tests exercise: which receipts cover the prompt is the table's
+ * answer, not this module's.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/db", () => ({ prisma: {} }));
-
-const latestActiveReceipt = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/consent/receipts", () => ({ latestActiveReceipt }));
+const activeKinds = vi.hoisted(() => ({ kinds: new Set<string>() }));
+const consentFindFirst = vi.hoisted(() =>
+  vi.fn(async (args: { where: { kind: { in: string[] } } }) =>
+    args.where.kind.in.some((kind) => activeKinds.kinds.has(kind))
+      ? { id: "receipt" }
+      : null,
+  ),
+);
+vi.mock("@/lib/db", () => ({
+  prisma: { consentReceipt: { findFirst: consentFindFirst } },
+}));
+// The capability itself is open; the route resolved it before calling in.
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForJob: vi.fn(async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  })),
+  requireAiCapability: vi.fn(async () => undefined),
+}));
 vi.mock("@/lib/documents/document-settings", () => ({
   documentAutoReadEnabled: vi.fn(async () => false),
 }));
@@ -54,10 +71,15 @@ vi.mock("@/lib/ai/coach/budget", () => budgetMocks);
 const buildCoachSnapshot = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/ai/coach/snapshot", () => ({ buildCoachSnapshot }));
 
-vi.mock("@/lib/logging/context", () => ({ annotate: vi.fn() }));
+vi.mock("@/lib/logging/context", () => ({
+  annotate: vi.fn(),
+  getEvent: () => null,
+}));
 
 import { deriveClarifyingQuestions } from "../self-context-questions";
+import { AI_CAPABILITIES } from "@/lib/ai/capabilities/types";
 import type { SelfContext } from "../about-me";
+import { DEFAULT_HEALTH_PROFILE_AI_SECTIONS } from "@/lib/validations/health-profile-facts";
 
 const ctx: SelfContext = {
   aboutMe: "Shift work, half-marathon training.",
@@ -84,7 +106,7 @@ let provider: ReturnType<typeof makeProvider>;
 beforeEach(() => {
   vi.clearAllMocks();
   provider = makeProvider();
-  latestActiveReceipt.mockResolvedValue(null);
+  activeKinds.kinds = new Set();
   providerMocks.hasAnyConfiguredProvider.mockResolvedValue(true);
   providerMocks.resolveProvider.mockResolvedValue({ type: "none" });
   budgetMocks.reserveBudget.mockResolvedValue({
@@ -104,6 +126,7 @@ describe("deriveClarifyingQuestions — included sections", () => {
       { ...ctx, aboutMe: null },
       "en",
       ["ABOUT_ME"],
+      { aiAvailable: true },
     );
 
     expect(out.questions).toEqual([
@@ -114,13 +137,41 @@ describe("deriveClarifyingQuestions — included sections", () => {
   });
 
   it("does no question work when no question-bearing field is included", async () => {
-    const out = await deriveClarifyingQuestions("user-1", ctx, "en", [
-      "FAMILY_HISTORY",
-    ]);
+    const out = await deriveClarifyingQuestions(
+      "user-1",
+      ctx,
+      "en",
+      ["FAMILY_HISTORY"],
+      { aiAvailable: true },
+    );
 
     expect(out.questions).toEqual([]);
     expect(providerMocks.hasAnyConfiguredProvider).not.toHaveBeenCalled();
     expect(buildCoachSnapshot).not.toHaveBeenCalled();
+  });
+});
+
+describe("deriveClarifyingQuestions — capability unavailable", () => {
+  it("serves the deterministic hints and never touches a provider, budget or snapshot", async () => {
+    providerMocks.resolveProviderChain.mockResolvedValue([
+      { providerType: "openai", instance: provider },
+    ]);
+
+    const out = await deriveClarifyingQuestions(
+      "user-1",
+      { ...ctx, aboutMe: null },
+      "en",
+      DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+      { aiAvailable: false },
+    );
+
+    expect(out.source).toBe("fallback");
+    expect(out.questions.length).toBeGreaterThan(0);
+    expect(providerMocks.hasAnyConfiguredProvider).not.toHaveBeenCalled();
+    expect(providerMocks.resolveProviderChain).not.toHaveBeenCalled();
+    expect(budgetMocks.reserveBudget).not.toHaveBeenCalled();
+    expect(buildCoachSnapshot).not.toHaveBeenCalled();
+    expect(provider.generateCompletion).not.toHaveBeenCalled();
   });
 });
 
@@ -130,7 +181,13 @@ describe("deriveClarifyingQuestions — server-managed consent gate", () => {
       { providerType: "admin-openai", instance: provider },
     ]);
 
-    const out = await deriveClarifyingQuestions("user-1", ctx, "en");
+    const out = await deriveClarifyingQuestions(
+      "user-1",
+      ctx,
+      "en",
+      DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+      { aiAvailable: true },
+    );
 
     expect(out.source).toBe("fallback");
     // The snapshot is the PHI: it must never even be built, let alone sent.
@@ -145,7 +202,13 @@ describe("deriveClarifyingQuestions — server-managed consent gate", () => {
       { providerType: "admin-codex", instance: provider },
     ]);
 
-    const out = await deriveClarifyingQuestions("user-1", ctx, "en");
+    const out = await deriveClarifyingQuestions(
+      "user-1",
+      ctx,
+      "en",
+      DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+      { aiAvailable: true },
+    );
 
     expect(out.source).toBe("fallback");
     expect(provider.generateCompletion).not.toHaveBeenCalled();
@@ -157,7 +220,13 @@ describe("deriveClarifyingQuestions — server-managed consent gate", () => {
     providerMocks.resolveProviderChain.mockResolvedValue([]);
     providerMocks.resolveProvider.mockResolvedValue(provider);
 
-    const out = await deriveClarifyingQuestions("user-1", ctx, "en");
+    const out = await deriveClarifyingQuestions(
+      "user-1",
+      ctx,
+      "en",
+      DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+      { aiAvailable: true },
+    );
 
     expect(out.source).toBe("fallback");
     expect(provider.generateCompletion).not.toHaveBeenCalled();
@@ -167,11 +236,15 @@ describe("deriveClarifyingQuestions — server-managed consent gate", () => {
     providerMocks.resolveProviderChain.mockResolvedValue([
       { providerType: "admin-openai", instance: provider },
     ]);
-    latestActiveReceipt.mockImplementation(async (_userId, kind) =>
-      kind === "ai_coach" ? { id: "receipt-1" } : null,
-    );
+    activeKinds.kinds = new Set(["ai_coach"]);
 
-    const out = await deriveClarifyingQuestions("user-1", ctx, "en");
+    const out = await deriveClarifyingQuestions(
+      "user-1",
+      ctx,
+      "en",
+      DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+      { aiAvailable: true },
+    );
 
     expect(out.source).toBe("ai");
     expect(out.questions).toEqual(["Question one?", "Question two?"]);
@@ -182,14 +255,44 @@ describe("deriveClarifyingQuestions — server-managed consent gate", () => {
     providerMocks.resolveProviderChain.mockResolvedValue([
       { providerType: "admin-openai", instance: provider },
     ]);
-    latestActiveReceipt.mockImplementation(async (_userId, kind) =>
-      kind === "ai_full" ? { id: "receipt-2" } : null,
-    );
+    activeKinds.kinds = new Set(["ai_full"]);
 
-    const out = await deriveClarifyingQuestions("user-1", ctx, "en");
+    const out = await deriveClarifyingQuestions(
+      "user-1",
+      ctx,
+      "en",
+      DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+      { aiAvailable: true },
+    );
 
     expect(out.source).toBe("ai");
     expect(provider.generateCompletion).toHaveBeenCalledTimes(1);
+  });
+
+  it("accepts the analysis-only grant the capability table lists", async () => {
+    // The capability the route resolved admits `ai_insights_only`; the
+    // question path used to demand a Coach receipt on top and fell back.
+    providerMocks.resolveProviderChain.mockResolvedValue([
+      { providerType: "admin-openai", instance: provider },
+    ]);
+    activeKinds.kinds = new Set(["ai_insights_only"]);
+
+    const out = await deriveClarifyingQuestions(
+      "user-1",
+      ctx,
+      "en",
+      DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+      { aiAvailable: true },
+    );
+
+    expect(out.source).toBe("ai");
+    expect(consentFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          kind: { in: [...AI_CAPABILITIES.aboutMeQuestions.consent.kinds] },
+        }),
+      }),
+    );
   });
 
   it("leaves a BYOK chain ungated — the user's own egress needs no receipt", async () => {
@@ -197,11 +300,17 @@ describe("deriveClarifyingQuestions — server-managed consent gate", () => {
       { providerType: "openai", instance: provider },
     ]);
 
-    const out = await deriveClarifyingQuestions("user-1", ctx, "en");
+    const out = await deriveClarifyingQuestions(
+      "user-1",
+      ctx,
+      "en",
+      DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+      { aiAvailable: true },
+    );
 
     expect(out.source).toBe("ai");
     expect(provider.generateCompletion).toHaveBeenCalledTimes(1);
-    expect(latestActiveReceipt).not.toHaveBeenCalled();
+    expect(consentFindFirst).not.toHaveBeenCalled();
   });
 
   it("leaves a local chain ungated", async () => {
@@ -209,7 +318,13 @@ describe("deriveClarifyingQuestions — server-managed consent gate", () => {
       { providerType: "local", instance: provider },
     ]);
 
-    const out = await deriveClarifyingQuestions("user-1", ctx, "en");
+    const out = await deriveClarifyingQuestions(
+      "user-1",
+      ctx,
+      "en",
+      DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+      { aiAvailable: true },
+    );
 
     expect(out.source).toBe("ai");
     expect(provider.generateCompletion).toHaveBeenCalledTimes(1);
@@ -223,7 +338,13 @@ describe("deriveClarifyingQuestions — server-managed consent gate", () => {
       { providerType: "admin-openai", instance: provider },
     ]);
 
-    const out = await deriveClarifyingQuestions("user-1", ctx, "en");
+    const out = await deriveClarifyingQuestions(
+      "user-1",
+      ctx,
+      "en",
+      DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+      { aiAvailable: true },
+    );
 
     expect(out.source).toBe("fallback");
     expect(provider.generateCompletion).not.toHaveBeenCalled();
@@ -238,7 +359,13 @@ describe("deriveClarifyingQuestions — atomic budget", () => {
   });
 
   it("reserves before the call and reconciles the actual spend after", async () => {
-    await deriveClarifyingQuestions("user-1", ctx, "en");
+    await deriveClarifyingQuestions(
+      "user-1",
+      ctx,
+      "en",
+      DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+      { aiAvailable: true },
+    );
 
     expect(budgetMocks.reserveBudget).toHaveBeenCalledWith(
       "user-1",
@@ -267,7 +394,13 @@ describe("deriveClarifyingQuestions — atomic budget", () => {
       operatorAfter: 200_000,
     });
 
-    const out = await deriveClarifyingQuestions("user-1", ctx, "en");
+    const out = await deriveClarifyingQuestions(
+      "user-1",
+      ctx,
+      "en",
+      DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+      { aiAvailable: true },
+    );
 
     expect(out.source).toBe("fallback");
     expect(provider.generateCompletion).not.toHaveBeenCalled();
@@ -276,7 +409,13 @@ describe("deriveClarifyingQuestions — atomic budget", () => {
   it("reconciles the reservation to zero when the provider throws", async () => {
     provider.generateCompletion.mockRejectedValue(new Error("upstream down"));
 
-    const out = await deriveClarifyingQuestions("user-1", ctx, "en");
+    const out = await deriveClarifyingQuestions(
+      "user-1",
+      ctx,
+      "en",
+      DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+      { aiAvailable: true },
+    );
 
     expect(out.source).toBe("fallback");
     expect(budgetMocks.reconcileSpend).toHaveBeenCalledWith(

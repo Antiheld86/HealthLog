@@ -88,8 +88,8 @@ export const adminSettingsSchema = z
     // against Intl.supportedValuesOf at runtime; this schema just
     // guards the shape + length.
     defaultUserTimezone: z.string().max(64).optional(),
-    // v1.4.31 — assistant-surface operator feature flags. Master
-    // kills every sub-flag; sub-flags carve specific surfaces. The
+    // The operator's assistant switches. The master stops every AI
+    // capability; the sub-switches each stop the AI work they cover. The
     // dedicated admin endpoint at
     // /api/admin/settings/assistant-flags also accepts these via
     // its own schema; this entry exists so the generic
@@ -100,6 +100,6 @@ export const adminSettingsSchema = z
     assistantCoachEnabled: z.boolean().optional(),
     assistantBriefingEnabled: z.boolean().optional(),
     assistantInsightStatusEnabled: z.boolean().optional(),
-    assistantCorrelationsEnabled: z.boolean().optional(),
+    assistantDocumentAiEnabled: z.boolean().optional(),
   })
   .strict();

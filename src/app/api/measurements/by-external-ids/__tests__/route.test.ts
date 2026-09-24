@@ -28,7 +28,10 @@ vi.mock("@/lib/auth/audit", () => ({
 vi.mock("@/lib/cache/invalidate", () => ({
   invalidateUserMeasurements: vi.fn(),
 }));
-vi.mock("@/lib/insights/comprehensive-generate", () => ({
+// The status re-warm the shared post-mutation tail fires. Mocked at the
+// module the tail imports it from; a mock anywhere else is never called, and
+// the real one runs the AI capability loader against this file's stub db.
+vi.mock("@/lib/insights/status-invalidation", () => ({
   invalidateStatusInsightsForTypes: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/lib/rollups/measurement-rollups", async () => {
@@ -57,7 +60,7 @@ import { DELETE } from "../route";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
-import { invalidateStatusInsightsForTypes } from "@/lib/insights/comprehensive-generate";
+import { invalidateStatusInsightsForTypes } from "@/lib/insights/status-invalidation";
 import { recomputeBucketsForMeasurement } from "@/lib/rollups/measurement-rollups";
 
 const SESSION_OK = {
@@ -112,6 +115,12 @@ describe("DELETE /api/measurements/by-external-ids", () => {
       externalId: { in: ["uuid-aaa"] },
       deletedAt: null,
     });
+
+    // The deleted row's type is re-warmed; the zero-row case below is the
+    // twin that must not reach it.
+    expect(invalidateStatusInsightsForTypes).toHaveBeenCalledWith("user-1", [
+      "WEIGHT",
+    ]);
   });
 
   it("is a no-op for a foreign-origin externalId that collides on a non-app-minted row", async () => {

@@ -82,6 +82,7 @@ function doc(
     pendingCount: 1,
     conditionLinks: [],
     encounterLinks: [],
+    vaccinationLinks: [],
     servingClass: "inline",
     hasContentIndex: true,
     contentIndexSource: "vision",

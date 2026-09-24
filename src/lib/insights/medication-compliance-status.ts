@@ -37,9 +37,11 @@ import {
   round,
 } from "@/lib/insights/status-shared";
 import {
-  isTimeoutStub,
+  readFreshStatusItems,
+  refreshUnchangedStatusItems,
   resolveReadOnlyStatusMiss,
   statusCacheAction,
+  writeStatusNote,
 } from "@/lib/insights/status-cache";
 import { hashInsightSnapshot } from "@/lib/insights/snapshot-hash";
 import { returnTimeoutFallback } from "@/lib/insights/timeout-fallback";
@@ -56,6 +58,17 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 interface MedicationSummaryItem {
   medicationId: string;
   text: string;
+}
+
+/** The stored per-medication lines, keeping only well-formed entries. */
+function parseMedicationItems(items: unknown[]): MedicationSummaryItem[] {
+  return items.filter(
+    (entry): entry is MedicationSummaryItem =>
+      typeof (entry as MedicationSummaryItem | null)?.medicationId ===
+        "string" &&
+      typeof (entry as MedicationSummaryItem | null)?.text === "string" &&
+      (entry as MedicationSummaryItem).text.trim().length > 0,
+  );
 }
 
 /**
@@ -120,53 +133,25 @@ export async function prepareMedicationComplianceStatusForUser(
   const userTz = await resolveUserTimezone(userId);
   const todayKey = userDayKey(new Date(), userTz);
 
-  // This route carries a richer cached envelope (`summary` +
-  // `medications`) than the standard `text`-only generators, so it
-  // keeps its own cache-read — but it shares the stub-rejection
-  // predicate so a timeout stub never sticks for the day.
+  // This card stores per-medication lines next to its summary, so it reads
+  // its note through the items variant of the shared reader.
   if (!force) {
-    const latestCache = await prisma.auditLog.findFirst({
-      where: { userId, action: cacheAction },
-      orderBy: { createdAt: "desc" },
-      select: { createdAt: true, details: true },
+    const cached = await readFreshStatusItems({
+      userId,
+      cacheAction,
+      todayKey,
     });
-    if (latestCache?.details) {
-      try {
-        const parsed = JSON.parse(latestCache.details) as {
-          dateKey?: string;
-          summary?: string;
-          text?: string;
-          model?: string;
-          timeout?: boolean;
-          medications?: MedicationSummaryItem[];
-        };
-
-        if (
-          parsed.dateKey === todayKey &&
-          !isTimeoutStub(parsed) &&
-          typeof parsed.summary === "string" &&
-          parsed.summary.trim().length > 0 &&
-          Array.isArray(parsed.medications)
-        ) {
-          return {
-            phase: "served",
-            result: {
-              hasProvider: true,
-              summary: parsed.summary,
-              medications: parsed.medications.filter(
-                (entry): entry is MedicationSummaryItem =>
-                  typeof entry?.medicationId === "string" &&
-                  typeof entry?.text === "string" &&
-                  entry.text.trim().length > 0,
-              ),
-              cached: true,
-              updatedAt: latestCache.createdAt.toISOString(),
-            },
-          };
-        }
-      } catch {
-        // ignore invalid cache payload
-      }
+    if (cached && Array.isArray(cached.items)) {
+      return {
+        phase: "served",
+        result: {
+          hasProvider: true,
+          summary: cached.text,
+          medications: parseMedicationItems(cached.items),
+          cached: true,
+          updatedAt: cached.updatedAt,
+        },
+      };
     }
   }
 
@@ -178,13 +163,13 @@ export async function prepareMedicationComplianceStatusForUser(
       metric: "medication-compliance",
       locale,
     });
-    // v1.16.13 — `consent-missing` serves the same no-key fallback (see
-    // bmi-status); no enqueue happens for it.
-    if (outcome.kind === "no-provider" || outcome.kind === "consent-missing") {
+    // Unavailable for any reason: the deterministic line, no enqueue.
+    // `hasProvider` is provider presence only.
+    if (outcome.kind === "unavailable") {
       return {
         phase: "served",
         result: {
-          hasProvider: false,
+          hasProvider: outcome.hasProvider,
           summary: getNoKeyMedicationComplianceStatusText(locale),
           medications: [],
           cached: true,
@@ -429,56 +414,26 @@ export async function prepareMedicationComplianceStatusForUser(
 
   // Content-hash gate (v1.16.8): when the snapshot is unchanged since the
   // last real assessment, refresh the cache timestamp and skip the LLM.
-  // This generator caches the richer `{ summary, medications }` envelope,
-  // so it carries its own gate rather than the shared text-only one.
+  // This card stores per-medication lines next to the summary, so it uses
+  // the items variant of the shared gate.
   const snapshotHash = hashInsightSnapshot(snapshot);
-  const latestRow = await prisma.auditLog.findFirst({
-    where: { userId, action: cacheAction },
-    orderBy: { createdAt: "desc" },
-    select: { details: true },
+  const unchanged = await refreshUnchangedStatusItems({
+    userId,
+    cacheAction,
+    todayKey,
+    snapshotHash,
   });
-  if (latestRow?.details) {
-    try {
-      const parsed = JSON.parse(latestRow.details) as {
-        summary?: string;
-        medications?: MedicationSummaryItem[];
-        model?: string;
-        timeout?: boolean;
-        snapshotHash?: string;
-      };
-      if (
-        !isTimeoutStub(parsed) &&
-        typeof parsed.summary === "string" &&
-        parsed.summary.trim().length > 0 &&
-        Array.isArray(parsed.medications) &&
-        parsed.snapshotHash === snapshotHash
-      ) {
-        const refreshed = await prisma.auditLog.create({
-          data: {
-            userId,
-            action: cacheAction,
-            details: JSON.stringify({ ...parsed, dateKey: todayKey }),
-          },
-          select: { createdAt: true },
-        });
-        annotate({
-          action: { name: "insights.status.skipped_unchanged" },
-          meta: { cache_action: cacheAction },
-        });
-        return {
-          phase: "served",
-          result: {
-            hasProvider: true,
-            summary: parsed.summary,
-            medications: parsed.medications,
-            cached: true,
-            updatedAt: refreshed.createdAt.toISOString(),
-          },
-        };
-      }
-    } catch {
-      // Malformed cache payload — fall through to a real generation.
-    }
+  if (unchanged && Array.isArray(unchanged.items)) {
+    return {
+      phase: "served",
+      result: {
+        hasProvider: true,
+        summary: unchanged.text,
+        medications: parseMedicationItems(unchanged.items),
+        cached: true,
+        updatedAt: unchanged.updatedAt,
+      },
+    };
   }
 
   const previousContext = await getPreviousInsightContext(
@@ -622,29 +577,20 @@ export async function prepareMedicationComplianceStatusForUser(
           "Medication-compliance-status summary was empty after normalization",
         );
       }
-      const created = await prisma.auditLog.create({
-        data: {
-          userId,
-          action: cacheAction,
-          details: JSON.stringify({
-            dateKey: todayKey,
-            locale,
-            summary,
-            medications: medicationSummaries,
-            providerType: outcome.providerType,
-            model: outcome.model,
-            tokensUsed: outcome.tokensUsed,
-            snapshotHash,
-          }),
-        },
-        select: { createdAt: true },
+      const generatedAt = await writeStatusNote({
+        userId,
+        cacheAction,
+        todayKey,
+        text: summary,
+        items: medicationSummaries,
+        snapshotHash,
       });
       return {
         hasProvider: true,
         summary,
         medications: medicationSummaries,
         cached: false,
-        updatedAt: created.createdAt.toISOString(),
+        updatedAt: generatedAt.toISOString(),
       };
     },
   };

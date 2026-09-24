@@ -28,6 +28,7 @@ import { useTranslations } from "@/lib/i18n/context";
 import { useUnitDisplay } from "@/hooks/use-unit-display";
 import { useAuth } from "@/hooks/use-auth";
 import { resolveGlucoseUnit, toCanonicalMgdl } from "@/lib/glucose";
+import { isSurfaceVisible, type SurfaceModuleMap } from "@/lib/modules/surface";
 import {
   entryValueToCanonical,
   parseDecimalEntry,
@@ -47,7 +48,7 @@ import {
 
 const MAX_COMMENT_LENGTH = MEASUREMENT_NOTES_MAX_LENGTH;
 
-const MEASUREMENT_TYPES = [
+export const MEASUREMENT_TYPES = [
   {
     value: "BLOOD_PRESSURE",
     labelKey: "measurements.typeBloodPressure",
@@ -104,6 +105,46 @@ const MEASUREMENT_TYPES = [
     placeholder: "3.2",
     placeholderImperial: "7",
   },
+  // The rest of what a body-composition scale reports. The server has
+  // accepted all of these since the Withings and Apple Health work; only this
+  // list lagged, so a reading typed off the scale's display had no row. The
+  // guard in `measurement-form-body-composition.test.ts` keeps the two lists
+  // from drifting again.
+  {
+    value: "FAT_MASS",
+    labelKey: "measurements.typeFatMass",
+    unit: "kg",
+    placeholder: "18",
+    placeholderImperial: "40",
+  },
+  {
+    value: "FAT_FREE_MASS",
+    labelKey: "measurements.typeFatFreeMass",
+    unit: "kg",
+    placeholder: "58",
+    placeholderImperial: "128",
+  },
+  {
+    value: "LEAN_BODY_MASS",
+    labelKey: "measurements.typeLeanBodyMass",
+    unit: "kg",
+    placeholder: "55",
+    placeholderImperial: "121",
+  },
+  {
+    value: "MUSCLE_MASS",
+    labelKey: "measurements.typeMuscleMass",
+    unit: "kg",
+    placeholder: "52",
+    placeholderImperial: "115",
+  },
+  {
+    // A scale's own rating (Withings prints 1-12), not a percent.
+    value: "VISCERAL_FAT",
+    labelKey: "measurements.typeVisceralFat",
+    unitKey: "measurements.unitRating",
+    placeholder: "7",
+  },
   {
     value: "OXYGEN_SATURATION",
     labelKey: "measurements.typeOxygenSaturation",
@@ -154,6 +195,20 @@ const MEASUREMENT_TYPES = [
 export const MEASUREMENT_FORM_TYPE_VALUES = MEASUREMENT_TYPES.map(
   (t) => t.value,
 ) as readonly string[];
+
+/**
+ * The types the form offers for a module map: a type a module owns
+ * (`summary:<type>` in the surface map, the same ownership the server gates
+ * measurement types on) is left out while that module is off. An unknown map
+ * (the account still loading) offers every type.
+ */
+export function measurementFormTypes(
+  modules: SurfaceModuleMap | null | undefined,
+): ReadonlyArray<(typeof MEASUREMENT_TYPES)[number]> {
+  return MEASUREMENT_TYPES.filter((mt) =>
+    isSurfaceVisible(`summary:${mt.value}`, modules),
+  );
+}
 
 // Legacy / Insights-internal tokens that predate the canonical enum.
 // Older empty-state CTAs and a handful of dashboard tiles still emit
@@ -267,12 +322,18 @@ export function MeasurementForm({
   // seed from the last type the user actually saved rather than always
   // landing on BLOOD_PRESSURE. Lazy initializer so the localStorage read
   // happens once, at mount, not on every render.
-  const [type, setType] = useState(
+  const [selectedType, setType] = useState(
     () =>
       normalizedDefault ||
       getLastUsedMeasurementType(MEASUREMENT_FORM_TYPE_VALUES) ||
       "BLOOD_PRESSURE",
   );
+  // Only types whose module is on. A default, a deep link or the last-used
+  // type that is switched off falls back to the first offered type.
+  const offeredTypes = measurementFormTypes(user?.modules);
+  const type = offeredTypes.some((mt) => mt.value === selectedType)
+    ? selectedType
+    : (offeredTypes[0]?.value ?? "BLOOD_PRESSURE");
   const [value, setValue] = useState("");
   const [sysBp, setSysBp] = useState("");
   const [diaBp, setDiaBp] = useState("");
@@ -475,7 +536,7 @@ export function MeasurementForm({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {MEASUREMENT_TYPES.map((mt) => (
+            {offeredTypes.map((mt) => (
               <SelectItem key={mt.value} value={mt.value}>
                 {t(mt.labelKey)}
               </SelectItem>

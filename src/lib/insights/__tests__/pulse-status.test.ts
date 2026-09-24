@@ -1,9 +1,21 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
+// The graded series folds per-day aggregates in SQL; the fake folds the
+// mocked `measurement.findMany` rows with the same rules.
+vi.mock("@/lib/measurements/day-aggregates", async () => ({
+  readDayAggregates: (
+    await import("@/lib/measurements/__tests__/fake-day-aggregates")
+  ).fakeReadDayAggregates,
+}));
+
 vi.mock("@/lib/db", () => ({
   prisma: {
     user: { findUnique: vi.fn() },
-    auditLog: { findFirst: vi.fn(), create: vi.fn() },
+    insightStatusCache: {
+      findUnique: vi.fn(),
+      upsert: vi.fn(),
+      updateMany: vi.fn(),
+    },
     measurement: { findMany: vi.fn() },
     measurementRollup: { findMany: vi.fn() },
     // v1.28.25 — the graded-series cold-tier fallback day-buckets dense
@@ -15,8 +27,26 @@ vi.mock("@/lib/db", () => ({
 
 vi.mock("@/lib/insights/status-provider", () => ({
   runStatusCompletion: vi.fn(),
-  // Consent never blocks in these fixtures — the gate has its own tests.
-  statusConsentBlocksGeneration: vi.fn(async () => false),
+}));
+
+vi.mock(
+  "@/lib/ai/coach/bytes-codec",
+  async () => (await import("./status-note-fixtures")).fakeBytesCodec,
+);
+
+// statusText is available in these fixtures — the capability read has its
+// own tests in status-cache.test.ts.
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForRecord: async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
+  aiCapabilityToServe: async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
 }));
 
 vi.mock("@/lib/insights/memory", () => ({
@@ -27,6 +57,7 @@ vi.mock("@/lib/insights/memory", () => ({
 import { prisma } from "@/lib/db";
 import { runStatusCompletion } from "@/lib/insights/status-provider";
 import { generatePulseStatusForUser } from "../pulse-status";
+import { noteRow, writtenNotes } from "./status-note-fixtures";
 
 const dayMs = 24 * 60 * 60 * 1000;
 
@@ -50,6 +81,11 @@ function stubCompletion(
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(null);
+  vi.mocked(prisma.insightStatusCache.upsert).mockResolvedValue({} as never);
+  vi.mocked(prisma.insightStatusCache.updateMany).mockResolvedValue(
+    {} as never,
+  );
   vi.mocked(prisma.$queryRaw).mockResolvedValue([] as never);
   // Cold rollup tier: the pulse graded series folds monthly/yearly from
   // the full-history `measurement.findMany` fallback on a tier miss.
@@ -71,7 +107,6 @@ describe("generatePulseStatusForUser — graded payload", () => {
       dateOfBirth: null,
       gender: null,
     } as never);
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.measurement.findMany).mockResolvedValue(records as never);
     // v1.28.25 — PULSE is a dense type, so the cold-tier fallback reads
     // a SQL day-bucket aggregate instead of the raw findMany walk. Feed
@@ -82,9 +117,6 @@ describe("generatePulseStatusForUser — graded payload", () => {
         .reverse() as never,
     );
     vi.mocked(prisma.moodEntry.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: new Date(),
-    } as never);
 
     const captured: { userPrompt: string | null } = { userPrompt: null };
     stubCompletion('{"summary":"OK"}', captured);
@@ -146,16 +178,12 @@ describe("generatePulseStatusForUser — A2 resting-target in-target %", () => {
       dateOfBirth: null,
       gender: null,
     } as never);
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
     // pulse-status reads PULSE first, then RESTING_HEART_RATE.
     vi.mocked(prisma.measurement.findMany)
       .mockResolvedValueOnce(pulseRecords as never)
       .mockResolvedValueOnce(restingRecords as never)
       .mockResolvedValue([] as never);
     vi.mocked(prisma.moodEntry.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: now,
-    } as never);
 
     const captured: { userPrompt: string | null } = { userPrompt: null };
     stubCompletion('{"summary":"OK"}', captured);
@@ -194,15 +222,11 @@ describe("generatePulseStatusForUser — A2 resting-target in-target %", () => {
       dateOfBirth: null,
       gender: null,
     } as never);
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.measurement.findMany)
       .mockResolvedValueOnce(pulseRecords as never)
       .mockResolvedValueOnce([] as never); // no RESTING_HEART_RATE
     vi.mocked(prisma.measurement.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.moodEntry.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: now,
-    } as never);
 
     const captured: { userPrompt: string | null } = { userPrompt: null };
     stubCompletion('{"summary":"OK"}', captured);
@@ -234,15 +258,13 @@ describe("generatePulseStatusForUser — per-user tz (QA F5)", () => {
         gender: null,
         timezone: "America/New_York",
       } as never);
-      vi.mocked(prisma.auditLog.findFirst).mockResolvedValue({
-        createdAt: new Date(),
-        details: JSON.stringify({
+      vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+        noteRow({
           dateKey: nyToday,
-          locale: "en",
           text: "NY-anchored cached pulse text.",
-          model: "x",
-        }),
-      } as never);
+          generatedAt: new Date(),
+        }) as never,
+      );
 
       const result = await generatePulseStatusForUser("user-ny", {
         locale: "en",
@@ -259,8 +281,8 @@ describe("generatePulseStatusForUser — per-user tz (QA F5)", () => {
   });
 });
 
-describe("generatePulseStatusForUser — cache-read skips a stub", () => {
-  it("regenerates when the only cached row is a timeout stub", async () => {
+describe("generatePulseStatusForUser — a negative window is not a note", () => {
+  it("regenerates when today's row carries only a negative-cache window", async () => {
     const now = new Date();
     const todayKey = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Europe/Berlin",
@@ -269,23 +291,19 @@ describe("generatePulseStatusForUser — cache-read skips a stub", () => {
       dateOfBirth: null,
       gender: null,
     } as never);
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue({
-      createdAt: now,
-      details: JSON.stringify({
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({
         dateKey: todayKey,
-        locale: "en",
-        text: "Pulse fallback text…",
-        model: "timeout-stub",
-        timeout: true,
-      }),
-    } as never);
+        text: null,
+        generatedAt: null,
+        retryAt: new Date(Date.now() + 60_000),
+        negativeReason: "timeout",
+      }) as never,
+    );
     vi.mocked(prisma.measurement.findMany).mockResolvedValue([
       { value: 72, measuredAt: now },
     ] as never);
     vi.mocked(prisma.moodEntry.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: now,
-    } as never);
 
     stubCompletion('{"summary":"Fresh pulse assessment."}');
 
@@ -303,14 +321,10 @@ describe("generatePulseStatusForUser — token-leak hardening (v1.4.27 F16)", ()
       dateOfBirth: null,
       gender: null,
     } as never);
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.measurement.findMany).mockResolvedValue([
       { value: 72, measuredAt: new Date() },
     ] as never);
     vi.mocked(prisma.moodEntry.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: new Date(),
-    } as never);
 
     stubCompletion(
       '{"summary":"Your pulse is stable. metric:PULSE The 7-day average sits inside the band."}',
@@ -320,12 +334,9 @@ describe("generatePulseStatusForUser — token-leak hardening (v1.4.27 F16)", ()
 
     expect(result.text).toBeTruthy();
     expect(result.text).not.toContain("metric:");
-    const createCalls = vi.mocked(prisma.auditLog.create).mock.calls;
-    expect(createCalls.length).toBeGreaterThan(0);
-    const details = (createCalls[0][0] as { data: { details: string } }).data
-      .details;
-    const parsed = JSON.parse(details) as { text: string };
-    expect(parsed.text).not.toContain("metric:");
-    expect(parsed.text).toContain("Your pulse is stable.");
+    const notes = writtenNotes(prisma.insightStatusCache.upsert);
+    expect(notes.length).toBeGreaterThan(0);
+    expect(notes[0].text).not.toContain("metric:");
+    expect(notes[0].text).toContain("Your pulse is stable.");
   });
 });

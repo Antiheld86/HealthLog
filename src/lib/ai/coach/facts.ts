@@ -310,7 +310,7 @@ export async function extractAndStoreFacts(
   const result = await runCompletion({
     userId,
     cacheAction: "coach.facts",
-    consentSurface: "coach",
+    capability: "coach",
     systemPrompt: extractionSystemPrompt(opts?.locale),
     userPrompt: buildUserPrompt(turns, activeTexts),
     temperature: 0.2,

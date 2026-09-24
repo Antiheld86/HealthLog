@@ -23,6 +23,7 @@
  */
 import { type NextRequest } from "next/server";
 
+import { requireAiCapability } from "@/lib/ai/capabilities/gate";
 import { apiHandler, requireAuth, HttpError } from "@/lib/api-handler";
 import {
   apiError,
@@ -75,6 +76,11 @@ export const POST = apiHandler(
 
     const gate = await requireModuleEnabled(userId, "inboundDocuments");
     if (!gate.enabled) return gate.response;
+
+    // A turn sends the document's text to a model. The provider and the
+    // consent receipt are answered by the pick, for the provider actually used.
+    // Reading the history (GET) is the person's own data and stays open.
+    await requireAiCapability("documentAi", { pickDecides: true });
 
     const { id } = await params;
     const document = await loadOwnedDocument(userId, id);
@@ -213,6 +219,7 @@ export const POST = apiHandler(
       contractLocale,
       locale,
       signal: request.signal,
+      alsoRequires: [],
     });
   },
 );

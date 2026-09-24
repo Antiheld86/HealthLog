@@ -305,6 +305,7 @@ export function VaccinationForm({
 
       <VaccinationDocumentPicker
         enabled={user?.modules?.inboundDocuments === true}
+        anchor={anchor}
         documentIds={draft.documentIds}
         onChange={(documentIds) => patch({ documentIds })}
       />

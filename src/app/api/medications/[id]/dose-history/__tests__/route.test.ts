@@ -264,3 +264,165 @@ describe("GET /api/medications/[id]/dose-history", () => {
     expect(res.status).toBe(422);
   });
 });
+
+/**
+ * Issue #1028 — a dose logged for earlier today on a medication created later
+ * the same day vanished from the trailing-window ledger while the full
+ * history (which has no window) showed it. The window floor was clamped to
+ * the medication's creation instant and the same clamped floor filtered the
+ * intakes, so any dose recorded with a time before the moment the medication
+ * was added fell out of "Last 90 days". The creation floor exists to keep
+ * the ledger from minting phantom slots before the medication existed; it
+ * says nothing about which recorded doses belong in the window.
+ *
+ * Pinned in a positive and a negative UTC offset so a zone-dependent floor
+ * cannot hide behind one of them.
+ */
+describe("GET /api/medications/[id]/dose-history — intakes recorded before creation (#1028)", () => {
+  for (const tz of ["Asia/Kolkata", "America/Los_Angeles"]) {
+    it(`keeps a same-day dose logged before the medication was added (${tz})`, async () => {
+      const today = new Date("2026-09-22T12:00:00Z");
+      const now = localHmAsUtc(today, tz, 16, 30);
+      const createdAt = localHmAsUtc(today, tz, 16, 20);
+      const takenAt = localHmAsUtc(today, tz, 14, 0);
+
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(now);
+      try {
+        vi.mocked(getSession).mockResolvedValue({
+          ...SESSION_OK,
+          user: { ...SESSION_OK.user, timezone: tz },
+        } as never);
+        vi.mocked(prisma.medication.findUnique).mockResolvedValue({
+          id: "med-1",
+          startsOn: null,
+          endsOn: null,
+          oneShot: false,
+          createdAt,
+          scheduleRevisions: [],
+          schedules: [
+            {
+              id: "sched-1",
+              windowStart: "08:00",
+              windowEnd: "08:00",
+              daysOfWeek: null,
+              timesOfDay: ["08:00"],
+              reminderGraceMinutes: null,
+              rrule: null,
+              rollingIntervalDays: null,
+              scheduleType: "SCHEDULED",
+              cyclicOnWeeks: null,
+              cyclicOffWeeks: null,
+            },
+          ],
+        } as never);
+        vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValue([
+          {
+            id: "evt-earlier-today",
+            scheduledFor: takenAt,
+            takenAt,
+            skipped: false,
+            autoMissed: false,
+            attributionSource: "AUTO",
+            doseTaken: null,
+            source: "WEB",
+          },
+        ] as never);
+
+        // Exactly what the Verlauf tab sends: the trailing 90 days to now.
+        const from = new Date(now.getTime() - 90 * 86_400_000).toISOString();
+        const to = now.toISOString();
+        const res = await GET(
+          getReq(
+            `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+          ),
+          ROUTE_PARAMS,
+        );
+        expect(res.status).toBe(200);
+        const json = await res.json();
+        const ids = (
+          json.data.rows as Array<{ intake: { id: string | null } | null }>
+        ).map((r) => r.intake?.id);
+        expect(ids).toContain("evt-earlier-today");
+        // The response reports the window the recorded doses were read
+        // over: the requested start, not the medication's creation.
+        expect(json.data.from).toBe(from);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  }
+});
+
+describe("GET /api/medications/[id]/dose-history — early take (#1028 class)", () => {
+  it("keeps a dose taken inside its window before the slot's own time", async () => {
+    const tz = "Asia/Kolkata";
+    const today = new Date("2026-09-22T12:00:00Z");
+    const now = localHmAsUtc(today, tz, 19, 30);
+    const slot = localHmAsUtc(today, tz, 20, 0);
+    const takenAt = localHmAsUtc(today, tz, 19, 15);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+    try {
+      vi.mocked(getSession).mockResolvedValue({
+        ...SESSION_OK,
+        user: { ...SESSION_OK.user, timezone: tz },
+      } as never);
+      vi.mocked(prisma.medication.findUnique).mockResolvedValue({
+        id: "med-1",
+        startsOn: null,
+        endsOn: null,
+        oneShot: false,
+        createdAt: new Date("2026-01-01T00:00:00Z"),
+        scheduleRevisions: [],
+        schedules: [
+          {
+            id: "sched-1",
+            windowStart: "20:00",
+            windowEnd: "20:00",
+            daysOfWeek: null,
+            timesOfDay: ["20:00"],
+            reminderGraceMinutes: null,
+            rrule: null,
+            rollingIntervalDays: null,
+            scheduleType: "SCHEDULED",
+            cyclicOnWeeks: null,
+            cyclicOffWeeks: null,
+          },
+        ],
+      } as never);
+      vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValue([
+        {
+          id: "evt-early",
+          scheduledFor: slot,
+          takenAt,
+          skipped: false,
+          autoMissed: false,
+          attributionSource: "AUTO",
+          doseTaken: null,
+          source: "WEB",
+        },
+      ] as never);
+      const from = new Date(now.getTime() - 90 * 86_400_000).toISOString();
+      const res = await GET(
+        getReq(`?from=${encodeURIComponent(from)}`),
+        ROUTE_PARAMS,
+      );
+      const json = await res.json();
+      const rows = json.data.rows as Array<{
+        status: string;
+        intake: { id: string | null } | null;
+      }>;
+      // `to` reports how far recorded doses were read: up to the early
+      // dose's slot, past the request's own now.
+      expect(json.data.to).toBe(slot.toISOString());
+      const early = rows.find((r) => r.intake?.id === "evt-early");
+      expect(early?.status).toBe("taken_on_time");
+      // The read horizon stretches only to the recorded anchor: no later
+      // slot is minted as upcoming.
+      expect(rows.filter((r) => r.status === "upcoming")).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

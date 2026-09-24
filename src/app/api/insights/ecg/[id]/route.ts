@@ -20,15 +20,14 @@
  * a verdict of its own.
  *
  * Mirrors the `rhythm-events` gating: `apiHandler`, cookie OR Bearer auth,
- * `userId` from the session, the `insights` module gate, and the
- * `insightStatus` assistant-surface gate. No AI provider call.
+ * `userId` from the session. No AI gate and no module gate: the strip is
+ * device data. No AI provider call.
  */
 import { NextRequest } from "next/server";
 
 import { apiError, apiSuccess } from "@/lib/api-response";
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
-import { requireModuleEnabled } from "@/lib/modules/gate";
 import { prisma } from "@/lib/db";
 import { decryptWaveformFromBytes } from "@/lib/withings/ecg-waveform-codec";
 import {
@@ -45,9 +44,8 @@ export const GET = apiHandler(
     // v1.37.0 — MANAGE-level read: computed over the whole record, with no
     // provider anywhere on the path.
     const { user } = await requireRecordAuth("manage", "record");
-    const m = await requireModuleEnabled(user.id, "insights");
-    if (!m.enabled) return m.response;
-    // The waveform is never interpreted, so no assistant-surface gate.
+    // The waveform is never interpreted, so neither an AI gate nor the AI
+    // analysis opt-out applies.
 
     const { id } = await params;
     const full = request.nextUrl.searchParams.get("full") === "1";

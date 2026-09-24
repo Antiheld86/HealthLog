@@ -38,7 +38,8 @@ import { prisma } from "@/lib/db";
 import { ENVIRONMENT_FIELDS } from "@/lib/environment/fields";
 import type { Locale } from "@/lib/i18n/config";
 import { annotate } from "@/lib/logging/context";
-import { isModuleEnabled } from "@/lib/modules/gate";
+import { isModuleEnabled, resolveModuleMap } from "@/lib/modules/gate";
+import { isSurfaceVisible } from "@/lib/modules/surface";
 import { wallClockInTz } from "@/lib/tz/wall-clock";
 import {
   discoverCorrelations,
@@ -217,14 +218,19 @@ export async function readCoachCorrelations(
     //
     // v1.22 — the lab draws feed a separate point-vs-window pass, not the
     // matrix, so they are fetched alongside rather than assembled in.
+    // Switched-off modules never reach the Coach: their channels are left out
+    // of the scan and the lab pass is skipped with labs off.
+    const modules = await resolveModuleMap(userId);
     const [matrix, coincidentDerived, labDraws] = await Promise.all([
-      assembleDiscoveryMatrix(userId, { tz, since, fetchMode: "raw" }),
+      assembleDiscoveryMatrix(userId, { tz, since, fetchMode: "raw", modules }),
       // Coincident-deviation is its own derived metric — fail-soft to null so a
       // baseline hiccup never sinks the whole correlations read. D2-8: pass the
       // user's tz so the "today" grouping matches the user's calendar day, not
       // UTC's, before the fired flag is narrated as "out of band TODAY".
       computeCoincidentDeviation(userId, profile, { tz }).catch(() => null),
-      fetchLabDraws(userId, tz, since),
+      isSurfaceVisible("correlation:LAB_DRAWS", modules)
+        ? fetchLabDraws(userId, tz, since)
+        : Promise.resolve([]),
     ]);
     const { series, diagnostics } = matrix;
 

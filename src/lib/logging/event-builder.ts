@@ -288,6 +288,11 @@ export class WideEventBuilder {
     return structuredClone(this.event) as WideEvent;
   }
 
+  /** `http` for a request, `background` for a job or a hand-rolled route. */
+  getKind(): EventKind {
+    return this.event.kind ?? "http";
+  }
+
   getDurationMs(): number {
     return Math.round(performance.now() - this.startTime);
   }

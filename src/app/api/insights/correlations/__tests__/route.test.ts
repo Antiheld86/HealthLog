@@ -83,7 +83,7 @@ vi.mock("next/headers", () => ({
 import { GET } from "../route";
 import { getSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { requireModuleEnabled } from "@/lib/modules/gate";
+import { requireModuleEnabled, resolveModuleMap } from "@/lib/modules/gate";
 import { apiError } from "@/lib/api-response";
 import { checkAnalyticsReadRateLimit } from "@/lib/rate-limit";
 import { __resetAllCachesForTests } from "@/lib/cache/server-cache";
@@ -100,6 +100,10 @@ beforeEach(() => {
   // prior test would serve a hit and skip the builder every assertion spies on.
   __resetAllCachesForTests();
   vi.mocked(requireModuleEnabled).mockResolvedValue({ enabled: true });
+  // Every module on unless a test says otherwise.
+  vi.mocked(resolveModuleMap).mockResolvedValue(
+    {} as Awaited<ReturnType<typeof resolveModuleMap>>,
+  );
   // v1.15.20 — default to an allowing analytics-read budget.
   vi.mocked(checkAnalyticsReadRateLimit).mockResolvedValue({
     allowed: true,
@@ -194,36 +198,21 @@ describe("GET /api/insights/correlations", () => {
     expect(secondBody.data).toEqual(firstBody.data);
   });
 
-  it("returns 403 + errorCode when the correlations flag is off", async () => {
+  it("serves the statistics with every assistant switch off", async () => {
+    // Correlations are computed, not written by a model, so no AI switch
+    // decides whether they load. The switch that used to gate them is gone.
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
     (
       prisma.appSettings.findUnique as ReturnType<typeof vi.fn>
-    ).mockResolvedValueOnce({
-      assistantEnabled: true,
-      assistantCoachEnabled: true,
-      assistantBriefingEnabled: true,
-      assistantInsightStatusEnabled: true,
-      assistantCorrelationsEnabled: false,
-    });
-    const res = await callGet(makeReq());
-    expect(res.status).toBe(403);
-    const body = (await res.json()) as { meta?: { errorCode?: string } };
-    expect(body.meta?.errorCode).toBe("assistant.disabled.correlations");
-  });
-
-  it("returns 403 when the master flag is off (sub-flag forced)", async () => {
-    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
-    (
-      prisma.appSettings.findUnique as ReturnType<typeof vi.fn>
-    ).mockResolvedValueOnce({
+    ).mockResolvedValue({
       assistantEnabled: false,
-      assistantCoachEnabled: true,
-      assistantBriefingEnabled: true,
-      assistantInsightStatusEnabled: true,
-      assistantCorrelationsEnabled: true,
+      assistantCoachEnabled: false,
+      assistantBriefingEnabled: false,
+      assistantInsightStatusEnabled: false,
+      assistantDocumentAiEnabled: false,
     });
     const res = await callGet(makeReq());
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
   });
 
   it("returns 429 when the shared analytics-read budget is exhausted", async () => {
@@ -264,10 +253,34 @@ describe("GET /api/insights/correlations", () => {
     );
   });
 
-  // v1.18.0 (B2) — the route now also requires the `insights` module.
-  it("returns 403 + module.disabled when the insights module is off", async () => {
+  it("skips the lab draws with the labs module off", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
-    vi.mocked(requireModuleEnabled).mockResolvedValueOnce({
+    vi.mocked(resolveModuleMap).mockResolvedValue({
+      labs: false,
+    } as Awaited<ReturnType<typeof resolveModuleMap>>);
+    const res = await callGet(makeReq());
+    expect(res.status).toBe(200);
+    expect(prisma.labResult.findMany).not.toHaveBeenCalled();
+  });
+
+  it("recomputes rather than serve a cached body after a module was switched off", async () => {
+    // The switched-off set is part of the cache key. Watched red with the
+    // suffix removed from the key: the second call is a cache hit and the
+    // measurement window is read once.
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    await callGet(makeReq());
+    vi.mocked(resolveModuleMap).mockResolvedValue({
+      mood: false,
+    } as Awaited<ReturnType<typeof resolveModuleMap>>);
+    await callGet(makeReq());
+    expect(prisma.measurement.findMany).toHaveBeenCalledTimes(2);
+  });
+
+  // The `insights` module is the AI analysis opt-out. Correlations are
+  // statistics, so turning AI analysis off must not take them away.
+  it("serves the statistics with the insights module (the AI analysis opt-out) off", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    vi.mocked(requireModuleEnabled).mockResolvedValue({
       enabled: false,
       response: apiError('Module "insights" is not enabled', 403, {
         errorCode: "module.disabled",
@@ -275,13 +288,7 @@ describe("GET /api/insights/correlations", () => {
       }),
     });
     const res = await callGet(makeReq());
-    expect(res.status).toBe(403);
-    const body = (await res.json()) as {
-      meta?: { errorCode?: string; module?: string };
-    };
-    expect(body.meta?.errorCode).toBe("module.disabled");
-    expect(body.meta?.module).toBe("insights");
-    // The disabled-module request never reaches the series reads.
-    expect(prisma.measurement.findMany).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(requireModuleEnabled).not.toHaveBeenCalled();
   });
 });

@@ -200,17 +200,18 @@ export function isCoreDomain(key: string): key is CoreDomainKey {
  * The registry. Order is the Settings-hub display order (grouped by
  * category in the UI; this flat order is the canonical iteration order).
  *
- * `insights` decision (documented): disabling `insights` hides only the
- * AI-ANALYSIS surfaces — the Daily Briefing, the per-metric AI status
- * cards, the correlation narration, the Health-Score explainer. It does
- * NOT hide the raw weight / BP / pulse charts or any measurement data:
- * those are core and render from live measurements regardless. `insights`
- * is the narrative layer, not the data layer. (The operator-level
- * assistant master flag is a separate, server-wide kill-switch; this
- * per-user toggle sits below it.)
+ * `insights` is the person's AI opt-out, labelled "AI analysis". Turned off,
+ * no model writes anything for the record (the daily briefing and its lifts,
+ * period narratives, per-metric status notes, workout notes, reaction lines),
+ * by day or by night, and no text a model wrote earlier is shown. It never
+ * hides data: the Insights area, its charts, scores, ECG recordings and
+ * statistics are not owned by this module and stay whatever it says. The AI
+ * capability resolver (`src/lib/ai/capabilities/`) reads this key as the
+ * `user_disabled` layer for every capability it owns. The operator's assistant
+ * switches are a separate, server-wide layer above it.
  *
  * `coach` is the per-user opt-out half of the existing two-layer model
- * (`User.disableCoach` AND the operator master flag). It is surfaced here
+ * (`User.disableCoach` AND the operator's Coach switch). It is surfaced here
  * so the Modules hub lists it alongside its siblings, but it delegates —
  * the module blob never owns it.
  */
@@ -407,6 +408,14 @@ const CODE_DISABLED_MODULE_SET: ReadonlySet<string> = new Set(
 export function isCodeDisabledModule(key: ModuleKey): boolean {
   return CODE_DISABLED_MODULE_SET.has(key);
 }
+
+/**
+ * Modules whose OPERATOR layer is an assistant switch rather than a key in
+ * `AppSettings.moduleAvailabilityJson`. The Coach has one operator switch,
+ * `assistantCoachEnabled`; the availability blob's `coach` key was folded into
+ * it and is ignored, and the admin availability write refuses it.
+ */
+export const SWITCH_OWNED_MODULE_KEYS: readonly ModuleKey[] = ["coach"];
 
 /** The two delegated keys, resolved by their existing source of truth. */
 export function moduleDelegatesTo(

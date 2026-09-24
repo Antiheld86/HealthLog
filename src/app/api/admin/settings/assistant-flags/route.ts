@@ -1,6 +1,12 @@
 /**
  * `PUT /api/admin/settings/assistant-flags` — operator-side flip
- * surface for the five assistant feature flags.
+ * surface for the five assistant switches: the master, the Coach, the
+ * daily briefing, status notes, and reading documents.
+ *
+ * A switch that is off stops the AI work it covers and hides the text a
+ * model wrote for it; data, scores and statistics keep loading. The Coach
+ * switch is the operator's only Coach switch (the Coach row in module
+ * availability is read-only and follows it).
  *
  * Dedicated endpoint (separate from the generic
  * `/api/admin/settings` PUT) so the admin panel can wire its
@@ -46,7 +52,7 @@ const assistantFlagsSchema = z
     assistantCoachEnabled: z.boolean().optional(),
     assistantBriefingEnabled: z.boolean().optional(),
     assistantInsightStatusEnabled: z.boolean().optional(),
-    assistantCorrelationsEnabled: z.boolean().optional(),
+    assistantDocumentAiEnabled: z.boolean().optional(),
   })
   .strict();
 
@@ -55,7 +61,7 @@ type AssistantFlagsRow = {
   assistantCoachEnabled: boolean;
   assistantBriefingEnabled: boolean;
   assistantInsightStatusEnabled: boolean;
-  assistantCorrelationsEnabled: boolean;
+  assistantDocumentAiEnabled: boolean;
 };
 
 function buildResponseShape(row: AssistantFlagsRow) {
@@ -64,7 +70,7 @@ function buildResponseShape(row: AssistantFlagsRow) {
     coach: row.assistantCoachEnabled,
     briefing: row.assistantBriefingEnabled,
     insightStatus: row.assistantInsightStatusEnabled,
-    correlations: row.assistantCorrelationsEnabled,
+    documentAi: row.assistantDocumentAiEnabled,
   });
   return {
     raw: {
@@ -72,7 +78,7 @@ function buildResponseShape(row: AssistantFlagsRow) {
       assistantCoachEnabled: row.assistantCoachEnabled,
       assistantBriefingEnabled: row.assistantBriefingEnabled,
       assistantInsightStatusEnabled: row.assistantInsightStatusEnabled,
-      assistantCorrelationsEnabled: row.assistantCorrelationsEnabled,
+      assistantDocumentAiEnabled: row.assistantDocumentAiEnabled,
     },
     resolved,
   };
@@ -91,7 +97,7 @@ export const GET = apiHandler(async () => {
       assistantCoachEnabled: true,
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
-      assistantCorrelationsEnabled: true,
+      assistantDocumentAiEnabled: true,
     },
   });
 
@@ -101,8 +107,7 @@ export const GET = apiHandler(async () => {
     assistantBriefingEnabled: settings?.assistantBriefingEnabled ?? true,
     assistantInsightStatusEnabled:
       settings?.assistantInsightStatusEnabled ?? true,
-    assistantCorrelationsEnabled:
-      settings?.assistantCorrelationsEnabled ?? true,
+    assistantDocumentAiEnabled: settings?.assistantDocumentAiEnabled ?? true,
   };
 
   return apiSuccess(buildResponseShape(row));
@@ -153,7 +158,7 @@ export const PUT = apiHandler(async (request: NextRequest) => {
     assistantCoachEnabled: settings.assistantCoachEnabled,
     assistantBriefingEnabled: settings.assistantBriefingEnabled,
     assistantInsightStatusEnabled: settings.assistantInsightStatusEnabled,
-    assistantCorrelationsEnabled: settings.assistantCorrelationsEnabled,
+    assistantDocumentAiEnabled: settings.assistantDocumentAiEnabled,
   };
 
   return apiSuccess(buildResponseShape(row));

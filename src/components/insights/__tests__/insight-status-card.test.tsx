@@ -14,6 +14,17 @@ vi.mock("@/hooks/use-auth", () => ({
   }),
 }));
 
+// The card paints only while the `statusText` capability is available; these
+// tests are about the painted card, so the capability reads available.
+// `insight-status-card-capability-gate.test.tsx` owns the gate itself.
+vi.mock("@/hooks/use-ai-capability", () => ({
+  useAiCapability: () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
+}));
+
 /**
  * v1.4.27 — F16 regression cover. The per-metric status text comes
  * out of the AI provider with a literal `metric:<TYPE>` token (the
@@ -82,17 +93,6 @@ describe("<InsightStatusCard>", () => {
     expect(html).toContain("Pulse stayed inside the band.");
   });
 
-  it("renders the no-provider setup state when no terminal text exists", () => {
-    const html = render(
-      <InsightStatusCard {...baseProps} hasProvider={false} text={null} />,
-    );
-    // v1.18.6 — the no-provider tile is a guided-setup explainer + a
-    // Settings link, not a bare "unavailable" line.
-    expect(html).toContain("Connect an AI provider");
-    expect(html).toContain("Open AI settings");
-    expect(html).toContain("/settings/ai");
-  });
-
   it("renders a screened terminal fallback even when its envelope has no provider", () => {
     const html = render(
       <InsightStatusCard
@@ -159,15 +159,12 @@ describe("<InsightStatusCard>", () => {
     expect(html).not.toContain("animate-spin");
   });
 
-  it("keeps loading, preparing, no-provider, empty, and populated states distinct with stable compact geometry", () => {
+  it("keeps loading, preparing, empty, and populated states distinct with stable compact geometry", () => {
     const loading = render(
       <InsightStatusCard {...baseProps} text={null} loading />,
     );
     const preparing = render(
       <InsightStatusCard {...baseProps} text={null} preparing />,
-    );
-    const noProvider = render(
-      <InsightStatusCard {...baseProps} hasProvider={false} text={null} />,
     );
     const empty = render(<InsightStatusCard {...baseProps} text={null} />);
     const populated = render(
@@ -179,11 +176,10 @@ describe("<InsightStatusCard>", () => {
 
     expect(loading).toContain('data-testid="insight-status-card-loading"');
     expect(preparing).toContain('data-testid="insight-status-card-preparing"');
-    expect(noProvider).toContain('data-slot="insight-status-no-provider-cta"');
     expect(empty).toContain("No assessment yet.");
     expect(populated).toContain('data-slot="insight-assessment"');
 
-    for (const html of [loading, preparing, noProvider, empty]) {
+    for (const html of [loading, preparing, empty]) {
       expect(html).toContain("gap-2");
       expect(html).toContain("py-3");
       expect(html).toContain("md:py-4");

@@ -93,9 +93,10 @@ describe("<HealthChart> — bounded range fetch", () => {
     expect(measurementsUrl!).toMatch(/aggregate=daily/);
   });
 
-  it("omits aggregate=daily on windows of 7 days or fewer", async () => {
-    // v1.4.29 C3 — short windows keep raw fetching so the user can
-    // see hour-by-hour detail on the 7-day view.
+  it("asks for daily rows on the 7-day window too", async () => {
+    // The chart folds every range into days. The 7-day window used to read
+    // raw rows oldest-first under the 5000-row cap, which on a per-minute
+    // stream cut off the newest half of the week.
     const { I18nProvider } = await import("@/lib/i18n/context");
     const { HealthChart } = await import("../health-chart");
 
@@ -116,7 +117,7 @@ describe("<HealthChart> — bounded range fetch", () => {
       u.includes("/api/measurements"),
     );
     expect(measurementsUrl).toBeDefined();
-    expect(measurementsUrl!).not.toMatch(/aggregate=daily/);
+    expect(measurementsUrl!).toMatch(/aggregate=daily/);
   });
 
   it("re-keys the query when the range window changes", async () => {

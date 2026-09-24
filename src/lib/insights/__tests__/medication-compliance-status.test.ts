@@ -2,7 +2,11 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/db", () => ({
   prisma: {
-    auditLog: { findFirst: vi.fn(), create: vi.fn() },
+    insightStatusCache: {
+      findUnique: vi.fn(),
+      upsert: vi.fn(),
+      updateMany: vi.fn(),
+    },
     medication: { findMany: vi.fn() },
     medicationIntakeEvent: { findMany: vi.fn() },
   },
@@ -10,8 +14,26 @@ vi.mock("@/lib/db", () => ({
 
 vi.mock("@/lib/insights/status-provider", () => ({
   runStatusCompletion: vi.fn(),
-  // Consent never blocks in these fixtures — the gate has its own tests.
-  statusConsentBlocksGeneration: vi.fn(async () => false),
+}));
+
+vi.mock(
+  "@/lib/ai/coach/bytes-codec",
+  async () => (await import("./status-note-fixtures")).fakeBytesCodec,
+);
+
+// statusText is available in these fixtures — the capability read has its
+// own tests in status-cache.test.ts.
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForRecord: async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
+  aiCapabilityToServe: async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
 }));
 
 vi.mock("@/lib/insights/memory", () => ({
@@ -28,6 +50,7 @@ import { runStatusCompletion } from "@/lib/insights/status-provider";
 import { getMedicationCategories } from "@/lib/medication-category";
 import { getNoKeyMedicationComplianceStatusText } from "@/lib/insights/no-key-fallbacks";
 import { generateMedicationComplianceStatusForUser } from "../medication-compliance-status";
+import { noteRow, upsertedNotes, writtenNotes } from "./status-note-fixtures";
 
 const dayMs = 24 * 60 * 60 * 1000;
 
@@ -64,6 +87,11 @@ function medFixture(now: Date) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(null);
+  vi.mocked(prisma.insightStatusCache.upsert).mockResolvedValue({} as never);
+  vi.mocked(prisma.insightStatusCache.updateMany).mockResolvedValue(
+    {} as never,
+  );
   vi.mocked(getMedicationCategories).mockResolvedValue({});
 });
 
@@ -102,16 +130,12 @@ describe("generateMedicationComplianceStatusForUser — graded payload", () => {
       });
     }
 
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.medication.findMany).mockResolvedValue([
       medication,
     ] as never);
     vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValue(
       events as never,
     );
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: new Date(),
-    } as never);
 
     const captured: { userPrompt: string | null } = { userPrompt: null };
     stubCompletion('{"summary":"OK","medications":[]}', captured);
@@ -140,16 +164,12 @@ describe("generateMedicationComplianceStatusForUser — graded payload", () => {
 describe("generateMedicationComplianceStatusForUser — timeout never persists", () => {
   it("serves the fallback summary without writing a cache row on timeout", async () => {
     const now = new Date();
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.medication.findMany).mockResolvedValue([
       medFixture(now),
     ] as never);
     vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValue(
       [] as never,
     );
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: now,
-    } as never);
 
     vi.mocked(runStatusCompletion).mockResolvedValue({
       kind: "timeout",
@@ -164,46 +184,39 @@ describe("generateMedicationComplianceStatusForUser — timeout never persists",
     expect(result.cached).toBe(true);
     expect(result.updatedAt).toBeNull();
     // v1.8.3 — no real assessment persisted (updatedAt stays null above),
-    // but a short-TTL negative stub IS written so the read-only route does
+    // but a short-TTL negative window IS opened so the read-only route does
     // not re-enqueue on every navigation while the provider is degraded.
-    // The stub is a timeout marker that `readFreshStatusText` rejects.
+    // The window carries no note, so it can never be served as one.
     await Promise.resolve();
-    for (const call of vi.mocked(prisma.auditLog.create).mock.calls) {
-      const details = JSON.parse(
-        (call[0] as { data: { details: string } }).data.details,
-      );
-      expect(details.timeout === true || details.model === "timeout-stub").toBe(
-        true,
-      );
-    }
+    expect(writtenNotes(prisma.insightStatusCache.upsert)).toEqual([]);
+    const windows = upsertedNotes(prisma.insightStatusCache.upsert);
+    expect(windows).toHaveLength(1);
+    expect(windows[0].retryAt).toBeInstanceOf(Date);
+    expect(prisma.insightStatusCache.updateMany).not.toHaveBeenCalled();
   });
 });
 
-describe("generateMedicationComplianceStatusForUser — cache-read skips a stub", () => {
-  it("regenerates when the only cached row is a timeout stub", async () => {
+describe("generateMedicationComplianceStatusForUser — a negative window is not a note", () => {
+  it("regenerates when today's row carries only a negative-cache window", async () => {
     const now = new Date();
     const todayKey = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Europe/Berlin",
     }).format(now);
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue({
-      createdAt: now,
-      details: JSON.stringify({
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({
         dateKey: todayKey,
-        locale: "en",
-        text: "Medication compliance fallback…",
-        model: "timeout-stub",
-        timeout: true,
-      }),
-    } as never);
+        text: null,
+        generatedAt: null,
+        retryAt: new Date(Date.now() + 60_000),
+        negativeReason: "timeout",
+      }) as never,
+    );
     vi.mocked(prisma.medication.findMany).mockResolvedValue([
       medFixture(now),
     ] as never);
     vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValue(
       [] as never,
     );
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: now,
-    } as never);
 
     stubCompletion(
       '{"summary":"Fresh compliance assessment.","medications":[]}',
@@ -230,16 +243,12 @@ describe("generateMedicationComplianceStatusForUser — outbound screen (v1.32.2
    * stays null; the per-medication placeholder rows still render.
    */
   function setupCard(now: Date) {
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.medication.findMany).mockResolvedValue([
       medFixture(now),
     ] as never);
     vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValue(
       [] as never,
     );
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: now,
-    } as never);
   }
 
   it("withholds a dose-change imperative instead of rendering the raw prose", async () => {
@@ -257,13 +266,11 @@ describe("generateMedicationComplianceStatusForUser — outbound screen (v1.32.2
     expect(result.updatedAt).toBeNull();
     // The per-medication placeholder rows still surface for the active med.
     expect(result.medications).toHaveLength(1);
-    // No cache row ever persisted the screened model text.
-    for (const call of vi.mocked(prisma.auditLog.create).mock.calls) {
-      const details = JSON.parse(
-        (call[0] as { data: { details: string } }).data.details,
-      ) as { summary?: string };
-      expect(details.summary ?? "").not.toContain("10 mg");
+    // No note ever stored the screened model text.
+    for (const note of upsertedNotes(prisma.insightStatusCache.upsert)) {
+      expect(note.text ?? "").not.toContain("10 mg");
     }
+    expect(writtenNotes(prisma.insightStatusCache.upsert)).toEqual([]);
   });
 
   it("withholds a fabricated risk figure instead of rendering the raw prose", async () => {
@@ -299,17 +306,12 @@ describe("generateMedicationComplianceStatusForUser — outbound screen (v1.32.2
     );
     expect(result.updatedAt).not.toBeNull();
     expect(result.cached).toBe(false);
-    // The clean assessment was persisted (not the negative stub).
-    const persisted = vi
-      .mocked(prisma.auditLog.create)
-      .mock.calls.map(
-        (call) =>
-          JSON.parse(
-            (call[0] as { data: { details: string } }).data.details,
-          ) as { summary?: string },
-      )
-      .find((details) => (details.summary ?? "").includes("96%"));
+    // The clean assessment was stored as a note (not a negative window).
+    const persisted = writtenNotes(prisma.insightStatusCache.upsert).find(
+      (note) => (note.text ?? "").includes("96%"),
+    );
     expect(persisted).toBeTruthy();
+    expect(persisted!.negativeReason).toBeNull();
   });
 });
 
@@ -317,16 +319,12 @@ describe("generateMedicationComplianceStatusForUser — token-leak hardening (v1
   it("strips metric: tokens out of the cached summary", async () => {
     const now = new Date();
 
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.medication.findMany).mockResolvedValue([
       medFixture(now),
     ] as never);
     vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValue(
       [] as never,
     );
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: new Date(),
-    } as never);
 
     // The compliance prompt returns only a `{ summary }` envelope; the
     // per-medication cards are placeholder text built server-side, never
@@ -348,16 +346,11 @@ describe("generateMedicationComplianceStatusForUser — token-leak hardening (v1
     expect(result.medications).toHaveLength(1);
     expect(result.medications[0].medicationId).toBe("med-1");
     expect(result.medications[0].text).not.toContain("metric:");
-    const createCalls = vi.mocked(prisma.auditLog.create).mock.calls;
-    expect(createCalls.length).toBeGreaterThan(0);
-    const details = (createCalls[0][0] as { data: { details: string } }).data
-      .details;
-    const parsed = JSON.parse(details) as {
-      summary: string;
-      medications: Array<{ text: string }>;
-    };
-    expect(parsed.summary).not.toContain("metric:");
-    expect(parsed.medications[0].text).not.toContain("metric:");
+    const notes = writtenNotes(prisma.insightStatusCache.upsert);
+    expect(notes.length).toBeGreaterThan(0);
+    expect(notes[0].text).not.toContain("metric:");
+    const items = notes[0].items as Array<{ text: string }>;
+    expect(items[0].text).not.toContain("metric:");
   });
 });
 
@@ -396,7 +389,6 @@ describe("generateMedicationComplianceStatusForUser — no rate without an expec
       };
     });
 
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.medication.findMany).mockResolvedValue([
       scheduled,
       scheduleless(now),
@@ -404,9 +396,6 @@ describe("generateMedicationComplianceStatusForUser — no rate without an expec
     vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValue(
       events as never,
     );
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: new Date(),
-    } as never);
 
     const captured: { userPrompt: string | null } = { userPrompt: null };
     stubCompletion('{"summary":"OK","medications":[]}', captured);
@@ -424,7 +413,6 @@ describe("generateMedicationComplianceStatusForUser — no rate without an expec
 
   it("reports no active medications when the only one has no schedule", async () => {
     const now = new Date();
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.medication.findMany).mockResolvedValue([
       scheduleless(now),
     ] as never);

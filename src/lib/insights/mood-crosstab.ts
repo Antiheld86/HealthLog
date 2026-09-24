@@ -231,6 +231,7 @@ export function metricDayMap(
           deviceType: m.deviceType ?? null,
           type: type as MeasurementType,
           value: m.value,
+          count: m.count,
         })),
         metricKey,
         userPriorityJson,
@@ -243,7 +244,7 @@ export function metricDayMap(
     const key = berlinDayKey(m.measuredAt);
     const cur = byDay.get(key) ?? { sum: 0, count: 0 };
     cur.sum += m.value;
-    cur.count += 1;
+    cur.count += m.count ?? 1;
     byDay.set(key, cur);
   }
   const out = new Map<string, number>();

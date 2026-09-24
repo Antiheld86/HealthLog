@@ -108,7 +108,10 @@ vi.mock("@/lib/ai/coach/self-context-questions", () => ({
     questions: [],
     source: "none",
   })),
+  buildFallbackQuestions: vi.fn(() => ["deterministic hint"]),
 }));
+// The follow-up questions are the route's one AI part: `aboutMeQuestions`.
+vi.mock("@/lib/ai/capabilities/gate", () => ({ getAiCapability: vi.fn() }));
 
 import { GET, PUT } from "../route";
 import {
@@ -118,6 +121,12 @@ import {
 } from "@/lib/ai/coach/about-me";
 import { deriveClarifyingQuestions } from "@/lib/ai/coach/self-context-questions";
 import { auditLog } from "@/lib/auth/audit";
+import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import { buildFallbackQuestions } from "@/lib/ai/coach/self-context-questions";
+import {
+  AI_AVAILABLE,
+  aiUnavailable,
+} from "@/__tests__/helpers/ai-capability-fixtures";
 
 type Envelope = {
   data: unknown;
@@ -151,6 +160,7 @@ function putReq(
 describe("about-me module gate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getAiCapability).mockResolvedValue(AI_AVAILABLE);
     profileFindUnique.mockResolvedValue({
       updatedAt: new Date(0),
       aiIncludedSections: ["ABOUT_ME"],
@@ -284,12 +294,78 @@ describe("about-me module gate", () => {
       },
       "en",
       ["ABOUT_ME"],
+      { aiAvailable: true },
     );
     expect(setPendingQuestionsForUser).toHaveBeenCalledWith(
       "u1",
       [],
       new Date(0),
     );
+  });
+
+  it("derives without the model while aboutMeQuestions is unavailable", async () => {
+    setGates(true, false);
+    vi.mocked(getAiCapability).mockResolvedValue(
+      aiUnavailable("operator_disabled"),
+    );
+    vi.mocked(getSelfContextForUser).mockResolvedValueOnce({
+      aboutMe: "I run daily",
+      conditions: null,
+      allergies: null,
+      coachFocus: null,
+    });
+
+    const res = await put(putReq({ aiIncludedSections: ["ABOUT_ME"] }));
+
+    expect(res.status).toBe(200);
+    expect(getAiCapability).toHaveBeenCalledWith("aboutMeQuestions");
+    expect(vi.mocked(deriveClarifyingQuestions).mock.calls[0]?.[4]).toEqual({
+      aiAvailable: false,
+    });
+    expect((res.data as { ai: unknown }).ai).toEqual(
+      aiUnavailable("operator_disabled"),
+    );
+  });
+
+  it("GET swaps an outstanding (possibly model-written) set for the deterministic hints while unavailable", async () => {
+    setGates(true, false);
+    vi.mocked(getAiCapability).mockResolvedValue(aiUnavailable("no_provider"));
+    vi.mocked(getPendingQuestionsForUser).mockResolvedValueOnce([
+      "a question a model may have written",
+    ]);
+
+    const res = await get();
+
+    expect(res.status).toBe(200);
+    const data = res.data as { pendingQuestions: string[]; ai: unknown };
+    expect(data.pendingQuestions).toEqual(["deterministic hint"]);
+    expect(data.ai).toEqual(aiUnavailable("no_provider"));
+  });
+
+  it("GET keeps an answered (empty) set empty while unavailable", async () => {
+    setGates(true, false);
+    vi.mocked(getAiCapability).mockResolvedValue(aiUnavailable("no_provider"));
+    vi.mocked(getPendingQuestionsForUser).mockResolvedValueOnce([]);
+
+    const res = await get();
+
+    expect(
+      (res.data as { pendingQuestions: string[] }).pendingQuestions,
+    ).toEqual([]);
+    expect(buildFallbackQuestions).not.toHaveBeenCalled();
+  });
+
+  it("GET serves the stored set while available", async () => {
+    setGates(true, false);
+    vi.mocked(getPendingQuestionsForUser).mockResolvedValueOnce([
+      "stored question",
+    ]);
+
+    const res = await get();
+
+    expect(
+      (res.data as { pendingQuestions: string[] }).pendingQuestions,
+    ).toEqual(["stored question"]);
   });
 
   it("clears pending questions when inclusion removes every text field", async () => {

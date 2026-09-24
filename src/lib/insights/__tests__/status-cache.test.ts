@@ -2,7 +2,12 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/db", () => ({
   prisma: {
-    auditLog: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn() },
+    insightStatusCache: {
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+      upsert: vi.fn(),
+      updateMany: vi.fn(),
+    },
     // v1.18.11 (P6) — the input gate / fingerprint probe salient inputs.
     measurement: { groupBy: vi.fn() },
     moodEntry: { aggregate: vi.fn() },
@@ -10,12 +15,28 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-const hasUsableStatusProvider = vi.fn();
-const statusConsentBlocksGeneration = vi.fn();
-vi.mock("@/lib/insights/status-provider", () => ({
-  hasUsableStatusProvider: (...a: unknown[]) => hasUsableStatusProvider(...a),
-  statusConsentBlocksGeneration: (...a: unknown[]) =>
-    statusConsentBlocksGeneration(...a),
+// A reversible stand-in for the at-rest codec: the store's own logic (what it
+// serves, what it re-dates, what it leaves alone) is what these tests pin, not
+// AES-GCM.
+vi.mock("@/lib/ai/coach/bytes-codec", () => ({
+  encryptToBytes: (plain: string) => new TextEncoder().encode(`enc:${plain}`),
+  decryptFromBytes: (buf: Uint8Array) => {
+    const text = new TextDecoder().decode(buf);
+    if (!text.startsWith("enc:")) throw new Error("unknown key id");
+    return text.slice(4);
+  },
+}));
+
+const aiCapabilityForRecord = vi.fn();
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForRecord: (...a: unknown[]) => aiCapabilityForRecord(...a),
+  aiCapabilityToServe: (...args: unknown[]) =>
+    (aiCapabilityForRecord as (...a: unknown[]) => unknown)(...args),
+}));
+
+const probeProviderPresence = vi.fn();
+vi.mock("@/lib/ai/provider", () => ({
+  probeProviderPresence: (...a: unknown[]) => probeProviderPresence(...a),
 }));
 
 const enqueueStatusGeneration = vi.fn();
@@ -27,46 +48,108 @@ import { prisma } from "@/lib/db";
 import {
   computeStatusInputFingerprint,
   gateUnchangedStatusInput,
-  isTimeoutStub,
   readFreshStatusText,
+  readLastGoodStatusText,
+  readStatusNegativeCache,
   refreshUnchangedStatusInsight,
   resolveReadOnlyStatusMiss,
+  writeStatusNegativeWindow,
+  writeStatusNote,
 } from "../status-cache";
 
 const TODAY = "2026-05-31";
+const AVAILABLE = { available: true, reason: null, onDeviceAllowed: true };
 
-function cacheRow(details: Record<string, unknown>, createdAt = new Date()) {
-  return { createdAt, details: JSON.stringify(details) };
+function enc(text: string): Uint8Array {
+  return new TextEncoder().encode(`enc:${text}`);
+}
+
+/** One `InsightStatusCache` row as `findUnique` would return it. */
+function noteRow(fields: {
+  text?: string | null;
+  dateKey?: string;
+  generatedAt?: Date | null;
+  snapshotHash?: string | null;
+  inputHash?: string | null;
+  retryAt?: Date | null;
+  negativeReason?: string | null;
+  textEncrypted?: Uint8Array | null;
+}) {
+  return {
+    textEncrypted:
+      fields.textEncrypted !== undefined
+        ? fields.textEncrypted
+        : fields.text == null
+          ? null
+          : enc(fields.text),
+    itemsEncrypted: null,
+    inputHash: fields.inputHash ?? null,
+    snapshotHash: fields.snapshotHash ?? null,
+    dateKey: fields.dateKey ?? TODAY,
+    generatedAt:
+      fields.generatedAt !== undefined ? fields.generatedAt : new Date(),
+    retryAt: fields.retryAt ?? null,
+    negativeReason: fields.negativeReason ?? null,
+  };
 }
 
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(prisma.customMetric.findMany).mockResolvedValue([] as never);
+  aiCapabilityForRecord.mockResolvedValue(AVAILABLE);
+  probeProviderPresence.mockResolvedValue(true);
 });
 
-describe("isTimeoutStub", () => {
-  it("flags the timeout-stub model marker", () => {
-    expect(isTimeoutStub({ model: "timeout-stub" })).toBe(true);
+describe("writeStatusNote / writeStatusNegativeWindow", () => {
+  it("upserts one encrypted row per (user, metric, locale) and clears the negative window", async () => {
+    vi.mocked(prisma.insightStatusCache.upsert).mockResolvedValue({} as never);
+    await writeStatusNote({
+      userId: "u1",
+      cacheAction: "insights.weight-status.en",
+      todayKey: TODAY,
+      text: "Stable.",
+      snapshotHash: "s".repeat(64),
+    });
+    const arg = vi.mocked(prisma.insightStatusCache.upsert).mock
+      .calls[0][0] as {
+      where: { userId_metric_locale: Record<string, string> };
+      create: Record<string, unknown>;
+      update: Record<string, unknown>;
+    };
+    expect(arg.where.userId_metric_locale).toEqual({
+      userId: "u1",
+      metric: "weight",
+      locale: "en",
+    });
+    expect(
+      new TextDecoder().decode(arg.update.textEncrypted as Uint8Array),
+    ).toBe("enc:Stable.");
+    expect(arg.update.dateKey).toBe(TODAY);
+    expect(arg.update.snapshotHash).toBe("s".repeat(64));
+    expect(arg.update.retryAt).toBeNull();
+    expect(arg.update.negativeReason).toBeNull();
   });
 
-  it("flags the timeout:true marker", () => {
-    expect(isTimeoutStub({ timeout: true })).toBe(true);
-  });
-
-  it("does not flag a real assessment", () => {
-    expect(isTimeoutStub({ model: "gpt-4o-mini", timeout: false })).toBe(false);
-    expect(isTimeoutStub({})).toBe(false);
+  it("opens a negative window without touching the stored note", async () => {
+    const retryAt = new Date(Date.now() + 60_000);
+    await writeStatusNegativeWindow({
+      userId: "u1",
+      cacheAction: "insights.pulse-status.de",
+      todayKey: TODAY,
+      reason: "timeout",
+      retryAt,
+    });
+    const arg = vi.mocked(prisma.insightStatusCache.upsert).mock
+      .calls[0][0] as { update: Record<string, unknown> };
+    // Only the window moves: a stall must not hide yesterday's text.
+    expect(arg.update).toEqual({ retryAt, negativeReason: "timeout" });
   });
 });
 
 describe("readFreshStatusText", () => {
   it("returns today's real assessment text", async () => {
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(
-      cacheRow({
-        dateKey: TODAY,
-        text: "Your weight trend is stable.",
-        model: "gpt-4o-mini",
-      }) as never,
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({ text: "Your weight trend is stable." }) as never,
     );
     const hit = await readFreshStatusText({
       userId: "u1",
@@ -75,15 +158,44 @@ describe("readFreshStatusText", () => {
       force: false,
     });
     expect(hit?.text).toBe("Your weight trend is stable.");
+    expect(prisma.insightStatusCache.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId_metric_locale: {
+            userId: "u1",
+            metric: "weight",
+            locale: "en",
+          },
+        },
+      }),
+    );
   });
 
-  it("skips a timeout-stub row keyed to today", async () => {
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(
-      cacheRow({
-        dateKey: TODAY,
-        text: "Generic fallback advice.",
-        model: "timeout-stub",
-        timeout: true,
+  it("serves today's note even while a negative window is open on it", async () => {
+    // A stall writes the window next to the note; it never shadows the text.
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({
+        text: "Real assessment.",
+        retryAt: new Date(Date.now() + 60_000),
+        negativeReason: "timeout",
+      }) as never,
+    );
+    const hit = await readFreshStatusText({
+      userId: "u1",
+      cacheAction: "insights.weight-status.en",
+      todayKey: TODAY,
+      force: false,
+    });
+    expect(hit?.text).toBe("Real assessment.");
+  });
+
+  it("misses on a row that carries only a negative window", async () => {
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({
+        text: null,
+        generatedAt: null,
+        retryAt: new Date(Date.now() + 60_000),
+        negativeReason: "timeout",
       }) as never,
     );
     const hit = await readFreshStatusText({
@@ -96,8 +208,8 @@ describe("readFreshStatusText", () => {
   });
 
   it("skips a stale-day row", async () => {
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(
-      cacheRow({ dateKey: "2026-05-30", text: "Yesterday." }) as never,
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({ dateKey: "2026-05-30", text: "Yesterday." }) as never,
     );
     const hit = await readFreshStatusText({
       userId: "u1",
@@ -109,8 +221,8 @@ describe("readFreshStatusText", () => {
   });
 
   it("skips an empty-text row", async () => {
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(
-      cacheRow({ dateKey: TODAY, text: "   " }) as never,
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({ text: "   " }) as never,
     );
     const hit = await readFreshStatusText({
       userId: "u1",
@@ -129,14 +241,15 @@ describe("readFreshStatusText", () => {
       force: true,
     });
     expect(hit).toBeNull();
-    expect(prisma.auditLog.findFirst).not.toHaveBeenCalled();
+    expect(prisma.insightStatusCache.findUnique).not.toHaveBeenCalled();
   });
 
-  it("treats a malformed payload as a miss", async () => {
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue({
-      createdAt: new Date(),
-      details: "{not json",
-    } as never);
+  it("treats a note it cannot decrypt as a miss", async () => {
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({
+        textEncrypted: new TextEncoder().encode("{not ciphertext"),
+      }) as never,
+    );
     const hit = await readFreshStatusText({
       userId: "u1",
       cacheAction: "insights.weight-status.en",
@@ -145,35 +258,153 @@ describe("readFreshStatusText", () => {
     });
     expect(hit).toBeNull();
   });
+
+  it("returns null when statusText is unavailable, without reading the row", async () => {
+    aiCapabilityForRecord.mockResolvedValue({
+      available: false,
+      reason: "user_disabled",
+      onDeviceAllowed: false,
+    });
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({ text: "Would have been served." }) as never,
+    );
+    const hit = await readFreshStatusText({
+      userId: "u1",
+      cacheAction: "insights.weight-status.en",
+      todayKey: TODAY,
+      force: false,
+    });
+    expect(hit).toBeNull();
+    expect(aiCapabilityForRecord).toHaveBeenCalledWith("u1", "statusText");
+    expect(prisma.insightStatusCache.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+describe("readLastGoodStatusText", () => {
+  it("serves a note from an earlier day", async () => {
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({
+        dateKey: "2026-05-29",
+        text: "Two days old.",
+        generatedAt: new Date("2026-05-29T04:30:00.000Z"),
+      }) as never,
+    );
+    expect(
+      await readLastGoodStatusText({
+        userId: "u1",
+        cacheAction: "insights.weight-status.en",
+      }),
+    ).toEqual({
+      text: "Two days old.",
+      updatedAt: "2026-05-29T04:30:00.000Z",
+    });
+  });
+
+  it("serves nothing when statusText is unavailable", async () => {
+    aiCapabilityForRecord.mockResolvedValue({
+      available: false,
+      reason: "consent_required",
+      onDeviceAllowed: false,
+    });
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({ text: "Old text." }) as never,
+    );
+    expect(
+      await readLastGoodStatusText({
+        userId: "u1",
+        cacheAction: "insights.weight-status.en",
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("readStatusNegativeCache", () => {
+  it("reports an open window and flips retryable once retryAt passes", async () => {
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValueOnce(
+      noteRow({
+        text: "Kept.",
+        retryAt: new Date(Date.now() + 60_000),
+        negativeReason: "screened",
+      }) as never,
+    );
+    const open = await readStatusNegativeCache({
+      userId: "u1",
+      cacheAction: "insights.weight-status.en",
+    });
+    expect(open).toMatchObject({ reason: "screened", retryable: false });
+
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValueOnce(
+      noteRow({
+        text: "Kept.",
+        retryAt: new Date(Date.now() - 60_000),
+        negativeReason: "timeout",
+      }) as never,
+    );
+    const closed = await readStatusNegativeCache({
+      userId: "u1",
+      cacheAction: "insights.weight-status.en",
+    });
+    expect(closed).toMatchObject({ reason: "timeout", retryable: true });
+  });
 });
 
 describe("resolveReadOnlyStatusMiss", () => {
   beforeEach(() => {
-    // Default: no prior assessment to serve stale (readLastGoodStatusText).
-    vi.mocked(prisma.auditLog.findMany).mockResolvedValue([] as never);
+    // Default: no row at all — no last-good text, no negative window.
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      null as never,
+    );
   });
 
-  it("returns no-provider without enqueuing when the user has no provider", async () => {
-    hasUsableStatusProvider.mockResolvedValue(false);
+  it("returns unavailable with hasProvider from the probe and enqueues nothing", async () => {
+    aiCapabilityForRecord.mockResolvedValue({
+      available: false,
+      reason: "consent_required",
+      onDeviceAllowed: false,
+    });
+    probeProviderPresence.mockResolvedValue(true);
     const outcome = await resolveReadOnlyStatusMiss({
       userId: "u1",
       metric: "weight",
       locale: "en",
     });
-    expect(outcome.kind).toBe("no-provider");
+    // A withdrawn consent is not "no provider": the probe says one exists.
+    expect(outcome).toEqual({
+      kind: "unavailable",
+      reason: "consent_required",
+      hasProvider: true,
+    });
+    expect(probeProviderPresence).toHaveBeenCalledWith("u1", "text");
+    expect(enqueueStatusGeneration).not.toHaveBeenCalled();
+    expect(prisma.insightStatusCache.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("returns unavailable/no_provider without enqueuing when the user has no provider", async () => {
+    aiCapabilityForRecord.mockResolvedValue({
+      available: false,
+      reason: "no_provider",
+      onDeviceAllowed: false,
+    });
+    probeProviderPresence.mockResolvedValue(false);
+    const outcome = await resolveReadOnlyStatusMiss({
+      userId: "u1",
+      metric: "weight",
+      locale: "en",
+    });
+    expect(outcome).toEqual({
+      kind: "unavailable",
+      reason: "no_provider",
+      hasProvider: false,
+    });
     expect(enqueueStatusGeneration).not.toHaveBeenCalled();
   });
 
   it("enqueues generation and returns preparing on a clean miss", async () => {
-    hasUsableStatusProvider.mockResolvedValue(true);
-    // No negative stub present.
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null as never);
     const outcome = await resolveReadOnlyStatusMiss({
       userId: "u1",
       metric: "pulse",
       locale: "de",
     });
-    expect(outcome.kind).toBe("preparing");
     // No last-good text to show, so nothing to revalidate against — the card
     // polls on `preparing` alone.
     expect(outcome).toEqual({
@@ -189,19 +420,14 @@ describe("resolveReadOnlyStatusMiss", () => {
   });
 
   it("serves the last good assessment stale-while-revalidate on a clean miss", async () => {
-    hasUsableStatusProvider.mockResolvedValue(true);
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null as never);
     // A prior (e.g. yesterday's) real assessment is on record.
-    vi.mocked(prisma.auditLog.findMany).mockResolvedValue([
-      cacheRow(
-        {
-          dateKey: "2026-05-30",
-          text: "Steady upward trend.",
-          model: "gpt-4o-mini",
-        },
-        new Date("2026-05-30T04:30:00.000Z"),
-      ),
-    ] as never);
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({
+        dateKey: "2026-05-30",
+        text: "Steady upward trend.",
+        generatedAt: new Date("2026-05-30T04:30:00.000Z"),
+      }) as never,
+    );
     const outcome = await resolveReadOnlyStatusMiss({
       userId: "u1",
       metric: "weight",
@@ -217,14 +443,13 @@ describe("resolveReadOnlyStatusMiss", () => {
     expect(enqueueStatusGeneration).toHaveBeenCalledTimes(1);
   });
 
-  it("suppresses re-enqueue while a fresh timeout stub exists", async () => {
-    hasUsableStatusProvider.mockResolvedValue(true);
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(
-      cacheRow({
-        dateKey: TODAY,
-        timeout: true,
-        model: "timeout-stub",
-        retryAt: new Date(Date.now() + 60_000).toISOString(),
+  it("suppresses re-enqueue while a negative window is open, still serving the last note", async () => {
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({
+        dateKey: "2026-05-30",
+        text: "Yesterday's note.",
+        retryAt: new Date(Date.now() + 60_000),
+        negativeReason: "timeout",
       }) as never,
     );
     const outcome = await resolveReadOnlyStatusMiss({
@@ -234,19 +459,20 @@ describe("resolveReadOnlyStatusMiss", () => {
     });
     expect(outcome.kind).toBe("preparing");
     if (outcome.kind !== "preparing") throw new Error("expected preparing");
+    // The window does not hide the stored note.
+    expect(outcome.lastGood?.text).toBe("Yesterday's note.");
     // No enqueue on the suppressed branch → nothing in flight to revalidate.
     expect(outcome.revalidating).toBe(false);
     expect(enqueueStatusGeneration).not.toHaveBeenCalled();
   });
 
-  it("re-enqueues once the negative stub's retryAt has passed", async () => {
-    hasUsableStatusProvider.mockResolvedValue(true);
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(
-      cacheRow({
-        dateKey: TODAY,
-        timeout: true,
-        model: "timeout-stub",
-        retryAt: new Date(Date.now() - 60_000).toISOString(),
+  it("re-enqueues once the negative window's retryAt has passed", async () => {
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({
+        text: null,
+        generatedAt: null,
+        retryAt: new Date(Date.now() - 60_000),
+        negativeReason: "timeout",
       }) as never,
     );
     const outcome = await resolveReadOnlyStatusMiss({
@@ -262,13 +488,12 @@ describe("resolveReadOnlyStatusMiss", () => {
 describe("refreshUnchangedStatusInsight (v1.16.8)", () => {
   const HASH = "a".repeat(64);
 
-  beforeEach(() => {
-    // Default: consent does not block (BYOK / consented chains).
-    statusConsentBlocksGeneration.mockResolvedValue(false);
-  });
-
-  it("misses (and writes nothing) when the server-managed consent is revoked, even on a hash match", async () => {
-    statusConsentBlocksGeneration.mockResolvedValue(true);
+  it("misses (and writes nothing) when statusText is unavailable, even on a hash match", async () => {
+    aiCapabilityForRecord.mockResolvedValue({
+      available: false,
+      reason: "consent_required",
+      onDeviceAllowed: false,
+    });
     const hit = await refreshUnchangedStatusInsight({
       userId: "u1",
       cacheAction: "insights.weight-status.en",
@@ -276,31 +501,24 @@ describe("refreshUnchangedStatusInsight (v1.16.8)", () => {
       snapshotHash: HASH,
     });
     expect(hit).toBeNull();
-    // The gate must not even read the cache row — a revoked consent can
-    // never re-stamp old AI text as today's assessment.
-    expect(prisma.auditLog.findFirst).not.toHaveBeenCalled();
-    expect(prisma.auditLog.create).not.toHaveBeenCalled();
-    expect(statusConsentBlocksGeneration).toHaveBeenCalledWith(
-      "u1",
-      "insights",
-    );
+    // The gate must not even read the row — an unavailable capability can
+    // never re-date old AI text as today's assessment.
+    expect(prisma.insightStatusCache.findUnique).not.toHaveBeenCalled();
+    expect(prisma.insightStatusCache.updateMany).not.toHaveBeenCalled();
+    expect(aiCapabilityForRecord).toHaveBeenCalledWith("u1", "statusText");
   });
 
-  it("re-persists the row under today's dateKey and returns the text on a hash match", async () => {
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(
-      cacheRow({
+  it("re-dates the row under today's dateKey and returns the text on a hash match", async () => {
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({
         dateKey: "2026-05-30",
-        locale: "en",
         text: "Stable weight, no concerns.",
-        providerType: "openai",
-        model: "gpt-4o-mini",
-        tokensUsed: 321,
         snapshotHash: HASH,
       }) as never,
     );
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: new Date("2026-05-31T04:30:00.000Z"),
-    } as never);
+    vi.mocked(prisma.insightStatusCache.updateMany).mockResolvedValue(
+      {} as never,
+    );
 
     const hit = await refreshUnchangedStatusInsight({
       userId: "u1",
@@ -310,27 +528,33 @@ describe("refreshUnchangedStatusInsight (v1.16.8)", () => {
     });
 
     expect(hit?.text).toBe("Stable weight, no concerns.");
-    expect(hit?.updatedAt).toBe("2026-05-31T04:30:00.000Z");
-    // The refresh row carries the same payload re-keyed to today, so the
-    // read path and the ingest debounce both see a current assessment.
-    expect(prisma.auditLog.create).toHaveBeenCalledTimes(1);
-    const arg = vi.mocked(prisma.auditLog.create).mock.calls[0][0] as {
-      data: { userId: string; action: string; details: string };
+    expect(hit?.expiresAfterDateKey).toBe(TODAY);
+    // The re-date moves only the day key and timestamp: the note and its
+    // fingerprints stay, so the read path and the ingest debounce both see a
+    // current assessment and tomorrow's gate still matches.
+    expect(prisma.insightStatusCache.updateMany).toHaveBeenCalledTimes(1);
+    const arg = vi.mocked(prisma.insightStatusCache.updateMany).mock
+      .calls[0][0] as {
+      where: Record<string, string>;
+      data: Record<string, unknown>;
     };
-    expect(arg.data.userId).toBe("u1");
-    expect(arg.data.action).toBe("insights.weight-status.en");
-    const details = JSON.parse(arg.data.details) as Record<string, unknown>;
-    expect(details.dateKey).toBe(TODAY);
-    expect(details.text).toBe("Stable weight, no concerns.");
-    expect(details.snapshotHash).toBe(HASH);
+    expect(arg.where).toEqual({
+      userId: "u1",
+      metric: "weight",
+      locale: "en",
+    });
+    expect(arg.data.dateKey).toBe(TODAY);
+    expect(arg.data).not.toHaveProperty("textEncrypted");
+    expect(arg.data).not.toHaveProperty("snapshotHash");
+    expect(hit?.updatedAt).toBe((arg.data.generatedAt as Date).toISOString());
+    expect(prisma.insightStatusCache.upsert).not.toHaveBeenCalled();
   });
 
   it("misses (and writes nothing) when the stored hash differs", async () => {
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(
-      cacheRow({
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({
         dateKey: "2026-05-30",
         text: "Older text.",
-        model: "gpt-4o-mini",
         snapshotHash: "b".repeat(64),
       }) as never,
     );
@@ -341,15 +565,31 @@ describe("refreshUnchangedStatusInsight (v1.16.8)", () => {
       snapshotHash: HASH,
     });
     expect(hit).toBeNull();
-    expect(prisma.auditLog.create).not.toHaveBeenCalled();
+    expect(prisma.insightStatusCache.updateMany).not.toHaveBeenCalled();
   });
 
-  it("misses when the latest row carries no hash (pre-gate rows)", async () => {
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(
-      cacheRow({
-        dateKey: "2026-05-30",
-        text: "Older text.",
-        model: "gpt-4o-mini",
+  it("misses when the row carries no hash", async () => {
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({ dateKey: "2026-05-30", text: "Older text." }) as never,
+    );
+    const hit = await refreshUnchangedStatusInsight({
+      userId: "u1",
+      cacheAction: "insights.weight-status.en",
+      todayKey: TODAY,
+      snapshotHash: HASH,
+    });
+    expect(hit).toBeNull();
+    expect(prisma.insightStatusCache.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("never refreshes off a row that carries only a negative window", async () => {
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({
+        text: null,
+        generatedAt: null,
+        snapshotHash: HASH,
+        retryAt: new Date(Date.now() + 60_000),
+        negativeReason: "timeout",
       }) as never,
     );
     const hit = await refreshUnchangedStatusInsight({
@@ -359,31 +599,28 @@ describe("refreshUnchangedStatusInsight (v1.16.8)", () => {
       snapshotHash: HASH,
     });
     expect(hit).toBeNull();
-    expect(prisma.auditLog.create).not.toHaveBeenCalled();
+    expect(prisma.insightStatusCache.updateMany).not.toHaveBeenCalled();
   });
 
-  it("never refreshes off a timeout stub, even with a matching hash", async () => {
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(
-      cacheRow({
-        dateKey: "2026-05-30",
-        text: "Generic fallback advice.",
-        model: "timeout-stub",
-        timeout: true,
+  it("misses on no prior row and on an undecryptable note", async () => {
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValueOnce(
+      null as never,
+    );
+    expect(
+      await refreshUnchangedStatusInsight({
+        userId: "u1",
+        cacheAction: "insights.weight-status.en",
+        todayKey: TODAY,
+        snapshotHash: HASH,
+      }),
+    ).toBeNull();
+
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValueOnce(
+      noteRow({
+        textEncrypted: new TextEncoder().encode("{not ciphertext"),
         snapshotHash: HASH,
       }) as never,
     );
-    const hit = await refreshUnchangedStatusInsight({
-      userId: "u1",
-      cacheAction: "insights.weight-status.en",
-      todayKey: TODAY,
-      snapshotHash: HASH,
-    });
-    expect(hit).toBeNull();
-    expect(prisma.auditLog.create).not.toHaveBeenCalled();
-  });
-
-  it("misses on no prior row and on malformed payloads", async () => {
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValueOnce(null as never);
     expect(
       await refreshUnchangedStatusInsight({
         userId: "u1",
@@ -392,27 +629,11 @@ describe("refreshUnchangedStatusInsight (v1.16.8)", () => {
         snapshotHash: HASH,
       }),
     ).toBeNull();
-
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValueOnce({
-      details: "{not json",
-    } as never);
-    expect(
-      await refreshUnchangedStatusInsight({
-        userId: "u1",
-        cacheAction: "insights.weight-status.en",
-        todayKey: TODAY,
-        snapshotHash: HASH,
-      }),
-    ).toBeNull();
-    expect(prisma.auditLog.create).not.toHaveBeenCalled();
+    expect(prisma.insightStatusCache.updateMany).not.toHaveBeenCalled();
   });
 });
 
 describe("computeStatusInputFingerprint (v1.18.11 P6)", () => {
-  beforeEach(() => {
-    statusConsentBlocksGeneration.mockResolvedValue(false);
-  });
-
   it("is stable across group order and flips when a count or newest moves", async () => {
     const t0 = new Date("2026-05-30T08:00:00.000Z");
     vi.mocked(prisma.measurement.groupBy).mockResolvedValue([
@@ -598,24 +819,18 @@ describe("computeStatusInputFingerprint (v1.18.11 P6)", () => {
 describe("gateUnchangedStatusInput (v1.18.11 P6)", () => {
   const INPUT = "b".repeat(64);
 
-  beforeEach(() => {
-    statusConsentBlocksGeneration.mockResolvedValue(false);
-  });
-
-  it("re-stamps the cached text and skips the build on a matching input hash", async () => {
-    const created = new Date("2026-05-31T02:00:00.000Z");
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(
-      cacheRow({
+  it("re-dates the cached text and skips the build on a matching input hash", async () => {
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({
         dateKey: "2026-05-30",
         text: "Stable weight.",
-        model: "gpt-4o-mini",
         inputHash: INPUT,
         snapshotHash: "c".repeat(64),
       }) as never,
     );
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: created,
-    } as never);
+    vi.mocked(prisma.insightStatusCache.updateMany).mockResolvedValue(
+      {} as never,
+    );
 
     const hit = await gateUnchangedStatusInput({
       userId: "u1",
@@ -625,25 +840,23 @@ describe("gateUnchangedStatusInput (v1.18.11 P6)", () => {
       force: false,
     });
     expect(hit?.text).toBe("Stable weight.");
-    const persisted = JSON.parse(
-      (
-        vi.mocked(prisma.auditLog.create).mock.calls[0][0] as {
-          data: { details: string };
-        }
-      ).data.details,
-    ) as { dateKey: string; inputHash: string; snapshotHash: string };
-    expect(persisted.dateKey).toBe(TODAY);
-    // The prior fingerprints are preserved so the next day's gates match.
-    expect(persisted.inputHash).toBe(INPUT);
-    expect(persisted.snapshotHash).toBe("c".repeat(64));
+    const data = (
+      vi.mocked(prisma.insightStatusCache.updateMany).mock.calls[0][0] as {
+        data: Record<string, unknown>;
+      }
+    ).data;
+    expect(data.dateKey).toBe(TODAY);
+    // The prior fingerprints are preserved (not rewritten) so the next day's
+    // gates match.
+    expect(data).not.toHaveProperty("inputHash");
+    expect(data).not.toHaveProperty("snapshotHash");
   });
 
   it("misses on a differing or missing input hash (caller builds)", async () => {
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(
-      cacheRow({
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({
         dateKey: "2026-05-30",
         text: "Stable weight.",
-        model: "gpt-4o-mini",
         // no inputHash on the row
       }) as never,
     );
@@ -656,7 +869,7 @@ describe("gateUnchangedStatusInput (v1.18.11 P6)", () => {
         force: false,
       }),
     ).toBeNull();
-    expect(prisma.auditLog.create).not.toHaveBeenCalled();
+    expect(prisma.insightStatusCache.updateMany).not.toHaveBeenCalled();
   });
 
   it("misses on a forced run without touching the cache", async () => {
@@ -669,11 +882,18 @@ describe("gateUnchangedStatusInput (v1.18.11 P6)", () => {
         force: true,
       }),
     ).toBeNull();
-    expect(prisma.auditLog.findFirst).not.toHaveBeenCalled();
+    expect(prisma.insightStatusCache.findUnique).not.toHaveBeenCalled();
   });
 
-  it("misses when the server-managed consent gate would block (no stale re-date)", async () => {
-    statusConsentBlocksGeneration.mockResolvedValue(true);
+  it("misses when statusText is unavailable (no stale re-date)", async () => {
+    aiCapabilityForRecord.mockResolvedValue({
+      available: false,
+      reason: "operator_disabled",
+      onDeviceAllowed: false,
+    });
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({ text: "Stable weight.", inputHash: INPUT }) as never,
+    );
     expect(
       await gateUnchangedStatusInput({
         userId: "u1",
@@ -683,6 +903,6 @@ describe("gateUnchangedStatusInput (v1.18.11 P6)", () => {
         force: false,
       }),
     ).toBeNull();
-    expect(prisma.auditLog.create).not.toHaveBeenCalled();
+    expect(prisma.insightStatusCache.updateMany).not.toHaveBeenCalled();
   });
 });

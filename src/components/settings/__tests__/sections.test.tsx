@@ -45,6 +45,22 @@ vi.mock("@tanstack/react-query", () => ({
   useMutation: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
+// The AI capability map on `/api/auth/me`: everything available, a provider
+// configured, nothing switched off by the operator.
+vi.mock("@/hooks/use-ai-capability", () => ({
+  useAiCapability: () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
+  useAiCapabilityMap: () => null,
+  useAiProviderState: () => ({
+    configured: true,
+    managedBy: "user",
+    canConfigure: true,
+  }),
+}));
+
 // Stub the auth hook — sections check `isAuthenticated` to enable queries.
 // v1.16.4 — AccountSection gates its content on `useMounted()` so the
 // SSR pass and the hydration render agree (React #418 family). The

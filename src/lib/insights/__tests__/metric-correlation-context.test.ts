@@ -14,6 +14,12 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
+// The record's module map; every module on unless a test switches one off.
+const moduleMap = vi.hoisted(() => ({ value: {} as Record<string, boolean> }));
+vi.mock("@/lib/modules/gate", () => ({
+  resolveModuleMap: vi.fn(async () => moduleMap.value),
+}));
+
 vi.mock("@/lib/insights/correlation-patterns", () => ({
   PATTERN_FAMILIES: { discoveryRetrospective: "DISCOVERY_RETROSPECTIVE" },
   syncAcceptedPatterns: vi.fn().mockResolvedValue(new Map()),
@@ -25,6 +31,7 @@ import { getRelevantCorrelationsForMetric } from "../metric-correlation-context"
 
 beforeEach(() => {
   vi.resetAllMocks();
+  moduleMap.value = {};
   vi.mocked(prisma.user.findUnique).mockResolvedValue({
     timezone: "Europe/Berlin",
   } as never);
@@ -96,6 +103,35 @@ describe("getRelevantCorrelationsForMetric", () => {
     for (const c of out) {
       expect(c.interpretation.toLowerCase()).not.toContain("weight");
     }
+  });
+
+  it("never grounds a card on a module that is switched off", async () => {
+    // Blood glucose today tracks tomorrow's weight. With the glucose module on,
+    // the weight card cites the pair (the positive control); with it off, the
+    // glucose channel never enters the scan and the card cites nothing.
+    const rows: Array<{ type: string; value: number; measuredAt: Date }> = [];
+    const base = new Date("2026-01-01T12:00:00Z");
+    for (let d = 0; d < 60; d++) {
+      const glucose = 80 + (d % 7) * 5;
+      rows.push({
+        type: "BLOOD_GLUCOSE",
+        value: glucose,
+        measuredAt: new Date(base.getTime() + d * 86_400_000),
+      });
+      rows.push({
+        type: "WEIGHT",
+        value: 60 + glucose * 0.1,
+        measuredAt: new Date(base.getTime() + (d + 1) * 86_400_000),
+      });
+    }
+    vi.mocked(prisma.measurement.findMany).mockResolvedValue(rows as never);
+
+    const on = await getRelevantCorrelationsForMetric("u-1", "WEIGHT", "en");
+    expect(on.length).toBeGreaterThan(0);
+
+    moduleMap.value = { glucose: false };
+    const off = await getRelevantCorrelationsForMetric("u-1", "WEIGHT", "en");
+    expect(off).toEqual([]);
   });
 
   it("is best-effort: a DB failure resolves to [] rather than throwing", async () => {

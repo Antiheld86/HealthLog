@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 import type { ModuleKey } from "@/lib/modules/registry";
+import { isSurfaceVisible, surfaceModule } from "@/lib/modules/surface";
 // The leaf module, not the `@/lib/record-settings` barrel, for the reason
 // `auth-shell.tsx` gives: the barrel drags server-side schemas into the chrome.
 import {
@@ -56,17 +57,6 @@ export interface NavDestination {
    * spotlight tour — renaming silently breaks the cutout for that step.
    */
   tourId?: string;
-  /**
-   * v1.18.0 — gate the entry on a per-user module toggle. When set, the
-   * entry is dropped unless the account's resolved module map (from
-   * `GET /api/auth/me`'s `modules`) has the key enabled. Core destinations
-   * (weight / BP / pulse + always-on pages) carry no key and always render.
-   * `cycle` and `coach` are delegated keys (cycle → gender +
-   * opt-in, coach → operator flag + per-user opt-out); the auth/me map
-   * already reflects that delegation, so reading them here is correct and
-   * not a re-derivation.
-   */
-  requiresModule?: ModuleKey;
   /**
    * v1.36.0 — is this destination part of what account sharing covers.
    *
@@ -119,12 +109,9 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
     tKey: "nav.mood",
     icon: Waves,
     tourId: "nav-mood",
-    requiresModule: "mood",
   },
   // v1.25.0 — opt-in mental-health screeners (PHQ-9 / GAD-7), beside mood.
-  // Born-gated: `requiresModule: "mentalHealth"` reads the opt-in (default-off)
-  // key from the resolved module map, so the entry is absent until the account
-  // turns the module on from the Modules hub. The destination is the dedicated
+  // Owned by `mentalHealth` in the surface map. The destination is the dedicated
   // top-level `/mental-wellbeing` check-in surface (its own module page — it
   // no longer borrows the Insights tab strip / layout shell).
   {
@@ -133,7 +120,6 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
     tKey: "nav.mentalWellbeing",
     icon: Brain,
     tourId: "nav-mental-wellbeing",
-    requiresModule: "mentalHealth",
   },
   {
     href: "/cycle",
@@ -141,7 +127,6 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
     tKey: "nav.cycle",
     icon: Droplets,
     tourId: "nav-cycle",
-    requiresModule: "cycle",
   },
   {
     href: "/medications",
@@ -151,7 +136,6 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
     tourId: "nav-medications",
     // v1.18.1 (D3) — medications graduated from a CORE domain to a toggleable
     // module; the nav entry now drops when the account turns the module off.
-    requiresModule: "medications",
   },
   // v1.17.1 — Vorsorge (preventive-care) gets a top-level nav home in the
   // clinical spine. It is a first-class tracking surface ("wann muss ich was
@@ -164,7 +148,8 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
     tKey: "nav.vorsorge",
     icon: Stethoscope,
     tourId: "nav-vorsorge",
-    // v1.18.1 — deliberately NOT module-gated (no `requiresModule`). Unlike
+    // v1.18.1 — deliberately owned by no module (absent from the surface
+    // map). Unlike
     // labs / illness / cycle (opt-in clinical-spine verticals born off by
     // default), preventive-care reminders are a CORE surface available to
     // every account from birth: a reminder can target core vitals
@@ -178,7 +163,6 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
     tKey: "nav.labs",
     icon: FlaskConical,
     tourId: "nav-labs",
-    requiresModule: "labs",
   },
   {
     href: "/profile",
@@ -189,21 +173,17 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
     tourId: "nav-profile",
   },
   // v1.18.1 — the illness/condition journal sits in the clinical spine
-  // next to Labs. Born-gated: `requiresModule: "illness"` reads the
-  // opt-in `illness` key from the resolved module map, so the entry is
-  // absent until the account turns the module on from the Modules hub.
+  // next to Labs. Owned by `illness` in the surface map.
   {
     href: "/illness",
     sharedRecord: true,
     tKey: "nav.illness",
     icon: Thermometer,
     tourId: "nav-illness",
-    requiresModule: "illness",
   },
   // v1.37.3: the immunization log sits in the clinical spine beside Illness.
-  // Born-gated: `requiresModule: "vaccinations"` reads the resolved module map,
-  // so the entry is absent until the account keeps the module on (default-on —
-  // it drops only when a user turns it off). SURFACE-gated: the `/api/vaccinations*`
+  // Owned by `vaccinations` in the surface map (default-on; it drops only when
+  // a user turns it off). SURFACE-gated: the `/api/vaccinations*`
   // data routes stay reachable so a restore / import keeps working and
   // re-enabling finds every dose intact.
   {
@@ -212,24 +192,23 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
     tKey: "nav.vaccinations",
     icon: Syringe,
     tourId: "nav-vaccinations",
-    requiresModule: "vaccinations",
   },
   // v1.18.0 — Workouts and Recovery both left the left-nav: each already
   // surfaces as an Insights tab-strip pill (`/insights/workouts` gated on
   // a workout row, `/insights/recovery` always present), so neither is a
   // top-level `NAV_DESTINATIONS` entry any more.
   // v1.25.0 (W-DOCS-IN) — inbound clinical documents sit in the clinical
-  // spine after Illness. Born-gated: `requiresModule: "inboundDocuments"`
-  // reads the opt-in key from the resolved module map, so the entry is absent
-  // until the account turns the module on from the Modules hub.
+  // spine after Illness. Owned by `inboundDocuments` in the surface map.
   {
     href: "/documents",
     sharedRecord: true,
     tKey: "nav.documents",
     icon: FileScan,
     tourId: "nav-documents",
-    requiresModule: "inboundDocuments",
   },
+  // Insights belongs to no module: the `insights` key means AI analysis, and
+  // the area is data, so switching AI analysis off leaves this entry standing.
+  //
   // Insights and the Coach carry no `sharedRecord` flag, so they drop out
   // under a switch. The reason has changed since v1.36.0 and the old wording
   // ("non-delegable, server-side and here") is no longer true of the tiles:
@@ -257,7 +236,6 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
     tKey: "nav.insights",
     icon: Lightbulb,
     tourId: "nav-insights",
-    requiresModule: "insights",
   },
   // v1.17.1 (F-3) — the Coach finally gets a single labeled nav home. It
   // was reachable from seven scattered entry points (FAB, hero CTA, empty
@@ -268,7 +246,6 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
     tKey: "nav.coach",
     icon: MessagesSquare,
     tourId: "nav-coach",
-    requiresModule: "coach",
   },
   {
     href: "/achievements",
@@ -276,7 +253,6 @@ export const NAV_DESTINATIONS: ReadonlyArray<NavDestination> = [
     tKey: "nav.achievements",
     icon: Trophy,
     tourId: "nav-achievements",
-    requiresModule: "achievements",
   },
 ];
 
@@ -356,9 +332,21 @@ export function visibleUtilityDestinations(
 export type ModuleVisibilityMap = Partial<Record<ModuleKey, boolean>>;
 
 /**
+ * The module that owns a destination, from the one surface map
+ * (`nav:<href>` in `@/lib/modules/surface`), or `undefined` for a core
+ * destination. The nav bars, the direct-URL notice and the tour all ask this,
+ * so a page and its nav entry cannot disagree about which switch they follow.
+ */
+export function navDestinationModule(
+  d: Pick<NavDestination, "href">,
+): ModuleKey | undefined {
+  return surfaceModule(`nav:${d.href}`);
+}
+
+/**
  * Whether a destination is visible under the given module map. Core
- * destinations (no `requiresModule`) always pass; a gated entry passes
- * unless its module resolves to an explicit `false`.
+ * destinations (no owner in the surface map) always pass; an owned entry
+ * passes unless its module resolves to an explicit `false`.
  *
  * `mounted` (default `true`) is the hydration gate the nav bars thread in.
  * The resolved module map rides the client-only `/api/auth/me` query, which
@@ -389,7 +377,7 @@ function isNavDestinationVisible(
   // than reached only through the shared arm, which is what it relied on
   // before the module gate below started applying to a shared record too.
   if (!sharedRecord && d.sharedRecordOnly) return false;
-  if (!d.requiresModule) return true;
+  if (navDestinationModule(d) === undefined) return true;
   if (!mounted) return false;
   // The module map, and whose it is, is the whole point. A shared record used
   // to skip this line: the grant's scope decided which doors existed, and the
@@ -400,7 +388,7 @@ function isNavDestinationVisible(
   // it, turning Cycle off for a profile left the Cycle door standing in that
   // profile's own navigation. Scope decides which doors the grant opens;
   // this decides which of them the record tracks at all.
-  return modules?.[d.requiresModule] !== false;
+  return isSurfaceVisible(`nav:${d.href}`, modules);
 }
 
 /**
@@ -427,8 +415,8 @@ export function isDestinationInSharedRecord(
  * The ordered destinations visible to this account — drops a module-gated
  * entry (mood, cycle, labs, coach, achievements …) when its module is
  * disabled in the account's resolved module map. Both bars start from this.
- * v1.18.0 — cycle is no longer a bespoke boolean: it is `requiresModule:
- * "cycle"` and reads the delegated `cycle` key from the same map.
+ * Cycle reads the delegated `cycle` key from the same map; `/insights` has
+ * no owner (the `insights` key is AI analysis, not the area).
  *
  * v1.36.0 — `sharedRecord` drops every entry that is not part of what sharing
  * covers, so a delegate is not offered a door the server will shut. Paint

@@ -31,6 +31,7 @@ import { generateMedicationComplianceStatusForUser } from "@/lib/insights/medica
 import { generateStatusBatchForUser } from "@/lib/insights/status-batch";
 import { findStatusCronCandidates } from "@/lib/jobs/status-cron-candidates";
 import { annotate } from "@/lib/logging/context";
+import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
 import { getWorkerPrisma } from "./shared";
 
 export interface GeneralStatusPayload {
@@ -64,11 +65,12 @@ export interface MedicationComplianceStatusPayload {
 /**
  * Shared driver for the nightly 02:xx per-metric status crons. User
  * discovery is centralised in `findStatusCronCandidates`, which applies
- * the operator assistant kill-switch, the per-user `disableCoach` gate,
- * and the pregenerate-candidate skip (users with a configured provider
- * and a stale comprehensive cache belong to the 04:30 pre-generate pass,
- * which re-warms every per-status cache anyway — see
- * `status-cron-candidates.ts` for the full division of nightly labour).
+ * the operator's `insightStatus` switch, the person's AI analysis switch,
+ * and the pregenerate-candidate skip (users with a stale comprehensive
+ * cache belong to the 04:30 pre-generate pass, which re-warms every
+ * per-status note anyway — see `status-cron-candidates.ts` for the full
+ * division of nightly labour). Each user's `statusText` capability is then
+ * resolved before a generator runs.
  * The generators normalise `locale` themselves (de stays de, everything
  * else gets English prose).
  *
@@ -96,6 +98,16 @@ export async function runStatusCronGenerate(
       let failed = 0;
 
       for (const user of users) {
+        // The capability before the generator builds a snapshot. The batch
+        // entry below checks for itself.
+        const capability = await aiCapabilityForJob(user.id, "statusText");
+        if (!capability.available) {
+          annotate({
+            action: { name: "insights.status.cron.skipped" },
+            meta: { task: taskName, reason: capability.reason },
+          });
+          continue;
+        }
         try {
           await generate(user.id, {
             locale: await resolveJobLocale(user.locale),

@@ -26,8 +26,6 @@ const REQUIRED_KEYS = [
   // Existing terminal contracts reused by the final v1.34.1 call sites.
   "insights.assessmentPreparing",
   "insights.noAnalysisYet",
-  "insights.noProviderConfigured",
-  "insights.noProviderAction",
   "common.loadFailed",
   "common.networkError",
   "settings.googleHealthSyncResult",

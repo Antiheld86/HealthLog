@@ -158,6 +158,9 @@ export function useLinkDocumentToVaccination() {
     onSuccess: () =>
       Promise.all([
         invalidateKeys(qc, vaccinationDependentKeys),
+        // The document's own sheet lists the doses it is filed against, so
+        // a link made from the suggestion there has to repaint it.
+        invalidateKeys(qc, [queryKeys.documents()]),
         // The linked-document badge can surface on the daily reads' checkup
         // items; force the unmounted snapshot/digest to refetch like the
         // sibling mutations do (via `invalidateReminderReads`).

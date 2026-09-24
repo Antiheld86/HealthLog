@@ -28,8 +28,9 @@
  *
  * Both verbs mirror the `rhythm-events` route gating exactly: `apiHandler`
  * wrapper, cookie OR Bearer auth, `userId` narrowed from the session (never a
- * body or query field), the `insights` module gate, and the `insightStatus`
- * assistant-surface gate. No AI provider call on either path.
+ * body or query field). No AI gate and no module gate: a recording is device
+ * data, and the `insights` module is the AI analysis opt-out. An ingest is
+ * never refused because AI is off; the POST keeps its own rate limit.
  */
 import { NextRequest } from "next/server";
 import { z } from "zod/v4";
@@ -42,7 +43,6 @@ import {
 } from "@/lib/api-response";
 import { apiHandler, requireAuth, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
-import { requireModuleEnabled } from "@/lib/modules/gate";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/db";
 import { persistEcgRecording } from "@/lib/ecg/persist-recording";
@@ -110,10 +110,6 @@ export const GET = apiHandler(async () => {
   // keeps `requireAuth()`: a delegate's phone must never move somebody else's
   // sync.
   const { user } = await requireRecordAuth("manage", "record");
-  const m = await requireModuleEnabled(user.id, "insights");
-  if (!m.enabled) return m.response;
-  // A pure read of the device's own recordings, so no assistant-surface
-  // gate.
 
   const rows = await prisma.ecgRecording.findMany({
     where: { userId: user.id },
@@ -179,10 +175,8 @@ export const GET = apiHandler(async () => {
  */
 export const POST = apiHandler(async (request: NextRequest) => {
   const { user } = await requireAuth();
-  const m = await requireModuleEnabled(user.id, "insights");
-  if (!m.enabled) return m.response;
-  // A device ingest carries no assistant prose, so switching the assistant
-  // off must not refuse a recording.
+  // A device ingest carries no model text: switching AI off, or the AI
+  // analysis opt-out, must never refuse a recording.
 
   const rl = await checkRateLimit(
     `insights:ecg:ingest:${user.id}`,

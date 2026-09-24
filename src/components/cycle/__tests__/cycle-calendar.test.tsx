@@ -20,6 +20,8 @@ function dayBase(date: string): CalendarDay {
     isPredictedOvulation: false,
     isPeriodLogged: false,
     isCycleStart: false,
+    cycleDay: null,
+    periodEndable: false,
     flow: null,
     hasSymptoms: false,
     confidence: 1,

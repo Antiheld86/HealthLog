@@ -1,4 +1,5 @@
 import type { DailyBriefing, DailyBriefingKeyFinding } from "@/lib/ai/schema";
+import { isSurfaceVisible, type SurfaceModuleMap } from "@/lib/modules/surface";
 
 /**
  * v1.8.5 — derive the Insights overview "Trends" chart set from the
@@ -261,6 +262,15 @@ export const DEFAULT_TREND_METRICS: ReadonlyArray<
   DailyBriefingKeyFinding["sourceMetric"]
 > = ["bp", "weight", "mood"];
 
+/**
+ * Metrics the fallback row reaches for, in order, when a default slot is left
+ * out because its module is off. Pulse is a core vital, so a row without mood
+ * still paints three charts rather than two.
+ */
+const FALLBACK_FILL_METRICS: ReadonlyArray<
+  DailyBriefingKeyFinding["sourceMetric"]
+> = ["pulse"];
+
 /** Max charts the row renders. Three keeps the equal-height 3-up grid. */
 export const DEFAULT_TREND_CHART_CAP = 3;
 
@@ -268,10 +278,13 @@ export interface SelectTrendChartsOptions {
   /** Max number of charts to return. Defaults to {@link DEFAULT_TREND_CHART_CAP}. */
   cap?: number;
   /**
-   * Metrics whose module is switched off. They are skipped on both the
-   * briefing path and the fallback triple, so a disabled module never
-   * charts on the overview.
+   * The record's resolved module map (`GET /api/auth/me` `modules`). A slot
+   * whose module is off (`trend:<metric>` in the surface map) is skipped on
+   * both the briefing path and the fallback row, and the next eligible
+   * metric takes its place. Absent or partial: every slot is eligible.
    */
+  modules?: SurfaceModuleMap | null;
+  /** Further metrics to leave out, on top of the module map. */
   hiddenMetrics?: ReadonlyArray<DailyBriefingKeyFinding["sourceMetric"]>;
 }
 
@@ -279,12 +292,14 @@ function configsFor(
   metrics: ReadonlyArray<DailyBriefingKeyFinding["sourceMetric"]>,
   cap: number,
   hidden: ReadonlySet<string>,
+  modules: SurfaceModuleMap | null | undefined,
 ): TrendChartConfig[] {
   const seen = new Set<string>();
   const out: TrendChartConfig[] = [];
   for (const metric of metrics) {
     if (out.length >= cap) break;
-    if (hidden.has(metric)) continue; // module switched off
+    if (hidden.has(metric)) continue;
+    if (!isSurfaceVisible(`trend:${metric}`, modules)) continue; // module off
     const config = TREND_CHART_CONFIG[metric];
     if (!config) continue; // metric has no standalone trend chart
     if (seen.has(config.metric)) continue; // dedupe
@@ -313,11 +328,16 @@ export function selectTrendCharts(
 
   const findingMetrics =
     briefing?.keyFindings?.map((f) => f.sourceMetric) ?? [];
-  const fromBriefing = configsFor(findingMetrics, cap, hidden);
+  const fromBriefing = configsFor(findingMetrics, cap, hidden, options.modules);
 
   if (fromBriefing.length > 0) {
     return fromBriefing;
   }
 
-  return configsFor(DEFAULT_TREND_METRICS, cap, hidden);
+  return configsFor(
+    [...DEFAULT_TREND_METRICS, ...FALLBACK_FILL_METRICS],
+    cap,
+    hidden,
+    options.modules,
+  );
 }

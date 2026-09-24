@@ -35,7 +35,7 @@ import {
   updateManagedProfileSchema,
 } from "@/lib/validations/managed-profiles";
 import { onboardingStateResource } from "./onboarding";
-import { moduleAccessMap } from "./profile";
+import { aiAccountBlock, moduleAccessMap } from "./profile";
 import { dataEnvelope, errorEnvelope, stdResponses } from "./shared";
 
 /**
@@ -451,6 +451,10 @@ const accountPayload = z
     username: z.string(),
     accountAccess: accountAccessBlock,
     moduleAccess: moduleAccessMap,
+    // v1.39 — enumerated because every AI surface decides on it: a client
+    // renders an AI surface only when its capability is available, and never
+    // derives the answer from the switches, the modules or the provider.
+    ai: aiAccountBlock,
     recordSession: recordSessionState.nullable(),
     // Enumerated because a client DECIDES on it rather than displays it: the
     // medication surface hides the server-side reminder switch when
@@ -476,7 +480,7 @@ const accountPayload = z
   .meta({
     id: "AccountPayload",
     description:
-      "The signed-in account: its identity, its preferences, and (since v1.36.0) what account sharing lets it do. Additional properties are the preference fields this spec does not yet enumerate. Under an active switch the identity and preference fields still describe the CALLER, because display preferences belong to the person at the keyboard rather than to the record they are reading. Two fields are the exception (v1.38.14): `modules` and `cycleTrackingEnabled` describe the ACTIVE RECORD, since every surface they gate shows the record's data — and they are masked to the sections the active grant opens, so a scoped grant reads `false` for a module outside it rather than the record's true state. With no switch — which is every native request, since the Bearer transport carries none — the two are the same account and nothing is masked. `moduleAccess` says WHY each module is or is not there — the record's own switch, the edge of the grant, or the operator's instance-wide one — beside the `modules` booleans it never contradicts.",
+      "The signed-in account: its identity, its preferences, and (since v1.36.0) what account sharing lets it do. Additional properties are the preference fields this spec does not yet enumerate. Under an active switch the identity and preference fields still describe the CALLER, because display preferences belong to the person at the keyboard rather than to the record they are reading. Two fields are the exception (v1.38.14): `modules` and `cycleTrackingEnabled` describe the ACTIVE RECORD, since every surface they gate shows the record's data — and they are masked to the sections the active grant opens, so a scoped grant reads `false` for a module outside it rather than the record's true state. With no switch — which is every native request, since the Bearer transport carries none — the two are the same account and nothing is masked. `moduleAccess` says WHY each module is or is not there — the record's own switch, the edge of the grant, or the operator's instance-wide one — beside the `modules` booleans it never contradicts. `ai` (v1.39) is the resolved AI capability map for the same record, with the same masking; it replaces reading `GET /api/feature-flags`.",
   });
 
 /**

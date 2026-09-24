@@ -165,6 +165,13 @@ export async function resolveDerivedAssessment(args: {
   userId: string;
   derived: Derived<unknown>;
   locale: string | null | undefined;
+  /**
+   * Whether the `statusText` capability is available for this record. When
+   * it is not, stored model text is never served and nothing is warmed: the
+   * deterministic text is the whole answer. Required, so a caller cannot
+   * forget the question.
+   */
+  aiAvailable: boolean;
   now?: Date;
 }): Promise<DerivedAssessment | null> {
   const now = args.now ?? new Date();
@@ -179,6 +186,8 @@ export async function resolveDerivedAssessment(args: {
   );
   // Not assessable, or status !== ok → no field (the locked contract).
   if (!deterministic) return null;
+  // AI unavailable for this record: no cached model text, no warm.
+  if (!args.aiAvailable) return deterministic;
 
   const scope = derivedScoreScope(args.metric);
   const cacheAction = statusCacheAction(scope, locale);
@@ -300,7 +309,7 @@ export async function generateDerivedScoreAssessment(args: {
   const outcome = await runStatusCompletion({
     userId: args.userId,
     cacheAction,
-    consentSurface: "insights",
+    capability: "statusText",
     systemPrompt: scoreSystemPrompt(locale),
     userPrompt: scoreUserPrompt(
       signal,
@@ -399,11 +408,7 @@ export async function generateDerivedScoreAssessment(args: {
     userId: args.userId,
     cacheAction,
     todayKey,
-    locale,
     text,
-    providerType: outcome.providerType,
-    model: outcome.model,
-    tokensUsed: outcome.tokensUsed,
     // v1.22 (W6) — store the input fingerprint so the next day's gate can skip
     // the warm when no contributor source changed.
     inputHash,

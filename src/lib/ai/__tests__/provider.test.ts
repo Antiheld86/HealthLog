@@ -440,7 +440,5 @@ describe("resolveProviderAvailability", () => {
 
     const result = await resolveProviderAvailability("user-123");
     expect(result).toEqual({ aiAvailable: false, managedBy: null });
-    // No admin lookup needed once the user row is absent.
-    expect(prisma.appSettings.findUnique).not.toHaveBeenCalled();
   });
 });

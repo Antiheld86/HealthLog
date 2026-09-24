@@ -4,8 +4,9 @@
  * Extraction is no longer part of upload: a document is stored first
  * (provider-free), and THIS route is the explicit, user-triggered enhancement.
  * It carries the entire ingest gauntlet that upload used to run inline —
- * resolve document provider (local-first, codex last) → assertDocumentEgressConsent
- * → rate-limit → reserveBudget → runInboundExtraction → reconcileSpend → stage
+ * requireAiCapability("documentAi") → resolve document provider (local-first,
+ * codex last) and re-check the capability for that pick, consent receipt
+ * included → rate-limit → reserveBudget → runInboundExtraction → reconcileSpend → stage
  * facts — but now against a row that already exists. Absent a provider this 422s
  * the ENHANCEMENT only; the stored document is untouched and remains filed.
  *
@@ -36,7 +37,7 @@ import {
   sanitiseZodIssues,
 } from "@/lib/api-response";
 import { AI_BUDGETS } from "@/lib/ai/ai-budgets";
-import { assertDocumentEgressConsent } from "@/lib/ai/consent-guard";
+import { requireAiCapability } from "@/lib/ai/capabilities/gate";
 import {
   buildDateKey,
   reconcileSpend,
@@ -58,8 +59,8 @@ import {
   serialiseDocumentDetail,
 } from "@/lib/documents/store";
 import {
-  resolveDocumentTextProvider,
-  resolveDocumentVisionProvider,
+  requireDocumentTextProvider,
+  requireDocumentVisionProvider,
 } from "@/lib/documents/provider-order";
 import {
   checkDocumentAiRateLimit,
@@ -138,6 +139,10 @@ export const POST = apiHandler(
 
     const gate = await requireModuleEnabled(user.id, "inboundDocuments");
     if (!gate.enabled) return gate.response;
+
+    // Reading a document is model work. The provider and the consent receipt
+    // are answered by the pick below, for the provider actually used.
+    await requireAiCapability("documentAi", { pickDecides: true });
 
     const { id } = await params;
     const document = await prisma.inboundDocument.findFirst({
@@ -220,18 +225,7 @@ async function handleTextExtract(
     });
   }
 
-  const { pick } = await resolveDocumentTextProvider(userId);
-  if (!pick) {
-    return apiError("No AI provider is configured", 422, {
-      errorCode: "documents.inbound.providerUnsupported",
-    });
-  }
-
-  await assertDocumentEgressConsent({
-    userId,
-    providerType: pick.providerType,
-    surface: "insights",
-  });
+  const pick = await requireDocumentTextProvider(userId);
 
   const rl = await checkDocumentAiRateLimit(userId);
   if (!rl.allowed) return documentAiRateLimited(rl);
@@ -337,18 +331,7 @@ async function handleStoredExtract(
     });
   }
 
-  const { pick } = await resolveDocumentTextProvider(userId);
-  if (!pick) {
-    return apiError("No AI provider is configured", 422, {
-      errorCode: "documents.inbound.providerUnsupported",
-    });
-  }
-
-  await assertDocumentEgressConsent({
-    userId,
-    providerType: pick.providerType,
-    surface: "insights",
-  });
+  const pick = await requireDocumentTextProvider(userId);
 
   const rl = await checkDocumentAiRateLimit(userId);
   if (!rl.allowed) return documentAiRateLimited(rl);
@@ -423,18 +406,7 @@ async function handleVisionExtract(
   userId: string,
   document: LoadedDocument,
 ): Promise<Response> {
-  const { pick } = await resolveDocumentVisionProvider(userId);
-  if (!pick) {
-    return apiError("No vision-capable AI provider is configured", 422, {
-      errorCode: "documents.inbound.providerUnsupported",
-    });
-  }
-
-  await assertDocumentEgressConsent({
-    userId,
-    providerType: pick.providerType,
-    surface: "insights",
-  });
+  const pick = await requireDocumentVisionProvider(userId);
 
   const rl = await checkDocumentAiRateLimit(userId);
   if (!rl.allowed) return documentAiRateLimited(rl);

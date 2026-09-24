@@ -32,7 +32,7 @@ import {
   sanitiseZodIssues,
 } from "@/lib/api-response";
 import { AI_BUDGETS } from "@/lib/ai/ai-budgets";
-import { assertDocumentEgressConsent } from "@/lib/ai/consent-guard";
+import { requireAiCapability } from "@/lib/ai/capabilities/gate";
 import {
   buildDateKey,
   reconcileSpend,
@@ -57,7 +57,7 @@ import {
   DocumentDescribeError,
   transcribeDocument,
 } from "@/lib/documents/describe";
-import { resolveDocumentVisionProvider } from "@/lib/documents/provider-order";
+import { requireDocumentVisionProvider } from "@/lib/documents/provider-order";
 import { annotate } from "@/lib/logging/context";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import { prisma } from "@/lib/db";
@@ -183,17 +183,12 @@ async function handleVisionIndex(
   userId: string,
   document: LoadedDocument,
 ): Promise<Response> {
-  const { pick } = await resolveDocumentVisionProvider(userId);
-  if (!pick) {
-    return apiError("No vision-capable AI provider is configured", 422, {
-      errorCode: "documents.inbound.providerUnsupported",
-    });
-  }
-  await assertDocumentEgressConsent({
-    userId,
-    providerType: pick.providerType,
-    surface: "insights",
-  });
+  // Transcribing the stored original is model work; indexing text the browser
+  // already read (the text mode above) is not, and stays open with AI off so
+  // search keeps working. The provider and the consent receipt are answered
+  // by the pick, for the provider actually used.
+  await requireAiCapability("documentAi", { pickDecides: true });
+  const pick = await requireDocumentVisionProvider(userId);
 
   const rl = await checkDocumentAiRateLimit(userId);
   if (!rl.allowed) return documentAiRateLimited(rl);

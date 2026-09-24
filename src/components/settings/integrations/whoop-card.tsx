@@ -61,6 +61,7 @@ import {
   IntegrationRedirectGuide,
 } from "./setup-guide-link";
 import type { IntegrationCallbackUrls } from "@/lib/integrations/callback-urls";
+import { loadDocument } from "@/lib/navigation/load-document";
 
 export function WhoopCard({
   viewModel,
@@ -493,7 +494,7 @@ export function WhoopCard({
               className="min-h-11 w-full sm:w-auto"
               data-testid="whoop-connect"
               onClick={() => {
-                window.location.href = "/api/whoop/connect";
+                loadDocument("/api/whoop/connect");
               }}
             >
               <Link2 className="h-3.5 w-3.5" />

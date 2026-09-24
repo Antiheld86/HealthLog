@@ -235,6 +235,13 @@ function headerlessReferences(file: string, source: string): Reference[] {
   )) {
     record(m.index, "window.location", m[1] ?? m[2] ?? "");
   }
+  // `loadDocument(path)` (`src/lib/navigation/load-document.ts`) is a
+  // `window.location.assign` behind a name, so it is the same sink. Without
+  // this the connect and sign-in hand-offs that moved onto it would drop out
+  // of view while the guard kept passing.
+  for (const m of source.matchAll(/\bloadDocument\(\s*([^)\n]+)\)/g)) {
+    record(m.index, "loadDocument", m[1]);
+  }
   // The imperative form: `el.src = "/api/…"`. A JSX attribute is the common
   // shape and the one the real offenders had, but a script or image built in
   // an effect issues exactly the same headerless request — and the tree

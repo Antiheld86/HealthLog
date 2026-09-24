@@ -307,6 +307,11 @@ const PINNED_AFFORDANCES: Record<
     "text-success": 5,
     "toast.success": 1,
   },
+  // The delete-with-undo toast, the same one the conversation list and the
+  // history rail raise for the same delete.
+  "src/components/settings/coach-conversations-memory-card.tsx": {
+    "toast.success": 1,
+  },
   "src/components/settings/coach-memory-section.tsx": { "toast.success": 2 },
   "src/components/settings/coach-prefs-section.tsx": { "toast.success": 1 },
   "src/components/settings/dashboard-layout-section.tsx": {

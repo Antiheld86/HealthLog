@@ -28,7 +28,6 @@ import {
   coachScopeWindowSchema,
 } from "@/lib/ai/coach/types";
 import { isModuleEnabled } from "@/lib/modules/gate";
-import { getAssistantFlags } from "@/lib/feature-flags";
 import { resolveBaseOrigin } from "@/lib/mcp/oauth/config";
 import {
   getCorrelation,
@@ -1783,7 +1782,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
     name: "get_intraday_pulse",
     title: "Get the intraday pulse shape",
     description:
-      "Fetch the user's own 10-minute heart-rate shape for ONE local day — 'what happened this afternoon?', 'was I tense during the meeting?'. When every confidence gate holds, also carries a single cautious elevated-at-rest ('tension') window: a DESCRIPTIVE pattern only, NEVER a stress diagnosis. Falls back to an hourly-grain shape for a day outside the dense-retention window — see the `resolution` field ('tenMin' vs 'hourly'); `tension` is only ever computed at the dense grain. Gated on the `insights` module. Returns { present: false, reason: \"module_disabled\" } when the module is off, or { present: false } when the day has no pulse data.",
+      "Fetch the user's own 10-minute heart-rate shape for ONE local day — 'what happened this afternoon?', 'was I tense during the meeting?'. When every confidence gate holds, also carries a single cautious elevated-at-rest ('tension') window: a DESCRIPTIVE pattern only, NEVER a stress diagnosis. Falls back to an hourly-grain shape for a day outside the dense-retention window — see the `resolution` field ('tenMin' vs 'hourly'); `tension` is only ever computed at the dense grain. Pulse is a core vital: no AI switch and no module gate apply. Returns { present: false } when the day has no pulse data.",
     inputShape: {
       date: z
         .string()
@@ -1796,15 +1795,8 @@ export const MCP_TOOLS: McpToolDefinition[] = [
     annotations: READ_ONLY_ANNOTATIONS,
     outputShape: getIntradayPulseOutput,
     async run(ctx, args) {
-      const enabled = await isModuleEnabled(ctx.userId, "insights");
-      if (!enabled) {
-        annotate({
-          action: { name: "mcp.tool.invoked" },
-          meta: { tool: "get_intraday_pulse", present: false },
-        });
-        return { present: false, reason: "module_disabled" };
-      }
-
+      // Mirrors `GET /api/insights/pulse/intraday`: a computation over core
+      // vitals, served whatever the AI analysis opt-out says.
       const user = await prisma.user.findUnique({
         where: { id: ctx.userId },
         select: { timezone: true },
@@ -1841,23 +1833,13 @@ export const MCP_TOOLS: McpToolDefinition[] = [
     name: "get_ecg_recordings",
     title: "Get ECG recordings",
     description:
-      "Fetch METADATA for the user's own ECG recordings — recorded time, duration, sampling rate, sample count, average heart rate, lead, and the DEVICE's own rhythm classification. NEVER reads or returns the waveform (that stays app-only). Non-diagnostic: this reflects ONLY the classification result the recording device's own certified on-device algorithm produced — HealthLog never re-classifies an ECG and never forms a diagnosis from it; `classificationSource` is always the fixed literal 'device'. Gated on the `insights` module. Returns { present: false, reason: \"module_disabled\" } when the module (or the assistant surface) is off, or { present: false } when no recordings exist.",
+      "Fetch METADATA for the user's own ECG recordings — recorded time, duration, sampling rate, sample count, average heart rate, lead, and the DEVICE's own rhythm classification. NEVER reads or returns the waveform (that stays app-only). Non-diagnostic: this reflects ONLY the classification result the recording device's own certified on-device algorithm produced — HealthLog never re-classifies an ECG and never forms a diagnosis from it; `classificationSource` is always the fixed literal 'device'. Device data: no AI switch and no module gate apply. Returns { present: false } when no recordings exist.",
     inputShape: {},
     annotations: READ_ONLY_ANNOTATIONS,
     outputShape: getEcgRecordingsOutput,
     async run(ctx) {
-      const moduleEnabled = await isModuleEnabled(ctx.userId, "insights");
-      const insightStatusEnabled = moduleEnabled
-        ? (await getAssistantFlags()).insightStatus
-        : false;
-      if (!moduleEnabled || !insightStatusEnabled) {
-        annotate({
-          action: { name: "mcp.tool.invoked" },
-          meta: { tool: "get_ecg_recordings", present: false },
-        });
-        return { present: false, reason: "module_disabled" };
-      }
-
+      // Device data, served whatever the AI switches or the AI analysis
+      // opt-out say, like `GET /api/insights/ecg`.
       const rows = await prisma.ecgRecording.findMany({
         where: { userId: ctx.userId },
         // Everything EXCEPT `waveformEncrypted` — mirrors `GET

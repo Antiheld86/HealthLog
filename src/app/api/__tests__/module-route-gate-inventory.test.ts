@@ -32,11 +32,16 @@ import { MODULE_KEYS, type ModuleKey } from "@/lib/modules/registry";
  *      `delegatesTo`):
  *        - cycle  → `requireCycleEnabled(...)` (the cycle gate the
  *                   `cycle` ModuleKey delegates to).
- *        - coach  → `requireAssistantSurface("coach")` (the assistant
- *                   master flag + per-user opt-out the `coach` ModuleKey
- *                   delegates to). Covered in depth by the sibling
- *                   `coach-route-gate-inventory.test.ts`; listed here so
- *                   coach-bearing routes are not flagged as ungated.
+ *        - an AI capability → `requireAiCapability(key)` /
+ *                   `getAiCapability(key)`. A capability resolves its owning
+ *                   modules and the AI opt-out (the `coach` module and
+ *                   `disableCoach` for the Coach, the `insights` module for
+ *                   every other capability), so an AI route that names one is
+ *                   gated on those modules. Covered in depth by
+ *                   `ai-capability-route-inventory.test.ts`. The `insights`
+ *                   module is the AI analysis opt-out and gates only AI parts;
+ *                   the data routes that happen to live under
+ *                   `/api/insights` are EXEMPT below.
  *
  *   3. EXEMPT — an explicit, COMMENTED allowlist of routes that serve a
  *      toggleable domain but are deliberately NOT gated, each with the
@@ -147,9 +152,10 @@ const MODULE_ROUTE_TREES_BY_KEY: Readonly<
   // counted as directly gated here, and the sibling
   // `coach-route-gate-inventory.test.ts` covers the surface in depth.
   coach: ["src/app/api/coach"],
-  // v1.18.0 (B2) — the AI-narrative insights tree, plus v1.28's unified
-  // daily-digest read (`GET /api/daily/digest`), which is the AI-narrative
-  // daily layer and gates on `insights` directly.
+  // The `insights` module is the AI analysis opt-out. It owns no data route:
+  // the AI routes under these trees name a capability that folds it in, and
+  // the data routes that live here (ECG, scores, statistics, the Today
+  // digest) are EXEMPT below because a computation never depends on AI.
   insights: ["src/app/api/insights", "src/app/api/daily"],
   // v1.18.1 (D3) — medications graduated from CORE to a toggleable module.
   // SURFACE-gated (nav entry, dashboard widget, the dedicated Medikamente
@@ -244,10 +250,9 @@ const EXEMPT_ROUTES: ReadonlyArray<string> = [
   // affordance), not the row store. The extract route is read-only vision
   // assistance, the commit route writes the user's own confirmed lab rows,
   // and the capability probe is an infra availability check carrying no
-  // module data. All three are owner-scoped and AI-gated (consent / budget /
-  // rate); the module toggle hiding the surface does not need to wedge them.
+  // module data. The extract route is not listed: it names the `labsOcr` AI
+  // capability, which carries the labs module, so it counts as gated.
   "src/app/api/labs/ocr/capability/route.ts",
-  "src/app/api/labs/ocr/extract/route.ts",
   "src/app/api/labs/ocr/commit/route.ts",
   // ── DATA LAYER (medications) ──────────────────────────────────────
   // v1.18.1 (D3) — medications graduated from CORE to a toggleable module,
@@ -268,9 +273,9 @@ const EXEMPT_ROUTES: ReadonlyArray<string> = [
   // per-medication importer below: it writes intake rows and reads its own job.
   "src/app/api/medications/intake/dose-history-import/route.ts",
   "src/app/api/medications/intake/dose-history-import/[jobId]/status/route.ts",
-  // NB: `medications/extract` is NOT exempt — it gates on
-  // `requireAssistantSurface("coach")` (the NL-extraction is an assistant
-  // surface), so the inventory already counts it as a delegated gate.
+  // `medications/extract` is not listed: it is model work under the
+  // `medicationExtract` AI capability (no owning module; medications is a
+  // core domain for extraction), and a capability call counts as the gate.
   "src/app/api/medications/[id]/route.ts",
   "src/app/api/medications/[id]/api-endpoint/route.ts",
   "src/app/api/medications/[id]/cadence/route.ts",
@@ -299,12 +304,47 @@ const EXEMPT_ROUTES: ReadonlyArray<string> = [
   // ── INFRA / UI-ONLY ───────────────────────────────────────────────
   // Static FHIR CapabilityStatement — server metadata, no user data.
   "src/app/api/fhir/metadata/route.ts",
+  // ── DATA (insights tree) ──────────────────────────────────────────
+  // The `insights` module is the AI analysis opt-out, so it gates AI parts
+  // only, through the capability. These routes serve or accept data that no
+  // model wrote: device recordings and events, computed scores, statistics,
+  // rule alerts, the person's stored Coach data and the Today digest. Turning
+  // AI analysis off must leave every one of them working.
+  "src/app/api/insights/ecg/route.ts",
+  "src/app/api/insights/ecg/[id]/route.ts",
+  "src/app/api/insights/rhythm-events/route.ts",
+  "src/app/api/insights/derived/batch/route.ts",
+  "src/app/api/insights/cards/route.ts",
+  "src/app/api/insights/correlations/route.ts",
+  "src/app/api/insights/coach-read/route.ts",
+  "src/app/api/insights/health-status/route.ts",
+  "src/app/api/insights/pulse/intraday/route.ts",
+  "src/app/api/insights/patterns/route.ts",
+  "src/app/api/insights/patterns/[id]/route.ts",
+  // Stored Coach data: viewing and erasing it never depends on the Coach
+  // being available (the GDPR reason), and a timestamp on one's own row is
+  // data too.
+  "src/app/api/insights/coach/seen/route.ts",
+  "src/app/api/insights/coach/facts/route.ts",
+  "src/app/api/insights/coach/facts/[id]/route.ts",
+  // The stored plans list. Its sibling `[id]` route keeps the Coach gate on
+  // PATCH (confirming a proposal is Coach use) and erases without it.
+  "src/app/api/coach/plans/route.ts",
+  // Not listed, by the same rule: `coach/reminders/route.ts` lists without the
+  // Coach gate but keeps it on POST (creating one is Coach use), and
+  // `coach/reminders/[id]/route.ts` erases without it but keeps it on PATCH.
+  // Both files still carry a gate, so the walk counts them as gated and an
+  // entry here would fail the "does not hide a gate" check below.
+  "src/app/api/insights/chat/[id]/route.ts",
+  "src/app/api/insights/chat/messages/[id]/feedback/route.ts",
+  // The Today digest and its dismiss: data, with the AI parts masked by the
+  // loader through the capability resolver.
+  "src/app/api/daily/digest/route.ts",
+  "src/app/api/daily/digest/dismiss/route.ts",
   // ── INFRA / CONFIG (insights) ─────────────────────────────────────
-  // v1.18.0 (B2) — the insights tree's non-narrative routes. The
-  // `insights` module gates the AI-narrative SURFACES (status cards,
-  // correlations, derived scores, period narrative, the rhythm-event
-  // timeline); these six carry no narrative payload, so gating them would
-  // only break configuration / settings reads while the module is off.
+  // The insights tree's configuration routes carry no narrative payload,
+  // so gating them would only break configuration / settings reads while
+  // the module is off.
   //
   // AI provider + privacy settings and the read-only chain summary — pure
   // configuration of the assistant, surfaced under Settings → AI, not an
@@ -385,7 +425,10 @@ const EXEMPT_ROUTES: ReadonlyArray<string> = [
 
 const MODULE_GATE_NEEDLE = "requireModuleEnabled(";
 const CYCLE_GATE_NEEDLE = "requireCycleEnabled(";
-const COACH_GATE_NEEDLE = 'requireAssistantSurface("coach")';
+// An AI capability resolves its owning modules and the AI opt-out, so a route
+// that names one is gated on them.
+const AI_CAPABILITY_GATE =
+  /\b(?:requireAiCapability|getAiCapability|aiCapabilityToServe)\s*\(/;
 // v1.18.1 — the illness journal's thin gate wrapper. `requireIllnessEnabled`
 // delegates to `requireModuleEnabled(userId, "illness")` and re-stamps the
 // illness-specific errorCode, exactly mirroring how `cycle` delegates to
@@ -464,6 +507,15 @@ function fileHasCall(text: string, needle: string): boolean {
     if (trimmed.startsWith("//")) return false;
     if (trimmed.startsWith("*")) return false;
     return true;
+  });
+}
+
+/** True when a non-comment line calls an AI capability gate. */
+function fileHasCapabilityGate(text: string): boolean {
+  return text.split("\n").some((line) => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("//") || trimmed.startsWith("*")) return false;
+    return AI_CAPABILITY_GATE.test(line);
   });
 }
 
@@ -631,8 +683,8 @@ describe("module API route gate inventory", () => {
 
       if (fileHasCall(text, MODULE_GATE_NEEDLE)) continue;
       if (fileHasCall(text, CYCLE_GATE_NEEDLE)) continue;
-      if (fileHasCall(text, COACH_GATE_NEEDLE)) continue;
       if (fileHasCall(text, ILLNESS_GATE_NEEDLE)) continue;
+      if (fileHasCapabilityGate(text)) continue;
 
       if (exempt.has(path)) continue;
 
@@ -752,8 +804,8 @@ describe("module API route gate inventory", () => {
       if (
         fileHasCall(text, MODULE_GATE_NEEDLE) ||
         fileHasCall(text, CYCLE_GATE_NEEDLE) ||
-        fileHasCall(text, COACH_GATE_NEEDLE) ||
-        fileHasCall(text, ILLNESS_GATE_NEEDLE)
+        fileHasCall(text, ILLNESS_GATE_NEEDLE) ||
+        fileHasCapabilityGate(text)
       ) {
         stillGated.push(path);
       }

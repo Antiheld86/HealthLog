@@ -13,6 +13,11 @@
  *   DELETE /api/consent/ai/latest
  *     Master toggle — revokes the latest active receipt across every
  *     consent kind. Returns the list of revoked rows.
+ *
+ * Either DELETE also deletes the regenerable model-written text (status
+ * notes, the cached briefing, model-written narratives, reaction lines,
+ * workout paragraphs) when it leaves no receipt covering the analysis, in the
+ * same transaction as the revoke. Coach memory and document summaries stay.
  */
 import { NextRequest } from "next/server";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
@@ -28,8 +33,8 @@ import {
 import {
   latestActiveReceipt,
   latestActiveReceiptsByKind,
-  revokeLatest,
 } from "@/lib/consent/receipts";
+import { withdrawConsent } from "@/lib/consent/withdrawal";
 import { serialiseReceipt } from "../route";
 
 export const GET = apiHandler(async (request: NextRequest) => {
@@ -81,6 +86,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
       ? serialiseReceipt(byKind.ai_insights_only)
       : null,
     ai_coach: byKind.ai_coach ? serialiseReceipt(byKind.ai_coach) : null,
+    ai_extraction: byKind.ai_extraction
+      ? serialiseReceipt(byKind.ai_extraction)
+      : null,
   };
 
   annotate({
@@ -119,53 +127,50 @@ export const DELETE = apiHandler(async (request: NextRequest) => {
 
   const { kind } = parsed.data;
 
-  if (kind) {
-    const revoked = await revokeLatest(user.id, kind);
-    if (!revoked) {
-      // Idempotent: "no active receipt to revoke" is success-shaped.
-      // The iOS toggle hammers this on every flip; returning 404
-      // would surface as a spurious error in the client.
-      annotate({
-        action: { name: "consent.ai.revoke" },
-        meta: { kind, revoked: false },
-      });
-      return apiSuccess({ kind, receipt: null });
-    }
+  // One kind, or every kind for the master "turn AI off" toggle. The revoke
+  // and the purge of the regenerable text the consent covered commit
+  // together (`withdrawConsent`).
+  const kinds = kind ? [kind] : consentKindEnum.options;
+  const { revoked, purged } = await withdrawConsent(user.id, kinds);
+
+  for (const { kind: k, receipt } of revoked) {
     auditLog("consent.ai.revoke", {
       userId: user.id,
-      details: { kind, receiptId: revoked.id },
+      details: { kind: k, receiptId: receipt.id },
     }).catch(() => {});
-    annotate({
-      action: { name: "consent.ai.revoke" },
-      meta: { kind, receiptId: revoked.id },
-    });
-    return apiSuccess({ kind, receipt: serialiseReceipt(revoked) });
   }
-
-  // No kind specified — master "AI deaktivieren" toggle. Revoke the
-  // latest active row for every kind that currently has one.
-  const revokedRows: Array<{
-    kind: ConsentKind;
-    receipt: ReturnType<typeof serialiseReceipt>;
-  }> = [];
-  for (const k of consentKindEnum.options) {
-    const r = await revokeLatest(user.id, k);
-    if (r) {
-      revokedRows.push({ kind: k, receipt: serialiseReceipt(r) });
-      auditLog("consent.ai.revoke", {
-        userId: user.id,
-        details: { kind: k, receiptId: r.id },
-      }).catch(() => {});
-    }
+  if (purged) {
+    // Counts only, never content.
+    auditLog("consent.ai.purge", {
+      userId: user.id,
+      details: { ...purged },
+    }).catch(() => {});
   }
 
   annotate({
     action: { name: "consent.ai.revoke" },
     meta: {
-      kinds_revoked: revokedRows.map((r) => r.kind),
-      count: revokedRows.length,
+      kinds_revoked: revoked.map((r) => r.kind),
+      count: revoked.length,
+      purged: purged !== null,
     },
   });
 
-  return apiSuccess({ revoked: revokedRows });
+  if (kind) {
+    // Idempotent: "no active receipt to revoke" is success-shaped. The iOS
+    // toggle hammers this on every flip; returning 404 would surface as a
+    // spurious error in the client.
+    const receipt = revoked[0]?.receipt ?? null;
+    return apiSuccess({
+      kind,
+      receipt: receipt ? serialiseReceipt(receipt) : null,
+    });
+  }
+
+  return apiSuccess({
+    revoked: revoked.map((r) => ({
+      kind: r.kind,
+      receipt: serialiseReceipt(r.receipt),
+    })),
+  });
 });

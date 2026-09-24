@@ -279,17 +279,27 @@ describe("resolveModuleEnabled — operator layer (two-layer AND)", () => {
     ).toBe(true);
   });
 
-  it("operator-off short-circuits a delegated module (coach) regardless of user state", () => {
-    // Even with the assistant master flag on and no per-user opt-out, the
-    // operator module-availability kill-switch wins.
+  it("the operator's Coach switch short-circuits the coach module regardless of user state", () => {
+    // The Coach's operator layer is the Coach switch, carried into the
+    // availability map; no per-user state can reopen it.
     expect(
       resolveModuleEnabled(
         "coach",
         inputs({ disableCoach: false }),
         true,
-        operator({ coach: false }),
+        resolveOperatorAvailability({}, false),
       ),
     ).toBe(false);
+  });
+
+  it("ignores a coach key left in the availability blob", () => {
+    // Folded into the Coach switch; only the switch decides.
+    expect(resolveOperatorAvailability({ coach: false }, true).coach).toBe(
+      true,
+    );
+    expect(resolveOperatorAvailability({ coach: true }, false).coach).toBe(
+      false,
+    );
   });
 
   it("operator-off short-circuits cycle even for a FEMALE account", () => {

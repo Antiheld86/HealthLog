@@ -29,6 +29,12 @@ export const labKeys = {
       params.sortDir,
     ] as const,
 
+  // The visit form's lab picker: newest results, its own page size. Its own
+  // key because the Labs list reads a different page size, and a shared key
+  // would serve one read's page to the other.
+  labResultsPicker: (limit: number) =>
+    ["lab-results", "picker", limit] as const,
+
   // v1.25 — paginated (offset) reading feed for the biomarker detail page.
   // Distinct from `labResultsList` (single-page key) so the infinite-query
   // accumulation never collides with a single-page read. Shares the

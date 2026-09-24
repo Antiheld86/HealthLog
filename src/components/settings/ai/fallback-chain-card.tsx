@@ -33,7 +33,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Switch } from "@/components/ui/switch";
 import { apiPut } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
+import { aiInputDependentKeys, invalidateKeys } from "@/lib/query-keys";
 
 import {
   DEFAULT_CHAIN,
@@ -99,7 +99,7 @@ export function FallbackChainCard({
     onSuccess: () => {
       setOk(true);
       setMsg(t("settings.ai.providerChain.saved"));
-      queryClient.invalidateQueries({ queryKey: queryKeys.insightsRoot() });
+      void invalidateKeys(queryClient, aiInputDependentKeys);
     },
     onError: (e) => {
       setOk(false);

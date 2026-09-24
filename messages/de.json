@@ -760,6 +760,7 @@
     "typeWaistToHeight": "Taille-Größe-Verhältnis",
     "unitScore": "Pkt.",
     "unitRatio": "Verhältnis",
+    "unitRating": "Stufe",
     "typeWho5Score": "WHO-5-Wert",
     "typeSciScore": "SCI-Wert"
   },
@@ -1311,7 +1312,9 @@
           "rateLimit": "Zu viele Anfragen — bitte kurz warten und erneut versuchen.",
           "noProvider": "Kein KI-Anbieter konfiguriert — bitte in den Einstellungen einrichten.",
           "budget": "Tägliches KI-Budget erreicht — bitte morgen erneut versuchen.",
-          "network": "KI-Anbieter nicht erreichbar — bitte erneut versuchen."
+          "network": "KI-Anbieter nicht erreichbar — bitte erneut versuchen.",
+          "consent": "Für das Lesen deiner Beschreibung mit KI brauchst du zuerst deine Einwilligung.",
+          "unavailable": "Das Lesen von Beschreibungen mit KI ist hier gerade nicht verfügbar."
         }
       },
       "cadence": {
@@ -2443,8 +2446,6 @@
     "bmiEmptyAction": "Account-Einstellungen öffnen",
     "noAnalysisYet": "Noch keine Einschätzung vorhanden.",
     "assessmentPreparing": "Einschätzung wird vorbereitet…",
-    "noProviderConfigured": "Verbinde einen KI-Anbieter, um hier eine Einschätzung zu deinen Werten zu sehen.",
-    "noProviderAction": "Zu den KI-Einstellungen",
     "personalRecord": {
       "badge": "PR",
       "tooltip": "Persönlicher Rekord: {value} {unit} am {date}"
@@ -2568,10 +2569,6 @@
       "emptyDescription": "Erstelle das heutige Briefing, um eine Zusammenfassung deiner Trends zu bekommen.",
       "emptyAction": "Briefing erstellen",
       "loadingLabel": "Briefing wird zusammengestellt",
-      "noProviderTitle": "Kein KI-Anbieter verbunden",
-      "noProviderDescription": "Richte HealthLog auf ein lokales Modell (Ollama, LM Studio — nichts verlässt dein Netzwerk) oder hinterlege deinen eigenen OpenAI- oder Anthropic-Schlüssel, und das tägliche Briefing fasst deine eigenen Messwerte in klarer Sprache zusammen. Die Einrichtung dauert etwa eine Minute.",
-      "noProviderAction": "Zu den KI-Einstellungen",
-      "staleNoProviderHint": "Dieses Briefing kann nicht aktualisiert werden — es ist kein KI-Anbieter verbunden.",
       "refreshFailedHint": "Briefing konnte nicht aktualisiert werden — es wird das letzte angezeigt.",
       "retryAction": "Erneut versuchen",
       "failedTitle": "Briefing konnte nicht erstellt werden",
@@ -2949,7 +2946,15 @@
       "interrupted": {
         "note": "Diese Antwort wurde unterbrochen, bevor sie fertig war.",
         "retry": "Erneut fragen"
-      }
+      },
+      "historyReadOnlyNote": "Der Coach ist gerade nicht verfügbar, deine Gespräche kannst du aber weiter lesen und löschen.",
+      "transcriptYou": "Du",
+      "transcriptCoach": "Coach",
+      "errorConsent": "Der Coach braucht deine KI-Einwilligung, bevor er antworten kann. Du kannst sie unter Einstellungen, KI geben.",
+      "errorNotPermitted": "Der Coach ist in einer Akte, die jemand mit dir teilt, nicht verfügbar.",
+      "errorUnavailable": "Der Coach konnte seine Einstellungen gerade nicht prüfen. Bitte versuch es gleich noch einmal.",
+      "errorOperatorOff": "KI ist auf diesem Server abgeschaltet, deshalb kann der Coach nicht antworten.",
+      "errorCoachOff": "Der Coach ist ausgeschaltet. Du kannst ihn unter Einstellungen, Module wieder einschalten."
     },
     "relativeJustNow": "gerade eben",
     "relativeMinutesAgoOne": "vor {count} Minute",
@@ -4382,7 +4387,15 @@
         "night": "Eine anhaltend erhöhte Ruhephase in der Nacht — möglicherweise etwas Anspannung."
       }
     },
-    "navEcg": "EKG"
+    "navEcg": "EKG",
+    "sectionLoadError": "Dieser Bereich konnte nicht geladen werden.",
+    "aiSetupHint": {
+      "title": "KI ist optional",
+      "body": "Hier funktioniert alles auch ohne KI. Wenn du ein tägliches Briefing, kurze Notizen zu deinen Werten und den Coach möchtest, kannst du einen KI-Anbieter verbinden.",
+      "settingsBody": "HealthLog funktioniert vollständig ohne KI. Verbinde unten einen Anbieter, wenn du ein tägliches Briefing, kurze Notizen zu deinen Werten und den Coach möchtest.",
+      "action": "KI einrichten",
+      "dismiss": "Nicht jetzt"
+    }
   },
   "thresholds": {
     "defaultLabel": "Default",
@@ -5781,7 +5794,8 @@
         "deleteConfirmTitle": "Diese Erinnerung löschen?",
         "deleteConfirmBody": "Sie wird nicht mehr ausgelöst. An bereits erfassten Daten ändert sich nichts.",
         "deleteConfirmAction": "Löschen",
-        "detail": "Fällige erscheinen hier und beim Coach."
+        "detail": "Fällige erscheinen hier und beim Coach.",
+        "readOnlyNote": "Der Coach ist gerade nicht verfügbar, deine Erinnerungen kannst du aber weiter lesen und löschen."
       },
       "aboutMe": {
         "title": "Über mich",
@@ -5828,14 +5842,38 @@
       "consent": {
         "title": "KI-Einwilligung",
         "activeSince": "Erteilt am {date}. Deine Gesundheitsdaten dürfen für die KI-Funktionen an den eingestellten Anbieter gesendet werden.",
-        "withdrawn": "Widerrufen. Es werden keine Gesundheitsdaten an einen KI-Anbieter gesendet; die KI-Funktionen bleiben aus.",
+        "withdrawn": "Widerrufen. Sofern keine andere Einwilligung sie abdeckt, nutzen Coach und Insights den KI-Zugang dieses Servers nicht mehr, und kein Online-Modell liest deine Dokumente. Mit deinem eigenen Schlüssel oder einem lokalen Modell laufen Coach und Insights weiter.",
         "withdraw": "Einwilligung widerrufen",
-        "confirmBody": "Die KI-Funktionen sind sofort abgeschaltet. Bereits erfasste Daten werden nicht gelöscht — dafür gibt es Daten & Privatsphäre.",
+        "confirmBody": "Sofern keine andere Einwilligung sie noch abdeckt, endet sofort: der Coach und die Insights, wo sie den KI-Zugang dieses Servers nutzen, und das Lesen von Dokumenten mit einem Online-Modell. Mit deinem eigenen Schlüssel oder einem lokalen Modell laufen Coach und Insights weiter. Sofern keine andere Einwilligung die Insights noch abdeckt, werden die Notizen gelöscht, die ein Modell für dich geschrieben hat: Statusnotizen, das tägliche Briefing, von einem Modell geschriebene Zeitraum-Zusammenfassungen, Ankunftszeilen und Trainingsnotizen. Deine Coach-Gespräche, was sich der Coach gemerkt hat, deine Pläne und deine Dokument-Zusammenfassungen bleiben, und du kannst sie selbst lesen oder löschen.",
         "confirmWithdraw": "Widerrufen",
         "regrantHint": "Mit einer neuen Einwilligung dürfen die KI-Funktionen deine Gesundheitsdaten wieder an den eingestellten Anbieter senden.",
         "grant": "Einwilligung erteilen",
         "grantError": "Die Einwilligung konnte nicht gespeichert werden. Bitte versuche es erneut.",
-        "error": "Der Widerruf konnte nicht gespeichert werden. Bitte versuche es erneut."
+        "error": "Der Widerruf konnte nicht gespeichert werden. Bitte versuche es erneut.",
+        "documentReading": {
+          "title": "Einwilligung zum Lesen von Dokumenten",
+          "activeSince": "Erteilt am {date}. Dokumente, gescannte Laborbefunde und Medikamentenbeschreibungen dürfen zum Lesen an deinen KI-Dienst gesendet werden.",
+          "confirmBody": "Dokumente, gescannte Laborbefunde und Medikamentenbeschreibungen werden nicht mehr zum Lesen gesendet. Nichts, was du bereits hast, wird gelöscht."
+        }
+      },
+      "operatorOff": {
+        "allTitle": "KI ist auf diesem Server abgeschaltet",
+        "allBody": "Wer diesen Server betreibt, hat KI abgeschaltet. HealthLog funktioniert weiter mit all deinen Daten; die Funktionen, die KI brauchen, werden einfach nicht angezeigt.",
+        "someTitle": "Einige KI-Funktionen sind auf diesem Server abgeschaltet",
+        "someBody": "Wer diesen Server betreibt, hat abgeschaltet: {switches}. Alles andere, auch all deine Daten, funktioniert wie gewohnt.",
+        "testRefused": "KI ist auf diesem Server abgeschaltet, daher gibt es nichts zu testen.",
+        "autoRead": "Das Lesen von Dokumenten mit KI ist auf diesem Server abgeschaltet."
+      },
+      "coachConversations": {
+        "title": "Coach-Gespräche",
+        "description": "Öffne ein Gespräch, um es zu lesen, oder lösche es.",
+        "more": "Mehr anzeigen",
+        "openAll": "Alle Gespräche öffnen"
+      },
+      "coachPlans": {
+        "title": "Coach-Pläne",
+        "description": "Die Pläne, die du mit dem Coach vereinbart hast, zum Lesen oder Entfernen.",
+        "open": "Pläne öffnen"
       }
     },
     "dashboard": {
@@ -6790,34 +6828,35 @@
     "monitoringTestSuccess": "Testevent wurde gesendet",
     "monitoringTestFailed": "Monitoring-Test fehlgeschlagen",
     "assistant": {
-      "title": "Assistenz-Oberflächen",
-      "description": "Jeder Toggle versteckt eine modellgestützte Oberfläche app-weit, ohne die Provider-Konfiguration zu entfernen.",
+      "title": "Assistenz",
+      "description": "Jeder Schalter stoppt die KI-Arbeit, die er abdeckt, und blendet ihren Text aus, Daten und Werte laden weiter.",
       "master": {
         "title": "Assistent aktiv",
-        "description": "Hauptschalter für jede modellgestützte Oberfläche. Wenn aus, sind alle Unter-Optionen unten zwangsweise aus."
+        "description": "Hauptschalter für alle KI-Funktionen. Ist er aus, wird nichts an ein Modell gesendet, und alle Schalter darunter sind aus."
       },
       "coach": {
         "title": "Coach",
-        "description": "Chat-Drawer, Launch-Button und die mobile FAB auf jeder Insights-Seite."
+        "description": "Chat, Pflege des Coach-Gedächtnisses und KI-Hinweise. Gespeicherte Gespräche bleiben lesbar und löschbar."
       },
       "briefing": {
         "title": "Tagesbriefing",
-        "description": "Briefing-Karte, Hero-Erzähltext, Empfehlungen und der Regenerieren-Knopf."
+        "description": "Das Tagesbriefing, seine Einleitung an anderen Stellen der App und Zeitraum-Zusammenfassungen, die ein Modell schreibt."
       },
       "insightStatus": {
-        "title": "Status-Karten",
-        "description": "Pro-Metrik-Status-Karten auf jeder /insights-Unterseite."
+        "title": "Statusnotizen",
+        "description": "Kurze Notizen, die ein Modell pro Messwert und Kennzahl schreibt, Trainingsnotizen und Reaktionszeilen. Der größte Anteil am Token-Verbrauch."
       },
-      "correlations": {
-        "title": "Korrelationen",
-        "description": "Erzähl-Kachel zur Korrelation auf der Insights-Übersicht."
+      "documentAi": {
+        "title": "Dokumente lesen",
+        "description": "KI-Lesen gespeicherter Dokumente, Scans von Laborbefunden und das Erkennen von Medikamenten aus Text. Der größte Anteil der Daten, die den Server verlassen."
       }
     },
     "modules": {
       "title": "Modulverfügbarkeit",
       "description": "Schalte ein Modul für den gesamten Server ab.",
       "saveError": "Modulverfügbarkeit konnte nicht aktualisiert werden.",
-      "detail": "Ein hier deaktiviertes Modul ist für jedes Konto aus — unabhängig von den persönlichen Einstellungen. Kerndaten (Gewicht, Blutdruck, Puls, Medikamente) sind immer aktiv und lassen sich nicht abschalten."
+      "detail": "Ein hier deaktiviertes Modul ist für jedes Konto aus — unabhängig von den persönlichen Einstellungen. Kerndaten (Gewicht, Blutdruck, Puls, Medikamente) sind immer aktiv und lassen sich nicht abschalten.",
+      "coachFollowsSwitch": "Folgt dem Coach-Schalter unter Assistenz."
     },
     "invites": {
       "title": "Einladungen",
@@ -8255,6 +8294,7 @@
       "saving": "Speichern…",
       "cancel": "Abbrechen",
       "saveError": "Konnte nicht gespeichert werden. Versuch es erneut.",
+      "emptyHint": "Wähle eine Stärke oder ein Symptom, um diesen Tag zu speichern, oder nutze oben den Knopf für den Periodenbeginn.",
       "intermenstrualBleeding": "Schmierblutung zwischen Perioden",
       "pregnancyTest": "Schwangerschaftstest",
       "progesteroneTest": "Progesterontest",
@@ -8798,7 +8838,8 @@
       "extractFailed": "Der Befund konnte nicht gelesen werden. Versuche ein schärferes Foto.",
       "pdfNeedsAnthropic": "PDF-Scannen benötigt einen Claude-Bildanbieter; lade stattdessen ein Foto hoch.",
       "refTextLabel": "Bereich wie gedruckt",
-      "refTextPlaceholder": "z. B. 3,5 - 5,0"
+      "refTextPlaceholder": "z. B. 3,5 - 5,0",
+      "aiUnavailable": "Das Scannen eines Befunds mit KI ist hier gerade nicht verfügbar."
     },
     "loadMoreReadings": "Weitere Werte laden",
     "documentsLink": "Befund-Dokumente",
@@ -8846,8 +8887,8 @@
       "description": "KI-Chat mit Bezug zu deinen Daten."
     },
     "insights": {
-      "label": "Insights",
-      "description": "KI-Analysen, Briefing und Korrelationen."
+      "label": "KI-Analyse",
+      "description": "Briefing, Statusnotizen und Trainingsnotizen, die ein Modell schreibt, nie deine Daten oder Werte."
     },
     "doctorReport": {
       "label": "Arztbericht",
@@ -9031,6 +9072,11 @@
       "mmrv": "MMRV (Masern, Mumps, Röteln, Varizellen)",
       "hepa-hepb": "Hepatitis A und B",
       "hepa-typhoid": "Hepatitis A und Typhus"
+    },
+    "renewal": {
+      "overdue": "Auffrischung fällig seit {date}",
+      "dueSoon": "Auffrischung fällig am {date}",
+      "current": "Nächste Auffrischung {date}"
     }
   },
   "illness": {
@@ -9242,6 +9288,7 @@
     "plans": {
       "title": "Pläne",
       "pageDescription": "Wenn-dann-Pläne aus deinen Coach-Gesprächen. Bestätige einen Vorschlag, damit der Coach ihn sich merkt.",
+      "readOnlyNote": "Der Coach ist gerade nicht verfügbar, deine Pläne kannst du aber weiter lesen und löschen.",
       "proposalTitle": "Plan-Vorschlag",
       "ifThen": "Wenn {cue}, dann {action}.",
       "targetPrefix": "Ziel: {target}",
@@ -9878,7 +9925,10 @@
       "uploadedMeta": "Hinzugefügt am {date} · {size}",
       "share": "Teilen",
       "labValuesLink": "{count} Laborwerte ansehen",
-      "visitsLabel": "Gehört zu Termin"
+      "visitsLabel": "Gehört zu Termin",
+      "vaccinationsLabel": "Impfungen",
+      "noVisitsToLink": "Noch keine Termine erfasst.",
+      "noVaccinationsToLink": "Noch keine Impfungen erfasst."
     },
     "dropOverlay": {
       "title": "Zum Hochladen ablegen",
@@ -9938,7 +9988,9 @@
       "errorNotIndexed": "Lies das Dokument zuerst aus, dann extrahiere.",
       "errorLocalOcrDisabled": "Aktiviere zuerst die lokale Texterkennung in den KI-Einstellungen.",
       "errorProvider": "Dafür ist kein KI-Anbieter eingerichtet.",
-      "errorTextImageOnly": "Lokale Texterkennung liest nur Bilder — nicht diese Datei."
+      "errorTextImageOnly": "Lokale Texterkennung liest nur Bilder — nicht diese Datei.",
+      "errorConsent": "Für das Lesen von Dokumenten mit KI brauchst du zuerst deine Einwilligung.",
+      "errorUnavailable": "Das Lesen von Dokumenten mit KI ist hier gerade nicht verfügbar."
     },
     "summary": {
       "summarise": "Zusammenfassen",
@@ -10016,6 +10068,11 @@
       "title": "Über dieses Dokument chatten",
       "openAria": "Coach über dieses Dokument fragen",
       "openButton": "Coach fragen"
+    },
+    "readingConsent": {
+      "body": "Beim Lesen mit KI geht dies an deinen KI-Dienst außerhalb dieses Servers. Darf HealthLog Dokumente, Laborbefunde und Medikamentenbeschreibungen zum Lesen senden?",
+      "grant": "Lesen erlauben",
+      "error": "Die Einwilligung konnte nicht gespeichert werden. Bitte versuch es erneut."
     }
   },
   "selfDescription": {
@@ -10152,8 +10209,7 @@
         "dayInvalid": "Die Einträge trugen ein Datum, das der Server nicht akzeptieren konnte. Das kann passieren, wenn Uhrzeit oder Zeitzone auf der sendenden Seite falsch eingestellt sind — das lohnt sich zu prüfen.",
         "upsertFailed": "Diese Einträge haben den Server erreicht, aber ein Problem auf unserer Seite hat verhindert, dass sie gespeichert wurden. Du musst nichts weiter tun.",
         "unknown": "Diese Einträge sind angekommen, konnten aber nicht gespeichert werden."
-      },
-      "moduleEnableError": "Das Nährstoffmodul konnte nicht aktiviert werden. Versuch es noch mal."
+      }
     },
     "hydration": {
       "referenceMeta": "Richtwert {value} {unit}/Tag · EFSA"
@@ -10822,7 +10878,9 @@
       "selectAll": "Alle auswählen",
       "searchPlaceholder": "Suchen",
       "searchNoMatch": "Kein Treffer",
-      "remove": "Entfernen"
+      "remove": "Entfernen",
+      "suggested": "Um dieses Datum",
+      "loadError": "Die Liste konnte nicht geladen werden."
     }
   }
 }

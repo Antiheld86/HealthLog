@@ -39,7 +39,7 @@ import {
 import { resolveDeterministicAssessment } from "@/lib/insights/derived/derived-assessment";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
 import { instructionLocale } from "@/lib/ai/prompts/output-language";
-import { requireModuleEnabled, resolveModuleMap } from "@/lib/modules/gate";
+import { resolveModuleMap } from "@/lib/modules/gate";
 import { DERIVED_MODULE } from "../route";
 
 export const dynamic = "force-dynamic";
@@ -117,10 +117,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // v1.37.0 — MANAGE-level read: the deterministic batch form, no provider on
   // the path.
   const { user, actor } = await requireRecordAuth("manage", "record");
-  const m = await requireModuleEnabled(user.id, "insights");
-  if (!m.enabled) return m.response;
-  // Same deterministic compute as the single route, so no
-  // assistant-surface gate.
+  // Same deterministic compute as the single route: no AI gate, and no
+  // `insights` module gate (that module is the AI analysis opt-out). Per-metric
+  // module ownership still applies below through `DERIVED_MODULE`.
 
   // Per-caller limiter, same posture as the compliance routes: the cold
   // build fans out up to 24 rollup walks, so an unthrottled caller could

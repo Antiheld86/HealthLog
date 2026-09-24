@@ -645,3 +645,91 @@ describe("link service — the vaccination pair", () => {
     ).rejects.toThrow(/No link table joins a vaccination to a labResult/);
   });
 });
+
+describe("link service — a document filed against many doses (#1024)", () => {
+  async function seedDoses(userId: string, count: number) {
+    const prisma = getPrismaClient();
+    const ids: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const dose = await prisma.vaccinationRecord.create({
+        data: {
+          userId,
+          occurredAt: new Date(Date.UTC(1991, i % 12, 1 + i)),
+          antigenSlug: i % 2 === 0 ? "dtap" : "polio",
+        },
+      });
+      ids.push(dose.id);
+    }
+    return ids;
+  }
+
+  it("files one page against a whole childhood schedule from the document side", async () => {
+    const prisma = getPrismaClient();
+    const doses = await seedDoses(OWNER, 12);
+    const result = await replaceTargets(prisma, {
+      userId: OWNER,
+      sourceKind: "document",
+      sourceId: owner.document.id,
+      targetKind: "vaccination",
+      targetIds: doses,
+    });
+    expect(result.changed).toBe(12);
+    // One table, read from either end: every dose now lists the page.
+    for (const dose of doses) {
+      const pages = await listTargets(prisma, {
+        userId: OWNER,
+        sourceKind: "vaccination",
+        sourceId: dose,
+        targetKind: "document",
+      });
+      expect(pages.map((page) => page.id)).toEqual([owner.document.id]);
+    }
+    // And the rows landed in the right columns.
+    const row = await prisma.vaccinationDocumentLink.findFirstOrThrow({
+      where: { vaccinationId: doses[0] },
+    });
+    expect(row.documentId).toBe(owner.document.id);
+    expect(row.userId).toBe(OWNER);
+  });
+
+  it("refuses another account's dose from the document side, and writes nothing", async () => {
+    const prisma = getPrismaClient();
+    const result = await linkTargets(prisma, {
+      userId: OWNER,
+      sourceKind: "document",
+      sourceId: owner.document.id,
+      targetKind: "vaccination",
+      targetIds: [stranger.vaccination.id],
+    });
+    expect(result.unknownTargetIds).toEqual([stranger.vaccination.id]);
+    expect(await prisma.vaccinationDocumentLink.count()).toBe(0);
+  });
+
+  it("unlinking from the document side leaves the other doses filed", async () => {
+    const prisma = getPrismaClient();
+    const doses = await seedDoses(OWNER, 3);
+    await replaceTargets(prisma, {
+      userId: OWNER,
+      sourceKind: "document",
+      sourceId: owner.document.id,
+      targetKind: "vaccination",
+      targetIds: doses,
+    });
+    await replaceTargets(prisma, {
+      userId: OWNER,
+      sourceKind: "document",
+      sourceId: owner.document.id,
+      targetKind: "vaccination",
+      targetIds: [doses[0]!, doses[2]!],
+    });
+    const linked = await listTargets(prisma, {
+      userId: OWNER,
+      sourceKind: "document",
+      sourceId: owner.document.id,
+      targetKind: "vaccination",
+    });
+    expect(linked.map((dose) => dose.id).sort()).toEqual(
+      [doses[0]!, doses[2]!].sort(),
+    );
+  });
+});

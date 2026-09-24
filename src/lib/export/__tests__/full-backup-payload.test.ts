@@ -78,7 +78,7 @@ const appSettings = {
   assistantCoachEnabled: false,
   assistantBriefingEnabled: false,
   assistantInsightStatusEnabled: false,
-  assistantCorrelationsEnabled: false,
+  assistantDocumentAiEnabled: false,
   moduleAvailabilityJson: { nutrients: false, insights: true },
   documentMaxFileBytes: 12_345_678,
   documentQuotaBytes: BigInt("9876543210"),

@@ -13,6 +13,12 @@
  * text, never blocking on the provider. An unknown `metric` 422s via the
  * closed registry enum.
  *
+ * A mixed read: the note is model text, served (and warmed on a miss) only
+ * while the `statusText` AI capability is available. Otherwise the route
+ * answers 200 with no note, `insufficient` still computed from the data, and
+ * an `ai` state saying why; the cache is not read and nothing is queued. The
+ * `insights` module (the AI analysis opt-out) folds into the capability.
+ *
  * Unlike the seven legacy `*-status` routes, this one carries OpenAPI
  * coverage (the route schema lives in `src/lib/openapi/routes.ts`),
  * establishing the pattern the legacy routes can be backfilled onto later.
@@ -23,14 +29,17 @@ import { apiSuccess, returnAllZodIssues } from "@/lib/api-response";
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
-import { requireAssistantSurface } from "@/lib/feature-flags";
 import { requireModuleEnabled, type ModuleKey } from "@/lib/modules/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
+import { unavailableStatusBody } from "@/lib/insights/status-unavailable";
+import { prisma } from "@/lib/db";
 import {
   generateMetricStatus,
   resolveMetricStatusLocale,
 } from "@/lib/insights/metric-status";
 import {
   METRIC_STATUS_IDS,
+  getMetricStatusMeta,
   type MetricStatusMetricId,
 } from "@/lib/insights/metric-status-registry";
 
@@ -72,10 +81,6 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // record, which is not a section a scoped grant can name. The miss behind it
   // enqueues nothing while a delegate is holding the request.
   const { user } = await requireRecordAuth("manage", "record");
-  const m = await requireModuleEnabled(user.id, "insights");
-  if (!m.enabled) return m.response;
-  await requireAssistantSurface("insightStatus");
-
   const parsed = metricQuerySchema.safeParse({
     metric: request.nextUrl.searchParams.get("metric"),
   });
@@ -99,6 +104,30 @@ export const GET = apiHandler(async (request: NextRequest) => {
     if (!gate.enabled) return gate.response;
   }
 
+  const ai = await aiCapabilityToServe(user.id, "statusText");
+  if (!ai.available) {
+    // The note is not served, but whether there is anything to assess is
+    // data: the card keeps its insufficient-data state.
+    const meta = getMetricStatusMeta(metric);
+    const readings = meta
+      ? await prisma.measurement.count({
+          where: {
+            userId: user.id,
+            type: meta.measurementType,
+            deletedAt: null,
+          },
+        })
+      : 0;
+    annotate({
+      action: { name: "insights.metric-status.unavailable" },
+      meta: { metric, reason: ai.reason },
+    });
+    return apiSuccess({
+      ...(await unavailableStatusBody(user.id, ai)),
+      insufficient: readings === 0,
+    });
+  }
+
   const localeParam = request.nextUrl.searchParams.get("locale");
   const resolved = await resolveServerLocale({
     request,
@@ -120,5 +149,5 @@ export const GET = apiHandler(async (request: NextRequest) => {
     meta: { metric },
   });
 
-  return apiSuccess(result);
+  return apiSuccess({ ...result, ai });
 });

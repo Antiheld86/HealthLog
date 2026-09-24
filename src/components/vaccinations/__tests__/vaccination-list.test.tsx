@@ -133,3 +133,111 @@ describe("VaccinationList grouping", () => {
     );
   });
 });
+
+describe("VaccinationList renewal state (#1005)", () => {
+  const tdap = record({
+    id: "tdap-1",
+    antigenSlug: "tdap",
+    catalogEntry: { slug: "tdap", atc: "J07AJ52", category: "standard" },
+    series: [
+      { antigen: "tetanus", position: 3, total: 3, booster: false },
+      { antigen: "pertussis", position: 1, total: 3, booster: false },
+    ],
+  });
+
+  function renderWith(
+    renewals: Parameters<typeof VaccinationList>[0]["renewals"],
+  ): string {
+    return renderToStaticMarkup(
+      <I18nProvider initialLocale="en">
+        <VaccinationList records={[tdap]} renewals={renewals} />
+      </I18nProvider>,
+    );
+  }
+
+  it("marks an overdue booster on its antigen's heading, and only there", () => {
+    const html = renderWith([
+      {
+        antigen: "tetanus",
+        reminderId: "rem-1",
+        dueAt: "2026-01-10T09:00:00.000Z",
+        daysUntil: -30,
+        state: "overdue",
+      },
+    ]);
+    expect(html.match(/data-slot="vaccination-renewal"/g)).toHaveLength(1);
+    expect(html).toContain('data-state="overdue"');
+    expect(html).toContain("Booster overdue since");
+    expect(html).toContain("text-warning");
+    // It sits inside the tetanus group, not the pertussis one.
+    const tetanusGroup = html.slice(
+      html.indexOf('data-antigen="tetanus"'),
+      html.indexOf('data-antigen="pertussis"') >
+        html.indexOf('data-antigen="tetanus"')
+        ? html.indexOf('data-antigen="pertussis"')
+        : undefined,
+    );
+    expect(tetanusGroup).toContain('data-slot="vaccination-renewal"');
+  });
+
+  it("tints a booster that is due soon and leaves a distant one as plain meta", () => {
+    const soon = renderWith([
+      {
+        antigen: "tetanus",
+        reminderId: "rem-1",
+        dueAt: "2026-10-10T09:00:00.000Z",
+        daysUntil: 16,
+        state: "dueSoon",
+      },
+    ]);
+    expect(soon).toContain("Booster due");
+    expect(soon).toContain("text-info");
+    const later = renderWith([
+      {
+        antigen: "tetanus",
+        reminderId: "rem-1",
+        dueAt: "2034-10-10T09:00:00.000Z",
+        daysUntil: 2900,
+        state: "current",
+      },
+    ]);
+    expect(later).toContain("Next booster");
+    expect(later).not.toContain("text-warning");
+    expect(later).not.toContain("text-info");
+  });
+
+  it("gives each antigen its own renewal when several are planned", () => {
+    const html = renderWith([
+      {
+        antigen: "pertussis",
+        reminderId: "rem-p",
+        dueAt: "2034-10-10T09:00:00.000Z",
+        daysUntil: 2900,
+        state: "current",
+      },
+      {
+        antigen: "tetanus",
+        reminderId: "rem-t",
+        dueAt: "2026-01-10T09:00:00.000Z",
+        daysUntil: -30,
+        state: "overdue",
+      },
+    ]);
+    const pertussisAt = html.indexOf('data-antigen="pertussis"');
+    const tetanusAt = html.indexOf('data-antigen="tetanus"');
+    const [first, second] =
+      pertussisAt < tetanusAt
+        ? [html.slice(pertussisAt, tetanusAt), html.slice(tetanusAt)]
+        : [html.slice(tetanusAt, pertussisAt), html.slice(pertussisAt)];
+    const pertussis = pertussisAt < tetanusAt ? first : second;
+    const tetanus = pertussisAt < tetanusAt ? second : first;
+    expect(pertussis).toContain('data-state="current"');
+    expect(pertussis).not.toContain('data-state="overdue"');
+    expect(tetanus).toContain('data-state="overdue"');
+  });
+
+  it("shows nothing when there is no renewal or the grant withholds it", () => {
+    expect(renderWith([])).not.toContain("vaccination-renewal");
+    expect(renderWith(null)).not.toContain("vaccination-renewal");
+  });
+});

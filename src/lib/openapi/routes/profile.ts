@@ -11,6 +11,11 @@ import { notificationPrefsSchema } from "@/lib/validations/notification-prefs";
 import { sourcePrioritySchema } from "@/lib/validations/source-priority";
 import { modulePrefsPatchSchema } from "@/lib/validations/modules";
 import { MODULE_KEYS } from "@/lib/modules/registry";
+import {
+  AI_CAPABILITIES,
+  AI_CAPABILITY_KEYS,
+  AI_UNAVAILABLE_REASONS,
+} from "@/lib/ai/capabilities/types";
 import { SCORE_PILLAR_IDS } from "@/lib/analytics/score/types";
 import { savedReportProfileSchema } from "@/lib/report-selection/profile-shape";
 import { injectionSiteEnum } from "@/lib/validations/medication";
@@ -113,6 +118,81 @@ export const moduleAccessMap = z
     id: "ModuleAccessMap",
     description:
       "Why each toggleable module is or is not available for the record this session is inside. `enabled` — the module is on and the client may paint it. `disabled` — the record has it switched off. `not_granted` — the active grant's sections do not open the module's section, which also covers every module that reads across the whole record (achievements, the assistant surfaces, the export, environment, the account's own MCP endpoint) since no scoped grant opens one. `unavailable` — the operator switched the module off for the whole instance. Precedence, highest first: `unavailable` > `not_granted` > `disabled` > `enabled`, so the reason published is the one nothing further in can change. Own-record sessions and unscoped grants never produce `not_granted`. Every key is present, and `modules[key] === (moduleAccess[key] === \"enabled\")` holds for every key — this field adds a reason, never a different gate.",
+  });
+
+// ── AI capabilities (`ai` on GET /api/auth/me) ─────────────────────────────
+
+export const aiUnavailableReason = z.enum(AI_UNAVAILABLE_REASONS).meta({
+  id: "AiUnavailableReason",
+  description:
+    "Why an AI capability is unavailable, listed in precedence order; only the outermost reason that applies is reported, because it names the layer that would have to change first. `check_failed` — an input could not be read and the answer failed closed. `operator_disabled` — the operator's master switch, the capability's own switch, or the operator's instance-wide availability of its module. `not_permitted_for_record` — AI work is not admitted for this record (a delegate inside somebody else's record). `module_disabled` — an owning module is off for this record, by its own switch or by the edge of the active grant. `user_disabled` — the record's own AI opt-out: the Coach preference for the Coach, the `insights` module (AI analysis) for everything else. `no_provider` — no configured provider can serve this capability's input. `consent_required` — the provider chain needs an AI consent receipt and none is active. The list is closed; a client that meets a value it does not know treats the capability as unavailable.",
+});
+
+export const aiCapabilityState = z
+  .object({
+    available: z.boolean(),
+    reason: aiUnavailableReason
+      .nullable()
+      .describe("`null` exactly when `available` is true."),
+    onDeviceAllowed: z
+      .boolean()
+      .describe(
+        "Whether an on-device model may do this work. False for `operator_disabled`, `not_permitted_for_record`, `module_disabled`, `user_disabled` and `check_failed`: the operator's and the person's decisions hold on the device too. True otherwise, since a missing server provider or a missing consent for server egress do not concern a model that runs on the device. Resolved here so the client never decides which reasons apply off the server.",
+      ),
+  })
+  .meta({
+    id: "AiCapabilityState",
+    description:
+      "One AI capability, resolved for one record from every layer that can say no. Render from it; never recompute it. Data never depends on it: measurements, scores, statistics and device records load whatever it says.",
+  });
+
+export const aiCapabilities = z
+  .object(
+    Object.fromEntries(
+      AI_CAPABILITY_KEYS.map((key) => [
+        key,
+        aiCapabilityState.describe(
+          `The "${key}" capability. Covered by the operator's "${AI_CAPABILITIES[key].operatorSwitch}" switch.`,
+        ),
+      ]),
+    ),
+  )
+  .meta({
+    id: "AiCapabilities",
+    description:
+      "Every AI capability, always all present. `coach` — chat, fenced document chat, attachments, Coach memory upkeep, AI nudges, every Coach launcher. `briefing` — the daily briefing and every place its text is lifted into. `periodNarrative` — the model-written half of a period narrative (the deterministic narrative is data). `statusText` — per-metric status notes and the AI override of a derived assessment. `workoutInsights` — the paragraph on a workout. `reactionLines` — the line written after a new reading. `aboutMeQuestions` — model-written follow-up questions on the about-me profile (a deterministic set stays). `documentAi` — suggest, summary, extract, index and chat over a stored document. `labsOcr` — reading a lab report image. `medicationExtract` — turning a typed medication description into a schedule.",
+  });
+
+export const aiProviderState = z
+  .object({
+    configured: z
+      .boolean()
+      .describe(
+        "At least one configured provider can serve text for this record. Presence only: no key is tried, so a revoked key still reads as configured until a generation fails.",
+      ),
+    managedBy: z
+      .enum(["user", "local", "server"])
+      .nullable()
+      .describe(
+        "Where the serving credential comes from: the person's own (`user`), a self-hosted model they pointed at (`local`), or one the operator holds (`server`). `null` when nothing is configured.",
+      ),
+    canConfigure: z
+      .boolean()
+      .describe(
+        "Whether the person in front of the screen may set up a provider for this record: false inside somebody else's record and while the operator's master switch is off. A setup hint is shown only when this is true.",
+      ),
+  })
+  .meta({
+    id: "AiProviderState",
+    description: "The account-level companion to the capability map.",
+  });
+
+export const aiAccountBlock = z
+  .object({ capabilities: aiCapabilities, provider: aiProviderState })
+  .meta({
+    id: "AiAccountBlock",
+    description:
+      "Which AI capabilities the record this session is inside has, and why not when it has none. Resolved on the server for the ACTIVE RECORD and masked to the sections the active grant opens, exactly like `modules` and `moduleAccess`; with no switch (every native request) it describes the caller's own record.",
   });
 
 const moduleMapEnvelopeInner = z
@@ -529,7 +609,7 @@ const aiProviderResponse = z
     aiAvailable: z
       .boolean()
       .describe(
-        "True when ANY provider can serve this user — including the operator's server-managed key when the user set none. iOS keys Coach visibility off this.",
+        "True when ANY provider can serve this user — including the operator's server-managed key when the user set none — AND the operator's master AI switch is on. With every AI capability switched off there is no AI available, whatever is configured. iOS keys Coach visibility off this. The per-capability answer is `ai` on `/api/auth/me`.",
       ),
     managedBy: z
       .enum(["user", "local", "server"])
@@ -585,7 +665,7 @@ const aiProviderResponse = z
     serverProviderOffer: z
       .boolean()
       .describe(
-        "Whether the shared provider may honestly be offered to this caller in one tap. True only when all of: the operator's provider is the one that would serve them (`managedBy: \"server\"`), `serverProviderHealth` is `healthy`, the operator's assistant master + coach flags are on, the acting record holds its own credentials (a managed profile never does), the caller holds no receipt yet, and the instance is not running in demo mode (where the grant the tap makes is refused at the edge). Anything unknown makes it false.",
+        'Whether the shared provider may honestly be offered to this caller in one tap. True only when all of: the operator\'s provider is the one that would serve them (`managedBy: "server"`), `serverProviderHealth` is `healthy`, the operator keeps at least one capability the consent would unlock switched on (the Coach, the daily briefing, or reading documents; the master switch off turns all three off), the acting record holds its own credentials (a managed profile never does), the caller holds no receipt yet, and the instance is not running in demo mode (where the grant the tap makes is refused at the edge). Anything unknown makes it false.',
       ),
     serverProviderConsent: z
       .boolean()
@@ -629,7 +709,7 @@ const glucoseUnitResponse = z
 const documentsAutoAiReadPatchRequest = documentsAutoAiReadPatchSchema.meta({
   id: "DocumentsAutoAiReadPatchRequest",
   description:
-    "Turn automatic AI reading of newly uploaded documents on or off. Turning it on also mints an `ai_full` consent receipt and schedules a catch-up over the existing vault.",
+    "Turn automatic AI reading of newly uploaded documents on or off. Turning it on also mints an `ai_extraction` consent receipt and schedules a catch-up over the existing vault.",
 });
 
 const documentsAutoAiReadResponse = z
@@ -964,7 +1044,7 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Auth"],
       summary: "Probe the AI provider connection",
       description:
-        "Sends a tiny fixed prompt to the resolved provider and reports whether it answered. The body is OPTIONAL: with no body the saved configuration is tested; with one, the unsaved selection is tested without touching the user row, so the settings surface can verify a credential before persisting it. Plaintext keys sent this way are never stored.\n\n**This route never returns 5xx, and that is deliberate.** A 5xx from the origin is rewritten to an HTML error page by a reverse proxy or CDN, and the client's `res.json()` then dies on `<!DOCTYPE`. So a provider failure comes back as **200 with `ok: false`** plus a categorised, secret-free `reasonCode`. Branch on `ok`, not on the status. The provider's own error text and body excerpt are logged for the operator and never put on the wire.\n\nThe probe is metered on the same daily AI budget every other AI surface writes to, because with an empty body it can resolve the OPERATOR's shared key — unmetered, that would be invisible spend on a surface that exists to answer 'are my settings right?'. A probe that fails is refunded.\n\nTwo ceilings: 5 per minute and 50 per day, per user.",
+        "Sends a tiny fixed prompt to the resolved provider and reports whether it answered. The body is OPTIONAL: with no body the saved configuration is tested; with one, the unsaved selection is tested without touching the user row, so the settings surface can verify a credential before persisting it. Plaintext keys sent this way are never stored.\n\n**This route never returns 5xx, and that is deliberate.** A 5xx from the origin is rewritten to an HTML error page by a reverse proxy or CDN, and the client's `res.json()` then dies on `<!DOCTYPE`. So a provider failure comes back as **200 with `ok: false`** plus a categorised, secret-free `reasonCode`. Branch on `ok`, not on the status. The provider's own error text and body excerpt are logged for the operator and never put on the wire.\n\nThe probe is metered on the same daily AI budget every other AI surface writes to, because with an empty body it can resolve the OPERATOR's shared key — unmetered, that would be invisible spend on a surface that exists to answer 'are my settings right?'. A probe that fails is refunded.\n\nTwo ceilings: 5 per minute and 50 per day, per user.\n\nWith the operator\'s master AI switch off the probe is refused (403 `assistant.disabled.enabled`, `meta.reason = \"operator_disabled\"`): no AI call leaves the server then, and this is an AI call. When the switches cannot be read the answer fails closed with 403 `ai.unavailable` (`meta.reason = \"check_failed\"`) rather than the usual 503, for the no-5xx reason above.",
       requestBody: {
         required: false,
         content: { "application/json": { schema: aiTestRequest } },
@@ -979,6 +1059,11 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
+        "403": {
+          description:
+            'The operator\'s master AI switch is off (`meta.errorCode = "assistant.disabled.enabled"`), or the switches could not be read (`ai.unavailable`). Nothing was sent.',
+          content: { "application/json": { schema: errorEnvelope } },
+        },
         "413": {
           description: "Body exceeds 64 KiB.",
           content: { "application/json": { schema: errorEnvelope } },
@@ -991,12 +1076,12 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
         ...stdResponses,
         "422": {
           description:
-            "Nothing could be probed. Either the override body failed validation, or the resolved configuration is not usable — no provider selected, a required key or base URL missing, a model name missing for the gateway, ChatGPT OAuth not connected, or a base URL pointing at an internal host. The message names which.",
+            'Nothing could be probed. Either the override body failed validation, or the resolved configuration is not usable — no provider selected, a required key or base URL missing, a model name missing for the gateway, ChatGPT OAuth not connected, or a base URL pointing at an internal host. The message names which; a resolved configuration with no provider at all carries `meta.errorCode = "ai.provider.none"`.',
           content: { "application/json": { schema: errorEnvelope } },
         },
         "429": {
           description:
-            "One of three ceilings: 5 probes per minute, 50 per day, or the account's daily AI token budget is exhausted. The message distinguishes them.",
+            'One of three ceilings: 5 probes per minute, 50 per day, or the account\'s daily AI token budget is exhausted. The message distinguishes them; the budget refusal also carries `meta.errorCode = "ai.budget.exceeded"`.',
           content: { "application/json": { schema: errorEnvelope } },
         },
       },
@@ -1740,7 +1825,7 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Set the automatic document-reading opt-in",
       description:
         "Hard-set, idempotent, audit-logged. Rate-limited 60 / min per user.\n\n" +
-        "Turning it ON does two further things a caller should expect. It is itself the standing consent act, so the write appends an `ai_full` `ConsentReceipt` — the same receipt POST /api/consent/ai/web mints, and one DELETE /api/consent/ai/latest revokes without touching this flag. And a genuine OFF→ON flip schedules a bounded catch-up over the documents already in the vault, because the summary job is enqueued at upload time and would otherwise only ever apply to future uploads. The catch-up is fire-and-forget and re-runs every consent and budget gate per document.\n\n" +
+        "Turning it ON does two further things a caller should expect. It is itself the standing consent act, so the write appends an `ai_extraction` `ConsentReceipt` unless one that covers document reads (`ai_extraction` or `ai_full`) is already active. The receipt covers reading documents, lab reports and medication text and nothing else: the Coach and the AI analysis keep asking for their own consent (earlier releases minted `ai_full` here, and those receipts stay valid). DELETE /api/consent/ai/latest?kind=ai_extraction revokes it without touching this flag. And a genuine OFF→ON flip schedules a bounded catch-up over the documents already in the vault, because the summary job is enqueued at upload time and would otherwise only ever apply to future uploads; it is skipped while the `documentAi` capability is closed for the record. The catch-up is fire-and-forget and re-runs every consent and budget gate per document.\n\n" +
         "The body cap here is 1 KB, far tighter than the 64 KB its siblings allow — a payload above it is refused with 413 rather than parsed.",
       requestBody: {
         required: true,

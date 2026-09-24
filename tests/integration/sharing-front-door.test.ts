@@ -261,6 +261,17 @@ frontDoorRead("GET /api/dashboard/snapshot", {
   read: (data: { user: { username: string } }) => data.user.username,
 });
 
+/** The person's own provider (presence only) and an AI consent receipt. */
+function ownProvider() {
+  return {
+    aiProvider: "ANTHROPIC",
+    aiAnthropicKeyEncrypted: "v1:presence-only",
+    consentReceipts: {
+      create: { kind: "ai_full", artefact: "test", signedAt: new Date() },
+    },
+  };
+}
+
 /** A parseable cached briefing — the only thing the digest lifts prose from. */
 function cachedBriefing(marker: string): string {
   return JSON.stringify({
@@ -272,12 +283,16 @@ function cachedBriefing(marker: string): string {
 }
 
 frontDoorRead("GET /api/daily/digest", {
+  // The briefing lead is stored model text: shown whenever the record's own
+  // `briefing` capability allows it, whoever reads. Each account therefore
+  // has its own provider (presence only) and consent.
   seed: async (userId, marker) => {
     await getPrismaClient().user.update({
       where: { id: userId },
       data: {
         insightsCachedText: cachedBriefing(marker),
         insightsCachedAt: new Date(),
+        ...ownProvider(),
       },
     });
   },
@@ -342,6 +357,10 @@ async function seedAssistantMessage(userId: string, at: string) {
 
 frontDoorRead("GET /api/insights/coach/nudge-status", {
   seed: async (userId, marker) => {
+    await getPrismaClient().user.update({
+      where: { id: userId },
+      data: ownProvider(),
+    });
     await seedAssistantMessage(
       userId,
       marker === "owner" ? "2026-07-01T09:00:00Z" : "2026-07-02T09:00:00Z",

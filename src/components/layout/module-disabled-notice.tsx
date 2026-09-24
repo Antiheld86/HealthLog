@@ -79,7 +79,11 @@ export function ModuleDisabledNotice({
   const moduleName = t(MODULE_REGISTRY[moduleKey].labelKey);
 
   return (
-    <div data-slot="module-disabled-notice" data-module-access={state}>
+    <div
+      data-slot="module-disabled-notice"
+      data-module={moduleKey}
+      data-module-access={state}
+    >
       <EmptyState
         icon={icon}
         title={t(copy.title, { module: moduleName })}

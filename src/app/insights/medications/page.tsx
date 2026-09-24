@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Loader2, Pill } from "lucide-react";
 
+import { useAiCapability } from "@/hooks/use-ai-capability";
 import { useAuth } from "@/hooks/use-auth";
 import { nextStatusPollInterval } from "@/hooks/use-insight-status";
 import { queryKeys } from "@/lib/query-keys";
@@ -93,6 +94,9 @@ interface MedicationComplianceDailyResponse {
 export default function InsightsMedikamentePage() {
   const { isAuthenticated } = useAuth();
   const { t, locale } = useTranslations();
+  // The compliance summary and the per-medication sentences are status notes:
+  // read only while the `statusText` capability is available.
+  const statusText = useAiCapability("statusText");
 
   const {
     data: comprehensive,
@@ -124,7 +128,7 @@ export default function InsightsMedikamentePage() {
         clearTimeout(timeoutHandle);
       }
     },
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && statusText.available,
     staleTime: 60 * 1000,
     retry: 0,
     // v1.8.4 — bounded preparing poll: stop after the shared attempt

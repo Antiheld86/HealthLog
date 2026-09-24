@@ -5,6 +5,11 @@
  * transcribed from. The shared {@link EntityLinkPicker} — an inline summary
  * (removable chips + an add button) over a searchable, month-grouped sheet.
  *
+ * The whole vault is offered, not only the pages dated near the dose: one
+ * childhood record commonly covers a dozen doses given years apart, and it
+ * belongs on every one of them. The pages dated within the upload
+ * suggestion's window of this dose sit on top as suggestions.
+ *
  * **The gate blanks the block, it does not post-filter it.** When the
  * `inboundDocuments` module is off, this renders nothing — no heading, no empty
  * list — because an empty picker for a switched-off module advertises a feature
@@ -13,64 +18,29 @@
  * Nothing here can block a save: the list starts empty and stays valid empty,
  * and linking is optional, capped and idempotent behind the link facade.
  */
-import { useQuery } from "@tanstack/react-query";
 import { FolderOpen } from "lucide-react";
 
-import { apiGet } from "@/lib/api/api-fetch";
-import { useFormatters, useTranslations } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
-import type { InboundDocumentDto } from "@/lib/validations/inbound-documents";
-import {
-  EntityLinkPicker,
-  type EntityLinkOption,
-} from "@/components/links/entity-link-picker";
-
-const PICKER_FETCH_LIMIT = 200;
-
-interface DocumentListPage {
-  documents: InboundDocumentDto[];
-}
+import { useTranslations } from "@/lib/i18n/context";
+import { EntityLinkPicker } from "@/components/links/entity-link-picker";
+import { useVaultDocumentOptions } from "@/components/links/vault-document-options";
 
 export function VaccinationDocumentPicker({
   enabled,
+  anchor,
   documentIds,
   onChange,
 }: {
   /** The `inboundDocuments` module flag — false blanks the block entirely. */
   enabled: boolean;
+  /** The dose's own date (ISO), for the suggestions on top. */
+  anchor: string | null;
   documentIds: string[];
   onChange: (documentIds: string[]) => void;
 }) {
   const { t } = useTranslations();
-  const format = useFormatters();
-
-  const documents = useQuery({
-    queryKey: queryKeys.inboundDocumentPicker("vaccination-form"),
-    enabled,
-    queryFn: () =>
-      apiGet<DocumentListPage>(
-        `/api/documents/inbound?sort=documentDate&order=desc&limit=${PICKER_FETCH_LIMIT}`,
-      ),
-  });
+  const vault = useVaultDocumentOptions({ enabled, anchor });
 
   if (!enabled) return null;
-
-  const options: EntityLinkOption[] = (documents.data?.documents ?? []).map(
-    (doc) => {
-      const date = doc.documentDate ?? doc.reportDate ?? doc.createdAt;
-      return {
-        id: doc.id,
-        label: doc.title ?? doc.filename ?? doc.id,
-        dateLabel: date ? format.date(date) : null,
-        group: date
-          ? {
-              key: date.slice(0, 7),
-              label: `${format.monthShort(date)} ${date.slice(0, 4)}`,
-            }
-          : null,
-      };
-    },
-  );
 
   return (
     <div className="border-t pt-4" data-slot="vaccination-document-picker">
@@ -78,10 +48,13 @@ export function VaccinationDocumentPicker({
         icon={FolderOpen}
         title={t("vaccinations.form.linkDocuments")}
         slot="vaccination-document"
-        pending={documents.isPending}
+        pending={vault.pending}
+        error={vault.error}
+        errorLabel={t("links.picker.loadError")}
+        onRetry={vault.retry}
         selected={documentIds}
         onChange={onChange}
-        options={options}
+        options={vault.options}
         searchPlaceholder={t("links.picker.searchPlaceholder")}
         emptyLabel={t("vaccinations.form.linkNothingToOffer")}
       />

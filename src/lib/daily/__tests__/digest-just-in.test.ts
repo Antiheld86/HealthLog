@@ -18,6 +18,7 @@ import {
   type DailyDigestInput,
 } from "@/lib/daily/digest";
 import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
+import { DIGEST_AI_AVAILABLE } from "@/__tests__/helpers/ai-capability-fixtures";
 
 const t = getServerTranslator("en").t;
 const NOW = new Date("2026-07-16T09:00:00.000Z");
@@ -38,6 +39,7 @@ function meds(): MedsTodayBlock {
 function input(over: Partial<DailyDigestInput> = {}): DailyDigestInput {
   return {
     now: NOW,
+    ai: DIGEST_AI_AVAILABLE,
     todayEndExclusive: new Date("2026-07-17T00:00:00.000Z"),
     modules: {},
     enabledHeroItemKinds: [...PRIORITY_ITEM_KINDS],

@@ -2,14 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import type * as ApiHandlerModule from "@/lib/api-handler";
 
-const { requireAuth, requireAssistantSurface, annotate, auditLog } = vi.hoisted(
-  () => ({
-    requireAuth: vi.fn(),
-    requireAssistantSurface: vi.fn(),
-    annotate: vi.fn(),
-    auditLog: vi.fn(),
-  }),
-);
+const { requireAuth, annotate, auditLog } = vi.hoisted(() => ({
+  requireAuth: vi.fn(),
+  annotate: vi.fn(),
+  auditLog: vi.fn(),
+}));
 
 vi.mock("@/lib/api-handler", async (importOriginal) => {
   const actual = await importOriginal<typeof ApiHandlerModule>();
@@ -20,7 +17,6 @@ vi.mock("@/lib/api-handler", async (importOriginal) => {
     requireAuth,
   };
 });
-vi.mock("@/lib/feature-flags", () => ({ requireAssistantSurface }));
 vi.mock("@/lib/logging/context", () => ({ annotate }));
 vi.mock("@/lib/auth/audit", () => ({ auditLog }));
 vi.mock("@/lib/ai/coach/persistence", () => ({
@@ -65,7 +61,6 @@ async function body(response: Response) {
 beforeEach(() => {
   vi.clearAllMocks();
   requireAuth.mockResolvedValue({ user: { id: USER_ID, locale: "en" } });
-  requireAssistantSurface.mockResolvedValue(undefined);
   auditLog.mockResolvedValue(undefined);
 });
 
@@ -77,7 +72,6 @@ describe("PATCH /api/insights/chat/[id]", () => {
     await expect(PATCH(request({ title: "Renamed" }), context())).rejects.toBe(
       unauthenticated,
     );
-    expect(requireAssistantSurface).not.toHaveBeenCalled();
     expect(renameConversation).not.toHaveBeenCalled();
   });
 

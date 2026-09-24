@@ -211,9 +211,9 @@ export async function generateBiomarkerStatus(args: {
       metric: scope,
       locale,
     });
-    if (outcome.kind === "no-provider" || outcome.kind === "consent-missing") {
+    if (outcome.kind === "unavailable") {
       return {
-        hasProvider: false,
+        hasProvider: outcome.hasProvider,
         text: getNoKeyBiomarkerStatusText(locale, marker.name),
         cached: true,
         updatedAt: null,
@@ -324,7 +324,7 @@ export async function generateBiomarkerStatus(args: {
   const outcome = await runStatusCompletion({
     userId: args.userId,
     cacheAction,
-    consentSurface: "insights",
+    capability: "statusText",
     systemPrompt: getBiomarkerSystemPrompt(safeMarkerName, locale as Locale),
     userPrompt: getBiomarkerUserPrompt(
       snapshotJson,
@@ -383,11 +383,7 @@ export async function generateBiomarkerStatus(args: {
     userId: args.userId,
     cacheAction,
     todayKey,
-    locale,
     text,
-    providerType: outcome.providerType,
-    model: outcome.model,
-    tokensUsed: outcome.tokensUsed,
     inputHash,
   });
 

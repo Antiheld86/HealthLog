@@ -108,21 +108,6 @@ interface DailyBriefingProps {
   /** Disables the regenerate CTA while a generation is in flight. */
   regenerating?: boolean;
   /**
-   * v1.15.20 — no AI provider is configured anywhere, so generating is
-   * futile. The empty state swaps the regenerate CTA for a quiet hint
-   * linking to Settings → AI instead of an eternal "preparing" loop.
-   */
-  noProvider?: boolean;
-  /**
-   * v1.18.9 (#4) — no AI provider configured WHILE a (stale) cached
-   * briefing is still shown. The read path serves the last good briefing
-   * regardless of provider state, so a provider-less account keeps seeing
-   * a days-old briefing. When true, the footer pairs the honest relative
-   * age with a discreet "this can't refresh — connect a provider" hint so
-   * the staleness reads as intentional, not as a live report.
-   */
-  noProviderStale?: boolean;
-  /**
    * v1.25 — the most recent generation attempt failed (provider timeout /
    * error). The briefing keeps its last good text, so this never blanks a
    * shown card; it only adds an honest "couldn't refresh" hint to the footer
@@ -365,8 +350,6 @@ export function DailyBriefing({
   loading = false,
   onRegenerate,
   regenerating = false,
-  noProvider = false,
-  noProviderStale = false,
   generationFailed = false,
   generationFailureClass = null,
   omittedReason = null,
@@ -482,7 +465,7 @@ export function DailyBriefing({
                 </div>
               </div>
             )}
-            {(updatedAt || noProviderStale || generationFailed) && (
+            {(updatedAt || generationFailed) && (
               <div className="border-border/60 space-y-1.5 border-t pt-3">
                 {updatedAt && (
                   <p
@@ -498,33 +481,12 @@ export function DailyBriefing({
                     )}
                   </p>
                 )}
-                {/* v1.18.9 (#4) — a stale briefing that can never refresh
-                      because no AI provider is connected. State that plainly
-                      and point at Settings → AI, so the days-old read is
-                      understood as held, not presented as current. */}
-                {noProviderStale && (
-                  <p
-                    data-slot="daily-briefing-stale-no-provider"
-                    className="text-muted-foreground flex flex-wrap items-center justify-end gap-x-1.5 gap-y-1 text-right text-xs"
-                  >
-                    <span>
-                      {t("insights.dailyBriefing.staleNoProviderHint")}
-                    </span>
-                    <Link
-                      href="/settings/ai"
-                      data-slot="daily-briefing-stale-no-provider-link"
-                      className="text-foreground/80 hover:text-foreground underline underline-offset-2"
-                    >
-                      {t("insights.dailyBriefing.noProviderAction")}
-                    </Link>
-                  </p>
-                )}
                 {/* v1.25 — the held briefing is shown, but the last refresh
                       attempt failed (provider timeout / error). State it plainly
                       and offer a retry so the staleness reads as held, not
-                      current. Suppressed when no provider is configured (that
-                      hint owns the footer) — a retry would be futile there. */}
-                {generationFailed && !noProviderStale && (
+                      current. The card only mounts while the briefing
+                      capability is available, so a provider exists. */}
+                {generationFailed && (
                   <p
                     data-slot="daily-briefing-refresh-failed"
                     className="text-muted-foreground flex flex-wrap items-center justify-end gap-x-1.5 gap-y-1 text-right text-xs"
@@ -546,29 +508,6 @@ export function DailyBriefing({
               </div>
             )}
           </div>
-        ) : noProvider ? (
-          // v1.15.20 — no provider configured anywhere: a regenerate CTA
-          // would 422 forever, so point at Settings → AI instead.
-          <EmptyState
-            data-slot="daily-briefing-no-provider"
-            variant="plain"
-            icon={<Sparkles className="size-5" />}
-            title={t("insights.dailyBriefing.noProviderTitle")}
-            description={t("insights.dailyBriefing.noProviderDescription")}
-            action={
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                asChild
-                data-slot="daily-briefing-no-provider-cta"
-              >
-                <Link href="/settings/ai">
-                  {t("insights.dailyBriefing.noProviderAction")}
-                </Link>
-              </Button>
-            }
-          />
         ) : (
           <EmptyState
             data-slot="daily-briefing-empty"

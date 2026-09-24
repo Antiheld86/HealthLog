@@ -14,7 +14,7 @@ import { ConfirmButton } from "@/components/ui/confirm-button";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
 import { formatDateTime } from "@/lib/format";
 import { useTranslations } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
+import { aiInputDependentKeys, invalidateKeys } from "@/lib/query-keys";
 
 import type { InsightsSettings } from "./shared";
 
@@ -55,7 +55,7 @@ export function CodexProviderForm({
     url.searchParams.delete("codex_error");
     window.history.replaceState({}, "", url.toString());
     if (oauthOutcome.kind === "connected") {
-      queryClient.invalidateQueries({ queryKey: queryKeys.insightsRoot() });
+      void invalidateKeys(queryClient, aiInputDependentKeys);
     }
   }, [oauthOutcome, queryClient]);
 
@@ -112,7 +112,7 @@ export function CodexProviderForm({
           setDevicePolling(false);
           setMsg(t("settings.codexConnected"));
           setMsgType("success");
-          queryClient.invalidateQueries({ queryKey: queryKeys.insightsRoot() });
+          void invalidateKeys(queryClient, aiInputDependentKeys);
           return;
         }
         if (!cancelled) setTimeout(tick, intervalMs);
@@ -151,7 +151,7 @@ export function CodexProviderForm({
       }
       setMsg(t("settings.codexDisconnected"));
       setMsgType("success");
-      queryClient.invalidateQueries({ queryKey: queryKeys.insightsRoot() });
+      void invalidateKeys(queryClient, aiInputDependentKeys);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : t("settings.savingError"));
       setMsgType("error");

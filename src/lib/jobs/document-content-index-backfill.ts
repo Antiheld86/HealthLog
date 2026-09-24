@@ -12,9 +12,10 @@
  * indexing egresses to a provider under the user's key + budget, so it must be
  * a deliberate, consented act, exactly like the per-document index route.
  *
- * Consent: gated on the document-egress consent (`assertDocumentEgressConsent`),
- * the same gate the extract / index routes use — any external provider needs an
- * active receipt; a local pick stays ungated. There is no separate per-user
+ * Consent: gated on the `documentAi` capability and the wire re-check of the
+ * document pick (`resolveDocumentVisionProvider` → `aiEgressRefusal`), the same
+ * gate the extract / index routes use — any external provider needs an active
+ * extraction receipt; a local pick needs none. There is no separate per-user
  * toggle (maintainer decision, 2026-07-07).
  *
  * Bounded + resumable: an id-cursor forward walk over the not-yet-indexed set,
@@ -30,10 +31,8 @@
  * (`src/lib/jobs/reminder/register-maintenance.ts`) so pg-boss provisions it.
  */
 import { AI_BUDGETS } from "@/lib/ai/ai-budgets";
-import {
-  assertDocumentEgressConsent,
-  ConsentRequiredError,
-} from "@/lib/ai/consent-guard";
+import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
+import { PICK_DECIDED_REASONS } from "@/lib/ai/capabilities/types";
 import {
   buildDateKey,
   reconcileSpend,
@@ -96,7 +95,8 @@ export interface ContentIndexBackfillSummary {
    * reservation existed; a later run retries.
    */
   failed: number;
-  reason: "ok" | "no-provider" | "no-consent" | "budget-reached";
+  reason:
+    "ok" | "no-provider" | "no-consent" | "budget-reached" | "unavailable";
 }
 
 /**
@@ -164,32 +164,45 @@ export async function runContentIndexBackfillForUser(
   // provider still gets their existing index moved to the current rules.
   const stale = await retokeniseStaleRows(userId);
 
-  const { pick } = await resolveDocumentVisionProvider(userId);
-  if (!pick)
+  // The `documentAi` capability before any document is listed: the
+  // operator's switches (the master and "Reading documents") and the vault
+  // module. Whether there is a provider and whether sending to it needs a
+  // receipt is the pick's to answer, just below.
+  const capability = await aiCapabilityForJob(userId, "documentAi");
+  if (
+    capability.reason !== null &&
+    !PICK_DECIDED_REASONS.has(capability.reason)
+  ) {
+    annotate({
+      action: { name: "documents.contentIndex.backfillSkipped" },
+      meta: { reason: capability.reason },
+    });
     return {
       indexed: 0,
       retokenised: stale.retokenised,
       skipped: 0,
       failed: stale.failed,
-      reason: "no-provider",
+      reason: "unavailable",
     };
-  try {
-    await assertDocumentEgressConsent({
-      userId,
-      providerType: pick.providerType,
-      surface: "insights",
-    });
-  } catch (err) {
-    if (err instanceof ConsentRequiredError) {
-      return {
-        indexed: 0,
-        retokenised: stale.retokenised,
-        skipped: 0,
-        failed: stale.failed,
-        reason: "no-consent",
-      };
-    }
-    throw err;
+  }
+
+  // The document-order pick, re-checked at the wire for exactly that
+  // provider: the capability again, and the extraction receipt an external
+  // pick needs (`ai_extraction` or `ai_full`). A local pick needs none.
+  const { pick, withheld } = await resolveDocumentVisionProvider(userId);
+  if (!pick) {
+    return {
+      indexed: 0,
+      retokenised: stale.retokenised,
+      skipped: 0,
+      failed: stale.failed,
+      reason:
+        withheld === null
+          ? "no-provider"
+          : withheld.reason === "consent_required"
+            ? "no-consent"
+            : "unavailable",
+    };
   }
 
   // PDFs are always candidates: `prepareVisionInput` passes them natively

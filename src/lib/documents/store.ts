@@ -21,6 +21,7 @@ import { toIndexOutcome } from "@/lib/validations/inbound-documents";
 import type {
   DocumentConditionLinkDto,
   DocumentEncounterLinkDto,
+  DocumentVaccinationLinkDto,
   DocumentContentIndexSourceValue,
   DocumentSummaryStateValue,
   ExtractedFactDto,
@@ -275,6 +276,7 @@ export function serialiseDocumentDetail(
   contentIndexSource: DocumentContentIndexSourceValue | null = null,
   hasThumbnail = false,
   encounterLinks: DocumentEncounterLinkDto[] = [],
+  vaccinationLinks: DocumentVaccinationLinkDto[] | null = [],
 ): InboundDocumentDetailDto {
   const pendingCount = facts.filter((f) => f.status === "PENDING").length;
   // `factCount` excludes REJECTED facts (a rejected fact is discarded, not part
@@ -324,6 +326,7 @@ export function serialiseDocumentDetail(
       encounterLinks,
     ),
     facts: facts.map(serialiseFact),
+    vaccinationLinks,
     summary,
     summaryGeneratedAt: doc.summaryGeneratedAt
       ? doc.summaryGeneratedAt.toISOString()

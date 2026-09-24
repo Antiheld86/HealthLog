@@ -23,6 +23,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { getPrismaClient, truncateAllTables } from "./setup";
 import { runCoachReminderSweep } from "@/lib/jobs/coach-reminder-sweep";
 import { readCoachNudgeStatus } from "@/lib/ai/coach/nudge-status";
+import { evaluateCoachContextReminders } from "@/lib/ai/coach/context-reminders";
 import { decryptFromBytes, encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 
 const NOW = new Date("2026-08-07T05:20:00.000Z");
@@ -32,16 +33,33 @@ beforeEach(async () => {
   await truncateAllTables(getPrismaClient());
 });
 
-async function seedUser(username: string, locale = "en") {
+/**
+ * A user whose Coach can answer: a provider (presence only) and a Coach
+ * consent receipt. Reminders are held while the Coach is unavailable, so a
+ * user without them would prove only the hold.
+ */
+async function seedUser(
+  username: string,
+  { coach = true }: { coach?: boolean } = {},
+) {
   return getPrismaClient().user.create({
     data: {
       username,
       email: `${username}@example.test`,
       timezone: "UTC",
-      locale,
+      locale: "en",
+      ...(coach ? COACH_READY : {}),
     },
   });
 }
+
+const COACH_READY = {
+  aiProvider: "ANTHROPIC",
+  aiAnthropicKeyEncrypted: "v1:presence-only",
+  consentReceipts: {
+    create: { kind: "ai_full", artefact: "test", signedAt: new Date() },
+  },
+} as const;
 
 describe("a due Coach reminder reaches the conversation the badge points at", () => {
   it("writes the note as an assistant message, and that message is what makes the badge unread", async () => {
@@ -235,5 +253,96 @@ describe("a due Coach reminder reaches the conversation the badge points at", ()
     });
     expect(untouched.status).toBe("active");
     expect((await readCoachNudgeStatus(user.id)).unread).toBe(false);
+  });
+
+  it("holds every reminder while the Coach is unavailable, and resumes when it is back", async () => {
+    const prisma = getPrismaClient();
+    const user = await seedUser("reminder-held", { coach: false });
+    const due = await prisma.coachReminder.create({
+      data: {
+        userId: user.id,
+        noteEncrypted: encryptToBytes("held until the Coach is back"),
+        triggerKind: "date",
+        dueAt: YESTERDAY,
+        status: "active",
+        source: "user",
+      },
+    });
+    // One more ignored day would reach the nag cap.
+    const nagging = await prisma.coachReminder.create({
+      data: {
+        userId: user.id,
+        noteEncrypted: encryptToBytes("surfaced before the Coach went away"),
+        triggerKind: "date",
+        dueAt: new Date("2026-08-01T09:00:00.000Z"),
+        status: "surfaced",
+        lastSurfacedAt: new Date("2026-08-04T05:20:00.000Z"),
+        surfaceCount: 2,
+        source: "user",
+      },
+    });
+    const context = await prisma.coachReminder.create({
+      data: {
+        userId: user.id,
+        noteEncrypted: encryptToBytes("ask about the weigh-in"),
+        triggerKind: "context",
+        contextCue: "NEXT_WEIGHT_LOGGED",
+        status: "active",
+        source: "user",
+      },
+    });
+    await prisma.measurement.create({
+      data: {
+        userId: user.id,
+        type: "WEIGHT",
+        value: 70,
+        unit: "kg",
+        measuredAt: YESTERDAY,
+      },
+    });
+
+    // Three daily ticks: none surfaces, none is charged or dismissed.
+    for (let day = 0; day < 3; day++) {
+      const summary = await runCoachReminderSweep(
+        prisma,
+        new Date(NOW.getTime() + day * 86_400_000),
+      );
+      expect(summary.remindersDue).toBe(0);
+      expect(summary.contextSurfaced).toBe(0);
+      expect(summary.nagDismissed).toBe(0);
+    }
+    // The ingest hook holds too.
+    expect(
+      (await evaluateCoachContextReminders(prisma, user.id, "measurement", NOW))
+        .surfaced,
+    ).toBe(0);
+
+    expect(
+      await prisma.coachMessage.count({
+        where: { conversation: { userId: user.id } },
+      }),
+    ).toBe(0);
+    const rows = await prisma.coachReminder.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "asc" },
+    });
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    expect(byId.get(due.id)?.status).toBe("active");
+    expect(byId.get(nagging.id)?.status).toBe("surfaced");
+    expect(byId.get(nagging.id)?.surfaceCount).toBe(2);
+    expect(byId.get(context.id)?.status).toBe("active");
+
+    // The Coach comes back: the held reminders surface on the next tick.
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        aiProvider: COACH_READY.aiProvider,
+        aiAnthropicKeyEncrypted: COACH_READY.aiAnthropicKeyEncrypted,
+        consentReceipts: { create: COACH_READY.consentReceipts.create },
+      },
+    });
+    const resumed = await runCoachReminderSweep(prisma, NOW);
+    expect(resumed.remindersDue).toBe(1);
+    expect(resumed.contextSurfaced).toBe(1);
   });
 });

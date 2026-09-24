@@ -17,6 +17,14 @@ vi.mock("@/hooks/use-record-capabilities", () => ({
   }),
 }));
 
+// The record's resolved module map; each test sets what it needs.
+const modulesRef: { value: Record<string, boolean> | undefined } = {
+  value: undefined,
+};
+vi.mock("@/hooks/use-auth", () => ({
+  useAuth: () => ({ user: { modules: modulesRef.value } }),
+}));
+
 vi.mock("@/components/ui/responsive-sheet", () => ({
   ResponsiveSheet: ({
     open,
@@ -51,6 +59,7 @@ function render() {
 
 describe("<CapturePicker> — offered kinds", () => {
   it("offers measurement, medication and mood, and no water entry", () => {
+    modulesRef.value = undefined;
     const html = render();
 
     expect(html).toContain('data-testid="capture-picker-measurement"');
@@ -59,5 +68,22 @@ describe("<CapturePicker> — offered kinds", () => {
     // Water logging was removed from the app; the picker offers no water
     // entry (water arrives by sync only).
     expect(html).not.toContain('data-testid="capture-picker-water"');
+  });
+});
+
+describe("<CapturePicker> — switched-off modules", () => {
+  it("drops Mood with the mood module off and Medication with medications off", () => {
+    modulesRef.value = { mood: false, medications: false };
+    const html = render();
+    expect(html).toContain('data-testid="capture-picker-measurement"');
+    expect(html).not.toContain('data-testid="capture-picker-mood"');
+    expect(html).not.toContain('data-testid="capture-picker-medication"');
+  });
+
+  it("keeps both while their modules are on", () => {
+    modulesRef.value = { mood: true, medications: true };
+    const html = render();
+    expect(html).toContain('data-testid="capture-picker-mood"');
+    expect(html).toContain('data-testid="capture-picker-medication"');
   });
 });

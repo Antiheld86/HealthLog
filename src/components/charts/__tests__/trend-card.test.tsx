@@ -68,6 +68,31 @@ describe("<TrendCard> directionSentiment", () => {
     expect(html).toContain("text-success");
   });
 
+  // #1006 — weight inside the person's own target band: steady is the win,
+  // and a move either way is neither celebrated nor scolded.
+  it("paints a hold metric that stayed flat as green", () => {
+    const html = render(
+      <TrendCard
+        {...baseProps}
+        slope30={STABLE}
+        trend7Delta={0}
+        directionSentiment="hold"
+      />,
+    );
+    expect(html).toContain("text-success");
+    expect(html).not.toContain("text-warning");
+  });
+
+  it("never paints a hold metric orange when it moves", () => {
+    for (const slope of [RISING, FALLING]) {
+      const html = render(
+        <TrendCard {...baseProps} slope30={slope} directionSentiment="hold" />,
+      );
+      expect(html).not.toContain("text-warning");
+      expect(html).not.toContain("text-success");
+    }
+  });
+
   it("paints up-good metric ↓ as orange", () => {
     const html = render(
       <TrendCard

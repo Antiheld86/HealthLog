@@ -619,7 +619,7 @@
     "typeBpSys": "Sys",
     "typeBpDia": "Dia",
     "typePulse": "Pouls",
-    "typeBodyFat": "Masse grasse",
+    "typeBodyFat": "Graisse corporelle",
     "typeSleep": "Sommeil",
     "typeSteps": "Pas",
     "typeBloodGlucose": "Glycémie",
@@ -633,7 +633,7 @@
     "typeWalkingRunningDistance": "Distance à pied et en course",
     "typeVo2Max": "VO₂ max",
     "typeBodyTemperature": "Température corporelle",
-    "typeFatFreeMass": "Masse maigre",
+    "typeFatFreeMass": "Masse non grasse",
     "typeFatMass": "Masse grasse",
     "typeMuscleMass": "Masse musculaire",
     "typeSkinTemperature": "Température cutanée",
@@ -760,6 +760,7 @@
     "typeWaistToHeight": "Rapport taille-taille",
     "unitScore": "pts",
     "unitRatio": "ratio",
+    "unitRating": "niveau",
     "typeWho5Score": "Score WHO-5",
     "typeSciScore": "Score SCI"
   },
@@ -1311,7 +1312,9 @@
           "rateLimit": "Trop de requêtes — attends un instant et réessaie.",
           "noProvider": "Aucun fournisseur d'IA configuré — configure-le dans les Paramètres.",
           "budget": "Budget IA quotidien atteint — réessaie demain.",
-          "network": "Impossible de joindre le fournisseur d'IA — réessaie."
+          "network": "Impossible de joindre le fournisseur d'IA — réessaie.",
+          "consent": "La lecture de votre description par IA nécessite d'abord votre consentement.",
+          "unavailable": "La lecture de descriptions par IA n'est pas disponible ici pour le moment."
         }
       },
       "cadence": {
@@ -2443,8 +2446,6 @@
     "bmiEmptyTitle": "Ajoute ta taille pour l’IMC",
     "bmiEmptyDescription": "L’IMC nécessite ta taille. Renseigne-la dans Paramètres → Compte.",
     "bmiEmptyAction": "Ouvrir les paramètres du compte",
-    "noProviderConfigured": "Connecte un fournisseur d'IA pour voir ici une évaluation de tes mesures.",
-    "noProviderAction": "Ouvrir les réglages IA",
     "personalRecord": {
       "badge": "PR",
       "tooltip": "Record personnel : {value} {unit} le {date}"
@@ -2568,10 +2569,6 @@
       "emptyDescription": "Génère le briefing du jour pour obtenir un récap de tes tendances.",
       "emptyAction": "Générer le briefing",
       "loadingLabel": "Préparation du briefing",
-      "noProviderTitle": "Aucun fournisseur d'IA connecté",
-      "noProviderDescription": "Faites pointer HealthLog vers un modèle local (Ollama, LM Studio — rien ne quitte votre réseau) ou utilisez votre propre clé OpenAI ou Anthropic, et le résumé quotidien transforme vos propres relevés en un résumé en langage clair. La configuration prend environ une minute.",
-      "noProviderAction": "Ouvrir les réglages IA",
-      "staleNoProviderHint": "Ce briefing ne peut pas être actualisé — aucun fournisseur d'IA n'est connecté.",
       "refreshFailedHint": "Impossible d'actualiser le briefing — affichage du précédent.",
       "retryAction": "Réessayer",
       "failedTitle": "Impossible de générer le briefing",
@@ -2949,7 +2946,15 @@
       "interrupted": {
         "note": "Cette réponse a été interrompue avant la fin.",
         "retry": "Reposer la question"
-      }
+      },
+      "historyReadOnlyNote": "Le Coach n'est pas disponible pour le moment, mais vous pouvez toujours lire et supprimer vos conversations.",
+      "transcriptYou": "Vous",
+      "transcriptCoach": "Coach",
+      "errorConsent": "Le Coach a besoin de votre consentement à l'IA avant de pouvoir répondre. Vous pouvez le donner dans Réglages, IA.",
+      "errorNotPermitted": "Le Coach n'est pas disponible dans un dossier que quelqu'un partage avec vous.",
+      "errorUnavailable": "Le Coach n'a pas pu vérifier ses réglages pour l'instant. Réessayez dans un instant.",
+      "errorOperatorOff": "L'IA est désactivée sur ce serveur, le Coach ne peut donc pas répondre.",
+      "errorCoachOff": "Le Coach est désactivé. Vous pouvez le réactiver dans Réglages, Modules."
     },
     "relativeJustNow": "à l’instant",
     "relativeMinutesAgoOne": "il y a {count} minute",
@@ -4382,7 +4387,15 @@
         "night": "Une période élevée au repos cette nuit — peut-être un peu de tension."
       }
     },
-    "navEcg": "ECG"
+    "navEcg": "ECG",
+    "sectionLoadError": "Cette section n'a pas pu être chargée.",
+    "aiSetupHint": {
+      "title": "L'IA est facultative",
+      "body": "Tout fonctionne ici sans IA. Si vous voulez un briefing quotidien, de courtes notes sur vos mesures et le Coach, vous pouvez connecter un fournisseur d'IA.",
+      "settingsBody": "HealthLog fonctionne entièrement sans IA. Connectez un fournisseur ci-dessous si vous voulez un briefing quotidien, de courtes notes sur vos mesures et le Coach.",
+      "action": "Configurer l'IA",
+      "dismiss": "Pas maintenant"
+    }
   },
   "thresholds": {
     "defaultLabel": "Par défaut",
@@ -5781,7 +5794,8 @@
         "deleteConfirmTitle": "Supprimer ce rappel ?",
         "deleteConfirmBody": "Il ne se déclenchera plus. Ce que tu as déjà enregistré reste intact.",
         "deleteConfirmAction": "Supprimer",
-        "detail": "Celles qui arrivent à échéance apparaissent ici et chez le Coach."
+        "detail": "Celles qui arrivent à échéance apparaissent ici et chez le Coach.",
+        "readOnlyNote": "Le Coach n'est pas disponible pour le moment, mais tu peux toujours lire et supprimer tes rappels."
       },
       "aboutMe": {
         "title": "À propos de moi",
@@ -5828,14 +5842,38 @@
       "consent": {
         "title": "Consentement IA",
         "activeSince": "Donné le {date}. Tes données de santé peuvent être transmises au fournisseur configuré pour les fonctions IA.",
-        "withdrawn": "Retiré. Aucune donnée de santé n'est transmise à un fournisseur IA ; les fonctions IA restent désactivées.",
+        "withdrawn": "Retiré. Sauf si un autre consentement le couvre, le Coach et Insights n'utilisent plus l'accès IA fourni par ce serveur, et aucun modèle en ligne ne lit vos documents. Avec votre propre clé ou un modèle local, le Coach et Insights continuent de fonctionner.",
         "withdraw": "Retirer le consentement",
-        "confirmBody": "Les fonctions IA s'arrêtent immédiatement. Rien de ce qui est déjà enregistré n'est supprimé — utilise Données et confidentialité pour exporter ou effacer ton dossier.",
+        "confirmBody": "Sauf si un autre consentement les couvre encore, ceci s'arrête immédiatement : le Coach et Insights lorsqu'ils utilisent l'accès IA fourni par ce serveur, et la lecture de documents par un modèle en ligne. Avec votre propre clé ou un modèle local, le Coach et Insights continuent de fonctionner. Sauf si un autre consentement couvre encore Insights, les notes qu'un modèle a écrites pour vous sont supprimées : notes d'état, briefing quotidien, résumés de période écrits par un modèle, lignes d'arrivée et notes d'entraînement. Vos conversations avec le Coach, ce que le Coach a retenu, vos plans et les résumés de vos documents sont conservés, et vous pouvez les lire ou les supprimer vous-même.",
         "confirmWithdraw": "Retirer",
         "regrantHint": "En le redonnant, les fonctions IA pourront à nouveau transmettre tes données de santé au fournisseur configuré.",
         "grant": "Donner le consentement",
         "grantError": "Le consentement n'a pas pu être enregistré. Réessaie.",
-        "error": "Le retrait n'a pas pu être enregistré. Réessaie."
+        "error": "Le retrait n'a pas pu être enregistré. Réessaie.",
+        "documentReading": {
+          "title": "Consentement à la lecture de documents",
+          "activeSince": "Donné le {date}. Les documents, les comptes rendus d'analyses numérisés et les descriptions de médicaments peuvent être envoyés à votre service d'IA pour lecture.",
+          "confirmBody": "Les documents, les comptes rendus d'analyses numérisés et les descriptions de médicaments ne sont plus envoyés pour lecture. Rien de ce que vous avez déjà n'est supprimé."
+        }
+      },
+      "operatorOff": {
+        "allTitle": "L'IA est désactivée sur ce serveur",
+        "allBody": "La personne qui gère ce serveur a désactivé l'IA. HealthLog continue de fonctionner avec toutes vos données ; les fonctions qui ont besoin de l'IA ne sont simplement pas affichées.",
+        "someTitle": "Certaines fonctions d'IA sont désactivées sur ce serveur",
+        "someBody": "La personne qui gère ce serveur a désactivé : {switches}. Tout le reste, y compris toutes vos données, fonctionne normalement.",
+        "testRefused": "L'IA est désactivée sur ce serveur, il n'y a donc rien à tester.",
+        "autoRead": "La lecture de documents par IA est désactivée sur ce serveur."
+      },
+      "coachConversations": {
+        "title": "Conversations avec le Coach",
+        "description": "Ouvrez une conversation pour la lire, ou supprimez-la.",
+        "more": "Afficher plus",
+        "openAll": "Ouvrir toutes les conversations"
+      },
+      "coachPlans": {
+        "title": "Plans du Coach",
+        "description": "Les plans convenus avec le Coach, à lire ou à supprimer.",
+        "open": "Ouvrir les plans"
       }
     },
     "dashboard": {
@@ -6790,34 +6828,35 @@
     "monitoringTestSuccess": "Événement de test envoyé",
     "monitoringTestFailed": "Échec du test de surveillance",
     "assistant": {
-      "title": "Surfaces d'assistance",
-      "description": "Chaque bascule masque une surface pilotée par le modèle dans toute l'application sans retirer la configuration du fournisseur.",
+      "title": "Assistant",
+      "description": "Chaque interrupteur arrête le travail d'IA qu'il couvre et masque son texte, tandis que données et scores continuent de se charger.",
       "master": {
         "title": "Assistant activé",
-        "description": "Commutateur principal pour chaque surface pilotée par le modèle. Lorsqu'il est désactivé, toutes les options secondaires ci-dessous sont forcées à off."
+        "description": "Interrupteur principal de toutes les fonctions d'IA. Désactivé, rien n'est envoyé à un modèle et tous les interrupteurs ci-dessous sont désactivés."
       },
       "coach": {
         "title": "Coach",
-        "description": "Drawer de chat, bouton de lancement, et la FAB mobile sur chaque page Insights."
+        "description": "Chat, entretien de la mémoire du Coach et rappels d'IA. Les conversations enregistrées restent lisibles et supprimables."
       },
       "briefing": {
         "title": "Briefing quotidien",
-        "description": "Carte de briefing, narration du hero strip, grille de recommandations, et l'action Régénérer."
+        "description": "Le briefing quotidien, ses premières lignes ailleurs dans l'application et les synthèses de période écrites par un modèle."
       },
       "insightStatus": {
-        "title": "Cartes de statut",
-        "description": "Cartes de statut par métrique sur chaque sous-page /insights."
+        "title": "Notes d'état",
+        "description": "Notes courtes qu'un modèle écrit par mesure et par indicateur, notes d'entraînement et lignes de réaction. La plus grande part de la consommation de jetons."
       },
-      "correlations": {
-        "title": "Corrélations",
-        "description": "Narration de la tuile de corrélation sur la vue d'ensemble Insights."
+      "documentAi": {
+        "title": "Lecture de documents",
+        "description": "Lecture par IA des documents enregistrés, scan des comptes rendus de laboratoire et extraction de médicaments à partir de texte. La plus grande part des données qui quittent le serveur."
       }
     },
     "modules": {
       "title": "Disponibilité des modules",
       "description": "Désactivez un module pour tout le serveur.",
       "saveError": "Impossible de mettre à jour la disponibilité des modules.",
-      "detail": "Un module désactivé ici est coupé pour chaque compte, quelle que soit la préférence personnelle. Les domaines essentiels (poids, tension, pouls, médicaments) restent toujours actifs et ne peuvent pas être désactivés."
+      "detail": "Un module désactivé ici est coupé pour chaque compte, quelle que soit la préférence personnelle. Les domaines essentiels (poids, tension, pouls, médicaments) restent toujours actifs et ne peuvent pas être désactivés.",
+      "coachFollowsSwitch": "Suit l'interrupteur Coach dans Assistant."
     },
     "invites": {
       "title": "Invitations",
@@ -8255,6 +8294,7 @@
       "saving": "Enregistrement…",
       "cancel": "Annuler",
       "saveError": "Enregistrement impossible. Réessaie.",
+      "emptyHint": "Choisis un flux ou un symptôme pour enregistrer cette journée, ou utilise le bouton de début des règles ci-dessus.",
       "intermenstrualBleeding": "Saignements entre les règles",
       "pregnancyTest": "Test de grossesse",
       "progesteroneTest": "Test de progestérone",
@@ -8798,7 +8838,8 @@
       "extractFailed": "Impossible de lire le compte rendu. Essayez une photo plus nette.",
       "pdfNeedsAnthropic": "Le scan PDF nécessite un fournisseur de vision Claude ; importez plutôt une photo.",
       "refTextLabel": "Plage telle qu'imprimée",
-      "refTextPlaceholder": "p. ex. 3,5 - 5,0"
+      "refTextPlaceholder": "p. ex. 3,5 - 5,0",
+      "aiUnavailable": "La numérisation d'un compte rendu par IA n'est pas disponible ici pour le moment."
     },
     "loadMoreReadings": "Charger plus de mesures",
     "documentsLink": "Documents de résultats",
@@ -8846,8 +8887,8 @@
       "description": "Chat IA fondé sur vos propres données."
     },
     "insights": {
-      "label": "Insights",
-      "description": "Analyses IA, briefing et corrélations."
+      "label": "Analyse IA",
+      "description": "Briefing, notes d'état et notes d'entraînement écrites par un modèle, jamais vos données ni vos scores."
     },
     "doctorReport": {
       "label": "Rapport médical",
@@ -9031,6 +9072,11 @@
       "mmrv": "RORV (rougeole, oreillons, rubéole, varicelle)",
       "hepa-hepb": "Hépatite A et B",
       "hepa-typhoid": "Hépatite A et typhoïde"
+    },
+    "renewal": {
+      "overdue": "Rappel en retard depuis le {date}",
+      "dueSoon": "Rappel prévu le {date}",
+      "current": "Prochain rappel le {date}"
     }
   },
   "illness": {
@@ -9242,6 +9288,7 @@
     "plans": {
       "title": "Plans",
       "pageDescription": "Plans « si… alors » convenus dans vos conversations avec le Coach. Confirmez une proposition pour que le Coach s'en souvienne.",
+      "readOnlyNote": "Le Coach n'est pas disponible pour le moment, mais vous pouvez toujours lire et supprimer vos plans.",
       "proposalTitle": "Proposition de plan",
       "ifThen": "Si {cue}, alors {action}.",
       "targetPrefix": "Objectif : {target}",
@@ -9878,7 +9925,10 @@
       "uploadedMeta": "Ajouté le {date} · {size}",
       "share": "Partager",
       "labValuesLink": "Voir {count} valeurs de laboratoire",
-      "visitsLabel": "Rattaché au rendez-vous"
+      "visitsLabel": "Rattaché au rendez-vous",
+      "vaccinationsLabel": "Vaccinations",
+      "noVisitsToLink": "Aucune consultation enregistrée pour l’instant.",
+      "noVaccinationsToLink": "Aucune vaccination enregistrée pour l’instant."
     },
     "dropOverlay": {
       "title": "Déposez les fichiers pour les téléverser",
@@ -9938,7 +9988,9 @@
       "errorNotIndexed": "Lisez d’abord le document, puis extrayez.",
       "errorLocalOcrDisabled": "Activez d'abord l'OCR local dans les paramètres d'IA.",
       "errorProvider": "Aucun fournisseur d'IA n'est configuré pour cela.",
-      "errorTextImageOnly": "L'OCR local ne lit que les images, pas ce fichier."
+      "errorTextImageOnly": "L'OCR local ne lit que les images, pas ce fichier.",
+      "errorConsent": "La lecture de documents par IA nécessite d'abord votre consentement.",
+      "errorUnavailable": "La lecture de documents par IA n'est pas disponible ici pour le moment."
     },
     "summary": {
       "summarise": "Résumer",
@@ -10016,6 +10068,11 @@
       "title": "Discuter de ce document",
       "openAria": "Interroger le Coach sur ce document",
       "openButton": "Demander au Coach"
+    },
+    "readingConsent": {
+      "body": "La lecture par IA envoie ceci à votre service d'IA hors de ce serveur. Autoriser HealthLog à envoyer des documents, des résultats d'analyses et des descriptions de médicaments pour lecture ?",
+      "grant": "Autoriser la lecture",
+      "error": "Le consentement n'a pas pu être enregistré. Veuillez réessayer."
     }
   },
   "selfDescription": {
@@ -10152,8 +10209,7 @@
         "dayInvalid": "Les entrées portaient une date que le serveur n'a pas pu accepter. Cela peut arriver quand l'horloge ou le fuseau horaire du côté qui envoie les données est incorrect — cela vaut la peine de vérifier.",
         "upsertFailed": "Ces entrées sont arrivées jusqu'au serveur, mais un problème de notre côté a empêché leur enregistrement. Tu n'as rien à faire.",
         "unknown": "Ces entrées sont arrivées mais n'ont pas pu être enregistrées."
-      },
-      "moduleEnableError": "Le module nutriments n'a pas pu être activé. Réessaie."
+      }
     },
     "hydration": {
       "referenceMeta": "Apport de référence {value} {unit}/jour · EFSA"
@@ -10822,7 +10878,9 @@
       "selectAll": "Tout sélectionner",
       "searchPlaceholder": "Rechercher",
       "searchNoMatch": "Aucun résultat",
-      "remove": "Retirer"
+      "remove": "Retirer",
+      "suggested": "Autour de cette date",
+      "loadError": "Impossible de charger la liste."
     }
   }
 }

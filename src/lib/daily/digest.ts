@@ -21,6 +21,7 @@
  */
 import type { EncounterKind } from "@/generated/prisma/client";
 import type { DailyBriefing, DailyBriefingSignal } from "@/lib/ai/schema";
+import type { AiCapabilityState } from "@/lib/ai/capabilities/types";
 import type { ArrivalKind } from "@/lib/arrivals/types";
 import { encounterKindLabelKey } from "@/lib/encounters/kind-label";
 import type { MedsTodayBlock } from "@/lib/dashboard/meds-today";
@@ -254,8 +255,22 @@ export interface DailyDigestArrival {
 export const JUST_IN_WINDOW_MS = 3 * 60 * 60 * 1000;
 
 /** The fully-resolved, IO-free input the composer folds into a digest. */
+/**
+ * The three AI capabilities the digest carries text or a card for, resolved
+ * for this record by the IO seam. The builder serves the briefing lead and
+ * top signal only while `briefing` is available, the reaction line only while
+ * `reactionLines` is, and the Coach check-in only while `coach` is; the rest
+ * of the digest is data and never depends on them.
+ */
+export interface DailyDigestAi {
+  briefing: AiCapabilityState;
+  coach: AiCapabilityState;
+  reactionLines: AiCapabilityState;
+}
+
 export interface DailyDigestInput {
   now: Date;
+  ai: DailyDigestAi;
   /**
    * First instant of the user's NEXT local day (profile tz), resolved by the
    * IO seam via `getUserTodayBounds`. Bounds the dose-window rail to TODAY'S
@@ -374,6 +389,8 @@ export interface DailyDigest {
    * sentence is garnish; its absence degrades nothing.
    */
   reactionLine: string | null;
+  /** Why the briefing lead, the reaction line or the check-in are absent. */
+  ai: DailyDigestAi;
 }
 
 /** First sentence of a paragraph, trimmed; null when empty. */
@@ -598,8 +615,8 @@ function buildUpcomingVisitItem(
 /**
  * S12 — the calm reward card. Emits ONE `milestone` PriorityItem when a durable
  * state was reached TODAY (the IO seam already applied the reached-once gate).
- * Gated on the `insights` module — the daily narrative layer that hosts it.
- * Celebratory-but-quiet: `success` status, a single "view" action into the
+ * Data, not AI: no module gate beyond the metric's own (applied by the IO
+ * seam). Celebratory-but-quiet: `success` status, a single "view" action into the
  * metric's insight, and copy that marks arrival at a state, never a maintained
  * count. Shown the day reached and never again — never a "you broke it" note.
  */
@@ -609,7 +626,6 @@ function buildMilestoneItem(
   t: Translate,
 ): PriorityItem | null {
   if (!milestone) return null;
-  if (!moduleEnabled(modules, "insights")) return null;
   const { title, body } = milestoneCopy(milestone, t);
   return {
     kind: "milestone",
@@ -624,15 +640,14 @@ function buildMilestoneItem(
         href: milestoneHref(milestone),
       },
     ],
-    moduleKey: "insights",
   };
 }
 
 /**
  * S11 — the elevated-at-rest ("tension") card. Emitted at most once per day
  * (the window is already the day's single most confident stretch), gated on
- * the `insights` module and on a non-null window (the analytics layer stays
- * silent unless every confidence gate holds). Cautious, non-diagnostic copy:
+ * a non-null window (the analytics layer stays silent unless every confidence
+ * gate holds). Pulse is a core vital, so no module gates it. Cautious, non-diagnostic copy:
  * "possible tension", never a clinical stress verdict. The one action deep-
  * links into the pulse insight where the intraday shape is charted.
  */
@@ -642,7 +657,6 @@ function buildTensionWindowItem(
   todayLocalDate: string,
   t: Translate,
 ): PriorityItem | null {
-  if (!moduleEnabled(modules, "insights")) return null;
   if (!window) return null;
   return {
     kind: "tension_window",
@@ -657,7 +671,6 @@ function buildTensionWindowItem(
         href: "/insights/pulse",
       },
     ],
-    moduleKey: "insights",
   };
 }
 
@@ -681,7 +694,6 @@ function buildSameTimeBaselineItem(
   todayLocalDate: string,
   t: Translate,
 ): PriorityItem | null {
-  if (!moduleEnabled(modules, "insights")) return null;
   if (!sameTime) return null;
   if (sameTime.band === "within") return null;
   // The comparison is against everything accumulated through the END of
@@ -704,7 +716,6 @@ function buildSameTimeBaselineItem(
         href: "/insights/steps",
       },
     ],
-    moduleKey: "insights",
   };
 }
 
@@ -735,7 +746,10 @@ function isCheckinDue(plan: DailyDigestCoachPlan, now: number): boolean {
 }
 
 /**
- * The one coach check-in card (§2.3). Gated on the `coach` module. Capped at
+ * The one coach check-in card (§2.3). Served only while the `coach` AI
+ * capability is available: the card's "Adjust" action opens the Coach, and a
+ * Coach that is off, opted out or without a provider has nothing to open.
+ * The capability folds in the `coach` module. Capped at
  * ONE per day across every plan: the earliest-due check-in wins, the rest wait
  * for a following day. Reads existing plan state only — never a fresh AI call.
  * Three one-tap actions map to the plan lifecycle: keep (re-arm), adjust
@@ -743,11 +757,11 @@ function isCheckinDue(plan: DailyDigestCoachPlan, now: number): boolean {
  */
 function buildCoachCheckinItem(
   plans: DailyDigestCoachPlan[],
-  modules: DigestModuleMap,
+  coach: AiCapabilityState,
   now: Date,
   t: Translate,
 ): PriorityItem | null {
-  if (!moduleEnabled(modules, "coach")) return null;
+  if (!coach.available) return null;
   const nowMs = now.getTime();
   const due = plans
     .filter((p) => isCheckinDue(p, nowMs))
@@ -820,8 +834,8 @@ const ECG_VERDICT_KEYS: Record<
 };
 
 /**
- * The one ECG "new recording" item (§3.5.3). Gated on the `insights` module
- * (the ECG viewer's own gate). Fires ONLY when the freshest recording landed
+ * The one ECG "new recording" item (§3.5.3). Device data: no module gates
+ * it, as none gates the ECG viewer. Fires ONLY when the freshest recording landed
  * within the last day — a calm "a new ECG recording is ready to view" pointer
  * into the viewer. NON-DIAGNOSTIC: the body echoes ONLY the RECORDING DEVICE's
  * verdict, attributed to the device; HealthLog never interprets the trace (the
@@ -834,7 +848,6 @@ function buildEcgNewRecordingItem(
   now: Date,
   t: Translate,
 ): PriorityItem | null {
-  if (!moduleEnabled(modules, "insights")) return null;
   if (!ecg) return null;
   const age = now.getTime() - ecg.recordedAt.getTime();
   // Skip a future-dated row (clock skew) and anything older than the window.
@@ -860,7 +873,6 @@ function buildEcgNewRecordingItem(
         href: "/insights#ecg",
       },
     ],
-    moduleKey: "insights",
   };
 }
 
@@ -932,8 +944,12 @@ export function buildDailyDigest(
   const sleepPending = sleepEnabled && sleepExpected && !isFinal;
   const phase: DailyDigest["phase"] = isFinal ? "final" : "provisional";
 
-  const topSignal = input.briefing?.signalsOfDay?.[0] ?? null;
-  const briefingLead = firstSentence(input.briefing?.paragraph);
+  // The briefing is model text: its lead and top signal are served only while
+  // the `briefing` capability is available. The IO seam already hides it; this
+  // is the builder's own backstop, so the DTO cannot carry it by accident.
+  const briefing = input.ai.briefing.available ? input.briefing : null;
+  const topSignal = briefing?.signalsOfDay?.[0] ?? null;
+  const briefingLead = firstSentence(briefing?.paragraph);
 
   // The day's most recently LANDED arrival drives both reaction fields. The
   // sample timestamp may be hours old (sleep synced after waking, an offline
@@ -969,7 +985,10 @@ export function buildDailyDigest(
       : null;
   // An empty or whitespace-only line is treated as absent rather than shipped
   // as a blank lead — a degraded generation must fall through to the floor.
-  const reactionLine = newestArrival?.line?.trim() || null;
+  // Model text too: served only while `reactionLines` is available.
+  const reactionLine = input.ai.reactionLines.available
+    ? newestArrival?.line?.trim() || null
+    : null;
 
   // Priority order: a due or overdue dose is the most time-sensitive daily
   // action, a broken sync next, then the calm coach check-in, a preventive
@@ -993,7 +1012,7 @@ export function buildDailyDigest(
   worthALook.push(...buildSyncIssueItems(input.syncIssues, t));
   const checkin = buildCoachCheckinItem(
     input.coachPlans,
-    input.modules,
+    input.ai.coach,
     input.now,
     t,
   );
@@ -1070,5 +1089,6 @@ export function buildDailyDigest(
     worthALook: visible.slice(0, MAX_WORTH_A_LOOK),
     justIn,
     reactionLine,
+    ai: input.ai,
   };
 }

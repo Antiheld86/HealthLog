@@ -14,7 +14,7 @@ import {
   DOCUMENT_ACCEPTED_EXTENSIONS,
   resolveDocumentLimits,
 } from "@/lib/documents/upload-policy";
-import { resolveOcrCapability } from "@/lib/labs/ocr-capability";
+import { resolveDocumentAiCapability } from "@/lib/documents/provider-order";
 import { listDistinctTargets } from "@/lib/links";
 import { annotate } from "@/lib/logging/context";
 import { requireModuleEnabled } from "@/lib/modules/gate";
@@ -58,8 +58,10 @@ export const GET = apiHandler(async () => {
       }),
       // Whether an AI action can run for this caller (assist + indexing share
       // the same provider precondition). Honest availability so the UI never
-      // offers what the endpoint would 422.
-      resolveOcrCapability(user.id),
+      // offers what the endpoint would refuse: the document provider order and
+      // the `documentAi` capability for this record, the same answer the
+      // capability probe gives.
+      resolveDocumentAiCapability(user.id),
       // Content-index coverage: how many live documents are indexed …
       // Scope the count to LIVE documents: a soft-deleted document keeps its
       // index row (cascade fires on hard purge only), so an unscoped count

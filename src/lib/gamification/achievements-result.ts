@@ -40,7 +40,7 @@ import {
 } from "@/lib/analytics/classifications";
 import { classifyIntakeTiming } from "@/lib/analytics/compliance";
 import { wallClockInTz } from "@/lib/tz/wall-clock";
-import { DEFAULT_TIMEZONE, userDayKey } from "@/lib/tz/format";
+import { DEFAULT_TIMEZONE, userDayKey, validTimezoneOr } from "@/lib/tz/format";
 
 export type AuthedUser = Awaited<ReturnType<typeof requireAuth>>["user"];
 
@@ -555,7 +555,7 @@ export async function buildAchievementsResult(
   // day-streak badge (login, entry, weekend, miss-free, sleep-log, on-time,
   // compliance-80) plus the hidden night-owl / early-bird / leap-day
   // triggers for every non-CET account.
-  const tz = user.timezone || DEFAULT_TIMEZONE;
+  const tz = validTimezoneOr(user.timezone, DEFAULT_TIMEZONE);
 
   const [
     vitalsBuckets,

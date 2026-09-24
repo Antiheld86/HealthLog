@@ -5,10 +5,14 @@
  * shared `generateAlerts()` rule engine, then re-shapes each `HealthAlert`
  * to the iOS Insight model (id, title, summary, severity, recommendations,
  * provider).
+ *
+ * Every card is a rule alert: deterministic text from the threshold engine,
+ * never model output. So the route carries no AI gate and no `insights`
+ * module gate (the AI analysis opt-out), `summary` is never null, and
+ * `provider` is `"rules"`. It used to echo the account's chosen AI provider
+ * (or `"claude"`), which claimed a model wrote text that none did.
  */
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
-import { requireAssistantSurface } from "@/lib/feature-flags";
-import { requireModuleEnabled } from "@/lib/modules/gate";
 import { apiSuccess } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { prisma } from "@/lib/db";
@@ -68,12 +72,6 @@ export const GET = apiHandler(async () => {
   // v1.37.0 — MANAGE-level read: computed over the whole record, with no
   // provider anywhere on the path.
   const { user } = await requireRecordAuth("manage", "record");
-  const m = await requireModuleEnabled(user.id, "insights");
-  if (!m.enabled) return m.response;
-  // v1.4.31 — the iOS cards adapter feeds the same per-metric
-  // insight surfaces the web `<InsightStatusCard>` mounts on each
-  // /insights/<metric> sub-page. Both share the operator gate.
-  await requireAssistantSurface("insightStatus");
   annotate({ action: { name: "insights.cards" } });
 
   const NINETY_DAY_WINDOW = 90;
@@ -83,7 +81,7 @@ export const GET = apiHandler(async () => {
     await Promise.all([
       prisma.user.findUnique({
         where: { id: user.id },
-        select: { heightCm: true, dateOfBirth: true, aiProvider: true },
+        select: { heightCm: true, dateOfBirth: true },
       }),
       // WEIGHT + BP are manual entries (low volume, and BP needs exact-
       // timestamp pairing below for `bpPctInTarget`), so a bounded raw read
@@ -257,7 +255,8 @@ export const GET = apiHandler(async () => {
     medications: medicationCompliance,
   });
 
-  const provider = dbUser?.aiProvider?.toLowerCase() ?? "claude";
+  // The rule engine wrote these, not a model.
+  const provider = "rules";
   const generatedAt = new Date().toISOString();
 
   const cards: InsightCard[] = alerts.map((alert, idx) => ({

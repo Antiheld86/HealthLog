@@ -197,6 +197,14 @@ const cycleCalendarDayDto = z.object({
     description:
       "Whether a logged cycle opens on this day. Deleting this day's log removes that cycle start with it.",
   }),
+  cycleDay: z.number().int().nullable().meta({
+    description:
+      "The 1-based day of the logged cycle this date belongs to. Null before the first logged start, after today, or once an open cycle has run past the point where the verdict stops counting. For today it equals verdict.dayOfCycle.",
+  }),
+  periodEndable: z.boolean().meta({
+    description:
+      "Whether a one-tap period end (POST /api/cycle/period, action end) on this date lands inside the first days of a logged cycle. Resolved per date, independent of today's phase.",
+  }),
   flow: flowLevelEnumOpenapi.nullable(),
   hasSymptoms: z.boolean(),
   confidence: z.number(),

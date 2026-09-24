@@ -281,6 +281,10 @@ export const encounterDependentKeys = [
   // `invalidateReminderReads` helper, which carries it) — the digest is
   // typically unmounted while the user is on the visits surface.
   queryKeys.dailyDigest(),
+  // A visit's form links and unlinks documents, and the document's sheet
+  // seeds its replace-set visit picker from its own cached links: left
+  // stale, the next tap there would delete the link just made.
+  queryKeys.documents(),
 ];
 
 /**
@@ -300,6 +304,33 @@ export const encounterDependentKeys = [
 export const vaccinationDependentKeys = [
   queryKeys.vaccinations(),
   queryKeys.measurementReminders(),
+  // A dose's form links and unlinks documents, and the document's sheet
+  // seeds its replace-set dose picker from its own cached links: left stale,
+  // the next tap there would delete the link just made.
+  queryKeys.documents(),
+];
+
+/**
+ * Keys invalidated when an input of the `ai` block on `GET /api/auth/me`
+ * changes: the account's own provider (key, local model, compatible endpoint,
+ * Codex sign-in), the fallback chain, the central-Codex opt-in, a consent
+ * receipt granted or withdrawn, a module switch, Hide Coach, and, for the
+ * admin's own session, the operator's assistant switches, server key, central
+ * Codex and module availability.
+ *
+ * Every AI surface reads its capability from that block, so a write that
+ * changes an input without evicting `authMe()` leaves the surface on the old
+ * answer: a freshly configured provider stays "not set up" until a reload, a
+ * removed one keeps offering AI work the server then refuses. The provider and
+ * insights roots ride along because they render the same state in detail.
+ *
+ * `ai-input-invalidation-guard.test.ts` holds every client write to one of
+ * those endpoints to this bundle.
+ */
+export const aiInputDependentKeys = [
+  queryKeys.authMe(),
+  queryKeys.userAiProvider(),
+  queryKeys.insightsRoot(),
 ];
 
 /**

@@ -48,12 +48,15 @@
  */
 
 import type { MeasurementType } from "@/generated/prisma/client";
-import { prisma } from "@/lib/db";
 import {
   readBestGranularityRollups,
   type RollupBucketRow,
 } from "@/lib/rollups/measurement-read-wmy";
 import { loadUserSourcePriority } from "@/lib/rollups/measurement-read";
+import {
+  readDayAggregates,
+  type DayAggregateRow,
+} from "@/lib/measurements/day-aggregates";
 import { toBerlinYmd } from "@/lib/tz/resolver";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -82,18 +85,6 @@ const MONTHLY_WINDOW_MS = WEEKLY_WINDOW_MS + MONTHLY_MONTHS * 30 * MS_PER_DAY;
  * covers the same horizon the warm path serves.
  */
 const COLD_FALLBACK_WINDOW_DAYS = 1095;
-
-/**
- * Sample-dense types whose cold-tier fallback is day-bucketed in SQL
- * (one AVG row per day) instead of read raw — same dense set the series
- * route caps (CGM glucose ~288 rows/day, PULSE per-sample / hourly).
- * The fold's output shape is unchanged; on the cold path only, a dense
- * type's monthly/yearly min/max/n derive from day means rather than
- * individual samples — the warm rollup tier restores sample-exact
- * figures as soon as the backfill lands.
- */
-const DENSE_FALLBACK_TYPES: ReadonlySet<MeasurementType> =
-  new Set<MeasurementType>(["BLOOD_GLUCOSE", "PULSE"]);
 
 export interface RecentDayBucket {
   /** Berlin YYYY-MM-DD. */
@@ -171,6 +162,11 @@ function berlinYearKey(date: Date): string {
  */
 function berlinIsoWeekKey(date: Date): string {
   const { year, month, day } = toBerlinYmd(date);
+  return isoWeekKeyOfYmd(year, month, day);
+}
+
+/** ISO week key of a calendar date given as `YYYY`, `MM`, `DD`. */
+function isoWeekKeyOfYmd(year: string, month: string, day: string): string {
   const localMidnight = new Date(
     Date.UTC(Number(year), Number(month) - 1, Number(day)),
   );
@@ -309,6 +305,133 @@ export function buildGradedSeriesFromPoints(
   return { recent, weekly, monthly, yearly };
 }
 
+function mergeInto(
+  map: Map<string, Agg>,
+  key: string,
+  row: DayAggregateRow,
+): void {
+  const existing = map.get(key);
+  if (existing) {
+    existing.sum += row.sum;
+    existing.n += row.n;
+    if (row.min < existing.min) existing.min = row.min;
+    if (row.max > existing.max) existing.max = row.max;
+  } else {
+    map.set(key, { sum: row.sum, min: row.min, max: row.max, n: row.n });
+  }
+}
+
+/** Segment boundaries matching `buildGradedSeriesFromPoints`' age split. */
+function gradedSegmentStarts(now: Date): Date[] {
+  const nowMs = now.getTime();
+  return [
+    new Date(nowMs - RECENT_WINDOW_MS),
+    new Date(nowMs - WEEKLY_WINDOW_MS),
+    new Date(nowMs - MONTHLY_WINDOW_MS),
+  ];
+}
+
+/**
+ * Read the graded series' per-day aggregates for one type, folded in SQL.
+ *
+ * Replaces the raw `findMany` over the window (#1023): a watch that streams
+ * heart rate every few seconds put a million rows into that read, which is
+ * what exhausted the worker's heap. The rows here are one per Berlin day per
+ * age segment, and their sum / count / min / max are exact, so the recent,
+ * weekly and monthly slices come out identical to folding the raw rows.
+ *
+ * The segment boundaries use the same edges as `buildGradedSeriesFromPoints`:
+ * a row exactly `RECENT_WINDOW_MS` old is weekly there, so it is segment 1
+ * here too.
+ */
+async function readGradedDayAggregates(
+  userId: string,
+  type: MeasurementType,
+  since: Date,
+  now: Date,
+): Promise<DayAggregateRow[]> {
+  return readDayAggregates({
+    userId,
+    type,
+    since,
+    // Future-dated readings were skipped by the in-memory fold.
+    until: now,
+    timeZone: "Europe/Berlin",
+    // `readDayAggregates` puts a row at segment k when it is older than k
+    // starts (`measured_at < start`). The in-memory fold treats an age of
+    // exactly the window as the older bucket, so shift each start by 1 ms.
+    segmentStarts: gradedSegmentStarts(now).map(
+      (d) => new Date(d.getTime() + 1),
+    ),
+  });
+}
+
+/**
+ * The graded series folded from per-day aggregates (segment = age class).
+ *
+ * recent / weekly / monthly and every bucket's min / max / mean / n match
+ * the raw-row fold exactly. The yearly slope is taken over the day means in
+ * date order rather than over individual readings: a direction signal either
+ * way, and the only form that stays bounded on a dense stream.
+ */
+export function buildGradedSeriesFromDayAggregates(
+  rows: readonly DayAggregateRow[],
+): GradedSeries {
+  const recentAgg = new Map<string, Agg>();
+  const weeklyAgg = new Map<string, Agg>();
+  const monthlyAgg = new Map<string, Agg>();
+  const yearlyAgg = new Map<string, Agg>();
+  const yearlyValues = new Map<string, number[]>();
+
+  const ordered = [...rows].sort((a, b) =>
+    a.day < b.day ? -1 : a.day > b.day ? 1 : b.segment - a.segment,
+  );
+  for (const row of ordered) {
+    const [year, month, day] = row.day.split("-");
+    if (row.segment === 0) {
+      mergeInto(recentAgg, row.day, row);
+    } else if (row.segment === 1) {
+      mergeInto(weeklyAgg, isoWeekKeyOfYmd(year, month, day), row);
+    } else if (row.segment === 2) {
+      mergeInto(monthlyAgg, `${year}-${month}`, row);
+    } else {
+      mergeInto(yearlyAgg, year, row);
+      const list = yearlyValues.get(year);
+      const dayMean = row.sum / row.n;
+      if (list) list.push(dayMean);
+      else yearlyValues.set(year, [dayMean]);
+    }
+  }
+
+  const toBuckets = (map: Map<string, Agg>) =>
+    Array.from(map.entries())
+      .map(([key, a]) => ({
+        key,
+        min: round(a.min),
+        max: round(a.max),
+        mean: round(a.sum / a.n),
+        n: a.n,
+      }))
+      .sort((x, y) => x.key.localeCompare(y.key));
+
+  return {
+    recent: toBuckets(recentAgg).map(({ key, ...b }) => ({ date: key, ...b })),
+    weekly: toBuckets(weeklyAgg).map(({ key, ...b }) => ({
+      weekISO: key,
+      ...b,
+    })),
+    monthly: toBuckets(monthlyAgg).map(({ key, ...b }) => ({
+      month: key,
+      ...b,
+    })),
+    yearly: toBuckets(yearlyAgg).map(({ key, ...b }) => ({
+      year: key,
+      ...b,
+      slope: leastSquaresSlope(yearlyValues.get(key) ?? []),
+    })),
+  };
+}
+
 /**
  * Project a rollup bucket row to a monthly/yearly graded bucket. The
  * tier already carries min/max/mean/slope per bucket — no JS folding.
@@ -335,24 +458,25 @@ function rollupYearly(rows: RollupBucketRow[]): YearlyBucket[] {
 }
 
 /**
- * Build the graded series with the recent / weekly slices folded from a
- * bounded raw read and the monthly / yearly slices read from the
+ * Build the graded series with the recent / weekly slices folded from
+ * per-day aggregates and the monthly / yearly slices read from the
  * pre-aggregated rollup tier.
  *
- * The recent / weekly read is capped to the recent + weekly horizon
- * (last ~90 days), so the common warm-tier path never pulls the full
- * multi-year history into memory. The rollup router picks MONTH for the
- * ~1-year window and YEAR for the multi-year tail.
+ * The recent / weekly read covers the recent + weekly horizon (last ~90
+ * days) and is folded in SQL to one row per day, so its size depends on
+ * the number of days, never on how densely a device samples (#1023). The
+ * rollup router picks MONTH for the ~1-year window and YEAR for the
+ * multi-year tail.
  *
  * Coverage-miss fallback: when the tier has no MONTH (resp. YEAR)
  * coverage for a metric — a fresh account the boot-backfill has not yet
  * caught up on — the bounded ~90-day read can NOT supply the monthly /
  * yearly slices (every row in it folds into recent / weekly), so naively
  * reusing it would ship empty monthly / yearly arrays even when years of
- * raw history exist. On that miss this falls back to an in-memory fold
- * over a bounded window (1095 days — the yearly router's own horizon;
- * sample-dense types are additionally day-bucketed in SQL) so the coarse
- * slices are populated from the raw rows rather than left falsely empty.
+ * raw history exist. On that miss this falls back to the same per-day
+ * aggregate over a bounded window (1095 days — the yearly router's own
+ * horizon) so the coarse slices are populated from the stored rows rather
+ * than left falsely empty.
  * The fallback read only happens when the tier is cold, which is exactly
  * the case the write-amplified tier was meant to avoid — so the hot path
  * stays bounded and the cold path stays correct.
@@ -363,15 +487,8 @@ export async function buildGradedSeriesWithRollups(
   now: Date,
 ): Promise<GradedSeries> {
   const since = new Date(now.getTime() - WEEKLY_WINDOW_MS);
-  const rawRecent = await prisma.measurement.findMany({
-    where: { userId, type, deletedAt: null, measuredAt: { gte: since } },
-    orderBy: { measuredAt: "asc" },
-    select: { measuredAt: true, value: true },
-  });
-
-  const recentGraded = buildGradedSeriesFromPoints(
-    rawRecent.map((r) => ({ measuredAt: r.measuredAt, value: r.value })),
-    now,
+  const recentGraded = buildGradedSeriesFromDayAggregates(
+    await readGradedDayAggregates(userId, type, since, now),
   );
 
   // v1.11.2 — load the source-priority blob once and thread it into both
@@ -420,57 +537,19 @@ export async function buildGradedSeriesWithRollups(
   }
 
   // Tier coverage miss for one or both coarse slices: the bounded
-  // ~90-day read can't supply them, so fold a BOUNDED history window in
-  // memory and take whichever slices the tier left empty. The fallback
-  // read is the exception (cold-tier accounts), never the warm-tier
-  // norm. v1.28.25 — the read is bounded to the same 1095-day horizon
-  // the yearly rollup router serves (it was previously unwindowed), and
-  // the sample-dense types are day-bucketed in SQL so a heavy import
-  // ahead of the rollup backfill can't drag six-figure row sets into JS.
+  // ~90-day read can't supply them, so fold a BOUNDED history window and
+  // take whichever slices the tier left empty. The fallback read is the
+  // exception (cold-tier accounts), never the warm-tier norm. It is
+  // bounded to the same 1095-day horizon the yearly rollup router serves,
+  // and folded per day in SQL for every type, so a heavy import ahead of
+  // the rollup backfill can't drag six-figure row sets into JS.
   if (!monthlyCovered || !yearlyCovered) {
     const fallbackSince = new Date(
       now.getTime() - COLD_FALLBACK_WINDOW_DAYS * MS_PER_DAY,
     );
-    let fallbackPoints: Point[];
-    if (DENSE_FALLBACK_TYPES.has(type)) {
-      // Parameter-bound day-bucket aggregate, mirroring the rollup tier's
-      // `date_trunc(...) GROUP BY` (measurement-rollups.ts) — at most
-      // ~1095 rows regardless of sample density.
-      const bucketRows = await prisma.$queryRaw<
-        Array<{ bucket_start: Date; mean: number }>
-      >`
-        SELECT
-          date_trunc('day', m."measured_at")   AS bucket_start,
-          AVG(m."value")::double precision     AS mean
-        FROM measurements m
-        WHERE m."user_id" = ${userId}
-          AND m."type" = ${type}::"measurement_type"
-          AND m."measured_at" >= ${fallbackSince}
-          AND m."deleted_at" IS NULL
-        GROUP BY date_trunc('day', m."measured_at")
-        ORDER BY bucket_start ASC
-      `;
-      fallbackPoints = bucketRows.map((r) => ({
-        measuredAt: r.bucket_start,
-        value: r.mean,
-      }));
-    } else {
-      const rows = await prisma.measurement.findMany({
-        where: {
-          userId,
-          type,
-          deletedAt: null,
-          measuredAt: { gte: fallbackSince },
-        },
-        orderBy: { measuredAt: "asc" },
-        select: { measuredAt: true, value: true },
-      });
-      fallbackPoints = rows.map((r) => ({
-        measuredAt: r.measuredAt,
-        value: r.value,
-      }));
-    }
-    const fullGraded = buildGradedSeriesFromPoints(fallbackPoints, now);
+    const fullGraded = buildGradedSeriesFromDayAggregates(
+      await readGradedDayAggregates(userId, type, fallbackSince, now),
+    );
     if (!monthlyCovered) monthly = fullGraded.monthly;
     if (!yearlyCovered) yearly = fullGraded.yearly;
   }

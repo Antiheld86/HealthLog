@@ -33,17 +33,21 @@ import {
   runCoachNudgeTick,
 } from "../coach-nudge";
 import { getAssistantFlags } from "@/lib/feature-flags";
-import { userRowHasProviderCredential } from "@/lib/ai/provider";
+import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
 import {
   DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
   type HealthProfileAiSection,
 } from "@/lib/validations/health-profile-facts";
 
-vi.mock("@/lib/feature-flags", () => ({
-  getAssistantFlags: vi.fn(async () => ({ coach: true })),
-}));
-vi.mock("@/lib/ai/provider", () => ({
-  userRowHasProviderCredential: vi.fn(() => true),
+vi.mock("@/lib/feature-flags", async () =>
+  (
+    await import("@/__tests__/helpers/assistant-switches-mock")
+  ).mockAssistantSwitches(vi.fn(async () => ({ coach: true }))),
+);
+// Gate 3 resolves the `coach` capability per user; never the real resolver.
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForJob: vi.fn(),
+  aiCapabilityForRecord: vi.fn(),
 }));
 vi.mock("@/lib/ai/coach/bytes-codec", () => ({
   decryptFromBytes: vi.fn(() => "morning blood pressure"),
@@ -602,9 +606,6 @@ describe("runCoachNudgeTick — gates and prefs", () => {
       user: {
         findMany: vi.fn(async () => overrides.users ?? []),
       },
-      appSettings: {
-        findUnique: vi.fn(async () => ({ adminAiKeyEncrypted: "k" })),
-      },
       pushAttempt: {
         findFirst: vi.fn(async (args?: unknown) => {
           void args;
@@ -661,7 +662,12 @@ describe("runCoachNudgeTick — gates and prefs", () => {
     vi.mocked(getAssistantFlags).mockResolvedValue({
       coach: true,
     } as Awaited<ReturnType<typeof getAssistantFlags>>);
-    vi.mocked(userRowHasProviderCredential).mockReturnValue(true);
+    vi.mocked(aiCapabilityForJob).mockReset();
+    vi.mocked(aiCapabilityForJob).mockResolvedValue({
+      available: true,
+      reason: null,
+      onDeviceAllowed: true,
+    });
     restModeMock.resolveRestMode.mockResolvedValue({
       active: false,
       since: null,
@@ -713,7 +719,7 @@ describe("runCoachNudgeTick — gates and prefs", () => {
       { dispatch: vi.fn() },
     );
     expect(summary.skippedOptedOut).toBe(1);
-    expect(userRowHasProviderCredential).not.toHaveBeenCalled();
+    expect(aiCapabilityForJob).not.toHaveBeenCalled();
     expect(prisma.pushAttempt.findFirst).not.toHaveBeenCalled();
   });
 
@@ -741,15 +747,75 @@ describe("runCoachNudgeTick — gates and prefs", () => {
   });
 
   it("checks the provider gate before the frequency cap", async () => {
-    vi.mocked(userRowHasProviderCredential).mockReturnValue(false);
+    vi.mocked(aiCapabilityForJob).mockResolvedValue({
+      available: false,
+      reason: "no_provider",
+      onDeviceAllowed: true,
+    });
     const prisma = prismaMock({ users: [userRow(null)] });
+    const dispatch = vi.fn();
     const summary = await runCoachNudgeTick(
       prisma as unknown as PrismaClient,
       now,
-      { dispatch: vi.fn() },
+      { dispatch },
     );
+    expect(aiCapabilityForJob).toHaveBeenCalledWith("user-1", "coach");
     expect(summary.skippedNoProvider).toBe(1);
+    expect(summary.skippedUnavailable).toBe(0);
     expect(prisma.pushAttempt.findFirst).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "operator_disabled",
+    "user_disabled",
+    "not_permitted_for_record",
+    "check_failed",
+  ] as const)(
+    "counts an unavailable coach capability (%s) as skippedUnavailable before the cap",
+    async (reason) => {
+      vi.mocked(aiCapabilityForJob).mockResolvedValue({
+        available: false,
+        reason,
+        onDeviceAllowed: false,
+      });
+      const prisma = prismaMock({
+        users: [userRow(null)],
+        intakeRows: failingIntakes,
+      });
+      const dispatch = vi.fn();
+      const summary = await runCoachNudgeTick(
+        prisma as unknown as PrismaClient,
+        now,
+        { dispatch },
+      );
+      expect(summary.skippedUnavailable).toBe(1);
+      expect(summary.skippedNoProvider).toBe(0);
+      expect(prisma.pushAttempt.findFirst).not.toHaveBeenCalled();
+      expect(prisma.medicationIntakeEvent.findMany).not.toHaveBeenCalled();
+      expect(dispatch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("still sends the template nudge when only a consent receipt is missing", async () => {
+    vi.mocked(aiCapabilityForJob).mockResolvedValue({
+      available: false,
+      reason: "consent_required",
+      onDeviceAllowed: true,
+    });
+    const prisma = prismaMock({
+      users: [userRow(null)],
+      intakeRows: failingIntakes,
+    });
+    const dispatch = vi.fn(async () => ({ dispatched: true }));
+    const summary = await runCoachNudgeTick(
+      prisma as unknown as PrismaClient,
+      now,
+      { dispatch: dispatch as never },
+    );
+    expect(summary.skippedNoProvider).toBe(0);
+    expect(summary.skippedUnavailable).toBe(0);
+    expect(summary.dispatched).toBe(1);
   });
 
   it("widens the cap cutoff to 14 days for a biweekly user", async () => {

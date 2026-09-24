@@ -53,7 +53,17 @@ export const GET = apiHandler(async () => {
   // no personal provider. iOS keys its Coach visibility off `aiAvailable` so
   // a server-managed provider is no longer invisible to the client.
   // `managedBy` reports the origin only; no admin keys/endpoints are leaked.
-  const { aiAvailable, managedBy } = await resolveProviderAvailability(user.id);
+  //
+  // The operator's master switch is part of the answer: with every AI
+  // capability switched off there is no AI available, whatever is
+  // configured, so a native client that keys on this field hides its AI
+  // surfaces. The switches fail closed (a read error reads as all off).
+  const [presence, assistantFlags] = await Promise.all([
+    resolveProviderAvailability(user.id),
+    getAssistantFlags(),
+  ]);
+  const aiAvailable = presence.aiAvailable && assistantFlags.enabled;
+  const { managedBy } = presence;
 
   // ── v1.38.19 — the shared provider, honestly ────────────────
   // `managedBy: "server"` says the operator configured a key. It has never
@@ -77,7 +87,6 @@ export const GET = apiHandler(async () => {
     user.id,
     "coach",
   );
-  const assistantFlags = await getAssistantFlags();
   // `personal`, not merely "not deny": a guardian's own record resolves to
   // `personal`, while a managed profile resolves to `operator-default` —
   // its provider is the operator's by definition, and a child's record does
@@ -93,13 +102,20 @@ export const GET = apiHandler(async () => {
   // one visitor minted would turn the operator's provider on for every later
   // one. A button that can only 403 into a generic toast is precisely the
   // misleading failure this surface exists to remove, so there is no button.
+  //
+  // The offer is worth making while any capability it would unlock is
+  // switched on by the operator: the Coach, the briefing, or reading
+  // documents. With all three off there is nothing for the consent to open.
   const demoInstance = process.env.DEMO_MODE === "true";
+  const offerUnlocksSomething =
+    assistantFlags.coach ||
+    assistantFlags.briefing ||
+    assistantFlags.documentAi;
   const serverProviderOffer =
     !demoInstance &&
     managedBy === "server" &&
     serverProviderHealth === "healthy" &&
-    assistantFlags.enabled &&
-    assistantFlags.coach &&
+    offerUnlocksSomething &&
     credentialPolicy === "personal" &&
     !serverProviderConsent;
 

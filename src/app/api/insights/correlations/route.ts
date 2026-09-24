@@ -23,8 +23,8 @@ import { apiError, apiSuccess } from "@/lib/api-response";
 import { cachedSwr, caches, type ServerCache } from "@/lib/cache/server-cache";
 import { annotate } from "@/lib/logging/context";
 import { checkAnalyticsReadRateLimit } from "@/lib/rate-limit";
-import { requireAssistantSurface } from "@/lib/feature-flags";
-import { requireModuleEnabled } from "@/lib/modules/gate";
+import { MODULE_KEYS, resolveModuleMap } from "@/lib/modules/gate";
+import { isSurfaceVisible, type SurfaceModuleMap } from "@/lib/modules/surface";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
 import { prisma } from "@/lib/db";
 import { wallClockInTz } from "@/lib/tz/wall-clock";
@@ -67,11 +67,10 @@ export const GET = apiHandler(async () => {
     return apiError("Too many analytics requests. Please retry later.", 429);
   }
 
-  const m = await requireModuleEnabled(user.id, "insights");
-  if (!m.enabled) return m.response;
-
-  // Operator can hide the correlation surface entirely.
-  await requireAssistantSurface("correlations");
+  // No AI gate and no `insights` module gate: this is statistics, not model
+  // output. The retired Correlations switch gated it and nothing model-written;
+  // an operator's AI switches, and the person's AI analysis opt-out, never
+  // take a computation down.
 
   // Reader's locale for the narrated `interpretation` — the correlation cards
   // render this string verbatim, so it MUST be localised (cookie / User.locale /
@@ -89,12 +88,18 @@ export const GET = apiHandler(async () => {
   // `invalidateUserCorrelationPatterns`, which sweeps it too. The
   // `syncAcceptedPatterns` calls are DB writes and live INSIDE the builder,
   // so a cache hit performs no write on the read path.
+  // Statistics serve only with their owning modules: a channel whose module
+  // is off never enters the scan. The switched-off set is part of the cache
+  // key, so toggling a module never serves a body computed under the other
+  // setting.
+  const modules = await resolveModuleMap(user.id);
+  const modulesOff = MODULE_KEYS.filter((key) => modules[key] === false);
   const body = await cachedSwr(
     caches.analytics as ServerCache<
       Awaited<ReturnType<typeof buildCorrelationsResponse>>
     >,
-    `${user.id}|correlations|${locale}`,
-    () => buildCorrelationsResponse(user.id, locale),
+    `${user.id}|correlations|${locale}|off:${modulesOff.join(",")}`,
+    () => buildCorrelationsResponse(user.id, locale, modules),
     annotate,
   );
 
@@ -104,6 +109,7 @@ export const GET = apiHandler(async () => {
 async function buildCorrelationsResponse(
   userId: string,
   locale: Awaited<ReturnType<typeof resolveServerLocale>>,
+  modules: SurfaceModuleMap,
 ) {
   const profile = await prisma.user.findUnique({
     where: { id: userId },
@@ -125,8 +131,15 @@ async function buildCorrelationsResponse(
   // v1.22 — lab draws (for the labs ↔ outcome pass) fetch alongside; they feed
   // a different pass over a different grain, so they are not matrix channels.
   const [matrix, labDraws] = await Promise.all([
-    assembleDiscoveryMatrix(userId, { tz, since, fetchMode: "tiered" }),
-    fetchLabDraws(userId, tz, since),
+    assembleDiscoveryMatrix(userId, {
+      tz,
+      since,
+      fetchMode: "tiered",
+      modules,
+    }),
+    isSurfaceVisible("correlation:LAB_DRAWS", modules)
+      ? fetchLabDraws(userId, tz, since)
+      : Promise.resolve([]),
   ]);
   const { series, diagnostics } = matrix;
 

@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   Check,
   Loader2,
@@ -24,8 +23,7 @@ import {
   useCoachPlanMutations,
   type CoachPlanDTO,
 } from "@/hooks/use-coach-plans";
-import { useFeatureFlags } from "@/hooks/use-feature-flags";
-import { useDisableCoach } from "@/hooks/use-disable-coach";
+import { useAiCapabilityAnswer } from "@/hooks/use-ai-capability";
 import { useTranslations } from "@/lib/i18n/context";
 import { formatDateOrRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -46,8 +44,10 @@ import { cn } from "@/lib/utils";
  * is injected into the Coach's snapshot memory (top-6, newest first), so
  * follow-up conversations recall it; a proposed or declined plan never is.
  *
- * Gating mirrors `/coach`: the operator master flag OR a per-user opt-out
- * redirects back to `/insights` rather than painting a dead shell.
+ * With the Coach unavailable (for any reason) the page stays reachable and
+ * turns read-only, like `/coach/conversations`: the plans are the person's
+ * own record, so they can still be read and erased. Confirming or moving a
+ * plan is Coach use and is not offered then (the PATCH route refuses it).
  */
 
 type GroupId = "proposed" | "standing" | "past";
@@ -64,7 +64,7 @@ function groupOf(status: string): GroupId {
   return "past";
 }
 
-function CoachPlansBody() {
+function CoachPlansBody({ readOnly }: { readOnly: boolean }) {
   const { t } = useTranslations();
   const query = useCoachPlans({ filter: { scope: "all" } });
   const { setStatus, remove } = useCoachPlanMutations();
@@ -122,7 +122,7 @@ function CoachPlansBody() {
           ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {group === "proposed" && (
+          {!readOnly && group === "proposed" && (
             <>
               <Button
                 type="button"
@@ -159,7 +159,7 @@ function CoachPlansBody() {
               </Button>
             </>
           )}
-          {group === "standing" && (
+          {!readOnly && group === "standing" && (
             <>
               <Button
                 type="button"
@@ -189,7 +189,7 @@ function CoachPlansBody() {
               </Button>
             </>
           )}
-          {group === "past" && (
+          {(readOnly || group === "past") && (
             <ConfirmButton
               slot="coach-plan-delete"
               variant="ghost"
@@ -216,7 +216,11 @@ function CoachPlansBody() {
         title={
           <span data-slot="coach-plans-heading">{t("coach.plans.title")}</span>
         }
-        description={t("coach.plans.pageDescription")}
+        description={
+          readOnly
+            ? t("coach.plans.readOnlyNote")
+            : t("coach.plans.pageDescription")
+        }
         actions={
           <Button asChild variant="outline" size="sm">
             <Link
@@ -278,22 +282,11 @@ function CoachPlansBody() {
 }
 
 export default function CoachPlansPage() {
-  const router = useRouter();
-  const flags = useFeatureFlags();
-  const disableCoach = useDisableCoach();
+  // The `coach` capability, read only once `/me` has answered. Unavailable
+  // means read-only, never a redirect.
+  const coach = useAiCapabilityAnswer("coach");
 
-  const coachUnavailable = !flags.coach || disableCoach;
-
-  // Same gating as `/coach`: operator master flag OR per-user opt-out
-  // redirects back to the Insights mother page so the route is never a
-  // dead-end.
-  useEffect(() => {
-    if (coachUnavailable) {
-      router.replace("/insights");
-    }
-  }, [coachUnavailable, router]);
-
-  if (coachUnavailable) return null;
+  if (coach === null) return null;
 
   return (
     <div
@@ -303,7 +296,7 @@ export default function CoachPlansPage() {
       // mobile-only BottomNav band).
       className="bg-background -mx-4 -mt-6 -mb-20 flex h-[calc(100dvh-8rem-env(safe-area-inset-bottom,0px))] min-h-[32rem] flex-col overflow-hidden md:-mx-6 md:h-[calc(100dvh-4rem)]"
     >
-      <CoachPlansBody />
+      <CoachPlansBody readOnly={!coach.available} />
     </div>
   );
 }

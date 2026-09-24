@@ -29,10 +29,12 @@ import { cachedSwr, caches, type ServerCache } from "@/lib/cache/server-cache";
 import { dashboardSnapshotCacheKey } from "@/lib/cache/invalidate";
 import { DASHBOARD_REFETCH_INTERVAL_MS } from "@/lib/queries/refetch-interval";
 import {
+  applyBriefingCapability,
   buildDashboardSnapshot,
   type DashboardSnapshot,
   type SnapshotUserInput,
 } from "@/lib/dashboard/snapshot";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
 import type { Locale } from "@/lib/i18n/config";
 
@@ -84,7 +86,6 @@ export async function readDashboardSnapshotCached(
     gender: user.gender,
     glucoseUnit: user.glucoseUnit,
     onboardingTourCompleted: user.onboardingTourCompleted,
-    disableCoach: user.disableCoach,
     insightsCachedText: user.insightsCachedText,
     insightsCachedAt: user.insightsCachedAt,
     insightsCachedLocale: user.insightsCachedLocale,
@@ -111,16 +112,25 @@ export async function readDashboardSnapshotCached(
   // — the foreground request never pays the cold rebuild. Hard-evicting
   // writes (widget reorder) still drop the key outright, forcing a clean
   // miss + synchronous rebuild here.
-  const body = await cachedSwr(
-    caches.analytics as ServerCache<DashboardSnapshot>,
-    // The invalidators sweep by `dashboardSnapshotCacheKey(userId)` prefix, so
-    // the read has to build its key from that same function. Spelling the
-    // string out here worked only for as long as nobody edited one side.
-    `${dashboardSnapshotCacheKey(user.id)}|${locale}`,
-    () => buildDashboardSnapshot(prisma, snapshotUser, { time, locale }),
-    annotate,
-    SNAPSHOT_CACHE_TTL_MS,
-  );
+  const [cached, briefingAi] = await Promise.all([
+    cachedSwr(
+      caches.analytics as ServerCache<DashboardSnapshot>,
+      // The invalidators sweep by `dashboardSnapshotCacheKey(userId)` prefix, so
+      // the read has to build its key from that same function. Spelling the
+      // string out here worked only for as long as nobody edited one side.
+      `${dashboardSnapshotCacheKey(user.id)}|${locale}`,
+      () => buildDashboardSnapshot(prisma, snapshotUser, { time, locale }),
+      annotate,
+      SNAPSHOT_CACHE_TTL_MS,
+    ),
+    aiCapabilityToServe(user.id, "briefing"),
+  ]);
+
+  // The briefing is model text: shown only while the record's `briefing`
+  // capability is available, decided on every read rather than baked into
+  // the cached body. The record's own state decides, whoever is reading, so a
+  // delegate sees the owner's briefing exactly when the owner would.
+  const body = applyBriefingCapability(cached, briefingAi);
 
   return { body, locale };
 }

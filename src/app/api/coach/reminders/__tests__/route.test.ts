@@ -125,6 +125,14 @@ const callDelete = (id = "r1") =>
     { params: Promise.resolve({ id }) },
   );
 
+/** The Coach module gate refuses: operator switch, module off or Hide Coach. */
+function coachOff() {
+  vi.mocked(requireModuleEnabled).mockResolvedValue({
+    enabled: false,
+    response: new Response(null, { status: 403 }),
+  } as never);
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
@@ -162,7 +170,14 @@ describe("GET /api/coach/reminders", () => {
       ?.where as { userId: string; deletedAt: null };
     expect(where.userId).toBe("user-1");
     expect(where.deletedAt).toBeNull();
-    expect(requireModuleEnabled).toHaveBeenCalledWith("user-1", "coach");
+  });
+
+  it("lists stored reminders with the Coach unavailable (they are the person's record)", async () => {
+    coachOff();
+    vi.mocked(prisma.coachReminder.findMany).mockResolvedValue([] as never);
+    const res = await callGet();
+    expect(res.status).toBe(200);
+    expect(requireModuleEnabled).not.toHaveBeenCalled();
   });
 
   it("skips an undecryptable row rather than 500ing", async () => {
@@ -202,6 +217,13 @@ describe("GET /api/coach/reminders", () => {
 });
 
 describe("POST /api/coach/reminders", () => {
+  it("stays Coach use: refused with the Coach unavailable", async () => {
+    coachOff();
+    const res = await callPost({ note: "check my sleep" });
+    expect(res.status).toBe(403);
+    expect(prisma.coachReminder.create).not.toHaveBeenCalled();
+  });
+
   it("creates a reminder field-by-field, resolving the when grammar", async () => {
     vi.mocked(prisma.coachReminder.count).mockResolvedValue(0 as never);
     vi.mocked(prisma.coachReminder.create).mockResolvedValue({
@@ -248,6 +270,14 @@ describe("POST /api/coach/reminders", () => {
 });
 
 describe("PATCH /api/coach/reminders/[id]", () => {
+  it("stays Coach use: refused with the Coach unavailable", async () => {
+    coachOff();
+    const res = await callPatch({ status: "active" });
+    expect(res.status).toBe(403);
+    expect(requireModuleEnabled).toHaveBeenCalledWith("user-1", "coach");
+    expect(prisma.coachReminder.updateMany).not.toHaveBeenCalled();
+  });
+
   it("confirms proposed → active field-by-field, owner-scoped", async () => {
     vi.mocked(prisma.coachReminder.updateMany).mockResolvedValue({
       count: 1,
@@ -308,5 +338,17 @@ describe("DELETE /api/coach/reminders/[id]", () => {
     const res = await callDelete("someone-elses");
     const body = (await res.json()) as { data: { deleted: boolean } };
     expect(body.data.deleted).toBe(false);
+  });
+
+  it("erases a stored reminder with the Coach unavailable", async () => {
+    coachOff();
+    vi.mocked(prisma.coachReminder.updateMany).mockResolvedValue({
+      count: 1,
+    } as never);
+    const res = await callDelete();
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: { deleted: boolean } };
+    expect(body.data.deleted).toBe(true);
+    expect(requireModuleEnabled).not.toHaveBeenCalled();
   });
 });

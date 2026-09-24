@@ -15,9 +15,18 @@
  * without an active receipt, so every AI surface falls back to its
  * no-consent state on the next call. Granting posts an affirmative intent,
  * which is the consent act itself and therefore may supersede an earlier
- * revocation; the silent mount heal never does. Nothing already stored is
- * deleted by a withdrawal; that is the export/erase path in Data & Privacy,
- * and the copy says so rather than implying more than it does.
+ * revocation; the silent mount heal never does.
+ *
+ * v1.39 — a withdrawal also deletes what the app can write again: the notes
+ * a model wrote from the person's data (status notes, the daily briefing,
+ * model-written period summaries, arrival lines, workout notes), in the same
+ * step as the revoke. The person's own records stay: Coach conversations,
+ * what the Coach remembered, plans and document summaries, readable and
+ * deletable by them. The confirm copy says exactly that.
+ *
+ * The narrower consent for reading documents (`ai_extraction`) gets its own
+ * row once one is on file, with its own withdrawal. It is granted where a
+ * document is read, so this is where it is taken back.
  * ──────────────────────────────────────────────────────────────── */
 
 import { useState } from "react";
@@ -26,10 +35,15 @@ import { Loader2, ShieldCheck, ShieldOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
 import { formatDateTime } from "@/lib/format";
 import { useTranslations } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
+import {
+  aiInputDependentKeys,
+  invalidateKeys,
+  queryKeys,
+} from "@/lib/query-keys";
 
 type ConsentReceiptWire = {
   id: string;
@@ -47,11 +61,13 @@ export function AiConsentCard({
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.aiConsentReceipt("ai_full"),
     queryFn: async () => {
       const res = await apiFetchRaw("/api/consent/ai/latest?kind=ai_full");
-      if (!res.ok) return null;
+      // A failed read is not a withdrawal: throw so the card says it could
+      // not load instead of reporting the person's decision wrongly.
+      if (!res.ok) throw new Error("consent read failed");
       const json = await res.json();
       return (json.data?.receipt ?? null) as ConsentReceiptWire;
     },
@@ -69,13 +85,12 @@ export function AiConsentCard({
     onSuccess: async () => {
       setConfirming(false);
       // The receipt gates every AI surface, so anything that reads consent
-      // state has to re-resolve — not just this card.
+      // state has to re-resolve — not just this card. `/me` carries the
+      // resolved capabilities every AI surface renders from.
       await queryClient.invalidateQueries({
         queryKey: queryKeys.aiConsentReceipt("ai_full"),
       });
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.insightsProviderChain(),
-      });
+      await invalidateKeys(queryClient, aiInputDependentKeys);
     },
   });
 
@@ -96,9 +111,7 @@ export function AiConsentCard({
       await queryClient.invalidateQueries({
         queryKey: queryKeys.aiConsentReceipt("ai_full"),
       });
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.insightsProviderChain(),
-      });
+      await invalidateKeys(queryClient, aiInputDependentKeys);
     },
   });
 
@@ -117,6 +130,17 @@ export function AiConsentCard({
           <Skeleton className="h-4 w-56" />
         </div>
         <Skeleton className="h-8 w-32" />
+      </section>
+    );
+  }
+
+  if (isError) {
+    return (
+      <section className="space-y-3" data-slot="ai-consent">
+        <QueryErrorRow
+          slot="ai-consent-load-error"
+          onRetry={() => void refetch()}
+        />
       </section>
     );
   }
@@ -217,6 +241,119 @@ export function AiConsentCard({
           {t("settings.ai.consent.grantError")}
         </p>
       ) : null}
+
+      <DocumentReadingConsentRow isAuthenticated={isAuthenticated} />
     </section>
+  );
+}
+
+/**
+ * The consent for reading documents (`ai_extraction`), shown only while one
+ * is on file. Withdrawing it stops documents, lab report scans and medication
+ * text from being sent for reading at once; it deletes nothing, because what
+ * a read produced (a document summary, extracted values) is the person's own
+ * record.
+ */
+function DocumentReadingConsentRow({
+  isAuthenticated,
+}: {
+  isAuthenticated: boolean;
+}) {
+  const { t } = useTranslations();
+  const queryClient = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+
+  const { data } = useQuery({
+    queryKey: queryKeys.aiConsentReceipt("ai_extraction"),
+    queryFn: async () => {
+      const res = await apiFetchRaw(
+        "/api/consent/ai/latest?kind=ai_extraction",
+      );
+      if (!res.ok) return null;
+      const json = await res.json();
+      return (json.data?.receipt ?? null) as ConsentReceiptWire;
+    },
+    enabled: isAuthenticated,
+  });
+
+  const revoke = useMutation({
+    mutationKey: queryKeys.aiConsentReceipt("ai_extraction"),
+    mutationFn: async () => {
+      const res = await apiFetchRaw(
+        "/api/consent/ai/latest?kind=ai_extraction",
+        { method: "DELETE" },
+      );
+      if (!res.ok) throw new Error("revoke failed");
+    },
+    onSuccess: async () => {
+      setConfirming(false);
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.aiConsentReceipt("ai_extraction"),
+      });
+      await invalidateKeys(queryClient, aiInputDependentKeys);
+    },
+  });
+
+  const active = data && data.revokedAt === null ? data : null;
+  if (!active) return null;
+
+  return (
+    <div
+      data-slot="ai-consent-document-reading"
+      className="border-border space-y-2 border-t pt-3"
+    >
+      <p className="text-sm font-medium">
+        {t("settings.ai.consent.documentReading.title")}
+      </p>
+      <p className="text-muted-foreground text-xs">
+        {t("settings.ai.consent.documentReading.activeSince", {
+          date: formatDateTime(active.signedAt),
+        })}
+      </p>
+      {confirming ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-muted-foreground w-full text-xs">
+            {t("settings.ai.consent.documentReading.confirmBody")}
+          </p>
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            data-slot="ai-consent-document-reading-withdraw-confirm"
+            onClick={() => revoke.mutate()}
+            disabled={revoke.isPending}
+          >
+            {revoke.isPending ? (
+              <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />
+            ) : null}
+            {t("settings.ai.consent.confirmWithdraw")}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setConfirming(false)}
+            disabled={revoke.isPending}
+          >
+            {t("common.cancel")}
+          </Button>
+        </div>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          data-slot="ai-consent-document-reading-withdraw"
+          onClick={() => setConfirming(true)}
+        >
+          {t("settings.ai.consent.withdraw")}
+        </Button>
+      )}
+      {revoke.isError ? (
+        <p className="text-destructive text-xs" role="alert">
+          {t("settings.ai.consent.error")}
+        </p>
+      ) : null}
+    </div>
   );
 }

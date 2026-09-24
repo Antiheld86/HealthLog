@@ -25,6 +25,7 @@ import {
   LAYOUT_GROUPS,
   LAYOUT_GROUP_IDS,
   isLayoutGroupId,
+  layoutGroupModule,
 } from "../layout-groups";
 
 describe("layout-groups registry", () => {
@@ -59,7 +60,9 @@ describe("layout-groups registry", () => {
 
   it("gates the toggleable tracking modules and leaves the rest always-on", () => {
     const gate = (id: string) =>
-      LAYOUT_GROUPS.find((group) => group.id === id)?.moduleGate;
+      LAYOUT_GROUPS.some((group) => group.id === id)
+        ? layoutGroupModule(id)
+        : "not-a-group";
     expect(gate("medications")).toBe("medications");
     expect(gate("mood")).toBe("mood");
     expect(gate("labs")).toBe("labs");

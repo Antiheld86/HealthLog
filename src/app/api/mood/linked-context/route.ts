@@ -39,6 +39,7 @@ import { annotate } from "@/lib/logging/context";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import { resolveLinkedDayContext } from "@/lib/mood/linked-context";
 import { DEFAULT_TIMEZONE } from "@/lib/mood/date-key";
+import { isValidTimezone } from "@/lib/tz/format";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +48,12 @@ const querySchema = z.object({
   // The zone the day is anchored to. Absent falls back to the account's own
   // display timezone; the edit dialog passes the entry's stored `tz` so a row
   // logged elsewhere keeps its own day boundaries.
-  tz: z.string().min(1).max(64).optional(),
+  tz: z
+    .string()
+    .min(1)
+    .max(64)
+    .refine(isValidTimezone, "Invalid IANA timezone")
+    .optional(),
 });
 
 export const GET = apiHandler(async (request: NextRequest) => {

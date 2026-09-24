@@ -78,7 +78,8 @@ import { isLegacyInsightPayload } from "@/lib/ai/legacy-payload";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { NextRequest } from "next/server";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
-import { requireAssistantSurface } from "@/lib/feature-flags";
+import { requireAiCapability } from "@/lib/ai/capabilities/gate";
+import { AI_PROVIDER_NONE_ERROR_CODE } from "@/lib/ai/capabilities/types";
 import { invalidateUserInsights } from "@/lib/cache/invalidate";
 import { annotate } from "@/lib/logging/context";
 import { toProfileSex } from "@/lib/profile/sex";
@@ -139,14 +140,22 @@ export function resolveInsightsRateLimit(): number {
  * cron and the "prepare assessments" button use). The next read reflects
  * the fresh briefing. User-initiated regeneration stays on the POST path.
  *
+ * A pure AI read: the payload is the model-written briefing and nothing
+ * else, so it keeps a typed refusal rather than answering 200 with nothing.
+ * The `briefing` capability is required (operator switch, the AI analysis
+ * opt-out, provider presence, consent); an unavailable one refuses with the
+ * capability envelope (`assistant.disabled.briefing`, `module.disabled`,
+ * `consent.ai.required`, `ai.provider.none` 422, …) before the cache is read,
+ * so stored briefing text is never served and no warm is enqueued.
+ *
  * `userId` is narrowed from the session / Bearer — never a body field.
  */
 export const GET = apiHandler(async (request: NextRequest) => {
   const { user } = await requireAuth();
-  // Same surface gate as the POST + the read-only status routes: a user
-  // with assessments enabled but Coach disabled still reads the cached
-  // briefing.
-  await requireAssistantSurface("coach");
+  // The briefing is its own capability now, not the Coach's: a user with the
+  // Coach hidden still reads their briefing, and one who opted out of AI
+  // analysis does not.
+  await requireAiCapability("briefing");
   const userId = user.id;
 
   const dbUser = await prisma.user.findUnique({
@@ -304,11 +313,10 @@ export const POST = apiHandler((request: NextRequest) =>
   // sibling consumer) for this request.
   withFeatureCacheScope(async () => {
     const { user } = await requireAuth();
-    // v1.4.31 — the advisor + daily briefing surfaces ride this
-    // endpoint. Operator disables Coach, every advisor consumer
-    // (briefing card, recommendations grid, hero strip narration)
-    // empties out.
-    await requireAssistantSurface("coach");
+    // The `briefing` capability, before any read or provider work. Refused
+    // with the capability envelope; no provider is `ai.provider.none` on the
+    // 422 this route has always used for it.
+    await requireAiCapability("briefing");
     const userId = user.id;
 
     const dbUser = await prisma.user.findUnique({
@@ -490,6 +498,7 @@ export const POST = apiHandler((request: NextRequest) =>
         return apiError(
           "No AI provider configured. Connect ChatGPT in settings or ask your admin to set up an API key.",
           422,
+          { errorCode: AI_PROVIDER_NONE_ERROR_CODE },
         );
       }
       chain.push({ providerType: "admin-openai", instance: legacy });

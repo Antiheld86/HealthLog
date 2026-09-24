@@ -1,9 +1,9 @@
 import type { MeasurementType } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
-import {
-  hasUsableStatusProvider,
-  statusConsentBlocksGeneration,
-} from "@/lib/insights/status-provider";
+import { decryptFromBytes, encryptToBytes } from "@/lib/ai/coach/bytes-codec";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
+import type { AiUnavailableReason } from "@/lib/ai/capabilities/types";
+import { probeProviderPresence } from "@/lib/ai/provider";
 import {
   enqueueStatusGeneration,
   type InsightStatusScope,
@@ -44,75 +44,222 @@ const CORRELATION_CHANNEL_TYPES: readonly MeasurementType[] =
   ]) as MeasurementType[];
 
 /**
- * Shared cache-read for the seven `*-status.ts` insight generators.
+ * The status-note store: what a model wrote about one metric, for one person,
+ * in one language.
  *
- * Every generator persists its assessment as an `auditLog` row keyed
- * `insights.<metric>-status.<locale>` whose `details` JSON carries
- * `{ dateKey, locale, text, providerType, model, tokensUsed }`. On the
- * next mount the generator reads the most recent such row and, if it is
- * still for today, serves it without re-hitting the provider.
+ * Every per-metric generator (the seven specialised cards, the generic
+ * `metric:<ID>` cards, the derived-score and biomarker assessments) keeps its
+ * note in `InsightStatusCache`, one row per `(user, metric, locale)`, the note
+ * itself encrypted at rest. Until v1.39.0 the notes were appended to
+ * `audit_logs` as plaintext JSON; the callers still name a note by the old
+ * cache-action string (`insights.<scope>-status.<locale>`, built only by
+ * `statusCacheAction`), and this module maps it onto the row.
  *
- * The timeout fallback used to poison this read. When a provider call
- * exceeded the status budget the route persisted a `model:"timeout-stub"`
- * / `timeout:true` row carrying the generic no-key text under the SAME
- * `text` field a real assessment uses. The cache-read only checked
- * `dateKey === today && text` — so the stub looked like a valid
- * assessment and stuck until midnight, hiding the real data-driven text
- * for the rest of the day.
+ * A row carries two things that are updated independently:
  *
- * `readFreshStatusText` is the one cache-read every standard generator
- * shares. It rejects stubs explicitly so a single stall no longer pins
- * the fallback for the day, and a fresh generation is attempted instead.
+ *   - the note (`textEncrypted`, its `dateKey`, `generatedAt` and the two
+ *     fingerprints), written when a generation succeeds or an unchanged-data
+ *     run re-dates it;
+ *   - a short negative-cache window (`retryAt`, `negativeReason`), written
+ *     when a generation stalls, errs or is screened, so a stalled provider
+ *     does not turn every page visit into another enqueue. Writing it never
+ *     touches the note, so one stall cannot hide yesterday's text, and writing
+ *     a note clears it.
+ *
+ * Nothing here serves a note while the `statusText` capability is unavailable
+ * for the record, whatever the reason: an operator switch, the person's AI
+ * opt-out, a missing provider, a withdrawn consent. The note stays stored (a
+ * switch flipped back costs nothing) unless consent withdrawal purges it.
  */
 
 /**
- * The single source of truth for the per-status cache-action shape.
- *
- * Every per-metric assessment is persisted as an `auditLog` row whose
- * `action` is `insights.<scope>-status.<locale>`. The shape IS the cache
- * key, so building it by hand in multiple places risks the same silent
- * drift the queryKey factory guards against on the client. `statusCacheAction`
- * is the one builder.
+ * The single builder of a status note's name. The shape is part of the
+ * contract between the generators, the queue and this store, so it is built
+ * in one place only.
  */
 export function statusCacheAction(scope: string, locale: string): string {
   return `insights.${scope}-status.${locale}`;
 }
 
-interface ParsedStatusCache {
-  dateKey?: string;
-  locale?: string;
-  text?: string;
-  summary?: string;
-  providerType?: string;
-  model?: string;
-  tokensUsed?: number | null;
-  timeout?: boolean;
-  /** v1.8.3 — ISO timestamp before which a timeout stub suppresses re-enqueue. */
-  retryAt?: string;
-  /** Explicit generated/negative cache classification for new rows. */
-  statusKind?: "generated" | "negative";
-  /** Whether the producer may be retried at the time this row is read. */
-  retryable?: boolean;
-  /** Generated rows expire once the caller's current day differs. */
-  expiresAfterDateKey?: string;
-  /** Stable non-sensitive negative-cache reason code. */
-  reason?: "timeout" | "error" | "screened";
-  /** v1.16.8 — fingerprint of the data snapshot the text was generated from. */
-  snapshotHash?: string;
-  /** v1.18.11 (P6) — cheap fingerprint of the salient inputs (count + newest). */
-  inputHash?: string;
+const CACHE_ACTION_SHAPE = /^insights\.(.+)-status\.([^.]+)$/;
+
+/** The row key behind a note's name, or `null` for a name of another shape. */
+function statusCacheKey(
+  cacheAction: string,
+): { metric: string; locale: string } | null {
+  const match = CACHE_ACTION_SHAPE.exec(cacheAction);
+  if (!match) return null;
+  return { metric: match[1], locale: match[2] };
+}
+
+/** One stored row, decrypted. */
+interface StoredStatusNote {
+  /** The note, `null` when the row carries only a negative-cache window. */
+  text: string | null;
+  /** Per-item notes (JSON), for a card that carries them. */
+  items: unknown;
+  inputHash: string | null;
+  snapshotHash: string | null;
+  dateKey: string;
+  generatedAt: Date | null;
+  retryAt: Date | null;
+  negativeReason: string | null;
+}
+
+function decryptOrNull(payload: Uint8Array | null): string | null {
+  if (!payload || payload.byteLength === 0) return null;
+  try {
+    return decryptFromBytes(payload);
+  } catch {
+    // A note encrypted under a key the host no longer holds is a cache miss;
+    // the next run writes it again.
+    return null;
+  }
+}
+
+async function readStatusNote(
+  userId: string,
+  cacheAction: string,
+): Promise<StoredStatusNote | null> {
+  const key = statusCacheKey(cacheAction);
+  if (!key) return null;
+  const row = await prisma.insightStatusCache.findUnique({
+    where: { userId_metric_locale: { userId, ...key } },
+    select: {
+      textEncrypted: true,
+      itemsEncrypted: true,
+      inputHash: true,
+      snapshotHash: true,
+      dateKey: true,
+      generatedAt: true,
+      retryAt: true,
+      negativeReason: true,
+    },
+  });
+  if (!row) return null;
+  const text = decryptOrNull(row.textEncrypted);
+  const itemsJson = decryptOrNull(row.itemsEncrypted);
+  let items: unknown = null;
+  if (itemsJson !== null) {
+    try {
+      items = JSON.parse(itemsJson);
+    } catch {
+      items = null;
+    }
+  }
+  return {
+    text: text !== null && text.trim().length > 0 ? text : null,
+    items,
+    inputHash: row.inputHash,
+    snapshotHash: row.snapshotHash,
+    dateKey: row.dateKey,
+    generatedAt: row.generatedAt,
+    retryAt: row.retryAt,
+    negativeReason: row.negativeReason,
+  };
 }
 
 /**
- * A cached row is a timeout stub when it carries the sentinel marker the
- * timeout path writes. Either flag is sufficient — older stub rows may
- * predate one of the two markers, so both are honoured.
+ * Whether stored status notes may be served, or re-dated, for this record.
+ * Every reader and both unchanged-data gates ask this first. Answered from
+ * the record's own state, so a delegate reads the owner's notes exactly when
+ * the owner would; starting work is a separate question (see below).
  */
-export function isTimeoutStub(parsed: {
-  model?: string;
-  timeout?: boolean;
-}): boolean {
-  return parsed.model === "timeout-stub" || parsed.timeout === true;
+async function statusTextServable(userId: string): Promise<boolean> {
+  return (await aiCapabilityToServe(userId, "statusText")).available;
+}
+
+/**
+ * Write a note: a successful generation. Upserts the one row, clears any
+ * negative-cache window, and returns when the note was written.
+ */
+export async function writeStatusNote(args: {
+  userId: string;
+  cacheAction: string;
+  todayKey: string;
+  text: string;
+  /** Per-item notes for a card that carries them; serialised as JSON. */
+  items?: unknown;
+  snapshotHash?: string;
+  inputHash?: string;
+}): Promise<Date> {
+  const key = statusCacheKey(args.cacheAction);
+  if (!key) {
+    throw new Error(`Not a status note name: ${args.cacheAction}`);
+  }
+  const generatedAt = new Date();
+  const note = {
+    textEncrypted: encryptToBytes(args.text),
+    itemsEncrypted:
+      args.items === undefined
+        ? null
+        : encryptToBytes(JSON.stringify(args.items)),
+    inputHash: args.inputHash ?? null,
+    snapshotHash: args.snapshotHash ?? null,
+    dateKey: args.todayKey,
+    generatedAt,
+    retryAt: null,
+    negativeReason: null,
+  };
+  await prisma.insightStatusCache.upsert({
+    where: { userId_metric_locale: { userId: args.userId, ...key } },
+    create: { userId: args.userId, ...key, ...note },
+    update: note,
+  });
+  return generatedAt;
+}
+
+/**
+ * Re-date the stored note under today's day key without touching the note or
+ * its fingerprints: an unchanged-data run. Returns the new timestamp.
+ */
+async function redateStatusNote(
+  userId: string,
+  cacheAction: string,
+  todayKey: string,
+): Promise<Date> {
+  const key = statusCacheKey(cacheAction);
+  const generatedAt = new Date();
+  if (key) {
+    // `updateMany`, not `update`: a note purged between the read and here (a
+    // consent withdrawal) is a no-op, not a thrown "record not found".
+    await prisma.insightStatusCache.updateMany({
+      where: { userId, ...key },
+      data: {
+        dateKey: todayKey,
+        generatedAt,
+        retryAt: null,
+        negativeReason: null,
+      },
+    });
+  }
+  return generatedAt;
+}
+
+/**
+ * Open a negative-cache window for a note: the generation stalled, erred, or
+ * was screened. Leaves any stored note exactly as it was.
+ */
+export async function writeStatusNegativeWindow(args: {
+  userId: string;
+  cacheAction: string;
+  todayKey: string;
+  reason: "timeout" | "error" | "screened";
+  retryAt: Date;
+}): Promise<void> {
+  const key = statusCacheKey(args.cacheAction);
+  if (!key) return;
+  await prisma.insightStatusCache.upsert({
+    where: { userId_metric_locale: { userId: args.userId, ...key } },
+    create: {
+      userId: args.userId,
+      ...key,
+      dateKey: args.todayKey,
+      retryAt: args.retryAt,
+      negativeReason: args.reason,
+    },
+    update: { retryAt: args.retryAt, negativeReason: args.reason },
+  });
 }
 
 export interface FreshStatusCacheHit {
@@ -124,14 +271,12 @@ export interface FreshStatusCacheHit {
 }
 
 /**
- * Read the latest cached assessment for `(userId, cacheAction)` and
- * return its text only when it is (a) for today and (b) NOT a timeout
- * stub. Returns `null` on a miss, a stale day, a stub, or a malformed
- * payload — every one of those means the caller should regenerate.
+ * Today's note for `(userId, cacheAction)`, or `null` on a miss, a note from
+ * an earlier day, no note at all, or a capability that is unavailable. Every
+ * one of those means the caller should not serve stored text as current.
  *
- * `force` short-circuits to `null` so a forced regeneration never reads
- * the cache. The DB read is still skipped entirely under `force` to
- * keep the forced path cheap.
+ * `force` short-circuits to `null` without a read, so a forced regeneration
+ * never reads the cache.
  */
 export async function readFreshStatusText(args: {
   userId: string;
@@ -141,61 +286,57 @@ export async function readFreshStatusText(args: {
 }): Promise<FreshStatusCacheHit | null> {
   const { userId, cacheAction, todayKey, force } = args;
   if (force) return null;
+  if (!(await statusTextServable(userId))) return null;
 
-  const latestCache = await prisma.auditLog.findFirst({
-    where: { userId, action: cacheAction },
-    orderBy: { createdAt: "desc" },
-    select: { createdAt: true, details: true },
-  });
-  if (!latestCache?.details) return null;
-
-  try {
-    const parsed = JSON.parse(latestCache.details) as ParsedStatusCache;
-    if (parsed.dateKey !== todayKey) return null;
-    if (isTimeoutStub(parsed)) return null;
-    if (typeof parsed.text !== "string" || parsed.text.trim().length === 0) {
-      return null;
-    }
-    return {
-      kind: "generated",
-      text: parsed.text,
-      updatedAt: latestCache.createdAt.toISOString(),
-      retryable: false,
-      expiresAfterDateKey: parsed.expiresAfterDateKey ?? parsed.dateKey,
-    };
-  } catch {
-    // Malformed cache payload — treat as a miss and regenerate.
+  const note = await readStatusNote(userId, cacheAction);
+  if (!note?.text || note.dateKey !== todayKey || !note.generatedAt) {
     return null;
   }
+  return {
+    kind: "generated",
+    text: note.text,
+    updatedAt: note.generatedAt.toISOString(),
+    retryable: false,
+    expiresAfterDateKey: note.dateKey,
+  };
 }
 
 /**
- * v1.16.8 — the content-hash regeneration gate for the per-status and
- * generic metric cards.
+ * Today's per-item note for a card that carries one (medication compliance):
+ * the summary plus the parsed items, under the same rules as
+ * `readFreshStatusText`.
+ */
+export async function readFreshStatusItems(args: {
+  userId: string;
+  cacheAction: string;
+  todayKey: string;
+}): Promise<{ text: string; items: unknown; updatedAt: string } | null> {
+  if (!(await statusTextServable(args.userId))) return null;
+  const note = await readStatusNote(args.userId, args.cacheAction);
+  if (!note?.text || note.dateKey !== args.todayKey || !note.generatedAt) {
+    return null;
+  }
+  return {
+    text: note.text,
+    items: note.items,
+    updatedAt: note.generatedAt.toISOString(),
+  };
+}
+
+/**
+ * The content-hash regeneration gate for the per-status and generic metric
+ * cards.
  *
- * A generator that has already gathered its data snapshot calls this
- * BEFORE the provider round-trip. When the latest cached assessment for
- * `(userId, cacheAction)` is a real (non-stub) text whose stored
- * `snapshotHash` equals the fresh snapshot's hash, nothing the prompt
- * sees has changed — so the gate re-persists the same text under
- * today's `dateKey` (a pure timestamp refresh that keeps the read path
- * and the ingest debounce satisfied) and returns it, and the caller
- * skips the LLM call entirely. Returns `null` on any miss (no prior
- * row, stub, empty text, missing or differing hash) — every one of
- * those means the caller should generate for real.
+ * A generator that has already gathered its data snapshot calls this BEFORE
+ * the provider round-trip. When the stored note's `snapshotHash` equals the
+ * fresh snapshot's, nothing the prompt sees has changed: the note is re-dated
+ * under today's key and returned, and the caller skips the model entirely.
+ * `null` on any miss (no note, a missing or differing hash).
  *
- * This single gate is what turns the nightly warm, the forced warm, and
- * the ingest-driven regeneration into no-ops on unchanged data: each of
- * those paths forces past the same-day cache read, gathers the
- * snapshot, and lands here.
- *
- * Consent comes BEFORE the hash compare (mirroring the comprehensive
- * pipeline's consent-before-gate order): re-stamping a cached text
- * under today's `dateKey` presents it as a current AI assessment, so a
- * user who revoked the server-managed AI consent must not have old
- * text re-dated by an unchanged-data refresh. On a blocked consent the
- * gate misses, the generator proceeds to `runStatusCompletion`, and
- * that gate returns the no-key fallback without persisting anything.
+ * The capability comes first. Re-dating a note presents it as current, so a
+ * record whose `statusText` capability is unavailable (consent withdrawn,
+ * AI analysis switched off, …) never has old text re-dated; the gate misses,
+ * and the generator's own chokepoint then refuses the generation.
  */
 export async function refreshUnchangedStatusInsight(args: {
   userId: string;
@@ -203,54 +344,61 @@ export async function refreshUnchangedStatusInsight(args: {
   todayKey: string;
   snapshotHash: string;
 }): Promise<FreshStatusCacheHit | null> {
-  if (await statusConsentBlocksGeneration(args.userId, "insights")) {
+  if (!(await statusTextServable(args.userId))) {
     annotate({
-      action: { name: "insights.status.consent_required" },
+      action: { name: "insights.status.unavailable" },
       meta: { cache_action: args.cacheAction, gate: "unchanged-refresh" },
     });
     return null;
   }
 
-  const latest = await prisma.auditLog.findFirst({
-    where: { userId: args.userId, action: args.cacheAction },
-    orderBy: { createdAt: "desc" },
-    select: { details: true },
-  });
-  if (!latest?.details) return null;
+  const note = await readStatusNote(args.userId, args.cacheAction);
+  if (!note?.text || note.snapshotHash !== args.snapshotHash) return null;
 
-  let parsed: ParsedStatusCache;
-  try {
-    parsed = JSON.parse(latest.details) as ParsedStatusCache;
-  } catch {
-    return null;
-  }
-  if (isTimeoutStub(parsed)) return null;
-  if (typeof parsed.text !== "string" || parsed.text.trim().length === 0) {
-    return null;
-  }
-  if (parsed.snapshotHash !== args.snapshotHash) return null;
-
-  // Same data, valid text — refresh the cache row's day key so the
-  // read path serves it as today's assessment and the ingest debounce
-  // window restarts, without touching the provider.
-  const created = await prisma.auditLog.create({
-    data: {
-      userId: args.userId,
-      action: args.cacheAction,
-      details: JSON.stringify({ ...parsed, dateKey: args.todayKey }),
-    },
-    select: { createdAt: true },
-  });
+  const generatedAt = await redateStatusNote(
+    args.userId,
+    args.cacheAction,
+    args.todayKey,
+  );
   annotate({
     action: { name: "insights.status.skipped_unchanged" },
     meta: { cache_action: args.cacheAction },
   });
   return {
     kind: "generated",
-    text: parsed.text,
-    updatedAt: created.createdAt.toISOString(),
+    text: note.text,
+    updatedAt: generatedAt.toISOString(),
     retryable: false,
     expiresAfterDateKey: args.todayKey,
+  };
+}
+
+/**
+ * The same gate for a card that carries per-item notes: re-dates the stored
+ * note when its `snapshotHash` matches and hands back the items too.
+ */
+export async function refreshUnchangedStatusItems(args: {
+  userId: string;
+  cacheAction: string;
+  todayKey: string;
+  snapshotHash: string;
+}): Promise<{ text: string; items: unknown; updatedAt: string } | null> {
+  if (!(await statusTextServable(args.userId))) return null;
+  const note = await readStatusNote(args.userId, args.cacheAction);
+  if (!note?.text || note.snapshotHash !== args.snapshotHash) return null;
+  const generatedAt = await redateStatusNote(
+    args.userId,
+    args.cacheAction,
+    args.todayKey,
+  );
+  annotate({
+    action: { name: "insights.status.skipped_unchanged" },
+    meta: { cache_action: args.cacheAction },
+  });
+  return {
+    text: note.text,
+    items: note.items,
+    updatedAt: generatedAt.toISOString(),
   };
 }
 
@@ -393,21 +541,17 @@ export async function computeStatusInputFingerprint(args: {
 }
 
 /**
- * v1.18.11 (P6) — the INPUT gate for slow-moving status metrics.
+ * The INPUT gate for slow-moving status metrics.
  *
- * Runs BEFORE the snapshot build. When the latest cached assessment is a
- * real (non-stub) text whose stored `inputHash` equals the freshly probed
- * one, nothing the prompt could see has changed, so the gate re-stamps that
- * text under today's `dateKey` and returns it — the caller then skips the
- * whole gather AND the provider call. Returns `null` on any miss (no prior
- * row, stub, empty text, missing or differing `inputHash`, or a forced
- * regeneration), in which case the caller proceeds to the normal build +
- * the finer post-build content-hash gate.
+ * Runs BEFORE the snapshot build. When the stored note's `inputHash` equals
+ * the freshly probed one, nothing the prompt could see has changed, so the
+ * note is re-dated under today's key and returned; the caller then skips the
+ * whole gather AND the provider call. `null` on any miss (no note, a missing
+ * or differing `inputHash`, a forced regeneration), in which case the caller
+ * proceeds to the normal build and the finer post-build content-hash gate.
  *
- * Consent is checked first, mirroring `refreshUnchangedStatusInsight`:
- * re-dating a cached text presents it as current, so a user who revoked the
- * server-managed AI consent must never have stale text re-stamped by an
- * unchanged-input refresh.
+ * The capability is checked first, for the reason `refreshUnchangedStatusInsight`
+ * gives.
  */
 export async function gateUnchangedStatusInput(args: {
   userId: string;
@@ -418,52 +562,34 @@ export async function gateUnchangedStatusInput(args: {
 }): Promise<FreshStatusCacheHit | null> {
   if (args.force) return null;
 
-  if (await statusConsentBlocksGeneration(args.userId, "insights")) {
+  if (!(await statusTextServable(args.userId))) {
     annotate({
-      action: { name: "insights.status.consent_required" },
+      action: { name: "insights.status.unavailable" },
       meta: { cache_action: args.cacheAction, gate: "unchanged-input" },
     });
     return null;
   }
 
-  const latest = await prisma.auditLog.findFirst({
-    where: { userId: args.userId, action: args.cacheAction },
-    orderBy: { createdAt: "desc" },
-    select: { details: true },
-  });
-  if (!latest?.details) return null;
-
-  let parsed: ParsedStatusCache;
-  try {
-    parsed = JSON.parse(latest.details) as ParsedStatusCache;
-  } catch {
+  const note = await readStatusNote(args.userId, args.cacheAction);
+  if (!note?.text || !note.inputHash || note.inputHash !== args.inputHash) {
     return null;
   }
-  if (isTimeoutStub(parsed)) return null;
-  if (typeof parsed.text !== "string" || parsed.text.trim().length === 0) {
-    return null;
-  }
-  if (!parsed.inputHash || parsed.inputHash !== args.inputHash) return null;
 
-  // Same inputs, valid text — re-stamp the day key WITHOUT rebuilding the
-  // snapshot or calling the provider. Preserve every field (incl. the prior
-  // `snapshotHash` + `inputHash`) so the next day's gates still match.
-  const created = await prisma.auditLog.create({
-    data: {
-      userId: args.userId,
-      action: args.cacheAction,
-      details: JSON.stringify({ ...parsed, dateKey: args.todayKey }),
-    },
-    select: { createdAt: true },
-  });
+  // Same inputs, a stored note: re-date it WITHOUT rebuilding the snapshot or
+  // calling the provider. Both fingerprints stay, so tomorrow's gates match.
+  const generatedAt = await redateStatusNote(
+    args.userId,
+    args.cacheAction,
+    args.todayKey,
+  );
   annotate({
     action: { name: "insights.status.skipped_unchanged" },
     meta: { cache_action: args.cacheAction, gate: "input" },
   });
   return {
     kind: "generated",
-    text: parsed.text,
-    updatedAt: created.createdAt.toISOString(),
+    text: note.text,
+    updatedAt: generatedAt.toISOString(),
     retryable: false,
     expiresAfterDateKey: args.todayKey,
   };
@@ -475,70 +601,94 @@ export interface LastGoodStatusHit {
 }
 
 /**
- * v1.8.7 — read the most recent NON-stub assessment for `(userId,
- * cacheAction)` regardless of which day it was generated. This is the
- * stale-while-revalidate source: when today's cache is a miss the
- * read-only path can still serve yesterday's (or older) good text
- * instantly while a fresh generation is warmed out of band, so opening a
- * category never drops to the "preparing" skeleton if an assessment was
- * ever produced. Returns `null` only when there is genuinely no prior
- * assessment (or every prior row is a timeout stub / malformed).
+ * The stored note for `(userId, cacheAction)` whatever day it was written:
+ * the stale-while-revalidate source. When today's note is a miss the read path
+ * can still show the last one instantly while a fresh generation is warmed,
+ * so opening a category never drops to the "preparing" skeleton if a note
+ * was ever written. `null` when there is none, or when the capability is
+ * unavailable.
  */
 export async function readLastGoodStatusText(args: {
   userId: string;
   cacheAction: string;
 }): Promise<LastGoodStatusHit | null> {
-  const { userId, cacheAction } = args;
-  const rows = await prisma.auditLog.findMany({
-    where: { userId, action: cacheAction },
-    orderBy: { createdAt: "desc" },
-    take: 5,
-    select: { createdAt: true, details: true },
-  });
-  for (const row of rows) {
-    if (!row.details) continue;
-    try {
-      const parsed = JSON.parse(row.details) as ParsedStatusCache;
-      if (isTimeoutStub(parsed)) continue;
-      if (typeof parsed.text !== "string" || parsed.text.trim().length === 0) {
-        continue;
-      }
-      return { text: parsed.text, updatedAt: row.createdAt.toISOString() };
-    } catch {
-      // Malformed payload — skip and look further back.
-      continue;
-    }
+  if (!(await statusTextServable(args.userId))) return null;
+  const note = await readStatusNote(args.userId, args.cacheAction);
+  if (!note?.text || !note.generatedAt) return null;
+  return { text: note.text, updatedAt: note.generatedAt.toISOString() };
+}
+
+/**
+ * The stored note written at least `minAgeHours` ago, for the next
+ * generation's "what did I say last time" prompt block. Not a serving read:
+ * it feeds a generation that the chokepoint has already admitted.
+ */
+export async function readPreviousStatusNote(args: {
+  userId: string;
+  cacheAction: string;
+  olderThan: Date;
+}): Promise<{ text: string; generatedAt: Date } | null> {
+  const note = await readStatusNote(args.userId, args.cacheAction);
+  if (!note?.text || !note.generatedAt) return null;
+  if (note.generatedAt.getTime() >= args.olderThan.getTime()) return null;
+  return { text: note.text, generatedAt: note.generatedAt };
+}
+
+/**
+ * Which of `cacheActions` carry a note written at or after `since`. The
+ * ingest invalidator skips those, so a fresh note survives a sync drip.
+ */
+export async function statusNotesWrittenSince(args: {
+  userId: string;
+  cacheActions: readonly string[];
+  since: Date;
+}): Promise<Set<string>> {
+  const byKey = new Map<string, string>();
+  for (const action of args.cacheActions) {
+    const key = statusCacheKey(action);
+    if (key) byKey.set(`${key.metric}\u0000${key.locale}`, action);
   }
-  return null;
+  if (byKey.size === 0) return new Set();
+  const keys = [...byKey.keys()].map((k) => {
+    const [metric, locale] = k.split("\u0000");
+    return { metric, locale };
+  });
+  const rows = await prisma.insightStatusCache.findMany({
+    where: {
+      userId: args.userId,
+      OR: keys,
+      generatedAt: { gte: args.since },
+      textEncrypted: { not: null },
+    },
+    select: { metric: true, locale: true },
+  });
+  const fresh = new Set<string>();
+  for (const row of rows) {
+    const action = byKey.get(`${row.metric}\u0000${row.locale}`);
+    if (action) fresh.add(action);
+  }
+  return fresh;
 }
 
 /**
  * Outcome of the read-only cache-miss resolution. The generators map this
  * onto their public return shape:
- *   - `no-provider` → `{ hasProvider: false, text: <no-key fallback> }`
- *   - `preparing`   → `{ hasProvider: true, text: <last-good|null>, preparing: true }`
  *
- * v1.8.7 — `preparing` now carries the last good assessment (if any) so
- * the card renders the previous text immediately (stale-while-revalidate)
- * instead of a skeleton while the worker re-warms the cache.
- *
- * v1.9.0 — `revalidating` is true only when last-good text is served AND a
- * fresh generation was actually enqueued (the open-card refresh case). When
- * the served text is terminal the card otherwise stops polling and never
- * sees the freshly-warmed assessment until a remount; the flag keeps the
- * bounded poll alive until the new row lands. It is false on the
- * suppressed-stub branch (no enqueue, so nothing is in flight) and whenever
- * there is no last-good text (that path already polls via `preparing`).
+ *   - `unavailable` → the deterministic line, no enqueue. `hasProvider` is
+ *     provider presence and nothing else, so a withdrawn consent or a switch
+ *     turned off no longer reads as "no provider configured"; `reason` says
+ *     which layer said no.
+ *   - `preparing`   → a generation is (or recently was) in flight; the last
+ *     note, if any, is served meanwhile. `revalidating` is true only when a
+ *     last note is served AND a fresh generation was actually enqueued, so
+ *     an open card keeps polling until the new note lands.
  */
 export type ReadOnlyMissOutcome =
-  | { kind: "no-provider" }
-  // v1.16.13 — a provider IS configured, but it resolves via the operator's
-  // server-managed key and the user has no active consent receipt, so the
-  // generation gate (`assertConsentForChain` / `runStatusCompletion`) would
-  // serve the no-key fallback. Distinct from `no-provider` so the status DTO
-  // can render an honest "consent required" signal instead of conflating it
-  // with "no AI configured at all".
-  | { kind: "consent-missing" }
+  | {
+      kind: "unavailable";
+      reason: AiUnavailableReason;
+      hasProvider: boolean;
+    }
   | {
       kind: "preparing";
       lastGood: LastGoodStatusHit | null;
@@ -546,34 +696,41 @@ export type ReadOnlyMissOutcome =
     };
 
 /**
- * v1.8.3 — resolve what a read-only status generation should return on a
- * cache miss WITHOUT running the heavy SQL gather or the blocking LLM
- * round-trip. This is the core of the holistic freeze fix: a navigation
- * request must never await an uncapped provider call.
+ * Resolve what a read-only status read returns on a cache miss WITHOUT the
+ * heavy SQL gather or a blocking model round-trip: a navigation request never
+ * awaits a provider.
  *
- * On a miss the route either:
- *   - finds no usable provider → returns `no-provider` (the card shows the
- *     no-key fallback; nothing to generate), or
- *   - finds a provider → fire-and-forget enqueues a generation job and
- *     returns `preparing` (the card shows a preparing state and the client
- *     polls until the worker warms the cache).
- *
- * The provider probe is a cheap chain-resolve (no completion), so the GET
- * stays sub-second even on a cold cache.
+ * The `statusText` capability decides first. Unavailable, for any reason,
+ * means no enqueue and no stored text. Available means: serve the last note
+ * (if any) and enqueue a generation out of band, unless a recent stall opened
+ * a negative-cache window.
  */
 export async function resolveReadOnlyStatusMiss(args: {
   userId: string;
   metric: InsightStatusScope;
   locale: SupportedLocale;
 }): Promise<ReadOnlyMissOutcome> {
-  // v1.37.0 — the one gate on the delegated path, and it sits here rather
-  // than in the ten generators that reach this function precisely because it
-  // is one gate: a generator added next year inherits it without knowing it
-  // exists. A manager holding a MANAGE grant may READ the record's generated
-  // assessments; the miss behind that read must not ship the owner's data to
-  // the owner's provider on the owner's budget. Served the same way the
-  // negative-cache branch below serves it: last-good text if there is any,
-  // `preparing` if there is not, and nothing enqueued either way.
+  // Serving view: whether the record's notes may be shown at all. Starting
+  // work for a delegate is refused by the suppression branch below.
+  const capability = await aiCapabilityToServe(args.userId, "statusText");
+  if (!capability.available) {
+    const reason = capability.reason ?? "check_failed";
+    annotate({
+      action: { name: "insights.status.unavailable" },
+      meta: { metric: args.metric, reason, read_only_miss: true },
+    });
+    return {
+      kind: "unavailable",
+      reason,
+      hasProvider: await probeProviderPresence(args.userId, "text"),
+    };
+  }
+
+  // v1.37.0 — a manager holding a MANAGE grant may READ the record's notes;
+  // the miss behind that read must not ship the owner's data to the owner's
+  // provider on the owner's budget. The last note if there is one,
+  // `preparing` if not, and nothing enqueued either way. One gate here rather
+  // than in every generator, so a generator added later inherits it.
   if (delegatedGenerationSuppressed()) {
     const lastGood = await readLastGoodStatusText({
       userId: args.userId,
@@ -590,39 +747,14 @@ export async function resolveReadOnlyStatusMiss(args: {
     return { kind: "preparing", lastGood, revalidating: false };
   }
 
-  const hasProvider = await hasUsableStatusProvider(args.userId);
-  if (!hasProvider) return { kind: "no-provider" };
-
-  // v1.16.13 — a provider is configured but the server-managed consent gate
-  // would block egress (no active receipt for the surface). Surface this as
-  // a distinct outcome so the card renders an honest "consent required"
-  // signal rather than the generic no-key fallback. Enqueuing here would be
-  // wasted work — the generator's own gate would short-circuit to `none`.
-  if (await statusConsentBlocksGeneration(args.userId, "insights")) {
-    annotate({
-      action: { name: "insights.status.consent_required" },
-      meta: { metric: args.metric, read_only_miss: true },
-    });
-    return { kind: "consent-missing" };
-  }
-
   const cacheAction = statusCacheAction(args.metric, args.locale);
-
-  // v1.8.7 — stale-while-revalidate. Surface the last good (non-stub)
-  // assessment for this scope so the card renders the previous text
-  // immediately instead of a skeleton while a refresh is warmed. Null when
-  // no assessment was ever produced — only then does the card show
-  // "preparing"/"no analysis yet".
   const lastGood = await readLastGoodStatusText({
     userId: args.userId,
     cacheAction,
   });
 
-  // v1.8.3 — honour the short-TTL negative cache. If the worker recently
-  // hit a provider stall it wrote a `retryAt` stub; re-enqueuing on every
-  // navigation while the provider is still degraded would be a storm. While
-  // the stub is fresh, stay in `preparing` without enqueuing; once it goes
-  // stale (or never existed) enqueue a fresh generation.
+  // Honour the short negative-cache window: re-enqueuing on every navigation
+  // while the provider is still degraded would be a storm.
   const negativeCache = await readStatusNegativeCache({
     userId: args.userId,
     cacheAction,
@@ -632,14 +764,11 @@ export async function resolveReadOnlyStatusMiss(args: {
       action: { name: "insights.status.preparing" },
       meta: { metric: args.metric, suppressed_enqueue: true },
     });
-    // No enqueue on this branch — nothing is in flight, so the open card has
-    // nothing to revalidate against. It still polls via `preparing` when
-    // there is no last-good text to show.
     return { kind: "preparing", lastGood, revalidating: false };
   }
 
-  // Enqueue out of band — do NOT await an LLM here. The enqueue itself is
-  // best-effort and de-duped per (user, metric, locale).
+  // Enqueue out of band, never await a model here. Best-effort and de-duped
+  // per (user, metric).
   await enqueueStatusGeneration({
     userId: args.userId,
     metric: args.metric,
@@ -649,20 +778,10 @@ export async function resolveReadOnlyStatusMiss(args: {
     action: { name: "insights.status.preparing" },
     meta: { metric: args.metric, stale_served: lastGood !== null },
   });
-  // A fresh generation is now in flight. When last-good text is served the
-  // payload is otherwise terminal (`preparing` is false), so the open card
-  // would stop polling and never pick up the warmed assessment. Signal
-  // `revalidating` so the bounded poll stays alive until the new row lands.
   return { kind: "preparing", lastGood, revalidating: lastGood !== null };
 }
 
-/**
- * True when the most recent cache row for `(userId, cacheAction)` is a
- * timeout stub whose `retryAt` is still in the future. Used by the
- * read-only resolver to suppress a re-enqueue storm while a provider is
- * degraded. A stub without `retryAt` (legacy) is treated as stale so the
- * resolver retries, matching the pre-v1.8.3 "transient miss" behaviour.
- */
+/** An open negative-cache window on a note. */
 export interface StatusNegativeCache {
   kind: "negative";
   reason: "timeout" | "error" | "screened";
@@ -671,38 +790,23 @@ export interface StatusNegativeCache {
 }
 
 /**
- * Read the latest negative-cache policy without exposing provider errors or
- * assessment content. `retryable` flips only when the explicit `retryAt`
- * boundary has passed; legacy/malformed stubs are treated as absent so the
- * next request may recover.
+ * The note's negative-cache window, without exposing provider errors or note
+ * content. `retryable` flips once `retryAt` has passed.
  */
 export async function readStatusNegativeCache(args: {
   userId: string;
   cacheAction: string;
 }): Promise<StatusNegativeCache | null> {
-  const latest = await prisma.auditLog.findFirst({
-    where: { userId: args.userId, action: args.cacheAction },
-    orderBy: { createdAt: "desc" },
-    select: { details: true },
-  });
-  if (!latest?.details) return null;
-  try {
-    const parsed = JSON.parse(latest.details) as ParsedStatusCache;
-    if (!isTimeoutStub(parsed)) return null;
-    if (typeof parsed.retryAt !== "string") return null;
-    const retryAtMs = new Date(parsed.retryAt).getTime();
-    if (!Number.isFinite(retryAtMs)) return null;
-    const reason =
-      parsed.reason === "error" || parsed.reason === "screened"
-        ? parsed.reason
-        : "timeout";
-    return {
-      kind: "negative",
-      reason,
-      retryAt: parsed.retryAt,
-      retryable: retryAtMs <= Date.now(),
-    };
-  } catch {
-    return null;
-  }
+  const note = await readStatusNote(args.userId, args.cacheAction);
+  if (!note?.retryAt) return null;
+  const reason =
+    note.negativeReason === "error" || note.negativeReason === "screened"
+      ? note.negativeReason
+      : "timeout";
+  return {
+    kind: "negative",
+    reason,
+    retryAt: note.retryAt.toISOString(),
+    retryable: note.retryAt.getTime() <= Date.now(),
+  };
 }

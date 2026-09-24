@@ -15,7 +15,7 @@
  * a pure UI inversion over the same column.
  *
  * Persists via `PATCH /api/auth/me/disable-coach`; the response invalidates
- * `queryKeys.authMe()` so every Coach mount point on the client
+ * `aiInputDependentKeys` (the account payload first) so every Coach mount point on the client
  * (`<LayoutCoachFab>`, `<LayoutCoachMount>`, the inline `<CoachLaunchButton>`
  * pill, the `/targets` page CTAs) re-renders with the new `user.disableCoach`
  * value on the next React Query refetch tick — no full reload required.
@@ -39,7 +39,7 @@ import { apiPatch } from "@/lib/api/api-fetch";
 import { useAuth } from "@/hooks/use-auth";
 import { useMounted } from "@/hooks/use-mounted";
 import { useTranslations } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
+import { aiInputDependentKeys, invalidateKeys } from "@/lib/query-keys";
 
 export function DisableCoachCard({
   isAuthenticated,
@@ -115,7 +115,7 @@ export function DisableCoachCard({
       // Surface the new value to every Coach gate via the shared
       // `useAuth()` query — the gates re-render once React Query
       // re-fetches /api/auth/me with the updated `disableCoach` field.
-      queryClient.invalidateQueries({ queryKey: queryKeys.authMe() });
+      void invalidateKeys(queryClient, aiInputDependentKeys);
       setOptimistic(null);
       scheduleClear();
     },

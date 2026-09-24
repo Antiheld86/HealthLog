@@ -7,8 +7,7 @@ import { cn } from "@/lib/utils";
 import { useTranslations } from "@/lib/i18n/context";
 import type { CoachLaunchScope } from "@/lib/insights/coach-launch-context";
 import { useCoachLaunch } from "@/lib/insights/coach-launch-context";
-import { useFeatureFlags } from "@/hooks/use-feature-flags";
-import { useDisableCoach } from "@/hooks/use-disable-coach";
+import { useAiCapability } from "@/hooks/use-ai-capability";
 
 /**
  * Inline desktop Coach launch button.
@@ -78,20 +77,16 @@ export function CoachLaunchButton({
 }: CoachLaunchButtonProps) {
   const { t } = useTranslations();
   const launch = useCoachLaunch();
-  const flags = useFeatureFlags();
-  const disableCoach = useDisableCoach();
+  const coach = useAiCapability("coach");
 
   if (!launch) {
     // The button only makes sense beneath the provider. Render nothing
     // so the sub-page doesn't paint a dead control.
     return null;
   }
-  // v1.4.31 — operator can hide the Coach surface app-wide.
-  if (!flags.coach) return null;
-  // v1.4.47 W3 — per-user opt-out is a peer gate to the operator's
-  // flag; either being off hides the pill entirely. See
+  // Hidden while the `coach` capability is unavailable for any reason. See
   // `<LayoutCoachFab>` for the matching FAB gate.
-  if (disableCoach) return null;
+  if (!coach.available) return null;
 
   const accessibleLabel = label ?? t("insights.heroActionAskCoach");
 

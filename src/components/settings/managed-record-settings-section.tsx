@@ -12,7 +12,11 @@ import {
   type InsightsSectionId,
 } from "@/lib/insights-layout";
 import { MODULE_REGISTRY } from "@/lib/modules/registry";
-import { queryKeys } from "@/lib/query-keys";
+import {
+  aiInputDependentKeys,
+  invalidateKeys,
+  queryKeys,
+} from "@/lib/query-keys";
 import {
   assertRecordSettingsResponseForRecord,
   MANAGED_RECORD_SETTINGS_MODULE_DEFAULTS,
@@ -1074,6 +1078,10 @@ export function ManagedRecordSettingsSection({
         queryKeys.recordSettingsFamily(recordId, family),
         response,
       );
+      // The record's module map, Hide Coach and profile (gender gates the
+      // cycle module) are inputs of the `/me` answer for this record, its AI
+      // capabilities included.
+      void invalidateKeys(queryClient, aiInputDependentKeys);
     },
   });
 

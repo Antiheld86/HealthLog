@@ -169,28 +169,32 @@ export function resolveModuleEnabled(
 
 /** Internal: load the gate inputs once per request. */
 function loadInputs(userId: string): Promise<ModuleGateInputs> {
-  return memoizePerRequest(`module-gate-inputs:${userId}`, async () => {
-    const [user, cycleProfile] = await Promise.all([
-      prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          gender: true,
-          disableCoach: true,
-          modulePreferencesJson: true,
-        },
-      }),
-      prisma.cycleProfile.findUnique({
-        where: { userId },
-        select: { cycleTrackingEnabled: true },
-      }),
-    ]);
-    return {
-      gender: user?.gender ?? null,
-      disableCoach: user?.disableCoach ?? false,
-      modulePreferences: normalisePrefs(user?.modulePreferencesJson),
-      cycleTrackingEnabled: cycleProfile?.cycleTrackingEnabled ?? null,
-    };
-  });
+  return memoizePerRequest(
+    `module-gate-inputs:${userId}`,
+    async () => {
+      const [user, cycleProfile] = await Promise.all([
+        prisma.user.findUnique({
+          where: { id: userId },
+          select: {
+            gender: true,
+            disableCoach: true,
+            modulePreferencesJson: true,
+          },
+        }),
+        prisma.cycleProfile.findUnique({
+          where: { userId },
+          select: { cycleTrackingEnabled: true },
+        }),
+      ]);
+      return {
+        gender: user?.gender ?? null,
+        disableCoach: user?.disableCoach ?? false,
+        modulePreferences: normalisePrefs(user?.modulePreferencesJson),
+        cycleTrackingEnabled: cycleProfile?.cycleTrackingEnabled ?? null,
+      };
+    },
+    { freshInBackground: true },
+  );
 }
 
 /**

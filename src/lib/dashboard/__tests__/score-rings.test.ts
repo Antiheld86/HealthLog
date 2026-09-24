@@ -3,7 +3,8 @@
  *
  * The resolver is tested in isolation with the derived dispatcher
  * mocked, pinning:
- *   - module gating (owning module + the insights gate on derived rings);
+ *   - module gating (the owning module, from the surface map; the insights
+ *     key, AI analysis, gates no ring);
  *   - the pass-through contract for derived scores (same resolvers the
  *     batch route calls, no recomputation, non-`ok` → no ring);
  *   - the dose ring: today's taken/scheduled progress off the shared
@@ -117,7 +118,11 @@ describe("buildScoreRingsBlock() — selection + module gating", () => {
     );
   });
 
-  it("the insights gate drops derived rings but keeps the dose ring", async () => {
+  it("keeps derived rings with AI analysis off: the scores are data", async () => {
+    computeDerivedMetric.mockResolvedValue({
+      status: "ok",
+      value: { score: 70, band: "yellow" },
+    });
     const rings = await buildScoreRingsBlock(
       fakePrisma,
       "user-1",
@@ -126,16 +131,19 @@ describe("buildScoreRingsBlock() — selection + module gating", () => {
       NOW,
       medsToday(2, 2),
     );
-    expect(computeDerivedMetric).not.toHaveBeenCalled();
-    expect(loadBaselineProfile).not.toHaveBeenCalled();
-    expect(rings).toEqual([
-      {
-        id: "MED_COMPLIANCE",
-        score: 100,
-        band: "green",
-        doses: { taken: 2, scheduled: 2 },
-      },
-    ]);
+    expect(rings.map((r) => r.id)).toEqual(["READINESS", "MED_COMPLIANCE"]);
+  });
+
+  it("drops the dose ring with the medications module off", async () => {
+    const rings = await buildScoreRingsBlock(
+      fakePrisma,
+      "user-1",
+      ["MED_COMPLIANCE"],
+      moduleMap({ medications: false }),
+      NOW,
+      medsToday(2, 2),
+    );
+    expect(rings).toEqual([]);
   });
 });
 

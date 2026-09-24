@@ -68,6 +68,14 @@ async function seedUserWithCachedBriefing(cachedLocale: string | null) {
       insightsCachedAt: new Date(),
       insightsCachedText: JSON.stringify({ dailyBriefing: BRIEFING }),
       insightsCachedLocale: cachedLocale,
+      // The briefing is shown only while its AI capability is available, so
+      // the account has its own provider (presence only) and a receipt.
+      aiProvider: "ANTHROPIC",
+      aiModel: "claude-sonnet-4-6",
+      aiAnthropicKeyEncrypted: "v1:presence-only",
+      consentReceipts: {
+        create: { kind: "ai_full", artefact: "test", signedAt: new Date() },
+      },
     },
   });
 }
@@ -84,9 +92,8 @@ describe("dashboard snapshot — briefing cache written in another language", ()
     expect(body.briefing).toBeNull();
     expect(body.briefingStale).toBe(false);
     expect(body.briefingUpdatedAt).toBeNull();
-    // No provider is configured on this account, so the honest empty state
-    // is "nothing will fill this"; with one it would be "preparing".
-    expect(["preparing", "no-provider"]).toContain(body.briefingState);
+    // A provider is configured, so a warm pass will refill the slot.
+    expect(body.briefingState).toBe("preparing");
   });
 
   it("serves the briefing when the tag matches the reader", async () => {

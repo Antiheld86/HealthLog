@@ -11,11 +11,16 @@
  *  - `useOcrCommit()` — writes the user-confirmed rows and invalidates the
  *    labs + biomarker query keys.
  */
+import type { AiCapabilityState } from "@/lib/ai/capabilities/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiFetch, apiGet, apiPatch, apiPost } from "@/lib/api/api-fetch";
 import { ocrImageToText } from "@/lib/labs/local-ocr";
-import { queryKeys } from "@/lib/query-keys";
+import {
+  aiInputDependentKeys,
+  invalidateKeys,
+  queryKeys,
+} from "@/lib/query-keys";
 import type {
   OcrCapabilityDto,
   OcrCommitResponseDto,
@@ -41,13 +46,22 @@ export interface OcrCommitResult extends OcrCommitResponseDto {
   inserted: LabResultDto[];
 }
 
-/** The capability route resolves the caller's own provider configuration. */
+/**
+ * The capability route resolves the caller's own provider configuration.
+ *
+ * It only runs while the `labsOcr` capability on `/api/auth/me` could let a
+ * scan happen: available, or missing nothing but the document-reading
+ * consent, which the scan dialog asks for in place. Any other reason (the
+ * operator's switch, no provider, the module, somebody else's record) means
+ * no scan is offered, so there is nothing to probe.
+ */
 export function shouldProbeOcrCapability({
   isAuthenticated,
   isLoading,
   labsEnabled,
   mounted,
   ownRecord,
+  labsOcr,
 }: {
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -55,8 +69,17 @@ export function shouldProbeOcrCapability({
   mounted: boolean;
   /** In the caller's own record; the probe and the commit resolve the caller, never a grant. */
   ownRecord: boolean;
+  labsOcr: AiCapabilityState;
 }): boolean {
-  return isAuthenticated && !isLoading && labsEnabled && mounted && ownRecord;
+  const aiOffered = labsOcr.available || labsOcr.reason === "consent_required";
+  return (
+    isAuthenticated &&
+    !isLoading &&
+    labsEnabled &&
+    mounted &&
+    ownRecord &&
+    aiOffered
+  );
 }
 
 /** Capability probe — refetched when the scan dialog opens. */
@@ -130,6 +153,8 @@ export function useUpdateLabsLocalOcr() {
       queryClient.setQueryData(queryKeys.labsLocalOcr(), data);
       // The toggle changes whether text-mode scanning is available.
       queryClient.invalidateQueries({ queryKey: queryKeys.ocrCapability() });
+      // It is also a provider input of the `labsOcr` capability on `/me`.
+      void invalidateKeys(queryClient, aiInputDependentKeys);
     },
   });
 }

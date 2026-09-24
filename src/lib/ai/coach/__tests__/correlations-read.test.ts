@@ -5,6 +5,7 @@
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
+const moduleMap = vi.hoisted(() => ({ value: {} as Record<string, boolean> }));
 const measurementFindMany = vi.fn();
 const moodFindMany = vi.fn();
 const userFindUnique = vi.fn();
@@ -17,6 +18,8 @@ const environmentContextFindMany = vi.fn();
 const customMetricFindMany = vi.fn();
 vi.mock("@/lib/modules/gate", () => ({
   isModuleEnabled: vi.fn(async () => true),
+  // The record's map feeds the matrix mask; every module on by default.
+  resolveModuleMap: vi.fn(async () => moduleMap.value),
 }));
 vi.mock("@/lib/db", () => ({
   prisma: {
@@ -67,6 +70,7 @@ import { readCoachCorrelations } from "@/lib/ai/coach/tools/correlations-read";
 
 describe("readCoachCorrelations", () => {
   beforeEach(() => {
+    moduleMap.value = {};
     measurementFindMany.mockReset().mockResolvedValue([]);
     moodFindMany.mockReset().mockResolvedValue([]);
     userFindUnique.mockReset().mockResolvedValue({ timezone: "Europe/Berlin" });
@@ -362,5 +366,56 @@ describe("readCoachCorrelations", () => {
     expect(pressureDriver?.direction).toBe("lower");
     // The channel key must never leak into prose the Coach reads out.
     expect(pressureDriver?.behaviour).not.toContain("ENV_");
+  });
+  it("never hands the Coach a weather driver with the environment module off", async () => {
+    moduleMap.value = { environment: false };
+    const real = await vi.importActual<
+      typeof import("@/lib/insights/correlation-discovery")
+    >("@/lib/insights/correlation-discovery");
+    discoverCorrelations.mockImplementation((series) =>
+      real.discoverCorrelations(
+        series as Parameters<typeof real.discoverCorrelations>[0],
+        { locale: "en" },
+      ),
+    );
+
+    // 45 consecutive days. Today's barometric pressure (behaviour, day D)
+    // tracks the NEXT day's sleep (outcome, day D+1) with a deterministic
+    // linear relationship, so the pair clears n ≥ 20 / p < 0.05 / FDR / the
+    // effect-size floor rather than riding on noise.
+    const DAYS = 45;
+    const base = Date.UTC(2026, 4, 1, 12, 0, 0); // midday → tz-stable day key
+    const dayKey = (offset: number): string =>
+      new Date(base + offset * 86_400_000).toISOString().slice(0, 10);
+
+    const envRows: Array<{ date: string; pressureMean: number }> = [];
+    const measurements: Array<{
+      type: string;
+      value: number;
+      measuredAt: Date;
+    }> = [];
+    for (let i = 0; i < DAYS; i++) {
+      const swing = i % 5; // 0..4, real variance across the window
+      envRows.push({ date: dayKey(i), pressureMean: 1000 + swing });
+      // Higher pressure today → shorter sleep tomorrow (a clean negative r).
+      measurements.push({
+        type: "SLEEP_DURATION",
+        value: 8 - swing * 0.5,
+        measuredAt: new Date(base + (i + 1) * 86_400_000),
+      });
+    }
+
+    measurementFindMany.mockResolvedValue(measurements);
+    // Every other env column is null, so only the pressure channel carries
+    // points and the assertion below cannot be satisfied by a sibling field.
+    environmentContextFindMany.mockResolvedValue(envRows);
+
+    const result = await readCoachCorrelations("u1", "en");
+
+    // The same data that surfaces a pressure driver above surfaces none here:
+    // the channel never enters the scan.
+    expect(
+      result.drivers?.find((d) => d.behaviour === "barometric pressure"),
+    ).toBeUndefined();
   });
 });

@@ -16,9 +16,12 @@
  *                          notification).
  *   4. Coach memory      — durable-fact review + forget controls.
  *
- * The nav entry is module-gated on `coach`. The preference + nudge + memory
- * cards keep their own content gate on `!user.disableCoach` (mirrored from the
- * old AI section): hiding the Coach hides its tuning + memory controls too.
+ * The nav entry is module-gated on `coach`. The preference + nudge cards
+ * keep their own content gate on `!user.disableCoach`: hiding the Coach hides
+ * its tuning. The memory (facts, stored conversations and reminders) is never
+ * gated: it is the person's own record, readable and deletable whatever the
+ * Coach's state. The reminders card turns read-only while the Coach is
+ * unavailable and, with the Coach hidden, shows only when rows exist.
  *
  * The "about me" context lives in the AI section, not here — the daily
  * briefing reads it too, so it is not a Coach-only setting.
@@ -29,7 +32,9 @@
 
 import { DisableCoachCard } from "@/components/settings/ai/disable-coach-card";
 import { CoachMemorySection } from "@/components/settings/coach-memory-section";
+import { CoachConversationsMemoryCard } from "@/components/settings/coach-conversations-memory-card";
 import { CoachRemindersSection } from "@/components/settings/coach-reminders-section";
+import { CoachPlansMemoryCard } from "@/components/settings/coach-plans-memory-card";
 import { CoachNudgeCard } from "@/components/settings/coach-nudge-card";
 import { CoachPrefsSection } from "@/components/settings/coach-prefs-section";
 import { useAuth } from "@/hooks/use-auth";
@@ -62,9 +67,16 @@ export function CoachSection() {
         </div>
       )}
 
-      {coachEnabled && <CoachMemorySection isAuthenticated={authed} />}
+      <CoachMemorySection isAuthenticated={authed} />
 
-      {coachEnabled && <CoachRemindersSection isAuthenticated={authed} />}
+      <CoachConversationsMemoryCard isAuthenticated={authed} />
+
+      <CoachPlansMemoryCard isAuthenticated={authed} />
+
+      <CoachRemindersSection
+        isAuthenticated={authed}
+        hideWhenEmpty={!coachEnabled}
+      />
     </div>
   );
 }

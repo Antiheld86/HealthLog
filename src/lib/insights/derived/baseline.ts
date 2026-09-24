@@ -29,12 +29,13 @@
  * composed-bucket baseline matches the raw-DAY baseline within tolerance.
  */
 import type { MeasurementType, PrismaClient } from "@/generated/prisma/client";
-import { prisma } from "@/lib/db";
+import { readDayAggregates } from "@/lib/measurements/day-aggregates";
 import { getAgeFromDateOfBirth } from "@/lib/analytics/pulse-targets";
 import { toProfileSex } from "@/lib/profile/sex";
 import {
   clampDerivedLowerBound,
   isPlausibleMetricValue,
+  plausibleMetricRange,
 } from "@/lib/measurements/value-domain";
 import type { ProfileSex } from "@/lib/profile/sex";
 import {
@@ -212,39 +213,6 @@ export function buildBaselineBand(
   };
 }
 
-/**
- * Group raw readings into per-day means, keeping only the values that sit
- * inside the metric's own plausibility domain.
- *
- * Pure, and exported because this is the arithmetic the band rests on: a
- * single stored value the application itself declares impossible drags the
- * day's mean with it, the median then carries it into the band, and the
- * personal "usual range" reads in the tens of thousands. Filtering here rather
- * than at the edge of the card keeps the number wrong in exactly one place —
- * nowhere — instead of right on one surface and wrong on the next.
- *
- * A day whose every reading is implausible produces no point at all. That is
- * the honest outcome: the day contributed no measurement, and an absent day is
- * something the coverage floor already knows how to report.
- */
-export function dayMeansFromRows(
-  rows: readonly { value: number; measuredAt: Date }[],
-  type: MeasurementType,
-): DayMeanPoint[] {
-  const byDay = new Map<string, { sum: number; count: number }>();
-  for (const row of rows) {
-    if (!isPlausibleMetricValue(type, row.value)) continue;
-    const day = row.measuredAt.toISOString().slice(0, 10);
-    const acc = byDay.get(day) ?? { sum: 0, count: 0 };
-    acc.sum += row.value;
-    acc.count += 1;
-    byDay.set(day, acc);
-  }
-  return [...byDay.entries()]
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([day, acc]) => ({ day, mean: acc.sum / acc.count }));
-}
-
 // ── reads ────────────────────────────────────────────────────────────
 
 /**
@@ -292,23 +260,22 @@ export async function readDayMeanSeries(
     // the spread is still DAY-native.
   }
 
-  // Per-type live fallback — bounded raw read, grouped into per-day
-  // means. Honest provenance: source = "live".
+  // Per-type live fallback — per-day means folded in SQL, so the read is
+  // one row per day however densely the metric is sampled (#1023). Only
+  // values inside the metric's own plausibility domain count: a single
+  // stored value the application declares impossible would drag the day's
+  // mean with it and the median would carry it into the band. A day whose
+  // every reading is implausible produces no point at all. Days are UTC
+  // days, matching the DAY rollup path above.
   const since = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000);
-  const rows = await prisma.measurement.findMany({
-    where: {
-      userId,
-      type,
-      deletedAt: null,
-      measuredAt: { gte: since },
-    },
-    orderBy: { measuredAt: "asc" },
-    select: { value: true, measuredAt: true },
+  const days = await readDayAggregates({
+    userId,
+    type,
+    since,
+    timeZone: "UTC",
+    valueRange: plausibleMetricRange(type),
   });
-  if (rows.length === 0) {
-    return { points: [], source: "none" };
-  }
-  const points = dayMeansFromRows(rows, type);
+  const points = days.map((d) => ({ day: d.day, mean: d.sum / d.n }));
   if (points.length === 0) {
     return { points: [], source: "none" };
   }

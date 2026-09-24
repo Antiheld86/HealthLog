@@ -51,7 +51,7 @@ import { CUSTOM_SYMPTOM_ICON_ALLOWLIST } from "@/lib/cycle/custom-symptoms-share
 import { FieldInfo } from "./field-info";
 import { CYCLE_SYMPTOM_CATALOG } from "./symptom-catalog";
 import { FLOW_HUE, PHASE_HUE } from "./phase-tokens";
-import type { CyclePhase, CycleGoal } from "./types";
+import type { CalendarDay, CyclePhase, CycleGoal } from "./types";
 import {
   useCreateCustomSymptom,
   useCustomSymptoms,
@@ -88,9 +88,9 @@ import type {
  * detailed form posts a single day-log (flow, symptoms, BBT, OPK, mucus,
  * intercourse + protection, free-text note). The write is optimistic-ish
  * (the mutation invalidates the cycle keys on success so the calendar +
- * wheel repaint); the symptom chips reuse the mood-tag chip styling.
+ * wheel repaint); symptoms list one per line with their intensity beside them.
  *
- * a11y: every chip is a real `<button>` with `aria-pressed`; the sheet
+ * a11y: every chip and symptom toggle is a real `<button>` with `aria-pressed`; the sheet
  * footer sticky-pins Save/Cancel.
  */
 
@@ -311,6 +311,89 @@ export function noteCount(s: DayLogFormState): number {
   return s.note.trim() ? 1 : 0;
 }
 
+/**
+ * Whether the form holds nothing a new day-log would record.
+ *
+ * Saving such a form used to write an empty row: the request succeeded, the
+ * sheet closed, and the calendar had nothing to draw, so a person who picked
+ * a past date and pressed Save to mark it saw the save "do nothing". A new
+ * entry now needs at least one thing to store. An existing row keeps Save
+ * enabled, because emptying it is a real edit.
+ */
+export function isBlankDayLog(s: DayLogFormState): boolean {
+  return (
+    s.flow === null &&
+    !s.intermenstrual &&
+    resolveBbt(s.bbt) === null &&
+    s.opk === null &&
+    s.mucus === null &&
+    s.cervixPosition === null &&
+    s.cervixFirmness === null &&
+    s.cervixOpening === null &&
+    !s.intercourse &&
+    s.pregnancyTest === null &&
+    s.progesteroneTest === null &&
+    s.contraceptive === null &&
+    s.note.trim() === "" &&
+    s.symptoms.size === 0
+  );
+}
+
+/**
+ * What the sheet may do with the form right now.
+ *
+ * `hydrated` is false between opening a date and its stored row arriving.
+ * In that window the form still holds the PREVIOUS date's values and row id,
+ * so a quick Save used to PATCH the other date's row and Delete would have
+ * removed it. Nothing writes until the form belongs to the date on screen.
+ */
+export function dayLogSaveState({
+  hydrated,
+  rowId,
+  form,
+}: {
+  hydrated: boolean;
+  rowId: string | null;
+  form: DayLogFormState;
+}): { rowId: string | null; canSave: boolean; blankNewEntry: boolean } {
+  if (!hydrated) return { rowId: null, canSave: false, blankNewEntry: false };
+  const blankNewEntry = rowId === null && isBlankDayLog(form);
+  return { rowId, canSave: !blankNewEntry, blankNewEntry };
+}
+
+/** The sheet's per-date context, read off the calendar grid for that date. */
+export interface SheetDayContext {
+  startsCycle: boolean;
+  periodEndable: boolean;
+  phase: CyclePhase | null;
+  dayOfCycle: number | null;
+}
+
+/**
+ * Resolve what the sheet says about `date` from the server's grid day for it.
+ * The grid may hold the same date twice where the anchored read and the
+ * month read overlap; the later entry wins, as it does in the calendar.
+ * A date the grid does not hold gets no claims at all.
+ */
+export function sheetDayContext(
+  date: string,
+  days: readonly CalendarDay[],
+): SheetDayContext {
+  let day: CalendarDay | undefined;
+  for (let i = days.length - 1; i >= 0; i--) {
+    if (days[i].date === date) {
+      day = days[i];
+      break;
+    }
+  }
+  return {
+    startsCycle: day?.isCycleStart ?? false,
+    periodEndable: day?.periodEndable ?? false,
+    phase: day?.phase ?? null,
+    dayOfCycle: day?.cycleDay ?? null,
+  };
+}
+
 /** The MIN_CYCLES gate the phase-education card uses — mirrored here so the
  * sheet's phase-context header makes the same honesty claim (no phase label
  * until prediction is on, not raw-chart, and at least three cycles seen). */
@@ -329,17 +412,21 @@ export interface LogDaySheetProps {
    */
   startsCycle?: boolean;
   /**
-   * Whether a period is currently open (today is in the MENSTRUAL phase) — gates
-   * the one-tap "end period" affordance so it never shows when no period is in
-   * progress (QA M2).
+   * Whether a one-tap period end can land on `date` (the server's per-date
+   * `periodEndable`). It used to follow TODAY's phase, so the button was
+   * missing on every back-dated period and appeared on unrelated dates
+   * whenever today happened to be a bleeding day.
    */
-  activePeriod?: boolean;
+  periodEndable?: boolean;
   /**
-   * The active cycle phase from the calendar read (or null). Drives the
+   * The phase of `date` from the calendar read (or null). Drives the
    * hue-tinted phase-context header so the sheet visually belongs to the ring.
    */
   phase?: CyclePhase | null;
-  /** Day-of-cycle for the header ("Day 14 · Ovulatory"); null when no cycle. */
+  /**
+   * The cycle day of `date` for the header ("Day 14 · Ovulatory"); null when
+   * the date sits in no logged cycle. Never today's count.
+   */
   dayOfCycle?: number | null;
   /**
    * The user's cycle goal — fertility goals (TTC / avoid-pregnancy) auto-open
@@ -501,7 +588,7 @@ export function LogDaySheet({
   date,
   today,
   startsCycle = false,
-  activePeriod = false,
+  periodEndable = false,
   phase = null,
   dayOfCycle = null,
   goal,
@@ -611,6 +698,7 @@ export function LogDaySheet({
   } else if (!open && lastFormKey !== null) {
     setLastFormKey(null);
   }
+  const hydrated = open && lastFormKey === formKey;
 
   function toggleSymptom(key: string) {
     setSymptoms((prev) => {
@@ -651,16 +739,20 @@ export function LogDaySheet({
     symptoms,
   };
 
+  const saveState = dayLogSaveState({ hydrated, rowId, form: formState });
+  const currentRowId = saveState.rowId;
+
   async function handleSave() {
+    if (!saveState.canSave) return;
     // v1.16.4 — catch so a rejected save doesn't escape as an unhandled
     // rejection; the inline `logDay.isError || patchDay.isError` strip in the
     // footer carries the visible failure signal and the sheet stays open.
     try {
-      if (rowId) {
+      if (currentRowId) {
         // Editing an existing row → PATCH with explicit nulls so a deselected
         // chip actually CLEARS (the POST merge can only add/keep — QA W-2).
         await patchDay.mutateAsync({
-          id: rowId,
+          id: currentRowId,
           patch: buildDayLogPatch(formState),
         });
       } else {
@@ -695,9 +787,9 @@ export function LogDaySheet({
   }
 
   async function handleDelete() {
-    if (!rowId) return;
+    if (!currentRowId) return;
     try {
-      await deleteDay.mutateAsync(rowId);
+      await deleteDay.mutateAsync(currentRowId);
       onOpenChange(false);
     } catch {
       /* toast shown by useDeleteDayLog onError */
@@ -733,7 +825,7 @@ export function LogDaySheet({
       contentWidth="lg"
       footer={
         <>
-          {rowId ? (
+          {currentRowId ? (
             <ConfirmButton
               slot="cycle-day-delete"
               variant="outline"
@@ -760,7 +852,11 @@ export function LogDaySheet({
           >
             {t("cycle.sheet.cancel")}
           </Button>
-          <Button onClick={handleSave} disabled={busy}>
+          <Button
+            onClick={handleSave}
+            disabled={busy || !saveState.canSave}
+            data-slot="cycle-day-save"
+          >
             {saving ? (
               <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
             ) : null}
@@ -782,7 +878,8 @@ export function LogDaySheet({
 
       {/* One-tap period boundaries — available on any selected date so a
           forgotten day-1 can be corrected retroactively (M3). "End period"
-          shows only while a period is actually open (M2). The labels drop the
+          shows only where it can land: inside the first days of the logged
+          cycle the selected date belongs to. The labels drop the
           word "today" on a back-dated day: they always wrote to the selected
           date, and saying otherwise is how a correction reads as a mistake. */}
       <div className="flex flex-wrap gap-2">
@@ -802,7 +899,7 @@ export function LogDaySheet({
             ? t("cycle.startedPeriod")
             : t("cycle.startedPeriodOnDate")}
         </Button>
-        {activePeriod ? (
+        {periodEndable ? (
           <Button
             variant="outline"
             className="flex-1 justify-start gap-2"
@@ -867,9 +964,9 @@ export function LogDaySheet({
                 <cat.icon className="h-3.5 w-3.5" aria-hidden="true" />
                 {t(cat.labelKey)}
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="space-y-1.5">
                 {cat.symptoms.map((s) => (
-                  <SymptomChip
+                  <SymptomRow
                     key={s.key}
                     symptomKey={s.key}
                     icon={s.icon}
@@ -891,9 +988,9 @@ export function LogDaySheet({
               <Tag className="h-3.5 w-3.5" aria-hidden="true" />
               {t("cycle.symptomCategory.custom")}
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="space-y-1.5">
               {(customSymptoms.data?.symptoms ?? []).map((s) => (
-                <SymptomChip
+                <SymptomRow
                   key={s.key}
                   symptomKey={s.key}
                   icon={customIcon(s.icon)}
@@ -1197,6 +1294,15 @@ export function LogDaySheet({
         />
       </SheetSection>
 
+      {saveState.blankNewEntry ? (
+        <p
+          className="text-muted-foreground text-xs"
+          data-slot="cycle-day-empty-hint"
+        >
+          {t("cycle.sheet.emptyHint")}
+        </p>
+      ) : null}
+
       {logDay.isError || patchDay.isError ? (
         <p className="text-destructive text-sm" role="alert">
           {t("cycle.sheet.saveError")}
@@ -1228,12 +1334,19 @@ function Field({
 }
 
 /**
- * One symptom chip + its inline 1-4 severity selector (shared by the seeded
- * catalogue chips and the custom chips so both render identically). A custom
- * chip additionally carries a tiny remove (×) affordance that soft-hides the
- * symptom from the catalogue.
+ * One symptom per line: the toggle on the left, its optional 1-4 intensity
+ * on the right (shared by the seeded catalogue and the custom symptoms so both
+ * render identically). A custom row additionally carries a remove control that
+ * soft-hides the symptom from the catalogue.
+ *
+ * The intensity used to appear inline next to a chip in a wrapping row, so
+ * selecting a symptom widened its chip and pushed every chip after it along,
+ * often right out from under the finger reaching for the intensity. The row
+ * now reserves the intensity's space whether or not it is shown: selecting a
+ * symptom changes colours and reveals the intensity in place, and nothing on
+ * the sheet moves.
  */
-function SymptomChip({
+export function SymptomRow({
   symptomKey,
   icon: Icon,
   label,
@@ -1269,26 +1382,41 @@ function SymptomChip({
   }
 
   return (
-    <div className="flex items-center gap-1">
-      <span className="relative inline-flex items-center">
-        <Chip active={active} onClick={() => onToggle(symptomKey)}>
-          <span className="flex items-center gap-1.5">
-            <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-            {label}
-          </span>
-        </Chip>
-        {custom ? (
+    <div
+      className="flex items-center gap-2"
+      data-slot="cycle-symptom-row"
+      data-symptom={symptomKey}
+      data-active={active ? "true" : "false"}
+    >
+      <button
+        type="button"
+        aria-pressed={active}
+        onClick={() => onToggle(symptomKey)}
+        className={cn(
+          "focus-visible:ring-ring/50 flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-md border px-3 py-1.5 text-left text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none sm:min-h-9",
+          active
+            ? "border-primary bg-primary/10 text-primary"
+            : "border-border text-foreground hover:bg-accent",
+        )}
+      >
+        <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+        {/* Wraps rather than truncates: the intensity column leaves a narrow
+            label on a phone, and a symptom name cut to "Breast tendern…" is
+            not a name. A wrapped row is taller in both states, so it still
+            never moves on select. */}
+        <span className="min-w-0 leading-snug break-words">{label}</span>
+      </button>
+      {custom ? (
+        <>
           <button
             type="button"
             onClick={() => setConfirmRemove(true)}
             disabled={deleteCustom.isPending}
             aria-label={t("cycle.symptom.custom.remove", { label })}
-            className="border-border bg-background text-muted-foreground hover:text-destructive hover:border-destructive focus-visible:ring-ring/50 relative -ml-1.5 grid size-4 shrink-0 place-items-center rounded-full border transition-colors before:absolute before:-inset-2 before:content-[''] focus-visible:ring-2 focus-visible:outline-none"
+            className="text-muted-foreground hover:text-destructive hover:bg-accent focus-visible:ring-ring/50 grid size-11 shrink-0 place-items-center rounded-md transition-colors focus-visible:ring-2 focus-visible:outline-none sm:size-9"
           >
-            <X className="size-2.5" aria-hidden="true" />
+            <X className="size-4" aria-hidden="true" />
           </button>
-        ) : null}
-        {custom ? (
           <ConfirmDialog
             slot="cycle-custom-symptom-remove"
             open={confirmRemove}
@@ -1299,41 +1427,45 @@ function SymptomChip({
             pending={deleteCustom.isPending}
             onConfirm={handleRemove}
           />
-        ) : null}
-      </span>
-      {active ? (
-        <div
-          className="flex gap-0.5"
-          role="group"
-          aria-label={t("cycle.sheet.severity")}
-        >
-          {SEVERITY_LEVELS.map((lvl) => (
-            <button
-              key={lvl}
-              type="button"
-              aria-pressed={severity === lvl}
-              aria-label={t("cycle.sheet.severityLevel", { level: lvl })}
-              onClick={() => onSeverity(symptomKey, lvl)}
-              className={cn(
-                "focus-visible:ring-ring/50 grid size-11 place-items-center rounded-full border text-xs tabular-nums transition-colors focus-visible:ring-2 focus-visible:outline-none sm:size-8",
-                severity === lvl
-                  ? "border-primary bg-primary/15 text-primary font-semibold"
-                  : "border-border text-muted-foreground hover:bg-accent",
-              )}
-            >
-              {lvl}
-            </button>
-          ))}
-        </div>
+        </>
       ) : null}
+      {/* Always laid out, only shown while the symptom is selected: the
+          reserved width is what keeps the row still when it appears. */}
+      <div
+        className={cn("flex shrink-0 gap-1", !active && "invisible")}
+        role="group"
+        aria-label={t("cycle.sheet.severity")}
+        aria-hidden={active ? undefined : true}
+        data-slot="cycle-symptom-severity"
+      >
+        {SEVERITY_LEVELS.map((lvl) => (
+          <button
+            key={lvl}
+            type="button"
+            aria-pressed={severity === lvl}
+            aria-label={t("cycle.sheet.severityLevel", { level: lvl })}
+            onClick={() => onSeverity(symptomKey, lvl)}
+            disabled={!active}
+            tabIndex={active ? undefined : -1}
+            className={cn(
+              "focus-visible:ring-ring/50 grid size-11 place-items-center rounded-full border text-xs tabular-nums transition-colors focus-visible:ring-2 focus-visible:outline-none sm:size-9",
+              severity === lvl
+                ? "border-primary bg-primary/15 text-primary font-semibold"
+                : "border-border text-muted-foreground hover:bg-accent",
+            )}
+          >
+            {lvl}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
 
 /**
- * The dashed ghost-chip in the symptom grid that opens a compact label + icon
- * popover to mint a new custom symptom. Matches the chip grid (same rounded-
- * full pill, same size) so it reads as part of the grid, not a foreign button.
+ * The dashed ghost row at the end of the custom symptoms that opens a compact
+ * label + icon popover to mint a new custom symptom. Same height and shape as
+ * a symptom row so it reads as part of the list, not a foreign button.
  */
 function AddSymptomChip({ onCreated }: { onCreated: (key: string) => void }) {
   const { t } = useTranslations();
@@ -1380,9 +1512,9 @@ function AddSymptomChip({ onCreated }: { onCreated: (key: string) => void }) {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="border-border text-muted-foreground hover:border-primary hover:text-primary focus-visible:ring-ring/50 inline-flex items-center gap-1.5 rounded-full border border-dashed px-3 py-1.5 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
+          className="border-border text-muted-foreground hover:border-primary hover:text-primary focus-visible:ring-ring/50 flex min-h-11 w-full items-center gap-2 rounded-md border border-dashed px-3 py-1.5 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none sm:min-h-9"
         >
-          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+          <Plus className="size-3.5" aria-hidden="true" />
           {t("cycle.symptom.custom.add")}
         </button>
       </PopoverTrigger>

@@ -3,6 +3,7 @@ import type { Locator, Page, Route } from "@playwright/test";
 import { expect, test } from "./setup/test";
 
 import { STORAGE_STATE_PATH } from "./setup/global-setup";
+import { aiBlockAvailable, serveAiBlock } from "./setup/ai-capabilities";
 import { openMenu } from "./open-menu";
 import { POPULATED_SUMMARIES } from "./utils/mock-dashboard-snapshot";
 
@@ -334,6 +335,9 @@ async function visitAndScan(
 }
 
 async function installA11yMocks(page: Page) {
+  // Every AI surface renders from the `ai` block of `/api/auth/me`; the
+  // scans cover the AI states too, so every capability reads available.
+  await serveAiBlock(page, aiBlockAvailable());
   await page.route(/\/api\/analytics(\?|$)/, (route) =>
     fulfilJson(route, {
       summaries: POPULATED_SUMMARIES,
@@ -760,12 +764,13 @@ const INSIGHTS_ROUTES: readonly RouteCase[] = [
   {
     name: "/insights overview",
     path: "/insights",
+    // The vitals grid, settled. The scores strip is not a stable gate: it
+    // unmounts for an account with no score yet, and since v1.39 it no longer
+    // keeps an empty cell for a cycle ring that has no dial to draw.
     painted: (page) =>
-      page.locator('[data-slot="wellness-scores"]').filter({
-        has: page.locator(
-          '[data-slot="wellness-scores-grid"]:not([aria-busy="true"])',
-        ),
-      }),
+      page.locator(
+        '[data-slot="vitals-dashboard-grid"]:not([aria-busy="true"])',
+      ),
   },
   {
     // `.recharts-wrapper` is a class the charting library writes, not a

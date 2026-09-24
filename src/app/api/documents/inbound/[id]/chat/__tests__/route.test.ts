@@ -34,17 +34,13 @@ vi.mock("@/lib/documents/content-index", () => ({
 vi.mock("@/lib/documents/provider-order", () => ({
   resolveDocumentTextProvider: vi.fn(),
 }));
-vi.mock("@/lib/ai/consent-guard", () => ({
-  assertDocumentEgressConsent: vi.fn().mockResolvedValue(undefined),
-  ConsentRequiredError: class ConsentRequiredError extends Error {
-    errorCode = "consent.ai.required" as const;
-    surface: string;
-    constructor(surface: string) {
-      super("consent required");
-      this.surface = surface;
-      this.name = "ConsentRequiredError";
-    }
-  },
+vi.mock("@/lib/ai/capabilities/gate", async () =>
+  (
+    await import("@/__tests__/helpers/provider-order-mock")
+  ).openCapabilityGateMock(),
+);
+vi.mock("@/lib/ai/capabilities/egress", () => ({
+  assertAiEgress: vi.fn(),
 }));
 vi.mock("@/lib/ai/coach/budget", () => ({
   buildDateKey: vi.fn(() => "2026-07-07"),
@@ -94,10 +90,9 @@ import { getSession } from "@/lib/auth/session";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { loadDocumentChatText } from "@/lib/documents/content-index";
 import { resolveDocumentTextProvider } from "@/lib/documents/provider-order";
-import {
-  assertDocumentEgressConsent,
-  ConsentRequiredError,
-} from "@/lib/ai/consent-guard";
+import { requireAiCapability } from "@/lib/ai/capabilities/gate";
+import { assertAiEgress } from "@/lib/ai/capabilities/egress";
+import { AiUnavailableError } from "@/lib/ai/capabilities/refusal";
 import { reserveBudget } from "@/lib/ai/coach/budget";
 import { runStreamingRawCompletionWithFallback } from "@/lib/ai/provider-runner";
 import {
@@ -162,7 +157,7 @@ beforeEach(() => {
     allowed: true,
     reserved: 600,
   } as never);
-  vi.mocked(assertDocumentEgressConsent).mockResolvedValue(undefined);
+  vi.mocked(assertAiEgress).mockResolvedValue(undefined);
   vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
   vi.mocked(prisma.inboundDocument.findFirst).mockResolvedValue({
     id: "doc-1",
@@ -413,9 +408,44 @@ describe("POST — numeric grounding", () => {
 });
 
 describe("POST — consent / budget gating", () => {
-  it("403s when document egress consent is missing", async () => {
-    vi.mocked(assertDocumentEgressConsent).mockRejectedValue(
-      new ConsentRequiredError("insights"),
+  it("403s when the pick needs a consent receipt the record does not hold", async () => {
+    vi.mocked(resolveDocumentTextProvider).mockResolvedValue({
+      chain: [],
+      pick: null,
+      withheld: new AiUnavailableError("documentAi", "consent_required"),
+    } as never);
+    const res = await POST(
+      req("doc-1", { message: "hi" }) as never,
+      ctx("doc-1") as never,
+    );
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.meta).toEqual({
+      errorCode: "consent.ai.required",
+      capability: "documentAi",
+      reason: "consent_required",
+    });
+    expect(runStreamingRawCompletionWithFallback).not.toHaveBeenCalled();
+    expect(appendMessage).not.toHaveBeenCalled();
+  });
+
+  it("answers under documentAi alone: the vault's chat asks nothing of the Coach", async () => {
+    await frames(
+      await POST(
+        req("doc-1", { message: "hi" }) as never,
+        ctx("doc-1") as never,
+      ),
+    );
+    expect(requireAiCapability).toHaveBeenCalledTimes(1);
+    expect(requireAiCapability).toHaveBeenCalledWith("documentAi", {
+      pickDecides: true,
+    });
+    expect(assertAiEgress).not.toHaveBeenCalled();
+  });
+
+  it("refuses before loading anything when document reading is off", async () => {
+    vi.mocked(requireAiCapability).mockRejectedValueOnce(
+      new AiUnavailableError("documentAi", "operator_disabled"),
     );
     const res = await POST(
       req("doc-1", { message: "hi" }) as never,
@@ -423,7 +453,8 @@ describe("POST — consent / budget gating", () => {
     );
     expect(res.status).toBe(403);
     const body = await res.json();
-    expect(body.meta?.errorCode ?? body.errorCode).toBe("consent.ai.required");
+    expect(body.meta.errorCode).toBe("assistant.disabled.documentAi");
+    expect(loadDocumentChatText).not.toHaveBeenCalled();
     expect(runStreamingRawCompletionWithFallback).not.toHaveBeenCalled();
   });
 

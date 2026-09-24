@@ -18,6 +18,9 @@ import { describe, expect, it } from "vitest";
 
 const ROOT = process.cwd();
 const SCHEMA_FILE = join(ROOT, "src/lib/openapi/routes/insights/schemas.ts");
+// Shared component schemas the insights schemas import by name (the AI
+// capability state). Resolved from their own file, never guessed.
+const IMPORTED_SCHEMA_FILES = [join(ROOT, "src/lib/openapi/routes/profile.ts")];
 const PATH_FILE = join(ROOT, "src/lib/openapi/routes/insights/paths.ts");
 const ROUTE_FILE = join(ROOT, "src/app/api/insights/derived/route.ts");
 const BATCH_ROUTE_FILE = join(
@@ -132,11 +135,19 @@ function zodObjectShape(path: string, schemaName: string): ZodObjectShape {
   const file = parse(path);
   const initializers = new Map<string, ts.Expression>();
   const arrays = new Set<string>();
-  for (const statement of file.statements) {
-    if (!ts.isVariableStatement(statement)) continue;
-    for (const declaration of statement.declarationList.declarations) {
-      if (ts.isIdentifier(declaration.name) && declaration.initializer) {
-        initializers.set(declaration.name.text, declaration.initializer);
+  // The schema file's own declarations win; an imported component fills in
+  // only a name the file does not declare itself.
+  for (const source of [file, ...IMPORTED_SCHEMA_FILES.map(parse)]) {
+    for (const statement of source.statements) {
+      if (!ts.isVariableStatement(statement)) continue;
+      for (const declaration of statement.declarationList.declarations) {
+        if (
+          ts.isIdentifier(declaration.name) &&
+          declaration.initializer &&
+          !initializers.has(declaration.name.text)
+        ) {
+          initializers.set(declaration.name.text, declaration.initializer);
+        }
       }
     }
   }
@@ -168,7 +179,8 @@ function zodObjectShape(path: string, schemaName: string): ZodObjectShape {
               `${prefix || schemaName} contains unsupported Zod object syntax: ${property.getText(file)}`,
             ).toBe(true);
             if (!ts.isPropertyAssignment(property)) return [];
-            const name = propertyName(property.name, file);
+            // The node may come from an imported schema file.
+            const name = propertyName(property.name, property.getSourceFile());
             expect(
               name,
               `${prefix || schemaName} contains a computed property name`,
@@ -416,7 +428,8 @@ function apiSuccessLineageBranches(
             `${path} contains unsupported apiSuccess syntax: ${property.getText(file)}`,
           ).toBe(true);
           if (ts.isPropertyAssignment(property)) {
-            const name = propertyName(property.name, file);
+            // The node may come from an imported schema file.
+            const name = propertyName(property.name, property.getSourceFile());
             expect(
               name,
               `${path} has a computed response field`,
@@ -892,7 +905,13 @@ const WIRE_ONLY_PROVENANCE =
 const WIRE_ONLY_ASSESSMENT_SOURCE =
   "The public response intentionally identifies deterministic versus cached assessment prose for programmatic and native callers. The web presents the prose and timestamp without exposing its implementation source.";
 
+const WIRE_ONLY_AI =
+  "The web reads AI availability from the account payload (`ai` on `/api/auth/me`) for every surface at once; the per-response state is for native and programmatic callers that read one route.";
+
 const EXCEPTIONS: Readonly<Record<string, string>> = {
+  "ai.available": WIRE_ONLY_AI,
+  "ai.reason": WIRE_ONLY_AI,
+  "ai.onDeviceAllowed": WIRE_ONLY_AI,
   metric: WIRE_ONLY_METRIC,
   "provenance.inputs": WIRE_ONLY_PROVENANCE,
   "provenance.source": WIRE_ONLY_PROVENANCE,
@@ -943,6 +962,7 @@ describe("derived response consumer guard", () => {
       provenance: ["derived.provenance"],
       reason: ["derived.reason", "derived.status"],
       assessment: ["assessment"],
+      ai: ["ai"],
     };
     for (const [index, lineage] of apiSuccessLineageBranches(
       ROUTE_FILE,
@@ -987,7 +1007,14 @@ describe("derived response consumer guard", () => {
       },
     );
     assertBatchSchemaReferencesSingleShape(SCHEMA_FILE);
-    assertBatchProducerLineage(BATCH_ROUTE_FILE, responseFields);
+    // `ai` rides the single-metric route only: the batch serves the
+    // deterministic assessment and resolves no capability. The schema marks
+    // the field optional for exactly this reason.
+    const singleRouteOnly = ["ai"];
+    assertBatchProducerLineage(
+      BATCH_ROUTE_FILE,
+      responseFields.filter((field) => !singleRouteOnly.includes(field)),
+    );
     assertBatchClientHandoff(DERIVED_BATCH_CLIENT, VITALS_DASHBOARD);
   });
 

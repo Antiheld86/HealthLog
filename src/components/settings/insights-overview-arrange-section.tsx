@@ -6,12 +6,16 @@ import { LayoutGrid, Loader2 } from "lucide-react";
 
 import { useTranslations } from "@/lib/i18n/context";
 import { useAuth } from "@/hooks/use-auth";
-import { useFeatureFlags } from "@/hooks/use-feature-flags";
+import { useAiCapability } from "@/hooks/use-ai-capability";
 import { useInsightsLayoutQuery } from "@/hooks/use-insights-layout";
 import { InsightsEditMode } from "@/components/insights/insights-edit-mode";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SettingsCard } from "@/components/settings/settings-card";
-import { type InsightsSectionId } from "@/lib/insights-layout";
+import {
+  INSIGHTS_SECTION_IDS,
+  type InsightsSectionId,
+} from "@/lib/insights-layout";
+import { isSurfaceVisible } from "@/lib/modules/surface";
 
 /**
  * v1.15.18 — overview-arrange block for the Insights settings section.
@@ -23,26 +27,32 @@ import { type InsightsSectionId } from "@/lib/insights-layout";
  * shared cache; the editor simply stays mounted).
  *
  * `gatedOffSectionIds` mirrors the mother page's gate logic so a section whose
- * feature flag / data gate is off renders its row disabled-with-a-hint rather
- * than offering a toggle that does nothing.
+ * feature flag or owning module is off renders its row disabled-with-a-hint
+ * rather than offering a toggle that does nothing. The row stays in the list
+ * (not filtered out) so a save keeps the section's stored place for when the
+ * module comes back.
  */
 export function InsightsOverviewArrangeSection({ id }: { id?: string }) {
   const { t } = useTranslations();
   const { isAuthenticated, user } = useAuth();
-  const flags = useFeatureFlags();
+  // The daily briefing is model-written: its row is live only while the
+  // `briefing` capability is available. The period review always renders
+  // (its narrative is composed from the numbers), so it stays a live row.
+  const briefing = useAiCapability("briefing");
   const { layout, isLoading } = useInsightsLayoutQuery(isAuthenticated);
 
   const gatedOffSectionIds = useMemo(() => {
     const gated = new Set<InsightsSectionId>();
-    if (!flags.briefing) {
-      gated.add("daily-briefing");
-      gated.add("period-review");
-    }
-    if (!user?.cycleTrackingEnabled) {
-      gated.add("cycle-summary");
+    if (!briefing.available) gated.add("daily-briefing");
+    // A block whose module is off cannot appear on the overview, so its row
+    // is not offered as a live toggle. Read from the one surface map the
+    // overview renders from (`overview:<id>`); cycle follows the resolved
+    // `modules.cycle` like the overview's cycle ring, not the raw column.
+    for (const id of INSIGHTS_SECTION_IDS) {
+      if (!isSurfaceVisible(`overview:${id}`, user?.modules)) gated.add(id);
     }
     return gated;
-  }, [flags.briefing, user?.cycleTrackingEnabled]);
+  }, [briefing.available, user?.modules]);
 
   return (
     <section

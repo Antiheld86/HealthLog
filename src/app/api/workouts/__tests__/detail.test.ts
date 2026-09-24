@@ -60,14 +60,21 @@ vi.mock("@/lib/modules/gate", async (importOriginal) => {
     ...actual,
     resolveModuleMap: vi.fn(async () => ({})),
     requireModuleEnabled: vi.fn(async () => ({ enabled: true })),
-    isModuleEnabled: vi.fn(async () => true),
   };
 });
+
+// The Activity Insight paragraph follows the `workoutInsights` capability.
+vi.mock("@/lib/ai/capabilities/gate", () => ({ aiCapabilityToServe: vi.fn() }));
 
 import { GET } from "../[id]/route";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
-import { isModuleEnabled, requireModuleEnabled } from "@/lib/modules/gate";
+import { requireModuleEnabled } from "@/lib/modules/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
+import {
+  AI_AVAILABLE,
+  aiUnavailable,
+} from "@/__tests__/helpers/ai-capability-fixtures";
 import { invalidateUserTimezone } from "@/lib/tz/resolver";
 
 const SESSION_OK = {
@@ -139,7 +146,7 @@ describe("GET /api/workouts/{id}", () => {
     vi.mocked(requireModuleEnabled).mockResolvedValue({
       enabled: true,
     } as never);
-    vi.mocked(isModuleEnabled).mockResolvedValue(true);
+    vi.mocked(aiCapabilityToServe).mockResolvedValue(AI_AVAILABLE);
     // The timezone resolver caches per user for 60 s in process; drop the
     // entry so a test that pins a zone is not served the previous one.
     invalidateUserTimezone(SESSION_OK.user.id);
@@ -565,6 +572,7 @@ describe("GET /api/workouts/{id} — aiInsight", () => {
     vi.clearAllMocks();
     vi.stubEnv("ENCRYPTION_KEY", TEST_KEY);
     _resetCryptoCacheForTests();
+    vi.mocked(aiCapabilityToServe).mockResolvedValue(AI_AVAILABLE);
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       sourcePriorityJson: null,
@@ -616,26 +624,41 @@ describe("GET /api/workouts/{id} — aiInsight", () => {
       paragraph: "A steady, aerobic-leaning run.",
       generatedAt: generatedAt.toISOString(),
     });
-  });
-
-  it("does not read or expose the stored paragraph when Insights is disabled", async () => {
-    vi.mocked(isModuleEnabled).mockResolvedValueOnce(false);
-    vi.mocked(prisma.workout.findUnique).mockResolvedValue({
-      ...BASE_ROW,
-      insight: {
-        paragraphEncrypted: new Uint8Array([1, 2, 3]),
-        generatedAt: new Date(`${SESSION_DAY}T07:35:00Z`),
-      },
-    } as never);
-
-    const body = await (await get()).json();
-    expect(body.data.aiInsight).toBeNull();
-    expect(prisma.workout.findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({
-        include: expect.objectContaining({ insight: false }),
-      }),
+    expect(aiCapabilityToServe).toHaveBeenCalledWith(
+      "user-1",
+      "workoutInsights",
     );
+    expect(body.data.ai).toEqual(AI_AVAILABLE);
   });
+
+  it.each([
+    "operator_disabled",
+    "user_disabled",
+    "module_disabled",
+    "consent_required",
+    "no_provider",
+  ] as const)(
+    "does not read or expose the stored paragraph while workoutInsights is %s",
+    async (reason) => {
+      vi.mocked(aiCapabilityToServe).mockResolvedValue(aiUnavailable(reason));
+      vi.mocked(prisma.workout.findUnique).mockResolvedValue({
+        ...BASE_ROW,
+        insight: {
+          paragraphEncrypted: new Uint8Array([1, 2, 3]),
+          generatedAt: new Date(`${SESSION_DAY}T07:35:00Z`),
+        },
+      } as never);
+
+      const body = await (await get()).json();
+      expect(body.data.aiInsight).toBeNull();
+      expect(body.data.ai).toEqual(aiUnavailable(reason));
+      expect(prisma.workout.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({ insight: false }),
+        }),
+      );
+    },
+  );
 
   it("degrades to no card rather than failing the page on an undecryptable row", async () => {
     // `decrypt` is fail-closed by design. A key rotated away must not turn the

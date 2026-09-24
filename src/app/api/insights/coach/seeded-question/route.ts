@@ -17,14 +17,19 @@
  *
  * Mirrors the sibling derived routes: `apiHandler` wrapper, `requireAuth`
  * (userId narrowed from the session/Bearer, never a body/query field),
- * analytics-read rate limit, `insights` module gate.
+ * analytics-read rate limit.
+ *
+ * A mixed read: the opener only exists to open the Coach, so it is served
+ * only while the `coach` capability is available. Otherwise the route answers
+ * 200 `{ signal: null, ai }`, the same neutral shape as "nothing notable",
+ * with the reason beside it.
  */
 import { apiError, apiSuccess } from "@/lib/api-response";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { checkAnalyticsReadRateLimit } from "@/lib/rate-limit";
-import { requireModuleEnabled } from "@/lib/modules/gate";
-import { requireAssistantSurface } from "@/lib/feature-flags";
+import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import type { AiCapabilityState } from "@/lib/ai/capabilities/types";
 import { prisma } from "@/lib/db";
 import { loadBaselineProfile } from "@/lib/insights/derived";
 import { detectDerivedBriefingSignals } from "@/lib/insights/derived-briefing";
@@ -46,17 +51,19 @@ export interface CoachSeededQuestionDTO {
     /** Band — `yellow` / `red` (green never surfaces as notable). */
     band: string;
   } | null;
+  /** Whether the Coach this opener feeds is available, and why not. */
+  ai: AiCapabilityState;
 }
 
 export const GET = apiHandler(async () => {
   const { user } = await requireAuth();
 
-  const m = await requireModuleEnabled(user.id, "insights");
-  if (!m.enabled) return m.response;
-
-  // The opener feeds the Coach hero, so it gates on the Coach assistant
-  // matrix: with the Coach off there is no hero to seed.
-  await requireAssistantSurface("coach");
+  // The opener feeds the Coach hero: with the Coach unavailable there is no
+  // hero to seed, so the neutral shape answers and says why.
+  const ai = await getAiCapability("coach");
+  if (!ai.available) {
+    return apiSuccess({ signal: null, ai } satisfies CoachSeededQuestionDTO);
+  }
 
   const rl = await checkAnalyticsReadRateLimit(user.id);
   if (!rl.allowed) {
@@ -77,7 +84,7 @@ export const GET = apiHandler(async () => {
       action: { name: "coach.seeded-question.resolve" },
       meta: { has_signal: false, source_metric: "none", band: "none" },
     });
-    return apiSuccess({ signal: null } satisfies CoachSeededQuestionDTO);
+    return apiSuccess({ signal: null, ai } satisfies CoachSeededQuestionDTO);
   }
 
   // Profile read once via the shared loader; passed into the detector,
@@ -102,5 +109,5 @@ export const GET = apiHandler(async () => {
     },
   });
 
-  return apiSuccess({ signal } satisfies CoachSeededQuestionDTO);
+  return apiSuccess({ signal, ai } satisfies CoachSeededQuestionDTO);
 });

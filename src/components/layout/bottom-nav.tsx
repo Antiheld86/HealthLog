@@ -17,9 +17,10 @@ import {
   isDestinationInSharedRecord,
   mobileMoreHubDestinations,
 } from "@/components/layout/nav-model";
-import type { ModuleKey } from "@/lib/modules/registry";
+import { isSurfaceVisible } from "@/lib/modules/surface";
 import { useCallback, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { useNavModules } from "@/hooks/use-nav-modules";
 import { useMounted } from "@/hooks/use-mounted";
 import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import {
@@ -60,34 +61,19 @@ interface NavLink {
 // surfaces tell one story instead of two hand-curated ones that drift,
 // and the headline invariant is a tested model function rather than
 // inline bar logic.
-// The Meds slot is module-gated exactly like the Insights slot below:
-// `/medications` renders nothing when the medications module is off, so a
-// pinned tab would be a visible control over a blank page.
-const PRIMARY_LEFT: ReadonlyArray<NavLink & { requiresModule?: ModuleKey }> = [
+// The Meds slot follows the medications module through the surface map
+// (`nav:/medications`): a pinned tab over a module that is off would be a
+// visible control over a notice.
+const PRIMARY_LEFT: ReadonlyArray<NavLink> = [
   { href: "/", tKey: "nav.dashboard", icon: Home },
-  {
-    href: "/medications",
-    tKey: "nav.medications",
-    icon: Pill,
-    requiresModule: "medications",
-  },
+  { href: "/medications", tKey: "nav.medications", icon: Pill },
 ];
 
-// v1.18.0 — the Insights primary slot is module-gated. Insights is now a
-// toggleable module (`requiresModule: "insights"` in the shared nav model),
-// so the fixed slot must respect the same per-user map the More hub already
-// honours rather than pinning a destination the account turned off. When
-// insights is disabled the slot is dropped (it is excluded from the More hub
-// by `BOTTOM_NAV_PRIMARY_SLOT_HREFS`, so a disabled module is hidden
-// everywhere, not relocated). Fail-open: a missing key / unloaded map keeps
-// the slot, mirroring the gate's default-on contract.
-const PRIMARY_RIGHT: ReadonlyArray<NavLink & { requiresModule?: ModuleKey }> = [
-  {
-    href: "/insights",
-    tKey: "nav.insights",
-    icon: Lightbulb,
-    requiresModule: "insights",
-  },
+// The Insights slot belongs to no module (the `insights` key is AI analysis,
+// not the area), so it stays whatever the module map says; it still drops
+// inside a shared record, like any destination sharing does not cover.
+const PRIMARY_RIGHT: ReadonlyArray<NavLink> = [
+  { href: "/insights", tKey: "nav.insights", icon: Lightbulb },
 ];
 
 export function BottomNav() {
@@ -115,43 +101,46 @@ export function BottomNav() {
   // The capture button opens the picker, so it shows exactly when the picker
   // would offer at least one kind — the same per-section rule, asked once.
   const canCapture =
-    visibleCaptureKinds(capabilities, CAPTURE_KIND_ORDER).length > 0;
+    visibleCaptureKinds(capabilities, CAPTURE_KIND_ORDER, user?.modules)
+      .length > 0;
 
   // v1.17.1 (F-1) — the More hub is the model-computed hub: every visible
   // feature destination that isn't a primary slot, plus the shared utility
   // tail. Cycle is gated by the same flag the sidebar uses, so the two
   // surfaces gate identically and cannot drift.
+  // The Coach entry follows the `coach` AI capability (a Coach that cannot
+  // answer is not offered); the sidebar reads the same map.
+  const navModules = useNavModules();
   const moreHub = useMemo<ReadonlyArray<NavLink>>(
     () =>
       mobileMoreHubDestinations({
-        modules: user?.modules,
+        modules: navModules,
         mounted,
         sharedRecord,
         sections,
       }),
-    [user?.modules, mounted, sharedRecord, sections],
+    [navModules, mounted, sharedRecord, sections],
   );
 
-  // v1.18.0 — drop a module-gated primary slot (Insights) when the account
-  // has that module disabled. Fail-closed until mounted (so a disabled
-  // Insights never flickers in), then the real map applies: a missing key /
-  // unloaded map keeps the slot, mirroring the gate + More-hub default-on
-  // contract.
+  // Every slot but Home asks two things: does sharing cover it, and does its
+  // module (if the surface map names one) stay on. Fail-closed until mounted,
+  // so SSR and the first paint agree, then the real map applies: a missing
+  // key / unloaded map keeps the slot, the gate's default-on contract.
   const primarySlotVisible = useCallback(
-    (item: NavLink & { requiresModule?: ModuleKey }) => {
-      // An ungated slot (Home) is pinned unconditionally — the bar always
-      // has an anchor, whatever the module map or a record switch says.
-      if (!item.requiresModule) return true;
+    (item: NavLink) => {
+      // Home is pinned unconditionally — the bar always has an anchor,
+      // whatever the module map or a record switch says.
+      if (item.href === "/") return true;
       return (
         // v1.36.0 — the fixed slot asks the shared destination model
         // whether sharing covers it, rather than carrying its own answer:
-        // Insights is an AI surface and drops out under a switch.
+        // Insights drops out under a switch.
         (!sharedRecord || isDestinationInSharedRecord(item.href, sections)) &&
         mounted &&
-        user?.modules?.[item.requiresModule] !== false
+        isSurfaceVisible(`nav:${item.href}`, navModules)
       );
     },
-    [user?.modules, mounted, sharedRecord, sections],
+    [navModules, mounted, sharedRecord, sections],
   );
 
   // Both fixed flanks run through the ONE slot filter, so a module-gated

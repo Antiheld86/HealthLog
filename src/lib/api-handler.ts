@@ -26,7 +26,7 @@ import {
   selectorNamesAnAccount,
   type ActingCarrier,
 } from "./auth/acting-carrier";
-import { AssistantDisabledError } from "./feature-flags";
+import { AiUnavailableError } from "./ai/capabilities/refusal";
 import { ConsentRequiredError } from "./ai/consent-guard";
 import { SCOPE_HEALTH_READ, SCOPE_HEALTH_WRITE } from "./mcp/oauth/config";
 import {
@@ -234,27 +234,21 @@ export function apiHandler<T extends (...args: any[]) => Promise<Response>>(
         try {
           response = await handler(...args);
         } catch (error) {
-          if (error instanceof AssistantDisabledError) {
-            // v1.4.31 — operator has disabled the assistant surface.
-            // The 403 + `errorCode: "assistant.disabled.<surface>"`
-            // envelope is locked per
-            // `.planning/RESPONSE-TO-IOS-TEAM-2026-05-16.md` §3 R5.
-            // Older iOS clients that don't know the errorCode surface
-            // this as a generic 403; v1.4.31+ clients can branch on the
-            // errorCode to render an inline operator-disabled notice.
+          if (error instanceof AiUnavailableError) {
+            // An AI capability is unavailable for this record. One envelope
+            // for every reason, keeping every code a shipped client already
+            // branches on: `meta.errorCode` plus the `capability` and the
+            // outermost `reason`, and `module` where the reason is about one.
+            // See `src/lib/ai/capabilities/gate.ts` for the table.
             evt.setError(error);
             response = NextResponse.json(
-              {
-                data: null,
-                error: error.message,
-                meta: { errorCode: error.errorCode },
-              },
-              { status: 403 },
+              { data: null, error: error.message, meta: error.meta },
+              { status: error.status },
             );
           } else if (error instanceof ConsentRequiredError) {
             // v1.12.1 — server-side consent gate before external-LLM PHI
-            // egress on the operator's server-managed key. Mirrors the
-            // AssistantDisabledError envelope (403 + meta.errorCode) so the
+            // egress on the operator's server-managed key. 403 +
+            // meta.errorCode, like the capability refusal above, so the
             // iOS client renders an inline "grant consent" notice instead of
             // a generic failure.
             evt.setError(error);

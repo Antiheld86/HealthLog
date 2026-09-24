@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ToggleLeft } from "lucide-react";
 import { toast } from "sonner";
@@ -7,10 +8,15 @@ import { toast } from "sonner";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useTranslations } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
+import {
+  aiInputDependentKeys,
+  invalidateKeys,
+  queryKeys,
+} from "@/lib/query-keys";
 import {
   MODULE_KEYS,
   MODULE_REGISTRY,
+  SWITCH_OWNED_MODULE_KEYS,
   isCodeDisabledModule,
 } from "@/lib/modules/registry";
 import type { ModuleKey } from "@/lib/modules/registry";
@@ -64,7 +70,7 @@ function useUpdateModuleAvailability() {
       client.setQueryData(queryKeys.adminModuleAvailability(), data);
       // The resolved `/api/auth/me` module map depends on this operator
       // layer; bust it so the operator sees the change within the session.
-      client.invalidateQueries({ queryKey: queryKeys.authMe() });
+      void invalidateKeys(client, aiInputDependentKeys);
       toast.success(t("common.saved"));
     },
     onError: (err) => {
@@ -106,6 +112,32 @@ export function ModuleAvailabilitySection() {
             // Default-available until the read resolves; an explicit `false`
             // from the operator layer is the only thing that turns it off.
             const available = availability?.[key] ?? true;
+            // The Coach has one operator switch, on the assistant panel. The
+            // row stays so the operator sees its state here, read-only, with
+            // the way to the switch that decides it.
+            if (SWITCH_OWNED_MODULE_KEYS.includes(key)) {
+              return (
+                <div
+                  key={key}
+                  className="space-y-1"
+                  data-slot="module-availability-switch-owned"
+                >
+                  <SettingsToggle
+                    label={t(def.labelKey)}
+                    description={t("admin.modules.coachFollowsSwitch")}
+                    checked={available}
+                    onCheckedChange={() => {}}
+                    disabled
+                  />
+                  <Link
+                    href="/admin/coach"
+                    className="text-primary text-xs underline-offset-4 hover:underline"
+                  >
+                    {t("admin.assistant.title")}
+                  </Link>
+                </div>
+              );
+            }
             return (
               <SettingsToggle
                 key={key}

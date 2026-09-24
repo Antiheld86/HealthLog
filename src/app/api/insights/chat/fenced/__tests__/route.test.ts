@@ -10,6 +10,11 @@ import { NextRequest } from "next/server";
  */
 
 vi.mock("@/lib/db", () => ({ prisma: {} }));
+vi.mock("@/lib/ai/capabilities/gate", async () =>
+  (
+    await import("@/__tests__/helpers/provider-order-mock")
+  ).openCapabilityGateMock(),
+);
 vi.mock("@/lib/modules/gate", () => ({
   requireModuleEnabled: vi.fn().mockResolvedValue({ enabled: true }),
 }));
@@ -54,6 +59,8 @@ vi.mock("next/headers", () => ({
 
 import { POST } from "../route";
 import { getSession } from "@/lib/auth/session";
+import { requireAiCapability } from "@/lib/ai/capabilities/gate";
+import { AiUnavailableError } from "@/lib/ai/capabilities/refusal";
 import {
   createConversation,
   fetchConversationWithMessages,
@@ -257,6 +264,53 @@ describe("fenced route — refusal", () => {
     );
     expect(res.status).toBe(200);
     expect(streamFencedRefusal).toHaveBeenCalled();
+    expect(streamFencedReply).not.toHaveBeenCalled();
+  });
+});
+
+describe("fenced route — the coach and documentAi capabilities", () => {
+  it("answers under both, leaving provider and consent to the pick", async () => {
+    await POST(req({ message: "hi", attachmentIds: ["doc-a"] }) as never);
+    expect(requireAiCapability).toHaveBeenCalledWith("coach", {
+      pickDecides: true,
+    });
+    expect(requireAiCapability).toHaveBeenCalledWith("documentAi", {
+      pickDecides: true,
+    });
+    // The turn re-checks the Coach for the picked provider too.
+    expect(streamFencedReply).toHaveBeenCalledWith(
+      expect.objectContaining({ alsoRequires: ["coach"] }),
+    );
+  });
+
+  it("refuses with the Coach's code before any conversation is created", async () => {
+    vi.mocked(requireAiCapability).mockRejectedValueOnce(
+      new AiUnavailableError("coach", "operator_disabled"),
+    );
+    const res = await POST(
+      req({ message: "hi", attachmentIds: ["doc-a"] }) as never,
+    );
+    expect(res.status).toBe(403);
+    expect(await errorCode(res)).toBe("assistant.disabled.coach");
+    expect(createConversation).not.toHaveBeenCalled();
+    expect(streamFencedReply).not.toHaveBeenCalled();
+  });
+
+  it("refuses when document reading is off even with the Coach on", async () => {
+    vi.mocked(requireAiCapability)
+      .mockResolvedValueOnce({
+        available: true,
+        reason: null,
+        onDeviceAllowed: true,
+      })
+      .mockRejectedValueOnce(
+        new AiUnavailableError("documentAi", "operator_disabled"),
+      );
+    const res = await POST(
+      req({ message: "hi", attachmentIds: ["doc-a"] }) as never,
+    );
+    expect(res.status).toBe(403);
+    expect(await errorCode(res)).toBe("assistant.disabled.documentAi");
     expect(streamFencedReply).not.toHaveBeenCalled();
   });
 });

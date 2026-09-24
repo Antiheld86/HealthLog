@@ -24,9 +24,16 @@
  * Behaviour:
  *
  *   1. requireAuth()                       — cookie OR Bearer.
- *   2. requireAssistantSurface("coach")    — operator can disable.
+ *   2. requireAiCapability("medicationExtract") — the operator's "Reading
+ *      documents" switch (and the master), provider-work authority for the
+ *      record, a configured provider (503 `ai.provider.none` otherwise; the
+ *      status predates the envelope and stays until no shipped client reads
+ *      it), and a document-class consent receipt: free-text medication input
+ *      is health data, and any provider that leaves the machine needs one.
  *   3. checkRateLimit(...)                 — 10 requests / 5 min / user.
- *   4. resolveProviderChain()              — fall back through providers.
+ *   4. resolveProviderChain()              — fall back through providers,
+ *      then `assertAiEgress` re-checks the capability for exactly that chain
+ *      immediately before anything is sent.
  *   5. reserveBudget(resolveDailyCap(chain)) — atomic daily token ceiling,
  *      capped against the COST OWNER: a self-hoster on their own key or a
  *      local model is measured against the user-plan ceiling, not the
@@ -56,7 +63,13 @@ import {
 } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
-import { requireAssistantSurface } from "@/lib/feature-flags";
+import { assertAiEgress } from "@/lib/ai/capabilities/egress";
+import { requireAiCapability } from "@/lib/ai/capabilities/gate";
+import {
+  AiUnavailableError,
+  type NoProviderRefusal,
+} from "@/lib/ai/capabilities/refusal";
+import { AI_PROVIDER_NONE_ERROR_CODE } from "@/lib/ai/capabilities/types";
 
 import {
   AllProvidersFailedError,
@@ -64,7 +77,6 @@ import {
 } from "@/lib/ai/provider-runner";
 import { resolveProvider, resolveProviderChain } from "@/lib/ai/provider";
 import { singleUserTurn } from "@/lib/ai/types";
-import { assertConsentForChain } from "@/lib/ai/consent-guard";
 
 import {
   buildDateKey,
@@ -79,6 +91,19 @@ import {
   medicationExtractionSchema,
   type MedicationExtractionResult,
 } from "@/lib/ai/coach/medication-extract-prompt";
+
+/**
+ * How the extractor refuses with no provider. 503 predates the capability
+ * envelope; it stays until no shipped client is known to branch on it, and the
+ * code says what it means either way.
+ */
+const MEDICATION_EXTRACT_NO_PROVIDER: NoProviderRefusal = {
+  errorCode: AI_PROVIDER_NONE_ERROR_CODE,
+  status: 503,
+};
+
+/** The budget refusal's code; the same string the body always carried. */
+const MEDICATION_EXTRACT_BUDGET_CODE = "coach.budget.exceeded";
 
 /** Hard cap on the free-text payload; mirrors `coachChatRequestSchema.message`. */
 const MAX_TEXT_LENGTH = 2000;
@@ -128,10 +153,12 @@ function parseModelJson(content: string): unknown | null {
 
 async function handleExtract(request: NextRequest): Promise<Response> {
   const auth = await requireAuth();
-  // Same operator-disable gate the Coach SSE route honours — when
-  // "coach" is off, the overlay also disappears so the wizard simply
-  // falls back to the manual path.
-  await requireAssistantSurface("coach");
+  // Medication text extraction is its own capability under the operator's
+  // "Reading documents" switch. When it is closed the wizard keeps its
+  // manual path; nothing here is data the wizard needs.
+  await requireAiCapability("medicationExtract", {
+    noProvider: MEDICATION_EXTRACT_NO_PROVIDER,
+  });
 
   const userId = auth.user.id;
 
@@ -178,15 +205,25 @@ async function handleExtract(request: NextRequest): Promise<Response> {
     const legacy = await resolveProvider(userId);
     if (legacy.type === "none") {
       annotate({ action: { name: "medications.extract.no-provider" } });
-      return apiError("No AI provider configured", 503);
+      throw new AiUnavailableError(
+        "medicationExtract",
+        "no_provider",
+        null,
+        MEDICATION_EXTRACT_NO_PROVIDER,
+      );
     }
     chain.push({ providerType: "admin-openai", instance: legacy });
   }
 
-  // Free-text medication input is PHI. If the resolved chain could egress
-  // via the operator's server-managed key, an active consent receipt is
-  // required first — same gate as the Coach (which shares this chain).
-  await assertConsentForChain({ userId, chain, surface: "coach" });
+  // The wire. The runner may cascade through every entry, so each one is
+  // named: any entry that leaves the machine needs a document-class consent
+  // receipt, and a switch turned off since the gate above answered stops the
+  // call here.
+  await assertAiEgress(
+    "medicationExtract",
+    userId,
+    chain.map((entry) => entry.providerType),
+  );
 
   const today = todayOverride ?? buildDateKey();
   const { systemPrompt, userPrompt } = buildMedicationExtractionPrompt({
@@ -219,7 +256,9 @@ async function handleExtract(request: NextRequest): Promise<Response> {
       action: { name: "medications.extract.budget-exceeded" },
       meta: { totalAfter: reservation.totalAfter },
     });
-    return apiError("coach.budget.exceeded", 429);
+    return apiError(MEDICATION_EXTRACT_BUDGET_CODE, 429, {
+      errorCode: MEDICATION_EXTRACT_BUDGET_CODE,
+    });
   }
 
   let completion;

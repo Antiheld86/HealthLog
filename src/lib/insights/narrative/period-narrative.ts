@@ -54,6 +54,7 @@ import {
 import { buildBaselineBand, median } from "@/lib/insights/derived/baseline";
 import { VITALS_BASELINE_TYPES } from "@/lib/insights/derived/registry";
 import { assembleDiscoveryMatrix } from "@/lib/insights/discovery-matrix";
+import { resolveModuleMap } from "@/lib/modules/gate";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -514,6 +515,9 @@ export async function buildPeriodNarrativeContext(
     tz,
     since,
     fetchMode: "raw",
+    // Switched-off modules are left out of the scan AND of `byMetric`, so the
+    // narrative never cites a delta or a pattern from a module that is off.
+    modules: await resolveModuleMap(userId),
     // The one surface that admits RATED mood factors — see the option's doc
     // comment for why it is one and not four.
     includeMoodFactors: true,

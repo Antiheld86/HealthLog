@@ -15,8 +15,7 @@ import {
   useCoachLaunch,
   type CoachLaunchScope,
 } from "@/lib/insights/coach-launch-context";
-import { useFeatureFlags } from "@/hooks/use-feature-flags";
-import { useDisableCoach } from "@/hooks/use-disable-coach";
+import { useAiCapability } from "@/hooks/use-ai-capability";
 
 /**
  * v1.21.0 (C4 H2) — discreet "Ask the Coach about this" affordance for
@@ -71,15 +70,13 @@ export function AskCoachAction({
 }: AskCoachActionProps) {
   const { t } = useTranslations();
   const launch = useCoachLaunch();
-  const flags = useFeatureFlags();
-  const disableCoach = useDisableCoach();
+  const coach = useAiCapability("coach");
 
   // Same gate posture as <CoachLaunchButton> / <LayoutCoachFab>: render
-  // nothing unless the provider is mounted, the operator flag is on, and
-  // the user has not opted out.
+  // nothing unless the launch provider is mounted and the `coach`
+  // capability is available.
   if (!launch) return null;
-  if (!flags.coach) return null;
-  if (disableCoach) return null;
+  if (!coach.available) return null;
 
   const accessibleLabel = label ?? t("insights.coach.askAboutThis");
 
@@ -125,12 +122,10 @@ export function AskCoachIconButton({
 }: AskCoachActionProps) {
   const { t } = useTranslations();
   const launch = useCoachLaunch();
-  const flags = useFeatureFlags();
-  const disableCoach = useDisableCoach();
+  const coach = useAiCapability("coach");
 
   if (!launch) return null;
-  if (!flags.coach) return null;
-  if (disableCoach) return null;
+  if (!coach.available) return null;
 
   const accessibleLabel = label ?? t("insights.coach.askAboutThis");
 

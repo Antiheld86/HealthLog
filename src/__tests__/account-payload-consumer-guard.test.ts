@@ -309,6 +309,23 @@ describe("account payload consumer guard", () => {
     expect(reads).toBeGreaterThan(0);
   });
 
+  it("has a reader for the AI capability block that reads the payload, not a translation key", () => {
+    // `ai` is a two-letter name, and the generic sweep above accepts it for
+    // every `settings.ai.*` translation key in the tree, so on its own it
+    // would pass with no reader at all. The block's reader is named here: the
+    // capability hook, which is the one place a surface may read it, reading
+    // both halves off the account payload.
+    expect(fields).toContain("ai");
+    const hook = stripComments(
+      readFileSync(join(SRC, "hooks", "use-ai-capability.ts"), "utf8"),
+    );
+    const reads = [
+      /\buser\?\.ai\?\.capabilities\b/,
+      /\buser\?\.ai\?\.provider\b/,
+    ].filter((read) => read.test(hook));
+    expect(reads.length).toBe(2);
+  });
+
   it("has non-zero entry and active-record readers for additive access fields", () => {
     const entrySources = ACCOUNT_ENTRY_CONSUMERS.map((file) =>
       stripComments(readFileSync(file, "utf8")),

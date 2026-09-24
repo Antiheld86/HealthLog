@@ -760,6 +760,7 @@
     "typeWaistToHeight": "Waist-to-height ratio",
     "unitScore": "pts",
     "unitRatio": "ratio",
+    "unitRating": "rating",
     "typeWho5Score": "WHO-5 score",
     "typeSciScore": "SCI score"
   },
@@ -1311,7 +1312,9 @@
           "rateLimit": "Too many requests — wait a moment and try again.",
           "noProvider": "No AI provider configured — set one up in Settings.",
           "budget": "Daily AI budget reached — try again tomorrow.",
-          "network": "Could not reach the AI provider — please retry."
+          "network": "Could not reach the AI provider — please retry.",
+          "consent": "Reading your description with AI needs your consent first.",
+          "unavailable": "Reading descriptions with AI is not available here right now."
         }
       },
       "cadence": {
@@ -2443,8 +2446,6 @@
     "bmiEmptyTitle": "Set your height to see BMI",
     "bmiEmptyDescription": "BMI needs your height. Add it under Settings → Account.",
     "bmiEmptyAction": "Open account settings",
-    "noProviderConfigured": "Connect an AI provider to see an assessment of your readings here.",
-    "noProviderAction": "Open AI settings",
     "personalRecord": {
       "badge": "PR",
       "tooltip": "Personal record: {value} {unit} on {date}"
@@ -2568,10 +2569,6 @@
       "emptyDescription": "Generate today's briefing to get a narrative read of your trends.",
       "emptyAction": "Generate briefing",
       "loadingLabel": "Synthesising today's briefing",
-      "noProviderTitle": "No AI provider connected",
-      "noProviderDescription": "Point HealthLog at a local model (Ollama, LM Studio — nothing leaves your network) or bring your own OpenAI or Anthropic key, and the daily briefing turns your own readings into a plain-language summary. Setup takes about a minute.",
-      "noProviderAction": "Open AI settings",
-      "staleNoProviderHint": "This briefing can't refresh — no AI provider is connected.",
       "refreshFailedHint": "Couldn't refresh the briefing — showing the last one.",
       "retryAction": "Retry",
       "failedTitle": "Couldn't generate the briefing",
@@ -2949,7 +2946,15 @@
       "interrupted": {
         "note": "This answer was interrupted before it finished.",
         "retry": "Ask again"
-      }
+      },
+      "historyReadOnlyNote": "The Coach is not available right now, but you can still read and delete your conversations.",
+      "transcriptYou": "You",
+      "transcriptCoach": "Coach",
+      "errorConsent": "The Coach needs your AI consent before it can answer. You can give it in Settings, AI.",
+      "errorNotPermitted": "The Coach is not available inside a record someone shared with you.",
+      "errorUnavailable": "The Coach could not check its settings just now. Please try again in a moment.",
+      "errorOperatorOff": "AI is switched off on this server, so the Coach cannot answer.",
+      "errorCoachOff": "The Coach is switched off. You can turn it back on in Settings, Modules."
     },
     "relativeJustNow": "just now",
     "relativeMinutesAgoOne": "{count} minute ago",
@@ -4382,7 +4387,15 @@
         "night": "A sustained elevated-at-rest stretch overnight — possibly some tension."
       }
     },
-    "navEcg": "ECG"
+    "navEcg": "ECG",
+    "sectionLoadError": "This section could not be loaded.",
+    "aiSetupHint": {
+      "title": "AI is optional",
+      "body": "Everything here works without AI. If you want a daily briefing, short notes on your readings and the Coach, you can connect an AI provider.",
+      "settingsBody": "HealthLog works fully without AI. Connect a provider below if you want a daily briefing, short notes on your readings and the Coach.",
+      "action": "Set up AI",
+      "dismiss": "Not now"
+    }
   },
   "thresholds": {
     "defaultLabel": "Default",
@@ -5781,7 +5794,8 @@
         "deleteConfirmTitle": "Delete this reminder?",
         "deleteConfirmBody": "It stops being raised. Anything you have already recorded is untouched.",
         "deleteConfirmAction": "Delete",
-        "detail": "Due ones show up here and on the Coach."
+        "detail": "Due ones show up here and on the Coach.",
+        "readOnlyNote": "The Coach is not available right now, but you can still read and delete your reminders."
       },
       "aboutMe": {
         "title": "About me",
@@ -5828,14 +5842,38 @@
       "consent": {
         "title": "AI consent",
         "activeSince": "Given on {date}. Your health data may be sent to the configured provider for the AI features.",
-        "withdrawn": "Withdrawn. No health data is sent to an AI provider; the AI features stay switched off.",
+        "withdrawn": "Withdrawn. Unless another consent covers them, the Coach and Insights no longer use the AI access this server provides, and no online model reads your documents. On your own key or a local model, the Coach and Insights keep working.",
         "withdraw": "Withdraw consent",
-        "confirmBody": "The AI features stop working straight away. Nothing already recorded is deleted — use Data & privacy to export or erase your record.",
+        "confirmBody": "Unless another consent you gave still covers them, these stop straight away: the Coach and Insights where they use the AI access this server provides, and reading documents with an online model. On your own key or a local model, the Coach and Insights keep working. Unless another consent still covers Insights, the notes a model wrote for you are deleted: status notes, the daily briefing, model-written period summaries, arrival lines and workout notes. Your Coach conversations, what the Coach remembered, your plans and your document summaries stay, and you can read or delete them yourself.",
         "confirmWithdraw": "Withdraw",
         "regrantHint": "Granting again lets the AI features send your health data to the configured provider.",
         "grant": "Grant consent",
         "grantError": "The consent could not be saved. Please try again.",
-        "error": "The withdrawal could not be saved. Please try again."
+        "error": "The withdrawal could not be saved. Please try again.",
+        "documentReading": {
+          "title": "Consent to reading documents",
+          "activeSince": "Given on {date}. Documents, lab report scans and medication descriptions may be sent to your AI service for reading.",
+          "confirmBody": "Documents, lab report scans and medication descriptions are no longer sent for reading. Nothing you already have is deleted."
+        }
+      },
+      "operatorOff": {
+        "allTitle": "AI is switched off on this server",
+        "allBody": "The person who runs this server has turned AI off. HealthLog keeps working with all your data; the features that need AI are simply not shown.",
+        "someTitle": "Some AI features are switched off on this server",
+        "someBody": "The person who runs this server has turned off: {switches}. Everything else, including all your data, works as usual.",
+        "testRefused": "AI is switched off on this server, so there is nothing to test.",
+        "autoRead": "Reading documents with AI is switched off on this server."
+      },
+      "coachConversations": {
+        "title": "Coach conversations",
+        "description": "Open a conversation to read it, or delete it.",
+        "more": "Show more",
+        "openAll": "Open all conversations"
+      },
+      "coachPlans": {
+        "title": "Coach plans",
+        "description": "The plans you agreed with the Coach, to read or remove.",
+        "open": "Open plans"
       }
     },
     "dashboard": {
@@ -6790,34 +6828,35 @@
     "monitoringTestSuccess": "Test event sent",
     "monitoringTestFailed": "Monitoring test failed",
     "assistant": {
-      "title": "Assistant Surfaces",
-      "description": "Each toggle hides a model-driven surface app-wide without removing the provider configuration.",
+      "title": "Assistant",
+      "description": "Each switch stops the AI work it covers and hides its text, while data and scores keep loading.",
       "master": {
         "title": "Assistant enabled",
-        "description": "Master switch for every model-driven surface. When off, every sub-flag below is forced off."
+        "description": "Master switch for every AI feature. When off, nothing is sent to a model and every switch below is off."
       },
       "coach": {
         "title": "Coach",
-        "description": "Chat drawer, launcher button, and the mobile FAB on every Insights page."
+        "description": "Chat, upkeep of the Coach's memory, and AI nudges. Stored conversations stay readable and deletable."
       },
       "briefing": {
         "title": "Daily Briefing",
-        "description": "Briefing card, hero strip narration, recommendations grid, and the regenerate action."
+        "description": "The daily briefing, its opening lines elsewhere in the app, and period summaries written by a model."
       },
       "insightStatus": {
-        "title": "Status cards",
-        "description": "Per-metric status cards on every /insights sub-page."
+        "title": "Status notes",
+        "description": "Short notes a model writes per reading and metric, workout notes and reaction lines. The largest share of token use."
       },
-      "correlations": {
-        "title": "Correlations",
-        "description": "Correlation tile narration on the Insights overview."
+      "documentAi": {
+        "title": "Reading documents",
+        "description": "AI reading of stored documents, lab report scans and medication extraction from text. The largest share of data leaving the server."
       }
     },
     "modules": {
       "title": "Module availability",
       "description": "Turn a module off for the whole server.",
       "saveError": "Could not update module availability.",
-      "detail": "A module disabled here is off for every account regardless of personal preference. Core domains (weight, blood pressure, pulse, medications) are always on and cannot be disabled."
+      "detail": "A module disabled here is off for every account regardless of personal preference. Core domains (weight, blood pressure, pulse, medications) are always on and cannot be disabled.",
+      "coachFollowsSwitch": "Follows the Coach switch under Assistant."
     },
     "invites": {
       "title": "Invites",
@@ -8265,6 +8304,7 @@
       "saving": "Saving…",
       "cancel": "Cancel",
       "saveError": "Could not save. Try again.",
+      "emptyHint": "Pick a flow or a symptom to save this day, or use the period start button above.",
       "temperatureSection": "Temperature & ovulation",
       "intimacySection": "Intimacy & contraception",
       "testsSection": "Tests",
@@ -8798,7 +8838,8 @@
       "extractFailed": "Couldn't read the report. Try a clearer photo.",
       "pdfNeedsAnthropic": "PDF scanning needs a Claude vision provider; upload a photo instead.",
       "refTextLabel": "Range as printed",
-      "refTextPlaceholder": "e.g. 3.5 - 5.0"
+      "refTextPlaceholder": "e.g. 3.5 - 5.0",
+      "aiUnavailable": "Scanning a report with AI is not available here right now."
     },
     "loadMoreReadings": "Load more readings",
     "documentsLink": "Lab report documents",
@@ -8846,8 +8887,8 @@
       "description": "AI chat grounded in your own data."
     },
     "insights": {
-      "label": "Insights",
-      "description": "AI analysis, briefing, and correlations."
+      "label": "AI analysis",
+      "description": "Briefing, status notes and workout notes written by a model, never your data or scores."
     },
     "doctorReport": {
       "label": "Doctor report",
@@ -9031,6 +9072,11 @@
       "mmrv": "MMRV (measles, mumps, rubella, varicella)",
       "hepa-hepb": "Hepatitis A and B",
       "hepa-typhoid": "Hepatitis A and typhoid"
+    },
+    "renewal": {
+      "overdue": "Booster overdue since {date}",
+      "dueSoon": "Booster due {date}",
+      "current": "Next booster {date}"
     }
   },
   "illness": {
@@ -9242,6 +9288,7 @@
     "plans": {
       "title": "Plans",
       "pageDescription": "If-then plans agreed in your Coach conversations. Confirm a proposal to make it part of the Coach's memory.",
+      "readOnlyNote": "The Coach is not available right now, but you can still read and delete your plans.",
       "proposalTitle": "Plan proposal",
       "ifThen": "If {cue}, then {action}.",
       "targetPrefix": "Target: {target}",
@@ -9878,7 +9925,10 @@
       "uploadedMeta": "Added {date} · {size}",
       "share": "Share",
       "labValuesLink": "View {count} lab values",
-      "visitsLabel": "Belongs to visit"
+      "visitsLabel": "Belongs to visit",
+      "vaccinationsLabel": "Vaccinations",
+      "noVisitsToLink": "No visits recorded yet.",
+      "noVaccinationsToLink": "No vaccinations recorded yet."
     },
     "dropOverlay": {
       "title": "Drop files to upload",
@@ -9938,7 +9988,9 @@
       "errorNotIndexed": "Read the document first, then extract.",
       "errorLocalOcrDisabled": "Turn on local OCR in the AI settings first.",
       "errorProvider": "No AI provider is set up for this.",
-      "errorTextImageOnly": "Local OCR reads images only — not this file."
+      "errorTextImageOnly": "Local OCR reads images only — not this file.",
+      "errorConsent": "Reading documents with AI needs your consent first.",
+      "errorUnavailable": "Reading documents with AI is not available here right now."
     },
     "summary": {
       "summarise": "Summarise",
@@ -10016,6 +10068,11 @@
       "title": "Chat about this document",
       "openAria": "Ask the Coach about this document",
       "openButton": "Ask the Coach"
+    },
+    "readingConsent": {
+      "body": "Reading with AI sends this to your AI service outside this server. Allow HealthLog to send documents, lab reports and medication descriptions for reading?",
+      "grant": "Allow reading",
+      "error": "The consent could not be saved. Please try again."
     }
   },
   "selfDescription": {
@@ -10152,8 +10209,7 @@
         "dayInvalid": "The entries carried a date the server couldn't accept. This can happen when the clock or time zone on the sending side is wrong — it's worth checking.",
         "upsertFailed": "These entries reached the server, but a problem on this end kept them from being saved. There's nothing you need to do.",
         "unknown": "These entries arrived but couldn't be stored."
-      },
-      "moduleEnableError": "The nutrients module couldn't be turned on. Please try again."
+      }
     },
     "hydration": {
       "referenceMeta": "Reference intake {value} {unit}/day · EFSA"
@@ -10822,7 +10878,9 @@
       "selectAll": "Select all",
       "searchPlaceholder": "Search",
       "searchNoMatch": "No match",
-      "remove": "Remove"
+      "remove": "Remove",
+      "suggested": "Around this date",
+      "loadError": "The list could not be loaded."
     }
   }
 }

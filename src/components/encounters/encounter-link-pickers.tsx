@@ -27,14 +27,20 @@ import { useFormatters, useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import type { ModuleKey } from "@/lib/modules/registry";
 import type { IllnessEpisodeDTO } from "@/lib/illness/dto";
-import type { InboundDocumentDto } from "@/lib/validations/inbound-documents";
 import {
   EntityLinkPicker,
   type EntityLinkOption,
 } from "@/components/links/entity-link-picker";
+import { useVaultDocumentOptions } from "@/components/links/vault-document-options";
 
 /** Fetch cap for the picker — the grouped sheet needs enough rows to group. */
-const PICKER_FETCH_LIMIT = 200;
+export const PICKER_FETCH_LIMIT = 200;
+
+/**
+ * The episode list route caps `limit` at 100 and answers anything above it
+ * with a 422, which the picker used to read as "nothing here to link".
+ */
+export const EPISODE_FETCH_LIMIT = 100;
 
 interface LabListPage {
   results: Array<{
@@ -45,18 +51,17 @@ interface LabListPage {
   }>;
 }
 
-interface DocumentListPage {
-  documents: InboundDocumentDto[];
-}
-
 export function EncounterLinkPickers({
   modules,
+  anchor,
   documentIds,
   labResultIds,
   episodeIds,
   onChange,
 }: {
   modules: Partial<Record<ModuleKey, boolean>> | undefined;
+  /** The visit's own date, for the document suggestions on top. */
+  anchor: string | null;
   documentIds: string[];
   labResultIds: string[];
   episodeIds: string[];
@@ -73,24 +78,16 @@ export function EncounterLinkPickers({
   const labsOn = modules?.labs === true;
   const illnessOn = modules?.illness === true;
 
-  const documents = useQuery({
-    queryKey: queryKeys.inboundDocumentPicker("encounter-form"),
+  // The whole vault, suggestions near the visit's date on top — see
+  // `useVaultDocumentOptions` for why this no longer asks for one oversized
+  // page.
+  const documents = useVaultDocumentOptions({
     enabled: documentsOn,
-    queryFn: () =>
-      apiGet<DocumentListPage>(
-        `/api/documents/inbound?sort=documentDate&order=desc&limit=${PICKER_FETCH_LIMIT}`,
-      ),
+    anchor,
   });
 
   const labs = useQuery({
-    queryKey: queryKeys.labResultsList({
-      analyte: undefined,
-      panel: undefined,
-      from: undefined,
-      to: undefined,
-      page: 0,
-      sortDir: "desc",
-    }),
+    queryKey: queryKeys.labResultsPicker(PICKER_FETCH_LIMIT),
     enabled: labsOn,
     queryFn: () =>
       apiGet<LabListPage>(
@@ -99,33 +96,15 @@ export function EncounterLinkPickers({
   });
 
   const episodes = useQuery({
-    queryKey: queryKeys.illnessEpisodes(true),
+    queryKey: queryKeys.illnessEpisodesPicker(EPISODE_FETCH_LIMIT),
     enabled: illnessOn,
     queryFn: () =>
       apiGet<IllnessEpisodeDTO[]>(
-        `/api/illness/episodes?includeResolved=true&limit=${PICKER_FETCH_LIMIT}`,
+        `/api/illness/episodes?includeResolved=true&limit=${EPISODE_FETCH_LIMIT}`,
       ),
   });
 
   if (!documentsOn && !labsOn && !illnessOn) return null;
-
-  // Documents group by month; the caller localizes the heading.
-  const documentOptions: EntityLinkOption[] = (
-    documents.data?.documents ?? []
-  ).map((doc) => {
-    const date = doc.documentDate ?? doc.reportDate ?? doc.createdAt;
-    return {
-      id: doc.id,
-      label: doc.title ?? doc.filename ?? doc.id,
-      dateLabel: date ? format.date(date) : null,
-      group: date
-        ? {
-            key: date.slice(0, 7),
-            label: `${format.monthShort(date)} ${date.slice(0, 4)}`,
-          }
-        : null,
-    };
-  });
 
   // Labs group by sample date + panel: "Blutbild · 12.05.2026", the analyte
   // underneath. A visit links the whole panel from a day in one "select all".
@@ -163,10 +142,13 @@ export function EncounterLinkPickers({
           icon={FolderOpen}
           title={t("encounters.form.linkDocuments")}
           slot="encounter-link-documents"
-          pending={documents.isPending}
+          pending={documents.pending}
+          error={documents.error}
+          errorLabel={t("links.picker.loadError")}
+          onRetry={documents.retry}
           selected={documentIds}
           onChange={(ids) => onChange({ documentIds: ids })}
-          options={documentOptions}
+          options={documents.options}
           searchPlaceholder={t("links.picker.searchPlaceholder")}
           emptyLabel={t("encounters.form.linkNothingToOffer")}
         />
@@ -178,6 +160,9 @@ export function EncounterLinkPickers({
           title={t("encounters.form.linkLabResults")}
           slot="encounter-link-labs"
           pending={labs.isPending}
+          error={labs.isError}
+          errorLabel={t("links.picker.loadError")}
+          onRetry={() => void labs.refetch()}
           selected={labResultIds}
           onChange={(ids) => onChange({ labResultIds: ids })}
           options={labOptions}
@@ -192,6 +177,9 @@ export function EncounterLinkPickers({
           title={t("encounters.form.linkConditions")}
           slot="encounter-link-conditions"
           pending={episodes.isPending}
+          error={episodes.isError}
+          errorLabel={t("links.picker.loadError")}
+          onRetry={() => void episodes.refetch()}
           selected={episodeIds}
           onChange={(ids) => onChange({ episodeIds: ids })}
           options={episodeOptions}

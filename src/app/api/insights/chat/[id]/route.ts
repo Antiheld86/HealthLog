@@ -21,7 +21,6 @@ import {
   safeJson,
 } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
-import { requireAssistantSurface } from "@/lib/feature-flags";
 import { auditLog } from "@/lib/auth/audit";
 import { COACH_CONVERSATION_TITLE_MAX } from "@/lib/ai/coach/types";
 
@@ -43,10 +42,9 @@ const renameConversationSchema = z
 
 export const GET = apiHandler(async (_request: NextRequest, ctx: RouteCtx) => {
   const auth = await requireAuth();
-  // v1.4.38 W-C M6 — operator can hide the Coach surface app-wide;
-  // the conversation reader is part of the Coach stack (encrypted
-  // assistant prose), so a disabled surface must 403 here too.
-  await requireAssistantSurface("coach");
+  // Never AI-gated: a stored conversation is the person's own data. Reading,
+  // renaming and deleting it keep working while the Coach is unavailable for
+  // any reason, so a thread can always be reviewed and erased.
   const { id } = await ctx.params;
   if (!id) return apiError("coach.conversation.notFound", 404);
 
@@ -74,7 +72,6 @@ export const GET = apiHandler(async (_request: NextRequest, ctx: RouteCtx) => {
 
 export const PATCH = apiHandler(async (request: NextRequest, ctx: RouteCtx) => {
   const auth = await requireAuth();
-  await requireAssistantSurface("coach");
   const { id } = await ctx.params;
   if (!id) return apiError("coach.conversation.notFound", 404);
 
@@ -114,10 +111,8 @@ export const PATCH = apiHandler(async (request: NextRequest, ctx: RouteCtx) => {
 export const DELETE = apiHandler(
   async (_request: NextRequest, ctx: RouteCtx) => {
     const auth = await requireAuth();
-    // v1.4.38 W-C M6 — same gate as GET; a disabled Coach surface
-    // means the user can't reach the conversation list anyway, so the
-    // delete affordance must stay behind the same kill-switch.
-    await requireAssistantSurface("coach");
+    // Not AI-gated, like GET: deleting one's own thread never waits on the
+    // Coach being available.
     const { id } = await ctx.params;
     if (!id) return apiError("coach.conversation.notFound", 404);
 

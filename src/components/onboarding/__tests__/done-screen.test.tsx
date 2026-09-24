@@ -66,6 +66,19 @@ vi.mock("@/hooks/use-auth", () => ({
   useAuth: () => ({ user: { id: "u1" } }),
 }));
 
+/**
+ * `ai.provider.canConfigure` from `/api/auth/me`: the panel is one optional
+ * offer, shown only while AI can be set up from here.
+ */
+const providerState = vi.hoisted(() => ({ canConfigure: true }));
+vi.mock("@/hooks/use-ai-capability", () => ({
+  useAiProviderState: () => ({
+    configured: false,
+    managedBy: null,
+    canConfigure: providerState.canConfigure,
+  }),
+}));
+
 vi.mock("@/hooks/use-account-switch", () => ({
   useAccountSwitch: () => ({ mutate: () => {}, isPending: false }),
 }));
@@ -127,6 +140,18 @@ describe("<DoneScreen> AI panel", () => {
     expect(html).toContain("fully useful without AI");
     // Setup is a single optional deep-link, not a gate.
     expect(html).toContain('href="/settings/ai"');
+  });
+
+  it("leaves the panel out when AI cannot be set up here", () => {
+    // The operator switched AI off, or the record belongs to somebody else.
+    // HealthLog is complete without AI, so the screen goes from "done"
+    // straight to the exits.
+    providerState.canConfigure = false;
+    aiProviderState.data = undefined;
+    const html = render();
+    expect(html).not.toContain('data-slot="onboarding-ai-panel"');
+    expect(html).toContain('data-slot="onboarding-open-dashboard"');
+    providerState.canConfigure = true;
   });
 
   it("keeps every exit so the panel is fully skippable", () => {

@@ -83,8 +83,8 @@ export const medicationKeys = {
    * Übersicht headline % flip in the same paint, then reconciles on the
    * authoritative refetch.
    */
-  medicationDoseHistory: (medicationId: string, from: string, to: string) =>
-    ["medications", medicationId, "dose-history", from, to] as const,
+  medicationDoseHistory: (medicationId: string, windowDays: number) =>
+    ["medications", medicationId, "dose-history", windowDays] as const,
   medicationIntakeDrugLevelChart: (medicationId: string) =>
     ["medications", medicationId, "intake", "drug-level-chart"] as const,
   /**

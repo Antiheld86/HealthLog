@@ -14,7 +14,11 @@ import { Label } from "@/components/ui/label";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useTranslations } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
+import {
+  aiInputDependentKeys,
+  invalidateKeys,
+  queryKeys,
+} from "@/lib/query-keys";
 import { apiGet, apiPut } from "@/lib/api/api-fetch";
 import { PasswordInput } from "./_shared";
 
@@ -74,6 +78,8 @@ export function AiServerKeySection() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.adminAiServerKey(),
       });
+      // The server key is a provider input of the admin's own AI answer.
+      void invalidateKeys(queryClient, aiInputDependentKeys);
       toast.success(t("admin.aiServerKey.saved"));
     },
     onError: (error: unknown) => {

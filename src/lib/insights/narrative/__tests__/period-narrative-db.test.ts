@@ -30,6 +30,12 @@ const illnessEpisodeFindMany = vi.fn();
 const illnessDayLogFindMany = vi.fn();
 const environmentContextFindMany = vi.fn();
 const customMetricFindMany = vi.fn();
+// The record's module map; every module on unless a test switches one off.
+const moduleMap = vi.hoisted(() => ({ value: {} as Record<string, boolean> }));
+vi.mock("@/lib/modules/gate", () => ({
+  resolveModuleMap: vi.fn(async () => moduleMap.value),
+}));
+
 vi.mock("@/lib/db", () => ({
   prisma: {
     user: { findUnique: (a: unknown) => userFindUnique(a) },
@@ -51,6 +57,7 @@ import { buildPeriodNarrativeContext } from "../period-narrative";
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 beforeEach(() => {
+  moduleMap.value = {};
   userFindUnique.mockReset().mockResolvedValue({
     timezone: "UTC",
     sourcePriorityJson: null,
@@ -66,6 +73,84 @@ beforeEach(() => {
 });
 
 describe("buildPeriodNarrativeContext — grain (QA F3)", () => {
+  it("never narrates a module that is switched off", async () => {
+    // The fixture of the test above, with the sleep module off: the sleep
+    // night is in the data, and the narrative must neither delta it nor scan
+    // it. Mutation-checked against a caller passing an empty module map.
+    moduleMap.value = { sleep: false };
+    // `now` deep enough into the week that a full current + prior 7-day
+    // span (plus the +1 day lag slack) has clean, unambiguous UTC days.
+    const now = new Date("2026-06-30T12:00:00.000Z");
+
+    // WEIGHT + PULSE: 14 daily readings each (current + prior week) so both
+    // clear the >=3-covered-day floor and the >=2-metrics-covered gate.
+    const dailyMetricRows: Array<{
+      type: string;
+      value: number;
+      measuredAt: Date;
+    }> = [];
+    for (let i = 0; i < 14; i++) {
+      const at = new Date(now.getTime() - i * DAY_MS - 6 * 60 * 60 * 1000);
+      dailyMetricRows.push({ type: "WEIGHT", value: 80, measuredAt: at });
+      dailyMetricRows.push({ type: "PULSE", value: 60, measuredAt: at });
+    }
+
+    // One night THIS week: CORE 240 + DEEP 90 + REM 80 = 410 minutes total
+    // asleep. `measuredAt` is the END of each segment (reconstructor derives
+    // the start from `measuredAt - value minutes`), matching
+    // `sleep-night.test.ts` / `correlation-channel-series.test.ts`.
+    const nightEnd = new Date(now.getTime() - 1 * DAY_MS);
+    const sleepRows = [
+      {
+        type: "SLEEP_DURATION",
+        value: 240,
+        measuredAt: new Date(nightEnd.getTime() - 3 * 60 * 60 * 1000),
+        source: "APPLE_HEALTH",
+        deviceType: null,
+        sleepStage: "CORE",
+      },
+      {
+        type: "SLEEP_DURATION",
+        value: 90,
+        measuredAt: new Date(nightEnd.getTime() - 1.5 * 60 * 60 * 1000),
+        source: "APPLE_HEALTH",
+        deviceType: null,
+        sleepStage: "DEEP",
+      },
+      {
+        type: "SLEEP_DURATION",
+        value: 80,
+        measuredAt: nightEnd,
+        source: "APPLE_HEALTH",
+        deviceType: null,
+        sleepStage: "REM",
+      },
+    ];
+
+    measurementFindMany.mockResolvedValue([
+      ...dailyMetricRows.map((r) => ({
+        ...r,
+        source: "MANUAL",
+        deviceType: null,
+        sleepStage: null,
+      })),
+      ...sleepRows,
+    ]);
+
+    const result = await buildPeriodNarrativeContext("u1", {
+      period: "week",
+      now,
+      locale: "en",
+    });
+
+    expect(result.status).toBe("ready");
+    if (result.status !== "ready") return;
+    expect(
+      result.metricDeltas.find((d) => d.type === "SLEEP_DURATION"),
+    ).toBeUndefined();
+    expect(result.metricDeltas.length).toBeGreaterThan(0);
+  });
+
   it("sums a night's per-stage segments into the SLEEP_DURATION delta instead of averaging them", async () => {
     // `now` deep enough into the week that a full current + prior 7-day
     // span (plus the +1 day lag slack) has clean, unambiguous UTC days.

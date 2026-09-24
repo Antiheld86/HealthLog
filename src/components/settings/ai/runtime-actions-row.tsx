@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { apiFetchRaw, apiPut } from "@/lib/api/api-fetch";
 import { formatDateTime } from "@/lib/format";
+import { useAiCapability } from "@/hooks/use-ai-capability";
 import { useTranslations } from "@/lib/i18n/context";
 
 import {
@@ -39,6 +40,12 @@ export function RuntimeActionsRow({
   onPrivacyChanged: () => void;
 }) {
   const { t } = useTranslations();
+  // "Regenerate" writes the daily briefing, so it is offered only while the
+  // `briefing` capability is available (operator switch, AI analysis opt-out,
+  // provider, consent). The connection test stays: it is how a provider gets
+  // checked before anything else can be on.
+  const briefing = useAiCapability("briefing");
+  const showRegenerate = canRegenerate && briefing.available;
 
   const [testing, setTesting] = useState(false);
   const [testMsg, setTestMsg] = useState<string | null>(null);
@@ -80,13 +87,18 @@ export function RuntimeActionsRow({
         setTestMsg(t("settings.ai.testUnexpectedResponse"));
         return;
       }
-      // 4xx config errors still arrive via the error envelope.
+      // 4xx config errors still arrive via the error envelope. A refusal
+      // because the operator switched AI off says so in words.
       if (!res.ok) {
         setTestOk(false);
+        const code = (json as { meta?: { errorCode?: unknown } | null }).meta
+          ?.errorCode;
         setTestMsg(
-          t("settings.ai.testFailedShort", {
-            message: json.error ?? `HTTP ${res.status}`,
-          }),
+          typeof code === "string" && code.startsWith("assistant.disabled.")
+            ? t("settings.ai.operatorOff.testRefused")
+            : t("settings.ai.testFailedShort", {
+                message: json.error ?? `HTTP ${res.status}`,
+              }),
         );
         return;
       }
@@ -204,7 +216,7 @@ export function RuntimeActionsRow({
     // setting and every status line (last-generated, test / regenerate
     // result) sit ABOVE it, never under it.
     <div className="space-y-3">
-      {canRegenerate && (
+      {showRegenerate && (
         <div className="bg-muted/50 rounded-lg p-3">
           <div className="flex items-center justify-between gap-4">
             <div className="pr-2">
@@ -264,7 +276,7 @@ export function RuntimeActionsRow({
           )}
           {t("settings.ai.testProvider")}
         </Button>
-        {canRegenerate && (
+        {showRegenerate && (
           <Button
             size="sm"
             variant="outline"
