@@ -303,6 +303,29 @@ export const vaccinationDependentKeys = [
 ];
 
 /**
+ * Keys invalidated when an input of the `ai` block on `GET /api/auth/me`
+ * changes: the account's own provider (key, local model, compatible endpoint,
+ * Codex sign-in), the fallback chain, the central-Codex opt-in, a consent
+ * receipt granted or withdrawn, a module switch, Hide Coach, and, for the
+ * admin's own session, the operator's assistant switches, server key, central
+ * Codex and module availability.
+ *
+ * Every AI surface reads its capability from that block, so a write that
+ * changes an input without evicting `authMe()` leaves the surface on the old
+ * answer: a freshly configured provider stays "not set up" until a reload, a
+ * removed one keeps offering AI work the server then refuses. The provider and
+ * insights roots ride along because they render the same state in detail.
+ *
+ * `ai-input-invalidation-guard.test.ts` holds every client write to one of
+ * those endpoints to this bundle.
+ */
+export const aiInputDependentKeys = [
+  queryKeys.authMe(),
+  queryKeys.userAiProvider(),
+  queryKeys.insightsRoot(),
+];
+
+/**
  * Invalidate every key in the bundle in parallel. Use this from mutation
  * `onSuccess` handlers so the call site stays a one-liner instead of repeating
  * `Promise.all(keys.map(...))` everywhere.

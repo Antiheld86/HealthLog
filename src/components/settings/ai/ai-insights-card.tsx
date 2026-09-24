@@ -28,7 +28,11 @@ import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
 import { formatDateTime } from "@/lib/format";
 import { useTranslations } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
+import {
+  aiInputDependentKeys,
+  invalidateKeys,
+  queryKeys,
+} from "@/lib/query-keys";
 
 import { AdminOpenAIProviderForm } from "./admin-openai-provider-form";
 import { AiConsentCard } from "./ai-consent-card";
@@ -127,10 +131,20 @@ export function AiInsightsCard({
   // settings UI. Runs once per mount of the AI-settings surface.
   useEffect(() => {
     if (!isAuthenticated) return;
-    void apiFetchRaw("/api/consent/ai/web", { method: "POST" }).catch(() => {
-      /* best-effort heal — the explicit grant path stays available */
-    });
-  }, [isAuthenticated]);
+    // A heal that minted a receipt changed an input of the account's AI
+    // capability answer, so `/me` re-resolves; a no-op heal leaves it alone.
+    void apiFetchRaw("/api/consent/ai/web", { method: "POST" })
+      .then(async (res) => {
+        if (!res.ok) return;
+        const body = (await res.json()) as { data?: { minted?: boolean } };
+        if (body.data?.minted) {
+          void invalidateKeys(queryClient, aiInputDependentKeys);
+        }
+      })
+      .catch(() => {
+        /* best-effort heal — the explicit grant path stays available */
+      });
+  }, [isAuthenticated, queryClient]);
 
   // The Select is URL-driven so the SSR test can pick the branch and
   // a deep link works. Default = `?provider=…` query param when the

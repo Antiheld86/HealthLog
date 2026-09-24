@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiPatch } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
+import { aiInputDependentKeys, invalidateKeys } from "@/lib/query-keys";
 
 import type { UserAIProvider } from "./shared";
 
@@ -69,7 +69,7 @@ export function ResponseTimeoutCard({
     onSuccess: () => {
       setOk(true);
       setMsg(t("settings.ai.saved"));
-      queryClient.invalidateQueries({ queryKey: queryKeys.userAiProvider() });
+      void invalidateKeys(queryClient, aiInputDependentKeys);
     },
     onError: (e) => {
       setOk(false);

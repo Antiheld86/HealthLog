@@ -39,7 +39,11 @@ import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
 import { formatDateTime } from "@/lib/format";
 import { useTranslations } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
+import {
+  aiInputDependentKeys,
+  invalidateKeys,
+  queryKeys,
+} from "@/lib/query-keys";
 
 type ConsentReceiptWire = {
   id: string;
@@ -86,10 +90,7 @@ export function AiConsentCard({
       await queryClient.invalidateQueries({
         queryKey: queryKeys.aiConsentReceipt("ai_full"),
       });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.authMe() });
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.insightsProviderChain(),
-      });
+      await invalidateKeys(queryClient, aiInputDependentKeys);
     },
   });
 
@@ -110,10 +111,7 @@ export function AiConsentCard({
       await queryClient.invalidateQueries({
         queryKey: queryKeys.aiConsentReceipt("ai_full"),
       });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.authMe() });
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.insightsProviderChain(),
-      });
+      await invalidateKeys(queryClient, aiInputDependentKeys);
     },
   });
 
@@ -292,7 +290,7 @@ function DocumentReadingConsentRow({
       await queryClient.invalidateQueries({
         queryKey: queryKeys.aiConsentReceipt("ai_extraction"),
       });
-      await queryClient.invalidateQueries({ queryKey: queryKeys.authMe() });
+      await invalidateKeys(queryClient, aiInputDependentKeys);
     },
   });
 

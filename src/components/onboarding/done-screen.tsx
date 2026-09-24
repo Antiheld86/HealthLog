@@ -25,7 +25,11 @@ import { useOnboardingAnswer } from "@/components/onboarding/use-onboarding-flow
 import { useAuth } from "@/hooks/use-auth";
 import { useAccountSwitch } from "@/hooks/use-account-switch";
 import { setTourReferrer } from "@/components/onboarding/tour-launcher";
-import { queryKeys } from "@/lib/query-keys";
+import {
+  aiInputDependentKeys,
+  invalidateKeys,
+  queryKeys,
+} from "@/lib/query-keys";
 import { apiFetchRaw, apiGet } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
 import { markChecklistExpanded } from "@/lib/onboarding/checklist-storage";
@@ -162,9 +166,7 @@ export function DoneScreen({ state }: { state: OnboardingStateDto }) {
     },
     onSuccess: async () => {
       setJustGranted(true);
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.userAiProvider(),
-      });
+      await invalidateKeys(queryClient, aiInputDependentKeys);
       await queryClient.invalidateQueries({
         queryKey: queryKeys.aiConsentReceipt("ai_full"),
       });

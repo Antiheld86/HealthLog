@@ -30,7 +30,11 @@ import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { apiFetchRaw, apiGet } from "@/lib/api/api-fetch";
 import { formatDateTime } from "@/lib/format";
 import { useTranslations } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
+import {
+  aiInputDependentKeys,
+  invalidateKeys,
+  queryKeys,
+} from "@/lib/query-keys";
 
 interface CentralCodexStatus {
   status: string;
@@ -100,6 +104,7 @@ export function CentralCodexSection() {
           queryClient.invalidateQueries({
             queryKey: queryKeys.adminCentralCodex(),
           });
+          void invalidateKeys(queryClient, aiInputDependentKeys);
           return;
         }
         if (!cancelled) setTimeout(tick, intervalMs);
@@ -135,6 +140,7 @@ export function CentralCodexSection() {
       queryClient.invalidateQueries({
         queryKey: queryKeys.adminCentralCodex(),
       });
+      void invalidateKeys(queryClient, aiInputDependentKeys);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : t("admin.centralCodex.error"),

@@ -3,7 +3,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { apiPost } from "@/lib/api/api-fetch";
-import { queryKeys } from "@/lib/query-keys";
+import {
+  aiInputDependentKeys,
+  invalidateKeys,
+  queryKeys,
+} from "@/lib/query-keys";
 
 /**
  * Grant the consent for reading documents (`ai_extraction`) from the place
@@ -38,7 +42,7 @@ export function useGrantDocumentReadingConsent() {
       });
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.authMe() });
+      void invalidateKeys(queryClient, aiInputDependentKeys);
       void queryClient.invalidateQueries({
         queryKey: queryKeys.aiConsentReceipt("ai_extraction"),
       });

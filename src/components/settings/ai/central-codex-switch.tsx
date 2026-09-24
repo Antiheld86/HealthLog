@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { apiPatch } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
+import { aiInputDependentKeys, invalidateKeys } from "@/lib/query-keys";
 
 import type { InsightsSettings } from "./shared";
 
@@ -51,11 +51,9 @@ export function CentralCodexSwitch({
       }),
     onSuccess: () => {
       // The opt-in changes which providers can serve this user — refresh the
-      // settings summary (which carries the flag) and every insight read.
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.insightsSettings(),
-      });
-      queryClient.invalidateQueries({ queryKey: queryKeys.insightsRoot() });
+      // settings summary (which carries the flag), the account's AI
+      // capability answer, and every insight read.
+      void invalidateKeys(queryClient, aiInputDependentKeys);
       setPendingEnable(false);
     },
   });
