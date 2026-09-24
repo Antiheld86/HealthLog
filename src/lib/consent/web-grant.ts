@@ -35,7 +35,10 @@
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
 import { isP2002 } from "@/lib/prisma-errors";
-import { latestActiveReceipt } from "@/lib/consent/receipts";
+import {
+  AI_EXTRACTION_CONSENT_KIND,
+  latestActiveReceipt,
+} from "@/lib/consent/receipts";
 import type { ConsentReceipt } from "@/lib/consent/receipts";
 
 /**
@@ -63,24 +66,55 @@ export type WebConsentGrantResult =
  */
 export type WebConsentGrantIntent = "heal" | "affirmative";
 
+/** The receipt kinds the web mints: the master grant, or extraction alone. */
+type WebConsentKind = "ai_full" | typeof AI_EXTRACTION_CONSENT_KIND;
+
 /**
  * Ensure the web user has an active `ai_full` consent receipt, minting one
  * if absent. Idempotent: returns `{ minted: false }` when an active master
  * grant already exists, so callers can invoke it freely on mount.
  *
  * Mirrors the iOS `ai_full` grant. `ai_full` is the master kind that
- * satisfies every surface gate (insights + coach), matching the iOS app's
- * single master toggle rather than per-surface web grants.
+ * satisfies every surface gate (insights + coach + extraction), matching the
+ * iOS app's single master toggle rather than per-surface web grants.
  */
 export async function ensureWebAiConsentReceipt(
   userId: string,
   intent: WebConsentGrantIntent,
   now: Date = new Date(),
 ): Promise<WebConsentGrantResult> {
+  return ensureWebConsentReceipt(userId, "ai_full", intent, now);
+}
+
+/**
+ * Ensure an active `ai_extraction` receipt: the consent to read documents,
+ * lab report scans and typed medication text with an external model. Minted
+ * by switching the document auto-read on, which is the person's own
+ * affirmative act, so it supersedes an earlier revocation of the same kind.
+ * It does not satisfy the Coach or the analysis.
+ */
+export async function ensureExtractionConsentReceipt(
+  userId: string,
+  now: Date = new Date(),
+): Promise<WebConsentGrantResult> {
+  return ensureWebConsentReceipt(
+    userId,
+    AI_EXTRACTION_CONSENT_KIND,
+    "affirmative",
+    now,
+  );
+}
+
+async function ensureWebConsentReceipt(
+  userId: string,
+  kind: WebConsentKind,
+  intent: WebConsentGrantIntent,
+  now: Date,
+): Promise<WebConsentGrantResult> {
   // Fast path: a cheap read outside the transaction short-circuits the
   // common already-granted case (every mount after the first) without
   // opening a transaction.
-  const existing = await latestActiveReceipt(userId, "ai_full");
+  const existing = await latestActiveReceipt(userId, kind);
   if (existing) return { minted: false, reason: "already_active" };
 
   // A revoked receipt anywhere in this account's history means the user made
@@ -88,7 +122,7 @@ export async function ensureWebAiConsentReceipt(
   // affirmative act is the user deciding again, so it may proceed.
   if (intent === "heal") {
     const revoked = await prisma.consentReceipt.findFirst({
-      where: { userId, kind: "ai_full", revokedAt: { not: null } },
+      where: { userId, kind, revokedAt: { not: null } },
       select: { id: true },
     });
     if (revoked) return { minted: false, reason: "previously_revoked" };
@@ -96,7 +130,7 @@ export async function ensureWebAiConsentReceipt(
 
   const artefact = JSON.stringify({
     source: "web",
-    kind: "ai_full",
+    kind,
     grantedAt: now.toISOString(),
     note: "In-app affirmative AI consent granted via the web client.",
   });
@@ -112,7 +146,7 @@ export async function ensureWebAiConsentReceipt(
     return await prisma.$transaction(
       async (tx) => {
         const inTx = await tx.consentReceipt.findFirst({
-          where: { userId, kind: "ai_full", revokedAt: null },
+          where: { userId, kind, revokedAt: null },
           orderBy: { createdAt: "desc" },
         });
         if (inTx) return { minted: false, reason: "already_active" } as const;
@@ -122,7 +156,7 @@ export async function ensureWebAiConsentReceipt(
         // mint would overwrite a decision made a moment earlier.
         if (intent === "heal") {
           const revokedInTx = await tx.consentReceipt.findFirst({
-            where: { userId, kind: "ai_full", revokedAt: { not: null } },
+            where: { userId, kind, revokedAt: { not: null } },
             select: { id: true },
           });
           if (revokedInTx)
@@ -130,7 +164,7 @@ export async function ensureWebAiConsentReceipt(
         }
 
         const receipt = await tx.consentReceipt.create({
-          data: { userId, kind: "ai_full", artefact, signedAt: now },
+          data: { userId, kind, artefact, signedAt: now },
         });
         return { minted: true, receipt } as const;
       },

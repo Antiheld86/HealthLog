@@ -21,7 +21,10 @@ vi.mock("@/lib/db", () => {
 });
 
 import { prisma } from "@/lib/db";
-import { ensureWebAiConsentReceipt } from "../web-grant";
+import {
+  ensureExtractionConsentReceipt,
+  ensureWebAiConsentReceipt,
+} from "../web-grant";
 
 const $transaction = vi.mocked(prisma.$transaction) as unknown as {
   mockImplementation: (impl: (fn: TxFn) => unknown) => void;
@@ -244,5 +247,46 @@ describe("ensureWebAiConsentReceipt — a revocation is a standing decision", ()
 
     expect(result).toEqual({ minted: false, reason: "previously_revoked" });
     expect(prisma.consentReceipt.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("ensureExtractionConsentReceipt", () => {
+  it("mints an ai_extraction receipt, never the master grant", async () => {
+    vi.mocked(prisma.consentReceipt.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.consentReceipt.create).mockResolvedValue(
+      row({ kind: "ai_extraction" }) as never,
+    );
+
+    const result = await ensureExtractionConsentReceipt("user-1");
+
+    expect(result.minted).toBe(true);
+    const createArg = vi.mocked(prisma.consentReceipt.create).mock.calls[0][0];
+    expect(createArg.data.kind).toBe("ai_extraction");
+    expect(JSON.parse(createArg.data.artefact as string).kind).toBe(
+      "ai_extraction",
+    );
+    for (const [args] of vi.mocked(prisma.consentReceipt.findFirst).mock
+      .calls) {
+      expect((args as { where: { kind: string } }).where.kind).toBe(
+        "ai_extraction",
+      );
+    }
+  });
+
+  it("supersedes an earlier revocation of the same kind (it is the person's own act)", async () => {
+    vi.mocked(prisma.consentReceipt.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.consentReceipt.create).mockResolvedValue(
+      row({ kind: "ai_extraction" }) as never,
+    );
+
+    await ensureExtractionConsentReceipt("user-1");
+
+    // An affirmative mint never looks for a past revocation.
+    for (const [args] of vi.mocked(prisma.consentReceipt.findFirst).mock
+      .calls) {
+      expect(
+        (args as { where: { revokedAt: unknown } }).where.revokedAt,
+      ).toBeNull();
+    }
   });
 });

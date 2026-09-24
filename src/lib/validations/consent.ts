@@ -4,11 +4,14 @@ import { z } from "zod/v4";
  * v1.4.40 SB-10 — AI consent receipts (App-Store Guideline 5.1.2(i) +
  * GDPR Art. 7 audit trail).
  *
- * The discriminator covers the three consent surfaces the iOS client
- * collects independently:
+ * The discriminator covers the consent surfaces collected independently:
  *   - `ai_full`           full assistant + on-device personalisation
  *   - `ai_insights_only`  read-only Insights generation (no Coach)
  *   - `ai_coach`          chat-style Coach access
+ *   - `ai_extraction`     reading documents, lab report scans and typed
+ *                         medication text with an external model (minted by
+ *                         the document auto-read toggle; it satisfies neither
+ *                         the Coach nor the analysis)
  *
  * Keeping each surface as its own row means the legal team can prove
  * which exact scope the user agreed to without parsing the signed
@@ -20,6 +23,7 @@ export const consentKindEnum = z.enum([
   "ai_full",
   "ai_insights_only",
   "ai_coach",
+  "ai_extraction",
 ]);
 
 export type ConsentKind = z.infer<typeof consentKindEnum>;
@@ -73,7 +77,7 @@ export type WebConsentGrantBodyInput = z.input<typeof webConsentGrantBody>;
  *
  * Omitting `kind` on GET returns the latest active receipt per kind
  * (a `Record<ConsentKind, …>` shape). Omitting it on DELETE revokes
- * the latest receipt across all three kinds — handy for the iOS
+ * the latest receipt across every kind — handy for the iOS
  * "deaktivieren alle KI-Funktionen" master toggle.
  */
 export const consentLatestQuery = z.object({

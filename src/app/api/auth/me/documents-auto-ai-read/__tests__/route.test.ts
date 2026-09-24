@@ -22,7 +22,7 @@ vi.mock("@/lib/db-compat", () => ({
   ensureDbCompatibility: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/lib/consent/web-grant", () => ({
-  ensureWebAiConsentReceipt: vi.fn().mockResolvedValue(undefined),
+  ensureExtractionConsentReceipt: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("@/lib/jobs/document-summary-catchup", () => ({
   enqueueSummaryCatchUp: vi.fn().mockResolvedValue({ enqueued: true }),
@@ -47,7 +47,7 @@ vi.mock("next/headers", () => ({
 import { PATCH } from "../route";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
-import { ensureWebAiConsentReceipt } from "@/lib/consent/web-grant";
+import { ensureExtractionConsentReceipt } from "@/lib/consent/web-grant";
 import { enqueueSummaryCatchUp } from "@/lib/jobs/document-summary-catchup";
 
 const SESSION_OK = {
@@ -103,23 +103,20 @@ describe("PATCH /api/auth/me/documents-auto-ai-read — catch-up scheduling", ()
     await PATCH(mkPatch(false));
 
     expect(enqueueSummaryCatchUp).not.toHaveBeenCalled();
-    expect(ensureWebAiConsentReceipt).not.toHaveBeenCalled();
+    expect(ensureExtractionConsentReceipt).not.toHaveBeenCalled();
   });
 
   it("still mints the consent receipt on the flip that schedules the pass", async () => {
     // The catch-up rides the same act of consent, never around it. The mint
-    // is marked `affirmative` because switching the toggle on IS the consent
-    // act: unlike the settings-mount heal, it may lift an earlier
-    // withdrawal, which is the user deciding again rather than the page
-    // deciding for them.
+    // is the extraction kind (documents, lab scans, medication text) and
+    // nothing wider: switching document reading on does not consent to the
+    // Coach or to the analysis. It is the person's own affirmative act, so
+    // it may lift an earlier withdrawal of the same kind.
     withPrevious(false);
 
     await PATCH(mkPatch(true));
 
-    expect(ensureWebAiConsentReceipt).toHaveBeenCalledWith(
-      "user-1",
-      "affirmative",
-    );
+    expect(ensureExtractionConsentReceipt).toHaveBeenCalledWith("user-1");
   });
 
   it("persists the flag field-by-field", async () => {

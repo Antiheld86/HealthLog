@@ -709,7 +709,7 @@ const glucoseUnitResponse = z
 const documentsAutoAiReadPatchRequest = documentsAutoAiReadPatchSchema.meta({
   id: "DocumentsAutoAiReadPatchRequest",
   description:
-    "Turn automatic AI reading of newly uploaded documents on or off. Turning it on also mints an `ai_full` consent receipt and schedules a catch-up over the existing vault.",
+    "Turn automatic AI reading of newly uploaded documents on or off. Turning it on also mints an `ai_extraction` consent receipt and schedules a catch-up over the existing vault.",
 });
 
 const documentsAutoAiReadResponse = z
@@ -1820,7 +1820,7 @@ export const profilePaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary: "Set the automatic document-reading opt-in",
       description:
         "Hard-set, idempotent, audit-logged. Rate-limited 60 / min per user.\n\n" +
-        "Turning it ON does two further things a caller should expect. It is itself the standing consent act, so the write appends an `ai_full` `ConsentReceipt` — the same receipt POST /api/consent/ai/web mints, and one DELETE /api/consent/ai/latest revokes without touching this flag. And a genuine OFF→ON flip schedules a bounded catch-up over the documents already in the vault, because the summary job is enqueued at upload time and would otherwise only ever apply to future uploads. The catch-up is fire-and-forget and re-runs every consent and budget gate per document.\n\n" +
+        "Turning it ON does two further things a caller should expect. It is the consent act for reading documents, so the write appends an `ai_extraction` `ConsentReceipt`: the narrow kind that covers documents, lab report scans and typed medication text and nothing else (not the Coach, not the analysis). DELETE /api/consent/ai/latest revokes it without touching this flag, and the revocation wins: document reading stops even while the flag stays on. And a genuine OFF→ON flip schedules a bounded catch-up over the documents already in the vault, because the summary job is enqueued at upload time and would otherwise only ever apply to future uploads. The catch-up is fire-and-forget and re-runs every consent and budget gate per document.\n\n" +
         "The body cap here is 1 KB, far tighter than the 64 KB its siblings allow — a payload above it is refused with 413 rather than parsed.",
       requestBody: {
         required: true,

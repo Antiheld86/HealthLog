@@ -30,7 +30,7 @@ import {
 } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
-import { ensureWebAiConsentReceipt } from "@/lib/consent/web-grant";
+import { ensureExtractionConsentReceipt } from "@/lib/consent/web-grant";
 import { prisma } from "@/lib/db";
 import { enqueueSummaryCatchUp } from "@/lib/jobs/document-summary-catchup";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
@@ -102,11 +102,12 @@ export const PATCH = apiHandler(async (req: Request) => {
     data: { documentsAutoAiRead: next },
   });
 
-  // Turning the toggle ON is the standing consent act — mint an append-only
-  // `ai_full` receipt (idempotent) so the durable audit trail records it, in
-  // addition to the runtime short-circuit the document consent gate reads.
+  // Turning the toggle ON is the consent act for reading documents — mint an
+  // append-only `ai_extraction` receipt (idempotent). The document consent
+  // gate reads that receipt, not the toggle, so a later revocation wins over
+  // a toggle left on. It does not grant the Coach or the analysis.
   if (next) {
-    await ensureWebAiConsentReceipt(user.id, "affirmative");
+    await ensureExtractionConsentReceipt(user.id);
   }
 
   // A genuine OFF→ON flip schedules a catch-up over the documents already in

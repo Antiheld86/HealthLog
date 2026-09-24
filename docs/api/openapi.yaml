@@ -7948,12 +7948,13 @@ paths:
         Hard-set, idempotent, audit-logged. Rate-limited 60 / min per user.
 
 
-        Turning it ON does two further things a caller should expect. It is itself the standing consent act, so the
-        write appends an `ai_full` `ConsentReceipt` — the same receipt POST /api/consent/ai/web mints, and one DELETE
-        /api/consent/ai/latest revokes without touching this flag. And a genuine OFF→ON flip schedules a bounded
-        catch-up over the documents already in the vault, because the summary job is enqueued at upload time and would
-        otherwise only ever apply to future uploads. The catch-up is fire-and-forget and re-runs every consent and
-        budget gate per document.
+        Turning it ON does two further things a caller should expect. It is the consent act for reading documents, so
+        the write appends an `ai_extraction` `ConsentReceipt`: the narrow kind that covers documents, lab report scans
+        and typed medication text and nothing else (not the Coach, not the analysis). DELETE /api/consent/ai/latest
+        revokes it without touching this flag, and the revocation wins: document reading stops even while the flag stays
+        on. And a genuine OFF→ON flip schedules a bounded catch-up over the documents already in the vault, because the
+        summary job is enqueued at upload time and would otherwise only ever apply to future uploads. The catch-up is
+        fire-and-forget and re-runs every consent and budget gate per document.
 
 
         The body cap here is 1 KB, far tighter than the 64 KB its siblings allow — a payload above it is refused with
@@ -12691,6 +12692,7 @@ paths:
               - ai_full
               - ai_insights_only
               - ai_coach
+              - ai_extraction
           description: Narrow to one consent kind. Omit for the full keyspace.
       responses:
         "200":
@@ -12702,8 +12704,9 @@ paths:
                   - $ref: "#/components/schemas/ConsentLatestForKindEnvelope"
                   - $ref: "#/components/schemas/ConsentLatestByKindEnvelope"
         "400": &a22
-          description: "`kind` was present but is not one of `ai_full`, `ai_insights_only`, `ai_coach`. Multi-issue envelope;
-            nothing was read or revoked. The consent family answers 400 here where the rest of the API answers 422."
+          description: "`kind` was present but is not one of `ai_full`, `ai_insights_only`, `ai_coach`, `ai_extraction`.
+            Multi-issue envelope; nothing was read or revoked. The consent family answers 400 here where the rest of the
+            API answers 422."
           content:
             application/json:
               schema:
@@ -12726,9 +12729,18 @@ paths:
         each revocation is audit-logged.
 
 
-        Revoking `ai_full` does NOT switch off `documentsAutoAiRead`; that flag is written through PATCH
-        /api/auth/me/documents-auto-ai-read and turning it on mints a fresh receipt. A client offering both controls
-        should show them as the two separate things they are.
+        Revoking `ai_full` or `ai_extraction` does NOT switch off `documentsAutoAiRead`, but it does stop document
+        reading: the document gate reads the receipt, not the switch, so a revocation wins over a switch left on.
+        Turning the switch on again mints a fresh `ai_extraction` receipt through PATCH
+        /api/auth/me/documents-auto-ai-read. A client offering both controls should show them as the two separate things
+        they are.
+
+
+        When a revocation leaves no receipt covering the analysis (`ai_insights_only` or `ai_full`), the same
+        transaction deletes the text a model wrote under it that can be written again: per-metric status notes, the
+        cached briefing, model-written period narratives, reaction lines and workout paragraphs. Coach conversations,
+        facts and plans and document summaries are the person's records and stay. A deletion is audit-logged with counts
+        only (`consent.ai.purge`).
       parameters:
         - in: query
           name: kind
@@ -12739,6 +12751,7 @@ paths:
               - ai_full
               - ai_insights_only
               - ai_coach
+              - ai_extraction
           description: Revoke one kind. Omit to revoke the latest active receipt across every kind.
       responses:
         "200":
@@ -23846,8 +23859,8 @@ components:
           type: boolean
       required:
         - documentsAutoAiRead
-      description: Turn automatic AI reading of newly uploaded documents on or off. Turning it on also mints an `ai_full`
-        consent receipt and schedules a catch-up over the existing vault.
+      description: Turn automatic AI reading of newly uploaded documents on or off. Turning it on also mints an
+        `ai_extraction` consent receipt and schedules a catch-up over the existing vault.
     InjectionSitePrefsPatchRequest:
       type: object
       properties:
@@ -26005,6 +26018,7 @@ components:
             - ai_full
             - ai_insights_only
             - ai_coach
+            - ai_extraction
         artefact:
           type: string
           minLength: 1
@@ -58019,6 +58033,7 @@ components:
                 - ai_full
                 - ai_insights_only
                 - ai_coach
+                - ai_extraction
             signedAt:
               type: string
             revokedAt:
@@ -58115,6 +58130,7 @@ components:
             - ai_full
             - ai_insights_only
             - ai_coach
+            - ai_extraction
         receipt:
           anyOf:
             - $ref: "#/components/schemas/SerialisedConsentReceipt"
@@ -58137,6 +58153,7 @@ components:
             - ai_full
             - ai_insights_only
             - ai_coach
+            - ai_extraction
         signedAt:
           type: string
           format: date-time
@@ -58193,13 +58210,18 @@ components:
           anyOf:
             - $ref: "#/components/schemas/SerialisedConsentReceipt"
             - type: "null"
+        ai_extraction:
+          anyOf:
+            - $ref: "#/components/schemas/SerialisedConsentReceipt"
+            - type: "null"
       required:
         - ai_full
         - ai_insights_only
         - ai_coach
+        - ai_extraction
       additionalProperties: false
-      description: "The latest active receipt for every kind. All three keys are always present: a null value means the kind
-        is not granted, so a client never has to read absence as ambiguity."
+      description: "The latest active receipt for every kind. Every key is always present: a null value means the kind is not
+        granted, so a client never has to read absence as ambiguity."
     ConsentRevokeForKindEnvelope:
       type: object
       properties:
@@ -58248,6 +58270,7 @@ components:
                   - ai_full
                   - ai_insights_only
                   - ai_coach
+                  - ai_extraction
               receipt:
                 $ref: "#/components/schemas/SerialisedConsentReceipt"
             required:
