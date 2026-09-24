@@ -69,6 +69,14 @@ vi.mock("@/lib/db-compat", () => ({
 vi.mock("@/lib/ai/provider", () => ({
   resolveProvider: vi.fn().mockResolvedValue({ type: "none" }),
   hasAnyConfiguredProvider: vi.fn().mockResolvedValue(false),
+  // The AI capability loader's presence probe, answering the same "no
+  // provider". Without it the loader throws and every capability on the
+  // three wires reads `check_failed` instead of `no_provider`.
+  probeProviderChain: vi.fn().mockResolvedValue({
+    entries: [],
+    localOcrEnabled: false,
+    managedBy: null,
+  }),
 }));
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -236,9 +244,14 @@ async function readWires(): Promise<Wires> {
     data: {
       status: string;
       value: { configured?: boolean } | null;
+      ai: { reason: string | null };
     } | null;
   };
   expect(derivedBody.data?.status).toBe("ok");
+  // The AI state rides the same payload. `no_provider` is this fixture's
+  // honest answer; `check_failed` would mean a mock starved the capability
+  // loader and every wire above was read on its failure path.
+  expect(derivedBody.data?.ai.reason).toBe("no_provider");
 
   return {
     snapshot: snapshotBody.data!.healthScore!.configured,
