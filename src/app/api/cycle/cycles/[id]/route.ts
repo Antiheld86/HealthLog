@@ -37,17 +37,21 @@ export const DELETE = apiHandler(
 
     const existing = await prisma.menstrualCycle.findUnique({
       where: { id },
-      select: { id: true, userId: true, startDate: true },
+      select: { id: true, userId: true, startDate: true, deletedAt: true },
     });
     if (!existing || existing.userId !== user.id) {
       return apiError("Cycle not found", 404);
+    }
+    // Already a tombstone: the delete is done, and nothing is left to move.
+    if (existing.deletedAt !== null) {
+      return new Response(null, { status: 204 });
     }
 
     // Tombstone + re-anchor as one unit: a neighbour re-derived against a
     // half-applied delete would read the row being removed as still live.
     // The shared removal also gives back a start this one folded in and
-    // hands the removed cycle's days back. `null` is a cycle already
-    // tombstoned: nothing left to move.
+    // hands the removed cycle's days back. `null` is a concurrent delete that
+    // tombstoned the row first: nothing left to move.
     const removed = await prisma.$transaction((db) =>
       removeCycleStartedOn(db, user.id, existing.startDate),
     );
