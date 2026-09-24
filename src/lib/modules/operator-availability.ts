@@ -117,6 +117,34 @@ export async function getOperatorModuleAvailability(): Promise<OperatorModuleAva
   );
 }
 
+/**
+ * Bring an instance settings pair written before migration 0343 forward.
+ *
+ * Until 0343 the operator turned the Coach off in module availability
+ * (`{ coach: false }`); since then the Coach switch alone carries that answer
+ * and the availability key is ignored. The migration folded every live row; a
+ * restored backup from before it needs the same fold, or the Coach it had off
+ * comes back on and the dead key sits in the blob. Returns the pair to write.
+ */
+export function foldLegacyCoachAvailability(
+  moduleAvailabilityJson: unknown,
+  assistantCoachEnabled: boolean,
+): { moduleAvailabilityJson: unknown; assistantCoachEnabled: boolean } {
+  if (
+    typeof moduleAvailabilityJson !== "object" ||
+    moduleAvailabilityJson === null ||
+    Array.isArray(moduleAvailabilityJson) ||
+    !("coach" in moduleAvailabilityJson)
+  ) {
+    return { moduleAvailabilityJson, assistantCoachEnabled };
+  }
+  const { coach, ...rest } = moduleAvailabilityJson as Record<string, unknown>;
+  return {
+    moduleAvailabilityJson: rest,
+    assistantCoachEnabled: coach === false ? false : assistantCoachEnabled,
+  };
+}
+
 /** A module key whose operator layer the blob owns (every key but the Coach). */
 function isBlobOwnedKey(key: string): key is ModuleKey {
   return isModuleKey(key) && !SWITCH_OWNED_MODULE_KEYS.includes(key);

@@ -385,6 +385,59 @@ describe("POST /api/admin/backups/[id]/restore", () => {
     expect(rewritten.documentMaxFileBytes).toBe(4 * 1_048_576);
   });
 
+  it("folds a pre-0343 Coach availability key into the Coach switch", async () => {
+    const prisma = getPrismaClient();
+    const admin = await seedAdminSession();
+    const live = await prisma.appSettings.create({
+      data: { id: "singleton" },
+    });
+
+    // A file written before the Coach's operator layer moved from module
+    // availability to the Coach switch: the operator had the Coach off there.
+    const { assistantDocumentAiEnabled: _dropped, ...beforeTheSwitchExisted } =
+      live;
+    void _dropped;
+    const backup = await prisma.dataBackup.create({
+      data: {
+        userId: admin.id,
+        type: "MANUAL_UPLOAD_SETTINGS_TEST",
+        data: encrypt(
+          JSON.stringify({
+            schemaVersion: "1",
+            exportedAt: "2026-05-09T00:00:00.000Z",
+            userId: admin.id,
+            measurements: [],
+            medications: [],
+            intakeEvents: [],
+            moodEntries: [],
+            appSettings: {
+              ...beforeTheSwitchExisted,
+              documentQuotaBytes: String(live.documentQuotaBytes),
+              assistantCoachEnabled: true,
+              moduleAvailabilityJson: { coach: false, labs: false },
+            },
+          }),
+        ),
+      },
+    });
+
+    const { POST } = await import("@/app/api/admin/backups/[id]/restore/route");
+    const res = await POST(
+      makeRequest(backup.id, {
+        confirm: "RESTORE",
+        restoreInstanceSettings: true,
+      }) as unknown as Parameters<typeof POST>[0],
+      { params: Promise.resolve({ id: backup.id }) },
+    );
+    expect(res.status).toBe(200);
+
+    const restored = await prisma.appSettings.findUniqueOrThrow({
+      where: { id: "singleton" },
+    });
+    expect(restored.assistantCoachEnabled).toBe(false);
+    expect(restored.moduleAvailabilityJson).toEqual({ labs: false });
+  });
+
   it("returns 404 when the backup id is unknown", async () => {
     const admin = await seedAdminSession();
     void admin;
