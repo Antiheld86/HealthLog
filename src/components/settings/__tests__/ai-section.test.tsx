@@ -44,6 +44,23 @@ vi.mock("@/hooks/use-auth", () => ({
   }),
 }));
 
+// The AI capability map on `/api/auth/me`: everything available, a provider
+// configured, nothing switched off by the operator. The notices and the
+// setup hint above the provider card have their own suites.
+vi.mock("@/hooks/use-ai-capability", () => ({
+  useAiCapability: () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
+  useAiCapabilityMap: () => null,
+  useAiProviderState: () => ({
+    configured: true,
+    managedBy: "user",
+    canConfigure: true,
+  }),
+}));
+
 // Stable mocks for every TanStack Query the section reads. The chain
 // fixture mirrors the default order (codex first) so the rows render in
 // a known order; insights settings + ai-provider GET return enough to

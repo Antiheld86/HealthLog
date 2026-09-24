@@ -251,6 +251,11 @@ export default defineConfig({
         // under the first mid-assertion. It sets the mobile width itself for
         // the add menu, so it runs in one project.
         "modules-off.spec.ts",
+        // The AI-optional account journeys withdraw their account's consent
+        // and delete its stored Coach rows; a second project would reset the
+        // account under the first. They prove server state through stable
+        // data-slots, not a mobile layout, so they run in one project.
+        "ai-optional-account.spec.ts",
       ],
       use: {
         // Pixel 5 — Chromium-based mobile profile so CI only needs

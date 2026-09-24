@@ -18,8 +18,8 @@
  * off `useAuth().user.modules`.
  *
  * Operator precedence stays honest: a module the operator turned off
- * server-wide (the module-availability blob, plus the assistant master flag
- * `flags.coach` for the coach row) renders a disabled switch + a
+ * server-wide (the module-availability blob, or for the coach row the
+ * operator's Coach switch as the `coach` capability reports it) renders a disabled switch + a
  * "disabled server-wide" hint — a per-user toggle could not re-enable it.
  *
  * The three CORE domains (weight, blood pressure, pulse) render as a
@@ -63,7 +63,7 @@ import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { ModuleToggleRow } from "@/components/settings/module-toggle-row";
 import { useAuth } from "@/hooks/use-auth";
-import { useFeatureFlags } from "@/hooks/use-feature-flags";
+import { useAiCapability } from "@/hooks/use-ai-capability";
 import { useTranslations } from "@/lib/i18n/context";
 import { apiPatch } from "@/lib/api/api-fetch";
 import {
@@ -118,7 +118,7 @@ const MODULE_ICONS: Record<ModuleKey, LucideIcon> = {
 export function ModulesSection() {
   const { t } = useTranslations();
   const { user } = useAuth();
-  const flags = useFeatureFlags();
+  const coach = useAiCapability("coach");
   const queryClient = useQueryClient();
 
   const modules = user?.modules ?? {};
@@ -234,13 +234,13 @@ export function ModulesSection() {
 
             // Operator precedence. A per-user toggle can never re-enable a
             // module the operator turned off server-wide, so the switch goes
-            // disabled + hint. For coach the operator layer is BOTH the
-            // module-availability blob AND the assistant master flag
-            // (`flags.coach`, already master-composed); for cycle and the
-            // owned modules it is the module-availability blob alone.
+            // disabled + hint. For coach the operator layer is the
+            // operator's Coach switch, read from the resolved `coach`
+            // capability (`operator_disabled`, master applied); for cycle
+            // and the owned modules it is the module-availability blob.
             const operatorAvailable =
               delegate === "coach"
-                ? moduleAvailability[key] !== false && flags.coach
+                ? coach.reason !== "operator_disabled"
                 : moduleAvailability[key] !== false;
             const disabledReason = operatorAvailable
               ? undefined

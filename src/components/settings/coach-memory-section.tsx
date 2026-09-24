@@ -14,9 +14,14 @@
  *
  * Reads unwrap `(await res.json()).data` per the envelope convention;
  * every read/write routes its key through `queryKeys.coachFacts()` so
- * a forget invalidates the list. Gated on `!user.disableCoach` so the
- * panel mirrors the rest of the Coach surface — hiding the Coach hides
- * its memory controls too.
+ * a forget invalidates the list.
+ *
+ * v1.39 — never gated on the Coach. What the Coach stored is the person's
+ * own record: it stays readable and deletable while the Coach is off for any
+ * reason (the operator's switch, Hide Coach, no provider, no consent). The
+ * facts routes are data routes and ask no AI gate. Settings → Coach always
+ * shows this card; while that page is not reachable, Settings → AI shows it
+ * through `<StoredCoachMemory>` below, whenever rows exist.
  */
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -45,6 +50,7 @@ import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 import { toast } from "sonner";
 import { apiDelete, apiGet } from "@/lib/api/api-fetch";
+import { CoachConversationsMemoryCard } from "@/components/settings/coach-conversations-memory-card";
 
 /** Closed enum mirrored from the server `CoachFact.category` column. */
 const FACT_CATEGORIES = [
@@ -81,8 +87,11 @@ async function fetchFacts(): Promise<CoachFact[]> {
 
 export function CoachMemorySection({
   isAuthenticated,
+  hideWhenEmpty = false,
 }: {
   isAuthenticated: boolean;
+  /** Render nothing while there are no stored facts (the Coach-off mount). */
+  hideWhenEmpty?: boolean;
 }) {
   const { t } = useTranslations();
   const queryClient = useQueryClient();
@@ -137,6 +146,9 @@ export function CoachMemorySection({
       items: facts.filter((f) => f.category === category),
     })).filter((g) => g.items.length > 0);
   }, [facts]);
+
+  if (hideWhenEmpty && (query.isPending || query.isError)) return null;
+  if (hideWhenEmpty && facts.length === 0) return null;
 
   return (
     <SettingsCard
@@ -277,5 +289,27 @@ export function CoachMemorySection({
         ) : null}
       </SettingsCardActions>
     </SettingsCard>
+  );
+}
+
+/**
+ * Everything the Coach stored, for Settings → AI while Settings → Coach is not
+ * reachable (the Coach switched off by the operator or hidden by the person).
+ * Each card renders only when it has rows, so a person who never used the
+ * Coach sees nothing here.
+ */
+export function StoredCoachMemory({
+  isAuthenticated,
+}: {
+  isAuthenticated: boolean;
+}) {
+  return (
+    <>
+      <CoachMemorySection isAuthenticated={isAuthenticated} hideWhenEmpty />
+      <CoachConversationsMemoryCard
+        isAuthenticated={isAuthenticated}
+        hideWhenEmpty
+      />
+    </>
   );
 }

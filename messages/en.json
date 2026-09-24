@@ -1312,7 +1312,9 @@
           "rateLimit": "Too many requests — wait a moment and try again.",
           "noProvider": "No AI provider configured — set one up in Settings.",
           "budget": "Daily AI budget reached — try again tomorrow.",
-          "network": "Could not reach the AI provider — please retry."
+          "network": "Could not reach the AI provider — please retry.",
+          "consent": "Reading your description with AI needs your consent first.",
+          "unavailable": "Reading descriptions with AI is not available here right now."
         }
       },
       "cadence": {
@@ -2444,8 +2446,6 @@
     "bmiEmptyTitle": "Set your height to see BMI",
     "bmiEmptyDescription": "BMI needs your height. Add it under Settings → Account.",
     "bmiEmptyAction": "Open account settings",
-    "noProviderConfigured": "Connect an AI provider to see an assessment of your readings here.",
-    "noProviderAction": "Open AI settings",
     "personalRecord": {
       "badge": "PR",
       "tooltip": "Personal record: {value} {unit} on {date}"
@@ -2569,10 +2569,6 @@
       "emptyDescription": "Generate today's briefing to get a narrative read of your trends.",
       "emptyAction": "Generate briefing",
       "loadingLabel": "Synthesising today's briefing",
-      "noProviderTitle": "No AI provider connected",
-      "noProviderDescription": "Point HealthLog at a local model (Ollama, LM Studio — nothing leaves your network) or bring your own OpenAI or Anthropic key, and the daily briefing turns your own readings into a plain-language summary. Setup takes about a minute.",
-      "noProviderAction": "Open AI settings",
-      "staleNoProviderHint": "This briefing can't refresh — no AI provider is connected.",
       "refreshFailedHint": "Couldn't refresh the briefing — showing the last one.",
       "retryAction": "Retry",
       "failedTitle": "Couldn't generate the briefing",
@@ -2950,7 +2946,15 @@
       "interrupted": {
         "note": "This answer was interrupted before it finished.",
         "retry": "Ask again"
-      }
+      },
+      "historyReadOnlyNote": "The Coach is not available right now, but you can still read and delete your conversations.",
+      "transcriptYou": "You",
+      "transcriptCoach": "Coach",
+      "errorConsent": "The Coach needs your AI consent before it can answer. You can give it in Settings, AI.",
+      "errorNotPermitted": "The Coach is not available inside a record someone shared with you.",
+      "errorUnavailable": "The Coach could not check its settings just now. Please try again in a moment.",
+      "errorOperatorOff": "AI is switched off on this server, so the Coach cannot answer.",
+      "errorCoachOff": "The Coach is switched off. You can turn it back on in Settings, Modules."
     },
     "relativeJustNow": "just now",
     "relativeMinutesAgoOne": "{count} minute ago",
@@ -4383,7 +4387,15 @@
         "night": "A sustained elevated-at-rest stretch overnight — possibly some tension."
       }
     },
-    "navEcg": "ECG"
+    "navEcg": "ECG",
+    "sectionLoadError": "This section could not be loaded.",
+    "aiSetupHint": {
+      "title": "AI is optional",
+      "body": "Everything here works without AI. If you want a daily briefing, short notes on your readings and the Coach, you can connect an AI provider.",
+      "settingsBody": "HealthLog works fully without AI. Connect a provider below if you want a daily briefing, short notes on your readings and the Coach.",
+      "action": "Set up AI",
+      "dismiss": "Not now"
+    }
   },
   "thresholds": {
     "defaultLabel": "Default",
@@ -5831,12 +5843,30 @@
         "activeSince": "Given on {date}. Your health data may be sent to the configured provider for the AI features.",
         "withdrawn": "Withdrawn. No health data is sent to an AI provider; the AI features stay switched off.",
         "withdraw": "Withdraw consent",
-        "confirmBody": "The AI features stop working straight away. Nothing already recorded is deleted — use Data & privacy to export or erase your record.",
+        "confirmBody": "The AI features stop straight away, and the notes a model wrote for you are deleted: status notes, the daily briefing, model-written period summaries, arrival lines and workout notes. Your Coach conversations, what the Coach remembered, your plans and your document summaries stay, and you can read or delete them yourself.",
         "confirmWithdraw": "Withdraw",
         "regrantHint": "Granting again lets the AI features send your health data to the configured provider.",
         "grant": "Grant consent",
         "grantError": "The consent could not be saved. Please try again.",
-        "error": "The withdrawal could not be saved. Please try again."
+        "error": "The withdrawal could not be saved. Please try again.",
+        "documentReading": {
+          "title": "Consent to reading documents",
+          "activeSince": "Given on {date}. Documents, lab report scans and medication descriptions may be sent to your AI service for reading.",
+          "confirmBody": "Documents, lab report scans and medication descriptions are no longer sent for reading. Nothing you already have is deleted."
+        }
+      },
+      "operatorOff": {
+        "allTitle": "AI is switched off on this server",
+        "allBody": "The person who runs this server has turned AI off. HealthLog keeps working with all your data; the features that need AI are simply not shown.",
+        "someTitle": "Some AI features are switched off on this server",
+        "someBody": "The person who runs this server has turned off: {switches}. Everything else, including all your data, works as usual.",
+        "testRefused": "AI is switched off on this server, so there is nothing to test.",
+        "autoRead": "Reading documents with AI is switched off on this server."
+      },
+      "coachConversations": {
+        "title": "Coach conversations",
+        "description": "Open a conversation to read it, or delete it.",
+        "more": "Show more"
       }
     },
     "dashboard": {
@@ -8801,7 +8831,8 @@
       "extractFailed": "Couldn't read the report. Try a clearer photo.",
       "pdfNeedsAnthropic": "PDF scanning needs a Claude vision provider; upload a photo instead.",
       "refTextLabel": "Range as printed",
-      "refTextPlaceholder": "e.g. 3.5 - 5.0"
+      "refTextPlaceholder": "e.g. 3.5 - 5.0",
+      "aiUnavailable": "Scanning a report with AI is not available here right now."
     },
     "loadMoreReadings": "Load more readings",
     "documentsLink": "Lab report documents",
@@ -9949,7 +9980,9 @@
       "errorNotIndexed": "Read the document first, then extract.",
       "errorLocalOcrDisabled": "Turn on local OCR in the AI settings first.",
       "errorProvider": "No AI provider is set up for this.",
-      "errorTextImageOnly": "Local OCR reads images only — not this file."
+      "errorTextImageOnly": "Local OCR reads images only — not this file.",
+      "errorConsent": "Reading documents with AI needs your consent first.",
+      "errorUnavailable": "Reading documents with AI is not available here right now."
     },
     "summary": {
       "summarise": "Summarise",
@@ -10027,6 +10060,11 @@
       "title": "Chat about this document",
       "openAria": "Ask the Coach about this document",
       "openButton": "Ask the Coach"
+    },
+    "readingConsent": {
+      "body": "Reading with AI sends this to your AI service outside this server. Allow HealthLog to send documents, lab reports and medication descriptions for reading?",
+      "grant": "Allow reading",
+      "error": "The consent could not be saved. Please try again."
     }
   },
   "selfDescription": {

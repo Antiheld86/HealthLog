@@ -48,7 +48,7 @@ vi.mock("../use-cycle", async () => {
     await vi.importActual<typeof import("../use-cycle")>("../use-cycle");
   return {
     ...actual,
-    useCycleCalendar: () => calendarState.current,
+    useCycleRingCalendar: () => calendarState.current,
   };
 });
 

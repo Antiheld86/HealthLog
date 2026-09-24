@@ -13,8 +13,13 @@ vi.mock("@/hooks/use-auth", () => ({
     user: { modules: modulesRef.value },
   }),
 }));
-vi.mock("@/hooks/use-feature-flags", () => ({
-  useFeatureFlags: () => ({ briefing: true }),
+const briefingRef: { available: boolean } = { available: true };
+vi.mock("@/hooks/use-ai-capability", () => ({
+  useAiCapability: () => ({
+    available: briefingRef.available,
+    reason: briefingRef.available ? null : "user_disabled",
+    onDeviceAllowed: false,
+  }),
 }));
 vi.mock("@/hooks/use-insights-layout", () => ({
   useInsightsLayoutQuery: () => ({
@@ -62,5 +67,13 @@ describe("<InsightsOverviewArrangeSection> module gate", () => {
 
   it("marks nothing for AI analysis off", () => {
     expect(gatedFor({ insights: false })).toEqual([]);
+  });
+
+  it("marks only the daily briefing when the briefing is unavailable", () => {
+    // The period review renders its composed narrative whatever the AI
+    // state, so it stays a live row.
+    briefingRef.available = false;
+    expect(gatedFor({})).toEqual(["daily-briefing"]);
+    briefingRef.available = true;
   });
 });

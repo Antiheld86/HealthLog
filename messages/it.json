@@ -1312,7 +1312,9 @@
           "rateLimit": "Troppe richieste — attendi un momento e riprova.",
           "noProvider": "Nessun provider IA configurato — configurane uno in Impostazioni.",
           "budget": "Budget IA giornaliero raggiunto — riprova domani.",
-          "network": "Impossibile contattare il provider IA — riprova."
+          "network": "Impossibile contattare il provider IA — riprova.",
+          "consent": "La lettura della tua descrizione con IA richiede prima il tuo consenso.",
+          "unavailable": "La lettura delle descrizioni con IA non è disponibile qui al momento."
         }
       },
       "cadence": {
@@ -2444,8 +2446,6 @@
     "bmiEmptyTitle": "Aggiungi l’altezza per il BMI",
     "bmiEmptyDescription": "Per il BMI serve la tua altezza. Salvala in Impostazioni → Account.",
     "bmiEmptyAction": "Apri impostazioni account",
-    "noProviderConfigured": "Collega un provider IA per vedere qui una valutazione delle tue misurazioni.",
-    "noProviderAction": "Apri impostazioni IA",
     "personalRecord": {
       "badge": "PR",
       "tooltip": "Record personale: {value} {unit} il {date}"
@@ -2569,10 +2569,6 @@
       "emptyDescription": "Genera il briefing di oggi per avere un riepilogo dei tuoi trend.",
       "emptyAction": "Genera briefing",
       "loadingLabel": "Preparazione del briefing",
-      "noProviderTitle": "Nessun provider IA collegato",
-      "noProviderDescription": "Punta HealthLog verso un modello locale (Ollama, LM Studio: nulla lascia la tua rete) o usa la tua chiave OpenAI o Anthropic, e il riepilogo quotidiano trasforma le tue misurazioni in un riassunto in linguaggio chiaro. La configurazione richiede circa un minuto.",
-      "noProviderAction": "Apri impostazioni IA",
-      "staleNoProviderHint": "Questo briefing non può aggiornarsi: nessun provider IA è collegato.",
       "refreshFailedHint": "Impossibile aggiornare il briefing: viene mostrato l'ultimo.",
       "retryAction": "Riprova",
       "failedTitle": "Impossibile generare il briefing",
@@ -2950,7 +2946,15 @@
       "interrupted": {
         "note": "Questa risposta è stata interrotta prima di essere completata.",
         "retry": "Chiedi di nuovo"
-      }
+      },
+      "historyReadOnlyNote": "Il Coach non è disponibile al momento, ma puoi ancora leggere ed eliminare le tue conversazioni.",
+      "transcriptYou": "Tu",
+      "transcriptCoach": "Coach",
+      "errorConsent": "Il Coach ha bisogno del tuo consenso all'IA prima di poter rispondere. Puoi darlo in Impostazioni, IA.",
+      "errorNotPermitted": "Il Coach non è disponibile in una cartella che qualcuno condivide con te.",
+      "errorUnavailable": "Il Coach non è riuscito a controllare le sue impostazioni. Riprova tra un momento.",
+      "errorOperatorOff": "L'IA è disattivata su questo server, quindi il Coach non può rispondere.",
+      "errorCoachOff": "Il Coach è disattivato. Puoi riattivarlo in Impostazioni, Moduli."
     },
     "relativeJustNow": "proprio ora",
     "relativeMinutesAgoOne": "{count} minuto fa",
@@ -4383,7 +4387,15 @@
         "night": "Un tratto elevato a riposo durante la notte — forse un po' di tensione."
       }
     },
-    "navEcg": "ECG"
+    "navEcg": "ECG",
+    "sectionLoadError": "Non è stato possibile caricare questa sezione.",
+    "aiSetupHint": {
+      "title": "L'IA è facoltativa",
+      "body": "Qui tutto funziona anche senza IA. Se vuoi un riepilogo giornaliero, brevi note sulle tue misurazioni e il Coach, puoi collegare un fornitore di IA.",
+      "settingsBody": "HealthLog funziona completamente senza IA. Collega un fornitore qui sotto se vuoi un riepilogo giornaliero, brevi note sulle tue misurazioni e il Coach.",
+      "action": "Configura IA",
+      "dismiss": "Non ora"
+    }
   },
   "thresholds": {
     "defaultLabel": "Predefinito",
@@ -5831,12 +5843,30 @@
         "activeSince": "Concesso il {date}. I tuoi dati sanitari possono essere inviati al provider configurato per le funzioni IA.",
         "withdrawn": "Revocato. Nessun dato sanitario viene inviato a un provider IA; le funzioni IA restano disattivate.",
         "withdraw": "Revoca il consenso",
-        "confirmBody": "Le funzioni IA si fermano subito. Nulla di quanto già registrato viene eliminato — usa Dati e privacy per esportare o cancellare il tuo archivio.",
+        "confirmBody": "Le funzioni di IA si fermano subito e le note che un modello ha scritto per te vengono eliminate: note di stato, il riepilogo giornaliero, i riepiloghi di periodo scritti da un modello, le righe di arrivo e le note sugli allenamenti. Le tue conversazioni con il Coach, ciò che il Coach ricordava, i tuoi piani e i riepiloghi dei tuoi documenti restano, e puoi leggerli o eliminarli tu stesso.",
         "confirmWithdraw": "Revoca",
         "regrantHint": "Concedendolo di nuovo, le funzioni IA potranno inviare ancora i tuoi dati sanitari al provider configurato.",
         "grant": "Concedi il consenso",
         "grantError": "Non è stato possibile salvare il consenso. Riprova.",
-        "error": "Non è stato possibile salvare la revoca. Riprova."
+        "error": "Non è stato possibile salvare la revoca. Riprova.",
+        "documentReading": {
+          "title": "Consenso alla lettura dei documenti",
+          "activeSince": "Dato il {date}. Documenti, referti di laboratorio scansionati e descrizioni di farmaci possono essere inviati al tuo servizio di IA per la lettura.",
+          "confirmBody": "Documenti, referti di laboratorio scansionati e descrizioni di farmaci non vengono più inviati per la lettura. Nulla di ciò che hai già viene eliminato."
+        }
+      },
+      "operatorOff": {
+        "allTitle": "L'IA è disattivata su questo server",
+        "allBody": "Chi gestisce questo server ha disattivato l'IA. HealthLog continua a funzionare con tutti i tuoi dati; le funzioni che richiedono l'IA semplicemente non vengono mostrate.",
+        "someTitle": "Alcune funzioni di IA sono disattivate su questo server",
+        "someBody": "Chi gestisce questo server ha disattivato: {switches}. Tutto il resto, compresi tutti i tuoi dati, funziona come sempre.",
+        "testRefused": "L'IA è disattivata su questo server, quindi non c'è nulla da testare.",
+        "autoRead": "La lettura dei documenti con IA è disattivata su questo server."
+      },
+      "coachConversations": {
+        "title": "Conversazioni con il Coach",
+        "description": "Apri una conversazione per leggerla oppure eliminala.",
+        "more": "Mostra altro"
       }
     },
     "dashboard": {
@@ -8801,7 +8831,8 @@
       "extractFailed": "Impossibile leggere il referto. Prova con una foto più nitida.",
       "pdfNeedsAnthropic": "La scansione PDF richiede un provider di visione Claude; carica invece una foto.",
       "refTextLabel": "Intervallo come stampato",
-      "refTextPlaceholder": "es. 3,5 - 5,0"
+      "refTextPlaceholder": "es. 3,5 - 5,0",
+      "aiUnavailable": "La scansione di un referto con IA non è disponibile qui al momento."
     },
     "loadMoreReadings": "Carica altre misurazioni",
     "documentsLink": "Documenti dei referti",
@@ -9949,7 +9980,9 @@
       "errorNotIndexed": "Leggi prima il documento, poi estrai.",
       "errorLocalOcrDisabled": "Attiva prima l'OCR locale nelle impostazioni IA.",
       "errorProvider": "Nessun provider IA è configurato per questo.",
-      "errorTextImageOnly": "L'OCR locale legge solo immagini, non questo file."
+      "errorTextImageOnly": "L'OCR locale legge solo immagini, non questo file.",
+      "errorConsent": "La lettura dei documenti con IA richiede prima il tuo consenso.",
+      "errorUnavailable": "La lettura dei documenti con IA non è disponibile qui al momento."
     },
     "summary": {
       "summarise": "Riassumi",
@@ -10027,6 +10060,11 @@
       "title": "Chatta su questo documento",
       "openAria": "Chiedi al Coach su questo documento",
       "openButton": "Chiedi al Coach"
+    },
+    "readingConsent": {
+      "body": "La lettura con IA invia questo contenuto al tuo servizio di IA fuori da questo server. Consentire a HealthLog di inviare documenti, referti di laboratorio e descrizioni di farmaci per la lettura?",
+      "grant": "Consenti lettura",
+      "error": "Non è stato possibile salvare il consenso. Riprova."
     }
   },
   "selfDescription": {

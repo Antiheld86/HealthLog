@@ -16,9 +16,11 @@
  *                          notification).
  *   4. Coach memory      — durable-fact review + forget controls.
  *
- * The nav entry is module-gated on `coach`. The preference + nudge + memory
- * cards keep their own content gate on `!user.disableCoach` (mirrored from the
- * old AI section): hiding the Coach hides its tuning + memory controls too.
+ * The nav entry is module-gated on `coach`. The preference + nudge +
+ * reminder cards keep their own content gate on `!user.disableCoach`: hiding
+ * the Coach hides its tuning. The memory (facts and stored conversations) is
+ * never gated: it is the person's own record, readable and deletable whatever
+ * the Coach's state.
  *
  * The "about me" context lives in the AI section, not here — the daily
  * briefing reads it too, so it is not a Coach-only setting.
@@ -29,6 +31,7 @@
 
 import { DisableCoachCard } from "@/components/settings/ai/disable-coach-card";
 import { CoachMemorySection } from "@/components/settings/coach-memory-section";
+import { CoachConversationsMemoryCard } from "@/components/settings/coach-conversations-memory-card";
 import { CoachRemindersSection } from "@/components/settings/coach-reminders-section";
 import { CoachNudgeCard } from "@/components/settings/coach-nudge-card";
 import { CoachPrefsSection } from "@/components/settings/coach-prefs-section";
@@ -62,7 +65,9 @@ export function CoachSection() {
         </div>
       )}
 
-      {coachEnabled && <CoachMemorySection isAuthenticated={authed} />}
+      <CoachMemorySection isAuthenticated={authed} />
+
+      <CoachConversationsMemoryCard isAuthenticated={authed} />
 
       {coachEnabled && <CoachRemindersSection isAuthenticated={authed} />}
     </div>

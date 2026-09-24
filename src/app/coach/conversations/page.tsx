@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -19,6 +19,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { COACH_SCROLLBAR } from "@/components/insights/coach-panel/message-thread";
 import { ConversationRename } from "@/components/insights/coach-panel/conversation-rename";
+import { ConversationTranscript } from "@/components/insights/coach-panel/conversation-transcript";
 import {
   useCoachConversationHistory,
   useDeleteCoachConversationWithUndo,
@@ -26,8 +27,7 @@ import {
 import type { CoachConversationDTO } from "@/lib/ai/coach/types";
 import { useCoachLaunch } from "@/lib/insights/coach-launch-context";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { useFeatureFlags } from "@/hooks/use-feature-flags";
-import { useDisableCoach } from "@/hooks/use-disable-coach";
+import { useAiCapabilityAnswer } from "@/hooks/use-ai-capability";
 import { useLoadMoreSentinel } from "@/hooks/use-load-more-sentinel";
 import { useTranslations } from "@/lib/i18n/context";
 import { formatRelativeTime } from "@/lib/i18n/relative-time";
@@ -50,10 +50,12 @@ import { cn } from "@/lib/utils";
  * consumes — the two surfaces can no longer drift onto different
  * pagination behaviour.
  *
- * Gating mirrors `/coach`: the operator master flag OR a per-user opt-out
- * hides the Coach entirely and redirects back to `/insights` rather than
- * painting a dead shell. The full-bleed sizing wrapper matches the Coach
- * page so the two surfaces share one chrome.
+ * Stored conversations are the person's own records, so this page stays
+ * reachable while the Coach is unavailable for any reason (the operator's
+ * switch, Hide Coach, no provider, missing consent). It then turns read-only:
+ * a row opens its transcript inline instead of the Coach, and delete stays,
+ * so a thread can always be reviewed and erased. The full-bleed sizing
+ * wrapper matches the Coach page so the two surfaces share one chrome.
  */
 
 type RecencyGroupId = "today" | "yesterday" | "thisWeek" | "earlier";
@@ -108,8 +110,9 @@ function groupByRecency(conversations: CoachConversationDTO[]): RecencyGroup[] {
     .filter((g) => g.conversations.length > 0);
 }
 
-function CoachConversationsBody() {
+function CoachConversationsBody({ readOnly }: { readOnly: boolean }) {
   const { t, locale } = useTranslations();
+  const [openId, setOpenId] = useState<string | null>(null);
   const router = useRouter();
   const [filter, setFilter] = useState<string>("");
   // v1.30.2 (QoL H1) — search now drives the server-side title query;
@@ -149,6 +152,11 @@ function CoachConversationsBody() {
   });
 
   function handleSelect(id: string) {
+    if (readOnly) {
+      // No Coach to open the thread in: show its transcript right here.
+      setOpenId((current) => (current === id ? null : id));
+      return;
+    }
     // Reuse the existing `?c=<id>` open mechanism on the Coach page.
     router.push(`/coach?c=${id}`);
   }
@@ -175,18 +183,24 @@ function CoachConversationsBody() {
               {t("insights.coach.historyTitle")}
             </span>
           }
+          description={
+            readOnly ? t("insights.coach.historyReadOnlyNote") : undefined
+          }
           actions={
             // Surface the sibling Plans ledger — otherwise it is reachable
-            // only from the composer's `+` menu.
-            <Button asChild variant="outline" size="sm">
-              <Link
-                href="/coach/plans"
-                data-slot="coach-conversations-plans-link"
-              >
-                <Target className="size-4" aria-hidden="true" />
-                {t("coach.plans.title")}
-              </Link>
-            </Button>
+            // only from the composer's `+` menu. Plans need the Coach, so the
+            // link stays away while it is unavailable.
+            readOnly ? undefined : (
+              <Button asChild variant="outline" size="sm">
+                <Link
+                  href="/coach/plans"
+                  data-slot="coach-conversations-plans-link"
+                >
+                  <Target className="size-4" aria-hidden="true" />
+                  {t("coach.plans.title")}
+                </Link>
+              </Button>
+            )
           }
         />
         <div className="relative">
@@ -257,7 +271,7 @@ function CoachConversationsBody() {
                       key={c.id}
                       data-slot="coach-conversations-item"
                       className={cn(
-                        "group relative flex items-center gap-1.5 rounded-xl px-3 py-2.5",
+                        "group relative flex flex-wrap items-center gap-1.5 rounded-xl px-3 py-2.5",
                         "text-sm transition-colors",
                         "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
                       )}
@@ -267,6 +281,7 @@ function CoachConversationsBody() {
                         onClick={() => handleSelect(c.id)}
                         className="flex min-h-11 min-w-0 flex-1 flex-col justify-center text-left"
                         data-slot="coach-conversations-select"
+                        aria-expanded={readOnly ? openId === c.id : undefined}
                       >
                         <span className="flex min-w-0 items-center gap-1.5 font-medium">
                           {/* v1.29.x (S7) — badge fenced threads (they run on
@@ -294,7 +309,9 @@ function CoachConversationsBody() {
                           {formatRelativeTime(c.updatedAt, t, locale)}
                         </span>
                       </button>
-                      <ConversationRename id={c.id} title={c.title} />
+                      {readOnly ? null : (
+                        <ConversationRename id={c.id} title={c.title} />
+                      )}
                       <Button
                         type="button"
                         variant="ghost"
@@ -306,6 +323,11 @@ function CoachConversationsBody() {
                       >
                         <Trash2 className="size-4" aria-hidden="true" />
                       </Button>
+                      {readOnly && openId === c.id ? (
+                        <div className="basis-full">
+                          <ConversationTranscript id={c.id} />
+                        </div>
+                      ) : null}
                     </li>
                   );
                 })}
@@ -339,27 +361,16 @@ function CoachConversationsBody() {
 }
 
 export default function CoachConversationsPage() {
-  const router = useRouter();
   const launch = useCoachLaunch();
-  const flags = useFeatureFlags();
-  const disableCoach = useDisableCoach();
-
-  const coachUnavailable = !flags.coach || disableCoach;
-
-  // Same gating as `/coach`: operator master flag OR per-user opt-out
-  // redirects back to the Insights mother page so the route is never a
-  // dead-end.
-  useEffect(() => {
-    if (coachUnavailable) {
-      router.replace("/insights");
-    }
-  }, [coachUnavailable, router]);
+  // `null` until `/me` answers; then the page renders either way, read-only
+  // while the `coach` capability is unavailable.
+  const coach = useAiCapabilityAnswer("coach");
 
   // Keep the launch context referenced so the shared FAB drawer the page
   // hands back to stays mounted (mirrors `/coach`).
   void launch;
 
-  if (coachUnavailable) return null;
+  if (coach === null) return null;
 
   return (
     <div
@@ -372,7 +383,7 @@ export default function CoachConversationsPage() {
       // ~50px on notched devices; restored to match exactly.
       className="bg-background -mx-4 -mt-6 -mb-20 flex h-[calc(100dvh-8rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px))] min-h-[32rem] flex-col overflow-hidden md:-mx-6 md:h-[calc(100dvh-4rem)]"
     >
-      <CoachConversationsBody />
+      <CoachConversationsBody readOnly={!coach.available} />
     </div>
   );
 }

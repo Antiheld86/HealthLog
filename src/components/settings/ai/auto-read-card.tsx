@@ -21,6 +21,7 @@ import { ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { apiGet, apiPatch } from "@/lib/api/api-fetch";
+import { useAiCapability } from "@/hooks/use-ai-capability";
 import { useTranslations } from "@/lib/i18n/context";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -31,6 +32,12 @@ interface AutoReadPref {
 export function AutoReadCard() {
   const { t } = useTranslations();
   const queryClient = useQueryClient();
+  // With the operator's "Reading documents" switch (or all AI) off, nothing
+  // would be read whatever this says, so the switch is shown disabled with
+  // the reason instead of a control that silently does nothing. Turning an
+  // already-on preference off stays possible.
+  const documentAi = useAiCapability("documentAi");
+  const operatorOff = documentAi.reason === "operator_disabled";
 
   // Whether the honesty confirm is currently shown (user flipped the switch ON
   // but has not yet acknowledged the trade). Off→on reveals it; the write only
@@ -54,10 +61,12 @@ export function AutoReadCard() {
       queryClient.setQueryData(queryKeys.documentsAutoAiRead(), result);
       // Flipping the toggle changes whether an ambient/per-document read
       // egresses without a per-document consent step — refresh the capability
-      // probe the vault UI reads.
+      // probe the vault UI reads, and `/me`, whose `documentAi` capability
+      // reflects the consent the toggle records.
       queryClient.invalidateQueries({
         queryKey: queryKeys.inboundDocumentAiCapability(),
       });
+      queryClient.invalidateQueries({ queryKey: queryKeys.authMe() });
       setPendingEnable(false);
     },
   });
@@ -92,12 +101,21 @@ export function AutoReadCard() {
         </div>
         <Switch
           checked={checked}
-          disabled={busy}
+          disabled={busy || (operatorOff && !enabled)}
           onCheckedChange={onSwitch}
           aria-label={t("settings.ai.autoRead.title")}
           data-testid="documents-auto-read-enable"
         />
       </div>
+
+      {operatorOff ? (
+        <p
+          data-slot="documents-auto-read-operator-off"
+          className="text-muted-foreground text-xs"
+        >
+          {t("settings.ai.operatorOff.autoRead")}
+        </p>
+      ) : null}
 
       {pendingEnable ? (
         <div

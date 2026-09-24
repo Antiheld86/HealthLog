@@ -950,8 +950,13 @@ export function useSendCoachMessage(opts: UseSendCoachMessageOptions = {}) {
           try {
             const envelope = (await response.clone().json()) as {
               error?: unknown;
+              meta?: { errorCode?: unknown } | null;
             };
-            if (typeof envelope?.error === "string") {
+            // v1.39 — a capability refusal carries its code in
+            // `meta.errorCode` and a sentence in `error`; the code wins.
+            if (typeof envelope?.meta?.errorCode === "string") {
+              structured = envelope.meta.errorCode;
+            } else if (typeof envelope?.error === "string") {
               structured = envelope.error;
             }
           } catch {

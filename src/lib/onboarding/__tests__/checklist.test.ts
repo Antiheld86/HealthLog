@@ -56,6 +56,7 @@ function inputs(
     dataSourceConnected: false,
     notificationsConfigured: false,
     insightsConfigured: false,
+    aiConfigurable: true,
     dismissedIds: new Set<ChecklistItemId>(),
     upcomingVisitCount: 0,
     managedProfileCount: 0,
@@ -94,11 +95,20 @@ describe("buildChecklist", () => {
   it("flags insights done once any provider can serve the user", () => {
     const off = buildChecklist(inputs({ insightsConfigured: false }));
     expect(off.find((i) => i.id === "insights")?.done).toBe(false);
-    // `insightsConfigured` is derived from aiAvailable, which is true for a
-    // personal key, a local model, an OAuth sign-in, OR the operator's
-    // shared key — any one flips the row done.
+    // `insightsConfigured` is `ai.provider.configured` from `/api/auth/me`,
+    // true for a personal key, a local model, an OAuth sign-in, OR the
+    // operator's shared key; any one flips the row done.
     const on = buildChecklist(inputs({ insightsConfigured: true }));
     expect(on.find((i) => i.id === "insights")?.done).toBe(true);
+  });
+
+  it("leaves the AI row out when AI cannot be set up here", () => {
+    // `provider.canConfigure` is false while the operator has AI switched
+    // off and inside a record somebody else owns. HealthLog is complete
+    // without AI, so the list never carries a to-do nobody here can finish.
+    const items = buildChecklist(inputs({ aiConfigurable: false }));
+    expect(items.map((i) => i.id)).not.toContain("insights");
+    expect(items).toHaveLength(5);
   });
 
   it("marks profile done when all three fields set", () => {
@@ -293,6 +303,7 @@ describe("visibleChecklist + checklistProgress", () => {
       dataSourceConnected: false,
       notificationsConfigured: false,
       insightsConfigured: false,
+      aiConfigurable: true,
       dismissedIds: new Set(),
       upcomingVisitCount: 0,
       managedProfileCount: 0,

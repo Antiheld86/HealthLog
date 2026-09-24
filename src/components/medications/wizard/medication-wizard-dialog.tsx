@@ -30,6 +30,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { useAiCapability } from "@/hooks/use-ai-capability";
 import { toast } from "sonner";
 import {
   Bell,
@@ -127,6 +128,14 @@ function WizardDialogShell({
   navigateOnCreate = true,
 }: MedicationWizardDialogProps) {
   const { t, locale } = useTranslations();
+  // The "describe it in words" reader follows the `medicationExtract`
+  // capability: offered while available, and while only the document-reading
+  // consent is missing (the sheet asks for it). Otherwise the button is not
+  // there at all, and the manual steps are the whole wizard.
+  const medicationExtract = useAiCapability("medicationExtract");
+  const extractOffered =
+    medicationExtract.available ||
+    medicationExtract.reason === "consent_required";
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -489,7 +498,7 @@ function WizardDialogShell({
               lastLabel={t("medications.wizard.nav.jumpLast")}
               srLabel={stepOf}
             />
-            {step === 1 && mode === "create" && (
+            {step === 1 && mode === "create" && extractOffered && (
               <div className="flex justify-end">
                 <Button
                   type="button"
@@ -612,7 +621,7 @@ function WizardDialogShell({
       {/* Natural-language extractor — same dialog the v1.5.3 page mounted.
           Only available on the create path; edit flows already know
           what the medication looks like. */}
-      {mode === "create" && (
+      {mode === "create" && extractOffered && (
         <NaturalLanguageExtractor
           open={nlOpen}
           onClose={() => setNlOpen(false)}
@@ -620,6 +629,7 @@ function WizardDialogShell({
             applyPartial(extractorToWizardPartial(partial));
           }}
           locale={locale}
+          consentRequired={medicationExtract.reason === "consent_required"}
         />
       )}
     </>

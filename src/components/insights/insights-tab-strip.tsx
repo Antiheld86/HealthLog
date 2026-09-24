@@ -82,7 +82,8 @@ export interface InsightsTabStripProps {
    * v1.15.18 — the outcome of the last settled regenerate. The falling-edge
    * toast fires "refreshed" ONLY when this is `"fresh"`; a slow generation the
    * client gave up on (`"timeout"`) shows a "still working" hint instead of a
-   * misleading success, and a missing provider (`"no-provider"`) stays silent
+   * misleading success, and a missing provider (`"no-provider"`) or a refused
+   * briefing (`"unavailable"`) stays silent
    * (the surface already shows the connect-AI empty state). v1.15.20 —
    * `"rate-limited"` (quota exhausted) and `"empty"` (transient 503) show
    * their own honest hints instead of the success toast. Absent (legacy
@@ -94,6 +95,7 @@ export interface InsightsTabStripProps {
     | "rate-limited"
     | "timeout"
     | "no-provider"
+    | "unavailable"
     | "settle-failed"
     | null;
   /**
@@ -649,6 +651,7 @@ export function regenerateToastKind(
     case "settle-failed":
       return { kind: "error", messageKey: "insights.regenerateSettleFailed" };
     case "no-provider":
+    case "unavailable":
       return null;
     default:
       return { kind: "success", messageKey: "insights.regenerateSuccess" };

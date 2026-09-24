@@ -2,12 +2,20 @@ import { expect, test } from "./setup/test";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { STORAGE_STATE_PATH } from "./setup/global-setup";
+import { aiBlockAvailable, serveAiBlock } from "./setup/ai-capabilities";
 
 const CONVERSATION_ID = "conversation-rename-e2e";
 const INITIAL_TITLE = "Morning check-in";
 const RENAMED_TITLE = "Weekly health review";
 
 test.describe("Coach conversation rename", () => {
+  // AI surfaces render from the `ai` block of `/api/auth/me`, and the suite
+  // has no reachable provider; every capability reads available here so the
+  // mocked AI routes below are what the surfaces talk to.
+  test.beforeEach(async ({ page }) => {
+    await serveAiBlock(page, aiBlockAvailable());
+  });
+
   test.use({ storageState: STORAGE_STATE_PATH });
 
   test("renames by keyboard once and survives reload on desktop and mobile", async ({

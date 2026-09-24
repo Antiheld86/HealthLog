@@ -9,8 +9,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "@/lib/i18n/context";
 import { useCoachLaunch } from "@/lib/insights/coach-launch-context";
-import { useFeatureFlags } from "@/hooks/use-feature-flags";
-import { useDisableCoach } from "@/hooks/use-disable-coach";
+import { useAiCapability } from "@/hooks/use-ai-capability";
 import { queryKeys } from "@/lib/query-keys";
 
 import { apiGet, apiPost } from "@/lib/api/api-fetch";
@@ -78,8 +77,9 @@ export function LayoutCoachFab() {
   const pathname = usePathname();
   const router = useRouter();
   const launch = useCoachLaunch();
-  const flags = useFeatureFlags();
-  const disableCoach = useDisableCoach();
+  // One answer for every Coach entry point: the `coach` capability on
+  // `/api/auth/me` (operator switch, Hide Coach, provider, consent).
+  const coach = useAiCapability("coach");
 
   // Local "seen on this device" stamp — the nudge timestamp the user
   // last dismissed by opening the chat. Lazy initialiser per the
@@ -93,7 +93,7 @@ export function LayoutCoachFab() {
     }
   });
 
-  const coachAvailable = !!launch && flags.coach && !disableCoach;
+  const coachAvailable = !!launch && coach.available;
   const onCoachPage = pathname?.startsWith("/coach") ?? false;
   const queryClient = useQueryClient();
 

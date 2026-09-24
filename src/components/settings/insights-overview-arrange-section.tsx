@@ -6,7 +6,7 @@ import { LayoutGrid, Loader2 } from "lucide-react";
 
 import { useTranslations } from "@/lib/i18n/context";
 import { useAuth } from "@/hooks/use-auth";
-import { useFeatureFlags } from "@/hooks/use-feature-flags";
+import { useAiCapability } from "@/hooks/use-ai-capability";
 import { useInsightsLayoutQuery } from "@/hooks/use-insights-layout";
 import { InsightsEditMode } from "@/components/insights/insights-edit-mode";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -35,15 +35,15 @@ import { isSurfaceVisible } from "@/lib/modules/surface";
 export function InsightsOverviewArrangeSection({ id }: { id?: string }) {
   const { t } = useTranslations();
   const { isAuthenticated, user } = useAuth();
-  const flags = useFeatureFlags();
+  // The daily briefing is model-written: its row is live only while the
+  // `briefing` capability is available. The period review always renders
+  // (its narrative is composed from the numbers), so it stays a live row.
+  const briefing = useAiCapability("briefing");
   const { layout, isLoading } = useInsightsLayoutQuery(isAuthenticated);
 
   const gatedOffSectionIds = useMemo(() => {
     const gated = new Set<InsightsSectionId>();
-    if (!flags.briefing) {
-      gated.add("daily-briefing");
-      gated.add("period-review");
-    }
+    if (!briefing.available) gated.add("daily-briefing");
     // A block whose module is off cannot appear on the overview, so its row
     // is not offered as a live toggle. Read from the one surface map the
     // overview renders from (`overview:<id>`); cycle follows the resolved
@@ -52,7 +52,7 @@ export function InsightsOverviewArrangeSection({ id }: { id?: string }) {
       if (!isSurfaceVisible(`overview:${id}`, user?.modules)) gated.add(id);
     }
     return gated;
-  }, [flags.briefing, user?.modules]);
+  }, [briefing.available, user?.modules]);
 
   return (
     <section

@@ -62,8 +62,6 @@ export const settingsKeys = {
   /** v1.11.0 — owner's clinician share links (Settings → Sharing). */
   shareLinks: () => ["share-links"] as const,
 
-  featureFlags: () => ["feature-flags"] as const,
-
   /**
    * The account's standing AI consent receipt (`GET /api/consent/ai/latest`).
    * Keyed by kind because the endpoint answers per kind and a shared key
@@ -71,4 +69,12 @@ export const settingsKeys = {
    */
   aiConsentReceipt: (kind: string) =>
     ["consent", "ai", "latest", kind] as const,
+
+  /**
+   * Mutation key for granting the document-reading consent (`ai_extraction`)
+   * from the place that asks for it: a document read, a lab scan, the
+   * medication text reader.
+   */
+  aiExtractionConsentGrant: () =>
+    ["consent", "ai", "grant", "ai_extraction"] as const,
 };

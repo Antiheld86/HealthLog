@@ -1312,7 +1312,9 @@
           "rateLimit": "Zu viele Anfragen — bitte kurz warten und erneut versuchen.",
           "noProvider": "Kein KI-Anbieter konfiguriert — bitte in den Einstellungen einrichten.",
           "budget": "Tägliches KI-Budget erreicht — bitte morgen erneut versuchen.",
-          "network": "KI-Anbieter nicht erreichbar — bitte erneut versuchen."
+          "network": "KI-Anbieter nicht erreichbar — bitte erneut versuchen.",
+          "consent": "Für das Lesen deiner Beschreibung mit KI brauchst du zuerst deine Einwilligung.",
+          "unavailable": "Das Lesen von Beschreibungen mit KI ist hier gerade nicht verfügbar."
         }
       },
       "cadence": {
@@ -2444,8 +2446,6 @@
     "bmiEmptyAction": "Account-Einstellungen öffnen",
     "noAnalysisYet": "Noch keine Einschätzung vorhanden.",
     "assessmentPreparing": "Einschätzung wird vorbereitet…",
-    "noProviderConfigured": "Verbinde einen KI-Anbieter, um hier eine Einschätzung zu deinen Werten zu sehen.",
-    "noProviderAction": "Zu den KI-Einstellungen",
     "personalRecord": {
       "badge": "PR",
       "tooltip": "Persönlicher Rekord: {value} {unit} am {date}"
@@ -2569,10 +2569,6 @@
       "emptyDescription": "Erstelle das heutige Briefing, um eine Zusammenfassung deiner Trends zu bekommen.",
       "emptyAction": "Briefing erstellen",
       "loadingLabel": "Briefing wird zusammengestellt",
-      "noProviderTitle": "Kein KI-Anbieter verbunden",
-      "noProviderDescription": "Richte HealthLog auf ein lokales Modell (Ollama, LM Studio — nichts verlässt dein Netzwerk) oder hinterlege deinen eigenen OpenAI- oder Anthropic-Schlüssel, und das tägliche Briefing fasst deine eigenen Messwerte in klarer Sprache zusammen. Die Einrichtung dauert etwa eine Minute.",
-      "noProviderAction": "Zu den KI-Einstellungen",
-      "staleNoProviderHint": "Dieses Briefing kann nicht aktualisiert werden — es ist kein KI-Anbieter verbunden.",
       "refreshFailedHint": "Briefing konnte nicht aktualisiert werden — es wird das letzte angezeigt.",
       "retryAction": "Erneut versuchen",
       "failedTitle": "Briefing konnte nicht erstellt werden",
@@ -2950,7 +2946,15 @@
       "interrupted": {
         "note": "Diese Antwort wurde unterbrochen, bevor sie fertig war.",
         "retry": "Erneut fragen"
-      }
+      },
+      "historyReadOnlyNote": "Der Coach ist gerade nicht verfügbar, deine Gespräche kannst du aber weiter lesen und löschen.",
+      "transcriptYou": "Du",
+      "transcriptCoach": "Coach",
+      "errorConsent": "Der Coach braucht deine KI-Einwilligung, bevor er antworten kann. Du kannst sie unter Einstellungen, KI geben.",
+      "errorNotPermitted": "Der Coach ist in einer Akte, die jemand mit dir teilt, nicht verfügbar.",
+      "errorUnavailable": "Der Coach konnte seine Einstellungen gerade nicht prüfen. Bitte versuch es gleich noch einmal.",
+      "errorOperatorOff": "KI ist auf diesem Server abgeschaltet, deshalb kann der Coach nicht antworten.",
+      "errorCoachOff": "Der Coach ist ausgeschaltet. Du kannst ihn unter Einstellungen, Module wieder einschalten."
     },
     "relativeJustNow": "gerade eben",
     "relativeMinutesAgoOne": "vor {count} Minute",
@@ -4383,7 +4387,15 @@
         "night": "Eine anhaltend erhöhte Ruhephase in der Nacht — möglicherweise etwas Anspannung."
       }
     },
-    "navEcg": "EKG"
+    "navEcg": "EKG",
+    "sectionLoadError": "Dieser Bereich konnte nicht geladen werden.",
+    "aiSetupHint": {
+      "title": "KI ist optional",
+      "body": "Hier funktioniert alles auch ohne KI. Wenn du ein tägliches Briefing, kurze Notizen zu deinen Werten und den Coach möchtest, kannst du einen KI-Anbieter verbinden.",
+      "settingsBody": "HealthLog funktioniert vollständig ohne KI. Verbinde unten einen Anbieter, wenn du ein tägliches Briefing, kurze Notizen zu deinen Werten und den Coach möchtest.",
+      "action": "KI einrichten",
+      "dismiss": "Nicht jetzt"
+    }
   },
   "thresholds": {
     "defaultLabel": "Default",
@@ -5831,12 +5843,30 @@
         "activeSince": "Erteilt am {date}. Deine Gesundheitsdaten dürfen für die KI-Funktionen an den eingestellten Anbieter gesendet werden.",
         "withdrawn": "Widerrufen. Es werden keine Gesundheitsdaten an einen KI-Anbieter gesendet; die KI-Funktionen bleiben aus.",
         "withdraw": "Einwilligung widerrufen",
-        "confirmBody": "Die KI-Funktionen sind sofort abgeschaltet. Bereits erfasste Daten werden nicht gelöscht — dafür gibt es Daten & Privatsphäre.",
+        "confirmBody": "Die KI-Funktionen stoppen sofort, und die Notizen, die ein Modell für dich geschrieben hat, werden gelöscht: Statusnotizen, das tägliche Briefing, von einem Modell geschriebene Zeitraum-Zusammenfassungen, Ankunftszeilen und Trainingsnotizen. Deine Coach-Gespräche, was sich der Coach gemerkt hat, deine Pläne und deine Dokument-Zusammenfassungen bleiben, und du kannst sie selbst lesen oder löschen.",
         "confirmWithdraw": "Widerrufen",
         "regrantHint": "Mit einer neuen Einwilligung dürfen die KI-Funktionen deine Gesundheitsdaten wieder an den eingestellten Anbieter senden.",
         "grant": "Einwilligung erteilen",
         "grantError": "Die Einwilligung konnte nicht gespeichert werden. Bitte versuche es erneut.",
-        "error": "Der Widerruf konnte nicht gespeichert werden. Bitte versuche es erneut."
+        "error": "Der Widerruf konnte nicht gespeichert werden. Bitte versuche es erneut.",
+        "documentReading": {
+          "title": "Einwilligung zum Lesen von Dokumenten",
+          "activeSince": "Erteilt am {date}. Dokumente, gescannte Laborbefunde und Medikamentenbeschreibungen dürfen zum Lesen an deinen KI-Dienst gesendet werden.",
+          "confirmBody": "Dokumente, gescannte Laborbefunde und Medikamentenbeschreibungen werden nicht mehr zum Lesen gesendet. Nichts, was du bereits hast, wird gelöscht."
+        }
+      },
+      "operatorOff": {
+        "allTitle": "KI ist auf diesem Server abgeschaltet",
+        "allBody": "Wer diesen Server betreibt, hat KI abgeschaltet. HealthLog funktioniert weiter mit all deinen Daten; die Funktionen, die KI brauchen, werden einfach nicht angezeigt.",
+        "someTitle": "Einige KI-Funktionen sind auf diesem Server abgeschaltet",
+        "someBody": "Wer diesen Server betreibt, hat abgeschaltet: {switches}. Alles andere, auch all deine Daten, funktioniert wie gewohnt.",
+        "testRefused": "KI ist auf diesem Server abgeschaltet, daher gibt es nichts zu testen.",
+        "autoRead": "Das Lesen von Dokumenten mit KI ist auf diesem Server abgeschaltet."
+      },
+      "coachConversations": {
+        "title": "Coach-Gespräche",
+        "description": "Öffne ein Gespräch, um es zu lesen, oder lösche es.",
+        "more": "Mehr anzeigen"
       }
     },
     "dashboard": {
@@ -8801,7 +8831,8 @@
       "extractFailed": "Der Befund konnte nicht gelesen werden. Versuche ein schärferes Foto.",
       "pdfNeedsAnthropic": "PDF-Scannen benötigt einen Claude-Bildanbieter; lade stattdessen ein Foto hoch.",
       "refTextLabel": "Bereich wie gedruckt",
-      "refTextPlaceholder": "z. B. 3,5 - 5,0"
+      "refTextPlaceholder": "z. B. 3,5 - 5,0",
+      "aiUnavailable": "Das Scannen eines Befunds mit KI ist hier gerade nicht verfügbar."
     },
     "loadMoreReadings": "Weitere Werte laden",
     "documentsLink": "Befund-Dokumente",
@@ -9949,7 +9980,9 @@
       "errorNotIndexed": "Lies das Dokument zuerst aus, dann extrahiere.",
       "errorLocalOcrDisabled": "Aktiviere zuerst die lokale Texterkennung in den KI-Einstellungen.",
       "errorProvider": "Dafür ist kein KI-Anbieter eingerichtet.",
-      "errorTextImageOnly": "Lokale Texterkennung liest nur Bilder — nicht diese Datei."
+      "errorTextImageOnly": "Lokale Texterkennung liest nur Bilder — nicht diese Datei.",
+      "errorConsent": "Für das Lesen von Dokumenten mit KI brauchst du zuerst deine Einwilligung.",
+      "errorUnavailable": "Das Lesen von Dokumenten mit KI ist hier gerade nicht verfügbar."
     },
     "summary": {
       "summarise": "Zusammenfassen",
@@ -10027,6 +10060,11 @@
       "title": "Über dieses Dokument chatten",
       "openAria": "Coach über dieses Dokument fragen",
       "openButton": "Coach fragen"
+    },
+    "readingConsent": {
+      "body": "Beim Lesen mit KI geht dies an deinen KI-Dienst außerhalb dieses Servers. Darf HealthLog Dokumente, Laborbefunde und Medikamentenbeschreibungen zum Lesen senden?",
+      "grant": "Lesen erlauben",
+      "error": "Die Einwilligung konnte nicht gespeichert werden. Bitte versuch es erneut."
     }
   },
   "selfDescription": {

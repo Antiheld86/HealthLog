@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { useAiCapability } from "@/hooks/use-ai-capability";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
 import type { MetricStatusMetricId } from "@/lib/insights/metric-status-registry";
@@ -295,6 +296,10 @@ const QUERY_KEY_FACTORY: Record<
  */
 export function useInsightStatus(metric: InsightStatusMetric) {
   const { isAuthenticated } = useAuth();
+  // Status notes are model-written: no read while the `statusText`
+  // capability is unavailable (the card is hidden then anyway). Unavailable
+  // while `/me` loads, so the first paint fires nothing.
+  const statusText = useAiCapability("statusText");
   const { locale } = useTranslations();
   const queryKey = QUERY_KEY_FACTORY[metric](locale);
 
@@ -305,7 +310,7 @@ export function useInsightStatus(metric: InsightStatusMetric) {
         `/api/insights/${metric}-status?locale=${locale}`,
         signal,
       ),
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && statusText.available,
     staleTime: 60 * 1000,
     // v1.4.28 FB-D2 — the status route returns a deterministic envelope on
     // a miss/timeout. Retrying inline re-fires work and lengthens the
@@ -359,6 +364,7 @@ export function useInsightMetricStatus(
   enabled = true,
 ) {
   const { isAuthenticated } = useAuth();
+  const statusText = useAiCapability("statusText");
   const { locale } = useTranslations();
   const queryKey = queryKeys.insightsMetricStatus(metric, locale);
 
@@ -371,7 +377,7 @@ export function useInsightMetricStatus(
         )}&locale=${locale}`,
         signal,
       ),
-    enabled: isAuthenticated && enabled,
+    enabled: isAuthenticated && enabled && statusText.available,
     staleTime: 60 * 1000,
     retry: 0,
     refetchInterval: (query) =>
@@ -409,6 +415,7 @@ export function useInsightBiomarkerAssessment(
   enabled = true,
 ) {
   const { isAuthenticated } = useAuth();
+  const statusText = useAiCapability("statusText");
   const { locale } = useTranslations();
   const queryKey = queryKeys.insightsBiomarkerAssessment(biomarkerId, locale);
 
@@ -421,7 +428,11 @@ export function useInsightBiomarkerAssessment(
         )}&locale=${locale}`,
         signal,
       ),
-    enabled: isAuthenticated && enabled && biomarkerId.length > 0,
+    enabled:
+      isAuthenticated &&
+      enabled &&
+      statusText.available &&
+      biomarkerId.length > 0,
     staleTime: 60 * 1000,
     retry: 0,
     refetchInterval: (query) =>

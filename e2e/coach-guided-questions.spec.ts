@@ -1,6 +1,7 @@
 import { expect, test } from "./setup/test";
 
 import { STORAGE_STATE_PATH } from "./setup/global-setup";
+import { aiBlockAvailable, serveAiBlock } from "./setup/ai-capabilities";
 
 /**
  * Guided clarifying-questions flow on the full-page Coach route
@@ -31,6 +32,13 @@ import { STORAGE_STATE_PATH } from "./setup/global-setup";
  * ordering contract is pinned here).
  */
 test.describe("Coach guided clarifying questions", () => {
+  // AI surfaces render from the `ai` block of `/api/auth/me`, and the suite
+  // has no reachable provider; every capability reads available here so the
+  // mocked AI routes below are what the surfaces talk to.
+  test.beforeEach(async ({ page }) => {
+    await serveAiBlock(page, aiBlockAvailable());
+  });
+
   test.use({ storageState: STORAGE_STATE_PATH });
 
   const QUESTIONS = [

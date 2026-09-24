@@ -11,6 +11,7 @@ import { useTranslations, useFormatters } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { InsightSectionCard } from "./insight-section-card";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 
 /**
  * v1.10.0 — device-flagged event awareness surface (categorical events,
@@ -89,7 +90,7 @@ export function RhythmEventsCard({
   const { t } = useTranslations();
   const fmt = useFormatters();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.insightsRhythmEvents(),
     queryFn: async () => {
       try {
@@ -102,6 +103,28 @@ export function RhythmEventsCard({
     },
     enabled: enabled && isAuthenticated,
   });
+
+  // A failed read is said, never swallowed: this card carries health alerts,
+  // and silently rendering nothing on an error would hide them.
+  if (isError && !data) {
+    return (
+      <section
+        data-slot="rhythm-events-section"
+        aria-label={t("insights.rhythmEvents.sectionTitle")}
+        className={cn("space-y-3", className)}
+      >
+        <SectionHeading
+          icon={Activity}
+          title={t("insights.rhythmEvents.sectionTitle")}
+        />
+        <QueryErrorRow
+          slot="rhythm-events-error"
+          message={t("insights.rhythmEvents.loadError")}
+          onRetry={() => void refetch()}
+        />
+      </section>
+    );
+  }
 
   // Data-availability gate — never paint an empty / alarming card.
   if (isLoading || !data || !data.hasEvents) return null;

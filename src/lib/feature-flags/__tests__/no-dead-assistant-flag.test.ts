@@ -88,7 +88,6 @@ const RETIRED_SWITCHES: RetiredSwitch[] = [
  */
 const PLUMBING = [
   "src/lib/feature-flags/index.ts",
-  "src/hooks/use-feature-flags.ts",
   "src/components/admin/assistant-section.tsx",
   "src/app/api/feature-flags/route.ts",
   "src/app/api/admin/settings/assistant-flags/route.ts",

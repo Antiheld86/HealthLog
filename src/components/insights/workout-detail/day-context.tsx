@@ -60,9 +60,10 @@ export interface WorkoutDetailDayContextProps {
  * undated and named for what their targets actually deliver — trends and
  * history, not "that day".
  *
- * Module gating: the intraday tile mounts only when `insights` is on and
- * the sleep row only when `sleep` is on, so a switched-off module never
- * paints as a failed request. Mood has no module gate, so the section
+ * Module gating: the sleep row mounts only when `sleep` is on, so a
+ * switched-off module never paints as a failed request. The intraday pulse
+ * tile is heart-rate data and follows no module (the "AI analysis" switch
+ * only governs model-written text). Mood has no module gate, so the section
  * always carries at least one part and the heading is never an orphan.
  */
 export function WorkoutDetailDayContext({
@@ -71,7 +72,6 @@ export function WorkoutDetailDayContext({
   const { t } = useTranslations();
   const fmt = useFormatters();
   const { user, isAuthenticated } = useAuth();
-  const insightsEnabled = useModuleEnabled("insights");
   const sleepEnabled = useModuleEnabled("sleep");
 
   const sleep = useSleepNight(workout.dayKey, isAuthenticated && sleepEnabled);
@@ -96,12 +96,10 @@ export function WorkoutDetailDayContext({
         }
       />
 
-      {insightsEnabled ? (
-        <IntradayPulseChart
-          userTimezone={user?.timezone}
-          initialDateKey={workout.dayKey}
-        />
-      ) : null}
+      <IntradayPulseChart
+        userTimezone={user?.timezone}
+        initialDateKey={workout.dayKey}
+      />
 
       <Card className="gap-2 py-3 md:py-4" data-slot="workout-detail-day-card">
         <CardContent>

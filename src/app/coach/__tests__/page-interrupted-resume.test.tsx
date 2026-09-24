@@ -37,11 +37,12 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/insights/coach-launch-context", () => ({
   useCoachLaunch: () => ({ askCoach: vi.fn() }),
 }));
-vi.mock("@/hooks/use-feature-flags", () => ({
-  useFeatureFlags: () => ({ coach: true }),
-}));
-vi.mock("@/hooks/use-disable-coach", () => ({
-  useDisableCoach: () => false,
+vi.mock("@/hooks/use-ai-capability", () => ({
+  useAiCapabilityAnswer: () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
 }));
 vi.mock("@/hooks/use-auth", () => ({
   useAuth: () => ({ user: {}, isLoading: false }),

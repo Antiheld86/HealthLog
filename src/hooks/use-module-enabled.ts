@@ -7,7 +7,7 @@ import type { ModuleKey } from "@/lib/modules/registry";
 /**
  * v1.18.0 R4 — SSR-safe accessor for a per-account module flag.
  *
- * Mirrors `useDisableCoach()`: `useAuth()` calls `useQuery` directly and
+ * `useAuth()` calls `useQuery` directly and
  * crashes when a legacy presentational component (`<HeroStrip>`, the
  * isolated score-card snapshots, …) renders without a
  * `<QueryClientProvider>`. We gate the inner hook on

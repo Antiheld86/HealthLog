@@ -72,10 +72,9 @@ function useUpdateAssistantFlags() {
     onSuccess: (data) => {
       client.setQueryData(queryKeys.adminAssistantFlags(), data);
       // Every record's resolved AI capabilities ride the account payload,
-      // and the deprecated switch projection is still read on the web;
-      // bust both so the operator sees the change within the session.
+      // which is the only thing the web reads them from; bust it so the
+      // operator sees the change within the session.
       client.invalidateQueries({ queryKey: queryKeys.authMe() });
-      client.invalidateQueries({ queryKey: queryKeys.featureFlags() });
       toast.success(t("common.saved"));
     },
     onError: (err) => {

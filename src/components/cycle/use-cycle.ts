@@ -9,6 +9,7 @@
  * wheel, predictions panel, and history repaint in lockstep after a quick
  * log.
  */
+import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -109,6 +110,35 @@ export function useCycleCalendar(from: string, to: string, enabled = true) {
       apiGet<CalendarResponse>(`/api/cycle/calendar?from=${from}&to=${to}`),
     staleTime: 60_000,
   });
+}
+
+/** YYYY-MM-DD for `days` from today in the local zone. */
+function localYmdFromToday(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return localYmd(d);
+}
+
+/**
+ * The calendar window the cycle ring reads: the cycle page's own window, so
+ * the ring, the page and the summary card share one cache entry.
+ */
+export function useCycleRingCalendar(enabled = true) {
+  const from = useMemo(() => localYmdFromToday(-90), []);
+  const to = useMemo(() => localYmdFromToday(180), []);
+  return useCycleCalendar(from, to, enabled);
+}
+
+/**
+ * Whether the cycle ring would draw a dial today. The wellness strip asks
+ * this before it gives the ring a cell (and takes Strain's place for it): the
+ * ring renders nothing without an active cycle, and a cell reserved for it
+ * would sit empty in the row.
+ */
+export function useCycleRingHasDial(enabled: boolean): boolean {
+  const calendar = useCycleRingCalendar(enabled);
+  const verdict = calendar.data?.verdict;
+  return enabled && verdict?.phase != null && verdict.dayOfCycle != null;
 }
 
 export function useCycleHistory(limit = 24) {
