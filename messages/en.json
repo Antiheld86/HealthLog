@@ -5842,9 +5842,9 @@
       "consent": {
         "title": "AI consent",
         "activeSince": "Given on {date}. Your health data may be sent to the configured provider for the AI features.",
-        "withdrawn": "Withdrawn. No health data is sent to an AI provider; the AI features stay switched off.",
+        "withdrawn": "Withdrawn. Unless another consent covers them, the Coach and Insights no longer use the AI access this server provides, and no online model reads your documents. On your own key or a local model, the Coach and Insights keep working.",
         "withdraw": "Withdraw consent",
-        "confirmBody": "The AI features stop straight away, and the notes a model wrote for you are deleted: status notes, the daily briefing, model-written period summaries, arrival lines and workout notes. Your Coach conversations, what the Coach remembered, your plans and your document summaries stay, and you can read or delete them yourself.",
+        "confirmBody": "Unless another consent you gave still covers them, these stop straight away: the Coach and Insights where they use the AI access this server provides, and reading documents with an online model. On your own key or a local model, the Coach and Insights keep working. Unless another consent still covers Insights, the notes a model wrote for you are deleted: status notes, the daily briefing, model-written period summaries, arrival lines and workout notes. Your Coach conversations, what the Coach remembered, your plans and your document summaries stay, and you can read or delete them yourself.",
         "confirmWithdraw": "Withdraw",
         "regrantHint": "Granting again lets the AI features send your health data to the configured provider.",
         "grant": "Grant consent",

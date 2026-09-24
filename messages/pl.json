@@ -5842,9 +5842,9 @@
       "consent": {
         "title": "Zgoda na AI",
         "activeSince": "Udzielona {date}. Twoje dane zdrowotne mogą być wysyłane do skonfigurowanego dostawcy na potrzeby funkcji AI.",
-        "withdrawn": "Wycofana. Żadne dane zdrowotne nie są wysyłane do dostawcy AI; funkcje AI pozostają wyłączone.",
+        "withdrawn": "Wycofana. Jeśli żadna inna zgoda tego nie obejmuje, Coach i Insights nie korzystają już z dostępu AI zapewnianego przez ten serwer, a żaden model online nie czyta Twoich dokumentów. Na własnym kluczu lub lokalnym modelu Coach i Insights działają dalej.",
         "withdraw": "Wycofaj zgodę",
-        "confirmBody": "Funkcje AI zatrzymują się od razu, a notatki napisane dla Ciebie przez model zostają usunięte: notatki o stanie, codzienne podsumowanie, podsumowania okresu napisane przez model, linie po nowym pomiarze i notatki o treningach. Twoje rozmowy z Coachem, to, co zapamiętał Coach, Twoje plany i podsumowania dokumentów zostają, a Ty możesz je sam przeczytać lub usunąć.",
+        "confirmBody": "Jeśli żadna inna Twoja zgoda ich nie obejmuje, od razu przestają działać: Coach i Insights tam, gdzie korzystają z dostępu AI zapewnianego przez ten serwer, oraz czytanie dokumentów przez model online. Na własnym kluczu lub lokalnym modelu Coach i Insights działają dalej. Jeśli żadna inna zgoda nie obejmuje już Insights, notatki napisane dla Ciebie przez model zostają usunięte: notatki o stanie, codzienne podsumowanie, podsumowania okresu napisane przez model, linie po nowym pomiarze i notatki o treningach. Twoje rozmowy z Coachem, to, co zapamiętał Coach, Twoje plany i podsumowania dokumentów zostają, a Ty możesz je sam przeczytać lub usunąć.",
         "confirmWithdraw": "Wycofaj",
         "regrantHint": "Po ponownym udzieleniu zgody funkcje AI znów będą mogły wysyłać Twoje dane zdrowotne do skonfigurowanego dostawcy.",
         "grant": "Udziel zgody",

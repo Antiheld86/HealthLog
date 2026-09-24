@@ -5842,9 +5842,9 @@
       "consent": {
         "title": "Consentimiento de IA",
         "activeSince": "Otorgado el {date}. Tus datos de salud pueden enviarse al proveedor configurado para las funciones de IA.",
-        "withdrawn": "Retirado. No se envían datos de salud a ningún proveedor de IA; las funciones de IA permanecen desactivadas.",
+        "withdrawn": "Retirado. Salvo que otro consentimiento lo cubra, el Coach e Insights ya no usan el acceso de IA de este servidor y ningún modelo en línea lee tus documentos. Con tu propia clave o un modelo local, el Coach e Insights siguen funcionando.",
         "withdraw": "Retirar el consentimiento",
-        "confirmBody": "Las funciones de IA se detienen de inmediato y se eliminan las notas que un modelo escribió para ti: notas de estado, el resumen diario, los resúmenes de periodo escritos por un modelo, las líneas de llegada y las notas de entrenamiento. Tus conversaciones con el Coach, lo que el Coach recordaba, tus planes y los resúmenes de tus documentos se conservan, y puedes leerlos o eliminarlos tú mismo.",
+        "confirmBody": "Salvo que otro consentimiento tuyo los siga cubriendo, se detienen de inmediato: el Coach e Insights cuando usan el acceso de IA de este servidor, y la lectura de documentos con un modelo en línea. Con tu propia clave o un modelo local, el Coach e Insights siguen funcionando. Salvo que otro consentimiento siga cubriendo Insights, se eliminan las notas que un modelo escribió para ti: notas de estado, el resumen diario, los resúmenes de periodo escritos por un modelo, las líneas de llegada y las notas de entrenamiento. Tus conversaciones con el Coach, lo que el Coach recordaba, tus planes y los resúmenes de tus documentos se conservan, y puedes leerlos o eliminarlos tú mismo.",
         "confirmWithdraw": "Retirar",
         "regrantHint": "Si vuelves a otorgarlo, las funciones de IA podrán enviar de nuevo tus datos de salud al proveedor configurado.",
         "grant": "Otorgar el consentimiento",
