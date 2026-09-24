@@ -121,8 +121,8 @@ export async function readDailySeries(opts: {
   // every bucket's UTC-midnight start read as the previous local day west of
   // UTC. The 7-day chart buckets raw rows by the local day, so switching
   // ranges moved daily totals between neighbouring days. The live fold is
-  // one indexed pass per window (about 0.1 s for 90 days of per-minute
-  // samples) and returns at most one row per day.
+  // one pass per window (about 0.3 s for a year of per-minute samples,
+  // measured against Postgres 16) and returns at most one row per day.
   const timeZone = opts.timeZone ?? (await resolveUserTimezone(userId));
   const rows = await readLiveBuckets({
     userId,
@@ -185,24 +185,31 @@ export async function readLiveBuckets(opts: {
   // `TRUNC_UNIT` map keyed by the Zod-constrained grain, never from input.
   const unit = Prisma.raw(`'${TRUNC_UNIT[grain]}'`);
   // Cumulative types SUM per bucket, every other type averages. The type list
-  // is the closed code constant, spliced as literals; `s."type"` is a GROUP BY
+  // is the closed code constant, spliced as literals; `m."type"` is a GROUP BY
   // column, so choosing the aggregate per group is legal.
   const cumulativeList = [...CUMULATIVE_HK_TYPES]
     .map((t) => `'${t}'`)
     .join(",");
   const aggregator = Prisma.raw(
-    `(CASE WHEN s."type"::text IN (${cumulativeList}) THEN SUM(s."value") ELSE AVG(s."value") END)::double precision`,
+    `(CASE WHEN m."type"::text IN (${cumulativeList}) THEN SUM(m."value") ELSE AVG(m."value") END)::double precision`,
   );
   const rankRaw = Prisma.raw(
-    buildSourceRankCase(priorityJson, 'm."type"', 'm."source"'),
+    buildSourceRankCase(priorityJson, 'p."type"', 'p."source"'),
   );
   const typeFilter = type
     ? Prisma.sql`AND m."type" = ${type}::measurement_type`
     : Prisma.empty;
   // measured_at is a UTC wall-clock timestamp: pin it to UTC, re-read it in
-  // the user's zone and truncate there. The bucket is computed once in `src`
-  // and referenced by name afterwards, so the zone parameter never has to
-  // match itself across SELECT and GROUP BY.
+  // the user's zone and truncate there.
+  //
+  // Fold first, pick second. Every source is folded per bucket in one hashed
+  // pass (a few rows per day, however dense the stream), and only then does
+  // each bucket keep its ladder-canonical source. The fold of the canonical
+  // source's rows is exactly the fold of that source's group, so the result
+  // is the same as collapsing the rows first; what changes is the cost. A
+  // year of per-minute heart rate is half a million rows, and ranking them
+  // before the fold sorted them twice (about 0.55 s); folding first never
+  // sorts more than one row per source per day.
   const buckets = await prisma.$queryRaw<
     Array<{
       type: string;
@@ -213,41 +220,38 @@ export async function readLiveBuckets(opts: {
       max_value: number | null;
     }>
   >`
-    WITH src AS (
+    WITH per_source AS (
       SELECT
         m."type",
         m."source",
-        m."value",
-        date_trunc(${unit}, (m."measured_at" AT TIME ZONE 'UTC') AT TIME ZONE ${timeZone}) AS d
+        date_trunc(${unit}, (m."measured_at" AT TIME ZONE 'UTC') AT TIME ZONE ${timeZone}) AS d,
+        ${aggregator} AS avg,
+        COUNT(*)::int AS cnt,
+        MIN(m."value") AS min_value,
+        MAX(m."value") AS max_value
       FROM measurements m
       WHERE m."user_id" = ${userId}
         AND m."measured_at" >= ${from}
         AND m."measured_at" <= ${to}
         AND m."deleted_at" IS NULL
         ${typeFilter}
+      GROUP BY m."type", m."source", 3
     ),
     canon AS (
-      SELECT DISTINCT ON (m."type", m.d)
-        m."type"   AS t,
-        m.d        AS d,
-        m."source" AS canon
-      FROM src m
-      ORDER BY m."type", m.d, (${rankRaw}), m."source"
+      SELECT DISTINCT ON (p."type", p.d)
+        p."type", p.d, p.avg, p.cnt, p.min_value, p.max_value
+      FROM per_source p
+      ORDER BY p."type", p.d, (${rankRaw}), p."source"
     )
     SELECT
-      s."type"::text AS type,
-      s.d AT TIME ZONE ${timeZone} AS bucket_start,
-      ${aggregator} AS avg,
-      COUNT(*)::int AS cnt,
-      MIN(s."value") AS min_value,
-      MAX(s."value") AS max_value
-    FROM src s
-    JOIN canon c
-      ON c.t = s."type"
-      AND c.d = s.d
-      AND c.canon = s."source"
-    GROUP BY s."type", s.d
-    ORDER BY s.d ASC
+      c."type"::text AS type,
+      c.d AT TIME ZONE ${timeZone} AS bucket_start,
+      c.avg,
+      c.cnt,
+      c.min_value,
+      c.max_value
+    FROM canon c
+    ORDER BY c.d ASC
     LIMIT ${cap}
   `;
   return buckets.map((b) => {
