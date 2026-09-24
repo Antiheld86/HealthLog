@@ -17,12 +17,14 @@
  * operator turned document reading off finds no provider when it runs, so
  * nothing is sent even though the job itself asks nothing of the capability.
  *
- * Mutation checks (recorded with the package): deleting the
- * `requireAiCapability("documentAi"` line from the suggest route leaves the
- * wire re-check to refuse, so the switch case still answers 403 but through
- * the pick; deleting the `atTheWire` re-check from `provider-order.ts` turns
- * both job cases and the receipt cases red; returning `ai_full` from the
- * auto-read mint turns the receipt-kind case red.
+ * Mutation checks, run against this file: replacing the `atTheWire` re-check
+ * in `provider-order.ts` with "nothing withheld" turns four cases red (both
+ * receipt cases on the vault route and both background cases). Deleting the
+ * `requireAiCapability("documentAi"` line from the suggest route leaves all
+ * seventeen green, and that is the design rather than a blind spot: the pick
+ * re-checks the same capability, so the switch still answers 403 with the
+ * same envelope. The route gate's own presence and order are pinned by the
+ * route's unit suite instead.
  */
 import { Buffer } from "node:buffer";
 
