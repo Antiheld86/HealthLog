@@ -83,7 +83,7 @@ vi.mock("next/headers", () => ({
 import { GET } from "../route";
 import { getSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
-import { requireModuleEnabled } from "@/lib/modules/gate";
+import { requireModuleEnabled, resolveModuleMap } from "@/lib/modules/gate";
 import { apiError } from "@/lib/api-response";
 import { checkAnalyticsReadRateLimit } from "@/lib/rate-limit";
 import { __resetAllCachesForTests } from "@/lib/cache/server-cache";
@@ -100,6 +100,10 @@ beforeEach(() => {
   // prior test would serve a hit and skip the builder every assertion spies on.
   __resetAllCachesForTests();
   vi.mocked(requireModuleEnabled).mockResolvedValue({ enabled: true });
+  // Every module on unless a test says otherwise.
+  vi.mocked(resolveModuleMap).mockResolvedValue(
+    {} as Awaited<ReturnType<typeof resolveModuleMap>>,
+  );
   // v1.15.20 — default to an allowing analytics-read budget.
   vi.mocked(checkAnalyticsReadRateLimit).mockResolvedValue({
     allowed: true,
@@ -247,6 +251,29 @@ describe("GET /api/insights/correlations", () => {
         take: 5000,
       }),
     );
+  });
+
+  it("skips the lab draws with the labs module off", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    vi.mocked(resolveModuleMap).mockResolvedValue({
+      labs: false,
+    } as Awaited<ReturnType<typeof resolveModuleMap>>);
+    const res = await callGet(makeReq());
+    expect(res.status).toBe(200);
+    expect(prisma.labResult.findMany).not.toHaveBeenCalled();
+  });
+
+  it("recomputes rather than serve a cached body after a module was switched off", async () => {
+    // The switched-off set is part of the cache key. Watched red with the
+    // suffix removed from the key: the second call is a cache hit and the
+    // measurement window is read once.
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    await callGet(makeReq());
+    vi.mocked(resolveModuleMap).mockResolvedValue({
+      mood: false,
+    } as Awaited<ReturnType<typeof resolveModuleMap>>);
+    await callGet(makeReq());
+    expect(prisma.measurement.findMany).toHaveBeenCalledTimes(2);
   });
 
   // v1.18.0 (B2) — the route now also requires the `insights` module.
