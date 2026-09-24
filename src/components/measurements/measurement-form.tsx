@@ -28,6 +28,7 @@ import { useTranslations } from "@/lib/i18n/context";
 import { useUnitDisplay } from "@/hooks/use-unit-display";
 import { useAuth } from "@/hooks/use-auth";
 import { resolveGlucoseUnit, toCanonicalMgdl } from "@/lib/glucose";
+import { isSurfaceVisible, type SurfaceModuleMap } from "@/lib/modules/surface";
 import {
   entryValueToCanonical,
   parseDecimalEntry,
@@ -195,6 +196,20 @@ export const MEASUREMENT_FORM_TYPE_VALUES = MEASUREMENT_TYPES.map(
   (t) => t.value,
 ) as readonly string[];
 
+/**
+ * The types the form offers for a module map: a type a module owns
+ * (`summary:<type>` in the surface map, the same ownership the server gates
+ * measurement types on) is left out while that module is off. An unknown map
+ * (the account still loading) offers every type.
+ */
+export function measurementFormTypes(
+  modules: SurfaceModuleMap | null | undefined,
+): ReadonlyArray<(typeof MEASUREMENT_TYPES)[number]> {
+  return MEASUREMENT_TYPES.filter((mt) =>
+    isSurfaceVisible(`summary:${mt.value}`, modules),
+  );
+}
+
 // Legacy / Insights-internal tokens that predate the canonical enum.
 // Older empty-state CTAs and a handful of dashboard tiles still emit
 // these — translate them to the form's canonical value so the link
@@ -307,12 +322,18 @@ export function MeasurementForm({
   // seed from the last type the user actually saved rather than always
   // landing on BLOOD_PRESSURE. Lazy initializer so the localStorage read
   // happens once, at mount, not on every render.
-  const [type, setType] = useState(
+  const [selectedType, setType] = useState(
     () =>
       normalizedDefault ||
       getLastUsedMeasurementType(MEASUREMENT_FORM_TYPE_VALUES) ||
       "BLOOD_PRESSURE",
   );
+  // Only types whose module is on. A default, a deep link or the last-used
+  // type that is switched off falls back to the first offered type.
+  const offeredTypes = measurementFormTypes(user?.modules);
+  const type = offeredTypes.some((mt) => mt.value === selectedType)
+    ? selectedType
+    : (offeredTypes[0]?.value ?? "BLOOD_PRESSURE");
   const [value, setValue] = useState("");
   const [sysBp, setSysBp] = useState("");
   const [diaBp, setDiaBp] = useState("");
@@ -515,7 +536,7 @@ export function MeasurementForm({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {MEASUREMENT_TYPES.map((mt) => (
+            {offeredTypes.map((mt) => (
               <SelectItem key={mt.value} value={mt.value}>
                 {t(mt.labelKey)}
               </SelectItem>
