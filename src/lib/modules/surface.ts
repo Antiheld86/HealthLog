@@ -47,6 +47,7 @@ import type { ModuleKey } from "@/lib/modules/registry";
  *  - `settings`: a Settings section, by its slug.
  *  - `settings-layout`: a Settings, Layout group, by its id.
  *  - `correlation`: a correlation-discovery channel, by its channel key.
+ *  - `score-ring`: a dashboard hero score ring, by its `ScoreRingId`.
  */
 export const SURFACE_KINDS = [
   "nav",
@@ -60,6 +61,7 @@ export const SURFACE_KINDS = [
   "settings",
   "settings-layout",
   "correlation",
+  "score-ring",
 ] as const;
 
 export type SurfaceKind = (typeof SURFACE_KINDS)[number];
@@ -162,6 +164,14 @@ const STATIC_SURFACE_MODULE = {
   "derived:STRAIN_SCORE": "recovery",
   "derived:STRESS_SCORE": "recovery",
   "derived:READINESS": "recovery",
+
+  // ── Dashboard hero score rings ──
+  // The three derived rings follow their derived score; the dose ring is
+  // medications'.
+  "score-ring:READINESS": "recovery",
+  "score-ring:RECOVERY_SCORE": "recovery",
+  "score-ring:SLEEP_SCORE": "sleep",
+  "score-ring:MED_COMPLIANCE": "medications",
 
   // ── Settings sections ──
   "settings:environment": "environment",

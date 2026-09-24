@@ -48,7 +48,10 @@ import { NAV_DESTINATIONS } from "@/components/layout/nav-model";
 import { CAPTURE_KIND_ORDER } from "@/components/layout/capture-picker";
 import { SETTINGS_SECTIONS } from "@/components/settings/settings-shell";
 import { LAYOUT_GROUP_IDS } from "@/components/settings/layout-groups";
-import { DASHBOARD_WIDGET_CATALOGUE_IDS } from "@/lib/dashboard-layout";
+import {
+  DASHBOARD_WIDGET_CATALOGUE_IDS,
+  SCORE_RING_IDS,
+} from "@/lib/dashboard-layout";
 import { SUMMARY_TYPE_MODULE } from "@/lib/dashboard/widget-modules";
 import { ENVIRONMENT_FIELDS } from "@/lib/environment/fields";
 import {
@@ -126,6 +129,17 @@ describe("every surface id names a surface that exists", () => {
   it("derived: a derived metric id", () => {
     const ids = new Set<string>(DERIVED_METRIC_IDS);
     for (const id of localIds("derived")) expect(ids.has(id), id).toBe(true);
+  });
+
+  it("score-ring: a hero score ring id, the derived ones owned like their score", () => {
+    const ids = new Set<string>(SCORE_RING_IDS);
+    for (const id of localIds("score-ring")) {
+      expect(ids.has(id), id).toBe(true);
+      const derivedOwner = surfaceModule(`derived:${id}`);
+      if (derivedOwner !== undefined) {
+        expect(surfaceModule(`score-ring:${id}`), id).toBe(derivedOwner);
+      }
+    }
   });
 
   it("settings: a Settings section slug", () => {

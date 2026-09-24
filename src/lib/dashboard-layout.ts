@@ -4,7 +4,6 @@
  * Single source of truth for which widgets show on /, what order, and
  * what the default layout is for new users. Null / missing = default.
  */
-import type { ModuleKey } from "@/lib/modules/registry";
 import {
   PRIORITY_ITEM_KINDS,
   isPriorityItemKind,
@@ -512,21 +511,6 @@ export function resolveHeroRingOrder(
   }
   return out;
 }
-
-/**
- * Ring id → owning toggleable module. Mirrors the derived routes'
- * `DERIVED_MODULE` map for the three derived rings (READINESS rides the
- * recovery module like the recovery/strain/stress trio); MED_COMPLIANCE
- * belongs to the medications module. Client-safe (type-only ModuleKey
- * import) so the Settings picker and the server snapshot resolver gate
- * on the same map — the `WIDGET_MODULE_BY_ID` pattern.
- */
-export const SCORE_RING_MODULE: Record<ScoreRingId, ModuleKey> = {
-  READINESS: "recovery",
-  RECOVERY_SCORE: "recovery",
-  SLEEP_SCORE: "sleep",
-  MED_COMPLIANCE: "medications",
-};
 
 function isScoreRingId(value: unknown): value is ScoreRingId {
   return (
