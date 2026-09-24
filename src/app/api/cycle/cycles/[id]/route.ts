@@ -19,7 +19,7 @@ import { auditLog } from "@/lib/auth/audit";
 import { overwriteDetails } from "@/lib/sharing/audit-details";
 import { apiError, getClientIp } from "@/lib/api-response";
 import { requireCycleEnabled } from "@/lib/cycle/gate";
-import { reanchorAfterRemovedStart } from "@/lib/cycle/cycle-boundaries";
+import { removeCycleStartedOn } from "@/lib/cycle/cycle-boundaries";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -45,13 +45,13 @@ export const DELETE = apiHandler(
 
     // Tombstone + re-anchor as one unit: a neighbour re-derived against a
     // half-applied delete would read the row being removed as still live.
-    const reanchored = await prisma.$transaction(async (db) => {
-      await db.menstrualCycle.update({
-        where: { id },
-        data: { deletedAt: new Date(), syncVersion: { increment: 1 } },
-      });
-      return reanchorAfterRemovedStart(db, user.id, existing.startDate);
-    });
+    // The shared removal also gives back a start this one folded in and
+    // hands the removed cycle's days back. `null` is a cycle already
+    // tombstoned: nothing left to move.
+    const removed = await prisma.$transaction((db) =>
+      removeCycleStartedOn(db, user.id, existing.startDate),
+    );
+    const reanchored = removed?.reanchored ?? null;
 
     await auditLog("cycle.cycle.delete", {
       userId: user.id,
@@ -61,6 +61,9 @@ export const DELETE = apiHandler(
       details: {
         cycleId: id,
         startDate: existing.startDate,
+        ...(removed && removed.restoredCycleIds.length > 0
+          ? { restoredCycleIds: removed.restoredCycleIds }
+          : {}),
         ...(reanchored
           ? {
               reanchoredCycleId: reanchored.cycleId,
