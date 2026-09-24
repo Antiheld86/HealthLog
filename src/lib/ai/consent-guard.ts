@@ -27,26 +27,17 @@
  * failure and we must not race that decision. A receipt of the surface's
  * mapped kind OR the superset `ai_full` grant satisfies the gate.
  */
-import {
-  AI_EXTRACTION_CONSENT_KIND,
-  latestActiveReceipt,
-} from "@/lib/consent/receipts";
+import { latestActiveReceipt } from "@/lib/consent/receipts";
 import type { ConsentKind } from "@/lib/validations/consent";
 import type { ProviderChainResolved } from "@/lib/ai/provider-runner";
 
 /**
- * The consent groups that gate PHI egress. Each maps to the consent kind
- * collected for it; `ai_full` (the master grant) satisfies every one.
- *
- *   - `coach`: the Coach (`ai_coach`).
- *   - `insights`: model-written analysis over the person's own readings
- *     (`ai_insights_only`).
- *   - `extraction`: reading a document, a lab report scan or typed medication
- *     text (`ai_extraction`, the narrower grant the document auto-read toggle
- *     mints). It no longer satisfies the Coach or the analysis, and neither of
- *     those satisfies it.
+ * The two AI surfaces that egress PHI through a chain. Each maps to the consent
+ * kind the iOS client collects for it; `ai_full` (the master grant) satisfies
+ * either. Reading documents has its own kind (`ai_extraction`), checked by the
+ * capability egress re-check rather than here.
  */
-export type ConsentSurface = "coach" | "insights" | "extraction";
+export type ConsentSurface = "coach" | "insights";
 
 /**
  * Provider tags that egress via an operator-managed credential the user did not
@@ -95,14 +86,9 @@ export function chainRequiresServerManagedConsent(
 
 /** The consent kinds that satisfy a given surface (the specific + the master). */
 function acceptableKinds(surface: ConsentSurface): ConsentKind[] {
-  switch (surface) {
-    case "coach":
-      return ["ai_coach", "ai_full"];
-    case "insights":
-      return ["ai_insights_only", "ai_full"];
-    case "extraction":
-      return [AI_EXTRACTION_CONSENT_KIND, "ai_full"];
-  }
+  return surface === "coach"
+    ? ["ai_coach", "ai_full"]
+    : ["ai_insights_only", "ai_full"];
 }
 
 /**
@@ -156,7 +142,11 @@ export async function assertConsentForChain(args: {
  * AI routes call the single resolved provider directly (no runner cascade), so
  * the exact egress is the picked provider. A `local` pick never leaves the
  * machine and stays ungated; EVERY external pick (codex, BYOK openai/anthropic,
- * the operator's admin key) requires an active document-class consent receipt.
+ * the operator's admin key) requires an active extraction receipt
+ * (`ai_extraction` or `ai_full`). The check itself runs through the capability
+ * egress re-check (`aiEgressRefusal` in `@/lib/ai/capabilities/egress`), which
+ * reads the receipt kinds from the capability table; the auto-read toggle is a
+ * trigger, never the consent, so a revoked receipt wins over a toggle left on.
  */
 const LOCAL_ONLY_PROVIDER_TYPES: ReadonlySet<string> = new Set(["local"]);
 
@@ -167,50 +157,4 @@ const LOCAL_ONLY_PROVIDER_TYPES: ReadonlySet<string> = new Set(["local"]);
  */
 export function isExternalDocumentEgress(providerType: string): boolean {
   return !LOCAL_ONLY_PROVIDER_TYPES.has(providerType);
-}
-
-/**
- * Enforce the document-class consent precondition for the provider that will
- * actually receive the document. No-op for a `local` pick (nothing leaves the
- * machine); for any external pick, throw `ConsentRequiredError` unless an
- * active extraction receipt (`ai_extraction`, or the master `ai_full`) is on
- * file.
- *
- * The document auto-read toggle is NOT a shortcut here any more. Switching it
- * on mints an `ai_extraction` receipt, and that receipt is what this reads, so
- * a receipt the person later revokes wins over a toggle still left on: the
- * withdrawal is honoured at the next egress, not at the next toggle flip.
- *
- * Call this AFTER the document provider is picked and BEFORE the first
- * `generateCompletion` on it.
- */
-export async function assertDocumentEgressConsent(args: {
-  userId: string;
-  providerType: string;
-}): Promise<void> {
-  if (!isExternalDocumentEgress(args.providerType)) return;
-  if (await hasActiveConsentForSurface(args.userId, "extraction")) return;
-  throw new ConsentRequiredError("extraction");
-}
-
-/**
- * The document rule for a provider CHAIN (lab report scans, which cascade
- * across the chain rather than calling one picked provider). A lab report is a
- * document, so any entry that would send it off the machine needs an active
- * extraction receipt, whoever holds the credential; a chain of local entries
- * only is ungated. Fails closed like `assertConsentForChain`: an external
- * entry anywhere in the chain requires the receipt, because the runner may
- * cascade to it.
- */
-export async function assertExtractionConsentForChain(args: {
-  userId: string;
-  chain: ReadonlyArray<ProviderChainResolved>;
-}): Promise<void> {
-  if (
-    !args.chain.some((entry) => isExternalDocumentEgress(entry.providerType))
-  ) {
-    return;
-  }
-  if (await hasActiveConsentForSurface(args.userId, "extraction")) return;
-  throw new ConsentRequiredError("extraction");
 }

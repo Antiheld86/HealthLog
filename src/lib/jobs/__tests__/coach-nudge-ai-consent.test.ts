@@ -10,15 +10,25 @@
  * The gate is skip-shaped: no receipt → `null` → the caller ships the
  * deterministic template, so the nudge itself is never lost.
  *
- * `@/lib/consent/receipts` is mocked rather than the consent guard, so the real
- * `chainRequiresServerManagedConsent` + `hasActiveConsentForSurface` logic runs.
+ * Only the receipt table (`prisma.consentReceipt`) is mocked, not the wire
+ * re-check, so the real `aiEgressRefusal` rule runs: the capability again (a
+ * job, so `aiCapabilityForJob`), then whether exactly this chain needs a
+ * receipt under the `coach` capability's rule, then whether one is active.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/db", () => ({ prisma: {} }));
-
-const latestActiveReceipt = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/consent/receipts", () => ({ latestActiveReceipt }));
+/** The active receipt kinds the record holds; `findFirst` answers from them. */
+const activeKinds = vi.hoisted(() => ({ current: [] as string[] }));
+const consentReceiptFindFirst = vi.hoisted(() =>
+  vi.fn(async (args: { where: { kind: { in: string[] } } }) =>
+    args.where.kind.in.some((kind) => activeKinds.current.includes(kind))
+      ? { id: "receipt-1" }
+      : null,
+  ),
+);
+vi.mock("@/lib/db", () => ({
+  prisma: { consentReceipt: { findFirst: consentReceiptFindFirst } },
+}));
 vi.mock("@/lib/documents/document-settings", () => ({
   documentAutoReadEnabled: vi.fn(async () => false),
 }));
@@ -40,7 +50,12 @@ const budgetMocks = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/ai/coach/budget", () => budgetMocks);
 
-vi.mock("@/lib/logging/context", () => ({ annotate: vi.fn() }));
+// No request event: the nudge runs off-request, which is the arm of
+// `aiEgressRefusal` that resolves the capability for the job's record.
+vi.mock("@/lib/logging/context", () => ({
+  annotate: vi.fn(),
+  getEvent: vi.fn(() => undefined),
+}));
 
 // The composer resolves the `coach` capability before the chain. Available
 // by default so the consent logic below is what each case exercises.
@@ -55,6 +70,7 @@ import {
   createNudgeAiTickBudget,
   type ComposeNudgeParams,
 } from "../coach-nudge-ai";
+import { annotate } from "@/lib/logging/context";
 
 function makeProvider() {
   return {
@@ -85,7 +101,7 @@ function params(): ComposeNudgeParams {
 beforeEach(() => {
   vi.clearAllMocks();
   provider = makeProvider();
-  latestActiveReceipt.mockResolvedValue(null);
+  activeKinds.current = [];
   aiCapabilityForJob.mockResolvedValue({
     available: true,
     reason: null,
@@ -138,9 +154,7 @@ describe("composeNudgeWithAI — server-managed consent gate", () => {
     resolveProviderChain.mockResolvedValue([
       { providerType: "admin-openai", instance: provider },
     ]);
-    latestActiveReceipt.mockImplementation(async (_userId, kind) =>
-      kind === "ai_coach" ? { id: "receipt-1" } : null,
-    );
+    activeKinds.current = ["ai_coach"];
 
     const out = await composeNudgeWithAI(params());
 
@@ -155,12 +169,24 @@ describe("composeNudgeWithAI — server-managed consent gate", () => {
     resolveProviderChain.mockResolvedValue([
       { providerType: "admin-openai", instance: provider },
     ]);
-    latestActiveReceipt.mockImplementation(async (_userId, kind) =>
-      kind === "ai_full" ? { id: "receipt-2" } : null,
-    );
+    activeKinds.current = ["ai_full"];
 
     expect(await composeNudgeWithAI(params())).not.toBeNull();
     expect(provider.generateCompletion).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not count a receipt of an unrelated kind", async () => {
+    resolveProviderChain.mockResolvedValue([
+      { providerType: "admin-openai", instance: provider },
+    ]);
+    activeKinds.current = ["ai_extraction"];
+
+    expect(await composeNudgeWithAI(params())).toBeNull();
+    expect(provider.generateCompletion).not.toHaveBeenCalled();
+    expect(annotate).toHaveBeenCalledWith({
+      action: { name: "coach.nudge.ai.refused" },
+      meta: { reason: "consent_required" },
+    });
   });
 
   it("leaves a BYOK chain ungated — the user's own egress needs no receipt", async () => {
@@ -170,7 +196,7 @@ describe("composeNudgeWithAI — server-managed consent gate", () => {
 
     expect(await composeNudgeWithAI(params())).not.toBeNull();
     expect(provider.generateCompletion).toHaveBeenCalledTimes(1);
-    expect(latestActiveReceipt).not.toHaveBeenCalled();
+    expect(consentReceiptFindFirst).not.toHaveBeenCalled();
   });
 
   it("fails closed when a server-managed entry sits BEHIND a BYOK primary", async () => {

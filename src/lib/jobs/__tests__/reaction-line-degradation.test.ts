@@ -73,13 +73,11 @@ vi.mock("@/lib/ai/provider", () => ({
   resolveProviderChain: (...a: unknown[]) => resolveProviderChain(...a),
 }));
 
-const chainRequiresServerManagedConsent = vi.fn();
-const hasActiveConsentForSurface = vi.fn();
-vi.mock("@/lib/ai/consent-guard", () => ({
-  chainRequiresServerManagedConsent: (...a: unknown[]) =>
-    chainRequiresServerManagedConsent(...a),
-  hasActiveConsentForSurface: (...a: unknown[]) =>
-    hasActiveConsentForSurface(...a),
+// The wire re-check for the resolved chain. Its rule is pinned in
+// egress.test.ts; here it passes unless a case refuses.
+const aiEgressRefusal = vi.fn();
+vi.mock("@/lib/ai/capabilities/egress", () => ({
+  aiEgressRefusal: (...a: unknown[]) => aiEgressRefusal(...a),
 }));
 
 const reserveBudget = vi.fn();
@@ -106,6 +104,7 @@ vi.mock("@/lib/ai/coach/bytes-codec", () => ({
 }));
 
 import { runReactionLine } from "@/lib/jobs/reaction-line";
+import { AiUnavailableError } from "@/lib/ai/capabilities/refusal";
 
 const JOB = {
   userId: "u1",
@@ -202,8 +201,7 @@ beforeEach(async () => {
     reason: null,
     onDeviceAllowed: true,
   });
-  chainRequiresServerManagedConsent.mockReturnValue(false);
-  hasActiveConsentForSurface.mockResolvedValue(true);
+  aiEgressRefusal.mockResolvedValue(null);
   // v1.38.19 — the claim reservation is no longer a
   // second copy of the upsert; it calls the shared `reserveBudget` with the
   // transaction client. The spy therefore runs the REAL gate against the
@@ -512,14 +510,21 @@ describe("reaction line — degradation", () => {
 
   it("no consent on a server-managed chain: refuses before reserving", async () => {
     resolveProviderChain.mockResolvedValue([
+      { providerType: "openai", instance: {} },
       { providerType: "admin-openai", instance: {} },
     ]);
-    chainRequiresServerManagedConsent.mockReturnValue(true);
-    hasActiveConsentForSurface.mockResolvedValue(false);
+    aiEgressRefusal.mockResolvedValue(
+      new AiUnavailableError("reactionLines", "consent_required"),
+    );
 
     const outcome = await runReactionLine(JOB);
 
     expect(outcome).toEqual({ status: "skipped", reason: "consent_required" });
+    // Asked about exactly the chain it would cascade through.
+    expect(aiEgressRefusal).toHaveBeenCalledWith("reactionLines", "u1", [
+      "openai",
+      "admin-openai",
+    ]);
     // A user without a receipt must not spend a token OR a ledger slot.
     expect(reserveBudget).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();

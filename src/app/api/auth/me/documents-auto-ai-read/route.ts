@@ -37,6 +37,7 @@ import { annotate } from "@/lib/logging/context";
 import { auditLog } from "@/lib/auth/audit";
 import { getAiCapability } from "@/lib/ai/capabilities/gate";
 import { AI_CAPABILITIES } from "@/lib/ai/capabilities/types";
+import { AI_EXTRACTION_CONSENT_KIND } from "@/lib/consent/receipts";
 import { prisma } from "@/lib/db";
 import { isP2002 } from "@/lib/prisma-errors";
 import { enqueueSummaryCatchUp } from "@/lib/jobs/document-summary-catchup";
@@ -57,7 +58,7 @@ type DocumentsAutoAiReadResponse = {
  * master `ai_full`. The capability table lists it (with `ai_full`) as what
  * satisfies the document consent rule.
  */
-const AUTO_READ_CONSENT_KIND = "ai_extraction";
+const AUTO_READ_CONSENT_KIND = AI_EXTRACTION_CONSENT_KIND;
 
 /**
  * Mint the extraction receipt unless one that satisfies document reads is

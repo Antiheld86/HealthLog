@@ -34,6 +34,7 @@
  */
 import { documentAutoReadEnabled } from "@/lib/documents/document-settings";
 import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
+import { PICK_DECIDED_REASONS } from "@/lib/ai/capabilities/types";
 import { prisma } from "@/lib/db";
 import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { enqueueDocumentSummary } from "@/lib/jobs/document-summary";
@@ -94,10 +95,14 @@ export async function runSummaryCatchUpForUser(
   }
 
   // The `documentAi` capability, once for the whole pass, before any document
-  // is listed: a switch off, no provider or no extraction consent means there
-  // is nothing the per-document jobs could do.
+  // is listed: a switch or the vault module off means there is nothing the
+  // per-document jobs could do. A missing provider or receipt is each job's
+  // pick to decide.
   const capability = await aiCapabilityForJob(userId, "documentAi");
-  if (!capability.available) {
+  if (
+    capability.reason !== null &&
+    !PICK_DECIDED_REASONS.has(capability.reason)
+  ) {
     annotate({
       action: { name: "documents.autoRead.catchUpSkipped" },
       meta: { reason: capability.reason },

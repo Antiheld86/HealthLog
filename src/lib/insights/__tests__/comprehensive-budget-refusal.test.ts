@@ -25,7 +25,8 @@ const resolveProvider = vi.fn();
 const runRawCompletionWithFallback = vi.fn();
 const extractFeatures = vi.fn();
 const recordBriefingFailure = vi.fn();
-const hasActiveConsentForSurface = vi.fn();
+const hasReceipt = vi.fn();
+const aiEgressRefusal = vi.fn();
 
 vi.mock("@/lib/db", () => ({
   prisma: {
@@ -113,18 +114,16 @@ vi.mock("@/lib/ai/coach/about-me", () => ({
 vi.mock("@/lib/cache/invalidate", () => ({
   invalidateUserInsights: vi.fn(),
 }));
-// Modelled truthfully rather than stubbed open: only an operator-credential
-// chain needs a receipt, which is what lets the consent-ordering test below
-// assert the real gate rather than a bypass.
-vi.mock("@/lib/ai/consent-guard", () => ({
-  chainRequiresServerManagedConsent: (chain: { providerType: string }[] = []) =>
-    chain.some((c) => c.providerType.startsWith("admin-")),
-  hasActiveConsentForSurface: (...a: unknown[]) =>
-    hasActiveConsentForSurface(...a),
+// The wire re-check, modelled truthfully rather than stubbed open: only an
+// operator-credential entry needs a receipt, which is what lets the
+// consent-ordering test below assert the real gate rather than a bypass.
+vi.mock("@/lib/ai/capabilities/egress", () => ({
+  aiEgressRefusal: (...a: unknown[]) => aiEgressRefusal(...a),
 }));
 
 import { generateComprehensiveInsight } from "../comprehensive-generate";
 import { OPERATOR_COST_CAP, USER_PLAN_CAP } from "@/lib/ai/coach/budget";
+import { AiUnavailableError } from "@/lib/ai/capabilities/refusal";
 
 const VALID = JSON.stringify({ dailyBriefing: { paragraph: "ok" } });
 
@@ -148,7 +147,13 @@ beforeEach(() => {
     insightsSnapshotHash: null,
     insightsBriefingRerollDate: null,
   });
-  hasActiveConsentForSurface.mockResolvedValue(true);
+  hasReceipt.mockResolvedValue(true);
+  aiEgressRefusal.mockImplementation(
+    async (key: never, _userId: string, providerTypes: string[]) =>
+      providerTypes.some((t) => t.startsWith("admin-")) && !(await hasReceipt())
+        ? new AiUnavailableError(key, "consent_required")
+        : null,
+  );
   runRawCompletionWithFallback.mockResolvedValue({
     result: { content: VALID, tokensUsed: 900, model: "m" },
     workingProvider: { providerType: "admin-openai" },
@@ -224,11 +229,28 @@ describe("generateComprehensiveInsight — daily token ceiling", () => {
     // Reserving first would bill an operator-key user for a snapshot that is
     // never sent anywhere, and could lock them out of a tier they are not
     // even permitted to use.
-    hasActiveConsentForSurface.mockResolvedValue(false);
+    hasReceipt.mockResolvedValue(false);
 
     const outcome = await generateComprehensiveInsight("u1", { locale: "de" });
 
     expect(outcome).toEqual({ status: "skipped", reason: "no-consent" });
+    expect(aiEgressRefusal).toHaveBeenCalledWith("briefing", "u1", [
+      "admin-openai",
+    ]);
+    expect(runRawCompletionWithFallback).not.toHaveBeenCalled();
+    expect(ledgerTotal).toBe(0);
+  });
+
+  it("reports any other wire refusal as `skipped: unavailable`, before any spend", async () => {
+    // A switch the operator turned off after the run was scheduled: not a
+    // consent question, so not reported as one.
+    aiEgressRefusal.mockResolvedValue(
+      new AiUnavailableError("briefing", "operator_disabled"),
+    );
+
+    const outcome = await generateComprehensiveInsight("u1", { locale: "de" });
+
+    expect(outcome).toEqual({ status: "skipped", reason: "unavailable" });
     expect(runRawCompletionWithFallback).not.toHaveBeenCalled();
     expect(ledgerTotal).toBe(0);
   });

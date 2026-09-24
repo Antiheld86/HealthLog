@@ -1,15 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/consent/receipts", () => ({
-  AI_EXTRACTION_CONSENT_KIND: "ai_extraction",
   latestActiveReceipt: vi.fn(),
 }));
 
 import {
   ConsentRequiredError,
   assertConsentForChain,
-  assertDocumentEgressConsent,
-  assertExtractionConsentForChain,
   chainRequiresServerManagedConsent,
   hasActiveConsentForSurface,
   isExternalDocumentEgress,
@@ -200,73 +197,14 @@ describe("isExternalDocumentEgress", () => {
   });
 });
 
-describe("assertDocumentEgressConsent", () => {
-  beforeEach(() => {
-    mockedLatest.mockReset();
-  });
-
-  it("never reads consent and never throws for a LOCAL document pick", async () => {
-    grant([]);
-    await expect(
-      assertDocumentEgressConsent({ userId: "u1", providerType: "local" }),
-    ).resolves.toBeUndefined();
-    expect(mockedLatest).not.toHaveBeenCalled();
-  });
-
-  // The live gap the governance fix closes: codex was ungated for documents.
-  it("REQUIRES a receipt to send a document to codex (the closed gap)", async () => {
-    grant([]);
-    await expect(
-      assertDocumentEgressConsent({ userId: "u1", providerType: "codex" }),
-    ).rejects.toBeInstanceOf(ConsentRequiredError);
-  });
-
-  it("requires a receipt for BYOK document egress too (openai / anthropic)", async () => {
-    grant([]);
-    for (const p of ["openai", "anthropic", "admin-openai"]) {
-      await expect(
-        assertDocumentEgressConsent({ userId: "u1", providerType: p }),
-      ).rejects.toBeInstanceOf(ConsentRequiredError);
-    }
-  });
-
-  it("proceeds for an external pick with an active extraction receipt", async () => {
-    grant(["ai_extraction"]);
-    await expect(
-      assertDocumentEgressConsent({ userId: "u1", providerType: "codex" }),
-    ).resolves.toBeUndefined();
-  });
-
-  it("proceeds for an external pick with the master ai_full receipt", async () => {
-    grant(["ai_full"]);
-    await expect(
-      assertDocumentEgressConsent({ userId: "u1", providerType: "openai" }),
-    ).resolves.toBeUndefined();
-  });
-
-  // K1: the analysis and the Coach consents no longer cover documents.
-  it("refuses an external pick when only the analysis or Coach consent is active", async () => {
-    for (const kinds of [
-      ["ai_insights_only"],
-      ["ai_coach"],
-    ] as ConsentKind[][]) {
-      grant(kinds);
-      await expect(
-        assertDocumentEgressConsent({ userId: "u1", providerType: "codex" }),
-      ).rejects.toBeInstanceOf(ConsentRequiredError);
-    }
-  });
-
-  it("names the extraction group on the refusal", async () => {
-    grant([]);
-    await expect(
-      assertDocumentEgressConsent({ userId: "u1", providerType: "codex" }),
-    ).rejects.toMatchObject({ surface: "extraction" });
-  });
-});
-
-describe("extraction consent does not satisfy the other groups", () => {
-  it("an ai_extraction receipt alone satisfies neither the Coach nor the analysis", async () => {
+// The document-class receipt (`ai_extraction` or `ai_full`) is read by the
+// capability egress re-check, not here: see
+// `src/lib/ai/capabilities/__tests__/egress.test.ts` and
+// `tests/integration/consent-withdrawal-purge.test.ts`. What this module still
+// owes the document surfaces is the local/external split above, and that the
+// extraction kind satisfies neither chain surface.
+describe("an extraction receipt does not satisfy the chain surfaces", () => {
+  it("satisfies neither the Coach nor the analysis", async () => {
     grant(["ai_extraction"]);
     await expect(hasActiveConsentForSurface("u1", "coach")).resolves.toBe(
       false,
@@ -274,51 +212,5 @@ describe("extraction consent does not satisfy the other groups", () => {
     await expect(hasActiveConsentForSurface("u1", "insights")).resolves.toBe(
       false,
     );
-    await expect(hasActiveConsentForSurface("u1", "extraction")).resolves.toBe(
-      true,
-    );
-  });
-});
-
-describe("assertExtractionConsentForChain (lab report scans)", () => {
-  beforeEach(() => mockedLatest.mockReset());
-
-  it("is a no-op for a chain of local entries only", async () => {
-    grant([]);
-    await expect(
-      assertExtractionConsentForChain({
-        userId: "u1",
-        chain: [entry("local")],
-      }),
-    ).resolves.toBeUndefined();
-    expect(mockedLatest).not.toHaveBeenCalled();
-  });
-
-  it("requires an extraction receipt for a BYOK chain, unlike the self-snapshot rule", async () => {
-    grant([]);
-    await expect(
-      assertExtractionConsentForChain({
-        userId: "u1",
-        chain: [entry("local"), entry("anthropic")],
-      }),
-    ).rejects.toBeInstanceOf(ConsentRequiredError);
-    // The self-snapshot rule would have admitted the same chain.
-    await expect(
-      assertConsentForChain({
-        userId: "u1",
-        chain: [entry("anthropic")],
-        surface: "insights",
-      }),
-    ).resolves.toBeUndefined();
-  });
-
-  it("admits the chain with an extraction receipt", async () => {
-    grant(["ai_extraction"]);
-    await expect(
-      assertExtractionConsentForChain({
-        userId: "u1",
-        chain: [entry("openai")],
-      }),
-    ).resolves.toBeUndefined();
   });
 });

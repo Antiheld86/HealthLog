@@ -50,6 +50,11 @@ vi.mock("@/lib/db", () => ({
     },
   },
 }));
+// The wire re-check (`aiEgressRefusal`) passes in these fixtures; its refusal
+// arm has its own test in comprehensive-budget-refusal.test.ts.
+vi.mock("@/lib/ai/capabilities/egress", () => ({
+  aiEgressRefusal: vi.fn(async () => null),
+}));
 vi.mock("@/lib/ai/capabilities/gate", () => ({
   aiCapabilityForRecord: (...a: unknown[]) => aiCapabilityForRecord(...a),
 }));

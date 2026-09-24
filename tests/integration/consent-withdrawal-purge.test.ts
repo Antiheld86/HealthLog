@@ -307,21 +307,15 @@ describe("a revoked extraction receipt wins over the auto-read toggle", () => {
         signedAt: new Date(),
       },
     });
-    const { assertDocumentEgressConsent, ConsentRequiredError } =
-      await import("@/lib/ai/consent-guard");
+    const { aiEgressRefusal } = await import("@/lib/ai/capabilities/egress");
 
-    await expect(
-      assertDocumentEgressConsent({ userId: user.id, providerType: "codex" }),
-    ).resolves.toBeUndefined();
+    expect(await aiEgressRefusal("documentAi", user.id, ["codex"])).toBeNull();
 
     await withdrawConsent(user.id, ["ai_extraction"]);
 
-    await expect(
-      assertDocumentEgressConsent({ userId: user.id, providerType: "codex" }),
-    ).rejects.toBeInstanceOf(ConsentRequiredError);
+    const refusal = await aiEgressRefusal("documentAi", user.id, ["codex"]);
+    expect(refusal?.reason).toBe("consent_required");
     // A local pick never leaves the machine and stays admitted.
-    await expect(
-      assertDocumentEgressConsent({ userId: user.id, providerType: "local" }),
-    ).resolves.toBeUndefined();
+    expect(await aiEgressRefusal("documentAi", user.id, ["local"])).toBeNull();
   });
 });

@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Content-index backfill (Document vault P2). Pins: no provider / no consent →
- * clean no-op; indexes not-yet-indexed docs; stops when the budget is reached
+ * Content-index backfill (Document vault P2). Pins: an operator / module /
+ * personal switch off → refused before the pick; no provider or a pick the
+ * wire re-check withholds (no consent, a switch) → clean no-op; indexes not-yet-indexed docs; stops when the budget is reached
  * (resumable); skips are bounded by the MIME-filtered candidate set; rows on a
  * stale `tokenizerVersion` are re-tokenised locally (the column's consumer)
  * while current-version rows are left alone.
@@ -40,15 +41,6 @@ vi.mock("@/lib/documents/content-index", () => ({
 vi.mock("@/lib/documents/provider-order", () => ({
   resolveDocumentVisionProvider: vi.fn(),
 }));
-vi.mock("@/lib/ai/consent-guard", () => ({
-  assertDocumentEgressConsent: vi.fn().mockResolvedValue(undefined),
-  // Mirrors the real rule: only the self-hosted `local` provider stays on the
-  // machine.
-  isExternalDocumentEgress: vi.fn(
-    (providerType: string) => providerType !== "local",
-  ),
-  ConsentRequiredError: class ConsentRequiredError extends Error {},
-}));
 vi.mock("@/lib/ai/capabilities/gate", () => ({
   aiCapabilityForJob: vi.fn(),
   aiCapabilityForRecord: vi.fn(),
@@ -69,10 +61,7 @@ import { detectOcrMimeType } from "@/lib/labs/ocr-upload";
 import { rasterizePdf } from "@/lib/documents/rasterize-pdf";
 import { transcribeDocument } from "@/lib/documents/describe";
 import { resolveDocumentVisionProvider } from "@/lib/documents/provider-order";
-import {
-  assertDocumentEgressConsent,
-  ConsentRequiredError,
-} from "@/lib/ai/consent-guard";
+import { AiUnavailableError } from "@/lib/ai/capabilities/refusal";
 import { reserveBudget } from "@/lib/ai/coach/budget";
 import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
 import {
@@ -82,6 +71,7 @@ import {
 
 const PICK = {
   chain: [{ providerType: "anthropic", instance: {} }],
+  withheld: null,
   pick: {
     entry: { providerType: "anthropic", instance: {} },
     providerType: "anthropic",
@@ -151,6 +141,7 @@ describe("runContentIndexBackfillForUser", () => {
   it("no-ops with no provider", async () => {
     vi.mocked(resolveDocumentVisionProvider).mockResolvedValue({
       chain: [],
+      withheld: null,
       pick: null,
     } as never);
     const result = await runContentIndexBackfillForUser("user-1");
@@ -164,30 +155,43 @@ describe("runContentIndexBackfillForUser", () => {
     expect(upsertContentIndex).not.toHaveBeenCalled();
   });
 
-  it("no-ops when consent is missing", async () => {
-    vi.mocked(resolveDocumentVisionProvider).mockResolvedValue(PICK as never);
-    vi.mocked(assertDocumentEgressConsent).mockRejectedValueOnce(
-      new ConsentRequiredError("insights" as never),
-    );
-    const result = await runContentIndexBackfillForUser("user-1");
-    expect(result).toEqual({
-      indexed: 0,
-      retokenised: 0,
-      skipped: 0,
-      failed: 0,
-      reason: "no-consent",
-    });
-    expect(upsertContentIndex).not.toHaveBeenCalled();
-  });
-
   it.each([
     ["consent_required", "no-consent"],
     ["operator_disabled", "unavailable"],
     ["module_disabled", "unavailable"],
-    ["no_provider", "no-provider"],
   ] as const)(
-    "refuses an external pick before any document is read when documentAi is unavailable (%s → %s)",
+    "no-ops when the wire re-check withholds the pick (%s → %s)",
     async (reason, summaryReason) => {
+      // The pick's own re-check answers for exactly the provider picked: an
+      // external pick without an extraction receipt, or a switch turned off
+      // between the pass-level check and the pick.
+      vi.mocked(resolveDocumentVisionProvider).mockResolvedValue({
+        chain: PICK.chain,
+        pick: null,
+        withheld: new AiUnavailableError("documentAi", reason),
+      } as never);
+      vi.mocked(prisma.inboundDocument.findMany).mockResolvedValue([
+        { id: "d1" },
+      ] as never);
+
+      const result = await runContentIndexBackfillForUser("user-1");
+
+      expect(result).toEqual({
+        indexed: 0,
+        retokenised: 0,
+        skipped: 0,
+        failed: 0,
+        reason: summaryReason,
+      });
+      expect(prisma.inboundDocument.findMany).not.toHaveBeenCalled();
+      expect(reserveBudget).not.toHaveBeenCalled();
+      expect(upsertContentIndex).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["operator_disabled", "module_disabled", "user_disabled"] as const)(
+    "refuses before the pick and before any document is read when documentAi is switched off (%s)",
+    async (reason) => {
       vi.mocked(resolveDocumentVisionProvider).mockResolvedValue(PICK as never);
       vi.mocked(aiCapabilityForJob).mockResolvedValue({
         available: false,
@@ -206,9 +210,9 @@ describe("runContentIndexBackfillForUser", () => {
         retokenised: 0,
         skipped: 0,
         failed: 0,
-        reason: summaryReason,
+        reason: "unavailable",
       });
-      expect(assertDocumentEgressConsent).not.toHaveBeenCalled();
+      expect(resolveDocumentVisionProvider).not.toHaveBeenCalled();
       expect(prisma.inboundDocument.findMany).not.toHaveBeenCalled();
       expect(reserveBudget).not.toHaveBeenCalled();
       expect(transcribeDocument).not.toHaveBeenCalled();
@@ -216,30 +220,37 @@ describe("runContentIndexBackfillForUser", () => {
     },
   );
 
-  it("does not ask the documentAi capability for a local pick", async () => {
-    vi.mocked(resolveDocumentVisionProvider).mockResolvedValue({
-      chain: [{ providerType: "local", instance: {} }],
-      pick: {
-        entry: { providerType: "local", instance: {} },
-        providerType: "local",
-        pdfSupported: false,
-      },
-    } as never);
-    vi.mocked(aiCapabilityForJob).mockResolvedValue({
-      available: false,
-      reason: "consent_required",
-      onDeviceAllowed: true,
-    });
-    vi.mocked(prisma.inboundDocument.findMany).mockResolvedValue([
-      { id: "d1" },
-    ] as never);
+  it.each(["no_provider", "consent_required"] as const)(
+    "leaves %s to the pick: a local pick the presence answer would refuse still indexes",
+    async (reason) => {
+      // Presence may see an external entry without a receipt, or no server
+      // provider at all; the document order can still land on the local
+      // model, which needs neither. The pick decides, not the presence answer.
+      vi.mocked(resolveDocumentVisionProvider).mockResolvedValue({
+        chain: [{ providerType: "local", instance: {} }],
+        withheld: null,
+        pick: {
+          entry: { providerType: "local", instance: {} },
+          providerType: "local",
+          pdfSupported: false,
+        },
+      } as never);
+      vi.mocked(aiCapabilityForJob).mockResolvedValue({
+        available: false,
+        reason,
+        onDeviceAllowed: true,
+      });
+      vi.mocked(prisma.inboundDocument.findMany).mockResolvedValue([
+        { id: "d1" },
+      ] as never);
 
-    const result = await runContentIndexBackfillForUser("user-1");
+      const result = await runContentIndexBackfillForUser("user-1");
 
-    expect(aiCapabilityForJob).not.toHaveBeenCalled();
-    expect(result.reason).toBe("ok");
-    expect(result.indexed).toBe(1);
-  });
+      expect(resolveDocumentVisionProvider).toHaveBeenCalledWith("user-1");
+      expect(result.reason).toBe("ok");
+      expect(result.indexed).toBe(1);
+    },
+  );
 
   it("indexes the not-yet-indexed documents", async () => {
     vi.mocked(resolveDocumentVisionProvider).mockResolvedValue(PICK as never);
@@ -268,6 +279,7 @@ describe("runContentIndexBackfillForUser", () => {
     // silently leaves every PDF out for exactly those providers.
     vi.mocked(resolveDocumentVisionProvider).mockResolvedValue({
       chain: [{ providerType: "codex", instance: {} }],
+      withheld: null,
       pick: {
         entry: { providerType: "codex", instance: {} },
         providerType: "codex",
@@ -310,6 +322,7 @@ describe("runContentIndexBackfillForUser", () => {
   it("counts a PDF the rasteriser cannot render as skipped, not failed", async () => {
     vi.mocked(resolveDocumentVisionProvider).mockResolvedValue({
       chain: [{ providerType: "codex", instance: {} }],
+      withheld: null,
       pick: {
         entry: { providerType: "codex", instance: {} },
         providerType: "codex",
@@ -365,6 +378,7 @@ describe("runContentIndexBackfillForUser", () => {
     // No provider at all: the sweep is local work and must run anyway.
     vi.mocked(resolveDocumentVisionProvider).mockResolvedValue({
       chain: [],
+      withheld: null,
       pick: null,
     } as never);
     seedIndexRows([
@@ -409,6 +423,7 @@ describe("runContentIndexBackfillForUser", () => {
   it("touches nothing when every row already carries the current tokenizerVersion", async () => {
     vi.mocked(resolveDocumentVisionProvider).mockResolvedValue({
       chain: [],
+      withheld: null,
       pick: null,
     } as never);
     seedIndexRows([
@@ -434,6 +449,7 @@ describe("runContentIndexBackfillForUser", () => {
   it("counts an undecryptable stale row as failed and keeps walking", async () => {
     vi.mocked(resolveDocumentVisionProvider).mockResolvedValue({
       chain: [],
+      withheld: null,
       pick: null,
     } as never);
     seedIndexRows([

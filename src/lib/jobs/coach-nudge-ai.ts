@@ -36,10 +36,7 @@ import type { CoachNudgeTrigger } from "@/lib/jobs/coach-nudge";
 import type { Locale } from "@/lib/i18n/config";
 import { resolveProviderChain } from "@/lib/ai/provider";
 import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
-import {
-  chainRequiresServerManagedConsent,
-  hasActiveConsentForSurface,
-} from "@/lib/ai/consent-guard";
+import { aiEgressRefusal } from "@/lib/ai/capabilities/egress";
 import {
   buildDateKey,
   reconcileSpend,
@@ -189,16 +186,23 @@ export const composeNudgeWithAI: ComposeNudgeWithAI = async (params) => {
     const chain = await resolveProviderChain(params.userId);
     if (chain.length === 0) return null;
 
-    // Consent gate — before the budget reservation, so a user without a
-    // receipt never spends a slot or a token. Skip-shaped like every other
-    // guard here: no receipt → return null and the caller ships the
-    // deterministic template, so the nudge itself is never lost. BYOK / local
-    // / ChatGPT-OAuth chains are the user's own egress and stay ungated.
-    if (
-      chainRequiresServerManagedConsent(chain) &&
-      !(await hasActiveConsentForSurface(params.userId, "coach"))
-    ) {
-      annotate({ action: { name: "coach.nudge.ai.consent_required" } });
+    // The wire re-check for exactly this chain, before the budget
+    // reservation so a user without a receipt never spends a slot or a token:
+    // the capability again, and the consent an operator-held entry needs.
+    // Skip-shaped like every other guard here: a refusal returns null and the
+    // caller ships the deterministic template, so the nudge itself is never
+    // lost. A person's own key, their ChatGPT account or a local model need no
+    // receipt.
+    const refusal = await aiEgressRefusal(
+      "coach",
+      params.userId,
+      chain.map((entry) => entry.providerType),
+    );
+    if (refusal) {
+      annotate({
+        action: { name: "coach.nudge.ai.refused" },
+        meta: { reason: refusal.reason },
+      });
       return null;
     }
 

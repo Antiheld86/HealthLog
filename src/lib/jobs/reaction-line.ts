@@ -33,10 +33,7 @@ import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { annotate } from "@/lib/logging/context";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import { resolveProviderChain } from "@/lib/ai/provider";
-import {
-  chainRequiresServerManagedConsent,
-  hasActiveConsentForSurface,
-} from "@/lib/ai/consent-guard";
+import { aiEgressRefusal } from "@/lib/ai/capabilities/egress";
 import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
 import {
   buildDateKey,
@@ -490,12 +487,14 @@ export async function runReactionLine(
   const chain = await resolveProviderChain(job.userId);
   if (chain.length === 0) return { status: "skipped", reason: "no_provider" };
 
-  if (
-    chainRequiresServerManagedConsent(chain) &&
-    !(await hasActiveConsentForSurface(job.userId, "insights"))
-  ) {
-    return { status: "skipped", reason: "consent_required" };
-  }
+  // The wire re-check for exactly this chain: the capability again, and the
+  // consent an operator-held entry needs (`aiEgressRefusal`).
+  const refusal = await aiEgressRefusal(
+    "reactionLines",
+    job.userId,
+    chain.map((entry) => entry.providerType),
+  );
+  if (refusal) return { status: "skipped", reason: refusal.reason };
 
   const generationClaimId = randomUUID();
   const claimedAt = new Date();

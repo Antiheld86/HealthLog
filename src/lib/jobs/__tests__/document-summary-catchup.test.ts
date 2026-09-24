@@ -122,7 +122,7 @@ describe("runSummaryCatchUpForUser", () => {
     expect(findMany).not.toHaveBeenCalled();
   });
 
-  it.each(["operator_disabled", "no_provider", "consent_required"] as const)(
+  it.each(["operator_disabled", "module_disabled", "user_disabled"] as const)(
     "does nothing when the documentAi capability is unavailable (%s)",
     async (reason) => {
       serveDocuments(5);
@@ -143,6 +143,31 @@ describe("runSummaryCatchUpForUser", () => {
         action: { name: "documents.autoRead.catchUpSkipped" },
         meta: { reason },
       });
+    },
+  );
+
+  it.each(["no_provider", "consent_required"] as const)(
+    "leaves %s to each job's pick: still walks and enqueues",
+    async (reason) => {
+      // Whether there is a provider and whether sending to it needs a receipt
+      // depends on the document-order pick, which the per-document job
+      // re-checks at the wire. The pass-level presence answer does not decide.
+      serveDocuments(2);
+      mockCapability.mockResolvedValue({
+        available: false,
+        reason,
+        onDeviceAllowed: true,
+      });
+
+      const result = await runSummaryCatchUpForUser("user-1");
+
+      expect(result).toEqual({ enqueued: 2, capped: false });
+      expect(mockEnqueueSummary).toHaveBeenCalledTimes(2);
+      expect(annotate).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: { name: "documents.autoRead.catchUpSkipped" },
+        }),
+      );
     },
   );
 

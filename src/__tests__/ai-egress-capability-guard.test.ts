@@ -29,9 +29,13 @@ const SRC = join(process.cwd(), "src");
 const EGRESS_CALL =
   /\.generateCompletion(?:Stream)?\s*\(|\brunRawCompletionWithFallback\s*\(|\brunWithFallback\s*\(/;
 
-/** A capability read in the same file. */
+/**
+ * A capability read in the same file: one of the gates, or the wire re-check
+ * (`aiEgressRefusal` / `assertAiEgress`), which also answers the consent a
+ * picked provider needs.
+ */
 const CAPABILITY_CHECK =
-  /\b(?:aiCapabilityForJob|aiCapabilityForRecord|requireAiCapability|getAiCapability)\s*\(/;
+  /\b(?:aiCapabilityForJob|aiCapabilityForRecord|requireAiCapability|getAiCapability|aiEgressRefusal|assertAiEgress)\s*\(/;
 
 /** Comments name the helpers too; only code counts. */
 function stripComments(source: string): string {
@@ -71,7 +75,7 @@ const EGRESS_SITES: Record<string, EgressSite> = {
   "lib/jobs/reaction-line.ts": {
     recheck: true,
     reason:
-      "Reaction lines call the first chain entry directly; the worker resolves `reactionLines` before the digest or the chain.",
+      "Reaction lines call the first chain entry directly; the worker resolves `reactionLines` before the digest and re-checks the chain at the wire (`aiEgressRefusal`).",
   },
   "lib/jobs/coach-nudge-ai.ts": {
     recheck: true,

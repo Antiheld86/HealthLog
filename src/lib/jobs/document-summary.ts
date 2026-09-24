@@ -26,10 +26,7 @@ import {
   aiCapabilityForJob,
   aiCapabilityForRecord,
 } from "@/lib/ai/capabilities/gate";
-import {
-  assertDocumentEgressConsent,
-  ConsentRequiredError,
-} from "@/lib/ai/consent-guard";
+import { PICK_DECIDED_REASONS } from "@/lib/ai/capabilities/types";
 import {
   buildDateKey,
   reconcileSpend,
@@ -140,68 +137,58 @@ export async function runDocumentSummaryJob(
   }
 
   // The `documentAi` capability before a provider is picked or the document is
-  // decrypted: the operator's switches (the master and "Reading documents"),
-  // the vault module, provider presence and the extraction consent. The
-  // auto-read toggle above is the trigger, not the consent.
+  // decrypted: the operator's switches (the master and "Reading documents")
+  // and the vault module. A switch turned off means this job was never to run
+  // at all, so only the PENDING it was meant to resolve goes back to NONE; a
+  // recorded UNAVAILABLE or WITHHELD is an earlier real attempt and stays.
+  // Whether there is a provider and whether sending to it needs a receipt is
+  // the pick's to answer (the document order differs from the chain order the
+  // presence probe reads), so those two reasons wait for the pick below.
   const capability = await aiCapabilityForJob(userId, "documentAi");
-  if (!capability.available) {
-    if (
-      capability.reason === "no_provider" ||
-      capability.reason === "consent_required"
-    ) {
-      // An attempt that could not run, recorded as such.
-      await markSummaryState(userId, documentId, "UNAVAILABLE");
-    } else {
-      // A switch turned off means this job was never to run at all. Only the
-      // PENDING this job was meant to resolve goes back to NONE; a recorded
-      // UNAVAILABLE or WITHHELD is an earlier real attempt and stays.
-      await prisma.inboundDocument.updateMany({
-        where: {
-          id: documentId,
-          userId,
-          deletedAt: null,
-          summaryState: "PENDING",
-        },
-        data: { summaryState: "NONE" },
-      });
-    }
+  if (
+    capability.reason !== null &&
+    !PICK_DECIDED_REASONS.has(capability.reason)
+  ) {
+    await prisma.inboundDocument.updateMany({
+      where: {
+        id: documentId,
+        userId,
+        deletedAt: null,
+        summaryState: "PENDING",
+      },
+      data: { summaryState: "NONE" },
+    });
     annotate({
       action: { name: "documents.summary.autoSkipped" },
-      meta: { documentId, reason: capability.reason },
+      meta: {
+        documentId,
+        reason: "unavailable",
+        capability_reason: capability.reason,
+      },
     });
     return;
   }
 
-  // Resolve the DOCUMENT-order vision provider (local-first, codex last). No
-  // vision-capable provider configured → graceful no-op (unlike the index job,
-  // there is no local text-layer fallback for a descriptive summary).
-  const { pick } = await resolveDocumentVisionProvider(userId);
+  // Resolve the DOCUMENT-order vision provider (local-first, codex last) and
+  // re-check the wire for exactly that pick: the capability again and the
+  // extraction receipt an external pick needs (`ai_extraction` or `ai_full`;
+  // the auto-read toggle mints one but is not one, so a revoke mid-flight wins).
+  // No pick → an attempt that could not run, recorded as UNAVAILABLE (unlike
+  // the index job, there is no local text-layer fallback for a summary).
+  const { pick, withheld } = await resolveDocumentVisionProvider(userId);
   if (!pick) {
-    await markSummaryState(userId, documentId, "UNAVAILABLE");
-    annotate({
-      action: { name: "documents.summary.autoSkipped" },
-      meta: { documentId, reason: "no-provider" },
-    });
-    return;
-  }
-
-  // Re-assert egress consent for the picked provider. A local pick is ungated;
-  // an external pick needs an active extraction receipt (`ai_extraction` or
-  // `ai_full`); the auto-read toggle mints one but is not one. A consent race
-  // (a revoke mid-flight) resolves to a no-op, never an egress.
-  try {
-    await assertDocumentEgressConsent({
-      userId,
-      providerType: pick.providerType,
-    });
-  } catch (err) {
     await markSummaryState(userId, documentId, "UNAVAILABLE");
     annotate({
       action: { name: "documents.summary.autoSkipped" },
       meta: {
         documentId,
         reason:
-          err instanceof ConsentRequiredError ? "consent" : "consent-error",
+          withheld === null
+            ? "no-provider"
+            : withheld.reason === "consent_required"
+              ? "consent"
+              : "unavailable",
+        capability_reason: withheld?.reason ?? null,
       },
     });
     return;
@@ -355,11 +342,15 @@ export async function enqueueDocumentSummary(
       });
       return { enqueued: false };
     }
-    // Nothing is queued that the capability already refuses (a switch off,
-    // no provider, no extraction consent): the document stays NONE and the
-    // view offers the manual action, exactly as with the opt-in off.
+    // Nothing is queued that the capability already refuses (a switch or the
+    // vault module off): the document stays NONE and the view offers the
+    // manual action, exactly as with the opt-in off. A missing provider or
+    // receipt is the job's pick to decide.
     const capability = await aiCapabilityForRecord(userId, "documentAi");
-    if (!capability.available) {
+    if (
+      capability.reason !== null &&
+      !PICK_DECIDED_REASONS.has(capability.reason)
+    ) {
       annotate({
         action: { name: "documents.summary.autoSkipped" },
         meta: { documentId, reason: capability.reason },

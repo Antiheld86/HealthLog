@@ -38,13 +38,6 @@ vi.mock("@/lib/documents/describe", () => ({
 vi.mock("@/lib/documents/store", () => ({
   encryptDocumentSummary: vi.fn(() => new Uint8Array([9, 9, 9])),
 }));
-vi.mock("@/lib/ai/consent-guard", () => {
-  class ConsentRequiredError extends Error {}
-  return {
-    ConsentRequiredError,
-    assertDocumentEgressConsent: vi.fn(),
-  };
-});
 vi.mock("@/lib/ai/coach/budget", () => ({
   buildDateKey: vi.fn(() => "2026-07-17"),
   reserveBudget: vi.fn(),
@@ -75,7 +68,6 @@ import {
 } from "@/lib/documents/ai-route-support";
 import { runDocumentSummary } from "@/lib/documents/describe";
 import { encryptDocumentSummary } from "@/lib/documents/store";
-import { assertDocumentEgressConsent } from "@/lib/ai/consent-guard";
 import { reserveBudget, reconcileSpend } from "@/lib/ai/coach/budget";
 import {
   aiCapabilityForJob,
@@ -106,6 +98,7 @@ const PICK = {
     providerType: "anthropic",
     pdfSupported: true,
   },
+  withheld: null,
 };
 
 function visionOk() {
@@ -133,7 +126,6 @@ beforeEach(() => {
   vi.mocked(aiCapabilityForJob).mockResolvedValue(AVAILABLE);
   vi.mocked(aiCapabilityForRecord).mockResolvedValue(AVAILABLE);
   vi.mocked(resolveDocumentVisionProvider).mockResolvedValue(PICK as never);
-  vi.mocked(assertDocumentEgressConsent).mockResolvedValue(undefined);
   vi.mocked(loadOwnedDocument).mockResolvedValue(DOC as never);
   visionOk();
   vi.mocked(runDocumentSummary).mockResolvedValue({
@@ -168,12 +160,8 @@ describe("runDocumentSummaryJob — gating", () => {
 
     expect(runDocumentSummary).toHaveBeenCalledTimes(1);
     expect(aiCapabilityForJob).toHaveBeenCalledWith("user-1", "documentAi");
-    // The egress consent is re-asserted for the picked provider; the auto-read
-    // toggle is not a consent and no `surface` rides along any more.
-    expect(assertDocumentEgressConsent).toHaveBeenCalledWith({
-      userId: "user-1",
-      providerType: "anthropic",
-    });
+    // The pick is re-checked at the wire inside the provider order.
+    expect(resolveDocumentVisionProvider).toHaveBeenCalledWith("user-1");
     expect(encryptDocumentSummary).toHaveBeenCalledWith(
       "A lab report from a clinic listing routine blood values.",
     );
@@ -227,15 +215,9 @@ describe("runDocumentSummaryJob — gating", () => {
     expect(prisma.inboundDocument.updateMany).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ["no_provider", "UNAVAILABLE"],
-    ["consent_required", "UNAVAILABLE"],
-    ["operator_disabled", "NONE"],
-    ["module_disabled", "NONE"],
-    ["check_failed", "NONE"],
-  ] as const)(
-    "refuses before any provider is picked when documentAi is unavailable (%s → %s)",
-    async (reason, state) => {
+  it.each(["operator_disabled", "module_disabled", "check_failed"] as const)(
+    "refuses before any provider is picked when documentAi is closed (%s → only PENDING heals to NONE)",
+    async (reason) => {
       vi.mocked(aiCapabilityForJob).mockResolvedValue({
         available: false,
         reason,
@@ -245,28 +227,70 @@ describe("runDocumentSummaryJob — gating", () => {
       await runDocumentSummaryJob({ userId: "user-1", documentId: "doc-1" });
 
       expect(resolveDocumentVisionProvider).not.toHaveBeenCalled();
-      expect(assertDocumentEgressConsent).not.toHaveBeenCalled();
       expect(loadOwnedDocument).not.toHaveBeenCalled();
       expect(reserveBudget).not.toHaveBeenCalled();
       expect(runDocumentSummary).not.toHaveBeenCalled();
-      // An attempt that could not run is recorded as UNAVAILABLE; a switch
-      // turned off only heals the PENDING this job was meant to resolve, so an
-      // earlier UNAVAILABLE / WITHHELD is never overwritten.
+      // A switch turned off only heals the PENDING this job was meant to
+      // resolve, so an earlier UNAVAILABLE / WITHHELD is never overwritten.
       expect(prisma.inboundDocument.updateMany).toHaveBeenCalledWith({
         where: {
           id: "doc-1",
           userId: "user-1",
           deletedAt: null,
-          summaryState: state === "NONE" ? "PENDING" : { not: "READY" },
+          summaryState: "PENDING",
         },
-        data: { summaryState: state },
+        data: { summaryState: "NONE" },
       });
       expect(annotate).toHaveBeenCalledWith({
         action: { name: "documents.summary.autoSkipped" },
-        meta: { documentId: "doc-1", reason },
+        meta: {
+          documentId: "doc-1",
+          reason: "unavailable",
+          capability_reason: reason,
+        },
       });
     },
   );
+
+  it.each(["no_provider", "consent_required"] as const)(
+    "leaves %s to the pick: the provider order decides",
+    async (reason) => {
+      vi.mocked(aiCapabilityForJob).mockResolvedValue({
+        available: false,
+        reason,
+        onDeviceAllowed: true,
+      });
+
+      await runDocumentSummaryJob({ userId: "user-1", documentId: "doc-1" });
+
+      expect(resolveDocumentVisionProvider).toHaveBeenCalledWith("user-1");
+      expect(runDocumentSummary).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("records UNAVAILABLE with the reason when the pick is withheld at the wire", async () => {
+    vi.mocked(resolveDocumentVisionProvider).mockResolvedValue({
+      chain: PICK.chain,
+      pick: null,
+      withheld: { reason: "consent_required" },
+    } as never);
+
+    await runDocumentSummaryJob({ userId: "user-1", documentId: "doc-1" });
+
+    expect(loadOwnedDocument).not.toHaveBeenCalled();
+    expect(runDocumentSummary).not.toHaveBeenCalled();
+    expect(prisma.inboundDocument.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { summaryState: "UNAVAILABLE" } }),
+    );
+    expect(annotate).toHaveBeenCalledWith({
+      action: { name: "documents.summary.autoSkipped" },
+      meta: {
+        documentId: "doc-1",
+        reason: "consent",
+        capability_reason: "consent_required",
+      },
+    });
+  });
 
   it("does not consult the capability when the opt-in is OFF", async () => {
     vi.mocked(documentAutoReadEnabled).mockResolvedValue(false);
@@ -280,6 +304,7 @@ describe("runDocumentSummaryJob — gating", () => {
     vi.mocked(resolveDocumentVisionProvider).mockResolvedValue({
       chain: [],
       pick: null,
+      withheld: null,
     } as never);
 
     await runDocumentSummaryJob({ userId: "user-1", documentId: "doc-1" });
@@ -398,8 +423,8 @@ describe("enqueueDocumentSummary — the pending contract", () => {
     );
   });
 
-  it.each(["no_provider", "consent_required", "operator_disabled"] as const)(
-    "does not enqueue and does not claim PENDING when documentAi is unavailable (%s)",
+  it.each(["operator_disabled", "module_disabled", "check_failed"] as const)(
+    "does not enqueue and does not claim PENDING when documentAi is closed (%s)",
     async (reason) => {
       vi.mocked(aiCapabilityForRecord).mockResolvedValue({
         available: false,
@@ -418,6 +443,23 @@ describe("enqueueDocumentSummary — the pending contract", () => {
       expect(result).toEqual({ enqueued: false });
       expect(send).not.toHaveBeenCalled();
       expect(prisma.inboundDocument.updateMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["no_provider", "consent_required"] as const)(
+    "still enqueues on %s: the job's own pick decides",
+    async (reason) => {
+      vi.mocked(aiCapabilityForRecord).mockResolvedValue({
+        available: false,
+        reason,
+        onDeviceAllowed: true,
+      });
+      const send = vi.fn().mockResolvedValue("job-1");
+      vi.mocked(getGlobalBoss).mockReturnValue({ send } as never);
+
+      const result = await enqueueDocumentSummary("user-1", "doc-1");
+
+      expect(result).toEqual({ enqueued: true });
     },
   );
 
