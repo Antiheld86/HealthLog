@@ -1,6 +1,7 @@
 "use client";
 
 import { chartSeriesParams } from "@/components/charts/chart-series-request";
+import { DEFAULT_TIMEZONE } from "@/lib/tz/format";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
@@ -214,10 +215,11 @@ interface HealthChartProps {
   /**
    * v1.4.25 W7b — per-user display timezone. When passed (mount sites
    * thread `useAuth().user?.timezone`), x-axis tick labels and the
-   * per-day bucket keys both render in the user's zone instead of the
-   * legacy Europe/Berlin pin. Defaults to "Europe/Berlin" so older
-   * callers that haven't yet adopted the prop keep their previous
-   * behaviour bit-for-bit.
+   * per-day bucket keys both render in the user's zone. When a mount
+   * passes none, the chart uses the signed-in account's zone (which
+   * `/api/auth/me` reports already resolved against the server default),
+   * and only before that has loaded the shared `DEFAULT_TIMEZONE` the
+   * server itself falls back to.
    */
   userTimezone?: string;
   /**
@@ -614,7 +616,7 @@ export function HealthChart({
   chartKey,
   annotations,
   verticalMarkers,
-  userTimezone = "Europe/Berlin",
+  userTimezone: userTimezoneProp,
   valueScale = 1,
   valueOffset = 0,
   onVisibleStats,
@@ -625,6 +627,9 @@ export function HealthChart({
   showDataTable = false,
 }: HealthChartProps) {
   const { isAuthenticated, user } = useAuth();
+  // A mount without the prop used to pin Europe/Berlin, so those charts
+  // cut days in Berlin for every user whatever their profile said.
+  const userTimezone = userTimezoneProp || user?.timezone || DEFAULT_TIMEZONE;
   const { t, locale } = useTranslations();
   const fmt = useFormatters();
   // Issue #490 — x-axis tick + tooltip date labels. Every timestamp this
