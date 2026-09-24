@@ -5867,7 +5867,13 @@
       "coachConversations": {
         "title": "Conversazioni con il Coach",
         "description": "Apri una conversazione per leggerla oppure eliminala.",
-        "more": "Mostra altro"
+        "more": "Mostra altro",
+        "openAll": "Apri tutte le conversazioni"
+      },
+      "coachPlans": {
+        "title": "Piani del Coach",
+        "description": "I piani concordati con il Coach, da leggere o rimuovere.",
+        "open": "Apri i piani"
       }
     },
     "dashboard": {

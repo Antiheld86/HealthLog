@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { MessagesSquare, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -8,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
+import { SettingsCardActions } from "@/components/settings/_card-actions";
 import { ConversationTranscript } from "@/components/insights/coach-panel/conversation-transcript";
 import {
   useCoachConversationHistory,
@@ -25,6 +27,10 @@ import { formatRelativeTime } from "@/lib/i18n/relative-time";
  * transcript in place and can be deleted (with the same undo window the
  * conversation list uses). Reading and deleting never ask the Coach; the
  * routes behind them are data routes.
+ *
+ * The card links to `/coach/conversations`, which stays reachable and
+ * read-only with the Coach off, so the full list and its search are one step
+ * away even when no navigation entry leads there.
  *
  * `hideWhenEmpty`: the card renders nothing when there is nothing stored.
  * Settings → AI mounts it that way while the Coach is off, so it appears only
@@ -121,18 +127,35 @@ export function CoachConversationsMemoryCard({
           ))}
         </ul>
       )}
-      {history.hasNextPage ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="min-h-11 self-start sm:min-h-9"
-          disabled={history.isFetchingNextPage}
-          onClick={() => void history.fetchNextPage()}
-        >
-          {t("settings.ai.coachConversations.more")}
-        </Button>
-      ) : null}
+      <SettingsCardActions align="start">
+        {history.hasNextPage ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="min-h-11 sm:min-h-9"
+            disabled={history.isFetchingNextPage}
+            onClick={() => void history.fetchNextPage()}
+          >
+            {t("settings.ai.coachConversations.more")}
+          </Button>
+        ) : null}
+        {visible.length > 0 ? (
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="min-h-11 sm:min-h-9"
+          >
+            <Link
+              href="/coach/conversations"
+              data-slot="settings-coach-conversations-open-all"
+            >
+              {t("settings.ai.coachConversations.openAll")}
+            </Link>
+          </Button>
+        ) : null}
+      </SettingsCardActions>
     </SettingsCard>
   );
 }

@@ -53,6 +53,7 @@ import { toast } from "sonner";
 import { apiDelete, apiGet } from "@/lib/api/api-fetch";
 import { CoachConversationsMemoryCard } from "@/components/settings/coach-conversations-memory-card";
 import { CoachRemindersSection } from "@/components/settings/coach-reminders-section";
+import { CoachPlansMemoryCard } from "@/components/settings/coach-plans-memory-card";
 
 /** Closed enum mirrored from the server `CoachFact.category` column. */
 const FACT_CATEGORIES = [
@@ -312,6 +313,7 @@ export function StoredCoachMemory({
         isAuthenticated={isAuthenticated}
         hideWhenEmpty
       />
+      <CoachPlansMemoryCard isAuthenticated={isAuthenticated} />
       <CoachRemindersSection isAuthenticated={isAuthenticated} hideWhenEmpty />
     </>
   );

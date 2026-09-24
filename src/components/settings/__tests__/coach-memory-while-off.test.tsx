@@ -62,7 +62,22 @@ const CONVERSATION = {
   attachments: [],
 };
 
-function client(stored: { facts: unknown[]; conversations: unknown[] }) {
+type Stored = { facts: unknown[]; conversations: unknown[]; plans?: unknown[] };
+
+const PLAN = {
+  id: "plan-1",
+  metric: "steps",
+  ifCue: "after lunch",
+  thenAction: "walk ten minutes",
+  target: null,
+  status: "active",
+  reviewDate: null,
+  sourceConversationId: null,
+  createdAt: "2026-09-01T08:00:00.000Z",
+  updatedAt: "2026-09-01T08:00:00.000Z",
+};
+
+function client(stored: Stored) {
   const c = new QueryClient({
     defaultOptions: { queries: { retry: 0, staleTime: Infinity } },
   });
@@ -71,13 +86,12 @@ function client(stored: { facts: unknown[]; conversations: unknown[] }) {
     pages: [{ conversations: stored.conversations, nextCursor: null }],
     pageParams: [null],
   });
+  if (stored.plans)
+    c.setQueryData(queryKeys.coachPlans("scope:all"), stored.plans);
   return c;
 }
 
-function render(
-  node: React.ReactNode,
-  stored: { facts: unknown[]; conversations: unknown[] },
-) {
+function render(node: React.ReactNode, stored: Stored) {
   return renderToStaticMarkup(
     <QueryClientProvider client={client(stored)}>
       <I18nProvider initialLocale="en">{node}</I18nProvider>
@@ -140,5 +154,45 @@ describe("<StoredCoachMemory> (Settings → AI while the Coach page is out of re
       conversations: [],
     });
     expect(html).toBe("");
+  });
+});
+
+describe("the way to /coach/plans and /coach/conversations with the Coach off", () => {
+  it("links to the stored plans from Settings → AI when plans exist", () => {
+    const html = render(<StoredCoachMemory isAuthenticated />, {
+      facts: [],
+      conversations: [],
+      plans: [PLAN],
+    });
+    expect(html).toContain('data-testid="settings-coach-plans-card"');
+    expect(html).toContain('href="/coach/plans"');
+  });
+
+  it("links to the stored plans from Settings → Coach with Hide Coach on", () => {
+    authState.disableCoach = true;
+    const html = render(<CoachSection />, {
+      facts: [],
+      conversations: [],
+      plans: [PLAN],
+    });
+    expect(html).toContain('href="/coach/plans"');
+  });
+
+  it("shows no plans card without plans", () => {
+    const html = render(<StoredCoachMemory isAuthenticated />, {
+      facts: [],
+      conversations: [],
+      plans: [],
+    });
+    expect(html).not.toContain("settings-coach-plans-card");
+  });
+
+  it("links to the full conversation list from the conversations card", () => {
+    const html = render(<StoredCoachMemory isAuthenticated />, {
+      facts: [],
+      conversations: [CONVERSATION],
+    });
+    expect(html).toContain('data-slot="settings-coach-conversations-open-all"');
+    expect(html).toContain('href="/coach/conversations"');
   });
 });
