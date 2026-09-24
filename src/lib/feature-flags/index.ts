@@ -2,10 +2,7 @@ import { prisma } from "@/lib/db";
 import { getEvent } from "@/lib/logging/context";
 import { memoizePerRequest } from "@/lib/request-cache";
 
-import type {
-  AiOperatorSwitch,
-  AiOperatorSwitchSet,
-} from "@/lib/ai/capabilities/types";
+import type { AiOperatorSwitchSet } from "@/lib/ai/capabilities/types";
 
 /**
  * The operator's assistant switches: input one of the AI capability resolver
