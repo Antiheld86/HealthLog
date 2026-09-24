@@ -10155,8 +10155,7 @@
         "dayInvalid": "Die Einträge trugen ein Datum, das der Server nicht akzeptieren konnte. Das kann passieren, wenn Uhrzeit oder Zeitzone auf der sendenden Seite falsch eingestellt sind — das lohnt sich zu prüfen.",
         "upsertFailed": "Diese Einträge haben den Server erreicht, aber ein Problem auf unserer Seite hat verhindert, dass sie gespeichert wurden. Du musst nichts weiter tun.",
         "unknown": "Diese Einträge sind angekommen, konnten aber nicht gespeichert werden."
-      },
-      "moduleEnableError": "Das Nährstoffmodul konnte nicht aktiviert werden. Versuch es noch mal."
+      }
     },
     "hydration": {
       "referenceMeta": "Richtwert {value} {unit}/Tag · EFSA"

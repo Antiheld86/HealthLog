@@ -10155,8 +10155,7 @@
         "dayInvalid": "Les entrées portaient une date que le serveur n'a pas pu accepter. Cela peut arriver quand l'horloge ou le fuseau horaire du côté qui envoie les données est incorrect — cela vaut la peine de vérifier.",
         "upsertFailed": "Ces entrées sont arrivées jusqu'au serveur, mais un problème de notre côté a empêché leur enregistrement. Tu n'as rien à faire.",
         "unknown": "Ces entrées sont arrivées mais n'ont pas pu être enregistrées."
-      },
-      "moduleEnableError": "Le module nutriments n'a pas pu être activé. Réessaie."
+      }
     },
     "hydration": {
       "referenceMeta": "Apport de référence {value} {unit}/jour · EFSA"
