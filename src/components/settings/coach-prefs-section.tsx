@@ -39,6 +39,7 @@ import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useTranslations } from "@/lib/i18n/context";
 import { useCoachPrefs, useSaveCoachPrefs } from "@/hooks/use-coach-prefs";
+import { useAiCapability } from "@/hooks/use-ai-capability";
 import {
   DEFAULT_COACH_PREFS,
   type CoachExcludeMetric,
@@ -74,6 +75,7 @@ export interface CoachPrefsSectionProps {
 
 export function CoachPrefsSection({ isAuthenticated }: CoachPrefsSectionProps) {
   const { t } = useTranslations();
+  const coach = useAiCapability("coach");
 
   const { data: persisted } = useCoachPrefs({ enabled: isAuthenticated });
 
@@ -225,19 +227,22 @@ export function CoachPrefsSection({ isAuthenticated }: CoachPrefsSectionProps) {
               used to render its own copies of both controls; two writable
               surfaces for the same persisted fields is exactly the
               redundancy the rail was built to end. A pointer replaces
-              them. */}
-          <p
-            data-slot="coach-prefs-sources-pointer"
-            className="text-muted-foreground border-border/60 rounded-md border border-dashed px-3 py-2 text-xs leading-relaxed"
-          >
-            {t("insights.coach.settingsSourcesPointer")}{" "}
-            <Link
-              href="/coach"
-              className="text-foreground underline underline-offset-2"
+              them. Only while the Coach can open: without it the link
+              would bounce back to Insights and the rail is out of reach. */}
+          {coach.available ? (
+            <p
+              data-slot="coach-prefs-sources-pointer"
+              className="text-muted-foreground border-border/60 rounded-md border border-dashed px-3 py-2 text-xs leading-relaxed"
             >
-              {t("insights.coach.settingsSourcesPointerLink")}
-            </Link>
-          </p>
+              {t("insights.coach.settingsSourcesPointer")}{" "}
+              <Link
+                href="/coach"
+                className="text-foreground underline underline-offset-2"
+              >
+                {t("insights.coach.settingsSourcesPointerLink")}
+              </Link>
+            </p>
+          ) : null}
 
           {/* Exclude metrics — checked = excluded. */}
           <div className="flex flex-col gap-2">

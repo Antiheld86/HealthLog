@@ -7,7 +7,11 @@ import { toast } from "sonner";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useTranslations } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
+import {
+  aiInputDependentKeys,
+  invalidateKeys,
+  queryKeys,
+} from "@/lib/query-keys";
 import { SettingsToggle } from "./_shared";
 import { apiGet, apiPut } from "@/lib/api/api-fetch";
 
@@ -74,7 +78,7 @@ function useUpdateAssistantFlags() {
       // Every record's resolved AI capabilities ride the account payload,
       // which is the only thing the web reads them from; bust it so the
       // operator sees the change within the session.
-      client.invalidateQueries({ queryKey: queryKeys.authMe() });
+      void invalidateKeys(client, aiInputDependentKeys);
       toast.success(t("common.saved"));
     },
     onError: (err) => {

@@ -8,7 +8,11 @@ import { toast } from "sonner";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useTranslations } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
+import {
+  aiInputDependentKeys,
+  invalidateKeys,
+  queryKeys,
+} from "@/lib/query-keys";
 import {
   MODULE_KEYS,
   MODULE_REGISTRY,
@@ -66,7 +70,7 @@ function useUpdateModuleAvailability() {
       client.setQueryData(queryKeys.adminModuleAvailability(), data);
       // The resolved `/api/auth/me` module map depends on this operator
       // layer; bust it so the operator sees the change within the session.
-      client.invalidateQueries({ queryKey: queryKeys.authMe() });
+      void invalidateKeys(client, aiInputDependentKeys);
       toast.success(t("common.saved"));
     },
     onError: (err) => {

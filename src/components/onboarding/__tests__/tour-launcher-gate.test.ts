@@ -13,6 +13,8 @@
  * regress the gate. v1.18.6.1 — the tour is first-time-auto-start
  * only; the former "manual restart from Settings" bypass was removed.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -145,5 +147,25 @@ describe("tourIncludesAchievements() — v1.18.0 B5 module gate", () => {
 
   it("ignores other disabled modules — only the achievements key matters", () => {
     expect(tourIncludesAchievements({ sleep: false, mood: false })).toBe(true);
+  });
+});
+
+describe("the launcher hands the tour the capability-folded module map", () => {
+  // The raw `user.modules` says the Coach module is on for a fresh self-host
+  // with no provider, while `/coach` redirects to `/insights` because the
+  // Coach capability is unavailable: the tour pushed `/coach`, was sent back,
+  // and pushed again. The launcher must read `useNavModules()`, which folds
+  // the capability into `coach`, exactly as the nav does.
+  const source = readFileSync(
+    join(process.cwd(), "src/components/onboarding/tour-launcher.tsx"),
+    "utf8",
+  );
+
+  it("reads useNavModules()", () => {
+    expect(source).toMatch(/\buseNavModules\(\)/);
+  });
+
+  it("does not pass the raw account module map to the tour", () => {
+    expect(source).not.toMatch(/modules\s*=\s*user\?\.modules/);
   });
 });

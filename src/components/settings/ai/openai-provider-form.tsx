@@ -18,7 +18,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { PasswordInput } from "@/components/ui/password-input";
 import { apiPatch } from "@/lib/api/api-fetch";
 import { useTranslations } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
+import { aiInputDependentKeys, invalidateKeys } from "@/lib/query-keys";
 
 import {
   CUSTOM_MODEL_SENTINEL,
@@ -86,8 +86,7 @@ export function OpenAIProviderForm({
       setOk(true);
       setMsg(t("settings.ai.saved"));
       setApiKey("");
-      queryClient.invalidateQueries({ queryKey: queryKeys.userAiProvider() });
-      queryClient.invalidateQueries({ queryKey: queryKeys.insightsRoot() });
+      void invalidateKeys(queryClient, aiInputDependentKeys);
     },
     onError: (e) => {
       setOk(false);

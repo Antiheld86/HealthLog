@@ -115,7 +115,9 @@ export function AiSetupHint({
               aria-label={t("insights.aiSetupHint.dismiss")}
               title={t("insights.aiSetupHint.dismiss")}
               data-slot="ai-setup-hint-dismiss"
-              className="-my-2 shrink-0"
+              // 44 px on a phone like every other mobile action; the negative
+              // margin keeps the header row as tall as the title needs.
+              className="-my-2.5 size-11 shrink-0 sm:-my-2 sm:size-10"
             >
               <X className="size-4" aria-hidden="true" />
             </Button>

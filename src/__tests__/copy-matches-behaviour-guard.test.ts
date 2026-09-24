@@ -39,6 +39,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { consentNeededForProviders } from "@/lib/ai/capabilities/resolve";
+
 const MESSAGES = join(__dirname, "../../messages");
 const LOCALES = ["de", "en", "es", "fr", "it", "pl", "ko"] as const;
 
@@ -412,6 +414,54 @@ describe("the MCP token copy never claims the mint is read-only", () => {
             copy.toLowerCase(),
             `${locale} settings.mcp copy claims the minted token is read-only while the write toggle sits beneath it`,
           ).not.toContain(claim);
+        }
+      }
+    });
+  }
+});
+
+/**
+ * 5. AI CONSENT WITHDRAWAL. The confirmation said "the AI features stop
+ *    straight away" and the withdrawn line said no health data goes to an AI
+ *    provider any more. Neither holds: the Coach and Insights need the
+ *    receipt only when they use the AI access the server provides (the
+ *    operator's key or connection), so on the person's own key or a local
+ *    model they keep working; and the deletion of model-written notes is
+ *    skipped while another receipt still covers Insights. The copy now names
+ *    both conditions. The behaviour half is pinned against the resolver, so a
+ *    change to who needs the receipt fails here next to the copy it would
+ *    falsify.
+ */
+describe("AI consent withdrawal copy matches what withdrawing does", () => {
+  it("the Coach and Insights need no receipt on an own key or a local model", () => {
+    for (const key of ["coach", "briefing", "statusText"] as const) {
+      expect(consentNeededForProviders(key, ["openai"])).toBe(false);
+      expect(consentNeededForProviders(key, ["local"])).toBe(false);
+      expect(consentNeededForProviders(key, ["admin-openai"])).toBe(true);
+    }
+  });
+
+  /** Per locale: a phrase naming the own key, and one naming a local model. */
+  const OWN_PROVIDER: Record<string, readonly [string, string]> = {
+    en: ["own key", "local model"],
+    de: ["eigenen schlüssel", "lokalen modell"],
+    es: ["tu propia clave", "modelo local"],
+    fr: ["votre propre clé", "modèle local"],
+    it: ["tua chiave", "modello locale"],
+    pl: ["własnym kluczu", "lokalnym modelu"],
+    ko: ["자신의 키", "로컬 모델"],
+  };
+
+  for (const locale of LOCALES) {
+    it(`${locale} says what keeps working and when the notes stay`, () => {
+      const b = bundle(locale);
+      for (const path of [
+        "settings.ai.consent.confirmBody",
+        "settings.ai.consent.withdrawn",
+      ]) {
+        const copy = resolve(b, path).toLowerCase();
+        for (const phrase of OWN_PROVIDER[locale]) {
+          expect(copy, `${locale} ${path}`).toContain(phrase);
         }
       }
     });

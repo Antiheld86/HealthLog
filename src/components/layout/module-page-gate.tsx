@@ -19,14 +19,32 @@ import { surfaceModule } from "@/lib/modules/surface";
 const INSIGHTS_PREFIX = "/insights/";
 
 /**
+ * Pages that hold the person's own stored records under a module's nav entry.
+ * They stay reachable with the module off and turn read-only on their own, so
+ * a record can always be read and erased; the gate does not replace them.
+ */
+const STORED_RECORD_PAGES: ReadonlyArray<string> = [
+  "/coach/plans",
+  "/coach/conversations",
+];
+
+function isStoredRecordPage(pathname: string): boolean {
+  return STORED_RECORD_PAGES.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
+}
+
+/**
  * The module that owns the page at `pathname`, from the one surface map.
  *
  * An Insights sub-page answers by its slug (`insights-page:<slug>`), so
  * `/insights/mood` and `/insights/workouts/<id>` follow their own module while
  * `/insights` itself follows none. Every other page answers through the nav
- * destination it sits under (`nav:<href>`), most specific first.
+ * destination it sits under (`nav:<href>`), most specific first. A stored-record
+ * page (`/coach/plans`, `/coach/conversations`) follows none either.
  */
 export function moduleOwningPath(pathname: string): ModuleKey | undefined {
+  if (isStoredRecordPage(pathname)) return undefined;
   if (pathname.startsWith(INSIGHTS_PREFIX)) {
     const slug = pathname.slice(INSIGHTS_PREFIX.length).split("/")[0];
     const owner = surfaceModule(`insights-page:${slug}`);

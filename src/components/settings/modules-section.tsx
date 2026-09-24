@@ -71,7 +71,11 @@ import {
   withBaseToken,
   isConflict,
 } from "@/lib/api/optimistic-token";
-import { queryKeys } from "@/lib/query-keys";
+import {
+  aiInputDependentKeys,
+  invalidateKeys,
+  queryKeys,
+} from "@/lib/query-keys";
 import {
   MODULE_REGISTRY,
   isCodeDisabledModule,
@@ -170,7 +174,8 @@ export function ModulesSection() {
       // Insights pills, dashboard tiles, quick-add, search. The two delegated
       // keys also feed dedicated settings surfaces, so evict their reads too
       // (mirrors the canonical Coach / cycle cards' own invalidation).
-      void queryClient.invalidateQueries({ queryKey: queryKeys.authMe() });
+      // The module map is also an input of the AI capability answer.
+      void invalidateKeys(queryClient, aiInputDependentKeys);
       if (moduleDelegatesTo(vars.key) === "cycle") {
         void queryClient.invalidateQueries({
           queryKey: queryKeys.cyclePrefs(),

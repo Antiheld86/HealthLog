@@ -353,10 +353,29 @@ export function DocumentDetailSheet({
   const detail = useQuery({
     queryKey: queryKeys.inboundDocument(documentId ?? "none"),
     enabled: open && documentId !== null,
+    // Always read again on open: the link pickers below write replace-sets
+    // seeded from this copy (see `seedFresh`).
+    staleTime: 0,
     queryFn: () =>
       apiGet<InboundDocumentDetailDto>(`/api/documents/inbound/${documentId}`),
   });
   const doc = detail.data;
+
+  // The detail's timestamp when the sheet opened on this document. A read
+  // that lands after it is fresh enough to seed the link pickers from; a
+  // cached copy from before the sheet opened is not.
+  const [openedOn, setOpenedOn] = useState<{
+    id: string;
+    seenAt: number;
+  } | null>(null);
+  const openKey = open && documentId !== null ? documentId : null;
+  if (openKey !== (openedOn?.id ?? null)) {
+    setOpenedOn(
+      openKey === null ? null : { id: openKey, seenAt: detail.dataUpdatedAt },
+    );
+  }
+  const linkSeedFresh =
+    openedOn !== null && detail.dataUpdatedAt > openedOn.seenAt;
 
   // 2026-07-17 UX/IA audit M5 / F5-5 — the document → lab-values direction
   // had no UI link at all: an auto-staged (PENDING) or OCR-confirmed
@@ -1111,6 +1130,9 @@ export function DocumentDetailSheet({
                 key={`${doc.id}:${linkResets}`}
                 doc={doc}
                 canManage={canManageDocuments}
+                seedFresh={linkSeedFresh}
+                seedError={!linkSeedFresh && detail.isRefetchError}
+                onRetrySeed={() => void detail.refetch()}
                 onChange={(part) => patch.mutate(part)}
               />
 

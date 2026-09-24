@@ -34,6 +34,7 @@ import { DisableCoachCard } from "@/components/settings/ai/disable-coach-card";
 import { CoachMemorySection } from "@/components/settings/coach-memory-section";
 import { CoachConversationsMemoryCard } from "@/components/settings/coach-conversations-memory-card";
 import { CoachRemindersSection } from "@/components/settings/coach-reminders-section";
+import { CoachPlansMemoryCard } from "@/components/settings/coach-plans-memory-card";
 import { CoachNudgeCard } from "@/components/settings/coach-nudge-card";
 import { CoachPrefsSection } from "@/components/settings/coach-prefs-section";
 import { useAuth } from "@/hooks/use-auth";
@@ -69,6 +70,8 @@ export function CoachSection() {
       <CoachMemorySection isAuthenticated={authed} />
 
       <CoachConversationsMemoryCard isAuthenticated={authed} />
+
+      <CoachPlansMemoryCard isAuthenticated={authed} />
 
       <CoachRemindersSection
         isAuthenticated={authed}

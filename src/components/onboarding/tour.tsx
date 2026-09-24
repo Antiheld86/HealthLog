@@ -51,6 +51,8 @@ import {
   prevStep,
   skipTour,
   stepCounter,
+  dropRedirectedStop,
+  stopRouteRedirected,
   type TourModuleMap,
   type TourState,
   type TourStop,
@@ -257,6 +259,21 @@ export function OnboardingTour({
     initTourState(stops, filterToStop ? null : resumeFromStopId),
   );
   const [rect, setRect] = useState<SpotlightRect | null>(null);
+  // Which stop the tour last navigated for, from where, and whether that
+  // stop's page was reached; and which way the person was travelling, so a
+  // stop whose page redirects is stepped past in the same direction.
+  const navRef = useRef<{
+    stopId: string | null;
+    pushedFrom: string | null;
+    arrived: boolean;
+  }>({ stopId: null, pushedFrom: null, arrived: false });
+  const directionRef = useRef<"forward" | "back">("forward");
+  // The navigation effect reads the latest `onClose` without re-running on
+  // its identity (the launcher passes a fresh closure every render).
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   const stop = currentStop(state);
 
@@ -285,8 +302,42 @@ export function OnboardingTour({
     // stops (the two dashboard stops while on `/`, or the wrap-up which has
     // no route) skip the push. `filterToStop` re-entry never navigates — it
     // runs on the page the user is already viewing.
-    if (!filterToStop && stop.route && stop.route !== pathname) {
-      router.push(stop.route);
+    //
+    // One push per stop. A page that sends the person elsewhere (the Coach
+    // page redirects to `/insights` while the Coach is unavailable) would
+    // otherwise be pushed again on every pathname change, a loop between the
+    // two pages; such a stop is dropped and the tour moves on.
+    if (!filterToStop && stop.route) {
+      if (navRef.current.stopId !== stop.id) {
+        navRef.current = { stopId: stop.id, pushedFrom: null, arrived: false };
+      }
+      const nav = navRef.current;
+      if (pathname === stop.route) {
+        nav.arrived = true;
+      } else if (
+        stopRouteRedirected({
+          stopRoute: stop.route,
+          pathname,
+          pushedFrom: nav.pushedFrom,
+          arrived: nav.arrived,
+        })
+      ) {
+        const direction = directionRef.current;
+        queueMicrotask(() =>
+          setState((prev) => {
+            if (currentStop(prev)?.id !== stop.id) return prev;
+            const next = dropRedirectedStop(prev, direction);
+            if (isTourFinished(next)) {
+              queueMicrotask(() => onCloseRef.current("completed"));
+            }
+            return next;
+          }),
+        );
+        return;
+      } else if (nav.pushedFrom === null) {
+        nav.pushedFrom = pathname;
+        router.push(stop.route);
+      }
     }
 
     const measureNow = () => {
@@ -397,6 +448,7 @@ export function OnboardingTour({
   }, [onClose]);
 
   const handleNext = useCallback(() => {
+    directionRef.current = "forward";
     setState((prev) => {
       const next = nextStep(prev);
       if (isTourFinished(next) && next.outcome === "completed") {
@@ -407,6 +459,7 @@ export function OnboardingTour({
   }, [onClose]);
 
   const handlePrev = useCallback(() => {
+    directionRef.current = "back";
     setState((prev) => prevStep(prev));
   }, []);
 

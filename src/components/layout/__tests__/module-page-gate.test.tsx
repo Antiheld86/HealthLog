@@ -51,12 +51,17 @@ describe("moduleOwningPath", () => {
     expect(moduleOwningPath(path)).toBe(owner);
   });
 
-  it.each(["/", "/measurements", "/insights", "/insights/weight", "/checkups"])(
-    "%s belongs to no module",
-    (path) => {
-      expect(moduleOwningPath(path)).toBeUndefined();
-    },
-  );
+  it.each([
+    "/",
+    "/measurements",
+    "/insights",
+    "/insights/weight",
+    "/checkups",
+    "/coach/plans",
+    "/coach/conversations",
+  ])("%s belongs to no module", (path) => {
+    expect(moduleOwningPath(path)).toBeUndefined();
+  });
 });
 
 describe("<ModulePageGate>", () => {
@@ -97,5 +102,30 @@ describe("<ModulePageGate>", () => {
       modules: { medications: false },
     });
     expect(html).toContain('data-module="medications"');
+  });
+
+  // Stored plans and conversations are the person's own records: their pages
+  // turn read-only with the Coach unavailable instead of being replaced.
+  describe.each(["/coach/plans", "/coach/conversations"])("%s", (path) => {
+    it.each([
+      ["operator switched the Coach off", "unavailable"],
+      ["the person hid the Coach", "disabled"],
+    ])("stays reachable when %s", (_label, access) => {
+      const html = render(path, {
+        modules: { coach: false },
+        moduleAccess: { coach: access },
+      });
+      expect(html).toContain('data-testid="page"');
+      expect(html).not.toContain("module-disabled-notice");
+    });
+  });
+
+  it("still replaces the Coach page itself when the Coach is off", () => {
+    const html = render("/coach", {
+      modules: { coach: false },
+      moduleAccess: { coach: "unavailable" },
+    });
+    expect(html).not.toContain('data-testid="page"');
+    expect(html).toContain('data-module="coach"');
   });
 });

@@ -289,6 +289,49 @@ export function prevStep(state: TourState): TourState {
   return { ...state, index: state.index - 1 };
 }
 
+/**
+ * Whether the page a stop navigated to sent the person somewhere else.
+ *
+ * A stop's page can refuse the visit on its own (the Coach page answers an
+ * unavailable Coach with a redirect to `/insights`), and the overlay would
+ * otherwise push the stop's route again on every pathname change: a loop
+ * between the two pages. `pushedFrom` is the pathname the tour navigated
+ * from for this stop (`null` while it has not navigated), `arrived` whether
+ * the stop's own page was reached since. Before arrival, a pathname still
+ * equal to `pushedFrom` is a navigation on its way, not a redirect.
+ */
+export function stopRouteRedirected(args: {
+  stopRoute: string;
+  pathname: string;
+  pushedFrom: string | null;
+  arrived: boolean;
+}): boolean {
+  if (args.pushedFrom === null) return false;
+  if (args.pathname === args.stopRoute) return false;
+  return args.arrived || args.pathname !== args.pushedFrom;
+}
+
+/**
+ * Drop the current stop after its page redirected, and carry on in the
+ * direction the person was travelling. The stop leaves the list, so Back
+ * never lands on it again and the counter stays honest; dropping the last
+ * stop going forward completes the tour.
+ */
+export function dropRedirectedStop(
+  state: TourState,
+  direction: "forward" | "back",
+): TourState {
+  if (state.outcome !== null) return state;
+  const steps = state.steps.filter((_, i) => i !== state.index);
+  if (direction === "back") {
+    return { ...state, steps, index: Math.max(0, state.index - 1) };
+  }
+  if (state.index >= steps.length) {
+    return { ...state, steps, index: steps.length, outcome: "completed" };
+  }
+  return { ...state, steps };
+}
+
 /** User explicitly dismissed the tour from any step. */
 export function skipTour(state: TourState): TourState {
   if (state.outcome !== null) return state;

@@ -44,7 +44,11 @@ import { SettingsCardHeader } from "@/components/settings/_card-header";
 import { useAuth } from "@/hooks/use-auth";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { useTranslations } from "@/lib/i18n/context";
-import { queryKeys } from "@/lib/query-keys";
+import {
+  aiInputDependentKeys,
+  invalidateKeys,
+  queryKeys,
+} from "@/lib/query-keys";
 import { apiFetchRaw, apiGet, apiPatch } from "@/lib/api/api-fetch";
 
 interface McpTokenInfo {
@@ -211,7 +215,7 @@ function McpEnableCard() {
     mutationFn: async (next: boolean) =>
       apiPatch("/api/auth/me/modules", { mcp: next }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.authMe() });
+      void invalidateKeys(queryClient, aiInputDependentKeys);
       toast.success(t("settings.sections.modules.saved"));
     },
     onError: () => toast.error(t("settings.sections.modules.error")),

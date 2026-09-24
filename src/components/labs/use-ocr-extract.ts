@@ -16,7 +16,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiFetch, apiGet, apiPatch, apiPost } from "@/lib/api/api-fetch";
 import { ocrImageToText } from "@/lib/labs/local-ocr";
-import { queryKeys } from "@/lib/query-keys";
+import {
+  aiInputDependentKeys,
+  invalidateKeys,
+  queryKeys,
+} from "@/lib/query-keys";
 import type {
   OcrCapabilityDto,
   OcrCommitResponseDto,
@@ -149,6 +153,8 @@ export function useUpdateLabsLocalOcr() {
       queryClient.setQueryData(queryKeys.labsLocalOcr(), data);
       // The toggle changes whether text-mode scanning is available.
       queryClient.invalidateQueries({ queryKey: queryKeys.ocrCapability() });
+      // It is also a provider input of the `labsOcr` capability on `/me`.
+      void invalidateKeys(queryClient, aiInputDependentKeys);
     },
   });
 }
