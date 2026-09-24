@@ -74,6 +74,46 @@ export const AI_ROUTES: Readonly<Record<string, AiRouteEntry>> = {
     capabilities: ["aboutMeQuestions"],
     why: "The profile is data; only model-written follow-up questions follow the capability.",
   },
+  "src/app/api/insights/biomarker-assessment/route.ts": {
+    kind: "mixed",
+    capabilities: ["statusText"],
+    why: "Status family: the card is data, the note inside it follows the capability (200 with a null note otherwise).",
+  },
+  "src/app/api/insights/blood-pressure-status/route.ts": {
+    kind: "mixed",
+    capabilities: ["statusText"],
+    why: "Status family: the card is data, the note inside it follows the capability (200 with a null note otherwise).",
+  },
+  "src/app/api/insights/bmi-status/route.ts": {
+    kind: "mixed",
+    capabilities: ["statusText"],
+    why: "Status family: the card is data, the note inside it follows the capability (200 with a null note otherwise).",
+  },
+  "src/app/api/insights/medication-compliance-status/route.ts": {
+    kind: "mixed",
+    capabilities: ["statusText"],
+    why: "Status family: the card is data, the note inside it follows the capability (200 with a null note otherwise).",
+  },
+  "src/app/api/insights/metric-status/route.ts": {
+    kind: "mixed",
+    capabilities: ["statusText"],
+    why: "Status family: the card is data, the note inside it follows the capability (200 with a null note otherwise).",
+  },
+  "src/app/api/insights/mood-status/route.ts": {
+    kind: "mixed",
+    capabilities: ["statusText"],
+    why: "Status family: the card is data, the note inside it follows the capability (200 with a null note otherwise).",
+  },
+  "src/app/api/insights/pulse-status/route.ts": {
+    kind: "mixed",
+    capabilities: ["statusText"],
+    why: "Status family: the card is data, the note inside it follows the capability (200 with a null note otherwise).",
+  },
+  "src/app/api/insights/weight-status/route.ts": {
+    kind: "mixed",
+    capabilities: ["statusText"],
+    why: "Status family: the card is data, the note inside it follows the capability (200 with a null note otherwise).",
+  },
   "src/app/api/workouts/[id]/route.ts": {
     kind: "mixed",
     capabilities: ["workoutInsights"],
@@ -165,22 +205,6 @@ export const PENDING_ROUTES: Readonly<Record<string, string>> = {
     "Attaching a document to a conversation: moves to `coach` and `documentAi` with the document-extraction routes.",
   "src/app/api/insights/chat/[id]/attachments/[documentId]/route.ts":
     "Detaching a document: removal of one's own data, stays ungated once the document routes move.",
-  "src/app/api/insights/biomarker-assessment/route.ts":
-    "Status family: moves to `statusText` (200 with null text) in its own change.",
-  "src/app/api/insights/blood-pressure-status/route.ts":
-    "Status family: moves to `statusText` in its own change.",
-  "src/app/api/insights/bmi-status/route.ts":
-    "Status family: moves to `statusText` in its own change.",
-  "src/app/api/insights/medication-compliance-status/route.ts":
-    "Status family: moves to `statusText` in its own change.",
-  "src/app/api/insights/metric-status/route.ts":
-    "Status family: moves to `statusText` in its own change.",
-  "src/app/api/insights/mood-status/route.ts":
-    "Status family: moves to `statusText` in its own change.",
-  "src/app/api/insights/pulse-status/route.ts":
-    "Status family: moves to `statusText` in its own change.",
-  "src/app/api/insights/weight-status/route.ts":
-    "Status family: moves to `statusText` in its own change.",
 };
 
 /** The trees in which every route has to be classified above. */

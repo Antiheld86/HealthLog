@@ -367,3 +367,55 @@ describe("the snapshot applies the capability per read", () => {
     expect(after.data.briefingAi.reason).toBe("operator_disabled");
   });
 });
+
+describe("the status family", () => {
+  async function readStatus(path: string) {
+    const route =
+      path === "weight"
+        ? await import("@/app/api/insights/weight-status/route")
+        : await import("@/app/api/insights/metric-status/route");
+    const url =
+      path === "weight"
+        ? "http://localhost/api/insights/weight-status"
+        : "http://localhost/api/insights/metric-status?metric=RESTING_HEART_RATE";
+    return json<Record<string, unknown>>(await route.GET(new NextRequest(url)));
+  }
+
+  it("S0 publishes the capability beside the note", async () => {
+    const world = await enterState("S0");
+    // The available path resolves (never calls) the provider chain, so the
+    // key has to decrypt.
+    const { encrypt } = await import("@/lib/crypto");
+    await getPrismaClient().user.update({
+      where: { id: world.recordId },
+      data: { aiAnthropicKeyEncrypted: encrypt("sk-ant-integration") },
+    });
+    const status = await readStatus("weight");
+    expect(status.status).toBe(200);
+    expect(status.data.ai).toMatchObject({ available: true });
+  });
+
+  it.each([
+    ["S1", "operator_disabled", true],
+    ["S3", "no_provider", false],
+    ["S6", "user_disabled", true],
+  ] as const)(
+    "%s answers 200 with no note and provider presence in hasProvider",
+    async (state, reason, hasProvider) => {
+      await enterState(state);
+      for (const path of ["weight", "metric"]) {
+        const status = await readStatus(path);
+        expect(status.status, path).toBe(200);
+        expect(status.data, path).toMatchObject({
+          text: null,
+          preparing: false,
+          hasProvider,
+          ai: { available: false, reason },
+        });
+      }
+      const metric = await readStatus("metric");
+      // No readings were seeded: the data half still says so.
+      expect(metric.data.insufficient).toBe(true);
+    },
+  );
+});

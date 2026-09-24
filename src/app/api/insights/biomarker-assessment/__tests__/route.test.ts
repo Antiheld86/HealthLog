@@ -6,6 +6,12 @@ vi.mock("@/lib/db", () => ({
     appSettings: { findUnique: vi.fn().mockResolvedValue(null) },
   },
 }));
+// The `statusText` capability decides whether the note is served; the
+// unavailable body's provider-presence probe is stubbed.
+vi.mock("@/lib/ai/capabilities/gate", () => ({ getAiCapability: vi.fn() }));
+vi.mock("@/lib/ai/provider", () => ({
+  probeProviderPresence: vi.fn(async () => true),
+}));
 
 // The route resolves the `insights` module gate after `requireAuth()`. Mock
 // it default-enabled so the assertions ride through; the off → 403 coverage
@@ -57,6 +63,7 @@ import { getSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import { generateBiomarkerStatus } from "@/lib/insights/biomarker-status";
+import { getAiCapability } from "@/lib/ai/capabilities/gate";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -80,6 +87,11 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(prisma.appSettings.findUnique).mockResolvedValue(null as never);
   vi.mocked(requireModuleEnabled).mockResolvedValue({ enabled: true });
+  vi.mocked(getAiCapability).mockResolvedValue({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  });
   vi.mocked(generateBiomarkerStatus).mockResolvedValue({
     hasProvider: true,
     text: "ok",
@@ -121,19 +133,22 @@ describe("GET /api/insights/biomarker-assessment", () => {
     expect(res.status).toBe(401);
   });
 
-  it("403s + errorCode when insightStatus is disabled", async () => {
+  it("answers 200 with no note while statusText is unavailable, calling no generator", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
-    vi.mocked(prisma.appSettings.findUnique).mockResolvedValueOnce({
-      assistantEnabled: true,
-      assistantCoachEnabled: true,
-      assistantBriefingEnabled: true,
-      assistantInsightStatusEnabled: false,
-      assistantDocumentAiEnabled: true,
-    } as never);
+    vi.mocked(getAiCapability).mockResolvedValue({
+      available: false,
+      reason: "user_disabled",
+      onDeviceAllowed: false,
+    });
     const res = await callGet(makeReq("bm-1"));
-    expect(res.status).toBe(403);
-    const body = (await res.json()) as { meta?: { errorCode?: string } };
-    expect(body.meta?.errorCode).toBe("assistant.disabled.insightStatus");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: Record<string, unknown> };
+    expect(body.data).toMatchObject({
+      text: null,
+      preparing: false,
+      ai: { available: false, reason: "user_disabled" },
+    });
+    expect(generateBiomarkerStatus).not.toHaveBeenCalled();
   });
 
   it("preserves the safe terminal fallback produced when a causal claim is screened", async () => {
@@ -161,6 +176,7 @@ describe("GET /api/insights/biomarker-assessment", () => {
       text: "The assessment could not be completed safely. Your recorded measurements remain available.",
       cached: true,
       updatedAt: null,
+      ai: { available: true, reason: null, onDeviceAllowed: true },
     });
     expect(JSON.stringify(body)).not.toContain("medication caused");
     expect(JSON.stringify(body)).not.toContain("causal_claim");

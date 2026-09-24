@@ -1,19 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
-vi.mock("@/lib/db", () => ({
-  prisma: {
-    appSettings: { findUnique: vi.fn().mockResolvedValue(null) },
-  },
-}));
+/**
+ * The status family is a mixed read. The note is model text: served only
+ * while the `statusText` capability is available. Otherwise the route
+ * answers 200 with `text: null`, `preparing: false`, `hasProvider` as provider
+ * presence and an `ai` state, and the generator (the cache read and the warm
+ * enqueue behind it) is never called. The `insights` module is folded into
+ * the capability and no longer refuses the route.
+ */
 
-// v1.18.0 — the route now resolves the `insights` module gate after
-// `requireAuth()`. Mock it default-enabled so the existing assertions
-// ride through; the off → 403 coverage lives in the route-gate inventory
-// test.
+vi.mock("@/lib/db", () => ({ prisma: {} }));
+
 vi.mock("@/lib/modules/gate", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/modules/gate")>()),
-  requireModuleEnabled: vi.fn().mockResolvedValue({ enabled: true }),
+  requireModuleEnabled: vi.fn(),
   resolveModuleMap: vi.fn().mockResolvedValue({}),
 }));
 
@@ -38,22 +39,28 @@ vi.mock("next/headers", () => ({
   })),
 }));
 
-// Stub the heavy generator so the gate test stays isolated from the
-// real status pipeline.
 vi.mock("@/lib/insights/blood-pressure-status", () => ({
-  generateBloodPressureStatusForUser: vi.fn(async () => ({
-    available: true,
-    locale: "en",
-    text: "ok",
-  })),
+  generateBloodPressureStatusForUser: vi.fn(),
   resolveBloodPressureStatusLocale: () => "en",
+}));
+
+// The `statusText` capability decides whether the note is served; the
+// unavailable body's provider-presence probe is stubbed.
+vi.mock("@/lib/ai/capabilities/gate", () => ({ getAiCapability: vi.fn() }));
+vi.mock("@/lib/ai/provider", () => ({
+  probeProviderPresence: vi.fn(async () => true),
 }));
 
 import { GET } from "../route";
 import { getSession } from "@/lib/auth/session";
-import { prisma } from "@/lib/db";
 import { requireModuleEnabled } from "@/lib/modules/gate";
-import { apiError } from "@/lib/api-response";
+import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import { probeProviderPresence } from "@/lib/ai/provider";
+import { generateBloodPressureStatusForUser } from "@/lib/insights/blood-pressure-status";
+import {
+  AI_AVAILABLE,
+  aiUnavailable,
+} from "@/__tests__/helpers/ai-capability-fixtures";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -72,65 +79,66 @@ function makeReq(): NextRequest {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(prisma.appSettings.findUnique).mockResolvedValue(null as never);
-  vi.mocked(requireModuleEnabled).mockResolvedValue({ enabled: true });
+  vi.mocked(getAiCapability).mockResolvedValue(AI_AVAILABLE);
+  vi.mocked(probeProviderPresence).mockResolvedValue(true);
+  vi.mocked(generateBloodPressureStatusForUser).mockResolvedValue({
+    hasProvider: true,
+    text: "ok",
+    cached: true,
+    updatedAt: "2026-09-20T06:00:00.000Z",
+  });
 });
 
-describe("GET /api/insights/blood-pressure-status — assistant-flag gate", () => {
-  it("returns 200 when insightStatus is enabled (default)", async () => {
+describe("GET /api/insights/blood-pressure-status", () => {
+  it("serves the note and the state while statusText is available", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
     const res = await callGet(makeReq());
     expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: Record<string, unknown> };
+    expect(body.data.text).toBe("ok");
+    expect(body.data.ai).toEqual(AI_AVAILABLE);
+    expect(getAiCapability).toHaveBeenCalledWith("statusText");
+    expect(requireModuleEnabled).not.toHaveBeenCalled();
   });
 
-  it("returns 403 + errorCode when insightStatus is off", async () => {
+  it.each([
+    "operator_disabled",
+    "user_disabled",
+    "consent_required",
+    "check_failed",
+  ] as const)(
+    "answers 200 with no note for %s, reading and warming nothing",
+    async (reason) => {
+      vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+      vi.mocked(getAiCapability).mockResolvedValue(aiUnavailable(reason));
+      const res = await callGet(makeReq());
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { data: Record<string, unknown> };
+      expect(body.data).toEqual({
+        hasProvider: true,
+        text: null,
+        cached: false,
+        updatedAt: null,
+        preparing: false,
+        ai: aiUnavailable(reason),
+      });
+      expect(generateBloodPressureStatusForUser).not.toHaveBeenCalled();
+    },
+  );
+
+  it("reports hasProvider as presence only: false for a missing provider", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
-    vi.mocked(prisma.appSettings.findUnique).mockResolvedValueOnce({
-      assistantEnabled: true,
-      assistantCoachEnabled: true,
-      assistantBriefingEnabled: true,
-      assistantInsightStatusEnabled: false,
-      assistantDocumentAiEnabled: true,
-    } as never);
+    vi.mocked(getAiCapability).mockResolvedValue(aiUnavailable("no_provider"));
+    vi.mocked(probeProviderPresence).mockResolvedValue(false);
     const res = await callGet(makeReq());
-    expect(res.status).toBe(403);
-    const body = (await res.json()) as { meta?: { errorCode?: string } };
-    expect(body.meta?.errorCode).toBe("assistant.disabled.insightStatus");
+    const body = (await res.json()) as { data: Record<string, unknown> };
+    expect(body.data.hasProvider).toBe(false);
+    expect(body.data.text).toBeNull();
   });
 
   it("returns 401 when unauthenticated", async () => {
     vi.mocked(getSession).mockResolvedValue(null);
     const res = await callGet(makeReq());
     expect(res.status).toBe(401);
-  });
-});
-
-// v1.18.0 (B2) — the route now also requires the `insights` module.
-// Representative coverage that a disabled module short-circuits with the
-// 403 module.disabled envelope before any provider / cache work; the
-// inventory test guards that EVERY insights AI route carries this gate.
-describe("GET /api/insights/blood-pressure-status — insights module gate", () => {
-  it("returns 200 when insights is enabled (default)", async () => {
-    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
-    const res = await callGet(makeReq());
-    expect(res.status).toBe(200);
-  });
-
-  it("returns 403 + module.disabled when insights is off", async () => {
-    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
-    vi.mocked(requireModuleEnabled).mockResolvedValueOnce({
-      enabled: false,
-      response: apiError('Module "insights" is not enabled', 403, {
-        errorCode: "module.disabled",
-        module: "insights",
-      }),
-    });
-    const res = await callGet(makeReq());
-    expect(res.status).toBe(403);
-    const body = (await res.json()) as {
-      meta?: { errorCode?: string; module?: string };
-    };
-    expect(body.meta?.errorCode).toBe("module.disabled");
-    expect(body.meta?.module).toBe("insights");
   });
 });

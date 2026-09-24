@@ -596,7 +596,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Blood-pressure assessment",
       description:
-        "Data-driven plain-language assessment of the user's recent blood-pressure readings. Read-only: a cache miss warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate). Auth via cookie or Bearer.",
+        "Data-driven plain-language assessment of the user's recent blood-pressure readings. Read-only: a cache miss warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate). The note is model text: it is served, and warmed, only while the `statusText` AI capability is available. Otherwise the answer is 200 with the note null, `preparing` false, `hasProvider` as provider presence and `ai` naming the reason; nothing is read from the cache or queued. Never refused for an AI reason, and the `insights` module (the AI analysis opt-out) is folded into the capability. Auth via cookie or Bearer.",
       requestParams: {
         query: insightStatusQuery,
       },
@@ -622,7 +622,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Pulse assessment",
       description:
-        "Data-driven plain-language assessment of the user's recent resting-pulse readings. Read-only: a cache miss warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate). Auth via cookie or Bearer.",
+        "Data-driven plain-language assessment of the user's recent resting-pulse readings. Read-only: a cache miss warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate). The note is model text: it is served, and warmed, only while the `statusText` AI capability is available. Otherwise the answer is 200 with the note null, `preparing` false, `hasProvider` as provider presence and `ai` naming the reason; nothing is read from the cache or queued. Never refused for an AI reason, and the `insights` module (the AI analysis opt-out) is folded into the capability. Auth via cookie or Bearer.",
       requestParams: {
         query: insightStatusQuery,
       },
@@ -648,7 +648,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Weight assessment",
       description:
-        "Data-driven plain-language assessment of the user's recent weight trend. Read-only: a cache miss warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate). Auth via cookie or Bearer.",
+        "Data-driven plain-language assessment of the user's recent weight trend. Read-only: a cache miss warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate). The note is model text: it is served, and warmed, only while the `statusText` AI capability is available. Otherwise the answer is 200 with the note null, `preparing` false, `hasProvider` as provider presence and `ai` naming the reason; nothing is read from the cache or queued. Never refused for an AI reason, and the `insights` module (the AI analysis opt-out) is folded into the capability. Auth via cookie or Bearer.",
       requestParams: {
         query: insightStatusQuery,
       },
@@ -674,7 +674,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "BMI assessment",
       description:
-        "Data-driven plain-language assessment of the user's body-mass index. Read-only: a cache miss warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate). Auth via cookie or Bearer.",
+        "Data-driven plain-language assessment of the user's body-mass index. Read-only: a cache miss warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate). The note is model text: it is served, and warmed, only while the `statusText` AI capability is available. Otherwise the answer is 200 with the note null, `preparing` false, `hasProvider` as provider presence and `ai` naming the reason; nothing is read from the cache or queued. Never refused for an AI reason, and the `insights` module (the AI analysis opt-out) is folded into the capability. Auth via cookie or Bearer.",
       requestParams: {
         query: insightStatusQuery,
       },
@@ -700,7 +700,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Mood assessment",
       description:
-        "Data-driven plain-language assessment of the user's recent mood entries. Read-only: a cache miss warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate). Auth via cookie or Bearer.",
+        "Data-driven plain-language assessment of the user's recent mood entries. Read-only: a cache miss warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate). The note is model text: it is served, and warmed, only while the `statusText` AI capability is available. Otherwise the answer is 200 with the note null, `preparing` false, `hasProvider` as provider presence and `ai` naming the reason; nothing is read from the cache or queued. Never refused for an AI reason, and the `insights` module (the AI analysis opt-out) is folded into the capability. Auth via cookie or Bearer.",
       requestParams: {
         query: insightStatusQuery,
       },
@@ -726,7 +726,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Medication-compliance assessment",
       description:
-        "Data-driven plain-language assessment of the user's medication compliance — an overall `summary` plus a per-medication note array. Read-only: a cache miss warms a generation out of band and serves the last-good envelope meanwhile (stale-while-revalidate). Auth via cookie or Bearer.",
+        "Data-driven plain-language assessment of the user's medication compliance — an overall `summary` plus a per-medication note array. Read-only: a cache miss warms a generation out of band and serves the last-good envelope meanwhile (stale-while-revalidate). The note is model text: it is served, and warmed, only while the `statusText` AI capability is available. Otherwise the answer is 200 with the note null, `preparing` false, `hasProvider` as provider presence and `ai` naming the reason; nothing is read from the cache or queued. Never refused for an AI reason, and the `insights` module (the AI analysis opt-out) is folded into the capability. Auth via cookie or Bearer.",
       requestParams: {
         query: insightStatusQuery,
       },
@@ -753,7 +753,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Generic per-HealthKit-metric assessment",
       description:
-        "v1.8.7.1 — data-driven plain-language assessment for any registered HealthKit metric (resting heart rate, sleep, glucose, body composition, gait, audio exposure, …). One generic route covering ~30 metric pages via archetype prompt templates + per-metric metadata. Read-only: a cache miss warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate). An unknown `metric` 422s against the closed registry enum. Auth via cookie or Bearer.",
+        "v1.8.7.1 — data-driven plain-language assessment for any registered HealthKit metric (resting heart rate, sleep, glucose, body composition, gait, audio exposure, …). One generic route covering ~30 metric pages via archetype prompt templates + per-metric metadata. Read-only: a cache miss warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate). An unknown `metric` 422s against the closed registry enum. The note is model text: it is served, and warmed, only while the `statusText` AI capability is available. Otherwise the answer is 200 with the note null, `preparing` false, `hasProvider` as provider presence and `ai` naming the reason; nothing is read from the cache or queued. Never refused for an AI reason, and the `insights` module (the AI analysis opt-out) is folded into the capability. Auth via cookie or Bearer.",
       requestParams: {
         query: metricStatusQuery,
       },
@@ -779,7 +779,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Per-biomarker assessment",
       description:
-        "Data-driven plain-language assessment for one user-scoped lab biomarker, reading its `LabResult` history. Identical envelope to the metric-status card so the `InsightStatusCard` consumes it unchanged. Read-only: a cache miss warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate); the assessment regenerates only when a new reading lands. A marker with no numeric readings returns `insufficient` without an LLM call. Auth via cookie or Bearer.",
+        "Data-driven plain-language assessment for one user-scoped lab biomarker, reading its `LabResult` history. Identical envelope to the metric-status card so the `InsightStatusCard` consumes it unchanged. Read-only: a cache miss warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate); the assessment regenerates only when a new reading lands. A marker with no numeric readings returns `insufficient` without an LLM call. The note is model text: it is served, and warmed, only while the `statusText` AI capability is available. Otherwise the answer is 200 with the note null, `preparing` false, `hasProvider` as provider presence and `ai` naming the reason; nothing is read from the cache or queued. Never refused for an AI reason, and the `insights` module (the AI analysis opt-out) is folded into the capability. Auth via cookie or Bearer.",
       requestParams: {
         query: biomarkerAssessmentQuery,
       },

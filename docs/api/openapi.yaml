@@ -10557,8 +10557,11 @@ paths:
         - Insights
       summary: Blood-pressure assessment
       description: "Data-driven plain-language assessment of the user's recent blood-pressure readings. Read-only: a cache
-        miss warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate). Auth via
-        cookie or Bearer."
+        miss warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate). The note
+        is model text: it is served, and warmed, only while the `statusText` AI capability is available. Otherwise the
+        answer is 200 with the note null, `preparing` false, `hasProvider` as provider presence and `ai` naming the
+        reason; nothing is read from the cache or queued. Never refused for an AI reason, and the `insights` module (the
+        AI analysis opt-out) is folded into the capability. Auth via cookie or Bearer."
       parameters:
         - in: query
           name: locale
@@ -10586,8 +10589,11 @@ paths:
         - Insights
       summary: Pulse assessment
       description: "Data-driven plain-language assessment of the user's recent resting-pulse readings. Read-only: a cache miss
-        warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate). Auth via cookie
-        or Bearer."
+        warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate). The note is
+        model text: it is served, and warmed, only while the `statusText` AI capability is available. Otherwise the
+        answer is 200 with the note null, `preparing` false, `hasProvider` as provider presence and `ai` naming the
+        reason; nothing is read from the cache or queued. Never refused for an AI reason, and the `insights` module (the
+        AI analysis opt-out) is folded into the capability. Auth via cookie or Bearer."
       parameters:
         - in: query
           name: locale
@@ -10615,8 +10621,11 @@ paths:
         - Insights
       summary: Weight assessment
       description: "Data-driven plain-language assessment of the user's recent weight trend. Read-only: a cache miss warms a
-        generation out of band and serves the last-good text meanwhile (stale-while-revalidate). Auth via cookie or
-        Bearer."
+        generation out of band and serves the last-good text meanwhile (stale-while-revalidate). The note is model text:
+        it is served, and warmed, only while the `statusText` AI capability is available. Otherwise the answer is 200
+        with the note null, `preparing` false, `hasProvider` as provider presence and `ai` naming the reason; nothing is
+        read from the cache or queued. Never refused for an AI reason, and the `insights` module (the AI analysis
+        opt-out) is folded into the capability. Auth via cookie or Bearer."
       parameters:
         - in: query
           name: locale
@@ -10644,8 +10653,11 @@ paths:
         - Insights
       summary: BMI assessment
       description: "Data-driven plain-language assessment of the user's body-mass index. Read-only: a cache miss warms a
-        generation out of band and serves the last-good text meanwhile (stale-while-revalidate). Auth via cookie or
-        Bearer."
+        generation out of band and serves the last-good text meanwhile (stale-while-revalidate). The note is model text:
+        it is served, and warmed, only while the `statusText` AI capability is available. Otherwise the answer is 200
+        with the note null, `preparing` false, `hasProvider` as provider presence and `ai` naming the reason; nothing is
+        read from the cache or queued. Never refused for an AI reason, and the `insights` module (the AI analysis
+        opt-out) is folded into the capability. Auth via cookie or Bearer."
       parameters:
         - in: query
           name: locale
@@ -10673,8 +10685,11 @@ paths:
         - Insights
       summary: Mood assessment
       description: "Data-driven plain-language assessment of the user's recent mood entries. Read-only: a cache miss warms a
-        generation out of band and serves the last-good text meanwhile (stale-while-revalidate). Auth via cookie or
-        Bearer."
+        generation out of band and serves the last-good text meanwhile (stale-while-revalidate). The note is model text:
+        it is served, and warmed, only while the `statusText` AI capability is available. Otherwise the answer is 200
+        with the note null, `preparing` false, `hasProvider` as provider presence and `ai` naming the reason; nothing is
+        read from the cache or queued. Never refused for an AI reason, and the `insights` module (the AI analysis
+        opt-out) is folded into the capability. Auth via cookie or Bearer."
       parameters:
         - in: query
           name: locale
@@ -10703,7 +10718,11 @@ paths:
       summary: Medication-compliance assessment
       description: "Data-driven plain-language assessment of the user's medication compliance — an overall `summary` plus a
         per-medication note array. Read-only: a cache miss warms a generation out of band and serves the last-good
-        envelope meanwhile (stale-while-revalidate). Auth via cookie or Bearer."
+        envelope meanwhile (stale-while-revalidate). The note is model text: it is served, and warmed, only while the
+        `statusText` AI capability is available. Otherwise the answer is 200 with the note null, `preparing` false,
+        `hasProvider` as provider presence and `ai` naming the reason; nothing is read from the cache or queued. Never
+        refused for an AI reason, and the `insights` module (the AI analysis opt-out) is folded into the capability.
+        Auth via cookie or Bearer."
       parameters:
         - in: query
           name: locale
@@ -10734,7 +10753,10 @@ paths:
         sleep, glucose, body composition, gait, audio exposure, …). One generic route covering ~30 metric pages via
         archetype prompt templates + per-metric metadata. Read-only: a cache miss warms a generation out of band and
         serves the last-good text meanwhile (stale-while-revalidate). An unknown `metric` 422s against the closed
-        registry enum. Auth via cookie or Bearer."
+        registry enum. The note is model text: it is served, and warmed, only while the `statusText` AI capability is
+        available. Otherwise the answer is 200 with the note null, `preparing` false, `hasProvider` as provider presence
+        and `ai` naming the reason; nothing is read from the cache or queued. Never refused for an AI reason, and the
+        `insights` module (the AI analysis opt-out) is folded into the capability. Auth via cookie or Bearer."
       parameters:
         - in: query
           name: metric
@@ -10826,7 +10848,10 @@ paths:
         Identical envelope to the metric-status card so the `InsightStatusCard` consumes it unchanged. Read-only: a
         cache miss warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate); the
         assessment regenerates only when a new reading lands. A marker with no numeric readings returns `insufficient`
-        without an LLM call. Auth via cookie or Bearer."
+        without an LLM call. The note is model text: it is served, and warmed, only while the `statusText` AI capability
+        is available. Otherwise the answer is 200 with the note null, `preparing` false, `hasProvider` as provider
+        presence and `ai` naming the reason; nothing is read from the cache or queued. Never refused for an AI reason,
+        and the `insights` module (the AI analysis opt-out) is folded into the capability. Auth via cookie or Bearer."
       parameters:
         - in: query
           name: biomarkerId
@@ -53833,13 +53858,14 @@ components:
       properties:
         hasProvider:
           type: boolean
-          description: False when the user has no usable AI provider — `text` then carries the generic no-key guidance.
+          description: "Whether a configured AI provider exists for the record: provider presence and nothing else. It is never
+            false because the operator switched notes off or consent is missing; `ai` says that."
         text:
           anyOf:
             - type: string
             - type: "null"
-          description: The assessment narrative (plain text, rendered as React text children). Null while a first generation is
-            preparing.
+          description: The assessment note (plain text, rendered as React text children). Null while a first generation is
+            preparing, and whenever the `statusText` capability is unavailable (see `ai`).
         cached:
           type: boolean
           description: True when `text` is served from cache (incl. last-good).
@@ -53859,11 +53885,16 @@ components:
             flight. The client keeps polling on `preparing || revalidating` (bounded) so the open card upgrades to the
             warmed assessment without a remount.
           type: boolean
+        ai:
+          description: The `statusText` capability behind the note. While it is unavailable the note is null, `preparing` is
+            false, the cache is not read and nothing is warmed.
+          $ref: "#/components/schemas/AiCapabilityState"
       required:
         - hasProvider
         - text
         - cached
         - updatedAt
+        - ai
       additionalProperties: false
       description: "Specialised per-metric assessment envelope (blood-pressure, pulse, weight, bmi, mood). Identical shape to
         the generic metric-status card so the `InsightStatusCard` consumes it unchanged. Read-only +
@@ -53958,12 +53989,14 @@ components:
       properties:
         hasProvider:
           type: boolean
-          description: False when the user has no usable AI provider — `summary` then carries the generic no-key guidance.
+          description: "Whether a configured AI provider exists for the record: provider presence and nothing else. It is never
+            false because the operator switched notes off or consent is missing; `ai` says that."
         summary:
           anyOf:
             - type: string
             - type: "null"
-          description: The overall compliance narrative (plain text). Null while a first generation is preparing.
+          description: The overall compliance note (plain text). Null while a first generation is preparing, and whenever the
+            `statusText` capability is unavailable (see `ai`).
         medications:
           type: array
           items:
@@ -53987,12 +54020,17 @@ components:
           description: True when the envelope is served from last-good cache (stale-while-revalidate) while a fresh generation is
             in flight. The client keeps polling on `preparing || revalidating` (bounded).
           type: boolean
+        ai:
+          description: The `statusText` capability behind the note. While it is unavailable `summary` is null, `medications` is
+            empty, `preparing` is false, the cache is not read and nothing is warmed.
+          $ref: "#/components/schemas/AiCapabilityState"
       required:
         - hasProvider
         - summary
         - medications
         - cached
         - updatedAt
+        - ai
       additionalProperties: false
       description: Medication-compliance assessment envelope. Unlike the other six specialised cards it carries a `summary`
         plus a per-medication `text` array rather than a single `text` field. Read-only + stale-while-revalidate.
@@ -54031,13 +54069,15 @@ components:
       properties:
         hasProvider:
           type: boolean
-          description: False when the user has no usable AI provider — `text` then carries the generic no-key guidance.
+          description: "Whether a configured AI provider exists for the record: provider presence and nothing else. It is never
+            false because the operator switched notes off or consent is missing; `ai` says that."
         text:
           anyOf:
             - type: string
             - type: "null"
-          description: The assessment narrative (plain text, rendered as React text children). Null while a first generation is
-            preparing, or when the metric has insufficient data.
+          description: The assessment note (plain text, rendered as React text children). Null while a first generation is
+            preparing, when the metric has insufficient data, and whenever the `statusText` capability is unavailable
+            (see `ai`).
         cached:
           type: boolean
           description: True when `text` is served from cache (incl. last-good).
@@ -54059,13 +54099,18 @@ components:
           type: boolean
         insufficient:
           description: True when the metric has no readings; no assessment is generated (no LLM call). The card shows its
-            insufficient-data state.
+            insufficient-data state. Still computed while `ai` is unavailable.
           type: boolean
+        ai:
+          description: The `statusText` capability behind the note. While it is unavailable the note is null, `preparing` is
+            false, the cache is not read and nothing is warmed.
+          $ref: "#/components/schemas/AiCapabilityState"
       required:
         - hasProvider
         - text
         - cached
         - updatedAt
+        - ai
       additionalProperties: false
       description: "Generic per-metric assessment envelope. Identical shape to the seven specialised `*-status` cards so the
         `InsightStatusCard` consumes it unchanged. Read-only + stale-while-revalidate: a cache miss warms a generation
@@ -54092,13 +54137,15 @@ components:
       properties:
         hasProvider:
           type: boolean
-          description: False when the user has no usable AI provider — `text` then carries the generic no-key guidance.
+          description: "Whether a configured AI provider exists for the record: provider presence and nothing else. It is never
+            false because the operator switched notes off or consent is missing; `ai` says that."
         text:
           anyOf:
             - type: string
             - type: "null"
-          description: The assessment narrative (plain text, rendered as React text children). Null while a first generation is
-            preparing, or when the marker has no numeric readings.
+          description: The assessment note (plain text, rendered as React text children). Null while a first generation is
+            preparing, when the marker has no numeric readings, and whenever the `statusText` capability is unavailable
+            (see `ai`).
         cached:
           type: boolean
           description: True when `text` is served from cache (incl. last-good).
@@ -54122,11 +54169,16 @@ components:
           description: True when the marker has no numeric readings; no assessment is generated (no LLM call). The card is not
             rendered.
           type: boolean
+        ai:
+          description: The `statusText` capability behind the note. While it is unavailable the note is null, `preparing` is
+            false, the cache is not read and nothing is warmed.
+          $ref: "#/components/schemas/AiCapabilityState"
       required:
         - hasProvider
         - text
         - cached
         - updatedAt
+        - ai
       additionalProperties: false
       description: "Per-biomarker assessment envelope. Identical shape to the generic metric-status card so the
         `InsightStatusCard` consumes it unchanged. Read-only + stale-while-revalidate: a cache miss warms a generation

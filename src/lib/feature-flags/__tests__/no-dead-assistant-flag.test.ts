@@ -110,17 +110,7 @@ const AWAITING_READER: Record<string, string> = {
 /**
  * Every file that still calls the retired gate. Only ever shrinks.
  */
-const RETIRED_GATE_CALLERS = [
-  "src/app/api/insights/biomarker-assessment/route.ts",
-  "src/app/api/insights/blood-pressure-status/route.ts",
-  "src/app/api/insights/bmi-status/route.ts",
-  "src/app/api/insights/medication-compliance-status/route.ts",
-  "src/app/api/insights/metric-status/route.ts",
-  "src/app/api/insights/mood-status/route.ts",
-  "src/app/api/insights/pulse-status/route.ts",
-  "src/app/api/insights/weight-status/route.ts",
-  "src/app/api/medications/extract/route.ts",
-];
+const RETIRED_GATE_CALLERS = ["src/app/api/medications/extract/route.ts"];
 
 function sourceFiles(dir: string, acc: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {

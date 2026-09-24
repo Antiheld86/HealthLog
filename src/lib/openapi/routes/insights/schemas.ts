@@ -88,13 +88,13 @@ export const metricStatusResponse = z
     hasProvider: z
       .boolean()
       .describe(
-        "False when the user has no usable AI provider — `text` then carries the generic no-key guidance.",
+        "Whether a configured AI provider exists for the record: provider presence and nothing else. It is never false because the operator switched notes off or consent is missing; `ai` says that.",
       ),
     text: z
       .string()
       .nullable()
       .describe(
-        "The assessment narrative (plain text, rendered as React text children). Null while a first generation is preparing, or when the metric has insufficient data.",
+        "The assessment note (plain text, rendered as React text children). Null while a first generation is preparing, when the metric has insufficient data, and whenever the `statusText` capability is unavailable (see `ai`).",
       ),
     cached: z
       .boolean()
@@ -119,8 +119,11 @@ export const metricStatusResponse = z
       .boolean()
       .optional()
       .describe(
-        "True when the metric has no readings; no assessment is generated (no LLM call). The card shows its insufficient-data state.",
+        "True when the metric has no readings; no assessment is generated (no LLM call). The card shows its insufficient-data state. Still computed while `ai` is unavailable.",
       ),
+    ai: aiCapabilityState.describe(
+      "The `statusText` capability behind the note. While it is unavailable the note is null, `preparing` is false, the cache is not read and nothing is warmed.",
+    ),
   })
   .meta({
     id: "MetricStatusResponse",
@@ -728,13 +731,13 @@ export const insightStatusResponse = z
     hasProvider: z
       .boolean()
       .describe(
-        "False when the user has no usable AI provider — `text` then carries the generic no-key guidance.",
+        "Whether a configured AI provider exists for the record: provider presence and nothing else. It is never false because the operator switched notes off or consent is missing; `ai` says that.",
       ),
     text: z
       .string()
       .nullable()
       .describe(
-        "The assessment narrative (plain text, rendered as React text children). Null while a first generation is preparing.",
+        "The assessment note (plain text, rendered as React text children). Null while a first generation is preparing, and whenever the `statusText` capability is unavailable (see `ai`).",
       ),
     cached: z
       .boolean()
@@ -755,6 +758,9 @@ export const insightStatusResponse = z
       .describe(
         "True when `text` is served from last-good cache (stale-while-revalidate) while a fresh generation is in flight. The client keeps polling on `preparing || revalidating` (bounded) so the open card upgrades to the warmed assessment without a remount.",
       ),
+    ai: aiCapabilityState.describe(
+      "The `statusText` capability behind the note. While it is unavailable the note is null, `preparing` is false, the cache is not read and nothing is warmed.",
+    ),
   })
   .meta({
     id: "InsightStatusResponse",
@@ -786,13 +792,13 @@ export const biomarkerAssessmentResponse = z
     hasProvider: z
       .boolean()
       .describe(
-        "False when the user has no usable AI provider — `text` then carries the generic no-key guidance.",
+        "Whether a configured AI provider exists for the record: provider presence and nothing else. It is never false because the operator switched notes off or consent is missing; `ai` says that.",
       ),
     text: z
       .string()
       .nullable()
       .describe(
-        "The assessment narrative (plain text, rendered as React text children). Null while a first generation is preparing, or when the marker has no numeric readings.",
+        "The assessment note (plain text, rendered as React text children). Null while a first generation is preparing, when the marker has no numeric readings, and whenever the `statusText` capability is unavailable (see `ai`).",
       ),
     cached: z
       .boolean()
@@ -819,6 +825,9 @@ export const biomarkerAssessmentResponse = z
       .describe(
         "True when the marker has no numeric readings; no assessment is generated (no LLM call). The card is not rendered.",
       ),
+    ai: aiCapabilityState.describe(
+      "The `statusText` capability behind the note. While it is unavailable the note is null, `preparing` is false, the cache is not read and nothing is warmed.",
+    ),
   })
   .meta({
     id: "BiomarkerAssessmentResponse",
@@ -834,13 +843,13 @@ export const medicationComplianceStatusResponse = z
     hasProvider: z
       .boolean()
       .describe(
-        "False when the user has no usable AI provider — `summary` then carries the generic no-key guidance.",
+        "Whether a configured AI provider exists for the record: provider presence and nothing else. It is never false because the operator switched notes off or consent is missing; `ai` says that.",
       ),
     summary: z
       .string()
       .nullable()
       .describe(
-        "The overall compliance narrative (plain text). Null while a first generation is preparing.",
+        "The overall compliance note (plain text). Null while a first generation is preparing, and whenever the `statusText` capability is unavailable (see `ai`).",
       ),
     medications: z
       .array(
@@ -879,6 +888,9 @@ export const medicationComplianceStatusResponse = z
       .describe(
         "True when the envelope is served from last-good cache (stale-while-revalidate) while a fresh generation is in flight. The client keeps polling on `preparing || revalidating` (bounded).",
       ),
+    ai: aiCapabilityState.describe(
+      "The `statusText` capability behind the note. While it is unavailable `summary` is null, `medications` is empty, `preparing` is false, the cache is not read and nothing is warmed.",
+    ),
   })
   .meta({
     id: "MedicationComplianceStatusResponse",
