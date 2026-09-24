@@ -87,14 +87,7 @@ export function EncounterLinkPickers({
   });
 
   const labs = useQuery({
-    queryKey: queryKeys.labResultsList({
-      analyte: undefined,
-      panel: undefined,
-      from: undefined,
-      to: undefined,
-      page: 0,
-      sortDir: "desc",
-    }),
+    queryKey: queryKeys.labResultsPicker(PICKER_FETCH_LIMIT),
     enabled: labsOn,
     queryFn: () =>
       apiGet<LabListPage>(
@@ -103,7 +96,7 @@ export function EncounterLinkPickers({
   });
 
   const episodes = useQuery({
-    queryKey: queryKeys.illnessEpisodes(true),
+    queryKey: queryKeys.illnessEpisodesPicker(EPISODE_FETCH_LIMIT),
     enabled: illnessOn,
     queryFn: () =>
       apiGet<IllnessEpisodeDTO[]>(

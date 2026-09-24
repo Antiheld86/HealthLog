@@ -15,6 +15,10 @@ export const illnessKeys = {
   illness: () => ["illness"] as const,
   illnessEpisodes: (includeResolved: boolean) =>
     ["illness", "episodes", includeResolved] as const,
+  // The visit form's episode picker, with its own page size (the illness
+  // pages read the route's default); a shared key would serve one to the other.
+  illnessEpisodesPicker: (limit: number) =>
+    ["illness", "episodes-picker", limit] as const,
   illnessEpisode: (id: string) => ["illness", "episode", id] as const,
   illnessDayLog: (episodeId: string, date: string) =>
     ["illness", "day-log", episodeId, date] as const,
