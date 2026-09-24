@@ -144,7 +144,8 @@ import { queryKeys } from "@/lib/query-keys";
 import { useAnalyticsQuery } from "@/lib/queries/use-analytics-query";
 import { useDashboardSnapshot } from "@/lib/queries/use-dashboard-snapshot";
 import { useDailyDigest } from "@/lib/queries/use-daily-digest";
-import { useModuleEnabled } from "@/hooks/use-module-enabled";
+import { useSurfaceVisible } from "@/hooks/use-surface-visible";
+import { hideModuleWidgets } from "@/lib/dashboard/widget-modules";
 import { isDashboardSnapshotEnabled } from "@/lib/dashboard/snapshot-flag";
 import {
   BATCH_COVERAGE_DAYS,
@@ -311,17 +312,10 @@ export default function DashboardPageClient({
   const snapshotQuery = useDashboardSnapshot(snapshotEnabled);
 
   // S2 — the Today hero reads the unified daily digest (the S1 DTO) from
-  // its own cached route. Gated on the `insights` module (the digest is
-  // the AI-narrative daily layer; the route 403s when insights is off)
-  // and the auth state so a logged-out / gated account never fires it.
-  // Two readings of one flag, on purpose. The FETCH gate takes the live
-  // module map, so an account with insights off never fires the request. The
-  // RENDER gate below takes the mount-pinned account, so the hydration render
-  // agrees with the server (which had no account, and therefore the default-on
-  // answer). See `useAccountOnceMounted`.
-  const insightsModuleEnabled = useModuleEnabled("insights");
-  const insightsEnabled = user?.modules?.insights !== false;
-  const digestQuery = useDailyDigest(isAuthenticated && insightsModuleEnabled);
+  // its own cached route. It is the day's data, so no module owns it: the
+  // `insights` key means AI analysis, and the digest leaves its model-written
+  // lead out on its own when that is off. Gated on auth only.
+  const digestQuery = useDailyDigest(isAuthenticated);
 
   // v1.29.1 — the v1.29.0 selected-score-ring cluster is removed from the web
   // hero (Marc, live-use: uneven, wasted tile space). The snapshot still
@@ -423,9 +417,14 @@ export default function DashboardPageClient({
     enabled: !snapshotEnabled && isAuthenticated,
     ...DASHBOARD_QUERY_OPTS,
   });
+  // The snapshot publishes its layout with switched-off modules' widgets
+  // already hidden. The legacy feed is the stored layout as saved (Settings
+  // edits that exact value), so the same mask is applied here, from the same
+  // surface map, before anything paints.
   const layoutData = snapshotEnabled
     ? snapshotQuery.data?.layout
-    : layoutDataLegacy;
+    : layoutDataLegacy && hideModuleWidgets(layoutDataLegacy, user?.modules);
+  const moodWidgetVisible = useSurfaceVisible("widget:mood");
 
   const { data: moodDataLegacy } = useQuery({
     queryKey: queryKeys.moodAnalytics(),
@@ -435,7 +434,8 @@ export default function DashboardPageClient({
         summary: DataSummary;
       }>("/api/mood/analytics");
     },
-    enabled: !snapshotEnabled && isAuthenticated,
+    // The route refuses with the mood module off; do not ask.
+    enabled: !snapshotEnabled && isAuthenticated && moodWidgetVisible,
     ...DASHBOARD_QUERY_OPTS,
   });
   const moodData = snapshotEnabled
@@ -947,7 +947,7 @@ export default function DashboardPageClient({
           `<QueryErrorCard>` with a retry action rather than silently
           falling through to nothing. The dense tile grid + charts below
           are untouched. */}
-      {insightsEnabled &&
+      {
         // v1.30.9 — DATA-FIRST gate so the SSR pass paints the POPULATED hero
         // (the LCP element) instead of a skeleton. This is hydration-safe ONLY
         // because of a bound invariant: the digest is server-DEHYDRATED
@@ -966,7 +966,7 @@ export default function DashboardPageClient({
         // rehydrates from disk. The error / empty branches stay reachable only
         // post-mount. DO NOT add `["daily", …]` to that allowlist, or render
         // the hero from any client-only source, without revisiting this gate.
-        (digestQuery.data ? (
+        digestQuery.data ? (
           <TodayHero
             digest={digestQuery.data}
             renderFilteredAllClear={renderFilteredHeroAllClear}
@@ -978,7 +978,8 @@ export default function DashboardPageClient({
           <TodayHeroSkeleton />
         ) : digestQuery.isError ? (
           <QueryErrorCard onRetry={() => digestQuery.refetch()} />
-        ) : null)}
+        ) : null
+      }
 
       {/* v1.18.6 — the spotlight tour launcher moved to the app-shell
        * (`AuthShell`) so its overlay survives the cross-page

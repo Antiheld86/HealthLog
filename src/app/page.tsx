@@ -13,7 +13,6 @@ import {
   type BatchWindow,
 } from "@/lib/dashboard/batch-chart-types";
 import { resolveDashboardLayout } from "@/lib/dashboard-layout";
-import { resolveModuleMap } from "@/lib/modules/gate";
 import { loadDailyDigest } from "@/lib/daily/load-digest";
 import { readSeriesBatch } from "@/lib/measurements/series-batch-read";
 import { queryKeys } from "@/lib/query-keys";
@@ -62,8 +61,9 @@ function softTimeout<T>(ms: number): Promise<T | undefined> {
  *    window from `computeBatchWindow(now, user.timezone)` threaded to the
  *    client as the `batchWindow` prop. Server and client build the identical
  *    key by construction, so the prefetched slice lands instead of refetching.
- *  - Module-gate parity: the digest route gates on `insights`; skip its
- *    prefetch when the module is off (the client hook is disabled then too).
+ *  - The digest is the day's data and belongs to no module (the `insights`
+ *    key is AI analysis, which the digest omits on its own), so it is
+ *    prefetched for every account, as the client fetches it for every account.
  *  - Record identity: the session comes from `getUnswitchedSession()`, which
  *    answers null while the browser is acting on somebody else's record. Every
  *    read below scopes to `user`, and under a switch `user` is the DELEGATE —
@@ -117,9 +117,6 @@ export default async function DashboardPage() {
         batchWindow = computeBatchWindow(new Date(), user.timezone);
       }
 
-      const modules = await resolveModuleMap(user.id);
-      const insightsEnabled = modules.insights !== false;
-
       const seriesTypes = snapshotMode
         ? deriveBatchChartTypes(
             resolveDashboardLayout(wireBody.layout),
@@ -133,9 +130,7 @@ export default async function DashboardPage() {
 
       // Digest carries a soft budget (cold-day extras rebuild); series is a
       // warm rollup read (< 100 ms) with none. Both fail soft to `undefined`.
-      const digestWork = insightsEnabled
-        ? loadDailyDigest(user).catch(() => undefined)
-        : Promise.resolve(undefined);
+      const digestWork = loadDailyDigest(user).catch(() => undefined);
       const seriesWork =
         batchWindow && seriesTypes.length > 0
           ? readSeriesBatch(

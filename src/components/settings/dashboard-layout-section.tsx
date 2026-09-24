@@ -53,10 +53,8 @@ import {
 import { apiDelete, apiGet, apiPut, ApiError } from "@/lib/api/api-fetch";
 import { useMounted } from "@/hooks/use-mounted";
 import { useAuth } from "@/hooks/use-auth";
-import {
-  NATIVE_ONLY_WIDGET_LABEL_KEYS,
-  WIDGET_MODULE_BY_ID,
-} from "@/lib/dashboard/widget-modules";
+import { NATIVE_ONLY_WIDGET_LABEL_KEYS } from "@/lib/dashboard/widget-modules";
+import { isSurfaceVisible } from "@/lib/modules/surface";
 import { SettingsCard } from "@/components/settings/settings-card";
 import { SettingsCardHeader } from "@/components/settings/_card-header";
 
@@ -605,14 +603,10 @@ export function DashboardLayoutSection({ id }: { id: string }) {
               .filter((w): w is typeof w & { id: DashboardWidgetId } =>
                 webWidgetIds.has(w.id),
               )
-              // v1.18.0 — hide a widget toggle whose owning module is
-              // disabled. Map the widget id → ModuleKey FIRST (undefined =
-              // core widget = always shown), THEN check the module map.
-              // Fail-open: only an explicit `false` hides the row.
-              .filter((w) => {
-                const moduleKey = WIDGET_MODULE_BY_ID[w.id];
-                return !moduleKey || modules?.[moduleKey] !== false;
-              })
+              // Hide a widget toggle whose owning module is off, through the
+              // one surface map. A core widget has no owner and always shows;
+              // only an explicit `false` hides the row.
+              .filter((w) => isSurfaceVisible(`widget:${w.id}`, modules))
               .filter((w) => !unavailableIds.has(w.id))
               .sort((a, b) => a.order - b.order);
             const sortedIds = sortedWidgets.map((w) => w.id);
@@ -685,10 +679,7 @@ export function DashboardLayoutSection({ id }: { id: string }) {
               .filter((w) => nativeOnlyIds.has(w.id))
               // Same fail-open module gate as the web list: only an explicit
               // `false` hides the row.
-              .filter((w) => {
-                const moduleKey = WIDGET_MODULE_BY_ID[w.id];
-                return !moduleKey || modules?.[moduleKey] !== false;
-              })
+              .filter((w) => isSurfaceVisible(`widget:${w.id}`, modules))
               .filter((w) => !unavailableIds.has(w.id))
               .sort((a, b) => a.order - b.order);
             if (nativeWidgets.length === 0) return null;
