@@ -1312,7 +1312,9 @@
           "rateLimit": "Zbyt wiele żądań — poczekaj chwilę i spróbuj ponownie.",
           "noProvider": "Brak skonfigurowanego dostawcy AI — skonfiguruj go w Ustawieniach.",
           "budget": "Osiągnięto dzienny limit AI — spróbuj jutro.",
-          "network": "Nie udało się połączyć z dostawcą AI — spróbuj ponownie."
+          "network": "Nie udało się połączyć z dostawcą AI — spróbuj ponownie.",
+          "consent": "Odczyt Twojego opisu przez AI wymaga najpierw Twojej zgody.",
+          "unavailable": "Odczyt opisów przez AI jest tu teraz niedostępny."
         }
       },
       "cadence": {
@@ -2444,8 +2446,6 @@
     "bmiEmptyTitle": "Dodaj wzrost, aby obliczyć BMI",
     "bmiEmptyDescription": "BMI wymaga twojego wzrostu. Zapisz go w Ustawieniach → Konto.",
     "bmiEmptyAction": "Otwórz ustawienia konta",
-    "noProviderConfigured": "Połącz dostawcę AI, aby zobaczyć tutaj ocenę swoich pomiarów.",
-    "noProviderAction": "Otwórz ustawienia AI",
     "personalRecord": {
       "badge": "PR",
       "tooltip": "Rekord osobisty: {value} {unit} dnia {date}"
@@ -2569,10 +2569,6 @@
       "emptyDescription": "Wygeneruj dzisiejszy briefing, aby zobaczyć podsumowanie trendów.",
       "emptyAction": "Wygeneruj briefing",
       "loadingLabel": "Przygotowanie briefingu",
-      "noProviderTitle": "Brak połączonego dostawcy AI",
-      "noProviderDescription": "Skieruj HealthLog na model lokalny (Ollama, LM Studio — nic nie opuszcza Twojej sieci) lub podaj własny klucz OpenAI albo Anthropic, a codzienne podsumowanie zamieni Twoje pomiary w zrozumiały opis. Konfiguracja zajmuje około minuty.",
-      "noProviderAction": "Otwórz ustawienia AI",
-      "staleNoProviderHint": "Tego briefingu nie można odświeżyć — nie połączono żadnego dostawcy AI.",
       "refreshFailedHint": "Nie udało się odświeżyć briefingu — pokazujemy poprzedni.",
       "retryAction": "Spróbuj ponownie",
       "failedTitle": "Nie udało się wygenerować briefingu",
@@ -2950,7 +2946,15 @@
       "interrupted": {
         "note": "Ta odpowiedź została przerwana przed ukończeniem.",
         "retry": "Zapytaj ponownie"
-      }
+      },
+      "historyReadOnlyNote": "Coach jest teraz niedostępny. Nadal możesz czytać i usuwać swoje rozmowy.",
+      "transcriptYou": "Ty",
+      "transcriptCoach": "Coach",
+      "errorConsent": "Coach potrzebuje Twojej zgody na AI, zanim odpowie. Możesz ją wyrazić w Ustawieniach, AI.",
+      "errorNotPermitted": "Coach nie jest dostępny w kartotece, którą ktoś Ci udostępnił.",
+      "errorUnavailable": "Coach nie mógł teraz sprawdzić swoich ustawień. Spróbuj ponownie za chwilę.",
+      "errorOperatorOff": "AI jest wyłączone na tym serwerze, więc Coach nie może odpowiedzieć.",
+      "errorCoachOff": "Coach jest wyłączony. Możesz go ponownie włączyć w Ustawieniach, Moduły."
     },
     "relativeJustNow": "przed chwilą",
     "relativeMinutesAgoOne": "{count} minutę temu",
@@ -4383,7 +4387,15 @@
         "night": "Utrzymujący się podwyższony spoczynek w nocy — możliwe napięcie."
       }
     },
-    "navEcg": "EKG"
+    "navEcg": "EKG",
+    "sectionLoadError": "Nie udało się wczytać tej sekcji.",
+    "aiSetupHint": {
+      "title": "AI jest opcjonalne",
+      "body": "Wszystko tutaj działa bez AI. Jeśli chcesz codzienne podsumowanie, krótkie notatki o pomiarach i Coacha, możesz podłączyć dostawcę AI.",
+      "settingsBody": "HealthLog działa w pełni bez AI. Podłącz dostawcę poniżej, jeśli chcesz codzienne podsumowanie, krótkie notatki o pomiarach i Coacha.",
+      "action": "Skonfiguruj AI",
+      "dismiss": "Nie teraz"
+    }
   },
   "thresholds": {
     "defaultLabel": "Domyślne",
@@ -5831,12 +5843,30 @@
         "activeSince": "Udzielona {date}. Twoje dane zdrowotne mogą być wysyłane do skonfigurowanego dostawcy na potrzeby funkcji AI.",
         "withdrawn": "Wycofana. Żadne dane zdrowotne nie są wysyłane do dostawcy AI; funkcje AI pozostają wyłączone.",
         "withdraw": "Wycofaj zgodę",
-        "confirmBody": "Funkcje AI przestają działać natychmiast. Nic z już zapisanych danych nie zostaje usunięte — użyj sekcji Dane i prywatność, aby wyeksportować lub usunąć swoją historię.",
+        "confirmBody": "Funkcje AI zatrzymują się od razu, a notatki napisane dla Ciebie przez model zostają usunięte: notatki o stanie, codzienne podsumowanie, podsumowania okresu napisane przez model, linie po nowym pomiarze i notatki o treningach. Twoje rozmowy z Coachem, to, co zapamiętał Coach, Twoje plany i podsumowania dokumentów zostają, a Ty możesz je sam przeczytać lub usunąć.",
         "confirmWithdraw": "Wycofaj",
         "regrantHint": "Po ponownym udzieleniu zgody funkcje AI znów będą mogły wysyłać Twoje dane zdrowotne do skonfigurowanego dostawcy.",
         "grant": "Udziel zgody",
         "grantError": "Nie udało się zapisać zgody. Spróbuj ponownie.",
-        "error": "Nie udało się zapisać wycofania. Spróbuj ponownie."
+        "error": "Nie udało się zapisać wycofania. Spróbuj ponownie.",
+        "documentReading": {
+          "title": "Zgoda na odczyt dokumentów",
+          "activeSince": "Udzielona {date}. Dokumenty, zeskanowane wyniki badań i opisy leków mogą być wysyłane do Twojej usługi AI do odczytu.",
+          "confirmBody": "Dokumenty, zeskanowane wyniki badań i opisy leków nie są już wysyłane do odczytu. Nic, co już masz, nie zostaje usunięte."
+        }
+      },
+      "operatorOff": {
+        "allTitle": "AI jest wyłączone na tym serwerze",
+        "allBody": "Osoba prowadząca ten serwer wyłączyła AI. HealthLog nadal działa ze wszystkimi Twoimi danymi; funkcje wymagające AI po prostu się nie wyświetlają.",
+        "someTitle": "Niektóre funkcje AI są wyłączone na tym serwerze",
+        "someBody": "Osoba prowadząca ten serwer wyłączyła: {switches}. Wszystko inne, w tym wszystkie Twoje dane, działa jak zwykle.",
+        "testRefused": "AI jest wyłączone na tym serwerze, więc nie ma czego testować.",
+        "autoRead": "Odczyt dokumentów przez AI jest wyłączony na tym serwerze."
+      },
+      "coachConversations": {
+        "title": "Rozmowy z Coachem",
+        "description": "Otwórz rozmowę, aby ją przeczytać, albo ją usuń.",
+        "more": "Pokaż więcej"
       }
     },
     "dashboard": {
@@ -8801,7 +8831,8 @@
       "extractFailed": "Nie udało się odczytać wyniku. Spróbuj wyraźniejszego zdjęcia.",
       "pdfNeedsAnthropic": "Skanowanie PDF wymaga dostawcy wizji Claude; prześlij zamiast tego zdjęcie.",
       "refTextLabel": "Zakres tak jak wydrukowano",
-      "refTextPlaceholder": "np. 3,5 - 5,0"
+      "refTextPlaceholder": "np. 3,5 - 5,0",
+      "aiUnavailable": "Skanowanie wyniku przez AI jest tu teraz niedostępne."
     },
     "loadMoreReadings": "Wczytaj więcej pomiarów",
     "documentsLink": "Dokumenty wyników badań",
@@ -9949,7 +9980,9 @@
       "errorNotIndexed": "Najpierw odczytaj dokument, potem wyodrębnij.",
       "errorLocalOcrDisabled": "Najpierw włącz lokalne OCR w ustawieniach AI.",
       "errorProvider": "Nie skonfigurowano dostawcy AI do tego celu.",
-      "errorTextImageOnly": "Lokalne OCR odczytuje tylko obrazy, nie ten plik."
+      "errorTextImageOnly": "Lokalne OCR odczytuje tylko obrazy, nie ten plik.",
+      "errorConsent": "Odczyt dokumentów przez AI wymaga najpierw Twojej zgody.",
+      "errorUnavailable": "Odczyt dokumentów przez AI jest tu teraz niedostępny."
     },
     "summary": {
       "summarise": "Podsumuj",
@@ -10027,6 +10060,11 @@
       "title": "Porozmawiaj o tym dokumencie",
       "openAria": "Zapytaj Coacha o ten dokument",
       "openButton": "Zapytaj Coacha"
+    },
+    "readingConsent": {
+      "body": "Odczyt przez AI wysyła to do Twojej usługi AI poza tym serwerem. Czy HealthLog może wysyłać dokumenty, wyniki badań i opisy leków do odczytu?",
+      "grant": "Zezwól na odczyt",
+      "error": "Nie udało się zapisać zgody. Spróbuj ponownie."
     }
   },
   "selfDescription": {

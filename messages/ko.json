@@ -1312,7 +1312,9 @@
           "rateLimit": "요청이 너무 많아요 — 잠시 후 다시 시도해 주세요.",
           "noProvider": "AI 제공자가 설정되지 않았어요 — 설정에서 등록해 주세요.",
           "budget": "오늘 AI 사용 한도를 다 썼어요 — 내일 다시 시도해 주세요.",
-          "network": "AI 제공자에 연결하지 못했어요 — 다시 시도해 주세요."
+          "network": "AI 제공자에 연결하지 못했어요 — 다시 시도해 주세요.",
+          "consent": "AI로 설명을 읽으려면 먼저 동의가 필요합니다.",
+          "unavailable": "지금 여기에서는 AI로 설명을 읽을 수 없습니다."
         }
       },
       "cadence": {
@@ -2444,8 +2446,6 @@
     "bmiEmptyTitle": "BMI를 보려면 키를 입력해 주세요",
     "bmiEmptyDescription": "BMI에는 키가 필요해요. 설정 → 계정에서 추가해 주세요.",
     "bmiEmptyAction": "계정 설정 열기",
-    "noProviderConfigured": "AI 제공자를 연결하면 여기에서 측정값 평가를 볼 수 있어요.",
-    "noProviderAction": "AI 설정 열기",
     "personalRecord": {
       "badge": "신기록",
       "tooltip": "개인 최고 기록: {date} {value}{unit}"
@@ -2569,10 +2569,6 @@
       "emptyDescription": "오늘 브리핑을 만들면 추이를 이야기로 읽어 줘요.",
       "emptyAction": "브리핑 생성",
       "loadingLabel": "오늘 브리핑을 정리하는 중",
-      "noProviderTitle": "연결된 AI 제공자가 없어요",
-      "noProviderDescription": "HealthLog를 로컬 모델(Ollama, LM Studio — 네트워크 밖으로 나가지 않아요)에 연결하거나 직접 쓰는 OpenAI·Anthropic 키를 넣으면, 데일리 브리핑이 내 측정값을 쉬운 말 요약으로 바꿔 줘요. 설정은 1분쯤 걸려요.",
-      "noProviderAction": "AI 설정 열기",
-      "staleNoProviderHint": "연결된 AI 제공자가 없어서 이 브리핑을 새로 고칠 수 없어요.",
       "refreshFailedHint": "브리핑을 새로 고치지 못해서 마지막 브리핑을 보여 줘요.",
       "retryAction": "다시 시도",
       "failedTitle": "브리핑을 만들지 못했어요",
@@ -2950,7 +2946,15 @@
       "interrupted": {
         "note": "이 답변은 끝나기 전에 중단됐어요.",
         "retry": "다시 물어보기"
-      }
+      },
+      "historyReadOnlyNote": "지금은 코치를 사용할 수 없습니다. 대화는 계속 읽고 삭제할 수 있습니다.",
+      "transcriptYou": "나",
+      "transcriptCoach": "코치",
+      "errorConsent": "코치가 답변하려면 AI 동의가 필요합니다. 설정의 AI에서 동의할 수 있습니다.",
+      "errorNotPermitted": "다른 사람이 공유한 기록 안에서는 코치를 사용할 수 없습니다.",
+      "errorUnavailable": "코치가 지금 설정을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+      "errorOperatorOff": "이 서버에서 AI가 꺼져 있어 코치가 답변할 수 없습니다.",
+      "errorCoachOff": "코치가 꺼져 있습니다. 설정의 모듈에서 다시 켤 수 있습니다."
     },
     "relativeJustNow": "방금",
     "relativeMinutesAgoOne": "{count}분 전",
@@ -4383,7 +4387,15 @@
         "night": "밤사이 안정 시 심박수가 높은 구간이 이어졌어요 — 긴장이 있었을 수 있어요."
       }
     },
-    "navEcg": "심전도"
+    "navEcg": "심전도",
+    "sectionLoadError": "이 섹션을 불러오지 못했습니다.",
+    "aiSetupHint": {
+      "title": "AI는 선택 사항입니다",
+      "body": "여기의 모든 기능은 AI 없이도 작동합니다. 일일 브리핑, 측정값에 대한 짧은 메모, 코치를 원하시면 AI 제공자를 연결할 수 있습니다.",
+      "settingsBody": "HealthLog는 AI 없이도 모든 기능이 작동합니다. 일일 브리핑, 측정값에 대한 짧은 메모, 코치를 원하시면 아래에서 제공자를 연결하세요.",
+      "action": "AI 설정",
+      "dismiss": "나중에"
+    }
   },
   "thresholds": {
     "defaultLabel": "기본값",
@@ -5831,12 +5843,30 @@
         "activeSince": "{date}에 동의했어요. AI 기능을 위해 건강 데이터가 설정한 제공자에게 전송될 수 있어요.",
         "withdrawn": "동의를 철회했어요. 건강 데이터를 AI 제공자에게 보내지 않고, AI 기능도 꺼진 상태로 유지돼요.",
         "withdraw": "동의 철회",
-        "confirmBody": "AI 기능이 바로 멈춰요. 이미 기록한 내용은 지워지지 않아요 — 내보내거나 삭제하려면 데이터 및 개인정보를 이용하세요.",
+        "confirmBody": "AI 기능이 즉시 중지되고 모델이 작성한 메모가 삭제됩니다: 상태 메모, 일일 브리핑, 모델이 작성한 기간 요약, 새 측정값 알림 문장, 운동 메모. 코치 대화, 코치가 기억한 내용, 계획, 문서 요약은 그대로 남으며 직접 읽거나 삭제할 수 있습니다.",
         "confirmWithdraw": "철회",
         "regrantHint": "다시 동의하면 AI 기능이 건강 데이터를 설정한 제공자에게 보낼 수 있어요.",
         "grant": "동의하기",
         "grantError": "동의를 저장하지 못했어요. 다시 시도해 주세요.",
-        "error": "철회를 저장하지 못했어요. 다시 시도해 주세요."
+        "error": "철회를 저장하지 못했어요. 다시 시도해 주세요.",
+        "documentReading": {
+          "title": "문서 읽기 동의",
+          "activeSince": "{date}에 동의함. 문서, 스캔한 검사 결과지, 약 설명이 읽기용으로 AI 서비스에 전송될 수 있습니다.",
+          "confirmBody": "문서, 스캔한 검사 결과지, 약 설명이 더 이상 읽기용으로 전송되지 않습니다. 이미 가지고 있는 것은 삭제되지 않습니다."
+        }
+      },
+      "operatorOff": {
+        "allTitle": "이 서버에서 AI가 꺼져 있습니다",
+        "allBody": "이 서버를 운영하는 사람이 AI를 껐습니다. HealthLog는 모든 데이터로 계속 작동하며, AI가 필요한 기능만 표시되지 않습니다.",
+        "someTitle": "이 서버에서 일부 AI 기능이 꺼져 있습니다",
+        "someBody": "이 서버를 운영하는 사람이 다음을 껐습니다: {switches}. 모든 데이터를 포함한 나머지는 평소처럼 작동합니다.",
+        "testRefused": "이 서버에서 AI가 꺼져 있어 테스트할 대상이 없습니다.",
+        "autoRead": "이 서버에서 AI 문서 읽기가 꺼져 있습니다."
+      },
+      "coachConversations": {
+        "title": "코치 대화",
+        "description": "대화를 열어 읽거나 삭제하세요.",
+        "more": "더 보기"
       }
     },
     "dashboard": {
@@ -8801,7 +8831,8 @@
       "extractFailed": "결과지를 읽지 못했어요. 더 선명한 사진으로 시도해 주세요.",
       "pdfNeedsAnthropic": "PDF 스캔에는 Claude 비전 제공자가 필요해요. 대신 사진을 올려 주세요.",
       "refTextLabel": "적힌 그대로의 범위",
-      "refTextPlaceholder": "예: 3.5 - 5.0"
+      "refTextPlaceholder": "예: 3.5 - 5.0",
+      "aiUnavailable": "지금 여기에서는 AI로 결과지를 스캔할 수 없습니다."
     },
     "loadMoreReadings": "측정값 더 보기",
     "documentsLink": "검사 결과지 문서",
@@ -9949,7 +9980,9 @@
       "errorNotIndexed": "문서를 먼저 읽은 뒤에 추출해 주세요.",
       "errorLocalOcrDisabled": "AI 설정에서 로컬 OCR을 먼저 켜 주세요.",
       "errorProvider": "이 작업에 쓸 AI 제공자가 설정돼 있지 않아요.",
-      "errorTextImageOnly": "로컬 OCR은 이미지만 읽어요 — 이 파일은 읽을 수 없어요."
+      "errorTextImageOnly": "로컬 OCR은 이미지만 읽어요 — 이 파일은 읽을 수 없어요.",
+      "errorConsent": "AI로 문서를 읽으려면 먼저 동의가 필요합니다.",
+      "errorUnavailable": "지금 여기에서는 AI로 문서를 읽을 수 없습니다."
     },
     "summary": {
       "summarise": "요약하기",
@@ -10027,6 +10060,11 @@
       "title": "이 문서에 대해 대화",
       "openAria": "이 문서에 대해 코치에게 묻기",
       "openButton": "코치에게 묻기"
+    },
+    "readingConsent": {
+      "body": "AI로 읽으면 이 내용이 이 서버 밖의 AI 서비스로 전송됩니다. HealthLog가 문서, 검사 결과지, 약 설명을 읽기용으로 보내도록 허용하시겠습니까?",
+      "grant": "읽기 허용",
+      "error": "동의를 저장하지 못했습니다. 다시 시도해 주세요."
     }
   },
   "selfDescription": {

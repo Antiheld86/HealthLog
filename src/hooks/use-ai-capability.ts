@@ -63,3 +63,48 @@ function useAiProviderStateInner(): AiProviderState {
   const { user } = useAuth();
   return user?.ai?.provider ?? NO_PROVIDER_STATE;
 }
+
+/**
+ * The server's answer for one capability, or `null` while there is none yet
+ * (`/me` loading, no signed-in account, no query client). For the few places
+ * that act on an unavailable capability rather than just hiding: a Coach page
+ * that sends its visitor elsewhere must not do so on the loading frame, when
+ * `useAiCapability` already reads unavailable.
+ */
+export function useAiCapabilityAnswer(
+  key: AiCapabilityKey,
+): AiCapabilityState | null {
+  const hasClient = useQueryClientMounted();
+  if (!hasClient) return null;
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  return useAiCapabilityAnswerInner(key);
+}
+
+function useAiCapabilityAnswerInner(
+  key: AiCapabilityKey,
+): AiCapabilityState | null {
+  const { user, isLoading } = useAuth();
+  if (isLoading || !user) return null;
+  return user.ai?.capabilities?.[key] ?? UNKNOWN;
+}
+
+/**
+ * Every capability at once, or `null` until `/me` has answered. For the one
+ * surface that explains the whole set (the operator notice in Settings → AI);
+ * a surface that shows or hides one feature reads `useAiCapability`.
+ */
+export function useAiCapabilityMap(): Partial<
+  Record<AiCapabilityKey, AiCapabilityState>
+> | null {
+  const hasClient = useQueryClientMounted();
+  if (!hasClient) return null;
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  return useAiCapabilityMapInner();
+}
+
+function useAiCapabilityMapInner(): Partial<
+  Record<AiCapabilityKey, AiCapabilityState>
+> | null {
+  const { user } = useAuth();
+  return user?.ai?.capabilities ?? null;
+}
