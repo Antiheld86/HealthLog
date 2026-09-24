@@ -10,8 +10,13 @@
  */
 import { prisma } from "@/lib/db";
 import type {
+  MeasurementSource,
+  MeasurementType,
+} from "@/generated/prisma/client";
+import type {
   DayAggregateRow,
   ReadDayAggregatesOptions,
+  SourceDayAggregateRow,
 } from "@/lib/measurements/day-aggregates";
 import { userDayKey } from "@/lib/tz/format";
 
@@ -70,4 +75,58 @@ export async function fakeReadDayAggregates(
     select: { measuredAt: true, value: true },
   })) ?? []) as Array<{ measuredAt: Date; value: number }>;
   return foldDayAggregates(rows, opts);
+}
+
+/**
+ * In-memory stand-in for `readSourceDayAggregates`: reads the mocked
+ * `measurement.findMany` rows and groups them per type, day, source and
+ * device with the SQL's rules.
+ */
+export async function fakeReadSourceDayAggregates(opts: {
+  userId: string;
+  types: readonly MeasurementType[];
+  since: Date;
+  timeZone: string;
+}): Promise<SourceDayAggregateRow[]> {
+  const rows = ((await prisma.measurement.findMany({
+    where: {
+      userId: opts.userId,
+      deletedAt: null,
+      type: { in: [...opts.types] },
+      measuredAt: { gte: opts.since },
+    },
+    orderBy: { measuredAt: "asc" },
+  })) ?? []) as Array<{
+    type: MeasurementType;
+    value: number;
+    measuredAt: Date;
+    source?: MeasurementSource | null;
+    deviceType?: string | null;
+  }>;
+  const groups = new Map<string, SourceDayAggregateRow>();
+  for (const r of rows) {
+    if (r.measuredAt.getTime() < opts.since.getTime()) continue;
+    if (!opts.types.includes(r.type)) continue;
+    const day = userDayKey(r.measuredAt, opts.timeZone);
+    const source = (r.source ?? "MANUAL") as MeasurementSource;
+    const deviceType = r.deviceType ?? null;
+    const key = `${r.type}|${day}|${source}|${deviceType}`;
+    const g = groups.get(key);
+    if (g) {
+      g.n += 1;
+      g.sum += r.value;
+      if (r.measuredAt < g.firstAt) g.firstAt = r.measuredAt;
+    } else {
+      groups.set(key, {
+        type: r.type,
+        day,
+        source,
+        deviceType,
+        n: 1,
+        sum: r.value,
+        firstAt: r.measuredAt,
+      });
+    }
+  }
+  return [...groups.values()];
 }

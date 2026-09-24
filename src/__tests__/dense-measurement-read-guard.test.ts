@@ -74,11 +74,9 @@ const ALLOWED: Record<string, string> = {
   "lib/jobs/step-consolidation-repair.ts::STEP_TYPE":
     "Repair job over one user's step rows for a bounded day range; runs once per repair, not per status refresh.",
   'lib/ai/coach/snapshot.ts::"BLOOD_GLUCOSE" as never':
-    "Clinical CGM metrics (time in range, GMI, CV) need individual readings; 30 days at a sensor's fixed rate (at most one a minute) stays below 45 000 rows.",
+    "Clinical CGM metrics (time in range, SD / CV, J-index, LBGI / HBGI, reading span) are functions of the individual readings, which a per-day aggregate cannot reproduce. 30 days at a sensor's fixed rate (at most one a minute) stays below 45 000 rows.",
   'lib/dashboard/snapshot.ts::"BLOOD_GLUCOSE"':
-    "Same 30-day clinical glucose panel as the coach snapshot, grouped by meal context.",
-  "lib/ai/coach/cycle-snapshot.ts::{ in: PHASE_CROSSTAB_METRIC_TYPES":
-    "Cycle-phase crosstab over 365 days. Its dense members (steps, CGM glucose) are the known remaining case; steps are drained to one row per day nightly, CGM is not. Listed so it cannot grow unseen.",
+    "Same 30-day clinical glucose panel as the coach snapshot (per-reading metrics), grouped by meal context.",
   "lib/analytics/score/reader.ts::{ in: types":
     "Health-score inputs: steps (drained to one row per day nightly), sleep, waist, weight, blood pressure, fasting glucose only.",
 };

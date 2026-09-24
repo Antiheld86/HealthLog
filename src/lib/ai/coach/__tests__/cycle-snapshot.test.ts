@@ -10,6 +10,14 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
+// The crosstab reads per-source day aggregates; the fake groups the mocked
+// `measurement.findMany` rows with the same rules.
+vi.mock("@/lib/measurements/day-aggregates", async () => ({
+  readSourceDayAggregates: (
+    await import("@/lib/measurements/__tests__/fake-day-aggregates")
+  ).fakeReadSourceDayAggregates,
+}));
+
 import { buildCycleSnapshotBlock } from "../cycle-snapshot";
 import { prisma } from "@/lib/db";
 
