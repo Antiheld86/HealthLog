@@ -52,6 +52,7 @@ import {
   visibleNavDestinations,
   visibleUtilityDestinations,
 } from "../nav-model";
+import { surfaceModule } from "@/lib/modules/surface";
 
 /** Everything enabled, so the module gate never masks the sharing gate. */
 const ALL_MODULES = Object.fromEntries(
@@ -314,7 +315,10 @@ describe("the utility tail under a switch", () => {
       expect(firstListed, record.recordKind).toBeDefined();
       // A module-gated landing could vanish from the shell when its module is
       // off, leaving the entry pointing at a section the list no longer shows.
-      expect(firstListed?.moduleGate, record.recordKind).toBeUndefined();
+      expect(
+        surfaceModule(`settings:${firstListed?.slug}`),
+        record.recordKind,
+      ).toBeUndefined();
       expect(hrefs(record)).toEqual([`/settings/${firstListed?.slug}`]);
     }
   });

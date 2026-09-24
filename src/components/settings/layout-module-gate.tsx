@@ -22,8 +22,8 @@ import type { ModuleKey } from "@/lib/modules/registry";
  * an ordinary client update. The redirect is a client-only effect, so it never
  * diverges the initial render and cannot trigger a React #418 mismatch.
  *
- * Groups with no `moduleGate` (dashboard / insights / vorsorge) pass
- * `moduleGate={undefined}` and always render.
+ * Groups the surface map gives no owner (dashboard / insights / vorsorge)
+ * pass `moduleGate={undefined}` and always render.
  */
 export function LayoutModuleGate({
   moduleGate,

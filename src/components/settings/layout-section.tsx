@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useMounted } from "@/hooks/use-mounted";
 import { useTranslations } from "@/lib/i18n/context";
 import { SettingsCard } from "./settings-card";
+import { isSurfaceVisible } from "@/lib/modules/surface";
 import { LAYOUT_GROUPS } from "./layout-groups";
 
 /**
@@ -21,7 +22,8 @@ import { LAYOUT_GROUPS } from "./layout-groups";
  * `layout` slug; this body renders only the row list.
  *
  * Per-module gating fails OPEN (`!== false`): a missing key reads as enabled so
- * a section never silently disappears. Groups with no `moduleGate` always
+ * a section never silently disappears. Groups with no owner in the surface
+ * map (`settings-layout:<id>`) always
  * render. The filter is gated on a post-mount flag (`useMounted()`) so SSR and
  * the first client paint ALWAYS emit the same fail-open list — the same
  * hydration-stability contract the shell nav uses, so the module filter can
@@ -35,7 +37,7 @@ export function LayoutSection() {
   const modules = user?.modules;
   const visibleGroups = LAYOUT_GROUPS.filter(
     (group) =>
-      !hydrated || !group.moduleGate || modules?.[group.moduleGate] !== false,
+      !hydrated || isSurfaceVisible(`settings-layout:${group.id}`, modules),
   );
 
   return (
