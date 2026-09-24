@@ -9034,6 +9034,11 @@
       "mmrv": "MPRV (morbillo, parotite, rosolia, varicella)",
       "hepa-hepb": "Epatite A e B",
       "hepa-typhoid": "Epatite A e febbre tifoide"
+    },
+    "renewal": {
+      "overdue": "Richiamo scaduto dal {date}",
+      "dueSoon": "Richiamo previsto il {date}",
+      "current": "Prossimo richiamo il {date}"
     }
   },
   "illness": {

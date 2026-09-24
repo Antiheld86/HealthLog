@@ -9034,6 +9034,11 @@
       "mmrv": "MMRV(홍역, 유행성이하선염, 풍진, 수두)",
       "hepa-hepb": "A형·B형간염",
       "hepa-typhoid": "A형간염·장티푸스"
+    },
+    "renewal": {
+      "overdue": "{date}부터 추가접종 기한 지남",
+      "dueSoon": "{date} 추가접종 예정",
+      "current": "다음 추가접종 {date}"
     }
   },
   "illness": {

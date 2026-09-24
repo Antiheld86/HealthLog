@@ -49,9 +49,11 @@ import {
   resolveSeriesFor,
 } from "@/lib/vaccinations/service";
 import { satisfyBoostersForDose } from "@/lib/vaccinations/satisfy-matching";
+import { resolveRenewals } from "@/lib/vaccinations/renewal";
+import { actingDomainVisibility } from "@/lib/sharing/acting-domains";
 
 export const GET = apiHandler(async (request: NextRequest) => {
-  const { user } = await requireRecordAuth("read", "profile");
+  const { user, grantId } = await requireRecordAuth("read", "profile");
 
   const params = new URL(request.url).searchParams;
   const parsed = vaccinationListQuerySchema.safeParse({
@@ -96,6 +98,31 @@ export const GET = apiHandler(async (request: NextRequest) => {
     resolveSeriesFor(prisma, user.id),
   ]);
 
+  // v1.39 (#1005) — the renewal state of each antigen, from the booster the
+  // person confirmed. That reminder lives in the measurements section, so a
+  // grant that opened only the health background gets null rather than a
+  // reminder it was never given.
+  const visible = await actingDomainVisibility(prisma, grantId);
+  const renewals = visible("measurements")
+    ? resolveRenewals(
+        await prisma.measurementReminder.findMany({
+          where: {
+            userId: user.id,
+            deletedAt: null,
+            vaccinationAntigen: { not: null },
+          },
+          select: {
+            id: true,
+            vaccinationAntigen: true,
+            nextDueAt: true,
+            enabled: true,
+          },
+        }),
+        new Date(),
+        await resolveOwnerTimezone(user.id),
+      )
+    : null;
+
   annotate({
     action: { name: "vaccination.record.list", entity_type: "vaccination" },
     meta: { count: rows.length, filtered: Boolean(query.antigenSlug) },
@@ -105,6 +132,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     vaccinations: rows.map((row) =>
       toVaccinationDTO(row, series.get(row.id) ?? []),
     ),
+    renewals,
   };
   return apiSuccess(body);
 });

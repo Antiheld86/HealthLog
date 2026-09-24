@@ -9034,6 +9034,11 @@
       "mmrv": "MMRV (odra, świnka, różyczka, ospa wietrzna)",
       "hepa-hepb": "WZW typu A i B",
       "hepa-typhoid": "WZW typu A i dur brzuszny"
+    },
+    "renewal": {
+      "overdue": "Dawka przypominająca zaległa od {date}",
+      "dueSoon": "Dawka przypominająca {date}",
+      "current": "Następna dawka przypominająca {date}"
     }
   },
   "illness": {

@@ -60594,8 +60594,17 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Vaccination"
+        renewals:
+          anyOf:
+            - type: array
+              items:
+                $ref: "#/components/schemas/VaccinationRenewal"
+            - type: "null"
+          description: Each antigen's renewal state, earliest due first. Null when the caller acts under a grant that does not
+            cover the measurements section the booster reminders live in.
       required:
         - vaccinations
+        - renewals
       additionalProperties: false
       description: The caller's immunization history, newest dose first, with every entry's series already resolved over the
         whole live set — never over the filtered page, which would report the oldest dose in a window as the first ever
@@ -60831,6 +60840,37 @@ components:
         grant does not cover the document vault: a dose lives in the health background but points into the vault, and a
         page's filename is itself the sensitive part. The link is still listed — the caller may know the dose was
         transcribed from a page — and `redacted` tells a withheld name apart from a page that simply has no date."
+    VaccinationRenewal:
+      type: object
+      properties:
+        antigen:
+          type: string
+        reminderId:
+          type: string
+        dueAt:
+          type: string
+        daysUntil:
+          type: integer
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+        state:
+          type: string
+          enum:
+            - current
+            - dueSoon
+            - overdue
+      required:
+        - antigen
+        - reminderId
+        - dueAt
+        - daysUntil
+        - state
+      additionalProperties: false
+      description: "One antigen's renewal state, read from the booster reminder the person confirmed for it (`dueAt` is that
+        reminder's next due instant). `daysUntil` counts calendar days on the person's own clock and is negative once
+        the date has passed. `state` is `overdue` once it has passed, `dueSoon` within 30 days, `current` otherwise.
+        Render from `state`; do not recompute it. Nothing here is derived from age, history or the catalogue: an antigen
+        without a confirmed booster has no entry."
     CreateVaccinationEnvelope:
       type: object
       properties:

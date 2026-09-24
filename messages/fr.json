@@ -9034,6 +9034,11 @@
       "mmrv": "RORV (rougeole, oreillons, rubéole, varicelle)",
       "hepa-hepb": "Hépatite A et B",
       "hepa-typhoid": "Hépatite A et typhoïde"
+    },
+    "renewal": {
+      "overdue": "Rappel en retard depuis le {date}",
+      "dueSoon": "Rappel prévu le {date}",
+      "current": "Prochain rappel le {date}"
     }
   },
   "illness": {

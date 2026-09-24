@@ -9034,6 +9034,11 @@
       "mmrv": "Tetravírica (sarampión, paperas, rubéola, varicela)",
       "hepa-hepb": "Hepatitis A y B",
       "hepa-typhoid": "Hepatitis A y fiebre tifoidea"
+    },
+    "renewal": {
+      "overdue": "Refuerzo pendiente desde el {date}",
+      "dueSoon": "Refuerzo previsto el {date}",
+      "current": "Próximo refuerzo el {date}"
     }
   },
   "illness": {

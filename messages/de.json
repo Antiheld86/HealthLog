@@ -9034,6 +9034,11 @@
       "mmrv": "MMRV (Masern, Mumps, Röteln, Varizellen)",
       "hepa-hepb": "Hepatitis A und B",
       "hepa-typhoid": "Hepatitis A und Typhus"
+    },
+    "renewal": {
+      "overdue": "Auffrischung fällig seit {date}",
+      "dueSoon": "Auffrischung fällig am {date}",
+      "current": "Nächste Auffrischung {date}"
     }
   },
   "illness": {

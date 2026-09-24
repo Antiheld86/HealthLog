@@ -9034,6 +9034,11 @@
       "mmrv": "MMRV (measles, mumps, rubella, varicella)",
       "hepa-hepb": "Hepatitis A and B",
       "hepa-typhoid": "Hepatitis A and typhoid"
+    },
+    "renewal": {
+      "overdue": "Booster overdue since {date}",
+      "dueSoon": "Booster due {date}",
+      "current": "Next booster {date}"
     }
   },
   "illness": {
