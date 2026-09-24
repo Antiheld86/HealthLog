@@ -22,6 +22,7 @@ import { isTimeFormatPreference, storeTimeFormat } from "@/lib/time-format";
 import { isDateFormatPreference, storeDateFormat } from "@/lib/date-format";
 import { storeTimezone } from "@/lib/timezone-mirror";
 import type { ModuleKey } from "@/lib/modules/registry";
+import type { AiCapabilities } from "@/lib/ai/capabilities/types";
 import type { ModuleAccessState } from "@/lib/sharing/module-disclosure";
 import type { OnboardingStateDto } from "@/lib/onboarding/needs";
 import type { TourProgress } from "@/lib/onboarding/tour-progress";
@@ -228,6 +229,15 @@ export interface AuthUser {
    */
   moduleAccess?: Partial<Record<ModuleKey, ModuleAccessState>>;
   /**
+   * v1.39 — the AI capabilities for the record this browser is inside, and
+   * the account's provider state, resolved on the server. Read it through
+   * `useAiCapability`, never directly: the hook is where "not loaded yet" and
+   * "not published by this server" become "unavailable", so nothing fires a
+   * model request or flashes AI chrome before the answer is known. `null`
+   * against a payload that does not carry a well-formed block.
+   */
+  ai?: AiCapabilities | null;
+  /**
    * v1.36.0 — account sharing, resolved server-side. `accounts` is the
    * switcher's menu, `active` is the record this browser is inside (null when
    * it is in its own), `canSwitch` and per-entry `canWrite` are booleans to
@@ -432,6 +442,18 @@ export async function fetchMe(): Promise<AuthUser> {
       data.moduleAccess && typeof data.moduleAccess === "object"
         ? data.moduleAccess
         : {},
+    // Coerced to null unless both halves are objects; the capability hook
+    // reads null as "unavailable", which is the safe answer for a block the
+    // server did not send.
+    ai:
+      data.ai &&
+      typeof data.ai === "object" &&
+      data.ai.capabilities &&
+      typeof data.ai.capabilities === "object" &&
+      data.ai.provider &&
+      typeof data.ai.provider === "object"
+        ? data.ai
+        : null,
     accountAccess,
     accountAccessStatus,
   };

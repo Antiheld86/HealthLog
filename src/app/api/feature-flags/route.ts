@@ -1,38 +1,21 @@
 /**
- * `GET /api/feature-flags` — operator-side assistant flag matrix.
+ * `GET /api/feature-flags` — the operator's assistant switches. DEPRECATED.
  *
- * Projects `AppSettings.assistant*Enabled` over HTTP so every client
- * (web React tree + iOS native) reads the same authoritative shape.
+ * The answer a client needs is not the switch set but what the switches, the
+ * record's modules, the provider-work authority, the provider and consent add
+ * up to, per capability. That is `ai` on `GET /api/auth/me`, and it is what
+ * every client reads from this release on. This route stays a projection of
+ * the operator switches alone, for clients that have not moved yet, and is
+ * removed in the first release after the native build that reads `ai` ships:
  *
- * Response envelope:
+ *   { "data": { "assistant": { "enabled", "coach", "briefing",
+ *                              "insightStatus", "documentAi" } } }
  *
- *   {
- *     "data": {
- *       "assistant": {
- *         "enabled": true,
- *         "coach": true,
- *         "briefing": true,
- *         "insightStatus": true,
- *         "correlations": true
- *       }
- *     },
- *     "error": null
- *   }
+ * The master is applied (every sub-switch reads false when it is off), and a
+ * switch read that fails answers every switch off. The response carries
+ * `Deprecation: true` and a `Link` to its successor.
  *
- * - `requireActorAuth()` — any logged-in user, including one acting on
- *   somebody else's record. Per-request flag fetches from the iOS native
- *   client always arrive after auth, so the gate matches the rest of the
- *   read-only profile surface; the mode is argued at the call site.
- * - Master kills every sub-flag in the resolver before the shape
- *   leaves the handler, so callers never have to compose
- *   `master && sub`.
- * - `Cache-Control: private, max-age=60` — operator toggles flip
- *   rarely; a 60-second per-session cache keeps the cost off the
- *   hot /insights mount path while still propagating an admin
- *   change within a minute.
- *
- * Locked per `.planning/RESPONSE-TO-IOS-TEAM-2026-05-16.md` §3 R5
- * and `.planning/research/v15-assistant-optional.md` Part D.
+ * `Cache-Control: private, max-age=60`: switches flip rarely.
  */
 import type { NextRequest } from "next/server";
 
@@ -53,11 +36,16 @@ export const GET = apiHandler(async (_request: NextRequest) => {
   // about the DEPLOYMENT, which for this purpose is the caller's side of the
   // request, not the record's.
   await requireActorAuth();
-  annotate({ action: { name: "feature-flags.read" } });
+  annotate({
+    action: { name: "feature-flags.read" },
+    meta: { deprecated: true },
+  });
 
   const assistant = await getAssistantFlags();
 
   const response = apiSuccess({ assistant });
   response.headers.set("Cache-Control", "private, max-age=60");
+  response.headers.set("Deprecation", "true");
+  response.headers.set("Link", '</api/auth/me>; rel="successor-version"');
   return response;
 });

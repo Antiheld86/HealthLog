@@ -70,6 +70,7 @@ import {
   sectionsOpen,
 } from "@/lib/sharing/module-disclosure";
 import { recordSessionForPayload } from "@/lib/sharing/record-session-fence";
+import { loadAiCapabilities } from "@/lib/ai/capabilities/load";
 
 export const dynamic = "force-dynamic";
 
@@ -115,12 +116,32 @@ export const GET = apiHandler(async () => {
   // no switch at all, and the reason the own-record payload is untouched.
   const sections = accountAccess.active?.sections ?? null;
 
+  // Who may put a model to work on that record, stated from the switch this
+  // payload already resolved rather than read back off the request: this is an
+  // actor surface, so the request carries no record authority of its own.
+  // One's own record is the owner's; a managed profile is its guardian's,
+  // limited to the operator's key; anybody else's is a delegate's, and a
+  // delegate starts no AI work on a record that is not theirs.
+  const recordKind = accountAccess.active?.recordKind ?? "self";
+  const aiAuthority = {
+    origin:
+      recordKind === "self"
+        ? ("owner" as const)
+        : recordKind === "managed"
+          ? ("guardian" as const)
+          : ("delegate" as const),
+    recordUserId: recordId,
+    actorUserId: user.id,
+    grantId: null,
+  };
+
   const [
     record,
     cycleProfile,
     resolvedModules,
     moduleAvailability,
     onboardingRow,
+    ai,
   ] = await Promise.all([
     // The actor's own row is already in hand; a switched session needs the
     // record's `gender`, which is the column the cycle gate derives from.
@@ -171,6 +192,19 @@ export const GET = apiHandler(async () => {
     // keyed by record already, and a delegate seeing the record's own setup
     // state is what makes the dashboard they are looking at coherent.
     loadOnboardingRecordRow(prisma, recordId),
+    // v1.39 — the AI capabilities for the RECORD, resolved on the server from
+    // every layer that can say no: the operator's switches, the record's
+    // modules (masked to the grant exactly like `moduleAccess`), the
+    // provider-work authority, provider presence and consent. The module map
+    // and the operator availability it needs are the memoised reads above, so
+    // the extra cost is the provider presence (two point reads) and one read
+    // of the active consent kinds.
+    loadAiCapabilities({
+      recordId,
+      authority: aiAuthority,
+      sections,
+      recordKind,
+    }),
   ]);
 
   // The masking step, and the one place the record scoping is narrowed rather
@@ -350,6 +384,14 @@ export const GET = apiHandler(async () => {
     // adds a reason without moving a gate; empty states read it to say the
     // honest thing rather than offering a switch the reader cannot reach.
     moduleAccess,
+    // v1.39 — which AI capabilities this record has, and why not when it has
+    // none: `capabilities` maps every capability key to `{ available, reason,
+    // onDeviceAllowed }` (reason is the outermost layer that said no), and
+    // `provider` says whether a provider is configured, who manages it, and
+    // whether the person in front of the screen may set one up. Resolved for
+    // the RECORD and masked to the grant, like `modules`. Clients render from
+    // it and never recompute it; data never depends on it.
+    ai,
     // v1.36.0 — account sharing, resolved. `accounts` is the switcher's menu,
     // `active` is the record this session is inside (null when it is in its
     // own), `canSwitch` and per-entry `canWrite` are the booleans the UI binds

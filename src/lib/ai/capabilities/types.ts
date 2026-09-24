@@ -327,8 +327,3 @@ export const AI_RECORD_NOT_PERMITTED_ERROR_CODE = "ai.record.notPermitted";
 export const AI_PROVIDER_NONE_ERROR_CODE = "ai.provider.none";
 /** The capability's inputs could not be loaded; the answer failed closed. */
 export const AI_UNAVAILABLE_ERROR_CODE = "ai.unavailable";
-
-/** Is this string a capability key? */
-export function isAiCapabilityKey(value: string): value is AiCapabilityKey {
-  return (AI_CAPABILITY_KEYS as readonly string[]).includes(value);
-}

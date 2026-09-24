@@ -145,4 +145,27 @@ describe("GET /api/feature-flags", () => {
     const res = await GET(req());
     expect(res.headers.get("Cache-Control")).toBe("private, max-age=60");
   });
+
+  it("announces itself deprecated and names its successor", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    FIND.mockResolvedValue(null);
+    const res = await GET(req());
+    expect(res.headers.get("Deprecation")).toBe("true");
+    expect(res.headers.get("Link")).toBe(
+      '</api/auth/me>; rel="successor-version"',
+    );
+  });
+
+  it("answers every switch off when the switches cannot be read", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    FIND.mockRejectedValue(new Error("db down"));
+    const res = await GET(req());
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { assistant: Record<string, boolean> };
+    };
+    expect(Object.values(body.data.assistant).every((v) => v === false)).toBe(
+      true,
+    );
+  });
 });
