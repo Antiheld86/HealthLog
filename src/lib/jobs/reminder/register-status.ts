@@ -539,6 +539,7 @@ export async function registerStatusQueues(
               persisted: summary.persisted,
               skipped_opted_out: summary.skippedOptedOut,
               skipped_no_provider: summary.skippedNoProvider,
+              skipped_unavailable: summary.skippedUnavailable,
               skipped_recent_nudge: summary.skippedRecentNudge,
               skipped_recent_engagement: summary.skippedRecentEngagement,
               skipped_no_trigger: summary.skippedNoTrigger,

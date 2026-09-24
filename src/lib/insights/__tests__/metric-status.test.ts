@@ -11,7 +11,11 @@ vi.mock("@/lib/measurements/day-aggregates", async () => ({
 vi.mock("@/lib/db", () => ({
   prisma: {
     user: { findUnique: vi.fn() },
-    auditLog: { findFirst: vi.fn(), create: vi.fn() },
+    insightStatusCache: {
+      findUnique: vi.fn(),
+      upsert: vi.fn(),
+      updateMany: vi.fn(),
+    },
     measurement: { findMany: vi.fn(), count: vi.fn() },
     measurementRollup: { findMany: vi.fn() },
   },
@@ -19,8 +23,21 @@ vi.mock("@/lib/db", () => ({
 
 vi.mock("@/lib/insights/status-provider", () => ({
   runStatusCompletion: vi.fn(),
-  // Consent never blocks in these fixtures — the gate has its own tests.
-  statusConsentBlocksGeneration: vi.fn(async () => false),
+}));
+
+vi.mock(
+  "@/lib/ai/coach/bytes-codec",
+  async () => (await import("./status-note-fixtures")).fakeBytesCodec,
+);
+
+// statusText is available in these fixtures — the capability read has its
+// own tests in status-cache.test.ts.
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForRecord: async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
 }));
 
 vi.mock("@/lib/insights/memory", () => ({
@@ -60,6 +77,7 @@ import {
   metricStatusScope,
   METRIC_STATUS_IDS,
 } from "../metric-status-registry";
+import { writtenNotes } from "./status-note-fixtures";
 
 const dayMs = 24 * 60 * 60 * 1000;
 
@@ -86,6 +104,11 @@ function stubCompletion(
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(null);
+  vi.mocked(prisma.insightStatusCache.upsert).mockResolvedValue({} as never);
+  vi.mocked(prisma.insightStatusCache.updateMany).mockResolvedValue(
+    {} as never,
+  );
   vi.mocked(prisma.measurementRollup.findMany).mockResolvedValue([] as never);
   // resetAllMocks clears the module-mock default impls too — restore the
   // benign defaults so the relations fetch and the previous-context format
@@ -98,13 +121,9 @@ beforeEach(() => {
 
 describe("generateMetricStatus — SLEEP_DURATION night reconstruction (iOS E2)", () => {
   it("feeds the snapshot the per-night time-asleep total, not a single stage", async () => {
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null as never);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       dateOfBirth: null,
       gender: null,
-    } as never);
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: new Date("2026-06-04T07:00:00.000Z"),
     } as never);
 
     // One overnight session of granular stages, each row ONE stage (minutes).
@@ -169,13 +188,9 @@ describe("generateMetricStatus — SLEEP_DURATION night reconstruction (iOS E2)"
     // granular stage + IN_BED + AWAKE into one day bucket (~1490 min ≈ 24.8 h).
     // Post-fix the graded series is built from the deduped per-night points, so
     // every recent bucket mean is the night total (480 min = 8 h).
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null as never);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       dateOfBirth: null,
       gender: null,
-    } as never);
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: new Date(),
     } as never);
 
     // A recent night (last 24 h) so it lands in `graded.recent`.
@@ -337,7 +352,6 @@ describe("archetype prompt templates", () => {
 
 describe("generateMetricStatus — empty-data guard", () => {
   it("returns insufficient WITHOUT calling the provider when the metric has no data", async () => {
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.measurement.count).mockResolvedValue(0 as never);
 
     const result = await generateMetricStatus({
@@ -366,15 +380,11 @@ describe("generateMetricStatus — generation path", () => {
       });
     }
 
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.measurement.count).mockResolvedValue(400 as never);
     vi.mocked(prisma.measurement.findMany).mockResolvedValue(records as never);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       dateOfBirth: null,
       gender: null,
-    } as never);
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: now,
     } as never);
 
     const captured = { systemPrompt: null, userPrompt: null } as {
@@ -404,12 +414,9 @@ describe("generateMetricStatus — generation path", () => {
     expect(snapshot.metric.unit).toBe("bpm");
 
     // Persisted under the generic scope cache action.
-    const createCall = vi.mocked(prisma.auditLog.create).mock.calls[0][0] as {
-      data: { action: string; details: string };
-    };
-    expect(createCall.data.action).toBe(
-      "insights.metric:RESTING_HEART_RATE-status.en",
-    );
+    const [note] = writtenNotes(prisma.insightStatusCache.upsert);
+    expect(note.metric).toBe("metric:RESTING_HEART_RATE");
+    expect(note.locale).toBe("en");
 
     // v1.12.1 — the diversity context (variety lead + explicit data strength)
     // reaches the user prompt, and the relations fetch is keyed by this
@@ -432,15 +439,11 @@ describe("generateMetricStatus — generation path", () => {
         measuredAt: new Date(now.getTime() - day * dayMs),
       });
     }
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.measurement.count).mockResolvedValue(60 as never);
     vi.mocked(prisma.measurement.findMany).mockResolvedValue(records as never);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       dateOfBirth: null,
       gender: null,
-    } as never);
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: now,
     } as never);
     vi.mocked(getRelevantCorrelationsForMetric).mockResolvedValueOnce([
       {
@@ -472,7 +475,6 @@ describe("generateMetricStatus — generation path", () => {
   });
 
   it("strips chart tokens from the persisted text", async () => {
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.measurement.count).mockResolvedValue(3 as never);
     vi.mocked(prisma.measurement.findMany).mockResolvedValue([
       { value: 58, measuredAt: new Date() },
@@ -480,9 +482,6 @@ describe("generateMetricStatus — generation path", () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       dateOfBirth: null,
       gender: null,
-    } as never);
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: new Date(),
     } as never);
 
     stubCompletion(

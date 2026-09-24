@@ -21,6 +21,7 @@ import { readDashboardSnapshotCached } from "@/lib/dashboard/snapshot-read";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 import type { Locale } from "@/lib/i18n/config";
 import { decryptFromBytes } from "@/lib/ai/coach/bytes-codec";
+import { aiCapabilityForRecord } from "@/lib/ai/capabilities/gate";
 import { userDayKey } from "@/lib/tz/format";
 import { getUserTodayBounds } from "@/lib/tz/local-day";
 import { cachedSwr, caches, type ServerCache } from "@/lib/cache/server-cache";
@@ -305,13 +306,16 @@ function toCoachPlanCandidate(row: CoachPlanRow): DailyDigestCoachPlan {
  * marker itself — which is what actually drives the "just in" chip — survives
  * a lost sentence intact. Same discipline as `toCoachPlanCandidate` above.
  */
-function toDigestArrival(row: {
-  kind: string;
-  occurredAt: Date;
-  arrivedAt: Date;
-  lineEncrypted: Uint8Array | null;
-  generatedAt: Date | null;
-}): DailyDigestArrival | null {
+function toDigestArrival(
+  row: {
+    kind: string;
+    occurredAt: Date;
+    arrivedAt: Date;
+    lineEncrypted: Uint8Array | null;
+    generatedAt: Date | null;
+  },
+  linesServable: boolean,
+): DailyDigestArrival | null {
   // A kind this build does not know about (a row written by a newer version)
   // is dropped rather than widened — the DTO's kind union is closed.
   if (!isArrivalKind(row.kind)) return null;
@@ -319,7 +323,9 @@ function toDigestArrival(row: {
   let line: string | null = null;
   // The ciphertext rides only once the generation actually COMMITTED. A row
   // mid-generation carries no `generatedAt`, and its line must not surface.
-  if (row.generatedAt !== null && row.lineEncrypted !== null) {
+  // A model-written line is never served while `reactionLines` is
+  // unavailable for the record, whatever the reason; the marker still is.
+  if (linesServable && row.generatedAt !== null && row.lineEncrypted !== null) {
     try {
       line = decryptFromBytes(row.lineEncrypted);
     } catch {
@@ -366,6 +372,7 @@ export async function loadDailyDigest(
   );
 
   const [
+    linesServable,
     { body: snapshot, locale },
     modules,
     syncRows,
@@ -375,6 +382,9 @@ export async function loadDailyDigest(
     arrivalRows,
     nextVisitRow,
   ] = await Promise.all([
+    aiCapabilityForRecord(user.id, "reactionLines").then(
+      (capability) => capability.available,
+    ),
     readDashboardSnapshotCached(user, undefined, { locale: options.locale }),
     resolveModuleMap(user.id),
     prisma.integrationStatus.findMany({
@@ -637,7 +647,7 @@ export async function loadDailyDigest(
       todayLocalDate,
       dismissedItemKeys,
       arrivals: arrivalRows
-        .map(toDigestArrival)
+        .map((row) => toDigestArrival(row, linesServable))
         .filter((a): a is DailyDigestArrival => a !== null),
     },
     t,

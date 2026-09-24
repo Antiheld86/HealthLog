@@ -1,13 +1,18 @@
-import { resolveProvider, resolveProviderChain } from "@/lib/ai/provider";
+import {
+  probeProviderPresence,
+  resolveProvider,
+  resolveProviderChain,
+} from "@/lib/ai/provider";
+import { aiCapabilityForRecord } from "@/lib/ai/capabilities/gate";
+import type {
+  AiCapabilityKey,
+  AiUnavailableReason,
+} from "@/lib/ai/capabilities/types";
 import {
   runRawCompletionWithFallback,
   type ProviderChainResolved,
 } from "@/lib/ai/provider-runner";
-import {
-  chainRequiresServerManagedConsent,
-  hasActiveConsentForSurface,
-  type ConsentSurface,
-} from "@/lib/ai/consent-guard";
+import { aiEgressRefusal } from "@/lib/ai/capabilities/egress";
 import { annotate } from "@/lib/logging/context";
 import {
   buildDateKey,
@@ -42,7 +47,12 @@ import { resolveEffectiveTimeoutMs } from "@/lib/ai/effective-timeout";
  */
 
 export type StatusProviderResult =
-  | { kind: "none" }
+  /**
+   * Nothing was sent: no provider, or the capability is unavailable for this
+   * record (operator switch, opt-out, module, consent, …). Callers serve the
+   * deterministic line and persist nothing; `reason` says which layer said no.
+   */
+  | { kind: "none"; reason: AiUnavailableReason }
   | { kind: "timeout" }
   | { kind: "error" }
   | {
@@ -74,15 +84,14 @@ interface RunStatusCompletionArgs {
    */
   responseFormat?: "json" | "text";
   /**
-   * v1.12.1 — which AI surface this generation serves, for the consent gate.
-   * `insights` for the per-metric status cards + period narrative; `coach`
-   * for the off-budget Coach memory workers (rolling summary + fact
-   * extraction). When the resolved chain would egress via the operator's
-   * server-managed key and no active receipt of the matching kind exists,
-   * the run short-circuits to `{ kind: "none" }` (the no-key fallback) so no
-   * PHI leaves the server. BYOK / local / ChatGPT-OAuth chains are ungated.
+   * The AI capability this generation serves (`statusText`, `periodNarrative`,
+   * `workoutInsights`, `coach`, …). Required: the chokepoint re-checks it
+   * immediately before anything leaves the machine, so a job enqueued before
+   * an operator flipped a switch, or before the person withdrew consent or
+   * turned AI analysis off, still stops here. The capability also names the
+   * consent kinds an operator-held chain entry needs.
    */
-  consentSurface: ConsentSurface;
+  capability: AiCapabilityKey;
 }
 
 /**
@@ -103,42 +112,14 @@ async function resolveStatusChain(
 }
 
 /**
- * Cheap provider-availability probe for the read-only status path.
- *
- * v1.8.3 — when a status route runs in read-only mode (serve cache, never
- * block on the LLM) it still has to tell the difference between "no
- * provider — show the no-key fallback" and "provider configured but the
- * assessment isn't warm yet — show preparing + enqueue a generation". This
- * resolves the same chain `runStatusCompletion` would, but does NOT run a
- * completion, so the navigation request never awaits an LLM round-trip.
+ * Whether any configured provider could serve text for `userId`: the one
+ * presence probe (`probeProviderPresence`). No client construction, no token
+ * refresh, no network.
  */
 export async function hasUsableStatusProvider(
   userId: string,
 ): Promise<boolean> {
-  return (await resolveStatusChain(userId)) !== null;
-}
-
-/**
- * v1.16.8 — true when a status generation for `userId` would be blocked
- * by the server-managed consent gate (the same check `runStatusCompletion`
- * applies before egress). The content-hash gate
- * (`refreshUnchangedStatusInsight`) consults this BEFORE re-stamping a
- * cached assessment as current: after a consent revocation the unchanged-
- * data refresh must fall through to the generator, whose own gate then
- * serves the no-key fallback instead of presenting old AI text as fresh.
- * `false` when no provider is configured at all — that path already
- * resolves to the fallback via `{ kind: "none" }`.
- */
-export async function statusConsentBlocksGeneration(
-  userId: string,
-  surface: ConsentSurface,
-): Promise<boolean> {
-  const chain = await resolveStatusChain(userId);
-  if (chain === null) return false;
-  return (
-    chainRequiresServerManagedConsent(chain) &&
-    !(await hasActiveConsentForSurface(userId, surface))
-  );
+  return probeProviderPresence(userId, "text");
 }
 
 /**
@@ -154,27 +135,46 @@ export async function runStatusCompletion(
 ): Promise<StatusProviderResult> {
   const { userId, cacheAction, systemPrompt, userPrompt } = args;
 
-  const chain = await resolveStatusChain(userId);
-  if (chain === null) {
-    return { kind: "none" };
+  // The capability, re-checked at the wire. Every caller resolved it earlier
+  // (a worker before building its snapshot, a route before enqueueing), but
+  // switches, opt-outs and consent can change between the enqueue and here.
+  const capability = await aiCapabilityForRecord(userId, args.capability);
+  if (!capability.available) {
+    const reason = capability.reason ?? "check_failed";
+    annotate({
+      action: { name: "insights.status.capability_unavailable" },
+      meta: { cacheAction, capability: args.capability, reason },
+    });
+    return { kind: "none", reason };
   }
 
-  // v1.12.1 — consent gate before server-managed external egress. A chain
-  // that could egress via the operator's global key requires an active
-  // receipt of the surface's mapped kind (or master `ai_full`). Without one,
-  // surface the no-key fallback (`none`) rather than egress the snapshot —
-  // identical to a missing provider from the caller's perspective, so no
-  // generator branch needs to change. BYOK / local / ChatGPT-OAuth chains
-  // never trip this.
-  if (
-    chainRequiresServerManagedConsent(chain) &&
-    !(await hasActiveConsentForSurface(userId, args.consentSurface))
-  ) {
+  const chain = await resolveStatusChain(userId);
+  if (chain === null) {
+    return { kind: "none", reason: "no_provider" };
+  }
+
+  // The wire re-check for exactly this chain (`aiEgressRefusal`, the one
+  // helper every chokepoint uses): the capability again, and whether sending
+  // to these providers needs a consent receipt under the capability's rule
+  // (the operator's key or the shared central Codex does; a person's own key
+  // or a local model does not). Fails closed like the rest: a chain that
+  // COULD cascade to an operator-held entry needs the receipt.
+  const refusal = await aiEgressRefusal(
+    args.capability,
+    userId,
+    chain.map((entry) => entry.providerType),
+  );
+  if (refusal) {
     annotate({
-      action: { name: "insights.status.consent_required" },
-      meta: { cacheAction, surface: args.consentSurface },
+      action: { name: "insights.status.capability_unavailable" },
+      meta: {
+        cacheAction,
+        capability: args.capability,
+        reason: refusal.reason,
+        at: "wire",
+      },
     });
-    return { kind: "none" };
+    return { kind: "none", reason: refusal.reason };
   }
 
   // Honour the per-user response-timeout setting the operator dials in for a

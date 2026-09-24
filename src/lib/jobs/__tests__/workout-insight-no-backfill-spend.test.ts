@@ -23,6 +23,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/logging/context", () => ({ annotate: vi.fn() }));
 vi.mock("@/lib/jobs/boss-instance", () => ({ getGlobalBoss: vi.fn() }));
 vi.mock("@/lib/modules/gate", () => ({ resolveModuleMap: vi.fn() }));
+// The spine's provider-free prefilter (`aiWorkNotRuledOut`) runs for real; only
+// its operator-switch read is an edge.
+vi.mock("@/lib/feature-flags", () => ({ loadAssistantSwitches: vi.fn() }));
 vi.mock("@/lib/tz/resolver", () => ({ resolveUserTimezone: vi.fn() }));
 vi.mock("@/lib/cache/invalidate", () => ({
   invalidateUserDashboardSnapshot: vi.fn(),
@@ -47,6 +50,7 @@ import { runDataArrival } from "../data-arrival";
 import { enqueueWorkoutInsight } from "@/lib/jobs/workout-insight-generate-shared";
 import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { resolveModuleMap } from "@/lib/modules/gate";
+import { loadAssistantSwitches } from "@/lib/feature-flags";
 import { resolveUserTimezone } from "@/lib/tz/resolver";
 import type { DataArrival } from "@/lib/arrivals/types";
 
@@ -80,6 +84,13 @@ beforeEach(() => {
     workouts: true,
     insights: true,
   } as never);
+  vi.mocked(loadAssistantSwitches).mockResolvedValue({
+    enabled: true,
+    coach: true,
+    briefing: true,
+    insightStatus: true,
+    documentAi: true,
+  });
   vi.mocked(resolveUserTimezone).mockResolvedValue(TZ);
 });
 

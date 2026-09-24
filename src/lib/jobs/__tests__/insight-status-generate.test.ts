@@ -41,6 +41,17 @@ vi.mock("@/lib/insights/mood-status", () => ({
 vi.mock("@/lib/insights/medication-compliance-status", () => ({
   generateMedicationComplianceStatusForUser: vi.fn(),
 }));
+// The job resolves the `statusText` capability before any generator runs.
+const aiCapabilityForJob = vi.fn();
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForJob: (...a: unknown[]) => aiCapabilityForJob(...a),
+  aiCapabilityForRecord: vi.fn(),
+}));
+const annotate = vi.fn();
+vi.mock("@/lib/logging/context", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/logging/context")>()),
+  annotate: (...a: unknown[]) => annotate(...a),
+}));
 
 import {
   runInsightStatusGenerate,
@@ -51,7 +62,31 @@ import {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  aiCapabilityForJob.mockResolvedValue({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  });
 });
+
+const OWNER_AUTHORITY = {
+  origin: "owner" as const,
+  recordUserId: "u1",
+  actorUserId: "u1",
+  grantId: null,
+};
+
+function allGenerators() {
+  return {
+    general: vi.fn(),
+    "blood-pressure": vi.fn(),
+    weight: vi.fn(),
+    pulse: vi.fn(),
+    bmi: vi.fn(),
+    mood: vi.fn(),
+    "medication-compliance": vi.fn(),
+  };
+}
 
 describe("runInsightStatusGenerate", () => {
   it("forces the matching generator with the payload locale", async () => {
@@ -82,7 +117,36 @@ describe("runInsightStatusGenerate", () => {
     expect(weight).toHaveBeenCalledWith("u1", { locale: "en", force: true });
     // No other generator ran.
     expect(generators.pulse).not.toHaveBeenCalled();
+    expect(aiCapabilityForJob).toHaveBeenCalledWith("u1", "statusText");
   });
+
+  it.each(["user_disabled", "no_provider", "consent_required"] as const)(
+    "skips before any generator runs when statusText is unavailable (%s)",
+    async (reason) => {
+      aiCapabilityForJob.mockResolvedValue({
+        available: false,
+        reason,
+        onDeviceAllowed: false,
+      });
+      const generators = allGenerators();
+      await runInsightStatusGenerate(
+        {
+          userId: "u1",
+          metric: "weight",
+          locale: "en",
+          authority: OWNER_AUTHORITY,
+        },
+        generators,
+      );
+      for (const generator of Object.values(generators)) {
+        expect(generator).not.toHaveBeenCalled();
+      }
+      expect(annotate).toHaveBeenCalledWith({
+        action: { name: "insights.status.generate.skipped" },
+        meta: { metric: "weight", reason },
+      });
+    },
+  );
 
   it("skips (does not throw) an unknown metric", async () => {
     await expect(

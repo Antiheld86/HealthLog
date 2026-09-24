@@ -582,6 +582,8 @@ export const DERIVED_MODELS: Readonly<Record<string, string>> = {
     "A concurrency claim guarding the generator above. Meaningless outside the run that took it.",
   InsightNarrative:
     "Generated prose over measurements. Same reasoning as WorkoutInsight — the record restores, the essay about it does not.",
+  InsightStatusCache:
+    "Regenerable cache: the per-metric status notes a model wrote over measurements, rewritten by the nightly run. Same reasoning as InsightNarrative.",
   DocumentContentIndex:
     "A search index over `InboundDocument` text; rebuilt by the indexer.",
   DocumentThumbnail:

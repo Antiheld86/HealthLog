@@ -18,7 +18,7 @@
  *      are omitted, never fabricated), and run ONE completion with one
  *      JSON-correction retry.
  *   3. Fan each returned summary back into that metric's `finalize`, which
- *      persists the SAME per-metric `auditLog` cache row the standalone
+ *      stores the SAME per-metric status note the standalone
  *      generator wrote — so the card read path is unchanged.
  *
  * Graceful degradation (audit requirement): any metric the batch omits, or
@@ -51,6 +51,7 @@ import {
 } from "@/lib/ai/prompts/status-batch";
 import type { Locale } from "@/lib/i18n/config";
 import { annotate } from "@/lib/logging/context";
+import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
 
 /** The seven specialised prepares, in the warm order the cron used. */
 const PREPARES: ReadonlyArray<
@@ -121,6 +122,19 @@ export async function generateStatusBatchForUser(
     batchCallMade: false,
   };
 
+  // The capability before any snapshot is built: someone whose status notes
+  // are unavailable (switch, AI analysis off, no provider, consent withdrawn)
+  // costs one capability read, not seven snapshot builds. The chokepoint
+  // re-checks it at the wire.
+  const capability = await aiCapabilityForJob(userId, "statusText");
+  if (!capability.available) {
+    annotate({
+      action: { name: "insights.status.batch.skipped" },
+      meta: { reason: capability.reason },
+    });
+    return result;
+  }
+
   // Build every card's snapshot once. A prepare that throws must not abort
   // the whole batch — that one metric is simply skipped this cycle.
   const prepared = await Promise.all(
@@ -183,7 +197,7 @@ export async function generateStatusBatchForUser(
   let outcome = await runStatusCompletion({
     userId,
     cacheAction: "insights.status-batch",
-    consentSurface: "insights",
+    capability: "statusText",
     systemPrompt,
     userPrompt,
     temperature: AI_BUDGETS.statusBatch.temperature,
@@ -220,7 +234,7 @@ export async function generateStatusBatchForUser(
       const retry = await runStatusCompletion({
         userId,
         cacheAction: "insights.status-batch",
-        consentSurface: "insights",
+        capability: "statusText",
         systemPrompt,
         userPrompt: `${userPrompt}\n\nYour previous response was not valid JSON matching { "perMetric": { ... } }. Reply with that JSON object ONLY — no prose, no markdown fences.`,
         temperature: AI_BUDGETS.statusBatch.temperature,

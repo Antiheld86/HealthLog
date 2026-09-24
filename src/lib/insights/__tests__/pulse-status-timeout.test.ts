@@ -12,11 +12,11 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
  * (it is a deterministic, signal-grounded line, not a fresh AI assessment),
  * and the served text names the user's own value rather than a generic tip.
  *
- * v1.8.3 — the timeout path now writes a *short-TTL negative stub*
- * (`{ timeout:true, model:"timeout-stub", retryAt }`). It is explicitly
- * rejected by `readFreshStatusText`, so it can never hide the real
- * assessment; its sole purpose is to stop the read-only route re-enqueuing
- * generation on every navigation while a provider is degraded.
+ * v1.8.3 — the timeout path opens a *short-TTL negative window* on the note
+ * row (`retryAt`, `negativeReason`). Writing it never touches the stored
+ * note, so it can never hide the real assessment; its sole purpose is to
+ * stop the read-only route re-enqueuing generation on every navigation while
+ * a provider is degraded.
  */
 
 // The graded series folds per-day aggregates in SQL; the fake folds the
@@ -30,7 +30,11 @@ vi.mock("@/lib/measurements/day-aggregates", async () => ({
 vi.mock("@/lib/db", () => ({
   prisma: {
     user: { findUnique: vi.fn() },
-    auditLog: { findFirst: vi.fn(), create: vi.fn() },
+    insightStatusCache: {
+      findUnique: vi.fn(),
+      upsert: vi.fn(),
+      updateMany: vi.fn(),
+    },
     measurement: { findMany: vi.fn() },
     measurementRollup: { findMany: vi.fn() },
     // v1.28.25 — the graded-series cold-tier fallback day-buckets dense
@@ -42,8 +46,21 @@ vi.mock("@/lib/db", () => ({
 
 vi.mock("@/lib/insights/status-provider", () => ({
   runStatusCompletion: vi.fn(),
-  // Consent never blocks in these fixtures — the gate has its own tests.
-  statusConsentBlocksGeneration: vi.fn(async () => false),
+}));
+
+vi.mock(
+  "@/lib/ai/coach/bytes-codec",
+  async () => (await import("./status-note-fixtures")).fakeBytesCodec,
+);
+
+// statusText is available in these fixtures — the capability read has its
+// own tests in status-cache.test.ts.
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForRecord: async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
 }));
 
 vi.mock("@/lib/insights/memory", () => ({
@@ -57,6 +74,11 @@ import { generatePulseStatusForUser } from "../pulse-status";
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(null);
+  vi.mocked(prisma.insightStatusCache.upsert).mockResolvedValue({} as never);
+  vi.mocked(prisma.insightStatusCache.updateMany).mockResolvedValue(
+    {} as never,
+  );
   vi.mocked(prisma.$queryRaw).mockResolvedValue([] as never);
   vi.mocked(prisma.measurementRollup.findMany).mockResolvedValue([] as never);
 });
@@ -67,7 +89,6 @@ describe("generatePulseStatusForUser — provider timeout fallback", () => {
       dateOfBirth: null,
       gender: null,
     } as never);
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.measurement.findMany).mockResolvedValue([
       { value: 72, measuredAt: new Date() },
     ] as never);
@@ -94,19 +115,34 @@ describe("generatePulseStatusForUser — provider timeout fallback", () => {
     // never mislabels the fallback as a fresh assessment.
     expect(result.updatedAt).toBeNull();
 
-    // v1.8.3 — a short-TTL negative stub IS persisted (fire-and-forget) so
+    // v1.8.3 — a short-TTL negative window IS opened (fire-and-forget) so
     // the read-only route doesn't re-enqueue on every navigation while the
-    // provider is degraded. It is marked as a timeout stub, which
-    // `readFreshStatusText` rejects, so it never hides the real assessment.
+    // provider is degraded. It carries no note text, so it never hides or
+    // replaces the real assessment.
     // The write is fire-and-forget (`void`), so flush the microtask queue.
     await Promise.resolve();
-    expect(prisma.auditLog.create).toHaveBeenCalledTimes(1);
-    const persisted = vi.mocked(prisma.auditLog.create).mock.calls[0][0] as {
-      data: { details: string };
+    expect(prisma.insightStatusCache.upsert).toHaveBeenCalledTimes(1);
+    const persisted = vi.mocked(prisma.insightStatusCache.upsert).mock
+      .calls[0][0] as {
+      where: { userId_metric_locale: Record<string, string> };
+      create: Record<string, unknown>;
+      update: Record<string, unknown>;
     };
-    const stub = JSON.parse(persisted.data.details);
-    expect(stub.timeout).toBe(true);
-    expect(stub.model).toBe("timeout-stub");
-    expect(typeof stub.retryAt).toBe("string");
+    expect(persisted.where.userId_metric_locale).toEqual({
+      userId: "user-1",
+      metric: "pulse",
+      locale: "en",
+    });
+    expect(persisted.create.textEncrypted).toBeUndefined();
+    expect(persisted.create.negativeReason).toBe("timeout");
+    // The update arm moves only the window, never an existing note.
+    expect(Object.keys(persisted.update).sort()).toEqual([
+      "negativeReason",
+      "retryAt",
+    ]);
+    expect(persisted.update.retryAt).toBeInstanceOf(Date);
+    expect((persisted.update.retryAt as Date).getTime()).toBeGreaterThan(
+      Date.now(),
+    );
   });
 });

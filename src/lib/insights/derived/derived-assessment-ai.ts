@@ -300,7 +300,7 @@ export async function generateDerivedScoreAssessment(args: {
   const outcome = await runStatusCompletion({
     userId: args.userId,
     cacheAction,
-    consentSurface: "insights",
+    capability: "statusText",
     systemPrompt: scoreSystemPrompt(locale),
     userPrompt: scoreUserPrompt(
       signal,
@@ -399,11 +399,7 @@ export async function generateDerivedScoreAssessment(args: {
     userId: args.userId,
     cacheAction,
     todayKey,
-    locale,
     text,
-    providerType: outcome.providerType,
-    model: outcome.model,
-    tokensUsed: outcome.tokensUsed,
     // v1.22 (W6) — store the input fingerprint so the next day's gate can skip
     // the warm when no contributor source changed.
     inputHash,

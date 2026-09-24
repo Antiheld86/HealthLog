@@ -35,10 +35,8 @@
 import type { CoachNudgeTrigger } from "@/lib/jobs/coach-nudge";
 import type { Locale } from "@/lib/i18n/config";
 import { resolveProviderChain } from "@/lib/ai/provider";
-import {
-  chainRequiresServerManagedConsent,
-  hasActiveConsentForSurface,
-} from "@/lib/ai/consent-guard";
+import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
+import { aiEgressRefusal } from "@/lib/ai/capabilities/egress";
 import {
   buildDateKey,
   reconcileSpend,
@@ -173,19 +171,38 @@ export const composeNudgeWithAI: ComposeNudgeWithAI = async (params) => {
   }
 
   try {
+    // The capability at the wire, before the chain is resolved (a Codex
+    // chain may refresh a token on resolve). The cron checked it for the
+    // candidate already; a switch can flip within the tick.
+    const coach = await aiCapabilityForJob(params.userId, "coach");
+    if (!coach.available) {
+      annotate({
+        action: { name: "coach.nudge.ai.unavailable" },
+        meta: { reason: coach.reason },
+      });
+      return null;
+    }
+
     const chain = await resolveProviderChain(params.userId);
     if (chain.length === 0) return null;
 
-    // Consent gate — before the budget reservation, so a user without a
-    // receipt never spends a slot or a token. Skip-shaped like every other
-    // guard here: no receipt → return null and the caller ships the
-    // deterministic template, so the nudge itself is never lost. BYOK / local
-    // / ChatGPT-OAuth chains are the user's own egress and stay ungated.
-    if (
-      chainRequiresServerManagedConsent(chain) &&
-      !(await hasActiveConsentForSurface(params.userId, "coach"))
-    ) {
-      annotate({ action: { name: "coach.nudge.ai.consent_required" } });
+    // The wire re-check for exactly this chain, before the budget
+    // reservation so a user without a receipt never spends a slot or a token:
+    // the capability again, and the consent an operator-held entry needs.
+    // Skip-shaped like every other guard here: a refusal returns null and the
+    // caller ships the deterministic template, so the nudge itself is never
+    // lost. A person's own key, their ChatGPT account or a local model need no
+    // receipt.
+    const refusal = await aiEgressRefusal(
+      "coach",
+      params.userId,
+      chain.map((entry) => entry.providerType),
+    );
+    if (refusal) {
+      annotate({
+        action: { name: "coach.nudge.ai.refused" },
+        meta: { reason: refusal.reason },
+      });
       return null;
     }
 

@@ -33,11 +33,8 @@ import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { annotate } from "@/lib/logging/context";
 import { withBackgroundEvent } from "@/lib/logging/background";
 import { resolveProviderChain } from "@/lib/ai/provider";
-import {
-  chainRequiresServerManagedConsent,
-  hasActiveConsentForSurface,
-} from "@/lib/ai/consent-guard";
-import { isModuleEnabled } from "@/lib/modules/gate";
+import { aiEgressRefusal } from "@/lib/ai/capabilities/egress";
+import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
 import {
   buildDateKey,
   reconcileSpend,
@@ -467,8 +464,20 @@ export async function runReactionLine(
     return { status: "skipped", reason: "already_attempted" };
   }
 
-  if (!(await isModuleEnabled(job.userId, "insights"))) {
-    return { status: "skipped", reason: "module_disabled" };
+  // The `reactionLines` capability before the digest is built or a chain is
+  // resolved: the operator's switches (the master included, which this job
+  // never read before), the person's AI analysis switch, provider presence and
+  // consent in one answer. The marker itself is data and stays.
+  const capability = await aiCapabilityForJob(job.userId, "reactionLines");
+  if (!capability.available) {
+    annotate({
+      action: { name: "arrival.reaction.skipped" },
+      meta: { kind: job.kind, reason: capability.reason },
+    });
+    return {
+      status: "skipped",
+      reason: capability.reason ?? "check_failed",
+    };
   }
 
   const user = await prisma.user.findUnique({ where: { id: job.userId } });
@@ -478,12 +487,14 @@ export async function runReactionLine(
   const chain = await resolveProviderChain(job.userId);
   if (chain.length === 0) return { status: "skipped", reason: "no_provider" };
 
-  if (
-    chainRequiresServerManagedConsent(chain) &&
-    !(await hasActiveConsentForSurface(job.userId, "insights"))
-  ) {
-    return { status: "skipped", reason: "consent_required" };
-  }
+  // The wire re-check for exactly this chain: the capability again, and the
+  // consent an operator-held entry needs (`aiEgressRefusal`).
+  const refusal = await aiEgressRefusal(
+    "reactionLines",
+    job.userId,
+    chain.map((entry) => entry.providerType),
+  );
+  if (refusal) return { status: "skipped", reason: refusal.reason };
 
   const generationClaimId = randomUUID();
   const claimedAt = new Date();

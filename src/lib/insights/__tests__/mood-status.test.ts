@@ -2,7 +2,11 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/db", () => ({
   prisma: {
-    auditLog: { findFirst: vi.fn(), create: vi.fn() },
+    insightStatusCache: {
+      findUnique: vi.fn(),
+      upsert: vi.fn(),
+      updateMany: vi.fn(),
+    },
     moodEntry: { findMany: vi.fn() },
     measurement: { findMany: vi.fn() },
     user: { findUnique: vi.fn() },
@@ -11,8 +15,21 @@ vi.mock("@/lib/db", () => ({
 
 vi.mock("@/lib/insights/status-provider", () => ({
   runStatusCompletion: vi.fn(),
-  // Consent never blocks in these fixtures — the gate has its own tests.
-  statusConsentBlocksGeneration: vi.fn(async () => false),
+}));
+
+vi.mock(
+  "@/lib/ai/coach/bytes-codec",
+  async () => (await import("./status-note-fixtures")).fakeBytesCodec,
+);
+
+// statusText is available in these fixtures — the capability read has its
+// own tests in status-cache.test.ts.
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForRecord: async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
 }));
 
 vi.mock("@/lib/insights/memory", () => ({
@@ -23,6 +40,7 @@ vi.mock("@/lib/insights/memory", () => ({
 import { prisma } from "@/lib/db";
 import { runStatusCompletion } from "@/lib/insights/status-provider";
 import { generateMoodStatusForUser } from "../mood-status";
+import { noteRow, upsertedNotes, writtenNotes } from "./status-note-fixtures";
 
 const dayMs = 24 * 60 * 60 * 1000;
 
@@ -46,6 +64,11 @@ function stubCompletion(
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(null);
+  vi.mocked(prisma.insightStatusCache.upsert).mockResolvedValue({} as never);
+  vi.mocked(prisma.insightStatusCache.updateMany).mockResolvedValue(
+    {} as never,
+  );
   // The snapshot threads the user's source priority into the factor crosstab;
   // default to "no custom priority" so every test resolves it without stubbing.
   vi.mocked(prisma.user.findUnique).mockResolvedValue({
@@ -72,12 +95,8 @@ describe("generateMoodStatusForUser — graded payload", () => {
       });
     }
 
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.moodEntry.findMany).mockResolvedValue(entries as never);
     vi.mocked(prisma.measurement.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: new Date(),
-    } as never);
 
     const captured: { userPrompt: string | null } = { userPrompt: null };
     stubCompletion('{"summary":"OK"}', captured);
@@ -108,7 +127,6 @@ describe("generateMoodStatusForUser — graded payload", () => {
 describe("generateMoodStatusForUser — timeout/error never persists", () => {
   it("serves the fallback without writing a cache row on timeout", async () => {
     const t = new Date();
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.moodEntry.findMany).mockResolvedValue([
       {
         date: t.toISOString().slice(0, 10),
@@ -118,9 +136,6 @@ describe("generateMoodStatusForUser — timeout/error never persists", () => {
       },
     ] as never);
     vi.mocked(prisma.measurement.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: new Date(),
-    } as never);
 
     vi.mocked(runStatusCompletion).mockResolvedValue({
       kind: "timeout",
@@ -132,37 +147,33 @@ describe("generateMoodStatusForUser — timeout/error never persists", () => {
     expect(result.cached).toBe(true);
     expect(result.updatedAt).toBeNull();
     // v1.8.3 — no real assessment persisted (updatedAt stays null above),
-    // but a short-TTL negative stub IS written so the read-only route does
+    // but a short-TTL negative window IS opened so the read-only route does
     // not re-enqueue on every navigation while the provider is degraded.
-    // The stub is a timeout marker that `readFreshStatusText` rejects.
+    // The window carries no note, so it can never be served as one.
     await Promise.resolve();
-    for (const call of vi.mocked(prisma.auditLog.create).mock.calls) {
-      const details = JSON.parse(
-        (call[0] as { data: { details: string } }).data.details,
-      );
-      expect(details.timeout === true || details.model === "timeout-stub").toBe(
-        true,
-      );
-    }
+    expect(writtenNotes(prisma.insightStatusCache.upsert)).toEqual([]);
+    const windows = upsertedNotes(prisma.insightStatusCache.upsert);
+    expect(windows).toHaveLength(1);
+    expect(windows[0].retryAt).toBeInstanceOf(Date);
+    expect(prisma.insightStatusCache.updateMany).not.toHaveBeenCalled();
   });
 });
 
-describe("generateMoodStatusForUser — cache-read skips a stub", () => {
-  it("regenerates when the only cached row is a timeout stub", async () => {
+describe("generateMoodStatusForUser — a negative window is not a note", () => {
+  it("regenerates when today's row carries only a negative-cache window", async () => {
     const now = new Date();
     const todayKey = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Europe/Berlin",
     }).format(now);
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue({
-      createdAt: now,
-      details: JSON.stringify({
+    vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(
+      noteRow({
         dateKey: todayKey,
-        locale: "en",
-        text: "Mood fallback text…",
-        model: "timeout-stub",
-        timeout: true,
-      }),
-    } as never);
+        text: null,
+        generatedAt: null,
+        retryAt: new Date(Date.now() + 60_000),
+        negativeReason: "timeout",
+      }) as never,
+    );
     vi.mocked(prisma.moodEntry.findMany).mockResolvedValue([
       {
         date: now.toISOString().slice(0, 10),
@@ -172,9 +183,6 @@ describe("generateMoodStatusForUser — cache-read skips a stub", () => {
       },
     ] as never);
     vi.mocked(prisma.measurement.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: now,
-    } as never);
 
     stubCompletion('{"summary":"Fresh mood assessment."}');
 
@@ -189,7 +197,6 @@ describe("generateMoodStatusForUser — cache-read skips a stub", () => {
 describe("generateMoodStatusForUser — token-leak hardening (v1.4.27 F16)", () => {
   it("strips metric: tokens out of the cached text before persisting", async () => {
     const t = new Date();
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.moodEntry.findMany).mockResolvedValue([
       {
         date: t.toISOString().slice(0, 10),
@@ -199,9 +206,6 @@ describe("generateMoodStatusForUser — token-leak hardening (v1.4.27 F16)", () 
       },
     ] as never);
     vi.mocked(prisma.measurement.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: new Date(),
-    } as never);
 
     stubCompletion('{"summary":"Mood stayed positive. metric:MOOD"}');
 
@@ -209,11 +213,8 @@ describe("generateMoodStatusForUser — token-leak hardening (v1.4.27 F16)", () 
 
     expect(result.text).toBeTruthy();
     expect(result.text).not.toContain("metric:");
-    const createCalls = vi.mocked(prisma.auditLog.create).mock.calls;
-    expect(createCalls.length).toBeGreaterThan(0);
-    const details = (createCalls[0][0] as { data: { details: string } }).data
-      .details;
-    const parsed = JSON.parse(details) as { text: string };
-    expect(parsed.text).not.toContain("metric:");
+    const notes = writtenNotes(prisma.insightStatusCache.upsert);
+    expect(notes.length).toBeGreaterThan(0);
+    expect(notes[0].text).not.toContain("metric:");
   });
 });

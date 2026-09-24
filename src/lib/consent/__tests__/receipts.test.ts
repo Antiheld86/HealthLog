@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// `createReceipt` + `revokeLatest` run their supersede/revoke logic inside
-// a transaction. Run the callback against the same mock proxy. The Prisma
+// `createReceipt` runs its supersede logic inside a transaction. Run the callback against the same mock proxy. The Prisma
 // `$transaction` signature is generic; the mock takes a loose callback.
 type TxFn = (tx: unknown) => unknown;
 
@@ -26,7 +25,6 @@ import {
   createReceipt,
   latestActiveReceipt,
   latestActiveReceiptsByKind,
-  revokeLatest,
 } from "../receipts";
 
 const $transaction = vi.mocked(prisma.$transaction) as unknown as {
@@ -194,41 +192,5 @@ describe("latestActiveReceiptsByKind", () => {
     expect(result.ai_full?.id).toBe("fresh-full");
     expect(result.ai_coach?.id).toBe("fresh-coach");
     expect(result.ai_insights_only).toBeUndefined();
-  });
-});
-
-describe("revokeLatest", () => {
-  it("atomically revokes the active row via updateMany and returns it", async () => {
-    const now = new Date("2026-05-18T11:00:00.000Z");
-    vi.mocked(prisma.consentReceipt.updateMany).mockResolvedValue({
-      count: 1,
-    } as never);
-    vi.mocked(prisma.consentReceipt.findFirst).mockResolvedValue(
-      row({ revokedAt: now }) as never,
-    );
-
-    const result = await revokeLatest("user-1", "ai_full", now);
-
-    expect(prisma.consentReceipt.updateMany).toHaveBeenCalledWith({
-      where: { userId: "user-1", kind: "ai_full", revokedAt: null },
-      data: { revokedAt: now },
-    });
-    // Re-reads the just-revoked row so the audit log keeps the receipt id.
-    expect(prisma.consentReceipt.findFirst).toHaveBeenCalledWith({
-      where: { userId: "user-1", kind: "ai_full", revokedAt: now },
-      orderBy: { createdAt: "desc" },
-    });
-    expect(result?.revokedAt).toEqual(now);
-  });
-
-  it("returns null without re-reading when no active receipt exists", async () => {
-    vi.mocked(prisma.consentReceipt.updateMany).mockResolvedValue({
-      count: 0,
-    } as never);
-
-    const result = await revokeLatest("user-1", "ai_full");
-
-    expect(result).toBeNull();
-    expect(prisma.consentReceipt.findFirst).not.toHaveBeenCalled();
   });
 });

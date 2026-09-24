@@ -132,14 +132,13 @@ export async function prepareBmiStatusForUser(
       metric: "bmi",
       locale,
     });
-    // v1.16.13 — `consent-missing` (provider configured but the
-    // server-managed consent gate blocks egress) serves the same no-key
-    // fallback; no enqueue happens for it (the resolver short-circuits).
-    if (outcome.kind === "no-provider" || outcome.kind === "consent-missing") {
+    // Unavailable for any reason serves the deterministic line and enqueues
+    // nothing. `hasProvider` is provider presence only.
+    if (outcome.kind === "unavailable") {
       return {
         phase: "served",
         result: {
-          hasProvider: false,
+          hasProvider: outcome.hasProvider,
           text: getNoKeyBmiStatusText(locale),
           cached: true,
           updatedAt: null,
@@ -460,11 +459,7 @@ export async function prepareBmiStatusForUser(
         userId,
         cacheAction,
         todayKey,
-        locale,
         text: summary,
-        providerType: outcome.providerType,
-        model: outcome.model,
-        tokensUsed: outcome.tokensUsed,
         snapshotHash,
         // v1.18.11 (P6) — persist the input fingerprint for tomorrow's gate.
         inputHash,

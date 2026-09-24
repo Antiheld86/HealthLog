@@ -36,7 +36,10 @@ vi.mock("@/lib/db", () => ({
     user: { findUnique: vi.fn() },
   },
 }));
-vi.mock("@/lib/modules/gate", () => ({ resolveModuleMap: vi.fn() }));
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForJob: vi.fn(),
+  aiCapabilityForRecord: vi.fn(),
+}));
 vi.mock("@/lib/tz/resolver", () => ({ resolveUserTimezone: vi.fn() }));
 vi.mock("@/lib/workouts/hr-series", () => ({
   buildWorkoutHrSeries: vi.fn(),
@@ -53,7 +56,7 @@ vi.mock("@/lib/measurements/pick-canonical-workout-rows", () => ({
 
 import { runWorkoutInsightGenerate } from "../workout-insight-generate";
 import { prisma } from "@/lib/db";
-import { resolveModuleMap } from "@/lib/modules/gate";
+import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
 import { resolveUserTimezone } from "@/lib/tz/resolver";
 import { buildWorkoutHrSeries } from "@/lib/workouts/hr-series";
 import { runStatusCompletion } from "@/lib/insights/status-provider";
@@ -85,10 +88,11 @@ function workoutRow(over: Record<string, unknown> = {}) {
 }
 
 function arrangeHappyPath() {
-  vi.mocked(resolveModuleMap).mockResolvedValue({
-    workouts: true,
-    insights: true,
-  } as never);
+  vi.mocked(aiCapabilityForJob).mockResolvedValue({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  });
   vi.mocked(resolveUserTimezone).mockResolvedValue("Europe/Berlin");
   vi.mocked(prisma.workout.findFirst).mockResolvedValue(workoutRow() as never);
   vi.mocked(prisma.workout.findMany).mockResolvedValue([] as never);
@@ -155,35 +159,42 @@ describe("Activity Insight — the gate stack", () => {
     expect(write.create.paragraphEncrypted).toBeInstanceOf(Uint8Array);
   });
 
-  it("gate 1 — refuses when the workouts module is off", async () => {
-    vi.mocked(resolveModuleMap).mockResolvedValue({
-      workouts: false,
-      insights: true,
-    } as never);
+  it.each([
+    "module_disabled",
+    "user_disabled",
+    "operator_disabled",
+    "no_provider",
+    "consent_required",
+  ] as const)(
+    "gate 1 — refuses when the workoutInsights capability is unavailable (%s), before any evidence is built",
+    async (reason) => {
+      vi.mocked(aiCapabilityForJob).mockResolvedValue({
+        available: false,
+        reason,
+        onDeviceAllowed: false,
+      });
 
-    const outcome = await runWorkoutInsightGenerate(
-      { userId: USER, workoutId: WORKOUT },
-      NOW,
-    );
+      const outcome = await runWorkoutInsightGenerate(
+        { userId: USER, workoutId: WORKOUT },
+        NOW,
+      );
 
-    expect(outcome).toEqual({ status: "skipped", reason: "module_off" });
-    expect(runStatusCompletion).not.toHaveBeenCalled();
-    expect(prisma.workoutInsight.upsert).not.toHaveBeenCalled();
-  });
+      expect(aiCapabilityForJob).toHaveBeenCalledWith(USER, "workoutInsights");
+      expect(outcome).toEqual({ status: "skipped", reason });
+      expect(prisma.workout.findFirst).not.toHaveBeenCalled();
+      expect(buildWorkoutHrSeries).not.toHaveBeenCalled();
+      expect(runStatusCompletion).not.toHaveBeenCalled();
+      expect(prisma.workoutInsight.upsert).not.toHaveBeenCalled();
+    },
+  );
 
-  it("gate 1 — refuses when the insights module is off", async () => {
-    vi.mocked(resolveModuleMap).mockResolvedValue({
-      workouts: true,
-      insights: false,
-    } as never);
+  it("routes the provider call through the workoutInsights capability", async () => {
+    await runWorkoutInsightGenerate({ userId: USER, workoutId: WORKOUT }, NOW);
 
-    const outcome = await runWorkoutInsightGenerate(
-      { userId: USER, workoutId: WORKOUT },
-      NOW,
-    );
-
-    expect(outcome).toEqual({ status: "skipped", reason: "module_off" });
-    expect(runStatusCompletion).not.toHaveBeenCalled();
+    expect(vi.mocked(runStatusCompletion).mock.calls[0][0]).toMatchObject({
+      userId: USER,
+      capability: "workoutInsights",
+    });
   });
 
   it("gate 2 — refuses a session under the ten-minute floor", async () => {
@@ -335,7 +346,10 @@ describe("Activity Insight — the gate stack", () => {
   });
 
   it("gate 5 — a provider-less install writes no row", async () => {
-    vi.mocked(runStatusCompletion).mockResolvedValue({ kind: "none" });
+    vi.mocked(runStatusCompletion).mockResolvedValue({
+      kind: "none",
+      reason: "no_provider",
+    });
 
     const outcome = await runWorkoutInsightGenerate(
       { userId: USER, workoutId: WORKOUT },
@@ -499,7 +513,7 @@ describe("Activity Insight — durable generation ownership", () => {
   });
 
   it.each([
-    { kind: "none" as const },
+    { kind: "none" as const, reason: "no_provider" as const },
     { kind: "timeout" as const },
     { kind: "error" as const },
   ])(

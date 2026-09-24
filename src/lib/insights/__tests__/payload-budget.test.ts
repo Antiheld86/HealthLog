@@ -23,7 +23,11 @@ vi.mock("@/lib/measurements/day-aggregates", async () => ({
 vi.mock("@/lib/db", () => ({
   prisma: {
     user: { findUnique: vi.fn() },
-    auditLog: { findFirst: vi.fn(), create: vi.fn() },
+    insightStatusCache: {
+      findUnique: vi.fn(),
+      upsert: vi.fn(),
+      updateMany: vi.fn(),
+    },
     // v1.18.11 (P6) — the slow-mover input gate probes salient inputs.
     measurement: { findMany: vi.fn(), groupBy: vi.fn() },
     measurementRollup: { findMany: vi.fn() },
@@ -35,8 +39,21 @@ vi.mock("@/lib/db", () => ({
 
 vi.mock("@/lib/insights/status-provider", () => ({
   runStatusCompletion: vi.fn(),
-  // Consent never blocks in these fixtures — the gate has its own tests.
-  statusConsentBlocksGeneration: vi.fn(async () => false),
+}));
+
+vi.mock(
+  "@/lib/ai/coach/bytes-codec",
+  async () => (await import("./status-note-fixtures")).fakeBytesCodec,
+);
+
+// statusText is available in these fixtures — the capability read has its
+// own tests in status-cache.test.ts.
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForRecord: async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
 }));
 
 vi.mock("@/lib/insights/memory", () => ({
@@ -76,11 +93,12 @@ function snapshotChars(): number {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(prisma.insightStatusCache.findUnique).mockResolvedValue(null);
+  vi.mocked(prisma.insightStatusCache.upsert).mockResolvedValue({} as never);
+  vi.mocked(prisma.insightStatusCache.updateMany).mockResolvedValue(
+    {} as never,
+  );
   capturedPrompt = null;
-  vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
-  vi.mocked(prisma.auditLog.create).mockResolvedValue({
-    createdAt: new Date(),
-  } as never);
   vi.mocked(prisma.moodEntry.findMany).mockResolvedValue([] as never);
   vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValue(
     [] as never,

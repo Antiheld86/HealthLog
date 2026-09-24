@@ -70,8 +70,8 @@ const CONSENT_HELPERS = [
   "assertConsentForChain",
   "chainRequiresServerManagedConsent",
   "hasActiveConsentForSurface",
-  // Document-class, pick-shaped.
-  "assertDocumentEgressConsent",
+  // Document-class, pick-shaped (the receipt itself is read by the capability
+  // egress re-check below).
   "isExternalDocumentEgress",
 ] as const;
 

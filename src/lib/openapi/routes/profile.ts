@@ -709,7 +709,7 @@ const glucoseUnitResponse = z
 const documentsAutoAiReadPatchRequest = documentsAutoAiReadPatchSchema.meta({
   id: "DocumentsAutoAiReadPatchRequest",
   description:
-    "Turn automatic AI reading of newly uploaded documents on or off. Turning it on also mints an `ai_full` consent receipt and schedules a catch-up over the existing vault.",
+    "Turn automatic AI reading of newly uploaded documents on or off. Turning it on also mints an `ai_extraction` consent receipt and schedules a catch-up over the existing vault.",
 });
 
 const documentsAutoAiReadResponse = z
