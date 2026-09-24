@@ -6,9 +6,9 @@
  *      even a hint; not one request goes to a route that calls a model or
  *      serves model text, and no request is answered 403.
  * J3 — no provider, one could be set up here. Exactly one calm setup hint on
- *      the overview, no Coach launcher, no per-card "connect a provider"
- *      state. Dismissing the hint in Settings → AI keeps it gone on the
- *      overview.
+ *      the overview, no Coach launcher or per-card Coach hand-off, and
+ *      `/coach` goes back to the overview. Dismissing the hint in Settings →
+ *      AI keeps it gone on the overview.
  *
  * Both states are served through the `ai` block of `/api/auth/me`
  * (`serveAiBlock`, which says why): the operator's switches are instance-wide
@@ -90,12 +90,13 @@ test.describe("J1: AI switched off by the operator", () => {
     // Let every section's reads land before judging what painted.
     await page.waitForLoadState("networkidle");
 
-    await expect(
-      page.locator('[data-slot="insights-overview-error"]'),
-    ).toHaveCount(0);
+    // A read refused for want of AI paints one of these on the overview:
+    // the section boundary, the error card, or the dense error row.
     await expect(
       page.locator('[data-slot="insights-overview-section-error"]'),
     ).toHaveCount(0);
+    await expect(page.locator('[data-slot="query-error-card"]')).toHaveCount(0);
+    await expect(page.locator('[data-slot="query-error-row"]')).toHaveCount(0);
     await expect(page.locator('[data-slot="chart-error-state"]')).toHaveCount(
       0,
     );
@@ -138,12 +139,17 @@ test.describe("J3: no AI provider", () => {
     await page.waitForLoadState("networkidle");
     await expect(page.locator('[data-slot="coach-fab"]')).toHaveCount(0);
     await expect(page.locator('[data-slot="daily-briefing"]')).toHaveCount(0);
-    await expect(
-      page.locator('[data-slot="insight-status-no-provider-cta"]'),
-    ).toHaveCount(0);
-    await expect(
-      page.locator('[data-slot="daily-briefing-no-provider"]'),
-    ).toHaveCount(0);
+    // The per-card Coach hand-offs paint only while the Coach is available.
+    await expect(page.locator('[data-slot="ask-coach-action"]')).toHaveCount(0);
+    await expect(page.locator('[data-slot="ask-coach-icon"]')).toHaveCount(0);
+    await expect(page.locator('[data-slot="coach-launch-inline"]')).toHaveCount(
+      0,
+    );
+
+    // The Coach page itself answers an unavailable Coach by going back to
+    // the overview, rather than painting a composer that would be refused.
+    await page.goto("/coach");
+    await expect(page).toHaveURL(/\/insights$/, { timeout: 20_000 });
 
     // Settings → AI carries the same hint; dismissing it there is remembered.
     await page.goto("/settings/ai");
