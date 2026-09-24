@@ -183,6 +183,17 @@ export async function openCycleAt(
         syncVersion: { increment: 1 },
       },
     });
+  } else if (cycle.endDate != null || cycle.lengthDays != null) {
+    // With nothing after it the cycle is open. A re-tapped start whose row
+    // still carries an end from a successor that no longer exists (the
+    // one-day cycles an earlier rule left in front of a real start, once
+    // that start is folded in) would otherwise stay closed on a stale date.
+    moved.openedEndDateBefore = cycle.endDate;
+    moved.openedEndDateAfter = null;
+    await db.menstrualCycle.update({
+      where: { id: cycle.id },
+      data: { endDate: null, lengthDays: null, syncVersion: { increment: 1 } },
+    });
   }
 
   // The days between this start and the next one belong to this cycle now.

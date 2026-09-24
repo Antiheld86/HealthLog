@@ -371,6 +371,87 @@ describe("a bleeding day opens a cycle", () => {
     expect(day.cycleId).toBe(may.id);
   });
 
+  it("repairs a one-day cycle the old rule left, with one tap on the real first day", async () => {
+    // The state the previous rule produced when day two of a period was
+    // logged before day one: a cycle one day long in front of the real one.
+    // Seeded directly, because the current code no longer creates it.
+    const prisma = getPrismaClient();
+    const may = await prisma.menstrualCycle.create({
+      data: {
+        userId: USER_ID,
+        startDate: "2026-05-04",
+        endDate: "2026-05-31",
+        lengthDays: 28,
+      },
+    });
+    const stub = await prisma.menstrualCycle.create({
+      data: {
+        userId: USER_ID,
+        startDate: "2026-06-01",
+        endDate: "2026-06-01",
+        lengthDays: 1,
+      },
+    });
+    const real = await prisma.menstrualCycle.create({
+      data: { userId: USER_ID, startDate: "2026-06-02" },
+    });
+    await prisma.cycleDayLog.createMany({
+      data: [
+        {
+          userId: USER_ID,
+          date: "2026-06-01",
+          flow: "HEAVY",
+          cycleId: stub.id,
+        },
+        {
+          userId: USER_ID,
+          date: "2026-06-02",
+          flow: "MEDIUM",
+          cycleId: real.id,
+        },
+        {
+          userId: USER_ID,
+          date: "2026-06-06",
+          flow: "LIGHT",
+          cycleId: real.id,
+        },
+      ],
+    });
+
+    // What the release note tells the person to do.
+    const { POST } = await import("@/app/api/cycle/period/route");
+    const res = await POST(
+      jsonRequest("/api/cycle/period", "POST", {
+        action: "start",
+        date: "2026-06-01",
+        loggedAt: new Date().toISOString(),
+      }),
+    );
+    expect(res.status).toBe(200);
+
+    const rows = await prisma.menstrualCycle.findMany({
+      where: { userId: USER_ID, deletedAt: null },
+      orderBy: { startDate: "asc" },
+      select: { id: true, startDate: true, endDate: true, lengthDays: true },
+    });
+    expect(rows.map(({ id: _id, ...r }) => r)).toEqual([
+      { startDate: "2026-05-04", endDate: "2026-05-31", lengthDays: 28 },
+      { startDate: "2026-06-01", endDate: null, lengthDays: null },
+    ]);
+    expect(rows[0].id).toBe(may.id);
+    const june = rows[1].id;
+    const days = await prisma.cycleDayLog.findMany({
+      where: { userId: USER_ID, deletedAt: null },
+      orderBy: { date: "asc" },
+      select: { date: true, cycleId: true },
+    });
+    expect(days).toEqual([
+      { date: "2026-06-01", cycleId: june },
+      { date: "2026-06-02", cycleId: june },
+      { date: "2026-06-06", cycleId: june },
+    ]);
+  });
+
   it("gives the record a forecast and a cycle day it never had", async () => {
     // What the person actually sees. Four periods 28 days apart, logged as
     // flow and nothing else, and today inside the last one.
