@@ -12,9 +12,27 @@
  * The numbers below are shaped like the real thing: a resting-pulse series in
  * the 60s and 70s, one impossible sample dropped into it.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { buildBaselineBand, dayMeansFromRows } from "../baseline";
+import type { ReadDayAggregatesOptions } from "@/lib/measurements/day-aggregates";
+
+// The live day-mean read folds in SQL; the fake folds `rowsForRead` with the
+// same day / range rules, so these tests see the filter the read asks for.
+let rowsForRead: { value: number; measuredAt: Date }[] = [];
+const seenOptions: ReadDayAggregatesOptions[] = [];
+vi.mock("@/lib/db", () => ({ prisma: {} }));
+vi.mock("@/lib/measurements/day-aggregates", async () => {
+  const { foldDayAggregates } =
+    await import("@/lib/measurements/__tests__/fake-day-aggregates");
+  return {
+    readDayAggregates: async (opts: ReadDayAggregatesOptions) => {
+      seenOptions.push(opts);
+      return foldDayAggregates(rowsForRead, opts);
+    },
+  };
+});
+
+import { buildBaselineBand, readDayMeanSeries } from "../baseline";
 import { latestDayMeanFromRows } from "../coincident-deviation";
 import { isPlausibleMetricValue } from "@/lib/measurements/value-domain";
 
@@ -47,28 +65,49 @@ describe("metric plausibility domain", () => {
   });
 });
 
+/** The live (rollup-miss) day-mean read over `rows`. */
+async function dayMeansFromRows(
+  rows: { value: number; measuredAt: Date }[],
+  type: "PULSE",
+) {
+  rowsForRead = rows;
+  const { points } = await readDayMeanSeries(
+    "u1",
+    type,
+    3650,
+    new Date("2026-09-01T00:00:00Z"),
+    new Map(),
+  );
+  return points;
+}
+
 describe("per-day means behind the personal band", () => {
-  it("keeps the day mean on the real readings when one sample is impossible", () => {
+  it("asks the read for the metric's own plausibility domain", async () => {
+    await dayMeansFromRows(pulseDay("2026-08-01", [66]), "PULSE");
+    expect(seenOptions.at(-1)?.valueRange).toEqual({ min: 20, max: 300 });
+  });
+
+  it("keeps the day mean on the real readings when one sample is impossible", async () => {
     const rows = pulseDay("2026-08-01", [66, 70, 111287531.01, 68]);
 
-    const [point] = dayMeansFromRows(rows, "PULSE");
+    const [point] = await dayMeansFromRows(rows, "PULSE");
 
     expect(point.day).toBe("2026-08-01");
     expect(point.mean).toBeCloseTo(68, 6);
   });
 
-  it("drops a day whose every reading is impossible rather than inventing one", () => {
+  it("drops a day whose every reading is impossible rather than inventing one", async () => {
     const rows = [
       ...pulseDay("2026-08-01", [66, 70, 68]),
       ...pulseDay("2026-08-02", [36016.75, 111287531.01]),
     ];
 
-    const points = dayMeansFromRows(rows, "PULSE");
+    const points = await dayMeansFromRows(rows, "PULSE");
 
     expect(points.map((p) => p.day)).toEqual(["2026-08-01"]);
   });
 
-  it("holds the band inside the metric's own domain across a poisoned month", () => {
+  it("holds the band inside the metric's own domain across a poisoned month", async () => {
     const rows: { value: number; measuredAt: Date }[] = [];
     for (let d = 1; d <= 28; d += 1) {
       const day = `2026-08-${String(d).padStart(2, "0")}`;
@@ -81,7 +120,7 @@ describe("per-day means behind the personal band", () => {
     rows.push(...pulseDay("2026-08-26", [98211.5]));
 
     const band = buildBaselineBand(
-      dayMeansFromRows(rows, "PULSE").map((p) => p.mean),
+      (await dayMeansFromRows(rows, "PULSE")).map((p) => p.mean),
       "PULSE",
     );
 

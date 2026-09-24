@@ -254,6 +254,12 @@ export interface CrossMetricMeasurement {
   measuredAt: Date;
   source?: MeasurementSource | null;
   deviceType?: string | null;
+  /**
+   * Readings this row stands for. Absent on a raw reading (one). A row
+   * pre-aggregated per day, source and device carries its readings' sum in
+   * `value` and their number here, so the day's mean stays exact.
+   */
+  count?: number;
 }
 
 /**

@@ -105,10 +105,20 @@ export function isPlausibleMetricValue(
   value: number,
 ): boolean {
   if (!Number.isFinite(value)) return false;
-  if (!type) return true;
-  const range = VALUE_RANGES[type];
+  const range = plausibleMetricRange(type);
   if (range === undefined) return true;
   return value >= range.min && value <= range.max;
+}
+
+/**
+ * The plausibility domain of a metric, for a reader that filters in SQL
+ * rather than row by row (`readDayAggregates`' `valueRange`). `undefined`
+ * when the metric declares none, which admits every value.
+ */
+export function plausibleMetricRange(
+  type: string | null | undefined,
+): { min: number; max: number } | undefined {
+  return type ? VALUE_RANGES[type] : undefined;
 }
 
 /**

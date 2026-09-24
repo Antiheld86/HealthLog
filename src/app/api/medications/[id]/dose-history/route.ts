@@ -142,12 +142,18 @@ export const GET = apiHandler(
     const requestedFrom =
       parsed.data.from ?? new Date(to.getTime() - 90 * DAY_MS);
     const spanFloor = new Date(to.getTime() - MAX_WINDOW_DAYS * DAY_MS);
+    // The window the caller asked for, capped only by the span limit. This is
+    // the floor for recorded doses: a dose logged with a time before the
+    // medication was added (created at 16:20, "taken at 14:00") is a real
+    // record and belongs in the window, exactly as the unwindowed full
+    // history shows it (#1028).
+    const intakeFrom = new Date(
+      Math.max(requestedFrom.getTime(), spanFloor.getTime()),
+    );
+    // The floor for minted slots additionally stops at the medication's
+    // creation, so pre-existence days never mint phantom missed slots.
     const from = new Date(
-      Math.max(
-        requestedFrom.getTime(),
-        medication.createdAt.getTime(),
-        spanFloor.getTime(),
-      ),
+      Math.max(intakeFrom.getTime(), medication.createdAt.getTime()),
     );
 
     const events = await prisma.medicationIntakeEvent.findMany({
@@ -181,6 +187,23 @@ export const GET = apiHandler(
     }));
 
     const lastIntakeAt = lastNonSkippedTakenAt(mapped);
+
+    // A dose may be recorded before its slot's own time: the dose window opens
+    // up to two hours early, and a skip can be logged ahead. Such a row is
+    // stored on the slot's anchor, which still lies after `to`, so a window
+    // that ends at `to` dropped a dose the user had just recorded until the
+    // slot's clock time passed (#1028). Extend the read horizon to the latest
+    // anchor of a recorded row (taken or skipped) within a day of `to`, and no
+    // further: pending reminder rows record nothing and never stretch it.
+    const horizon = new Date(
+      mapped.reduce((latest, e) => {
+        const t = e.scheduledFor.getTime();
+        const recorded = e.skipped || (e.takenAt !== null && e.takenAt <= to);
+        return recorded && t > latest && t <= to.getTime() + DAY_MS
+          ? t
+          : latest;
+      }, to.getTime()),
+    );
 
     const bandMedication: BandMinterMedication = {
       id: medication.id,
@@ -223,7 +246,7 @@ export const GET = apiHandler(
       revisions: medication.scheduleRevisions ?? [],
       ctx,
       userTz,
-      range: { from, to },
+      range: { from, to: horizon },
       now,
       intakeInstants,
     });
@@ -241,7 +264,7 @@ export const GET = apiHandler(
     // partition, so filter on the stored anchor (a take snapped to an
     // out-of-window slot is excluded, matching the compliance read).
     const historyIntakes: HistoryIntake[] = mapped
-      .filter((e) => e.scheduledFor >= from && e.scheduledFor <= to)
+      .filter((e) => e.scheduledFor >= intakeFrom && e.scheduledFor <= horizon)
       .map((e) => ({
         id: e.id,
         scheduledFor: e.scheduledFor,
@@ -290,9 +313,13 @@ export const GET = apiHandler(
       meta: { row_count: serialized.length, family },
     });
 
+    // The window the recorded doses were read over (#1028): from the
+    // requested start (slots additionally start at the medication's
+    // creation) to the read horizon, which reaches past `to` only for a dose
+    // recorded ahead of its slot.
     return apiSuccess({
-      from: from.toISOString(),
-      to: to.toISOString(),
+      from: intakeFrom.toISOString(),
+      to: horizon.toISOString(),
       family,
       hasExpectedSlots: bands.length > 0,
       rows: serialized,
