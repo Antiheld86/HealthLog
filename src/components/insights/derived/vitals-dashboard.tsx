@@ -64,12 +64,16 @@ import type { DerivedProvenance } from "@/lib/insights/derived/types";
 // moved to `use-dashboard-derived.ts` so the page can own the one shared batch
 // and feed it to both the wellness strip and this grid. Imported above.
 
-/** Up-is-bad for the vitals where a rise is unfavourable. */
+/**
+ * Up-is-bad for the vitals where a rise is unfavourable. Weight is not one of
+ * them: which way it should move depends on the person's own target (#1006,
+ * `src/lib/targets/weight-trend.ts`), and this grid has no target in hand, so
+ * it stays neutral rather than assuming a fall is good.
+ */
 const UP_BAD_VITALS = new Set([
   "RESTING_HEART_RATE",
   "BODY_TEMPERATURE",
   "BLOOD_GLUCOSE",
-  "WEIGHT",
 ]);
 /** Up-is-good for the vitals where a rise is favourable. */
 const UP_GOOD_VITALS = new Set(["HEART_RATE_VARIABILITY", "OXYGEN_SATURATION"]);

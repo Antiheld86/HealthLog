@@ -16,8 +16,13 @@
  *                   ↑ orange, ↓ green.
  *   - `neutral`   — direction carries no value judgement (the change renders
  *                   muted).
+ *   - `hold`      — the value already sits where the person wants it (weight
+ *                   inside their own target band). Staying put is progress
+ *                   and renders green; a move either way renders muted, never
+ *                   orange, because a small drift inside the band is not a
+ *                   setback. See `src/lib/targets/weight-trend.ts`.
  */
-export type TrendDirectionSentiment = "up-good" | "up-bad" | "neutral";
+export type TrendDirectionSentiment = "up-good" | "up-bad" | "neutral" | "hold";
 
 /**
  * The resolved sentiment of a signed change under a metric's direction.
@@ -33,7 +38,14 @@ export function getTrendSentiment(
   change: number | null | undefined,
   sentiment: TrendDirectionSentiment,
 ): TrendSentimentDirection {
-  if (change == null || Math.abs(change) < 0.05) return "neutral";
+  if (change == null) return "neutral";
+  // Steady inside the target: the one case where "no change" is the news.
+  // Uses the same noise floor that draws the flat arrow, so a green arrow is
+  // always the flat one.
+  if (sentiment === "hold") {
+    return Math.abs(change) < 0.05 ? "positive" : "neutral";
+  }
+  if (Math.abs(change) < 0.05) return "neutral";
   if (sentiment === "neutral") return "neutral";
   const isUp = change > 0;
   const isGood =

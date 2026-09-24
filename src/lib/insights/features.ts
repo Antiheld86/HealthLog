@@ -53,6 +53,11 @@ import {
 } from "@/lib/insights/signals-of-day";
 import type { RollupGranularity } from "@/generated/prisma/client";
 
+import { resolveWeightTargetOverride } from "@/lib/analytics/effective-range";
+import {
+  buildWeightTargetFeature,
+  type WeightTargetFeature,
+} from "@/lib/targets/weight-trend";
 // The briefing read blocks and the signals-of-day builder moved to
 // sibling modules; re-exported so every existing call site keeps
 // importing from here.
@@ -442,6 +447,13 @@ export interface AggregatedFeatures {
     outlierCount: number;
     bmi: number | null;
     coverage: DataCoverage;
+    /**
+     * v1.39 (#1006) — the person's own stored weight target and which way is
+     * progress from where they are now. Absent when no target is stored, and
+     * then nothing here says which way is better. Present so a narrative
+     * never calls a gain a regression when gaining is exactly the goal.
+     */
+    target?: WeightTargetFeature;
   };
   bloodPressure?: {
     avgSys30: number | null;
@@ -952,6 +964,7 @@ export async function extractFeatures(
       heightCm: true,
       dateOfBirth: true,
       gender: true,
+      thresholdsJson: true,
     },
   });
 
@@ -1105,6 +1118,11 @@ export async function extractFeatures(
       bmi,
       coverage: computeCoverage(weightData, now),
     };
+    const weightTarget = buildWeightTargetFeature(
+      resolveWeightTargetOverride(user?.thresholdsJson),
+      { avg7: summary.avg7, latest: summary.latest },
+    );
+    if (weightTarget) features.weight.target = weightTarget;
   }
 
   // Blood Pressure

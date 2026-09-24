@@ -306,6 +306,59 @@ describe("buildDashboardSnapshot — envelope shape", () => {
   });
 });
 
+describe("buildDashboardSnapshot — weight trend judged against the stored target (#1006)", () => {
+  // The summary mock serves WEIGHT latest 80 (no avg7), so the reference
+  // weight is 80 kg in every case below.
+  beforeEach(() => {
+    probeRollupCoverage.mockResolvedValue(new Map([["WEIGHT", false]]));
+    isFullyCovered.mockReturnValue(false);
+  });
+
+  it("below the target: a gain is progress", async () => {
+    const snap = await buildDashboardSnapshot(
+      fakePrisma,
+      baseUser({ thresholdsJson: { WEIGHT: { min: 85, max: 90 } } }),
+    );
+    expect(snap.tiles.weightTrend).toEqual({
+      direction: "up-good",
+      targetPosition: "below",
+    });
+  });
+
+  it("inside the target: holding steady is progress", async () => {
+    const snap = await buildDashboardSnapshot(
+      fakePrisma,
+      baseUser({ thresholdsJson: { WEIGHT: { min: 75, max: 82 } } }),
+    );
+    expect(snap.tiles.weightTrend).toEqual({
+      direction: "hold",
+      targetPosition: "inside",
+    });
+  });
+
+  it("above the target: a loss is progress", async () => {
+    const snap = await buildDashboardSnapshot(
+      fakePrisma,
+      baseUser({ thresholdsJson: { WEIGHT: { min: 70, max: 75 } } }),
+    );
+    expect(snap.tiles.weightTrend).toEqual({
+      direction: "up-bad",
+      targetPosition: "above",
+    });
+  });
+
+  it("no stored target keeps today's reading, even with a height-derived band", async () => {
+    const snap = await buildDashboardSnapshot(fakePrisma, baseUser());
+    // The WHO band from height still shades the chart…
+    expect(snap.targetBands.weightRange).not.toBeNull();
+    // …but nobody chose it, so it does not decide the direction.
+    expect(snap.tiles.weightTrend).toEqual({
+      direction: "up-bad",
+      targetPosition: null,
+    });
+  });
+});
+
 describe("buildDashboardSnapshot — two-phase null extras", () => {
   it("returns extras: null on a rollup-coverage miss and never runs the thick read", async () => {
     probeRollupCoverage.mockResolvedValue(new Map([["WEIGHT", false]]));

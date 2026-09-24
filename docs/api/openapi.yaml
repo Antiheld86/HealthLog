@@ -50735,6 +50735,35 @@ components:
                     - sources
                   additionalProperties: false
                 - type: "null"
+            weightTrend:
+              description: Which way a weight change counts as progress, judged against the person's own stored target rather than
+                assuming a fall is good. Render the arrow, 7-day delta and comparison caption from `direction`; do not
+                recompute it. Optional for older cached snapshots; when absent, treat it as `up-bad`.
+              type: object
+              properties:
+                direction:
+                  type: string
+                  enum:
+                    - up-good
+                    - up-bad
+                    - hold
+                  description: "How the weight tile colours a change. `up-good`: a rise is progress (below the target band). `up-bad`: a
+                    fall is progress (above the band, and the reading when no target is stored). `hold`: the weight is
+                    inside the band, so a flat change is progress and a move either way is neutral, never a setback."
+                targetPosition:
+                  anyOf:
+                    - type: string
+                      enum:
+                        - below
+                        - inside
+                        - above
+                    - type: "null"
+                  description: Where the 7-day average (else the latest reading) sits against the person's own stored weight target. Null
+                    when no target is stored or there is no reading.
+              required:
+                - direction
+                - targetPosition
+              additionalProperties: false
           required:
             - summaries
             - lastSeenByType
