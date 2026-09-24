@@ -1,5 +1,286 @@
 # Changelog
 
+## [1.39.0] — 2026-09-25
+
+AI is optional everywhere now: your data loads whatever the AI settings
+say, and each AI switch stops the work it names instead of hiding it. A
+module you switch off leaves the whole app, and there are fixes for
+heart-rate streams, charts, the cycle calendar and labs.
+
+### Added
+
+- **The weight tile judges a change against your own target.** Below your
+  target band a gain counts as progress, above it a loss does, and inside
+  the band staying steady is progress while a small move either way is
+  shown neutrally. The weight note, the daily briefing, the overview
+  analysis and the Coach know the target too, and changing the target
+  refreshes the weight note without a new weigh-in. Without a target the
+  tile works as before. Thanks to @COBO5671 for #1006 and the screenshots.
+- **A document can be linked to every visit and vaccination it covers.**
+  The document's own view in the vault lists the visits and vaccination
+  doses it belongs to and lets you add or remove them, so a childhood
+  vaccination record can be filed against every dose it lists in a few
+  taps. Links made from either side are the same links. Thanks to @Cnote43
+  for #1024 and @CritLoren for #1005.
+- **The vaccination page shows the booster you planned.** Next to each
+  vaccine's heading it says when the next booster is due, marked once it
+  is due within a month and again once it is overdue. The app shows the
+  boosters you planned and does not work out dates of its own (#1005).
+- **A new "Reading documents" switch for people who run a server.** It
+  sits under Admin, Coach and covers AI reading of stored documents,
+  lab report scans and turning a typed medication description into a
+  schedule. It is on by default.
+- **Reading documents has its own consent.** Sending a document, a lab
+  scan or a medication description to an AI service outside your server
+  now needs consent for reading documents, including with your own OpenAI
+  or Anthropic key or your own ChatGPT account. A self-hosted model needs
+  none. The app asks at the place you start the read and grants exactly
+  that; the consent has its own withdraw button in Settings, AI. It does
+  not open the Coach or AI analysis, and consent for AI analysis alone
+  does not cover documents. A full AI consent given before this release
+  still covers both.
+- **What the Coach stored stays yours with the Coach off.** Your
+  conversations, the facts it remembered, your plans and the reminders you
+  asked it to keep can be read and deleted in Settings whether the Coach
+  is switched off on the server, hidden by you, or has no provider.
+  Confirming, finishing or moving a plan or reminder waits until the Coach
+  is back.
+- **One short hint instead of a message on every card.** While no AI
+  provider is set up and you could set one up, Insights and Settings, AI
+  show a single note that AI is optional, with a way to set it up and a
+  "Not now" that hides it on both pages. With AI switched off on the
+  server, setup and the getting-started list do not bring AI up.
+
+### Changed
+
+- **Your data never depends on AI.** Readings, charts, scores,
+  correlations, ECG recordings, heart rhythm events, the breathing and
+  lab-change cards, intraday pulse and the baseline strip on each metric
+  page load the same with AI on or off, with or without a provider, and
+  with or without your consent. Apple Watch ECG uploads are
+  stored in every case. Before, several of these reads sat behind AI
+  switches, and the Insights overview could fail with "Failed to load
+  insights". Thanks to @CritLoren for the log in #975.
+- **AI parts are left out when AI is off for you.** The daily briefing,
+  the sentence under your greeting and under the trend charts, the notes
+  on metric pages, lab markers and workouts, the line after a new reading,
+  the Coach button and menu entry, and the "describe it in words" button
+  in the medication wizard only appear while they can work. Text a model
+  wrote earlier is hidden from the next page load and returns when AI is
+  back; a switch or a missing provider deletes nothing. A summary the app
+  composed from your numbers alone is not AI text and stays.
+- **Nothing is written by a model at night unless AI is on for you.** The
+  nightly briefing, status notes, period summaries, arrival lines, workout
+  notes and Coach memory upkeep now check the server's switches, your AI
+  analysis switch, your provider and your consent for each person as the
+  run reaches them. Switching AI off during a nightly run stops the rest
+  of that run, and a reply that arrives after you withdrew consent is
+  thrown away. Week and month summaries still appear, written from your
+  numbers, and Coach nudges arrive in their plain form when only consent
+  is missing.
+- **The assistant switches stop AI work instead of hiding it.** When a
+  switch in Admin, Coach is off, nothing it covers is sent to a model,
+  and that now includes document reading, lab scans and medication text,
+  which the switches used to leave running. A read queued before the
+  switch was turned off stops when it runs. "Status cards" is renamed
+  "Status notes". If the server cannot read the switches for a moment,
+  every AI feature stays off for that request.
+- **The Coach has one switch for people who run a server.** It is the
+  Coach switch under Admin, Coach. The Coach row under module
+  availability now follows it and links to it; an operator who had turned
+  the Coach module off there has the Coach switch turned off.
+- **The "Insights" module is now "AI analysis".** It decides whether a
+  model writes the briefing, status notes and workout notes for you. With
+  it off, the Insights tab stays in the menu and the bottom bar, and the
+  Today summary and the readiness, recovery and sleep score rings stay on
+  the dashboard. Breathing screening now follows the Sleep module and
+  "What changed since your last panel" follows the Labs module.
+- **Hiding the Coach hides only the Coach.** It used to stop the nightly
+  briefing and status notes as well, which the setting never said. If you
+  had the Coach hidden, AI analysis is switched off for you in this
+  release so nothing new is written; switch it back on under Settings,
+  Modules if you want the notes.
+- **The morning briefing notification keeps coming with AI analysis
+  off.** It carries your health score or the day's reminders without the
+  first sentence a model would have written.
+- **Someone managing your record sees the stored AI text you would see.**
+  Your briefing, notes and summaries show for them whenever they show for
+  you, but opening your record never starts AI work on it.
+- **Coach reminders wait while the Coach is unavailable.** They were
+  surfaced into a conversation nobody could open and dismissed after a few
+  unanswered rounds. They now wait and appear once the Coach is back.
+- **Withdrawing AI consent deletes the notes written under it.** When no
+  consent for AI analysis is left, the status notes, the daily briefing,
+  the model-written period summaries, the arrival lines and the workout
+  notes are deleted in the same step. Your Coach conversations, the facts
+  it remembered, your plans and reminders, and your document summaries are
+  your records and stay. The confirmation says which of these applies to
+  you. When the consent card cannot read your consent, it says so with a
+  retry instead of showing it as withdrawn.
+- **Switching a module off removes it everywhere.** Mood, Sleep, Labs and
+  the other modules now leave the Insights tabs, the trends row on the
+  overview, the add menu (including the measurement types they own, such
+  as sleep and glucose), the dashboard tiles, the overview layout settings
+  and the score rings. The trends row moves on to the next chart so it
+  still shows three.
+- **Correlations only use what you track.** The pattern finder, and the
+  patterns the Coach, the status notes and the weekly and monthly review
+  look at, leave out mood, sleep, glucose, medication adherence, symptoms,
+  weather or lab results once that module is off. Turning it back on
+  brings them back, and patterns you had dismissed stay dismissed. Because
+  fewer pairs are checked, a weak pattern between two things you still
+  track can appear or disappear when you switch a module.
+- **A link to a switched-off page says why.** A bookmark to a page whose
+  module is off shows a short notice with a button to Settings, Modules
+  when the switch is yours. When the page is outside what someone shared
+  with you or the server turned the module off for everyone, it says so
+  and leaves the button out. The Nutrients page uses the same notice and
+  its own "turn on" button is gone.
+- **Clearer messages when AI is refused.** The Coach, document reading,
+  lab scans and the medication reader tell a missing consent, AI switched
+  off on the server, a record someone shared with you and a missing
+  provider apart. A spent daily budget in the medication reader no longer
+  shows "too many requests". Settings, AI names what the server has
+  switched off, and "Test connection" says AI is off on this server
+  instead of calling the model or showing an error code.
+- **Status notes live in their own encrypted storage.** They used to be
+  kept as plain text in the audit log. They are now encrypted like the
+  rest of your health data, covered by key rotation, left out of backups
+  because they are rebuilt each night, and removed by "Delete All Data".
+- **A year of per-minute heart rate reads in about half the time** when a
+  chart asks for it.
+- **If you write against the API**, `GET /api/auth/me` gains
+  `ai: { capabilities, provider }`, which says per feature and for the
+  record in use whether AI is available and why not. Routes that serve
+  data no longer answer `403` for an AI reason; routes that mix data with
+  model text answer `200` with the model text as `null` and an `ai` object
+  giving the reason. This covers `GET /api/insights/comprehensive`,
+  `/api/insights/derived`, `/api/insights/narrative`, the status note
+  routes, `/api/workouts/{id}`, `/api/daily/digest` and
+  `/api/dashboard/snapshot`, among others. AI refusals carry
+  `meta.errorCode` with `meta.capability`, `meta.reason` and, where it
+  applies, `meta.module`; the new codes are `ai.record.notPermitted`,
+  `ai.provider.none` and `ai.unavailable`. Document reading, lab scans and
+  medication text refuse with `assistant.disabled.documentAi`, and
+  `/api/insights/generate` with `assistant.disabled.briefing` instead of
+  `assistant.disabled.coach`. The consent routes accept a new kind,
+  `ai_extraction`. `aiAvailable` on `GET /api/user/ai-provider` is false
+  while the master switch is off, and every card from
+  `GET /api/insights/cards` says `provider: "rules"`.
+- **More for API clients.** New additive fields are
+  `tiles.weightTrend` on `GET /api/dashboard/snapshot` (`direction` is
+  `up-good`, `up-bad` or the new `hold`), `renewals` on
+  `GET /api/vaccinations`, `vaccinationLinks` on
+  `GET /api/documents/inbound/{id}` and `vaccinationIds` on its `PATCH`,
+  and `cycleDay` and `periodEndable` on each day of
+  `GET /api/cycle/calendar`. `GET /api/medications/{id}/dose-history`
+  reports `from` as the requested start rather than the medication's
+  creation time. `GET /api/auth/me` reports the server's default time
+  zone when the stored one cannot be used.
+
+### Removed
+
+- **The "Correlations" assistant switch.** It only ever turned off
+  statistics, which no model writes, so correlations now always load.
+
+### Fixed
+
+- **The worker no longer runs out of memory on a watch that streams heart
+  rate.** On an account with heart rate every minute or faster, the worker
+  grew until it crashed with "JavaScript heap out of memory" within 15 to
+  40 minutes, because the heart-rate status card read three months of
+  readings one by one. The card and the other background summaries,
+  including the Coach's cycle summary, now read one total per day. If you
+  raised `NODE_OPTIONS=--max-old-space-size` to keep the worker up, you
+  can leave it or remove it. Thanks to @ckaotik for the report, the logs
+  and the patient testing in #1023.
+- **Daily totals stay on the same day across chart ranges.** Steps,
+  active energy, flights climbed and walking distance could move to the
+  neighbouring day between the 7-day and 30-day ranges, because the longer
+  ranges cut days at midnight UTC. Every range of single days, up to a
+  year, now cuts them at your own midnight; longer ranges still group
+  weeks, months and years by UTC days. Thanks to @mills1975 for #1026 and
+  the screenshots.
+- **The 7-day chart shows the whole week on a streaming source.** It read
+  individual readings up to a limit that per-minute heart rate reaches
+  after about three and a half days. Every range now reads one value per
+  day, and the 7-day and 30-day ranges agree (#1026).
+- **Charts on the medication page, in the Coach and in recovery use your
+  time zone.** They cut days in Berlin for everyone. When a stored time
+  zone cannot be used, the server and the app both fall back to the
+  server's default. A bare offset such as `+05:30` is no longer accepted
+  as a time zone, because the database would cut days on the wrong side of
+  UTC; pick a named zone such as Asia/Kolkata (#1026).
+- **Recent doses appear under "Last 90 days" in a medication's history.**
+  A dose logged for a time before the medication was added, a dose taken
+  shortly before its scheduled time, and a dose added while the tab was
+  open were missing until later or until a reload. Thanks to
+  @sreeramachandramurthy for #1028 and for spotting the time pattern.
+- **Past dates in the cycle calendar show their own cycle day.** The log
+  sheet labelled any date with today's cycle day, and "My period ended
+  this day" only appeared while today was a period day. It now shows the
+  day of the cycle the date belongs to and offers the period end on the
+  first days of any logged cycle. Thanks to @sreeramachandramurthy for
+  #1004 and the step-by-step notes.
+- **Save in the cycle log needs something to save.** An empty Save stored
+  an empty entry the calendar could not show, which looked like a failed
+  save. It now asks you to pick a flow, a symptom or another sign (#1004).
+- **Cycle history entered out of order lands on the same cycles.**
+  Logging the second day of a period before the first no longer opens a
+  separate one-day cycle; the earlier day becomes the start, and days
+  logged before a back-filled start move to the right cycle. If you
+  already have such a one-day cycle, open the real first day and tap "My
+  period started this day" again. A start tapped by mistake a few days
+  early can be removed again, and the start it replaced comes back
+  (#1004).
+- **Selecting a cycle symptom no longer moves the list.** Symptoms are one
+  per line with the optional 1 to 4 intensity beside them. Thanks to
+  @sreeramachandramurthy for #1001.
+- **Labs "Save and add another" keeps your biomarker.** The second save
+  said "Pick a biomarker first" although one was shown. The form now keeps
+  the biomarker, the date and the visit and clears only the value and its
+  note. Thanks to @sreeramachandramurthy for #1029.
+- **Manual entry has the rest of the scale's readings.** Visceral fat, fat
+  mass, fat-free mass, lean body mass and muscle mass can be entered by
+  hand, in kilograms or pounds as you set. French, Italian and Polish
+  labels that gave two of these one name are distinct. Thanks to @ocurero
+  for #1013.
+- **The "Link a document" picker offers your whole vault.** It said "No
+  documents yet." on vaccinations and visits even with a full vault,
+  because it asked for more documents per page than the server accepts.
+  Documents dated within a week come first, the rest are listed by month
+  and searchable, and a failed load shows a retry. The condition picker on
+  visits had the same problem (#1024, #1005).
+- **The Insights overview no longer fails as a whole.** Each section loads
+  on its own and a failed one offers a retry. "Today's signal", the heart
+  rhythm events and the mood patterns card say when they could not load
+  instead of hiding or spinning, a score page no longer says "not enough
+  data" when it could not read the score, and with the cycle module on but
+  no cycle in progress the scores row no longer leaves a gap (#975).
+- **Restoring instance settings from a backup made before this release
+  keeps the Coach off** when the backup had the Coach module switched off.
+
+### Upgrade notes
+
+- **Take a database backup before upgrading.** Three migrations run.
+  `0343` adds the "Reading documents" switch, moves the old Coach module
+  setting into the Coach switch, switches AI analysis off for everyone who
+  had the Coach hidden and removes the Correlations switch. It cannot be
+  undone automatically; going back to an earlier version means restoring
+  that backup. `0344` creates the encrypted status note storage and
+  deletes the old status note rows from the audit log without copying
+  them, so the next night writes every note again, about one normal night
+  of extra model use. `0345` adds one column to cycle starts and changes
+  nothing else.
+- **The Correlations switch is gone** from Admin, Coach. Correlations
+  always load now.
+- **`GET /api/feature-flags` is deprecated.** It still answers, with a
+  `Deprecation` header pointing to `GET /api/auth/me`, and the web app no
+  longer reads it. The iPhone app and other clients should read `ai` on
+  `GET /api/auth/me` instead, expect `200` with `null` model text on the
+  mixed reads listed under Changed, and handle the three new error codes.
+  The route is removed in the first release after the next iPhone app.
+
 ## [1.38.25] — 2026-09-20
 
 Three readings that never arrived, and one import that turned away a
