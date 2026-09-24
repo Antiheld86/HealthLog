@@ -43,8 +43,19 @@ vi.mock("@/lib/logging/context", () => ({
   annotate: vi.fn(),
 }));
 
+vi.mock("@/lib/feature-flags", () => ({
+  loadAssistantSwitches: vi.fn(async () => ({
+    enabled: true,
+    coach: true,
+    briefing: true,
+    insightStatus: true,
+    documentAi: true,
+  })),
+}));
+
 import { POST } from "../route";
 import { resolveProviderForTest } from "@/lib/ai/provider";
+import { loadAssistantSwitches } from "@/lib/feature-flags";
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -367,6 +378,8 @@ describe("POST /api/ai/test — daily ceiling + ledger", () => {
 
     expect(response.status).toBe(429);
     expect(generateCompletion).not.toHaveBeenCalled();
+    const body = (await response.json()) as { meta?: { errorCode?: string } };
+    expect(body.meta?.errorCode).toBe("ai.budget.exceeded");
   });
 
   it("records a successful probe on the ledger", async () => {
@@ -383,5 +396,50 @@ describe("POST /api/ai/test — daily ceiling + ledger", () => {
       0,
       { servedBy: expect.any(String), reservedOwner: "operator" },
     );
+  });
+});
+
+describe("POST /api/ai/test — the operator's master switch and typed refusals", () => {
+  it("refuses with the master's code when AI is off on the server, before any provider resolves", async () => {
+    vi.mocked(loadAssistantSwitches).mockResolvedValueOnce({
+      enabled: false,
+      coach: false,
+      briefing: false,
+      insightStatus: false,
+      documentAi: false,
+    });
+    const response = await POST(emptyRequest() as never);
+    expect(response.status).toBe(403);
+    const body = (await response.json()) as { meta: Record<string, unknown> };
+    expect(body.meta).toEqual({
+      errorCode: "assistant.disabled.enabled",
+      reason: "operator_disabled",
+    });
+    expect(resolveProviderForTest).not.toHaveBeenCalled();
+  });
+
+  it("fails closed, without a 5xx, when the switches cannot be read", async () => {
+    vi.mocked(loadAssistantSwitches).mockResolvedValueOnce(null);
+    const response = await POST(emptyRequest() as never);
+    expect(response.status).toBeLessThan(500);
+    const body = (await response.json()) as { meta: Record<string, unknown> };
+    expect(body.meta).toEqual({
+      errorCode: "ai.unavailable",
+      reason: "check_failed",
+    });
+    expect(resolveProviderForTest).not.toHaveBeenCalled();
+  });
+
+  it("names a missing provider", async () => {
+    vi.mocked(resolveProviderForTest).mockResolvedValue({
+      type: "none",
+    } as never);
+    const response = await POST(emptyRequest() as never);
+    expect(response.status).toBe(422);
+    const body = (await response.json()) as { meta: Record<string, unknown> };
+    expect(body.meta).toEqual({
+      errorCode: "ai.provider.none",
+      reason: "no_provider",
+    });
   });
 });

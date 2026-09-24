@@ -38,7 +38,12 @@
  */
 export const ERROR_CODE_CATALOGUE: Readonly<Record<string, readonly string[]>> =
   {
-    ai: ["ai.provider.none", "ai.record.notPermitted", "ai.unavailable"],
+    ai: [
+      "ai.budget.exceeded",
+      "ai.provider.none",
+      "ai.record.notPermitted",
+      "ai.unavailable",
+    ],
     ai_provider: ["ai_provider.invalid", "ai_provider.no_fields"],
     allergy: ["allergy.invalid"],
     analytics: ["analytics.invalid_query"],
@@ -62,6 +67,7 @@ export const ERROR_CODE_CATALOGUE: Readonly<Record<string, readonly string[]>> =
     ],
     backup: ["backup.payload.undecryptable", "backup.section.missing"],
     coach: [
+      "coach.budget.exceeded",
       "coach.conversation.invalidTitle",
       "coach.conversation.notFound",
       "coach.fenced.attachmentConflict",
