@@ -11,7 +11,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 vi.mock("@/lib/db", () => ({
-  prisma: { user: { findUnique: vi.fn(), update: vi.fn() } },
+  prisma: {
+    user: { findUnique: vi.fn(), update: vi.fn() },
+    consentReceipt: { findFirst: vi.fn(), create: vi.fn() },
+  },
 }));
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/auth/audit", () => ({
@@ -21,8 +24,8 @@ vi.mock("@/lib/logging/transports", () => ({ emitIfSampled: vi.fn() }));
 vi.mock("@/lib/db-compat", () => ({
   ensureDbCompatibility: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock("@/lib/consent/web-grant", () => ({
-  ensureExtractionConsentReceipt: vi.fn().mockResolvedValue(undefined),
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  getAiCapability: vi.fn(),
 }));
 vi.mock("@/lib/jobs/document-summary-catchup", () => ({
   enqueueSummaryCatchUp: vi.fn().mockResolvedValue({ enqueued: true }),
@@ -47,7 +50,7 @@ vi.mock("next/headers", () => ({
 import { PATCH } from "../route";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
-import { ensureExtractionConsentReceipt } from "@/lib/consent/web-grant";
+import { getAiCapability } from "@/lib/ai/capabilities/gate";
 import { enqueueSummaryCatchUp } from "@/lib/jobs/document-summary-catchup";
 
 const SESSION_OK = {
@@ -74,6 +77,13 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
   vi.mocked(prisma.user.update).mockResolvedValue({} as never);
+  vi.mocked(prisma.consentReceipt.findFirst).mockResolvedValue(null);
+  vi.mocked(prisma.consentReceipt.create).mockResolvedValue({} as never);
+  vi.mocked(getAiCapability).mockResolvedValue({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  });
 });
 
 describe("PATCH /api/auth/me/documents-auto-ai-read — catch-up scheduling", () => {
@@ -103,20 +113,75 @@ describe("PATCH /api/auth/me/documents-auto-ai-read — catch-up scheduling", ()
     await PATCH(mkPatch(false));
 
     expect(enqueueSummaryCatchUp).not.toHaveBeenCalled();
-    expect(ensureExtractionConsentReceipt).not.toHaveBeenCalled();
+    expect(prisma.consentReceipt.create).not.toHaveBeenCalled();
   });
 
-  it("still mints the consent receipt on the flip that schedules the pass", async () => {
-    // The catch-up rides the same act of consent, never around it. The mint
-    // is the extraction kind (documents, lab scans, medication text) and
-    // nothing wider: switching document reading on does not consent to the
-    // Coach or to the analysis. It is the person's own affirmative act, so
-    // it may lift an earlier withdrawal of the same kind.
+  it("mints the extraction receipt on the flip that schedules the pass", async () => {
+    // The catch-up rides the same act of consent, never around it. The toggle
+    // grants document reading only: `ai_extraction`, not the master `ai_full`
+    // that would also open the Coach and the AI analysis.
     withPrevious(false);
 
     await PATCH(mkPatch(true));
 
-    expect(ensureExtractionConsentReceipt).toHaveBeenCalledWith("user-1");
+    expect(prisma.consentReceipt.create).toHaveBeenCalledTimes(1);
+    const data = vi.mocked(prisma.consentReceipt.create).mock.calls[0]![0]
+      .data as { userId: string; kind: string };
+    expect(data.userId).toBe("user-1");
+    expect(data.kind).toBe("ai_extraction");
+    // The capability is read after the mint, so the fresh receipt counts.
+    const mintOrder = vi.mocked(prisma.consentReceipt.create).mock
+      .invocationCallOrder[0]!;
+    const readOrder = vi.mocked(getAiCapability).mock.invocationCallOrder[0]!;
+    expect(mintOrder).toBeLessThan(readOrder);
+  });
+
+  it("does not mint a second receipt when one that covers document reads is active", async () => {
+    withPrevious(false);
+    vi.mocked(prisma.consentReceipt.findFirst).mockResolvedValue({
+      id: "r1",
+    } as never);
+
+    await PATCH(mkPatch(true));
+
+    expect(prisma.consentReceipt.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: "user-1",
+          revokedAt: null,
+          kind: { in: ["ai_extraction", "ai_full"] },
+        }),
+      }),
+    );
+    expect(prisma.consentReceipt.create).not.toHaveBeenCalled();
+  });
+
+  it("treats a concurrent mint as success", async () => {
+    withPrevious(false);
+    vi.mocked(prisma.consentReceipt.create).mockRejectedValue({
+      code: "P2002",
+    });
+
+    const res = await PATCH(mkPatch(true));
+
+    expect(res.status).toBe(200);
+  });
+
+  it("saves the preference but schedules no catch-up while document reading is closed", async () => {
+    // The operator turned document reading off: every summary the pass would
+    // enqueue could only be refused, so it is not enqueued at all.
+    withPrevious(false);
+    vi.mocked(getAiCapability).mockResolvedValue({
+      available: false,
+      reason: "operator_disabled",
+      onDeviceAllowed: false,
+    });
+
+    const res = await PATCH(mkPatch(true));
+
+    expect(res.status).toBe(200);
+    expect(prisma.user.update).toHaveBeenCalled();
+    expect(enqueueSummaryCatchUp).not.toHaveBeenCalled();
   });
 
   it("persists the flag field-by-field", async () => {

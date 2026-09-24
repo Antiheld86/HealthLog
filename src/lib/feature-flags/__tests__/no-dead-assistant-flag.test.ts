@@ -31,10 +31,10 @@
  *      matcher that stopped matching cannot agree with an empty world.
  *
  * Mutation checks: adding `await requireAssistantSurface("coach")` to any
- * route outside the frozen list turns guard 3 red by file name; removing the
- * `aiCapabilityForJob(userId, "documentAi")` calls from the document jobs
- * turns guard 2 red for `documentAi`; putting
- * `assistantCorrelationsEnabled` back on the schema turns guard 1 red.
+ * route outside the frozen list turns guard 3 red by file name; deleting the
+ * `requireAiCapability("documentAi"` calls from the document routes (the only
+ * reader of that switch's capabilities in the route tree) turns guard 2 red;
+ * putting `assistantCorrelationsEnabled` back on the schema turns guard 1 red.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -100,9 +100,6 @@ const PLUMBING = [
  * Switches with no reader yet, and why that is correct for now. An entry is
  * a claim with an expiry: the test below fails as soon as a reader appears.
  */
-// Empty since the document jobs resolve `documentAi` (the summary job, its
-// catch-up pass and the index backfill). A new switch that ships before its
-// reader is listed here with the reason.
 const AWAITING_READER: Record<string, string> = {};
 
 /**
@@ -130,7 +127,6 @@ const RETIRED_GATE_CALLERS = [
   "src/app/api/insights/pregenerate/route.ts",
   "src/app/api/insights/pulse-status/route.ts",
   "src/app/api/insights/weight-status/route.ts",
-  "src/app/api/medications/extract/route.ts",
   "src/app/coach/page.tsx",
 ];
 

@@ -268,9 +268,12 @@ const EXEMPT_ROUTES: ReadonlyArray<string> = [
   // per-medication importer below: it writes intake rows and reads its own job.
   "src/app/api/medications/intake/dose-history-import/route.ts",
   "src/app/api/medications/intake/dose-history-import/[jobId]/status/route.ts",
-  // NB: `medications/extract` is NOT exempt — it gates on
-  // `requireAssistantSurface("coach")` (the NL-extraction is an assistant
-  // surface), so the inventory already counts it as a delegated gate.
+  // `medications/extract` is model work, not data: it answers under the
+  // `medicationExtract` AI capability (`requireAiCapability`), which no
+  // module owns, because medications is a core domain for extraction. The
+  // capability carries the operator switch, the record's authority and the
+  // consent rule; there is no module gate for it to carry.
+  "src/app/api/medications/extract/route.ts",
   "src/app/api/medications/[id]/route.ts",
   "src/app/api/medications/[id]/api-endpoint/route.ts",
   "src/app/api/medications/[id]/cadence/route.ts",

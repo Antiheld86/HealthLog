@@ -35,17 +35,18 @@ vi.mock("@/lib/documents/describe", () => ({
 vi.mock("@/lib/documents/content-index", () => ({
   upsertContentIndex: vi.fn().mockResolvedValue({ tokenCount: 7 }),
 }));
-vi.mock("@/lib/documents/provider-order", () => ({
-  resolveDocumentVisionProvider: vi.fn(),
-}));
+vi.mock("@/lib/documents/provider-order", async () =>
+  (await import("@/__tests__/helpers/provider-order-mock")).providerOrderMock(),
+);
+vi.mock("@/lib/ai/capabilities/gate", async () =>
+  (
+    await import("@/__tests__/helpers/provider-order-mock")
+  ).openCapabilityGateMock(),
+);
 vi.mock("@/lib/documents/auto-stage-labs", () => ({
   maybeAutoStageLabFacts: vi
     .fn()
     .mockResolvedValue({ staged: false, reason: "not-lab" }),
-}));
-vi.mock("@/lib/ai/consent-guard", () => ({
-  assertDocumentEgressConsent: vi.fn().mockResolvedValue(undefined),
-  ConsentRequiredError: class ConsentRequiredError extends Error {},
 }));
 vi.mock("@/lib/ai/coach/budget", () => ({
   buildDateKey: vi.fn(() => "2026-07-07"),

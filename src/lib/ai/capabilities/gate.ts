@@ -40,7 +40,11 @@ import { providerWorkAuthorityForRecord } from "@/lib/sharing/provider-work-auth
 import { loadAiCapabilityInputs, type AiCapabilityScope } from "./load";
 import { explainAiCapability, resolveAiCapability } from "./resolve";
 import { AiUnavailableError, type NoProviderRefusal } from "./refusal";
-import type { AiCapabilityKey, AiCapabilityState } from "./types";
+import {
+  PICK_DECIDED_REASONS,
+  type AiCapabilityKey,
+  type AiCapabilityState,
+} from "./types";
 
 export interface AiGateOptions {
   /**
@@ -50,6 +54,15 @@ export interface AiGateOptions {
   recordId?: string;
   /** The route's own `no_provider` refusal, where a client already reads it. */
   noProvider?: NoProviderRefusal;
+  /**
+   * Leave `no_provider` and `consent_required` to the provider the route
+   * actually picks. The resolver answers both from presence, which is right
+   * for the published payload but can differ from a route that reads the
+   * chain in its own order (a text-mode document read takes the chain head,
+   * not the first vision entry). A route that sets this must run the pick
+   * through `assertAiEgress` / `aiEgressRefusal`, which answers both exactly.
+   */
+  pickDecides?: boolean;
 }
 
 /**
@@ -118,7 +131,10 @@ export async function requireAiCapability(
   } catch {
     finding = { reason: "check_failed", module: null };
   }
-  if (finding.reason !== null) {
+  if (
+    finding.reason !== null &&
+    !(options.pickDecides && PICK_DECIDED_REASONS.has(finding.reason))
+  ) {
     throw new AiUnavailableError(
       key,
       finding.reason,

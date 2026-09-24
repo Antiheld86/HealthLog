@@ -92,6 +92,14 @@ vi.mock("@/lib/jobs/document-index", () => ({
   enqueueDocumentIndex: vi.fn().mockResolvedValue({ enqueued: true }),
 }));
 
+vi.mock("@/lib/jobs/document-summary", () => ({
+  enqueueDocumentSummary: vi.fn().mockResolvedValue({ enqueued: true }),
+}));
+vi.mock("@/lib/ai/capabilities/gate", async () =>
+  (
+    await import("@/__tests__/helpers/provider-order-mock")
+  ).openCapabilityGateMock(),
+);
 vi.mock("@/lib/jobs/document-thumbnail", () => ({
   enqueueDocumentThumbnail: vi.fn().mockResolvedValue({ enqueued: true }),
 }));
@@ -129,6 +137,8 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import { enqueueDocumentIndex } from "@/lib/jobs/document-index";
+import { enqueueDocumentSummary } from "@/lib/jobs/document-summary";
+import { getAiCapability } from "@/lib/ai/capabilities/gate";
 import {
   acquireDocumentUploadSlot,
   DOCUMENT_UPLOAD_GLOBAL_CONCURRENCY,
@@ -545,5 +555,29 @@ describe("GET /api/documents/inbound (list)", () => {
       new Request("http://localhost/api/documents/inbound?sort=nope"),
     );
     expect(res.status).toBe(422);
+  });
+});
+
+describe("POST /api/documents/inbound — AI work on upload follows documentAi", () => {
+  it("enqueues the background summary when document reading is open", async () => {
+    const res = await post(mkUpload());
+    expect(res.status).toBe(201);
+    expect(getAiCapability).toHaveBeenCalledWith("documentAi");
+    expect(enqueueDocumentSummary).toHaveBeenCalledWith("user-1", "doc-1");
+  });
+
+  it("stores the document and indexes it, but enqueues no summary, with document reading closed", async () => {
+    vi.mocked(getAiCapability).mockResolvedValueOnce({
+      available: false,
+      reason: "operator_disabled",
+      onDeviceAllowed: false,
+    });
+    const res = await post(mkUpload());
+    // The upload is data: accepted whatever AI says.
+    expect(res.status).toBe(201);
+    expect(txCreate).toHaveBeenCalled();
+    // The index job still runs its provider-free text-layer path.
+    expect(enqueueDocumentIndex).toHaveBeenCalledWith("user-1", "doc-1");
+    expect(enqueueDocumentSummary).not.toHaveBeenCalled();
   });
 });

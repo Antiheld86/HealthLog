@@ -56,14 +56,14 @@ vi.mock("@/lib/labs/ocr-upload", () => ({
   detectOcrMimeType: vi.fn(() => "image/png"),
 }));
 
-vi.mock("@/lib/documents/provider-order", () => ({
-  resolveDocumentVisionProvider: vi.fn(),
-  resolveDocumentTextProvider: vi.fn(),
-}));
-vi.mock("@/lib/ai/consent-guard", () => ({
-  assertDocumentEgressConsent: vi.fn().mockResolvedValue(undefined),
-  ConsentRequiredError: class ConsentRequiredError extends Error {},
-}));
+vi.mock("@/lib/documents/provider-order", async () =>
+  (await import("@/__tests__/helpers/provider-order-mock")).providerOrderMock(),
+);
+vi.mock("@/lib/ai/capabilities/gate", async () =>
+  (
+    await import("@/__tests__/helpers/provider-order-mock")
+  ).openCapabilityGateMock(),
+);
 vi.mock("@/lib/ai/coach/budget", () => ({
   buildDateKey: vi.fn(() => "2026-06-27"),
   reserveBudget: vi.fn().mockResolvedValue({ allowed: true, reserved: 1 }),
@@ -117,6 +117,8 @@ import {
   resolveDocumentTextProvider,
   resolveDocumentVisionProvider,
 } from "@/lib/documents/provider-order";
+import { requireAiCapability } from "@/lib/ai/capabilities/gate";
+import { AiUnavailableError } from "@/lib/ai/capabilities/refusal";
 
 const tx = (
   prisma as unknown as {
@@ -320,6 +322,42 @@ describe("POST /api/documents/inbound/[id]/extract — stored mode", () => {
     vi.mocked(prisma.extractedFact.count).mockResolvedValue(1 as never);
     const res = await POST(storedReq("doc-1") as never, ctx("doc-1") as never);
     expect(res.status).toBe(409);
+    expect(runInboundExtraction).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/documents/inbound/[id]/extract — the documentAi capability", () => {
+  it("refuses with the operator's code before the document is loaded", async () => {
+    vi.mocked(requireAiCapability).mockRejectedValueOnce(
+      new AiUnavailableError("documentAi", "operator_disabled"),
+    );
+    const res = await POST(visionReq("doc-1") as never, ctx("doc-1") as never);
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.meta).toEqual({
+      errorCode: "assistant.disabled.documentAi",
+      capability: "documentAi",
+      reason: "operator_disabled",
+    });
+    expect(prisma.inboundDocument.findFirst).not.toHaveBeenCalled();
+    expect(resolveDocumentVisionProvider).not.toHaveBeenCalled();
+    expect(runInboundExtraction).not.toHaveBeenCalled();
+  });
+
+  it("stops at the wire when the picked provider needs a receipt, before any slot is charged", async () => {
+    vi.mocked(resolveDocumentTextProvider).mockResolvedValue({
+      chain: [],
+      pick: null,
+      withheld: new AiUnavailableError("documentAi", "consent_required"),
+    } as never);
+    vi.mocked(loadDocumentChatText).mockResolvedValue({
+      text: "Glucose 95 mg/dL",
+    } as never);
+    const res = await POST(storedReq("doc-1") as never, ctx("doc-1") as never);
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.meta.errorCode).toBe("consent.ai.required");
+    expect(checkRateLimit).not.toHaveBeenCalled();
     expect(runInboundExtraction).not.toHaveBeenCalled();
   });
 });
