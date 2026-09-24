@@ -9,6 +9,17 @@
  */
 import { describe, it, expect, vi } from "vitest";
 
+// Reminders are held while the Coach is unavailable; these cases are about
+// surfacing, so the Coach answers. The hold is pinned against Postgres in
+// `tests/integration/coach-reminder-surfacing.test.ts`.
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityToServe: vi.fn(async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  })),
+}));
+
 vi.mock("@/lib/ai/coach/bytes-codec", () => ({
   decryptFromBytes: (buf: Uint8Array) => Buffer.from(buf).toString("utf8"),
   encryptToBytes: (s: string) => new Uint8Array(Buffer.from(`enc:${s}`)),

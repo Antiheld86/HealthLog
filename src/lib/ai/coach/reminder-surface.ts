@@ -15,6 +15,7 @@
  */
 import type { PrismaClient } from "@/generated/prisma/client";
 
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 import { decryptFromBytes, encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 import type { Locale } from "@/lib/i18n/config";
@@ -56,6 +57,18 @@ export function buildReminderSurfaceMessage(
   return { title, body };
 }
 
+/**
+ * Whether a user's Coach reminders are held: the record's `coach` capability
+ * is unavailable (operator switch, module off, opt-out, no provider, no
+ * consent), which is the same answer that keeps the badge dark. A reminder
+ * surfaced into a Coach nobody can open is a message that never shows, and
+ * the nag cap would then dismiss it unseen; held, it waits and surfaces once
+ * the Coach is back.
+ */
+export async function coachRemindersHeld(userId: string): Promise<boolean> {
+  return !(await aiCapabilityToServe(userId, "coach")).available;
+}
+
 export interface SurfaceOutcome {
   /** Reminders that reached the conversation in this call. */
   surfaced: number;
@@ -70,7 +83,8 @@ export interface SurfaceOutcome {
  * cost the user the reminders beside it. At most `MAX_NOTES_PER_MESSAGE`
  * notes ride one message; the remainder keep their status and surface on
  * the next trigger. A write failure leaves every row untouched: no badge
- * claims a message that was never written.
+ * claims a message that was never written. While the Coach is unavailable
+ * nothing is written and every row keeps its status.
  */
 export async function surfaceCoachReminders(
   prisma: ReminderSurfacePrisma,
@@ -80,6 +94,7 @@ export async function surfaceCoachReminders(
 ): Promise<SurfaceOutcome> {
   const outcome: SurfaceOutcome = { surfaced: 0, errored: 0 };
   if (rows.length === 0) return outcome;
+  if (await coachRemindersHeld(userId)) return outcome;
 
   const usable: { id: string; note: string }[] = [];
   for (const row of rows) {

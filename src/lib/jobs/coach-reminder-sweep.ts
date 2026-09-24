@@ -34,6 +34,10 @@
  * that has been stuck on an empty conversation resolves into the message it
  * always implied rather than staying stuck.
  *
+ * While the record's `coach` capability is unavailable its reminders are held:
+ * none is surfaced, charged or auto-dismissed, and they resume once the Coach
+ * is back (`coachRemindersHeld`, the same answer that keeps the badge dark).
+ *
  * The sweep still never calls a provider and never pushes. The message body is
  * a deterministic localized template around the user's OWN note text — the
  * words they asked to be reminded of, never anything fabricated.
@@ -50,7 +54,10 @@ import type { PrismaClient } from "@/generated/prisma/client";
 
 import { decryptFromBytes, encryptToBytes } from "@/lib/ai/coach/bytes-codec";
 import { evaluateCoachContextReminders } from "@/lib/ai/coach/context-reminders";
-import { surfaceCoachReminders } from "@/lib/ai/coach/reminder-surface";
+import {
+  coachRemindersHeld,
+  surfaceCoachReminders,
+} from "@/lib/ai/coach/reminder-surface";
 
 export const COACH_REMINDER_SWEEP_QUEUE = "coach-reminder-sweep";
 // Daily at 05:20 Europe/Berlin — just after the 05:15 nudge tick so both
@@ -258,11 +265,26 @@ export async function runCoachReminderSweep(
   // it has already sat there for a day as one more surfacing, then
   // auto-dismiss the rows that reached the cap. Two bulk statements, no
   // message: dismissal is silence, not another nag.
+  // A day the Coach was unavailable is not a day the reminder sat ignored:
+  // the badge was dark and there was nothing to open. Those users' rows are
+  // neither charged nor dismissed.
+  const surfacedOwners = await prisma.coachReminder.findMany({
+    where: { deletedAt: null, status: "surfaced" },
+    distinct: ["userId"],
+    select: { userId: true },
+  });
+  const heldOwners: string[] = [];
+  for (const { userId } of surfacedOwners) {
+    if (await coachRemindersHeld(userId)) heldOwners.push(userId);
+  }
+  const notHeld =
+    heldOwners.length > 0 ? { userId: { notIn: heldOwners } } : {};
   await prisma.coachReminder.updateMany({
     where: {
       deletedAt: null,
       status: "surfaced",
       lastSurfacedAt: { lte: new Date(now.getTime() - NAG_STALE_MS) },
+      ...notHeld,
     },
     data: { surfaceCount: { increment: 1 } },
   });
@@ -271,6 +293,7 @@ export async function runCoachReminderSweep(
       deletedAt: null,
       status: "surfaced",
       surfaceCount: { gte: REMINDER_NAG_CAP },
+      ...notHeld,
     },
     data: { status: "dismissed" },
   });

@@ -19,6 +19,17 @@ vi.mock("@/lib/ai/coach/bytes-codec", () => ({
   encryptToBytes: (s: string) => new Uint8Array(Buffer.from(`enc:${s}`)),
 }));
 
+// Reminders are held while the Coach is unavailable; these cases are about
+// surfacing, so the Coach answers. The hold is pinned against Postgres in
+// `tests/integration/coach-reminder-surfacing.test.ts`.
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityToServe: vi.fn(async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  })),
+}));
+
 // The context-cue backstop delegates to the shared evaluator; its own
 // behaviour is pinned in `ai/coach/__tests__/context-reminders.test.ts`.
 const { contextEvaluateMock } = vi.hoisted(() => ({
