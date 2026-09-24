@@ -200,27 +200,18 @@ export function DoseHistoryLedger({
     slotAt: string;
   } | null>(null);
 
-  // Stable window captured once at mount (a lazy state initializer keeps the
-  // impure `Date.now()` out of render) so the query key + the `from`/`to`
-  // request stay byte-equal across renders rather than re-keying every paint.
-  const [{ fromIso, toIso }] = useState(() => {
-    const now = Date.now();
-    return {
-      toIso: new Date(now).toISOString(),
-      fromIso: new Date(now - windowDays * DAY_MS).toISOString(),
-    };
-  });
-
-  const queryKey = queryKeys.medicationDoseHistory(
-    medicationId,
-    fromIso,
-    toIso,
-  );
+  // The window is resolved when the request fires, not when the ledger
+  // mounts. A window pinned at mount made every refetch (including the one
+  // after adding an entry) ask for rows up to the moment the tab opened, so a
+  // dose recorded afterwards stayed invisible until a reload (#1028). Only
+  // `from` travels: the server's `to` defaults to its own now.
+  const queryKey = queryKeys.medicationDoseHistory(medicationId, windowDays);
 
   const { data, isLoading, isError } = useQuery<LedgerPayload>({
     queryKey,
     queryFn: async () => {
-      const search = new URLSearchParams({ from: fromIso, to: toIso });
+      const from = new Date(Date.now() - windowDays * DAY_MS).toISOString();
+      const search = new URLSearchParams({ from });
       return apiGet<LedgerPayload>(
         `/api/medications/${medicationId}/dose-history?${search.toString()}`,
       );
