@@ -85,6 +85,7 @@ import {
   IntegrationCardDescription,
 } from "./setup-guide-link";
 import type { IntegrationCallbackUrls } from "@/lib/integrations/callback-urls";
+import { loadDocument } from "@/lib/navigation/load-document";
 
 export function GoogleHealthCard({
   viewModel,
@@ -443,7 +444,7 @@ export function GoogleHealthCard({
               size="sm"
               variant="outline"
               onClick={() => {
-                window.location.href = "/api/google-health/connect";
+                loadDocument("/api/google-health/connect");
               }}
               data-testid="google-health-reconnect-button"
               className="min-h-11"
@@ -749,7 +750,7 @@ export function GoogleHealthCard({
               className="min-h-11 w-full sm:w-auto"
               data-testid="googlehealth-connect"
               onClick={() => {
-                window.location.href = "/api/google-health/connect";
+                loadDocument("/api/google-health/connect");
               }}
             >
               <Link2 className="h-3.5 w-3.5" />
