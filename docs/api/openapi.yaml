@@ -5961,21 +5961,23 @@ paths:
         - in: query
           name: from
           schema:
-            description: Window start (inclusive). Defaults to 90 days before `to`; clamped to the medication's `createdAt` and a
-              366-day span floor.
+            description: Window start (inclusive). Defaults to 90 days before `to`; clamped to a 366-day span floor. Recorded doses
+              are returned from this instant; expected slots are not minted before the medication's `createdAt`.
             type: string
             format: date-time
             pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-          description: Window start (inclusive). Defaults to 90 days before `to`; clamped to the medication's `createdAt` and a
-            366-day span floor.
+          description: Window start (inclusive). Defaults to 90 days before `to`; clamped to a 366-day span floor. Recorded doses
+            are returned from this instant; expected slots are not minted before the medication's `createdAt`.
         - in: query
           name: to
           schema:
-            description: Window end (inclusive). Defaults to now. Must be ≥ `from`.
+            description: Window end (inclusive). Defaults to now. Must be ≥ `from`. A dose recorded ahead of its slot (the slot's
+              time within a day after `to`) is still returned.
             type: string
             format: date-time
             pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
-          description: Window end (inclusive). Defaults to now. Must be ≥ `from`.
+          description: Window end (inclusive). Defaults to now. Must be ≥ `from`. A dose recorded ahead of its slot (the slot's
+            time within a day after `to`) is still returned.
       responses:
         "200":
           description: Dose-history ledger.
@@ -43671,10 +43673,13 @@ components:
           type: string
           format: date-time
           pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: "Start of the window recorded doses were read over: the requested `from` after the span clamp."
         to:
           type: string
           format: date-time
           pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
+          description: "End of the window recorded doses were read over: the requested `to`, or the slot time of a dose recorded
+            ahead of its slot when that lies later (at most one day after `to`)."
         family:
           type: string
           enum:

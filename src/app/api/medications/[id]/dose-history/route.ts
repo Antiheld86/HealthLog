@@ -313,9 +313,13 @@ export const GET = apiHandler(
       meta: { row_count: serialized.length, family },
     });
 
+    // The window the recorded doses were read over (#1028): from the
+    // requested start (slots additionally start at the medication's
+    // creation) to the read horizon, which reaches past `to` only for a dose
+    // recorded ahead of its slot.
     return apiSuccess({
-      from: from.toISOString(),
-      to: to.toISOString(),
+      from: intakeFrom.toISOString(),
+      to: horizon.toISOString(),
       family,
       hasExpectedSlots: bands.length > 0,
       rows: serialized,

@@ -344,6 +344,9 @@ describe("GET /api/medications/[id]/dose-history — intakes recorded before cre
           json.data.rows as Array<{ intake: { id: string | null } | null }>
         ).map((r) => r.intake?.id);
         expect(ids).toContain("evt-earlier-today");
+        // The response reports the window the recorded doses were read
+        // over: the requested start, not the medication's creation.
+        expect(json.data.from).toBe(from);
       } finally {
         vi.useRealTimers();
       }
@@ -410,6 +413,9 @@ describe("GET /api/medications/[id]/dose-history — early take (#1028 class)", 
         status: string;
         intake: { id: string | null } | null;
       }>;
+      // `to` reports how far recorded doses were read: up to the early
+      // dose's slot, past the request's own now.
+      expect(json.data.to).toBe(slot.toISOString());
       const early = rows.find((r) => r.intake?.id === "evt-early");
       expect(early?.status).toBe("taken_on_time");
       // The read horizon stretches only to the recorded anchor: no later
