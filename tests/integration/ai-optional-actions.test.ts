@@ -8,9 +8,9 @@
  * The chat keeps its `coach.provider.none` SSE frame for a missing provider,
  * now carrying `reason`.
  *
- * Mutation check: replacing `requireAiCapability("briefing")` in the generate
- * GET with the old Coach gate lets S2 (briefing off, the others on for this
- * case) through to the cache and turns that case red.
+ * Mutation check: removing `requireAiCapability("briefing")` from the
+ * generate GET lets every state through to the cache read and turns all five
+ * briefing cases red.
  */
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";

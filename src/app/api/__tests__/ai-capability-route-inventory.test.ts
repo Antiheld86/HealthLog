@@ -23,8 +23,7 @@
  * Mutation checks (each turned this file red by name): adding
  * `await requireAiCapability("statusText")` to `insights/ecg/route.ts`;
  * removing the capability call from `insights/chat/route.ts`; swapping
- * `getAiCapability` for `requireAiCapability` in `insights/narrative`;
- * breaking the call matcher.
+ * `getAiCapability` for `requireAiCapability` in `insights/narrative`.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";

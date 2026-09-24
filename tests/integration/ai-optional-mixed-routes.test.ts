@@ -8,10 +8,10 @@
  * served however fresh, and nothing is enqueued to warm it. The baseline (S0)
  * proves each assertion can see the text when it is allowed to.
  *
- * Mutation check: dropping the `ai.available` test from the narrative route
- * (`existing = stored`) serves the provider row under S1 and S6 and turns
- * those cases red; applying the briefing capability inside the cached builder
- * instead of per read turns the snapshot flip case red.
+ * Mutation check: dropping the capability test from the narrative route
+ * (`existing = stored`) serves the provider row and turns all four hiding
+ * states red. The per-read snapshot gate is mutation-checked by
+ * `snapshot-read-briefing-capability.test.ts`.
  */
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
