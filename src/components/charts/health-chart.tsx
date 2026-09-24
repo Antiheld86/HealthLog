@@ -1,5 +1,6 @@
 "use client";
 
+import { chartSeriesParams } from "@/components/charts/chart-series-request";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
@@ -327,8 +328,8 @@ interface MeasurementApiRow {
   value: number;
   // v1.8.5 — per-day min / max emitted by the rollup daily-aggregate
   // path (non-cumulative metrics only). Drive the Apple-Health-style
-  // range band shaded around the mean line. Absent on the raw-row path
-  // (windows ≤ 7 days) and on cumulative metrics.
+  // range band shaded around the mean line. Not drawn on the 7-day range
+  // and absent on cumulative metrics.
   // v1.18.6 — `null` accepted alongside `undefined` so the batched
   // series endpoint's row shape (which carries `number | null`) feeds
   // `preloadedSeries` directly. The bucketing loop already guards each
@@ -340,8 +341,7 @@ interface MeasurementApiRow {
   // the underlying raw-row count per bucket. Used downstream to gate
   // the "more days needed" empty-state copy on the actual measurement
   // count rather than the number of distinct calendar days. Optional
-  // because the short-window raw-row path does not populate it (each
-  // row already represents one measurement, count = 1).
+  // because the per-night sleep series does not carry it.
   count?: number;
 }
 
@@ -764,12 +764,11 @@ export function HealthChart({
     };
   }, [rangePoints, effectiveCompareBaseline]);
 
-  // v1.18.6 — honour the dashboard's batched slice ONLY for the
-  // daily-aggregate window (`windowDays > 7`, the rollup path) and ONLY
-  // when EVERY non-sleep type the chart renders is present in the slice.
-  // SLEEP_DURATION is never batched (per-night `/series`), so a chart
-  // that includes it always self-fetches. A range-tab change to a ≤7-day
-  // window (raw rows) drops batched coverage and self-fetches.
+  // v1.18.6 — honour the dashboard's batched slice ONLY for windows over
+  // 7 days and ONLY when EVERY non-sleep type the chart renders is present
+  // in the slice. SLEEP_DURATION is never batched (per-night `/series`),
+  // so a chart that includes it always self-fetches. The 7-day tab
+  // self-fetches its own window.
   //
   // v1.19.0 — also require that the requested window FITS within the
   // batch's actual coverage. The dashboard batches only a ~30-day slice;
@@ -916,41 +915,7 @@ export function HealthChart({
           await fetchSleepNights();
           return;
         }
-        const typeParams = new URLSearchParams();
-        typeParams.set("type", type);
-        typeParams.set("sortBy", "measuredAt");
-        typeParams.set("sortDir", "asc");
-        typeParams.set("from", fetchWindow.from);
-        typeParams.set("to", fetchWindow.to);
-        typeParams.set("limit", "5000");
-        // v1.4.29 C3 — windows over 7 days ask the server to bucket
-        // daily. Caps the chart's per-type payload at ~365 rows
-        // instead of ~5 000 for high-density types (pulse), and drops
-        // Recharts paint cost ~50× on continuous-monitoring accounts.
-        // Short windows keep raw fetching so hour-by-hour detail
-        // stays visible.
-        //
-        // v1.4.36 W1 — also route the daily aggregate through the
-        // persistent rollup buckets via `source=rollup`. The route
-        // reads from `measurement_rollups` instead of running a live
-        // `date_trunc` scan over the raw measurements table; the
-        // three parallel daily fetches on the Insights trends row
-        // (BP_SYS / BP_DIA / WEIGHT) drop from ~3 s each to a small
-        // indexed read against the ~5 k-row rollup table. The server
-        // falls back to live SQL when the rollup is empty for the
-        // requested window so brand-new accounts still see a chart
-        // on their first render.
-        //
-        // v1.19.2 — the `aggregate=daily` ask still holds, but for windows
-        // wider than the DAY bucket cap the server steps the rollup tier
-        // up to WEEK / MONTH and returns whole-history coverage at that
-        // tier. Each returned row is one coarse bucket; the daily fold +
-        // `bucketTimeSeries` below downsample it to the visible range, so
-        // the request contract is unchanged.
-        if (fetchWindow.windowDays > 7) {
-          typeParams.set("aggregate", "daily");
-          typeParams.set("source", "rollup");
-        }
+        const typeParams = chartSeriesParams(type, fetchWindow);
 
         // v1.18.6 — when the dashboard handed this chart a batched slice
         // for the type, fold those rows instead of a per-type fetch. The
@@ -1011,8 +976,11 @@ export function HealthChart({
           // same scale to the spread so the band tracks the line. The
           // BMI view drops the range tuple in its `select` callback (it
           // has never rendered the band), so the raw cache always
-          // carries the spread.
+          // carries the spread. The 7-day range never drew the band (it
+          // used to read raw rows, which carry no spread) and still does
+          // not, so its picture is unchanged now that it reads days too.
           if (
+            fetchWindow.windowDays > 7 &&
             typeof measurement.minValue === "number" &&
             typeof measurement.maxValue === "number"
           ) {
@@ -1044,10 +1012,9 @@ export function HealthChart({
           for (const [type, stats] of Object.entries(bucket.values)) {
             // v1.4.29.1 — cumulative HealthKit types (steps, active energy,
             // distance, flights, daylight) must reduce with sum, not the
-            // per-sample average. The server already does this when the
-            // chart fetches with `aggregate=daily` (windows over 7 days);
-            // the 7-day path still pulls raw rows and aggregates here,
-            // so the same distinction must hold client-side.
+            // per-sample average. The server already returns one row per
+            // day; a day that arrives as several rows (the coarser tiers
+            // of the "All" range) must still add up rather than average.
             const isCumulative = CUMULATIVE_HK_TYPES.has(
               type as MeasurementType,
             );
