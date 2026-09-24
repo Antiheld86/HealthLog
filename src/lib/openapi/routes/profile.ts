@@ -11,6 +11,11 @@ import { notificationPrefsSchema } from "@/lib/validations/notification-prefs";
 import { sourcePrioritySchema } from "@/lib/validations/source-priority";
 import { modulePrefsPatchSchema } from "@/lib/validations/modules";
 import { MODULE_KEYS } from "@/lib/modules/registry";
+import {
+  AI_CAPABILITIES,
+  AI_CAPABILITY_KEYS,
+  AI_UNAVAILABLE_REASONS,
+} from "@/lib/ai/capabilities/types";
 import { SCORE_PILLAR_IDS } from "@/lib/analytics/score/types";
 import { savedReportProfileSchema } from "@/lib/report-selection/profile-shape";
 import { injectionSiteEnum } from "@/lib/validations/medication";
@@ -113,6 +118,81 @@ export const moduleAccessMap = z
     id: "ModuleAccessMap",
     description:
       "Why each toggleable module is or is not available for the record this session is inside. `enabled` — the module is on and the client may paint it. `disabled` — the record has it switched off. `not_granted` — the active grant's sections do not open the module's section, which also covers every module that reads across the whole record (achievements, the assistant surfaces, the export, environment, the account's own MCP endpoint) since no scoped grant opens one. `unavailable` — the operator switched the module off for the whole instance. Precedence, highest first: `unavailable` > `not_granted` > `disabled` > `enabled`, so the reason published is the one nothing further in can change. Own-record sessions and unscoped grants never produce `not_granted`. Every key is present, and `modules[key] === (moduleAccess[key] === \"enabled\")` holds for every key — this field adds a reason, never a different gate.",
+  });
+
+// ── AI capabilities (`ai` on GET /api/auth/me) ─────────────────────────────
+
+export const aiUnavailableReason = z.enum(AI_UNAVAILABLE_REASONS).meta({
+  id: "AiUnavailableReason",
+  description:
+    "Why an AI capability is unavailable, listed in precedence order; only the outermost reason that applies is reported, because it names the layer that would have to change first. `check_failed` — an input could not be read and the answer failed closed. `operator_disabled` — the operator's master switch, the capability's own switch, or the operator's instance-wide availability of its module. `not_permitted_for_record` — AI work is not admitted for this record (a delegate inside somebody else's record). `module_disabled` — an owning module is off for this record, by its own switch or by the edge of the active grant. `user_disabled` — the record's own AI opt-out: the Coach preference for the Coach, the `insights` module (AI analysis) for everything else. `no_provider` — no configured provider can serve this capability's input. `consent_required` — the provider chain needs an AI consent receipt and none is active. The list is closed; a client that meets a value it does not know treats the capability as unavailable.",
+});
+
+export const aiCapabilityState = z
+  .object({
+    available: z.boolean(),
+    reason: aiUnavailableReason
+      .nullable()
+      .describe("`null` exactly when `available` is true."),
+    onDeviceAllowed: z
+      .boolean()
+      .describe(
+        "Whether an on-device model may do this work. False for `operator_disabled`, `not_permitted_for_record`, `module_disabled`, `user_disabled` and `check_failed`: the operator's and the person's decisions hold on the device too. True otherwise, since a missing server provider or a missing consent for server egress do not concern a model that runs on the device. Resolved here so the client never decides which reasons apply off the server.",
+      ),
+  })
+  .meta({
+    id: "AiCapabilityState",
+    description:
+      "One AI capability, resolved for one record from every layer that can say no. Render from it; never recompute it. Data never depends on it: measurements, scores, statistics and device records load whatever it says.",
+  });
+
+export const aiCapabilities = z
+  .object(
+    Object.fromEntries(
+      AI_CAPABILITY_KEYS.map((key) => [
+        key,
+        aiCapabilityState.describe(
+          `The "${key}" capability. Covered by the operator's "${AI_CAPABILITIES[key].operatorSwitch}" switch.`,
+        ),
+      ]),
+    ),
+  )
+  .meta({
+    id: "AiCapabilities",
+    description:
+      "Every AI capability, always all present. `coach` — chat, fenced document chat, attachments, Coach memory upkeep, AI nudges, every Coach launcher. `briefing` — the daily briefing and every place its text is lifted into. `periodNarrative` — the model-written half of a period narrative (the deterministic narrative is data). `statusText` — per-metric status notes and the AI override of a derived assessment. `workoutInsights` — the paragraph on a workout. `reactionLines` — the line written after a new reading. `aboutMeQuestions` — model-written follow-up questions on the about-me profile (a deterministic set stays). `documentAi` — suggest, summary, extract, index and chat over a stored document. `labsOcr` — reading a lab report image. `medicationExtract` — turning a typed medication description into a schedule.",
+  });
+
+export const aiProviderState = z
+  .object({
+    configured: z
+      .boolean()
+      .describe(
+        "At least one configured provider can serve text for this record. Presence only: no key is tried, so a revoked key still reads as configured until a generation fails.",
+      ),
+    managedBy: z
+      .enum(["user", "local", "server"])
+      .nullable()
+      .describe(
+        "Where the serving credential comes from: the person's own (`user`), a self-hosted model they pointed at (`local`), or one the operator holds (`server`). `null` when nothing is configured.",
+      ),
+    canConfigure: z
+      .boolean()
+      .describe(
+        "Whether the person in front of the screen may set up a provider for this record: false inside somebody else's record and while the operator's master switch is off. A setup hint is shown only when this is true.",
+      ),
+  })
+  .meta({
+    id: "AiProviderState",
+    description: "The account-level companion to the capability map.",
+  });
+
+export const aiAccountBlock = z
+  .object({ capabilities: aiCapabilities, provider: aiProviderState })
+  .meta({
+    id: "AiAccountBlock",
+    description:
+      "Which AI capabilities the record this session is inside has, and why not when it has none. Resolved on the server for the ACTIVE RECORD and masked to the sections the active grant opens, exactly like `modules` and `moduleAccess`; with no switch (every native request) it describes the caller's own record.",
   });
 
 const moduleMapEnvelopeInner = z

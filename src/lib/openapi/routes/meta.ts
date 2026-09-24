@@ -252,28 +252,30 @@ const assistantFlagsResponse = z
   .object({
     assistant: z
       .object({
-        enabled: z
-          .boolean()
-          .describe("Master kill-switch for every assistant surface."),
-        coach: z.boolean().describe("Coach drawer, chat stream, history."),
+        enabled: z.boolean().describe("Master switch for every AI feature."),
+        coach: z.boolean().describe("The Coach."),
         briefing: z
           .boolean()
-          .describe("Daily Briefing card and its recommendations."),
+          .describe("The daily briefing and model-written period narratives."),
         insightStatus: z
           .boolean()
-          .describe("Per-metric status cards on the insight sub-pages."),
-        correlations: z
+          .describe(
+            "Status notes: per-metric notes, workout notes and reaction lines.",
+          ),
+        documentAi: z
           .boolean()
-          .describe("Correlation narration on the insights page."),
+          .describe(
+            "Reading documents: the document vault's AI reads, lab report scans and medication extraction.",
+          ),
       })
       .describe(
-        "The resolved matrix. The master is already applied: when `enabled` is false every sub-flag is false in this payload, so a client reads `coach` directly and never composes `enabled && coach`.",
+        "The operator's switches, master applied: when `enabled` is false every sub-switch is false in this payload. A switch read that fails answers every switch false.",
       ),
   })
   .meta({
     id: "AssistantFlagsResponse",
     description:
-      "The operator's assistant visibility matrix, resolved. Gates the server-routed AND the on-device assistant surfaces, so a client hides the surface end-to-end rather than degrading it.",
+      "The operator's assistant switches, and nothing else. Deprecated: whether a capability is available also depends on the record's modules, the provider, consent and who is asking, and `ai` on GET /api/auth/me is that resolved answer.",
   });
 
 // ── Update check ─────────────────────────────────────────────────────
@@ -391,9 +393,10 @@ export const metaPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   "/api/feature-flags": {
     get: {
       tags: ["Meta"],
-      summary: "The operator's assistant feature matrix",
+      summary: "The operator's assistant switches (deprecated)",
+      deprecated: true,
       description:
-        "Which assistant surfaces this deployment offers. The master flag is applied server-side before the shape leaves the handler, so every sub-flag is already false when the master is off and a client never composes the two.\n\n" +
+        'Deprecated: read `ai` on GET /api/auth/me instead, which resolves each AI capability for the record from the switches, the record\'s modules, the provider, consent and who is asking. This route projects the operator switches alone and is removed in the first release after the native build that reads `ai` ships. Responses carry `Deprecation: true` and `Link: </api/auth/me>; rel="successor-version"`. The master is applied server-side, so every sub-switch is already false when it is off.\n\n' +
         "An ACTOR surface: it answers about the deployment, not about a record, so it keeps answering while the caller is acting on somebody else's — the Coach launcher and the assistant chrome are gated on it, and a refusal here would delete a piece of the shell rather than a piece of the data. A request that attaches the per-request account selector (the `AccountSelector` header parameter) is refused with 403 `sharing.not_permitted` rather than quietly answered.\n\n" +
         "Served with `Cache-Control: private, max-age=60`: an operator's toggle propagates within a minute, and the flag read stays off the hot mount path in the meantime.",
       responses: {

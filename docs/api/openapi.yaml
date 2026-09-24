@@ -770,10 +770,14 @@ paths:
     get:
       tags:
         - Meta
-      summary: The operator's assistant feature matrix
+      summary: The operator's assistant switches (deprecated)
+      deprecated: true
       description: >-
-        Which assistant surfaces this deployment offers. The master flag is applied server-side before the shape leaves
-        the handler, so every sub-flag is already false when the master is off and a client never composes the two.
+        Deprecated: read `ai` on GET /api/auth/me instead, which resolves each AI capability for the record from the
+        switches, the record's modules, the provider, consent and who is asking. This route projects the operator
+        switches alone and is removed in the first release after the native build that reads `ai` ships. Responses carry
+        `Deprecation: true` and `Link: </api/auth/me>; rel="successor-version"`. The master is applied server-side, so
+        every sub-switch is already false when it is off.
 
 
         An ACTOR surface: it answers about the deployment, not about a record, so it keeps answering while the caller is
@@ -30022,40 +30026,42 @@ components:
                 naming conventions coexist and none of them will be renamed, because a code is a wire value a shipped
                 client branches on. Treat an unlisted code the way you would treat an unlisted enum member — as a
                 refusal you do not recognise, not as a malformed response — since the list grows with the surfaces.
-                Three families are outside it on purpose: `assistant.disabled.<surface>` is built from a template so the
-                last segment is open (`assistant.disabled.coach` is the one the native client names); the
-                integration-probe classes (`credentials_rejected`, `rate_limited`, `upstream_error`, `timeout`,
-                `connection_failed` and the per-provider additions) are enumerated in each `/test` operation instead,
-                where the differences can be stated; and a 401 raised by a route checking a credential of its own may
-                carry no code at all. ai_provider — ai_provider.invalid, ai_provider.no_fields; allergy —
-                allergy.invalid; analytics — analytics.invalid_query; anamnesis — anamnesis.fact.conflict,
-                anamnesis.fact.currentExists, anamnesis.fact.invalidValue; auth — auth.admin.required,
-                auth.already_authenticated, auth.mfa.code_invalid, auth.missing, auth.refresh.invalid,
-                auth.refresh.reuse, auth.refresh.revoked, auth.scope.insufficient, auth.stepup.required,
-                auth.token.expired, auth.token.invalid; backup — backup.payload.undecryptable, backup.section.missing;
-                coach — coach.conversation.invalidTitle, coach.conversation.notFound, coach.fenced.attachmentConflict,
-                coach.fenced.attachmentLimit, coach.fenced.attachmentNotFound, coach.fenced.attachmentNotIndexed,
-                coach.fenced.attachmentRequired, coach.fenced.attachmentUnavailable, coach.fenced.invalid,
-                coach.request.invalid; coach-prefs — coach-prefs.body.invalid_json, coach-prefs.body.invalid_shape;
-                consent — consent.ai.required; cycle — cycle.bulk.invalid, cycle.bulk.too_large, cycle.calendar.invalid,
-                cycle.calendar.range, cycle.cycles.invalid, cycle.day-log.conflict, cycle.day-log.invalid,
-                cycle.disabled, cycle.period.invalid, cycle.symptom.custom.invalid, cycle.symptom.custom.limit;
-                cycle-prefs — cycle-prefs.body.invalid_json, cycle-prefs.invalid; disable-coach —
-                disable-coach.body.invalid_json; documents — documents.chat.conversationNotFound,
-                documents.chat.invalid, documents.inbound.alreadyConfirmed, documents.inbound.alreadyPartlyConfirmed,
-                documents.inbound.budgetExceeded, documents.inbound.decryptFailed, documents.inbound.encounterNotFound,
-                documents.inbound.episodeNotFound, documents.inbound.extractFailed, documents.inbound.factNotFound,
-                documents.inbound.factNotPending, documents.inbound.factTypeMismatch, documents.inbound.fileTooLarge,
-                documents.inbound.fileType, documents.inbound.invalidMetadata, documents.inbound.invalidQuery,
-                documents.inbound.invalidUpdate, documents.inbound.localOcrDisabled, documents.inbound.notFound,
-                documents.inbound.notIndexed, documents.inbound.pdfNeedsAnthropic,
-                documents.inbound.providerUnsupported, documents.inbound.quotaExceeded, documents.inbound.rateLimited,
-                documents.inbound.restoreDuplicate, documents.inbound.restoreGone, documents.inbound.uploadBusy,
-                documents.inbound.uploadTimeout; encounter — encounter.invalid, encounter.link.invalid,
-                encounter.practitioner-not-found, encounter.reminder-conflict, encounter.reminder-not-found; environment
-                — environment.invalid, environment.no_home, environment.range_too_large, environment.travel.not_found;
-                export — export.selection.empty, export.selection.unknown_leaf; familyHistory — familyHistory.invalid;
-                feedback — feedback.body.invalid; health_score_config — health_score_config.invalid,
+                Three families are outside it on purpose: `assistant.disabled.<switch>` is built from a template so the
+                last segment is open — it is one of `coach`, `briefing`, `insightStatus`, `documentAi` and `enabled`,
+                and `assistant.disabled.coach` is the one the native client names; the integration-probe classes
+                (`credentials_rejected`, `rate_limited`, `upstream_error`, `timeout`, `connection_failed` and the
+                per-provider additions) are enumerated in each `/test` operation instead, where the differences can be
+                stated; and a 401 raised by a route checking a credential of its own may carry no code at all. ai —
+                ai.provider.none, ai.record.notPermitted, ai.unavailable; ai_provider — ai_provider.invalid,
+                ai_provider.no_fields; allergy — allergy.invalid; analytics — analytics.invalid_query; anamnesis —
+                anamnesis.fact.conflict, anamnesis.fact.currentExists, anamnesis.fact.invalidValue; auth —
+                auth.admin.required, auth.already_authenticated, auth.mfa.code_invalid, auth.missing,
+                auth.refresh.invalid, auth.refresh.reuse, auth.refresh.revoked, auth.scope.insufficient,
+                auth.stepup.required, auth.token.expired, auth.token.invalid; backup — backup.payload.undecryptable,
+                backup.section.missing; coach — coach.conversation.invalidTitle, coach.conversation.notFound,
+                coach.fenced.attachmentConflict, coach.fenced.attachmentLimit, coach.fenced.attachmentNotFound,
+                coach.fenced.attachmentNotIndexed, coach.fenced.attachmentRequired, coach.fenced.attachmentUnavailable,
+                coach.fenced.invalid, coach.request.invalid; coach-prefs — coach-prefs.body.invalid_json,
+                coach-prefs.body.invalid_shape; consent — consent.ai.required; cycle — cycle.bulk.invalid,
+                cycle.bulk.too_large, cycle.calendar.invalid, cycle.calendar.range, cycle.cycles.invalid,
+                cycle.day-log.conflict, cycle.day-log.invalid, cycle.disabled, cycle.period.invalid,
+                cycle.symptom.custom.invalid, cycle.symptom.custom.limit; cycle-prefs — cycle-prefs.body.invalid_json,
+                cycle-prefs.invalid; disable-coach — disable-coach.body.invalid_json; documents —
+                documents.chat.conversationNotFound, documents.chat.invalid, documents.inbound.alreadyConfirmed,
+                documents.inbound.alreadyPartlyConfirmed, documents.inbound.budgetExceeded,
+                documents.inbound.decryptFailed, documents.inbound.encounterNotFound, documents.inbound.episodeNotFound,
+                documents.inbound.extractFailed, documents.inbound.factNotFound, documents.inbound.factNotPending,
+                documents.inbound.factTypeMismatch, documents.inbound.fileTooLarge, documents.inbound.fileType,
+                documents.inbound.invalidMetadata, documents.inbound.invalidQuery, documents.inbound.invalidUpdate,
+                documents.inbound.localOcrDisabled, documents.inbound.notFound, documents.inbound.notIndexed,
+                documents.inbound.pdfNeedsAnthropic, documents.inbound.providerUnsupported,
+                documents.inbound.quotaExceeded, documents.inbound.rateLimited, documents.inbound.restoreDuplicate,
+                documents.inbound.restoreGone, documents.inbound.uploadBusy, documents.inbound.uploadTimeout; encounter
+                — encounter.invalid, encounter.link.invalid, encounter.practitioner-not-found,
+                encounter.reminder-conflict, encounter.reminder-not-found; environment — environment.invalid,
+                environment.no_home, environment.range_too_large, environment.travel.not_found; export —
+                export.selection.empty, export.selection.unknown_leaf; familyHistory — familyHistory.invalid; feedback —
+                feedback.body.invalid; health_score_config — health_score_config.invalid,
                 health_score_config.too_narrow; illness — illness.day-log.invalid, illness.disabled,
                 illness.episode.chronic-no-resolve, illness.episode.invalid, illness.episode.invalid-window,
                 illness.episode.parent-not-found, illness.insights.invalid; import — import.write_failed; ingest —
@@ -30112,6 +30118,22 @@ components:
                 missing_required_columns, modules_conflict, mood_tag_layout_conflict, not_configured,
                 notification_prefs_conflict, oidc_only, private_origin_not_approved, private_origin_not_grantable,
                 rate_limited_self, too_many_rows, unreadable_json, upstream_invalid_json, vapid_not_configured"
+              type: string
+            capability:
+              description: "On an AI refusal: the capability that is unavailable, one of the keys of `AiCapabilities` (`coach`,
+                `briefing`, `periodNarrative`, `statusText`, `workoutInsights`, `reactionLines`, `aboutMeQuestions`,
+                `documentAi`, `labsOcr`, `medicationExtract`)."
+              type: string
+            reason:
+              description: "On an AI refusal: the outermost reason, one of `AiUnavailableReason`. The code maps from it:
+                `operator_disabled` → `assistant.disabled.<switch>` (or `module.disabled` with `module` when the
+                operator's module availability closed it), `not_permitted_for_record` → `ai.record.notPermitted`,
+                `module_disabled` and `user_disabled` → `module.disabled` with `module`, `no_provider` → the route's own
+                typed code where it has one, otherwise `ai.provider.none` (422), `consent_required` →
+                `consent.ai.required`, `check_failed` → `ai.unavailable` (503)."
+              type: string
+            module:
+              description: "Beside `module.disabled`: the module that is off. On an AI refusal it is the capability's owning module."
               type: string
           additionalProperties: {}
       required:
@@ -31786,33 +31808,34 @@ components:
           properties:
             enabled:
               type: boolean
-              description: Master kill-switch for every assistant surface.
+              description: Master switch for every AI feature.
             coach:
               type: boolean
-              description: Coach drawer, chat stream, history.
+              description: The Coach.
             briefing:
               type: boolean
-              description: Daily Briefing card and its recommendations.
+              description: The daily briefing and model-written period narratives.
             insightStatus:
               type: boolean
-              description: Per-metric status cards on the insight sub-pages.
-            correlations:
+              description: "Status notes: per-metric notes, workout notes and reaction lines."
+            documentAi:
               type: boolean
-              description: Correlation narration on the insights page.
+              description: "Reading documents: the document vault's AI reads, lab report scans and medication extraction."
           required:
             - enabled
             - coach
             - briefing
             - insightStatus
-            - correlations
+            - documentAi
           additionalProperties: false
-          description: "The resolved matrix. The master is already applied: when `enabled` is false every sub-flag is false in
-            this payload, so a client reads `coach` directly and never composes `enabled && coach`."
+          description: "The operator's switches, master applied: when `enabled` is false every sub-switch is false in this
+            payload. A switch read that fails answers every switch false."
       required:
         - assistant
       additionalProperties: false
-      description: The operator's assistant visibility matrix, resolved. Gates the server-routed AND the on-device assistant
-        surfaces, so a client hides the surface end-to-end rather than degrading it.
+      description: "The operator's assistant switches, and nothing else. Deprecated: whether a capability is available also
+        depends on the record's modules, the provider, consent and who is asking, and `ai` on GET /api/auth/me is that
+        resolved answer."
     UpdateCheckEnvelope:
       type: object
       properties:
@@ -32258,7 +32281,7 @@ components:
                   type: boolean
                 assistantInsightStatusEnabled:
                   type: boolean
-                assistantCorrelationsEnabled:
+                assistantDocumentAiEnabled:
                   type: boolean
                 moduleAvailabilityJson:
                   anyOf:
@@ -32306,7 +32329,6 @@ components:
                 - assistantCoachEnabled
                 - assistantBriefingEnabled
                 - assistantInsightStatusEnabled
-                - assistantCorrelationsEnabled
                 - moduleAvailabilityJson
                 - documentMaxFileBytes
                 - documentQuotaBytes
@@ -67276,6 +67298,8 @@ components:
           $ref: "#/components/schemas/AccountAccess"
         moduleAccess:
           $ref: "#/components/schemas/ModuleAccessMap"
+        ai:
+          $ref: "#/components/schemas/AiAccountBlock"
         recordSession:
           anyOf:
             - $ref: "#/components/schemas/RecordSessionState"
@@ -67301,6 +67325,7 @@ components:
         - username
         - accountAccess
         - moduleAccess
+        - ai
         - recordSession
         - notificationPrefs
         - onboarding
@@ -67314,7 +67339,8 @@ components:
         rather than the record's true state. With no switch — which is every native request, since the Bearer transport
         carries none — the two are the same account and nothing is masked. `moduleAccess` says WHY each module is or is
         not there — the record's own switch, the edge of the grant, or the operator's instance-wide one — beside the
-        `modules` booleans it never contradicts."
+        `modules` booleans it never contradicts. `ai` (v1.39) is the resolved AI capability map for the same record,
+        with the same masking; it replaces reading `GET /api/feature-flags`."
     AccountAccess:
       type: object
       properties:
@@ -67704,6 +67730,145 @@ components:
         the one nothing further in can change. Own-record sessions and unscoped grants never produce `not_granted`.
         Every key is present, and `modules[key] === (moduleAccess[key] === \"enabled\")` holds for every key — this
         field adds a reason, never a different gate."
+    AiAccountBlock:
+      type: object
+      properties:
+        capabilities:
+          $ref: "#/components/schemas/AiCapabilities"
+        provider:
+          $ref: "#/components/schemas/AiProviderState"
+      required:
+        - capabilities
+        - provider
+      additionalProperties: false
+      description: Which AI capabilities the record this session is inside has, and why not when it has none. Resolved on the
+        server for the ACTIVE RECORD and masked to the sections the active grant opens, exactly like `modules` and
+        `moduleAccess`; with no switch (every native request) it describes the caller's own record.
+    AiCapabilities:
+      type: object
+      properties:
+        coach:
+          description: The "coach" capability. Covered by the operator's "coach" switch.
+          $ref: "#/components/schemas/AiCapabilityState"
+        briefing:
+          description: The "briefing" capability. Covered by the operator's "briefing" switch.
+          $ref: "#/components/schemas/AiCapabilityState"
+        periodNarrative:
+          description: The "periodNarrative" capability. Covered by the operator's "briefing" switch.
+          $ref: "#/components/schemas/AiCapabilityState"
+        statusText:
+          description: The "statusText" capability. Covered by the operator's "insightStatus" switch.
+          $ref: "#/components/schemas/AiCapabilityState"
+        workoutInsights:
+          description: The "workoutInsights" capability. Covered by the operator's "insightStatus" switch.
+          $ref: "#/components/schemas/AiCapabilityState"
+        reactionLines:
+          description: The "reactionLines" capability. Covered by the operator's "insightStatus" switch.
+          $ref: "#/components/schemas/AiCapabilityState"
+        aboutMeQuestions:
+          description: The "aboutMeQuestions" capability. Covered by the operator's "coach" switch.
+          $ref: "#/components/schemas/AiCapabilityState"
+        documentAi:
+          description: The "documentAi" capability. Covered by the operator's "documentAi" switch.
+          $ref: "#/components/schemas/AiCapabilityState"
+        labsOcr:
+          description: The "labsOcr" capability. Covered by the operator's "documentAi" switch.
+          $ref: "#/components/schemas/AiCapabilityState"
+        medicationExtract:
+          description: The "medicationExtract" capability. Covered by the operator's "documentAi" switch.
+          $ref: "#/components/schemas/AiCapabilityState"
+      required:
+        - coach
+        - briefing
+        - periodNarrative
+        - statusText
+        - workoutInsights
+        - reactionLines
+        - aboutMeQuestions
+        - documentAi
+        - labsOcr
+        - medicationExtract
+      additionalProperties: false
+      description: Every AI capability, always all present. `coach` — chat, fenced document chat, attachments, Coach memory
+        upkeep, AI nudges, every Coach launcher. `briefing` — the daily briefing and every place its text is lifted
+        into. `periodNarrative` — the model-written half of a period narrative (the deterministic narrative is data).
+        `statusText` — per-metric status notes and the AI override of a derived assessment. `workoutInsights` — the
+        paragraph on a workout. `reactionLines` — the line written after a new reading. `aboutMeQuestions` —
+        model-written follow-up questions on the about-me profile (a deterministic set stays). `documentAi` — suggest,
+        summary, extract, index and chat over a stored document. `labsOcr` — reading a lab report image.
+        `medicationExtract` — turning a typed medication description into a schedule.
+    AiUnavailableReason:
+      type: string
+      enum:
+        - check_failed
+        - operator_disabled
+        - not_permitted_for_record
+        - module_disabled
+        - user_disabled
+        - no_provider
+        - consent_required
+      description: "Why an AI capability is unavailable, listed in precedence order; only the outermost reason that applies is
+        reported, because it names the layer that would have to change first. `check_failed` — an input could not be
+        read and the answer failed closed. `operator_disabled` — the operator's master switch, the capability's own
+        switch, or the operator's instance-wide availability of its module. `not_permitted_for_record` — AI work is not
+        admitted for this record (a delegate inside somebody else's record). `module_disabled` — an owning module is off
+        for this record, by its own switch or by the edge of the active grant. `user_disabled` — the record's own AI
+        opt-out: the Coach preference for the Coach, the `insights` module (AI analysis) for everything else.
+        `no_provider` — no configured provider can serve this capability's input. `consent_required` — the provider
+        chain needs an AI consent receipt and none is active. The list is closed; a client that meets a value it does
+        not know treats the capability as unavailable."
+    AiCapabilityState:
+      type: object
+      properties:
+        available:
+          type: boolean
+        reason:
+          anyOf:
+            - $ref: "#/components/schemas/AiUnavailableReason"
+            - type: "null"
+          description: "`null` exactly when `available` is true."
+        onDeviceAllowed:
+          type: boolean
+          description: "Whether an on-device model may do this work. False for `operator_disabled`, `not_permitted_for_record`,
+            `module_disabled`, `user_disabled` and `check_failed`: the operator's and the person's decisions hold on the
+            device too. True otherwise, since a missing server provider or a missing consent for server egress do not
+            concern a model that runs on the device. Resolved here so the client never decides which reasons apply off
+            the server."
+      required:
+        - available
+        - reason
+        - onDeviceAllowed
+      additionalProperties: false
+      description: "One AI capability, resolved for one record from every layer that can say no. Render from it; never
+        recompute it. Data never depends on it: measurements, scores, statistics and device records load whatever it
+        says."
+    AiProviderState:
+      type: object
+      properties:
+        configured:
+          type: boolean
+          description: "At least one configured provider can serve text for this record. Presence only: no key is tried, so a
+            revoked key still reads as configured until a generation fails."
+        managedBy:
+          anyOf:
+            - type: string
+              enum:
+                - user
+                - local
+                - server
+            - type: "null"
+          description: "Where the serving credential comes from: the person's own (`user`), a self-hosted model they pointed at
+            (`local`), or one the operator holds (`server`). `null` when nothing is configured."
+        canConfigure:
+          type: boolean
+          description: "Whether the person in front of the screen may set up a provider for this record: false inside somebody
+            else's record and while the operator's master switch is off. A setup hint is shown only when this is true."
+      required:
+        - configured
+        - managedBy
+        - canConfigure
+      additionalProperties: false
+      description: The account-level companion to the capability map.
     RecordSessionState:
       type: object
       properties:

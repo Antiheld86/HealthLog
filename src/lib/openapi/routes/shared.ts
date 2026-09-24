@@ -84,8 +84,26 @@ export const errorEnvelope = z
           .string()
           .optional()
           .describe(
-            "Stable machine code for this refusal. Branch on it rather than on `error`, which is prose and may be reworded. Every code the API emits today is enumerated below, grouped by the surface that emits it; four naming conventions coexist and none of them will be renamed, because a code is a wire value a shipped client branches on. Treat an unlisted code the way you would treat an unlisted enum member — as a refusal you do not recognise, not as a malformed response — since the list grows with the surfaces. Three families are outside it on purpose: `assistant.disabled.<surface>` is built from a template so the last segment is open (`assistant.disabled.coach` is the one the native client names); the integration-probe classes (`credentials_rejected`, `rate_limited`, `upstream_error`, `timeout`, `connection_failed` and the per-provider additions) are enumerated in each `/test` operation instead, where the differences can be stated; and a 401 raised by a route checking a credential of its own may carry no code at all. " +
+            "Stable machine code for this refusal. Branch on it rather than on `error`, which is prose and may be reworded. Every code the API emits today is enumerated below, grouped by the surface that emits it; four naming conventions coexist and none of them will be renamed, because a code is a wire value a shipped client branches on. Treat an unlisted code the way you would treat an unlisted enum member — as a refusal you do not recognise, not as a malformed response — since the list grows with the surfaces. Three families are outside it on purpose: `assistant.disabled.<switch>` is built from a template so the last segment is open — it is one of `coach`, `briefing`, `insightStatus`, `documentAi` and `enabled`, and `assistant.disabled.coach` is the one the native client names; the integration-probe classes (`credentials_rejected`, `rate_limited`, `upstream_error`, `timeout`, `connection_failed` and the per-provider additions) are enumerated in each `/test` operation instead, where the differences can be stated; and a 401 raised by a route checking a credential of its own may carry no code at all. " +
               renderErrorCodeCatalogue(),
+          ),
+        capability: z
+          .string()
+          .optional()
+          .describe(
+            "On an AI refusal: the capability that is unavailable, one of the keys of `AiCapabilities` (`coach`, `briefing`, `periodNarrative`, `statusText`, `workoutInsights`, `reactionLines`, `aboutMeQuestions`, `documentAi`, `labsOcr`, `medicationExtract`).",
+          ),
+        reason: z
+          .string()
+          .optional()
+          .describe(
+            "On an AI refusal: the outermost reason, one of `AiUnavailableReason`. The code maps from it: `operator_disabled` → `assistant.disabled.<switch>` (or `module.disabled` with `module` when the operator's module availability closed it), `not_permitted_for_record` → `ai.record.notPermitted`, `module_disabled` and `user_disabled` → `module.disabled` with `module`, `no_provider` → the route's own typed code where it has one, otherwise `ai.provider.none` (422), `consent_required` → `consent.ai.required`, `check_failed` → `ai.unavailable` (503).",
+          ),
+        module: z
+          .string()
+          .optional()
+          .describe(
+            "Beside `module.disabled`: the module that is off. On an AI refusal it is the capability's owning module.",
           ),
       })
       .optional(),
