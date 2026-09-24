@@ -2943,13 +2943,20 @@ describe("(g) the MANAGE route set is frozen", () => {
     expect(narrativeDispatch).toContain("mayDispatchProviderWork");
     expect(narrativeDispatch).toContain("withProviderWorkAuthority");
 
-    // A shared comprehensive read calls the resolver even before it decides
-    // whether there is enough context to generate. Credential policy belongs
-    // inside every resolver helper so a delegate or managed system job cannot
-    // select a personal BYOK key or custom base URL first.
+    // A shared comprehensive read asks for provider presence on every read.
+    // It asks the presence probe, never the resolver: a read builds no client
+    // and refreshes no token. Credential policy belongs inside every resolver
+    // and presence helper so a delegate or managed system job cannot select a
+    // personal BYOK key or custom base URL first.
+    expect(
+      callsSymbol(
+        "app/api/insights/comprehensive/route.ts",
+        "probeProviderPresence",
+      ),
+    ).toBe(true);
     expect(
       callsSymbol("app/api/insights/comprehensive/route.ts", "resolveProvider"),
-    ).toBe(true);
+    ).toBe(false);
     for (const name of [
       "resolveProvider",
       "resolveProviderChain",

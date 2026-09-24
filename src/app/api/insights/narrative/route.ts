@@ -10,6 +10,15 @@
  *
  * `userId` is narrowed from the session/Bearer (never a query field); an
  * unknown `period` 422s via the closed enum.
+ *
+ * A mixed read. The narrative is data when the deterministic composer wrote
+ * it and model output when a provider did. Model-written text is served only
+ * while the `periodNarrative` capability is available; otherwise `narrative`
+ * is null and `ai` says why. The warm is enqueued only when the capability is
+ * available, or when there is no servable text at all (the worker then writes
+ * the deterministic narrative). The `insights` module is the AI analysis
+ * opt-out and is folded into the capability, so it no longer refuses the
+ * route.
  */
 import { NextRequest } from "next/server";
 import { z } from "zod/v4";
@@ -18,9 +27,9 @@ import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
 import { locales, defaultLocale, type Locale } from "@/lib/i18n/config";
-import { requireAssistantSurface } from "@/lib/feature-flags";
-import { requireModuleEnabled } from "@/lib/modules/gate";
+import { getAiCapability } from "@/lib/ai/capabilities/gate";
 import { readPeriodNarrative } from "@/lib/insights/narrative/period-narrative-generate";
+import { DETERMINISTIC_PROVIDER_TYPE } from "@/lib/insights/narrative/period-narrative-deterministic";
 import {
   PERIOD_DAYS,
   type NarrativePeriod,
@@ -57,9 +66,6 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // record, which is not a section a scoped grant can name. The miss behind it
   // enqueues nothing while a delegate is holding the request.
   const { user } = await requireRecordAuth("manage", "record");
-  const m = await requireModuleEnabled(user.id, "insights");
-  if (!m.enabled) return m.response;
-  await requireAssistantSurface("insightStatus");
 
   const parsed = narrativeQuerySchema.safeParse({
     period: request.nextUrl.searchParams.get("period"),
@@ -80,10 +86,21 @@ export const GET = apiHandler(async (request: NextRequest) => {
   });
   const locale = narrowLocale(resolved);
 
-  const existing = await readPeriodNarrative(user.id, period, locale);
+  const ai = await getAiCapability("periodNarrative");
+  const stored = await readPeriodNarrative(user.id, period, locale);
+  // A row without a recorded provider is treated as model text: failing
+  // closed hides at most a deterministic line the next warm rewrites.
+  const modelWritten =
+    stored !== null && stored.providerType !== DETERMINISTIC_PROVIDER_TYPE;
+  const existing =
+    stored !== null && (!modelWritten || ai.available) ? stored : null;
   const isFresh =
     existing !== null &&
     Date.now() - new Date(existing.updatedAt).getTime() < NARRATIVE_FRESH_MS;
+  // With AI unavailable a warm is still useful when nothing servable exists:
+  // it produces the deterministic narrative. A stale deterministic row is
+  // served as it is rather than re-warmed.
+  const mayWarm = ai.available || existing === null;
 
   // Read-only: never block on the provider. Warm out of band whenever the row
   // is stale / missing. The generator produces AI prose when a provider is
@@ -98,7 +115,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // The stale row is still served; only the warm is withheld.
   let revalidating = false;
   const generationSuppressed = delegatedGenerationSuppressed();
-  if (!isFresh && !generationSuppressed) {
+  if (!isFresh && mayWarm && !generationSuppressed) {
     void enqueueNarrativeWarm({ userId: user.id, period, locale });
     revalidating = true;
   }
@@ -110,6 +127,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
       has_narrative: existing !== null,
       revalidating,
       generation_suppressed: generationSuppressed,
+      model_text_hidden: modelWritten && !ai.available,
     },
   });
 
@@ -124,5 +142,6 @@ export const GET = apiHandler(async (request: NextRequest) => {
         }
       : null,
     revalidating,
+    ai,
   });
 });

@@ -44,6 +44,14 @@ vi.mock("@/lib/analytics/intraday-pulse-io", () => ({
   loadIntradayPulse: vi.fn(),
 }));
 
+vi.mock("@/lib/ai/capabilities/record", () => ({
+  aiCapabilityForRecord: vi.fn(),
+}));
+
+vi.mock("@/lib/ai/coach/bytes-codec", () => ({
+  decryptFromBytes: vi.fn(() => "a reaction line"),
+}));
+
 vi.mock("@/lib/i18n/server-translator", () => ({
   getServerTranslator: vi.fn().mockReturnValue({ t: (key: string) => key }),
 }));
@@ -57,6 +65,13 @@ import { loadIntradayPulse } from "@/lib/analytics/intraday-pulse-io";
 import { __resetAllCachesForTests } from "@/lib/cache/server-cache";
 import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
 import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
+import { prisma } from "@/lib/db";
+import { aiCapabilityForRecord } from "@/lib/ai/capabilities/record";
+import { decryptFromBytes } from "@/lib/ai/coach/bytes-codec";
+import {
+  AI_AVAILABLE,
+  aiUnavailable,
+} from "@/__tests__/helpers/ai-capability-fixtures";
 
 const SNAPSHOT = {
   body: {
@@ -75,6 +90,7 @@ const SNAPSHOT = {
     briefingState: "ready",
     briefingUpdatedAt: null,
     briefingStale: false,
+    briefingAi: AI_AVAILABLE,
   },
   locale: "en",
 };
@@ -94,6 +110,7 @@ beforeEach(() => {
   vi.mocked(resolveModuleMap).mockResolvedValue({} as never);
   vi.mocked(probeRollupCoverage).mockResolvedValue(new Map());
   vi.mocked(loadIntradayPulse).mockResolvedValue({ tension: null } as never);
+  vi.mocked(aiCapabilityForRecord).mockResolvedValue(AI_AVAILABLE);
 });
 
 describe("loadDailyDigest — S11/S12 extras cache", () => {
@@ -145,13 +162,13 @@ describe("loadDailyDigest — S11/S12 extras cache", () => {
     expect(loadIntradayPulse).toHaveBeenCalledTimes(2);
   });
 
-  it("never gathers the extras when the insights module is disabled", async () => {
+  it("gathers the extras even with the insights module (the AI analysis opt-out) off", async () => {
     vi.mocked(resolveModuleMap).mockResolvedValue({ insights: false } as never);
 
     await loadDailyDigest(USER, NOW);
 
-    expect(probeRollupCoverage).not.toHaveBeenCalled();
-    expect(loadIntradayPulse).not.toHaveBeenCalled();
+    expect(probeRollupCoverage).toHaveBeenCalled();
+    expect(loadIntradayPulse).toHaveBeenCalled();
   });
   it("threads the resolved hero-item visibility into composition", async () => {
     vi.mocked(readDashboardSnapshotCached).mockResolvedValueOnce({
@@ -189,5 +206,96 @@ describe("loadDailyDigest — S11/S12 extras cache", () => {
     });
 
     expect(digest.worthALook.map((item) => item.kind)).toContain("dose_window");
+  });
+});
+
+describe("loadDailyDigest — AI parts", () => {
+  const ARRIVAL = {
+    kind: "sleep_night",
+    occurredAt: new Date("2026-07-17T06:00:00.000Z"),
+    arrivedAt: new Date("2026-07-17T08:55:00.000Z"),
+    lineEncrypted: new Uint8Array([1, 2, 3]),
+    generatedAt: new Date("2026-07-17T08:56:00.000Z"),
+  };
+
+  it("resolves the coach and reaction-line capabilities for the record and publishes them", async () => {
+    const digest = await loadDailyDigest(USER, NOW);
+
+    expect(aiCapabilityForRecord).toHaveBeenCalledWith("user-1", "coach");
+    expect(aiCapabilityForRecord).toHaveBeenCalledWith(
+      "user-1",
+      "reactionLines",
+    );
+    expect(digest.ai).toEqual({
+      briefing: AI_AVAILABLE,
+      coach: AI_AVAILABLE,
+      reactionLines: AI_AVAILABLE,
+    });
+  });
+
+  it("serves the stored reaction line while the capability is available", async () => {
+    vi.mocked(prisma.arrivalReaction.findMany).mockResolvedValueOnce([
+      ARRIVAL,
+    ] as never);
+
+    const digest = await loadDailyDigest(USER, NOW);
+
+    expect(digest.reactionLine).toBe("a reaction line");
+  });
+
+  it("neither decrypts nor serves a stored reaction line while the capability is unavailable", async () => {
+    vi.mocked(aiCapabilityForRecord).mockImplementation(async (_id, key) =>
+      key === "reactionLines" ? aiUnavailable("user_disabled") : AI_AVAILABLE,
+    );
+    vi.mocked(prisma.arrivalReaction.findMany).mockResolvedValueOnce([
+      ARRIVAL,
+    ] as never);
+
+    const digest = await loadDailyDigest(USER, NOW);
+
+    expect(digest.reactionLine).toBeNull();
+    expect(decryptFromBytes).not.toHaveBeenCalled();
+    // The marker itself is data and still drives the "just in" chip.
+    expect(digest.justIn?.kind).toBe("sleep_night");
+  });
+
+  it("does not decrypt plan prose while the coach capability is unavailable", async () => {
+    vi.mocked(aiCapabilityForRecord).mockImplementation(async (_id, key) =>
+      key === "coach" ? aiUnavailable("operator_disabled") : AI_AVAILABLE,
+    );
+    vi.mocked(prisma.coachPlan.findMany).mockResolvedValueOnce([
+      {
+        id: "p1",
+        status: "active",
+        reviewDate: null,
+        createdAt: new Date("2026-07-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-07-01T00:00:00.000Z"),
+        ifCueEncrypted: new Uint8Array([1]),
+        thenActionEncrypted: new Uint8Array([2]),
+      },
+    ] as never);
+
+    const digest = await loadDailyDigest(USER, NOW);
+
+    expect(decryptFromBytes).not.toHaveBeenCalled();
+    expect(digest.worthALook.some((i) => i.kind === "coach_checkin")).toBe(
+      false,
+    );
+  });
+
+  it("fails closed on the briefing when a cached body predates the published state", async () => {
+    const { briefingAi: _dropped, ...older } = SNAPSHOT.body;
+    vi.mocked(readDashboardSnapshotCached).mockResolvedValueOnce({
+      ...SNAPSHOT,
+      body: older,
+    } as never);
+
+    const digest = await loadDailyDigest(USER, NOW);
+
+    expect(digest.ai.briefing).toEqual({
+      available: false,
+      reason: "check_failed",
+      onDeviceAllowed: false,
+    });
   });
 });

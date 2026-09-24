@@ -10,7 +10,8 @@
  *     returns the count.
  *   - [id] DELETE soft-deletes the caller's own fact, and a cross-user /
  *     unknown id is a 0-count no-op that returns `{ deleted: false }`.
- *   - the `requireAssistantSurface("coach")` gate is present on every verb.
+ *   - no verb asks for the `coach` capability: the facts are the person's
+ *     data, readable and erasable while the Coach is unavailable.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
@@ -28,12 +29,17 @@ vi.mock("@/lib/auth/session", () => ({
   getSession: vi.fn(),
 }));
 
-// v1.4.31 — `requireAssistantSurface()` gates near the top of each
-// handler. Mock the module boundary so flag reads are deterministic; the
-// gate-presence assertions below verify the call is actually made.
-vi.mock("@/lib/feature-flags", () => ({
-  requireAssistantSurface: vi.fn(async () => undefined),
-  AssistantDisabledError: class extends Error {},
+// The capability gate answers "unavailable" throughout: every verb must
+// still work, and must not even ask.
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  requireAiCapability: vi.fn(async () => {
+    throw new Error("the coach capability was consulted");
+  }),
+  getAiCapability: vi.fn(async () => ({
+    available: false,
+    reason: "operator_disabled",
+    onDeviceAllowed: false,
+  })),
 }));
 
 // Mock the codec so the test never needs an encryption key. The "row"
@@ -78,7 +84,10 @@ import { GET, DELETE } from "../route";
 import { DELETE as DELETE_ONE } from "../[id]/route";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
-import { requireAssistantSurface } from "@/lib/feature-flags";
+import {
+  getAiCapability,
+  requireAiCapability,
+} from "@/lib/ai/capabilities/gate";
 import { annotate } from "@/lib/logging/context";
 
 const SESSION_OK = {
@@ -111,7 +120,6 @@ function deleteReq(): NextRequest {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
-  vi.mocked(requireAssistantSurface).mockResolvedValue(undefined as never);
 });
 
 describe("GET /api/insights/coach/facts", () => {
@@ -223,10 +231,12 @@ describe("GET /api/insights/coach/facts", () => {
     });
   });
 
-  it("invokes the coach assistant-surface gate", async () => {
+  it("lists facts while the Coach is unavailable, without asking", async () => {
     vi.mocked(prisma.coachFact.findMany).mockResolvedValue([] as never);
-    await callGet();
-    expect(requireAssistantSurface).toHaveBeenCalledWith("coach");
+    const res = await callGet();
+    expect(res.status).toBe(200);
+    expect(requireAiCapability).not.toHaveBeenCalled();
+    expect(getAiCapability).not.toHaveBeenCalled();
   });
 });
 
@@ -261,12 +271,14 @@ describe("DELETE /api/insights/coach/facts — forget all", () => {
     expect(body.data.cleared).toBe(0);
   });
 
-  it("invokes the coach assistant-surface gate", async () => {
+  it("forgets everything while the Coach is unavailable, without asking", async () => {
     vi.mocked(prisma.coachFact.updateMany).mockResolvedValue({
       count: 0,
     } as never);
-    await callDeleteAll();
-    expect(requireAssistantSurface).toHaveBeenCalledWith("coach");
+    const res = await callDeleteAll();
+    expect(res.status).toBe(200);
+    expect(requireAiCapability).not.toHaveBeenCalled();
+    expect(getAiCapability).not.toHaveBeenCalled();
   });
 });
 
@@ -316,13 +328,15 @@ describe("DELETE /api/insights/coach/facts/[id] — forget one", () => {
     expect(arg.where.userId).toBe("user-1");
   });
 
-  it("invokes the coach assistant-surface gate", async () => {
+  it("forgets one fact while the Coach is unavailable, without asking", async () => {
     vi.mocked(prisma.coachFact.updateMany).mockResolvedValue({
       count: 0,
     } as never);
-    await callDeleteOne(deleteReq(), {
+    const res = await callDeleteOne(deleteReq(), {
       params: Promise.resolve({ id: "f1" }),
     });
-    expect(requireAssistantSurface).toHaveBeenCalledWith("coach");
+    expect(res.status).toBe(200);
+    expect(requireAiCapability).not.toHaveBeenCalled();
+    expect(getAiCapability).not.toHaveBeenCalled();
   });
 });

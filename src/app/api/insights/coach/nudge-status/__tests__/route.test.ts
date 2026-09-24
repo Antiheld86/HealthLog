@@ -11,19 +11,26 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { requireRecordAuth, evaluateContext, readStatus } = vi.hoisted(() => ({
-  requireRecordAuth: vi.fn(),
-  evaluateContext: vi.fn(async () => ({ surfaced: 0, errored: 0 })),
-  readStatus: vi.fn(async () => ({ unread: false, nudgedAt: null })),
-}));
+const { requireRecordAuth, evaluateContext, readStatus, getAiCapability } =
+  vi.hoisted(() => ({
+    requireRecordAuth: vi.fn(),
+    evaluateContext: vi.fn(async () => ({ surfaced: 0, errored: 0 })),
+    readStatus: vi.fn(
+      async (): Promise<{ unread: boolean; nudgedAt: string | null }> => ({
+        unread: false,
+        nudgedAt: null,
+      }),
+    ),
+    getAiCapability: vi.fn(),
+  }));
+
+const AVAILABLE = { available: true, reason: null, onDeviceAllowed: true };
 
 vi.mock("@/lib/api-handler", () => ({
   apiHandler: <T extends (...args: unknown[]) => unknown>(fn: T) => fn,
   requireRecordAuth,
 }));
-vi.mock("@/lib/feature-flags", () => ({
-  requireAssistantSurface: vi.fn(async () => undefined),
-}));
+vi.mock("@/lib/ai/capabilities/gate", () => ({ getAiCapability }));
 vi.mock("@/lib/ai/coach/nudge-status", () => ({
   readCoachNudgeStatus: readStatus,
 }));
@@ -40,6 +47,7 @@ import { GET } from "../route";
 beforeEach(() => {
   vi.clearAllMocks();
   readStatus.mockResolvedValue({ unread: false, nudgedAt: null });
+  getAiCapability.mockResolvedValue(AVAILABLE);
 });
 
 describe("nudge-status — NEXT_APP_OPEN hook", () => {
@@ -92,4 +100,52 @@ describe("nudge-status — NEXT_APP_OPEN hook", () => {
       warn.mockRestore();
     }
   });
+});
+
+describe("nudge-status — the coach capability", () => {
+  it("adds the resolved state beside the unread signal while available", async () => {
+    requireRecordAuth.mockResolvedValue({
+      user: { id: "u1" },
+      actor: { id: "u1" },
+    });
+    readStatus.mockResolvedValue({ unread: true, nudgedAt: "2026-07-18" });
+
+    const res = (await (GET as unknown as () => Promise<unknown>)()) as {
+      data: Record<string, unknown>;
+    };
+
+    expect(getAiCapability).toHaveBeenCalledWith("coach");
+    expect(res.data).toEqual({
+      unread: true,
+      nudgedAt: "2026-07-18",
+      ai: AVAILABLE,
+    });
+  });
+
+  it.each(["operator_disabled", "user_disabled", "no_provider"] as const)(
+    "answers the quiet 200 shape for %s, reading and evaluating nothing",
+    async (reason) => {
+      requireRecordAuth.mockResolvedValue({
+        user: { id: "u1" },
+        actor: { id: "u1" },
+      });
+      const ai = { available: false, reason, onDeviceAllowed: false };
+      getAiCapability.mockResolvedValue(ai);
+
+      const res = (await (GET as unknown as () => Promise<unknown>)()) as {
+        data: Record<string, unknown>;
+        error: null;
+      };
+
+      expect(res.error).toBeNull();
+      expect(res.data).toEqual({
+        nudgedAt: null,
+        unread: false,
+        conversationId: null,
+        ai,
+      });
+      expect(readStatus).not.toHaveBeenCalled();
+      expect(evaluateContext).not.toHaveBeenCalled();
+    },
+  );
 });

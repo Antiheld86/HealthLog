@@ -294,11 +294,10 @@ describe("Coach per-user disableCoach invariant", () => {
     // FAB gate: operator master flag OR per-user opt-out redirects the
     // page back to `/insights` instead of painting a dead chat shell.
     // v1.18.0 — moved to the standalone top-level `/coach` route.
-    // v1.30.x — split into an RSC prefetch wrapper (`page.tsx`, which reads
-    // `session.user.disableCoach` to skip the nudge prefetch for an opted-out
-    // account) + the client leaf (`page-client.tsx`, the `useDisableCoach`
-    // render-path gate). Both legitimately read the per-user flag.
-    "src/app/coach/page.tsx",
+    // v1.30.x — split into an RSC prefetch wrapper (`page.tsx`) + the client
+    // leaf (`page-client.tsx`, the `useDisableCoach` render-path gate). The
+    // RSC wrapper now asks the `coach` capability, which folds the opt-out in,
+    // so only the client leaf reads the flag directly.
     "src/app/coach/page-client.tsx",
     // v1.21.4 — the dedicated conversation-history page mirrors the
     // Coach route gate: operator master flag OR per-user opt-out marks
@@ -322,15 +321,9 @@ describe("Coach per-user disableCoach invariant", () => {
     //   dedicated Coach settings entry.
     "src/components/settings/ai/disable-coach-card.tsx",
     "src/components/settings/coach-section.tsx",
-    // v1.7.0 W6 — the unified dashboard snapshot builder reads
-    // `user.disableCoach` to gate the embedded daily briefing to
-    // `briefingState: "disabled"`. Covered by the briefingState matrix
-    // in `src/lib/dashboard/__tests__/snapshot.test.ts`. The shared
-    // cached-read helper (used by BOTH the API route and the dashboard
-    // RSC prefetch) maps the session user's flag into the builder
-    // input; the route itself no longer touches the flag.
-    "src/lib/dashboard/snapshot.ts",
-    "src/lib/dashboard/snapshot-read.ts",
+    // The dashboard snapshot no longer reads the flag: hiding the Coach
+    // hides the Coach, and the daily briefing follows its own `briefing`
+    // capability, applied per read in `snapshot-read.ts`.
     // v1.18.0 — the module enable/disable gate delegates the `coach`
     // module to the SAME two-layer source of truth (`user.disableCoach`
     // AND the operator assistant master flag) rather than owning a

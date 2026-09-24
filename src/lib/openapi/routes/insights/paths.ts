@@ -6,16 +6,18 @@
 import type { ZodOpenApiObject } from "zod-openapi";
 import { z } from "zod/v4";
 import {
-  AI_CONSENT_REQUIRED_DESCRIPTION,
-  MODULE_DISABLED_DESCRIPTION,
   dataEnvelope,
   errorEnvelope,
   idempotencyKeyParameter,
   idempotentWrite,
-  moduleDisabledResponse,
   recordRefusal,
   stdResponses,
 } from "../shared";
+import {
+  aiCheckFailedResponse,
+  aiNoProviderResponse,
+  aiRefusal403Description,
+} from "../ai-refusal";
 import {
   insightsCardsResponse,
   insightsComprehensiveResponse,
@@ -80,7 +82,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Dashboard"],
       summary: "Unified dashboard first-paint snapshot",
       description:
-        "Assembles every above-the-fold tile field in one round-trip from the rollup / mood / widget helpers plus a read-only lift of the pre-generated daily briefing. Two-phase: `tiles` always present, `extras` nullable on a rollup-coverage miss. No LLM is reachable from this path. Cookie or Bearer auth.",
+        "Assembles every above-the-fold tile field in one round-trip from the rollup / mood / widget helpers plus a read-only lift of the pre-generated daily briefing. Two-phase: `tiles` always present, `extras` nullable on a rollup-coverage miss. No LLM is reachable from this path. The briefing is model text: it, its recall (`briefingMemory`) and its timestamp are served only while the `briefing` AI capability is available for the record, decided on every read rather than cached with the body; `briefingAi` carries the state and `briefingState` reads `no-provider` or `disabled` otherwise. Every other field is data and never depends on AI. Cookie or Bearer auth.",
       responses: {
         ...recordRefusal(),
         "200": {
@@ -101,12 +103,12 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
   "/api/insights/comprehensive": {
     get: {
       tags: ["Insights"],
-      summary: "Comprehensive AI insights bundle",
+      summary: "The Insights overview's computed read",
       description:
-        "Full Insights surface — daily briefing, recommendations with rationale, optional weekly report + storyboard annotations. Strict-schema validated server-side. Requires an active ConsentReceipt when the resolved provider chain egresses via the operator's server-managed key (see POST /api/consent/ai).",
+        "The main read of the Insights overview: summaries, classifications, correlations, medication compliance and rule alerts, all computed from the record. No provider is called and no AI switch, opt-out, provider or consent refuses it; `hasProvider` is provider presence only. The `ai` block beside the body says whether the briefing and the status notes that decorate the overview can be shown, resolved per request. Served stale-while-revalidate; `revalidating` marks a stale body. Delegable at MANAGE level over the whole record. Cookie or Bearer auth.",
       responses: {
         "200": {
-          description: "Insights bundle.",
+          description: "The overview read.",
           content: {
             "application/json": {
               schema: dataEnvelope(
@@ -117,7 +119,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           },
         },
         ...stdResponses,
-        ...recordRefusal(AI_CONSENT_REQUIRED_DESCRIPTION),
+        ...recordRefusal(),
       },
     },
   },
@@ -126,7 +128,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Insight cards (iOS adapter)",
       description:
-        "v1.4.31 — the native-client adapter over the same alert rule engine the web comprehensive surface consumes: measurements, BP-in-target, weight trend, pulse, and cadence-aware medication compliance are fed through `generateAlerts()` and each resulting `HealthAlert` is re-shaped to the iOS Insight card model. Deterministic — no LLM call on this path. Module-gated on `insights` and the operator `insightStatus` assistant surface. Auth via cookie or Bearer.",
+        'v1.4.31 — the native-client adapter over the same alert rule engine the web comprehensive surface consumes: measurements, BP-in-target, weight trend, pulse, and cadence-aware medication compliance are fed through `generateAlerts()` and each resulting `HealthAlert` is re-shaped to the iOS Insight card model. Deterministic — no LLM call on this path, so no AI switch, opt-out or module refuses it. Every card is a rule alert: `provider` is `"rules"` and `summary` is never null. Auth via cookie or Bearer.',
       responses: {
         "200": {
           description: "The list of insight cards (possibly empty).",
@@ -139,7 +141,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
+        ...recordRefusal(),
         ...stdResponses,
       },
     },
@@ -149,7 +151,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Warm all AI assessments for the calling user",
       description:
-        "v1.8.7.1 — enqueue a full warm of every AI assessment for the authenticated user (comprehensive insight + the seven specialised status cards + every data-bearing generic metric assessment) in the active locale, so the read-only status GETs serve cached text instantly. Returns immediately; the generation runs out of band on the worker. Empty metrics and provider-less accounts never trigger an LLM call. Short anti-spam bucket (`insights-warm:<userId>`, one warm per 3 minutes) → 429 on a tight loop. Auth via cookie or Bearer; `userId` is taken from the session, never the body.",
+        "v1.8.7.1 — enqueue a full warm of every AI assessment for the authenticated user (comprehensive insight + the seven specialised status cards + every data-bearing generic metric assessment) in the active locale, so the read-only status GETs serve cached text instantly. Returns immediately; the generation runs out of band on the worker. Covers two AI capabilities, `briefing` and `statusText`, and never refuses: with neither available it answers `queued: false` and enqueues nothing (and spends no anti-spam bucket); with one available it enqueues and the worker checks each half before it builds anything. The `ai` block says which half can run. Empty metrics and provider-less accounts never trigger an LLM call. Short anti-spam bucket (`insights-warm:<userId>`, one warm per 3 minutes) → 429 on a tight loop. Auth via cookie or Bearer; `userId` is taken from the session, never the body.",
       requestBody: {
         required: false,
         content: {
@@ -159,7 +161,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       responses: {
         "200": {
           description:
-            "Warm accepted and enqueued. The work runs on the worker; poll the read-only status routes for the text.",
+            "`queued: true`: the warm was enqueued; the work runs on the worker, so poll the read-only status routes for the text. `queued: false`: neither capability is available and nothing was enqueued; `ai` says why.",
           content: {
             "application/json": {
               schema: dataEnvelope(
@@ -199,7 +201,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Read the cached advisor briefing (never generates)",
       description:
-        'The read-only advisor. It serves the cached payload and NEVER calls a provider — the surfaces that mount on page load used to POST here, which blocked first paint on the whole provider chain. When the cache is stale or missing AND a provider exists it enqueues an out-of-band warm and says so in `revalidating`; the next read reflects it. User-initiated regeneration is the POST. Four honesty signals ride the payload and are the whole point of it: `hasProvider: false` means no warm pass can ever refresh what is shown, so stop polling and offer to connect one; `generationFailed` means the last attempt failed and the text is HELD rather than fresh; `generationFailureClass` says which lever to point at; and `briefingOmittedReason: "ungrounded"` means a generation SUCCEEDED and the grounding gate withheld the briefing, which is a different state from a failure. Gated on the Coach assistant surface — an operator who turns Coach off empties every advisor consumer. Cookie or Bearer auth; the caller is always resolved as themselves, so this read cannot be delegated to a shared record.',
+        'The read-only advisor. It serves the cached payload and NEVER calls a provider — the surfaces that mount on page load used to POST here, which blocked first paint on the whole provider chain. When the cache is stale or missing AND a provider exists it enqueues an out-of-band warm and says so in `revalidating`; the next read reflects it. User-initiated regeneration is the POST. Four honesty signals ride the payload and are the whole point of it: `hasProvider: false` means no warm pass can ever refresh what is shown, so stop polling and offer to connect one; `generationFailed` means the last attempt failed and the text is HELD rather than fresh; `generationFailureClass` says which lever to point at; and `briefingOmittedReason: "ungrounded"` means a generation SUCCEEDED and the grounding gate withheld the briefing, which is a different state from a failure. A pure AI read: the payload is the model-written briefing and nothing else, so it requires the `briefing` AI capability and refuses with the capability envelope before the cache is read; stored briefing text is never served, and no warm is enqueued, while the capability is unavailable. Cookie or Bearer auth; the caller is always resolved as themselves, so this read cannot be delegated to a shared record.',
       responses: {
         "200": {
           description:
@@ -214,10 +216,11 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           },
         },
         "403": {
-          description:
-            "The operator has switched the Coach assistant surface off (`meta.errorCode` = `assistant.disabled.coach`).",
+          description: aiRefusal403Description("briefing"),
           content: { "application/json": { schema: errorEnvelope } },
         },
+        "422": aiNoProviderResponse("briefing"),
+        "503": aiCheckFailedResponse,
         "401": stdResponses["401"],
         "429": stdResponses["429"],
       },
@@ -226,7 +229,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Generate the advisor briefing inline (costs tokens)",
       description:
-        "The only path in the advisor family that calls a provider, and it does so INLINE. Two gates bound it, and they bound different things. The RATE gate is `insights:<userId>`, ten generations per hour by default and configurable by the operator through `INSIGHTS_RATE_LIMIT_PER_HOUR` (a value below 1 falls back to the default); it is checked AFTER the cache short-circuit, so a cache hit never spends a token. The BUDGET gate is the day's token ceiling, refused at reservation time before any provider is contacted — so it is not a provider failure, records no failure marker, and answers 429 with `meta.errorCode` = `insights.generate.budgetExceeded`, which is how a client tells 'you asked too often' from 'the day's spend is gone'. Two more things a caller should know before integrating: a plain 200 does NOT mean a provider ran — a fresh cache inside 24 hours answers `cached: true`, and so does an exhausted quota when the fresh cache merely lacked a briefing — and a request that TIMES OUT client-side may still complete on the server, writing the briefing to the cache or a dated failure marker, which is exactly the pair the read GET reports so a client can settle an aborted regenerate by polling rather than guessing. Gated on the Coach assistant surface, consent-gated when the resolved chain egresses through the operator's server-managed key. Cookie or Bearer auth; not delegable.",
+        "The only path in the advisor family that calls a provider, and it does so INLINE. Two gates bound it, and they bound different things. The RATE gate is `insights:<userId>`, ten generations per hour by default and configurable by the operator through `INSIGHTS_RATE_LIMIT_PER_HOUR` (a value below 1 falls back to the default); it is checked AFTER the cache short-circuit, so a cache hit never spends a token. The BUDGET gate is the day's token ceiling, refused at reservation time before any provider is contacted — so it is not a provider failure, records no failure marker, and answers 429 with `meta.errorCode` = `insights.generate.budgetExceeded`, which is how a client tells 'you asked too often' from 'the day's spend is gone'. Two more things a caller should know before integrating: a plain 200 does NOT mean a provider ran — a fresh cache inside 24 hours answers `cached: true`, and so does an exhausted quota when the fresh cache merely lacked a briefing — and a request that TIMES OUT client-side may still complete on the server, writing the briefing to the cache or a dated failure marker, which is exactly the pair the read GET reports so a client can settle an aborted regenerate by polling rather than guessing. Requires the `briefing` AI capability (the operator's briefing switch, the AI analysis opt-out, a provider, and consent when the chain egresses through the operator's server-managed key), checked before any read or provider work. Cookie or Bearer auth; not delegable.",
       requestBody: {
         required: false,
         content: {
@@ -247,8 +250,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           },
         },
         "403": {
-          description:
-            "The Coach assistant surface is off (`assistant.disabled.coach`), or the resolved chain egresses through the operator's key and no consent receipt is on file (`consent.ai.required`).",
+          description: aiRefusal403Description("briefing"),
           content: { "application/json": { schema: errorEnvelope } },
         },
         "409": {
@@ -258,7 +260,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
         "422": {
           description:
-            "No AI provider is configured anywhere for this account, or the provider answered something that was not valid JSON (`meta.errorCode` = `ai_response_truncated` when the answer was cut off mid-stream rather than malformed), or the finished prose was withheld by the outbound safety screen (`insights.generate.outboundScreened`).",
+            "No AI provider can serve the `briefing` capability (`meta.errorCode` = `ai.provider.none`, `meta.reason` = `no_provider`), or the provider answered something that was not valid JSON (`meta.errorCode` = `ai_response_truncated` when the answer was cut off mid-stream rather than malformed), or the finished prose was withheld by the outbound safety screen (`insights.generate.outboundScreened`).",
           content: { "application/json": { schema: errorEnvelope } },
         },
         "429": {
@@ -268,7 +270,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
         "503": {
           description:
-            "Every provider in the chain failed for a reason that is not a rate limit — auth, timeout or an upstream 5xx. A dated failure marker is written, so the read GET reports the briefing as held rather than fresh.",
+            "Every provider in the chain failed for a reason that is not a rate limit — auth, timeout or an upstream 5xx. A dated failure marker is written, so the read GET reports the briefing as held rather than fresh. Also: the `briefing` capability could not be resolved (`meta.errorCode` = `ai.unavailable`, `meta.reason` = `check_failed`); nothing was generated.",
           content: { "application/json": { schema: errorEnvelope } },
         },
         "401": stdResponses["401"],
@@ -378,10 +380,10 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "The two-line Coach read for one metric",
       description:
-        "The own-baseline placement and the single strongest lagged association whose outcome is the named metric — the two server-authoritative lines a metric sub-page renders above its chart. Pure compute over the baseline and correlation engines: no provider call and no cache table, so web and native decode the same DTO rather than each deriving one. Line two arrives as a finished sentence in the reader's language and is printed verbatim, so the resolved locale decides the row; a correlation failure degrades it to null and never sinks line one. Module-gated on `insights` and gated on the Coach assistant surface, because the strip is the ambient Coach presence on that page. Shared analytics-read budget. Delegable at MANAGE level over the whole record: it is computed across the record with no provider on the path. Cookie or Bearer auth.",
+        "The own-baseline placement and the single strongest lagged association whose outcome is the named metric — the two server-authoritative lines a metric sub-page renders above its chart. Pure compute over the baseline and correlation engines: no provider call and no cache table, so web and native decode the same DTO rather than each deriving one. Line two arrives as a finished sentence in the reader's language and is printed verbatim, so the resolved locale decides the row; a correlation failure degrades it to null and never sinks line one. Both lines are computed, so no AI switch, opt-out or module refuses it (the name is historical). Shared analytics-read budget. Delegable at MANAGE level over the whole record: it is computed across the record with no provider on the path. Cookie or Bearer auth.",
       requestParams: { query: coachReadQuery },
       responses: {
-        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
+        ...recordRefusal(),
         "200": {
           description: "The strip.",
           content: {
@@ -402,7 +404,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Today's suggested Coach opener",
       description:
-        "Resolves today's single most notable derived wellness signal into a tappable opener for the Coach's blank-chat hero, using the same confidence-gated detector the daily briefing uses. The selection happens SERVER-side and the client renders it rather than recomputing. `signal: null` is the ordinary answer and means the hero keeps its neutral greeting — never a fabricated opener. Two different causes produce that null and are indistinguishable on the wire: nothing crossed the notability gate, or the account has turned proactive suggestions off, in which case the detector does not run at all. Module-gated on `insights` and on the Coach assistant surface. Shared analytics-read budget. Cookie or Bearer auth; not delegable.",
+        "Resolves today's single most notable derived wellness signal into a tappable opener for the Coach's blank-chat hero, using the same confidence-gated detector the daily briefing uses. The selection happens SERVER-side and the client renders it rather than recomputing. `signal: null` is the ordinary answer and means the hero keeps its neutral greeting — never a fabricated opener. Two different causes produce that null and are indistinguishable on the wire: nothing crossed the notability gate, or the account has turned proactive suggestions off, in which case the detector does not run at all. The opener exists only to open the Coach, so it is served only while the `coach` AI capability is available; otherwise the answer is the same neutral `signal: null` and `ai` says why. Never refused for an AI reason. Shared analytics-read budget. Cookie or Bearer auth; not delegable.",
       responses: {
         "200": {
           description: "The opener, or the neutral null.",
@@ -415,7 +417,6 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...moduleDisabledResponse,
         ...stdResponses,
       },
     },
@@ -425,10 +426,10 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "The latest week or month retrospective",
       description:
-        "The last generated period summary for the record. Read-only by construction: it never blocks on a provider, serves the last good row immediately, and warms out of band when the row is stale or missing. A provider-less account is not left empty — the generator falls back to deterministic, non-causal prose, so even the no-key demo gets a retrospective on the next read. `revalidating` reports whether this read enqueued a warm, and is always FALSE on a delegated request: the route warms unconditionally rather than on a miss, so without that suppression a manager's first navigation here would be an egress of the owner's record the owner never asked for. Rows are keyed per locale, so `locale` selects a different stored row rather than translating one. Module-gated on `insights` and on the `insightStatus` assistant surface. Delegable at MANAGE level over the whole record. Cookie or Bearer auth.",
+        "The last generated period summary for the record. Read-only by construction: it never blocks on a provider, serves the last good row immediately, and warms out of band when the row is stale or missing. A provider-less account is not left empty — the generator falls back to deterministic, non-causal prose, so even the no-key demo gets a retrospective on the next read. `revalidating` reports whether this read enqueued a warm, and is always FALSE on a delegated request: the route warms unconditionally rather than on a miss, so without that suppression a manager's first navigation here would be an egress of the owner's record the owner never asked for. Rows are keyed per locale, so `locale` selects a different stored row rather than translating one. A mixed read: a narrative the deterministic composer wrote is data and always served; one a model wrote is served only while the `periodNarrative` AI capability is available, otherwise `narrative` is null and `ai` says why. While the capability is unavailable a warm is enqueued only when nothing servable exists (the worker then writes the deterministic narrative). Never refused for an AI reason. Delegable at MANAGE level over the whole record. Cookie or Bearer auth.",
       requestParams: { query: narrativeQuery },
       responses: {
-        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
+        ...recordRefusal(),
         "200": {
           description:
             "The retrospective, or `narrative: null` when none is on file yet. Always 200 — absence is a normal answer.",
@@ -471,10 +472,10 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "One day's intraday heart-rate shape",
       description:
-        "The day's ten-minute mean heart-rate series plus, when every confidence gate holds, at most ONE cautious elevated-at-rest window. Computed from raw samples through the read-swap pattern rather than persisted as ten-minute rollups for all history, so a day outside the dense-retention window reads back at the coarser hourly grain instead of empty — `resolution` says which, and `tension` is always null on an hourly day because that read needs per-sample resolution. The bar for a tension window is deliberately high; under-flagging is the intended failure mode, and it is awareness, never a diagnosis. `date` is STRICT here, unlike the forgiving date filters elsewhere on the surface: anything but a `YYYY-MM-DD` literal is a 422. Module-gated on `insights`. Delegable at MANAGE level over the whole record. Cookie or Bearer auth.",
+        "The day's ten-minute mean heart-rate series plus, when every confidence gate holds, at most ONE cautious elevated-at-rest window. Computed from raw samples through the read-swap pattern rather than persisted as ten-minute rollups for all history, so a day outside the dense-retention window reads back at the coarser hourly grain instead of empty — `resolution` says which, and `tension` is always null on an hourly day because that read needs per-sample resolution. The bar for a tension window is deliberately high; under-flagging is the intended failure mode, and it is awareness, never a diagnosis. `date` is STRICT here, unlike the forgiving date filters elsewhere on the surface: anything but a `YYYY-MM-DD` literal is a 422. Pulse is a core vital, so no module gates it and no AI switch refuses it. Delegable at MANAGE level over the whole record. Cookie or Bearer auth.",
       requestParams: { query: intradayPulseQuery },
       responses: {
-        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
+        ...recordRefusal(),
         "200": {
           description:
             "The day's series. `Cache-Control` is the bfcache-friendly `private, max-age=0, must-revalidate` rather than `no-store`.",
@@ -804,7 +805,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Derived wellness metric (compute-once)",
       description:
-        "v1.10.0 — the compute-once `Derived<T>` value for any registered derived wellness metric (personal typical-range vitals baseline, cardio-fitness band, vascular-age delta, sleep score, readiness, coincident-deviation flag). One generic route over a closed registry enum; an unknown `metric` 422s. Pure compute over the rollup tier with a per-type live fallback on a coverage miss — no LLM call, no narrative, no cache table. Returns the flat `Derived<T>` union so the native client can decode one stable shape and combine values across metrics. `windowDays` widens or narrows the trailing window a metric summarises; `provenance.windowDays` always reports the window actually used and `coverage.historyDays` the days that actually backed it. Auth via cookie or Bearer.",
+        "v1.10.0 — the compute-once `Derived<T>` value for any registered derived wellness metric (personal typical-range vitals baseline, cardio-fitness band, vascular-age delta, sleep score, readiness, coincident-deviation flag). One generic route over a closed registry enum; an unknown `metric` 422s. Pure compute over the rollup tier with a per-type live fallback on a coverage miss — no LLM call, no narrative, no cache table. Returns the flat `Derived<T>` union so the native client can decode one stable shape and combine values across metrics. `windowDays` widens or narrows the trailing window a metric summarises; `provenance.windowDays` always reports the window actually used and `coverage.historyDays` the days that actually backed it. Never refused for an AI reason and not gated on the `insights` module (the AI analysis opt-out). The one AI part is the warmer model-written `assessment` text, served (and warmed) only while the `statusText` capability is available; otherwise the deterministic assessment stands and `ai` says why. Auth via cookie or Bearer.",
       requestParams: {
         query: derivedMetricQuery,
       },
@@ -830,7 +831,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Derived wellness metrics (batched compute-once)",
       description:
-        "v1.10.0 — resolve several derived wellness metrics in ONE request. The `metrics` CSV names the metrics (a `metric:type` token sub-targets a VITALS_BASELINE vital); the server fans out under a bounded limiter with the profile loaded once and returns a map keyed by the per-request token. Collapses the Insights cold-mount fan-out of 14+ independent single-metric requests — the pool-starvation class that surfaces as a hang-then-recover. The single-metric route stays for the per-score detail pages. Auth via cookie or Bearer.",
+        "v1.10.0 — resolve several derived wellness metrics in ONE request. The `metrics` CSV names the metrics (a `metric:type` token sub-targets a VITALS_BASELINE vital); the server fans out under a bounded limiter with the profile loaded once and returns a map keyed by the per-request token. Collapses the Insights cold-mount fan-out of 14+ independent single-metric requests — the pool-starvation class that surfaces as a hang-then-recover. The single-metric route stays for the per-score detail pages. Deterministic assessments only, so no AI gate and no `insights` module gate; each metric keeps its own owning module. Auth via cookie or Bearer.",
       requestParams: {
         query: derivedBatchQuery,
       },
@@ -879,7 +880,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "ECG recording list (metadata only)",
       description:
-        "v1.28.50 — the authenticated user's ECG recordings as a cheap, index-covered metadata list (recorded time, duration, sampling rate, sample count, average heart rate, lead, and the DEVICE's own rhythm classification). NEVER decrypts or returns the waveform — the per-recording strip is fetched on demand from GET /api/insights/ecg/{id}. Reflects only the recording device's certified on-device classification, verbatim; HealthLog never re-classifies an ECG or produces a diagnosis. Data-availability-gated: an empty account returns `hasRecordings: false`. Module-gated on `insights`; no assistant-surface gate and no LLM call. Auth via cookie or Bearer.",
+        "v1.28.50 — the authenticated user's ECG recordings as a cheap, index-covered metadata list (recorded time, duration, sampling rate, sample count, average heart rate, lead, and the DEVICE's own rhythm classification). NEVER decrypts or returns the waveform — the per-recording strip is fetched on demand from GET /api/insights/ecg/{id}. Reflects only the recording device's certified on-device classification, verbatim; HealthLog never re-classifies an ECG or produces a diagnosis. Data-availability-gated: an empty account returns `hasRecordings: false`. Device data: no module gate, no AI gate and no LLM call. Auth via cookie or Bearer.",
       responses: {
         "200": {
           description: "The ECG recording list (possibly empty).",
@@ -889,7 +890,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
+        ...recordRefusal(),
         ...stdResponses,
       },
     },
@@ -897,7 +898,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Ingest one ECG recording",
       description:
-        "The live ECG ingest: one Apple Watch recording per request, for a client draining its HealthKit ECG observer. Before this existed, a watch ECG could only reach HealthLog inside a full `export.zip`. One recording per request because a 30 s / 512 Hz strip is ~15 360 samples. Samples are INTEGER MICRO-VOLTS (convert from HealthKit's Volts), stored AES-256-GCM encrypted; `sampleCount` and `durationSeconds` are derived server-side. The `classification` is the device's own verdict stored verbatim — HealthLog never reads the waveform to produce or revise one. `source` accepts `APPLE_HEALTH` only; `userId` comes from the session and is never a body field. Unknown body keys are rejected with a 422 naming them. No `Idempotency-Key` is needed: the recording carries its own identity, so a retry resolves to the same row by construction — see `status` for what a re-post reports. Limits: 32 768 samples, 2 MB body, 60 recordings per minute per user. Module-gated on `insights`; no assistant-surface gate and no LLM call. Auth via cookie or Bearer.",
+        "The live ECG ingest: one Apple Watch recording per request, for a client draining its HealthKit ECG observer. Before this existed, a watch ECG could only reach HealthLog inside a full `export.zip`. One recording per request because a 30 s / 512 Hz strip is ~15 360 samples. Samples are INTEGER MICRO-VOLTS (convert from HealthKit's Volts), stored AES-256-GCM encrypted; `sampleCount` and `durationSeconds` are derived server-side. The `classification` is the device's own verdict stored verbatim — HealthLog never reads the waveform to produce or revise one. `source` accepts `APPLE_HEALTH` only; `userId` comes from the session and is never a body field. Unknown body keys are rejected with a 422 naming them. No `Idempotency-Key` is needed: the recording carries its own identity, so a retry resolves to the same row by construction — see `status` for what a re-post reports. Limits: 32 768 samples, 2 MB body, 60 recordings per minute per user. Device data: never refused because AI is off or the AI analysis opt-out is on; no module gate and no LLM call. Auth via cookie or Bearer.",
       requestBody: {
         required: true,
         content: {
@@ -928,7 +929,6 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...moduleDisabledResponse,
         ...stdResponses,
       },
     },
@@ -938,7 +938,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "One ECG recording with waveform",
       description:
-        "v1.28.50 — one recording's decrypted waveform plus metadata and the DEVICE's verbatim classification. Ownership is narrowed in the query where (`{ id, userId }`) so a cross-user read is structurally impossible; a foreign or unknown id 404s (existence sealed). The waveform is AES-256-GCM at rest, decrypted through the fail-closed codec. By default the ~9000-sample strip is min/max-decimated to ~2500 display points so R-wave peaks survive; `?full=1` returns the raw array. HealthLog does not interpret the trace, measure intervals, annotate beats, or emit a verdict of its own. Module-gated on `insights`; no assistant-surface gate and no LLM call. `no-store`. Auth via cookie or Bearer.",
+        "v1.28.50 — one recording's decrypted waveform plus metadata and the DEVICE's verbatim classification. Ownership is narrowed in the query where (`{ id, userId }`) so a cross-user read is structurally impossible; a foreign or unknown id 404s (existence sealed). The waveform is AES-256-GCM at rest, decrypted through the fail-closed codec. By default the ~9000-sample strip is min/max-decimated to ~2500 display points so R-wave peaks survive; `?full=1` returns the raw array. HealthLog does not interpret the trace, measure intervals, annotate beats, or emit a verdict of its own. Device data: no module gate, no AI gate and no LLM call. `no-store`. Auth via cookie or Bearer.",
       requestParams: {
         path: z.object({
           id: z.string().describe("The ECG recording id (cuid)."),
@@ -963,7 +963,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             "No ECG recording with that id for the authenticated user (existence sealed — a foreign id is indistinguishable from a missing one).",
           content: { "application/json": { schema: errorEnvelope } },
         },
-        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
+        ...recordRefusal(),
         ...stdResponses,
       },
     },
@@ -973,7 +973,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Device-flagged rhythm/HR/steadiness event timeline",
       description:
-        "v1.10.0 (WX-B) — the authenticated user's timeline of device-flagged EVENT rows: irregular-rhythm / high-HR / low-HR / walking-steadiness / breathing-disturbance notifications the user's wearable (Apple Watch / Withings ScanWatch) already produced and synced. AWARENESS / SCREENING of the DEVICE's own decision — HealthLog stores and reflects ONLY the classification result the device's certified on-device algorithm emitted, verbatim; it never re-classifies and never produces a HealthLog diagnosis. `classification` carries the full six-value verdict set (the three ECG verdicts plus the two walking-steadiness severities plus the neutral FIRED verdict) — a distinct, wider enum than the three-value one on GET /api/insights/ecg. Data-availability-gated: an account with no event rows returns `hasEvents: false`. Module-gated on `insights`; no assistant-surface gate and no LLM call. Auth via cookie or Bearer.",
+        "v1.10.0 (WX-B) — the authenticated user's timeline of device-flagged EVENT rows: irregular-rhythm / high-HR / low-HR / walking-steadiness / breathing-disturbance notifications the user's wearable (Apple Watch / Withings ScanWatch) already produced and synced. AWARENESS / SCREENING of the DEVICE's own decision — HealthLog stores and reflects ONLY the classification result the device's certified on-device algorithm emitted, verbatim; it never re-classifies and never produces a HealthLog diagnosis. `classification` carries the full six-value verdict set (the three ECG verdicts plus the two walking-steadiness severities plus the neutral FIRED verdict) — a distinct, wider enum than the three-value one on GET /api/insights/ecg. Data-availability-gated: an account with no event rows returns `hasEvents: false`. Device data: no module gate, no AI gate and no LLM call. Auth via cookie or Bearer.",
       responses: {
         "200": {
           description: "The device-flagged event timeline (possibly empty).",
@@ -986,7 +986,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
+        ...recordRefusal(),
         ...stdResponses,
       },
     },
@@ -996,7 +996,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Correlation discovery (FDR-controlled)",
       description:
-        "v1.10.0 — scans a curated behaviour × outcome matrix (daylight / mood / glucose / BP / steps × sleep / HRV / resting HR / weight), lag-joins each behaviour day to the next day's outcome, runs Pearson with the exact Student-t p-value, and applies Benjamini-Hochberg FDR control across every tested pair. Only statistically-defensible pairs surface, each carrying n, r, p, and the BH-adjusted q. Descriptive, never causal. Gated by the operator `correlations` assistant surface. Auth via cookie or Bearer.",
+        "v1.10.0 — scans a curated behaviour × outcome matrix (daylight / mood / glucose / BP / steps × sleep / HRV / resting HR / weight), lag-joins each behaviour day to the next day's outcome, runs Pearson with the exact Student-t p-value, and applies Benjamini-Hochberg FDR control across every tested pair. Only statistically-defensible pairs surface, each carrying n, r, p, and the BH-adjusted q. Descriptive, never causal. Statistics, not model output: no AI switch, opt-out or `insights` module gate refuses them. Auth via cookie or Bearer.",
       responses: {
         ...recordRefusal(),
         "200": {
@@ -1019,7 +1019,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "List current correlation patterns",
       description:
-        "Returns the authenticated account's currently accepted persisted correlation identities, evidence, and dismissal timestamps.",
+        "Returns the authenticated account's currently accepted persisted correlation identities, evidence, and dismissal timestamps. Statistics, not model output, so no AI or `insights` module gate applies.",
       responses: {
         "200": {
           description: "Current persisted correlation patterns.",
@@ -1032,7 +1032,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
+        ...recordRefusal(),
         ...stdResponses,
       },
     },
@@ -1042,7 +1042,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Update correlation pattern dismissal",
       description:
-        "Dismisses or restores one current account-owned pattern. A dismissal remains effective until the accepted evidence changes materially.",
+        "Dismisses or restores one current account-owned pattern. A dismissal remains effective until the accepted evidence changes materially. No AI or `insights` module gate applies.",
       requestParams: { path: z.object({ id: z.string() }) },
       requestBody: {
         required: true,
@@ -1066,7 +1066,7 @@ export const insightsPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           description: "No current pattern with that id for this account.",
           content: { "application/json": { schema: errorEnvelope } },
         },
-        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
+        ...recordRefusal(),
         ...stdResponses,
       },
     },

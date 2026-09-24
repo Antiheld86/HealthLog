@@ -12,8 +12,8 @@
  * convention is the idempotent-delete one used elsewhere in the tree
  * (a not-found delete is a successful no-op, not a 404).
  *
- * Coach-gated: same `requireAssistantSurface("coach")` kill-switch as the
- * collection route.
+ * Never AI-gated, like the collection route: deleting a stored fact keeps
+ * working while the Coach is unavailable.
  */
 import type { NextRequest } from "next/server";
 
@@ -21,7 +21,6 @@ import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiSuccess } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { prisma } from "@/lib/db";
-import { requireAssistantSurface } from "@/lib/feature-flags";
 
 interface RouteCtx {
   params: Promise<{ id: string }>;
@@ -30,7 +29,6 @@ interface RouteCtx {
 export const DELETE = apiHandler(
   async (_request: NextRequest, ctx: RouteCtx) => {
     const { user } = await requireAuth();
-    await requireAssistantSurface("coach");
 
     const { id } = await ctx.params;
 

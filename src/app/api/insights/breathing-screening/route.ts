@@ -10,7 +10,7 @@
  * classification). SCREENING SIGNAL ONLY — never a HealthLog diagnosis; the
  * card states this explicitly.
  *
- * Mirrors `/api/insights/derived`: `apiHandler`, `requireAuth`, the `insights`
+ * Mirrors `/api/insights/derived`: `apiHandler`, `requireAuth`, the `sleep`
  * module gate, the shared analytics-read budget. `userId` is narrowed from the
  * session.
  */
@@ -31,7 +31,10 @@ export const GET = apiHandler(async () => {
   // provider anywhere on the path.
   const { user } = await requireRecordAuth("manage", "record");
 
-  const m = await requireModuleEnabled(user.id, "insights");
+  // The screening belongs to sleep: with the sleep module off it hides like
+  // every other sleep surface. Not an AI read, so the `insights` module (the
+  // AI analysis opt-out) does not gate it.
+  const m = await requireModuleEnabled(user.id, "sleep");
   if (!m.enabled) return m.response;
 
   const rl = await checkAnalyticsReadRateLimit(user.id);

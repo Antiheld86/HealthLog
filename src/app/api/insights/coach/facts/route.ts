@@ -14,20 +14,19 @@
  * skipped rather than 500ing the whole list — the surface stays available
  * for the rows that DO decrypt.
  *
- * Coach-gated: a fact only exists because the Coach extracted it, so the
- * management surface sits behind the same `requireAssistantSurface("coach")`
- * kill-switch as the rest of the Coach stack.
+ * Never AI-gated. The facts are the person's stored data: viewing and
+ * deleting them keeps working while the Coach is off for any reason (the
+ * operator's switch, the person's own opt-out, no provider, no consent).
+ * Erasure that depends on the feature being on is no erasure.
  */
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiSuccess } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { prisma } from "@/lib/db";
-import { requireAssistantSurface } from "@/lib/feature-flags";
 import { decryptFromBytes } from "@/lib/ai/coach/bytes-codec";
 
 export const GET = apiHandler(async () => {
   const { user } = await requireAuth();
-  await requireAssistantSurface("coach");
 
   const rows = await prisma.coachFact.findMany({
     where: { userId: user.id, deletedAt: null },
@@ -80,7 +79,6 @@ export const GET = apiHandler(async () => {
 
 export const DELETE = apiHandler(async () => {
   const { user } = await requireAuth();
-  await requireAssistantSurface("coach");
 
   // Soft-delete every active fact — keeps the rows for audit while
   // hiding them from injection. `updateMany` scoped to the caller can

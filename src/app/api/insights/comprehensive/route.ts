@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
-import { resolveProvider } from "@/lib/ai/provider";
+import { probeProviderPresence } from "@/lib/ai/provider";
+import { getAiCapability } from "@/lib/ai/capabilities/gate";
 import { apiError, apiSuccess } from "@/lib/api-response";
 import type { DataPoint, DataSummary } from "@/lib/analytics/trends";
 import { summarize } from "@/lib/analytics/trends";
@@ -28,7 +29,6 @@ import {
   requireRecordAuth,
   type AuthContext,
 } from "@/lib/api-handler";
-import { requireModuleEnabled } from "@/lib/modules/gate";
 import { annotate } from "@/lib/logging/context";
 import { checkAnalyticsReadRateLimit } from "@/lib/rate-limit";
 import {
@@ -49,19 +49,19 @@ export const GET = apiHandler(async () => {
   // v1.37.0 — MANAGE-level read: computed over the whole record, with no
   // provider anywhere on the path.
   const { user } = await requireRecordAuth("manage", "record");
-  const m = await requireModuleEnabled(user.id, "insights");
-  if (!m.enabled) return m.response;
-
   // v1.15.20 — shared analytics-read budget (generous; caps runaway loops).
   const rl = await checkAnalyticsReadRateLimit(user.id);
   if (!rl.allowed) {
     return apiError("Too many analytics requests. Please retry later.", 429);
   }
 
-  // No assistant-surface gate. Every field is computed from the record
-  // (the provider chain is only probed for `hasProvider`), and this is the
-  // main read of the Insights overview: an operator who switches the
-  // assistant off still gets the overview.
+  // No AI gate, and no `insights` module gate (that module is the AI
+  // analysis opt-out). Every field is computed from the record (the provider
+  // chain is only probed for presence, for `hasProvider`), and this is the
+  // main read of the Insights overview: switching AI off, or never setting a
+  // provider up, still gets the overview. The `ai` block beside the body says
+  // whether the briefing and status notes that decorate the overview can be
+  // shown, resolved per request and never cached with the body.
 
   // v1.4.35 — read-through the analytics cache keyed on
   // (userId, "comprehensive"). The /insights page mount routinely
@@ -94,7 +94,16 @@ export const GET = apiHandler(async () => {
     annotate,
   );
 
-  return apiSuccess({ ...body, revalidating: outcome === "stale" });
+  const [briefing, statusText] = await Promise.all([
+    getAiCapability("briefing"),
+    getAiCapability("statusText"),
+  ]);
+
+  return apiSuccess({
+    ...body,
+    revalidating: outcome === "stale",
+    ai: { briefing, statusText },
+  });
 });
 
 type AuthedUser = AuthContext["user"];
@@ -599,7 +608,8 @@ export async function buildComprehensiveResponse(user: AuthedUser) {
     moodPulseScatterData,
     medications: medCompliance,
     alerts,
-    hasProvider: (await resolveProvider(userId)).type !== "none",
+    // Presence only: no client is built and no token is refreshed on a read.
+    hasProvider: await probeProviderPresence(userId),
     dataSpanDays,
     totalMeasurements: aggregate.totalMeasurements,
   };

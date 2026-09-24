@@ -38,8 +38,18 @@ vi.mock("next/headers", () => ({
 }));
 
 const buildDashboardSnapshot = vi.fn();
-vi.mock("@/lib/dashboard/snapshot", () => ({
+vi.mock("@/lib/dashboard/snapshot", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/dashboard/snapshot")>()),
   buildDashboardSnapshot: (...a: unknown[]) => buildDashboardSnapshot(...a),
+}));
+// The per-read briefing capability; its own behaviour is pinned in
+// `snapshot-read-briefing-capability.test.ts`.
+vi.mock("@/lib/ai/capabilities/record", () => ({
+  aiCapabilityForRecord: async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
 }));
 
 import { GET } from "../route";

@@ -19,7 +19,6 @@ const isFullyCovered = vi.fn();
 const readMoodDayRollups = vi.fn();
 const ensureUserMoodRollupsFresh = vi.fn();
 const computeBpInTargetFastPath = vi.fn();
-const getAssistantFlags = vi.fn();
 const hasAnyConfiguredProvider = vi.fn();
 const buildMedsTodayBlock = vi.fn();
 const computeUserHealthScoreMock = vi.fn();
@@ -39,9 +38,6 @@ vi.mock("@/lib/rollups/mood-rollups", () => ({
 vi.mock("@/lib/analytics/bp-in-target-fast-path", () => ({
   computeBpInTargetFastPath: (...a: unknown[]) =>
     computeBpInTargetFastPath(...a),
-}));
-vi.mock("@/lib/feature-flags", () => ({
-  getAssistantFlags: (...a: unknown[]) => getAssistantFlags(...a),
 }));
 // The builder imports only the credential-PRESENCE check; mock it so the
 // test never touches the real provider module (prisma / crypto imports).
@@ -148,6 +144,7 @@ function moduleMap(
 }
 
 import {
+  applyBriefingCapability,
   buildDashboardSnapshot,
   WIDGET_MODULE_BY_ID,
   SUMMARY_TYPE_MODULE,
@@ -156,6 +153,10 @@ import {
 import type { ModuleKey } from "@/lib/modules/gate";
 import { MODULE_KEYS } from "@/lib/modules/registry";
 import { SCORE_VERSION } from "@/lib/analytics/score/types";
+import {
+  AI_AVAILABLE,
+  aiUnavailable,
+} from "@/__tests__/helpers/ai-capability-fixtures";
 
 const emptySummary = {
   count: 0,
@@ -191,7 +192,6 @@ function baseUser(
     gender: "MALE",
     glucoseUnit: "mg/dL",
     onboardingTourCompleted: true,
-    disableCoach: false,
     insightsCachedText: null,
     insightsCachedAt: null,
     insightsCachedLocale: null,
@@ -212,13 +212,6 @@ beforeEach(() => {
     bmi: null,
   });
   readMoodDayRollups.mockResolvedValue([]);
-  getAssistantFlags.mockResolvedValue({
-    enabled: true,
-    coach: true,
-    briefing: true,
-    insightStatus: true,
-    documentAi: true,
-  });
   fakePrisma.measurement.findMany.mockResolvedValue([]);
   fakePrisma.moodEntry.findMany.mockResolvedValue([]);
   fakePrisma.nutrientIntakeDay.findMany.mockResolvedValue([]);
@@ -649,14 +642,7 @@ describe("buildDashboardSnapshot — briefingState matrix", () => {
     expect(hasAnyConfiguredProvider).not.toHaveBeenCalled();
   });
 
-  it("disabled — coach surface off (flag)", async () => {
-    getAssistantFlags.mockResolvedValue({
-      enabled: false,
-      coach: false,
-      briefing: false,
-      insightStatus: false,
-      documentAi: false,
-    });
+  it("the builder lifts the cache and leaves the capability to the read", async () => {
     const snap = await buildDashboardSnapshot(
       fakePrisma,
       baseUser({
@@ -666,22 +652,9 @@ describe("buildDashboardSnapshot — briefingState matrix", () => {
         }),
       }),
     );
-    expect(snap.briefingState).toBe("disabled");
-    expect(snap.briefing).toBeNull();
-  });
-
-  it("disabled — per-user disableCoach", async () => {
-    const snap = await buildDashboardSnapshot(
-      fakePrisma,
-      baseUser({
-        disableCoach: true,
-        insightsCachedAt: new Date(),
-        insightsCachedText: JSON.stringify({
-          dailyBriefing: { greeting: "x", paragraph: "y", keyFindings: [] },
-        }),
-      }),
-    );
-    expect(snap.briefingState).toBe("disabled");
+    expect(snap.briefingState).toBe("ready");
+    expect(snap.briefing).not.toBeNull();
+    expect(snap.briefingAi).toBeNull();
   });
 
   it("preparing — malformed cached briefing (invalid shape)", async () => {
@@ -694,6 +667,66 @@ describe("buildDashboardSnapshot — briefingState matrix", () => {
     );
     expect(snap.briefingState).toBe("preparing");
     expect(snap.briefing).toBeNull();
+  });
+});
+
+describe("applyBriefingCapability — the per-read briefing gate", () => {
+  beforeEach(() => {
+    probeRollupCoverage.mockResolvedValue(new Map());
+    isFullyCovered.mockReturnValue(false);
+  });
+
+  async function readySnapshot() {
+    return buildDashboardSnapshot(
+      fakePrisma,
+      baseUser({
+        insightsCachedAt: new Date(),
+        insightsCachedText: JSON.stringify({
+          dailyBriefing: { greeting: "x", paragraph: "y", keyFindings: [] },
+        }),
+      }),
+    );
+  }
+
+  it("keeps the briefing and publishes the state while available", async () => {
+    const snap = applyBriefingCapability(await readySnapshot(), AI_AVAILABLE);
+    expect(snap.briefing).not.toBeNull();
+    expect(snap.briefingState).toBe("ready");
+    expect(snap.briefingAi).toEqual(AI_AVAILABLE);
+  });
+
+  it.each([
+    "operator_disabled",
+    "user_disabled",
+    "consent_required",
+    "not_permitted_for_record",
+    "check_failed",
+  ] as const)(
+    "hides the briefing, its recall and its timestamp for %s",
+    async (reason) => {
+      const snap = applyBriefingCapability(
+        {
+          ...(await readySnapshot()),
+          briefingMemory: { recall: "r" } as never,
+        },
+        aiUnavailable(reason),
+      );
+      expect(snap.briefing).toBeNull();
+      expect(snap.briefingMemory).toBeNull();
+      expect(snap.briefingUpdatedAt).toBeNull();
+      expect(snap.briefingStale).toBe(false);
+      expect(snap.briefingState).toBe("disabled");
+      expect(snap.briefingAi).toEqual(aiUnavailable(reason));
+    },
+  );
+
+  it("keeps the published no-provider state for a missing provider", async () => {
+    const snap = applyBriefingCapability(
+      await readySnapshot(),
+      aiUnavailable("no_provider"),
+    );
+    expect(snap.briefing).toBeNull();
+    expect(snap.briefingState).toBe("no-provider");
   });
 });
 
@@ -1212,7 +1245,7 @@ describe("buildDashboardSnapshot — module gating (v1.18.0)", () => {
     expect(snap.tiles.lastSeenByType.NUTRIENT_WATER).toBeUndefined();
   });
 
-  it("insights disabled: Daily Briefing surface goes to disabled state", async () => {
+  it("insights disabled: the builder no longer decides the briefing (the read applies the capability)", async () => {
     const snap = await buildDashboardSnapshot(
       fakePrisma,
       baseUser({
@@ -1227,8 +1260,9 @@ describe("buildDashboardSnapshot — module gating (v1.18.0)", () => {
       }),
       { modules: () => Promise.resolve(moduleMap({ insights: false })) },
     );
-    expect(snap.briefingState).toBe("disabled");
-    expect(snap.briefing).toBeNull();
+    // The `insights` module is the AI analysis opt-out, folded into the
+    // `briefing` capability that `applyBriefingCapability` applies per read.
+    expect(snap.briefingAi).toBeNull();
   });
 
   it("defaults to resolveModuleMap when no override is injected", async () => {

@@ -19,6 +19,13 @@
  * text child only — no markdown library exists in the tree and none
  * may be added (XSS posture, see the contributor notes).
  *
+ * The follow-up questions are the one AI part. Model-written questions are
+ * derived and served only while the `aboutMeQuestions` capability is
+ * available; otherwise the deterministic completion hints stand in, no
+ * provider is called, and the `ai` field says why. Stored questions cannot be
+ * told apart by origin, so while the capability is unavailable an outstanding
+ * set is replaced on read by the deterministic hints for the same profile.
+ *
  * Ownership: the user id always comes from `requireAuth()`; the body
  * carries only the text. Audit rows never contain the text itself —
  * only per-field lengths — because it is free-form health prose.
@@ -44,7 +51,11 @@ import {
   filterSelfContextForAi,
   setPendingQuestionsForUser,
 } from "@/lib/ai/coach/about-me";
-import { deriveClarifyingQuestions } from "@/lib/ai/coach/self-context-questions";
+import {
+  buildFallbackQuestions,
+  deriveClarifyingQuestions,
+} from "@/lib/ai/coach/self-context-questions";
+import { getAiCapability } from "@/lib/ai/capabilities/gate";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import {
   ABOUT_ME_FIELD_MAX_CHARS,
@@ -79,7 +90,7 @@ export const GET = apiHandler(async () => {
   const gate = await requireSelfContextConsumer(user.id);
   if (!gate.enabled) return gate.response;
 
-  const [ctx, pendingQuestions, row] = await Promise.all([
+  const [ctx, storedQuestions, row, ai] = await Promise.all([
     getSelfContextForUser(user.id),
     gate.coachEnabled
       ? getPendingQuestionsForUser(user.id)
@@ -88,7 +99,22 @@ export const GET = apiHandler(async () => {
       where: { userId: user.id },
       select: { updatedAt: true, aiIncludedSections: true },
     }),
+    getAiCapability("aboutMeQuestions"),
   ]);
+  const aiIncludedSections =
+    (row?.aiIncludedSections as HealthProfileAiSection[] | undefined) ??
+    DEFAULT_HEALTH_PROFILE_AI_SECTIONS;
+  // A stored set may be model-written. While the capability is unavailable
+  // an outstanding set is swapped for the deterministic hints; an answered
+  // (empty) set stays empty.
+  const pendingQuestions =
+    ai.available || storedQuestions.length === 0
+      ? storedQuestions
+      : buildFallbackQuestions(
+          filterSelfContextForAi(ctx, aiIncludedSections),
+          user.locale,
+          aiIncludedSections,
+        );
 
   annotate({
     action: { name: "coach.about_me.get" },
@@ -107,12 +133,11 @@ export const GET = apiHandler(async () => {
     allergies: ctx.allergies,
     coachFocus: ctx.coachFocus,
     pendingQuestions,
-    aiIncludedSections:
-      (row?.aiIncludedSections as HealthProfileAiSection[] | undefined) ??
-      DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+    aiIncludedSections,
     updatedAt: row?.updatedAt?.toISOString() ?? null,
     maxChars: ABOUT_ME_MAX_CHARS,
     fieldMaxChars: ABOUT_ME_FIELD_MAX_CHARS,
+    ai,
   });
 });
 
@@ -325,6 +350,7 @@ export const PUT = apiHandler(async (req: Request) => {
     ctx.allergies === null &&
     ctx.coachFocus === null;
 
+  const ai = await getAiCapability("aboutMeQuestions");
   let pendingQuestions: string[] = [];
   let questionsToPersist: string[] | null | undefined;
   let questionsSource: "ai" | "fallback" | "none" = "none";
@@ -342,6 +368,7 @@ export const PUT = apiHandler(async (req: Request) => {
       aiContext,
       user.locale,
       aiIncludedSections,
+      { aiAvailable: ai.available },
     );
     pendingQuestions = derived.questions;
     questionsSource = derived.source;
@@ -404,6 +431,7 @@ export const PUT = apiHandler(async (req: Request) => {
     updatedAt: updatedAtIso,
     maxChars: ABOUT_ME_MAX_CHARS,
     fieldMaxChars: ABOUT_ME_FIELD_MAX_CHARS,
+    ai,
   });
 });
 

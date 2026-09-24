@@ -1,21 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
-vi.mock("@/lib/db", () => ({
-  prisma: {
-    appSettings: { findUnique: vi.fn().mockResolvedValue(null) },
-  },
-}));
+/**
+ * `POST /api/insights/pregenerate` warms two AI capabilities, `briefing` and
+ * `statusText`. It returns no model output, so it never refuses: with
+ * neither available it answers 200 `{ queued: false }` and enqueues nothing;
+ * with either available it enqueues (the worker checks each half). The `ai`
+ * block always says which half can run.
+ */
 
-// v1.18.0 — the route now resolves the `insights` module gate after
-// `requireAuth()`. Mock it default-enabled so the existing assertions
-// ride through; the off → 403 coverage lives in the route-gate inventory
-// test.
-vi.mock("@/lib/modules/gate", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/modules/gate")>()),
-  requireModuleEnabled: vi.fn().mockResolvedValue({ enabled: true }),
-  resolveModuleMap: vi.fn().mockResolvedValue({}),
-}));
+vi.mock("@/lib/db", () => ({ prisma: {} }));
 
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
 
@@ -38,8 +32,6 @@ vi.mock("next/headers", () => ({
   })),
 }));
 
-// Always allow the anti-spam bucket so the surface gate is what the test
-// exercises.
 vi.mock("@/lib/rate-limit", () => ({
   checkRateLimit: vi.fn(async () => ({ allowed: true })),
 }));
@@ -49,11 +41,18 @@ vi.mock("@/lib/jobs/insight-pregenerate-shared", () => ({
   enqueueForceWarm: vi.fn(async () => undefined),
 }));
 
+vi.mock("@/lib/ai/capabilities/gate", () => ({ getAiCapability: vi.fn() }));
+
 import { POST } from "../route";
 import { getSession } from "@/lib/auth/session";
-import { prisma } from "@/lib/db";
-import { requireModuleEnabled } from "@/lib/modules/gate";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { enqueueForceWarm } from "@/lib/jobs/insight-pregenerate-shared";
+import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import type { AiCapabilityKey } from "@/lib/ai/capabilities/types";
+import {
+  AI_AVAILABLE,
+  aiUnavailable,
+} from "@/__tests__/helpers/ai-capability-fixtures";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -72,57 +71,73 @@ function makeReq(): NextRequest {
   });
 }
 
+function capabilities(
+  states: Partial<Record<AiCapabilityKey, ReturnType<typeof aiUnavailable>>>,
+) {
+  vi.mocked(getAiCapability).mockImplementation(
+    async (key) => states[key] ?? AI_AVAILABLE,
+  );
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(prisma.appSettings.findUnique).mockResolvedValue(null as never);
-  vi.mocked(requireModuleEnabled).mockResolvedValue({ enabled: true });
+  vi.mocked(checkRateLimit).mockResolvedValue({ allowed: true } as never);
+  capabilities({});
 });
 
 describe("POST /api/insights/pregenerate", () => {
-  it("enqueues a warm when insightStatus is enabled", async () => {
+  it("enqueues a warm when both halves are available", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
     const res = await callPost(makeReq());
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      data: { queued: boolean } | null;
+      data: { queued: boolean; ai: Record<string, unknown> } | null;
       error: string | null;
     };
     expect(body.error).toBeNull();
     expect(body.data?.queued).toBe(true);
+    expect(body.data?.ai).toEqual({
+      briefing: AI_AVAILABLE,
+      statusText: AI_AVAILABLE,
+    });
     expect(enqueueForceWarm).toHaveBeenCalledWith(
       expect.objectContaining({ userId: "user-1" }),
     );
   });
 
-  it("gates on insightStatus, not coach — a coach-disabled user can still warm", async () => {
+  it("enqueues when only one half is available (the worker skips the other)", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
-    vi.mocked(prisma.appSettings.findUnique).mockResolvedValueOnce({
-      assistantEnabled: true,
-      assistantCoachEnabled: false,
-      assistantBriefingEnabled: true,
-      assistantInsightStatusEnabled: true,
-      assistantDocumentAiEnabled: true,
-    } as never);
+    capabilities({ briefing: aiUnavailable("operator_disabled") });
     const res = await callPost(makeReq());
     expect(res.status).toBe(200);
     expect(enqueueForceWarm).toHaveBeenCalledTimes(1);
   });
 
-  it("403s + errorCode when insightStatus is disabled", async () => {
-    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
-    vi.mocked(prisma.appSettings.findUnique).mockResolvedValueOnce({
-      assistantEnabled: true,
-      assistantCoachEnabled: true,
-      assistantBriefingEnabled: true,
-      assistantInsightStatusEnabled: false,
-      assistantDocumentAiEnabled: true,
-    } as never);
-    const res = await callPost(makeReq());
-    expect(res.status).toBe(403);
-    const body = (await res.json()) as { meta?: { errorCode?: string } };
-    expect(body.meta?.errorCode).toBe("assistant.disabled.insightStatus");
-    expect(enqueueForceWarm).not.toHaveBeenCalled();
-  });
+  it.each([
+    "operator_disabled",
+    "user_disabled",
+    "no_provider",
+    "consent_required",
+  ] as const)(
+    "answers 200 { queued: false } and enqueues nothing when neither half is available (%s)",
+    async (reason) => {
+      vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+      capabilities({
+        briefing: aiUnavailable(reason),
+        statusText: aiUnavailable(reason),
+      });
+      const res = await callPost(makeReq());
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        data: { queued: boolean; ai: { briefing: { reason: string } } };
+      };
+      expect(body.data.queued).toBe(false);
+      expect(body.data.ai.briefing.reason).toBe(reason);
+      expect(enqueueForceWarm).not.toHaveBeenCalled();
+      // Nothing to warm, so no anti-spam bucket is spent either.
+      expect(checkRateLimit).not.toHaveBeenCalled();
+    },
+  );
 
   it("401s when unauthenticated", async () => {
     vi.mocked(getSession).mockResolvedValue(null);

@@ -17,6 +17,7 @@ import type { User } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { annotate } from "@/lib/logging/context";
 import { resolveModuleMap } from "@/lib/modules/gate";
+import { aiCapabilityForRecord } from "@/lib/ai/capabilities/record";
 import { readDashboardSnapshotCached } from "@/lib/dashboard/snapshot-read";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 import type { Locale } from "@/lib/i18n/config";
@@ -29,6 +30,7 @@ import { isArrivalKind } from "@/lib/arrivals/types";
 import {
   buildDailyDigest,
   type DailyDigest,
+  type DailyDigestAi,
   type DailyDigestArrival,
   type DailyDigestCoachPlan,
   type DailyDigestEcg,
@@ -305,13 +307,17 @@ function toCoachPlanCandidate(row: CoachPlanRow): DailyDigestCoachPlan {
  * marker itself — which is what actually drives the "just in" chip — survives
  * a lost sentence intact. Same discipline as `toCoachPlanCandidate` above.
  */
-function toDigestArrival(row: {
-  kind: string;
-  occurredAt: Date;
-  arrivedAt: Date;
-  lineEncrypted: Uint8Array | null;
-  generatedAt: Date | null;
-}): DailyDigestArrival | null {
+function toDigestArrival(
+  row: {
+    kind: string;
+    occurredAt: Date;
+    arrivedAt: Date;
+    lineEncrypted: Uint8Array | null;
+    generatedAt: Date | null;
+  },
+  /** The `reactionLines` capability: the line is model text. */
+  linesAvailable: boolean,
+): DailyDigestArrival | null {
   // A kind this build does not know about (a row written by a newer version)
   // is dropped rather than widened — the DTO's kind union is closed.
   if (!isArrivalKind(row.kind)) return null;
@@ -319,7 +325,12 @@ function toDigestArrival(row: {
   let line: string | null = null;
   // The ciphertext rides only once the generation actually COMMITTED. A row
   // mid-generation carries no `generatedAt`, and its line must not surface.
-  if (row.generatedAt !== null && row.lineEncrypted !== null) {
+  // Nor while the capability is unavailable: it is not even decrypted.
+  if (
+    linesAvailable &&
+    row.generatedAt !== null &&
+    row.lineEncrypted !== null
+  ) {
     try {
       line = decryptFromBytes(row.lineEncrypted);
     } catch {
@@ -374,6 +385,8 @@ export async function loadDailyDigest(
     ecgRow,
     arrivalRows,
     nextVisitRow,
+    coachAi,
+    reactionLinesAi,
   ] = await Promise.all([
     readDashboardSnapshotCached(user, undefined, { locale: options.locale }),
     resolveModuleMap(user.id),
@@ -468,7 +481,22 @@ export async function loadDailyDigest(
         practitioner: { select: { name: true } },
       },
     }),
+    aiCapabilityForRecord(user.id, "coach"),
+    aiCapabilityForRecord(user.id, "reactionLines"),
   ]);
+
+  // The snapshot read has already applied the `briefing` capability and
+  // publishes the state it applied; the fallback only covers an older cached
+  // body shape and fails closed.
+  const ai: DailyDigestAi = {
+    briefing: snapshot.briefingAi ?? {
+      available: false,
+      reason: "check_failed",
+      onDeviceAllowed: false,
+    },
+    coach: coachAi,
+    reactionLines: reactionLinesAi,
+  };
 
   const score: DailyDigestScore | null = snapshot.healthScore
     ? {
@@ -545,35 +573,30 @@ export async function loadDailyDigest(
       }
     : null;
 
-  // Only decrypt plan prose for a coach-enabled account; the builder gates on
-  // the module too, so a disabled coach never surfaces a check-in either way.
-  const coachEnabled = modules.coach !== false;
-  const coachPlans: DailyDigestCoachPlan[] = coachEnabled
+  // Only decrypt plan prose while the Coach is available; the builder gates
+  // the check-in on the same capability, so it never surfaces otherwise.
+  const coachPlans: DailyDigestCoachPlan[] = coachAi.available
     ? planRows.map((row) => toCoachPlanCandidate(row as CoachPlanRow))
     : [];
 
-  // S12 — the calm reward layer. Only gather when the insights module (the
-  // narrative layer that hosts the milestone card) is on; the builder gates on
-  // it too, so a disabled account never surfaces one either way.
-  //
-  // S11 — the day's elevated-at-rest window, computed on demand from raw for
-  // TODAY only (read-swap, one bounded day-read; never persisted). Gated on the
-  // insights module and fault-isolated: a tension-read failure must never break
-  // the digest (a hot, must-not-fail path), it just omits the calm marker.
+  // S12 — the calm reward layer. S11 — the day's elevated-at-rest window,
+  // computed on demand from raw for TODAY only (read-swap, one bounded
+  // day-read; never persisted), fault-isolated: a tension-read failure must
+  // never break the digest (a hot, must-not-fail path), it just omits the calm
+  // marker. Both are computations over the record's own data, so neither
+  // depends on the `insights` module, which is the AI analysis opt-out.
   //
   // Both ride the cached, single-flight `loadDailyDigestExtrasCached` cell so
   // a 120 s poll of every open tab doesn't re-run the ~8.5k-row streak +
   // per-sample tension reads on every request — see its docblock for the
   // cache/invalidation contract.
-  const insightsEnabled = modules.insights !== false;
-  const { milestone, tensionWindow, sameTime } = insightsEnabled
-    ? await loadDailyDigestExtrasCached(
-        user.id,
-        user.timezone,
-        todayLocalDate,
-        now,
-      )
-    : { milestone: null, tensionWindow: null, sameTime: null };
+  const { milestone, tensionWindow, sameTime } =
+    await loadDailyDigestExtrasCached(
+      user.id,
+      user.timezone,
+      todayLocalDate,
+      now,
+    );
 
   // Dismiss ledger (P — Today rail dismiss). Only the OBSERVATIONAL kinds
   // (milestone / ecg_new_recording / tension_window) can ever be dismissed, so
@@ -615,6 +638,7 @@ export async function loadDailyDigest(
   const digest = buildDailyDigest(
     {
       now,
+      ai,
       todayEndExclusive,
       modules,
       enabledHeroItemKinds:
@@ -637,7 +661,7 @@ export async function loadDailyDigest(
       todayLocalDate,
       dismissedItemKeys,
       arrivals: arrivalRows
-        .map(toDigestArrival)
+        .map((row) => toDigestArrival(row, reactionLinesAi.available))
         .filter((a): a is DailyDigestArrival => a !== null),
     },
     t,

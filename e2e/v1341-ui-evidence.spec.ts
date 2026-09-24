@@ -12,11 +12,13 @@ import {
 } from "./utils/mock-dashboard-snapshot";
 import { mockPopulatedInsights } from "./utils/mock-populated-insights";
 import { settleBeforeMeasure, waitForFonts } from "./utils/settle";
+import { DIGEST_AI_AVAILABLE } from "@/__tests__/helpers/ai-capability-fixtures";
 
 const EVIDENCE_DIR = join(process.cwd(), "test-results", "v1341");
 
 const NARRATIVE_DIGEST: DailyDigest = {
   generatedAt: "2026-07-29T08:30:00.000Z",
+  ai: DIGEST_AI_AVAILABLE,
   phase: "final",
   sleepPending: false,
   score: {

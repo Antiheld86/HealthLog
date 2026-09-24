@@ -8,6 +8,7 @@
  */
 import { z } from "zod/v4";
 
+import type { AiUnavailableReason } from "@/lib/ai/capabilities/types";
 import type { CoachSuggestedAction } from "./suggest-action";
 
 /**
@@ -227,7 +228,17 @@ export type CoachStreamEvent =
       messageId: string;
       usage?: CoachUsage;
     }
-  | { type: "error"; code: string; message: string };
+  | {
+      type: "error";
+      code: string;
+      message: string;
+      /**
+       * The AI capability reason, when the refusal came from one (today only
+       * `no_provider` on `coach.provider.none`). Additive: older clients
+       * ignore it.
+       */
+      reason?: AiUnavailableReason;
+    };
 
 /**
  * v1.4.22 — Zod schema for one entry inside the Coach's evidence

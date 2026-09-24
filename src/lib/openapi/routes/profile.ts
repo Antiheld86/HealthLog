@@ -609,7 +609,7 @@ const aiProviderResponse = z
     aiAvailable: z
       .boolean()
       .describe(
-        "True when ANY provider can serve this user — including the operator's server-managed key when the user set none. iOS keys Coach visibility off this.",
+        "True when ANY provider can serve this user — including the operator's server-managed key when the user set none — AND the operator's master AI switch is on. With every AI capability switched off there is no AI available, whatever is configured. iOS keys Coach visibility off this. The per-capability answer is `ai` on `/api/auth/me`.",
       ),
     managedBy: z
       .enum(["user", "local", "server"])
@@ -665,7 +665,7 @@ const aiProviderResponse = z
     serverProviderOffer: z
       .boolean()
       .describe(
-        "Whether the shared provider may honestly be offered to this caller in one tap. True only when all of: the operator's provider is the one that would serve them (`managedBy: \"server\"`), `serverProviderHealth` is `healthy`, the operator's assistant master + coach flags are on, the acting record holds its own credentials (a managed profile never does), the caller holds no receipt yet, and the instance is not running in demo mode (where the grant the tap makes is refused at the edge). Anything unknown makes it false.",
+        'Whether the shared provider may honestly be offered to this caller in one tap. True only when all of: the operator\'s provider is the one that would serve them (`managedBy: "server"`), `serverProviderHealth` is `healthy`, the operator keeps at least one capability the consent would unlock switched on (the Coach, the daily briefing, or reading documents; the master switch off turns all three off), the acting record holds its own credentials (a managed profile never does), the caller holds no receipt yet, and the instance is not running in demo mode (where the grant the tap makes is refused at the edge). Anything unknown makes it false.',
       ),
     serverProviderConsent: z
       .boolean()

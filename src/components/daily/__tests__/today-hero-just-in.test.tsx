@@ -20,6 +20,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { I18nProvider } from "@/lib/i18n/context";
 import { TodayHero } from "../today-hero";
 import type { DailyDigest } from "@/lib/daily/digest";
+import { DIGEST_AI_AVAILABLE } from "@/__tests__/helpers/ai-capability-fixtures";
 
 function render(node: React.ReactNode, locale: "en" | "de" = "en") {
   const client = new QueryClient();
@@ -35,6 +36,7 @@ const ARRIVED_AT = "2026-07-16T05:41:00.000Z";
 function digest(over: Partial<DailyDigest> = {}): DailyDigest {
   return {
     generatedAt: "2026-07-16T06:00:00.000Z",
+    ai: DIGEST_AI_AVAILABLE,
     phase: "final",
     sleepPending: false,
     score: { value: 82, band: "green", delta: 3 },

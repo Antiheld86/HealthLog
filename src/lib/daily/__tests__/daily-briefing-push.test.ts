@@ -21,6 +21,7 @@ import { isUrgentPayload } from "@/lib/notifications/types";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 import { loadDailyDigest } from "@/lib/daily/load-digest";
 import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
+import { DIGEST_AI_AVAILABLE } from "@/__tests__/helpers/ai-capability-fixtures";
 
 // 06:00Z → 08:00 in Europe/Berlin (summer) → inside the morning window AND the
 // fixed fallback hour. The tz-window cases move only this instant.
@@ -31,6 +32,7 @@ const AFTER_WINDOW = new Date("2026-07-16T12:30:00Z"); // 14:30 Berlin
 function makeDigest(over: Partial<DailyDigest> = {}): DailyDigest {
   return {
     generatedAt: "2026-07-16T06:00:00.000Z",
+    ai: DIGEST_AI_AVAILABLE,
     phase: "final",
     sleepPending: false,
     score: { value: 82, band: "good", delta: 1 },

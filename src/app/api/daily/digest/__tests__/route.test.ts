@@ -8,9 +8,9 @@ import { SCORE_VERSION } from "@/lib/analytics/score/types";
 /**
  * `GET /api/daily/digest` — the P3 read seam.
  *
- * Under test: cookie/Bearer auth narrows the user, the `insights` module gate
- * returns a 403 `module.disabled` envelope when off (even for a valid
- * session), and the happy path returns the `DailyDigest` DTO shape. The digest
+ * Under test: cookie/Bearer auth narrows the user, the `insights` module (the
+ * AI analysis opt-out) no longer refuses the digest, and the happy path
+ * returns the `DailyDigest` DTO shape. The digest
  * itself is composed by `loadDailyDigest`, mocked here — the route must reach
  * no provider (there is nothing AI-shaped in this module graph).
  */
@@ -44,6 +44,7 @@ import { GET } from "../route";
 import { getSession } from "@/lib/auth/session";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import { loadDailyDigest } from "@/lib/daily/load-digest";
+import { DIGEST_AI_AVAILABLE } from "@/__tests__/helpers/ai-capability-fixtures";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -57,6 +58,7 @@ const SESSION_OK = {
 
 const DIGEST: DailyDigest = {
   generatedAt: "2026-07-16T09:00:00.000Z",
+  ai: DIGEST_AI_AVAILABLE,
   phase: "final",
   sleepPending: false,
   score: {
@@ -95,7 +97,7 @@ describe("GET /api/daily/digest", () => {
     expect(vi.mocked(loadDailyDigest)).not.toHaveBeenCalled();
   });
 
-  it("returns the 403 module.disabled envelope when insights is off", async () => {
+  it("serves the digest with the insights module (the AI analysis opt-out) off", async () => {
     vi.mocked(requireModuleEnabled).mockResolvedValue({
       enabled: false,
       response: apiError('Module "insights" is not enabled', 403, {
@@ -104,18 +106,9 @@ describe("GET /api/daily/digest", () => {
       }),
     });
     const res = await callGet(makeReq());
-    expect(res.status).toBe(403);
-    const body = await res.json();
-    expect(body.meta?.errorCode).toBe("module.disabled");
-    expect(vi.mocked(loadDailyDigest)).not.toHaveBeenCalled();
-  });
-
-  it("gates on the insights module key", async () => {
-    await callGet(makeReq());
-    expect(vi.mocked(requireModuleEnabled)).toHaveBeenCalledWith(
-      "user-1",
-      "insights",
-    );
+    expect(res.status).toBe(200);
+    expect(vi.mocked(requireModuleEnabled)).not.toHaveBeenCalled();
+    expect(vi.mocked(loadDailyDigest)).toHaveBeenCalled();
   });
 
   it("returns 200 with the DailyDigest DTO on the happy path", async () => {

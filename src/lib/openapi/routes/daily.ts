@@ -4,9 +4,9 @@
  * GET /api/daily/digest returns the `DailyDigest` DTO the Today surface, the
  * daily push, and a future iOS widget all consume. It is a pure read of
  * already-cached data (nightly briefing lift + dashboard-snapshot ingredients
- * + two light deterministic reads) — no provider call, no warm-on-mount. Gated
- * on the `insights` module. Part of the OpenAPI route table; aggregated in
- * `./index.ts`.
+ * + two light deterministic reads) — no provider call, no warm-on-mount. No
+ * module or AI gate; its AI parts follow their capabilities. Part of the
+ * OpenAPI route table; aggregated in `./index.ts`.
  */
 import { z } from "zod/v4";
 import type { ZodOpenApiObject } from "zod-openapi";
@@ -14,14 +14,9 @@ import type { ZodOpenApiObject } from "zod-openapi";
 import { ARRIVAL_KINDS } from "@/lib/arrivals/types";
 import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
 import { dismissPriorityItemSchema } from "@/lib/validations/daily";
-import {
-  MODULE_DISABLED_DESCRIPTION,
-  dataEnvelope,
-  moduleDisabledResponse,
-  recordRefusal,
-  stdResponses,
-} from "./shared";
+import { dataEnvelope, recordRefusal, stdResponses } from "./shared";
 import { healthScoreBasis } from "./insights/schemas";
+import { aiCapabilityState } from "./profile";
 
 const priorityItemSchema = z
   .object({
@@ -123,12 +118,14 @@ const dailyDigestResponse = z
       })
       .nullable()
       .describe(
-        "Clinical-priority top signal, lifted from the cached briefing.",
+        "Clinical-priority top signal, lifted from the cached briefing. Null while the `briefing` capability is unavailable.",
       ),
     briefingLead: z
       .string()
       .nullable()
-      .describe("First sentence of the cached briefing paragraph."),
+      .describe(
+        "First sentence of the cached briefing paragraph. Null while the `briefing` capability is unavailable; `line` then falls to its deterministic floor.",
+      ),
     line: z
       .string()
       .describe(
@@ -156,7 +153,16 @@ const dailyDigestResponse = z
       .string()
       .nullable()
       .describe(
-        "One-sentence generated reaction to that arrival, standing for the rest of the local day. Null whenever no line was generated (no provider, no consent, budget exhausted, or generation failed) — consumers fall back to `briefingLead` / `line`. Additive since v1.31.0.",
+        "One-sentence generated reaction to that arrival, standing for the rest of the local day. Null whenever no line was generated (no provider, no consent, budget exhausted, or generation failed), and whenever the `reactionLines` capability is unavailable, however recent the stored line — consumers fall back to `briefingLead` / `line`. Additive since v1.31.0.",
+      ),
+    ai: z
+      .object({
+        briefing: aiCapabilityState,
+        coach: aiCapabilityState,
+        reactionLines: aiCapabilityState,
+      })
+      .describe(
+        "The three AI capabilities the digest carries text or a card for: `briefing` (the lead and top signal), `coach` (the Coach check-in card, which opens the Coach) and `reactionLines` (the reaction line). Everything else in the digest is data.",
       ),
   })
   .meta({
@@ -171,7 +177,7 @@ export const dailyPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "The unified daily digest",
       description:
-        "Assembles the day's read from already-cached data: the nightly briefing lifted read-only from the insights cache, the dashboard-snapshot health score / meds-today / sleep freshness, plus deterministic integration-status and Vorsorge reads for the 'worth a look' rail. No provider call, no warm-on-mount. Requires the insights module. Cookie or Bearer auth.",
+        "Assembles the day's read from already-cached data: the nightly briefing lifted read-only from the insights cache, the dashboard-snapshot health score / meds-today / sleep freshness, plus deterministic integration-status and Vorsorge reads for the 'worth a look' rail. No provider call, no warm-on-mount. No module gate and no AI gate: the digest is data, and the `insights` module is the AI analysis opt-out. Its AI parts follow their capabilities, published in `ai`. Cookie or Bearer auth.",
       responses: {
         "200": {
           description: "The daily digest.",
@@ -181,7 +187,7 @@ export const dailyPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...recordRefusal(MODULE_DISABLED_DESCRIPTION),
+        ...recordRefusal(),
         ...stdResponses,
       },
     },
@@ -191,7 +197,7 @@ export const dailyPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Dismiss a Today rail item",
       description:
-        '"Dismiss / mark seen" for the Today rail\'s OBSERVATIONAL PriorityItem kinds only — milestone, ecg_new_recording, tension_window. The ACTIONABLE kinds (dose_window, sync_issue, preventive_care, coach_checkin) are structurally unreachable: itemKey must be namespaced under one of the three dismissible kinds or the request 422s before any lookup runs. Persisted server-side so the dismissal survives reload / a second device; an upsert, so a repeat dismiss of the same instance is a no-op. Requires the insights module. Cookie or Bearer auth.',
+        '"Dismiss / mark seen" for the Today rail\'s OBSERVATIONAL PriorityItem kinds only — milestone, ecg_new_recording, tension_window. The ACTIONABLE kinds (dose_window, sync_issue, preventive_care, coach_checkin) are structurally unreachable: itemKey must be namespaced under one of the three dismissible kinds or the request 422s before any lookup runs. Persisted server-side so the dismissal survives reload / a second device; an upsert, so a repeat dismiss of the same instance is a no-op. No module gate. Cookie or Bearer auth.',
       requestBody: {
         required: true,
         content: {
@@ -210,7 +216,6 @@ export const dailyPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             },
           },
         },
-        ...moduleDisabledResponse,
         ...stdResponses,
       },
     },

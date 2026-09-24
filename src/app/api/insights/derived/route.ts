@@ -35,6 +35,7 @@ import {
 import { DERIVED_MAX_WINDOW_DAYS } from "@/lib/insights/derived/types";
 import { resolveDerivedAssessment } from "@/lib/insights/derived/derived-assessment-ai";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
+import { getAiCapability } from "@/lib/ai/capabilities/gate";
 
 export const dynamic = "force-dynamic";
 
@@ -88,17 +89,15 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // enqueues nothing while a delegate is holding the request.
   const { user } = await requireRecordAuth("manage", "record");
 
-  const m = await requireModuleEnabled(user.id, "insights");
-  if (!m.enabled) return m.response;
-
   // v1.15.20 — shared analytics-read budget (generous; caps runaway loops).
   const rl = await checkAnalyticsReadRateLimit(user.id);
   if (!rl.allowed) {
     return apiError("Too many analytics requests. Please retry later.", 429);
   }
 
-  // Pure compute over the rollup tier, so no assistant-surface gate:
-  // switching the assistant off does not blank the derived tiles.
+  // Pure compute over the rollup tier, so no AI gate and no `insights`
+  // module gate (the AI analysis opt-out): switching AI off does not blank the
+  // derived tiles. Only the model-written assessment below depends on AI.
 
   const parsed = derivedQuerySchema.safeParse({
     metric: request.nextUrl.searchParams.get("metric"),
@@ -159,11 +158,16 @@ export const GET = apiHandler(async (request: NextRequest) => {
     userLocale: user.locale ?? null,
     override: localeParam,
   });
+  // The model-written override is served, and warmed, only while
+  // `statusText` is available. Otherwise the deterministic text stands and
+  // `ai` says why there is no warmer prose.
+  const ai = await getAiCapability("statusText");
   const assessment = await resolveDerivedAssessment({
     metric,
     userId: user.id,
     derived,
     locale: resolvedLocale,
+    aiAvailable: ai.available,
   });
 
   // Flatten the discriminated union for the wire: `metric` tags it,
@@ -177,5 +181,6 @@ export const GET = apiHandler(async (request: NextRequest) => {
     provenance: derived.provenance,
     reason: derived.status === "insufficient" ? derived.reason : null,
     assessment,
+    ai,
   });
 });

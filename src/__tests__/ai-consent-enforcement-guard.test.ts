@@ -129,8 +129,6 @@ const ALLOWLIST: Record<string, string> = {
     "Resolves the chain to REPORT which entry could do vision/text OCR (mode, reason, pdfSupported). Makes no completion call. Every consumer that then egresses a document is gated at its own call site with assertDocumentEgressConsent.",
   "app/api/insights/provider-chain/route.ts":
     "Lists the user's configured chain and which entry is active, for the settings UI. Constructs clients but never calls generateCompletion. No health data in the request or the response.",
-  "app/api/insights/comprehensive/route.ts":
-    "Uses the resolver only as a boolean probe ((await resolveProvider(userId)).type !== 'none') to set hasProvider on the response. The generation path itself lives in lib/insights/comprehensive-generate.ts, which is gated.",
 
   // --- Connection test: a real provider call, but with no user data. ---
   "app/api/ai/test/route.ts":

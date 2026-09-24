@@ -54,15 +54,16 @@ describe("GET /api/insights/patterns", () => {
     );
   });
 
-  it("refuses the list when Insights is disabled", async () => {
-    vi.mocked(requireModuleEnabled).mockResolvedValueOnce({
+  it("serves the list whatever the AI analysis opt-out says (statistics are data)", async () => {
+    vi.mocked(requireModuleEnabled).mockResolvedValue({
       enabled: false,
       response: apiError('Module "insights" is not enabled', 403),
     });
 
     const response = await GET();
 
-    expect(response.status).toBe(403);
-    expect(prisma.correlationPattern.findMany).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(requireModuleEnabled).not.toHaveBeenCalled();
+    expect(prisma.correlationPattern.findMany).toHaveBeenCalled();
   });
 });

@@ -249,10 +249,11 @@ describe("GET /api/insights/correlations", () => {
     );
   });
 
-  // v1.18.0 (B2) — the route now also requires the `insights` module.
-  it("returns 403 + module.disabled when the insights module is off", async () => {
+  // The `insights` module is the AI analysis opt-out. Correlations are
+  // statistics, so turning AI analysis off must not take them away.
+  it("serves the statistics with the insights module (the AI analysis opt-out) off", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
-    vi.mocked(requireModuleEnabled).mockResolvedValueOnce({
+    vi.mocked(requireModuleEnabled).mockResolvedValue({
       enabled: false,
       response: apiError('Module "insights" is not enabled', 403, {
         errorCode: "module.disabled",
@@ -260,13 +261,7 @@ describe("GET /api/insights/correlations", () => {
       }),
     });
     const res = await callGet(makeReq());
-    expect(res.status).toBe(403);
-    const body = (await res.json()) as {
-      meta?: { errorCode?: string; module?: string };
-    };
-    expect(body.meta?.errorCode).toBe("module.disabled");
-    expect(body.meta?.module).toBe("insights");
-    // The disabled-module request never reaches the series reads.
-    expect(prisma.measurement.findMany).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(requireModuleEnabled).not.toHaveBeenCalled();
   });
 });

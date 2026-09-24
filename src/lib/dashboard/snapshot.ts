@@ -71,8 +71,8 @@ import {
   type DashboardWidgetCatalogueId,
 } from "@/lib/dashboard-layout";
 import { dailyBriefingSchema, type DailyBriefing } from "@/lib/ai/schema";
-import { getAssistantFlags } from "@/lib/feature-flags";
 import { hasAnyConfiguredProvider } from "@/lib/ai/provider";
+import type { AiCapabilityState } from "@/lib/ai/capabilities/types";
 import { DEFAULT_TIMEZONE } from "@/lib/tz/resolver";
 import {
   buildMedsTodayBlock,
@@ -488,6 +488,15 @@ export interface DashboardSnapshot {
    * stale-while-revalidate honesty the insights page uses.
    */
   briefingStale: boolean;
+  /**
+   * Whether the daily briefing can be shown for this record, and why not.
+   * The builder lifts whatever the cache holds and leaves this null; the
+   * cached read applies the `briefing` capability on every request
+   * (`applyBriefingCapability`), so a switch flip, an opt-out or a withdrawn
+   * consent hides the text on the next read rather than when the cached body
+   * ages out. Optional so older cached bodies and fixtures stay valid.
+   */
+  briefingAi?: AiCapabilityState | null;
   generatedAt: string;
 }
 
@@ -502,7 +511,6 @@ export interface SnapshotUserInput {
   gender: string | null;
   glucoseUnit: string | null;
   onboardingTourCompleted: boolean;
-  disableCoach: boolean;
   insightsCachedText: string | null;
   insightsCachedAt: Date | null;
   /**
@@ -878,6 +886,31 @@ function parseCachedBriefing(cachedText: string | null): DailyBriefing | null {
 }
 
 /**
+ * Hide the briefing (and the recall that rides it) unless the `briefing`
+ * capability is available for this record, and publish the state beside it.
+ *
+ * Applied on every read, after the cache, so a body cached while the
+ * capability was available never outlives it. `briefingState` keeps its
+ * published values: `no-provider` when that is the reason, `disabled` for
+ * every other one.
+ */
+export function applyBriefingCapability(
+  body: DashboardSnapshot,
+  ai: AiCapabilityState,
+): DashboardSnapshot {
+  if (ai.available) return { ...body, briefingAi: ai };
+  return {
+    ...body,
+    briefing: null,
+    briefingMemory: null,
+    briefingState: ai.reason === "no_provider" ? "no-provider" : "disabled",
+    briefingUpdatedAt: null,
+    briefingStale: false,
+    briefingAi: ai,
+  };
+}
+
+/**
  * Read-only briefing lift. Parses `User.insightsCachedText`, validates
  * the `dailyBriefing` block, and reports a four-state. NEVER calls the
  * provider chain — `hasProvider` is a credential-PRESENCE thunk (two
@@ -894,7 +927,6 @@ function parseCachedBriefing(cachedText: string | null): DailyBriefing | null {
  */
 async function liftBriefing(
   user: SnapshotUserInput,
-  coachEnabled: boolean,
   hasProvider: () => Promise<boolean>,
   readerLocale: Locale,
 ): Promise<{
@@ -903,14 +935,9 @@ async function liftBriefing(
   briefingUpdatedAt: string | null;
   briefingStale: boolean;
 }> {
-  if (!coachEnabled || user.disableCoach) {
-    return {
-      briefing: null,
-      briefingState: "disabled",
-      briefingUpdatedAt: null,
-      briefingStale: false,
-    };
-  }
+  // No capability decision here: the body is cached and rebuilt in the
+  // background, where there is no request to resolve one for. Whether the
+  // lifted text may be shown is decided per read by `applyBriefingCapability`.
 
   // The cache is one slot per user with no per-language copy. Prose written
   // in another language is never the reader's briefing, stale or not, so a
@@ -1264,7 +1291,6 @@ export async function buildDashboardSnapshot(
     slimRaw,
     moodRaw,
     extrasResult,
-    flags,
     medsToday,
     modules,
     scoreRings,
@@ -1291,7 +1317,6 @@ export async function buildDashboardSnapshot(
           ),
         )
       : Promise.resolve(null),
-    time("flags", () => getAssistantFlags()),
     medsTodayPromise,
     modulesPromise,
     // v1.27.7 — the selected hero score rings, resolved through the
@@ -1352,27 +1377,27 @@ export async function buildDashboardSnapshot(
   }
 
   const layout = gateLayoutByModules(storedLayout, modules, slim.summaries);
-  // v1.18.0 — the Daily Briefing is the dashboard's AI-narrative surface,
-  // so the `insights` module gates it alongside the operator briefing
-  // flag + per-user coach opt-out. Disabling `insights` yields the same
-  // `briefingState: "disabled"` empty surface the existing flags produce
-  // (the raw weight/BP/pulse data stays untouched — `insights` is the
-  // narrative layer, not the data layer).
+  // The Daily Briefing is the dashboard's one AI surface. The builder lifts
+  // it from the cache unconditionally; the `briefing` capability (operator
+  // switch, the AI analysis opt-out, provider, consent) is applied per read
+  // by `applyBriefingCapability`, after the cache. The Coach opt-out no
+  // longer hides it: hiding the Coach hides the Coach.
   // The reader's locale: the route resolves it from the request; the builder
   // defaults to English. It decides which cached briefing counts as the
   // reader's and which narrative row the briefing memory reads.
   const locale = options.locale ?? "en";
   const briefing = await liftBriefing(
     user,
-    flags.briefing && modules.insights !== false,
     options.hasProvider ?? (() => hasAnyConfiguredProvider(user.id)),
     locale,
   );
 
   // v1.21.2 (A4 / A5 / A6) — the score-card narrative (Tension Verdict +
-  // return-to-baseline) and the briefing recall + forward-look. Gated like the
-  // briefing on the `insights` module so a narrative-off account carries none.
-  // Both are fail-soft — a transient derived-engine read resolves to null and
+  // return-to-baseline) and the briefing recall + forward-look. The score
+  // narrative is computed from the derived engines, no model involved, so no
+  // AI switch and no AI opt-out gates it. The recall reads the period
+  // narrative, which a model may have written, so it rides the briefing and
+  // is hidden with it per read. Both are fail-soft — a transient derived-engine read resolves to null and
   // never sinks the snapshot. The narrative block rides the warm phase's
   // healthScore; memory rides the briefing card.
   const narrativeSex = binaryReferenceSex(user.gender);
@@ -1384,8 +1409,7 @@ export async function buildDashboardSnapshot(
   // The Tension Verdict only adds signal once a health score actually rendered
   // (a coherent ring with no contributors is nothing to reconcile); memory only
   // matters once a briefing is shown.
-  const narrativeEnabled =
-    modules.insights !== false && extrasResult?.healthScore != null;
+  const narrativeEnabled = extrasResult?.healthScore != null;
   const [scoreNarrative, coachMemoryBlock] = await Promise.all([
     narrativeEnabled
       ? time("scoreNarrative", () =>
@@ -1398,7 +1422,7 @@ export async function buildDashboardSnapshot(
           ),
         ).catch(() => null)
       : Promise.resolve(null),
-    briefing.briefing !== null && modules.insights !== false
+    briefing.briefing !== null
       ? time("coachMemory", () =>
           (options.coachMemory ?? buildCoachMemoryBlock)(
             user.id,
@@ -1469,6 +1493,8 @@ export async function buildDashboardSnapshot(
     briefingState: briefing.briefingState,
     briefingUpdatedAt: briefing.briefingUpdatedAt,
     briefingStale: briefing.briefingStale,
+    // Applied per read, after the cache (`applyBriefingCapability`).
+    briefingAi: null,
     generatedAt: now.toISOString(),
   };
 }
