@@ -5794,7 +5794,8 @@
         "deleteConfirmTitle": "Usunąć to przypomnienie?",
         "deleteConfirmBody": "Przestanie się pojawiać. Zapisane wcześniej dane pozostają bez zmian.",
         "deleteConfirmAction": "Usuń",
-        "detail": "Te, których termin nadszedł, pojawiają się tutaj i w Coachu."
+        "detail": "Te, których termin nadszedł, pojawiają się tutaj i w Coachu.",
+        "readOnlyNote": "Coach jest teraz niedostępny, ale nadal możesz czytać i usuwać swoje przypomnienia."
       },
       "aboutMe": {
         "title": "O mnie",

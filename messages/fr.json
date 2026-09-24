@@ -5794,7 +5794,8 @@
         "deleteConfirmTitle": "Supprimer ce rappel ?",
         "deleteConfirmBody": "Il ne se déclenchera plus. Ce que tu as déjà enregistré reste intact.",
         "deleteConfirmAction": "Supprimer",
-        "detail": "Celles qui arrivent à échéance apparaissent ici et chez le Coach."
+        "detail": "Celles qui arrivent à échéance apparaissent ici et chez le Coach.",
+        "readOnlyNote": "Le Coach n'est pas disponible pour le moment, mais tu peux toujours lire et supprimer tes rappels."
       },
       "aboutMe": {
         "title": "À propos de moi",

@@ -5794,7 +5794,8 @@
         "deleteConfirmTitle": "이 알림을 삭제할까요?",
         "deleteConfirmBody": "더 이상 알려 주지 않아요. 이미 기록한 내용은 그대로예요.",
         "deleteConfirmAction": "삭제",
-        "detail": "예정된 알림은 여기와 코치에 나타나요."
+        "detail": "예정된 알림은 여기와 코치에 나타나요.",
+        "readOnlyNote": "지금은 코치를 사용할 수 없지만 알림은 계속 읽고 삭제할 수 있어요."
       },
       "aboutMe": {
         "title": "나에 대해",

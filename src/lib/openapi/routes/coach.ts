@@ -1745,7 +1745,7 @@ export const coachReminderPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "List the caller's Coach reminders",
       description:
-        'v1.22 (B2/B6) — the durable "remind me about X" memory the Coach captured inline, decrypted on the fly, soonest-due first. Pass `?status=` (one status or a comma set like `due,surfaced` for the in-app tile); omitted returns the non-terminal set (proposed + active + due + surfaced). Coach-gated (`requireModuleEnabled("coach")`). Auth via cookie or Bearer; the owner is narrowed from the session. Undecryptable rows are omitted.',
+        'v1.22 (B2/B6) — the durable "remind me about X" memory the Coach captured inline, decrypted on the fly, soonest-due first. Pass `?status=` (one status or a comma set like `due,surfaced` for the in-app tile); omitted returns the non-terminal set (proposed + active + due + surfaced). Not gated on the Coach: the reminders belong to the caller and stay readable while the Coach is unavailable (v1.39). Auth via cookie or Bearer; the owner is narrowed from the session. Undecryptable rows are omitted.',
       parameters: [
         {
           name: "status",
@@ -1769,8 +1769,8 @@ export const coachReminderPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           },
         },
         // The read is delegable and the create beside it is not, so only this
-        // one shares its 403 with the sharing refusal.
-        ...recordRefusal("Coach surface disabled."),
+        // one answers the sharing refusal. It asks no Coach gate.
+        ...recordRefusal(),
         ...stdResponses,
       },
     },
@@ -1857,7 +1857,7 @@ export const coachReminderPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Soft-delete one Coach reminder",
       description:
-        "v1.22 — soft-deletes a single reminder owned by the caller. An unknown / cross-user / already-deleted id is an idempotent no-op returning `{ deleted: false }`. Coach-gated. Auth via cookie or Bearer.",
+        "v1.22 — soft-deletes a single reminder owned by the caller. An unknown / cross-user / already-deleted id is an idempotent no-op returning `{ deleted: false }`. Not gated on the Coach: erasing a stored reminder works while the Coach is unavailable (v1.39). Auth via cookie or Bearer.",
       parameters: [
         {
           name: "id",

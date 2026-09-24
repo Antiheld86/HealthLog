@@ -19,7 +19,8 @@
  * v1.39 — never gated on the Coach. What the Coach stored is the person's
  * own record: it stays readable and deletable while the Coach is off for any
  * reason (the operator's switch, Hide Coach, no provider, no consent). The
- * facts routes are data routes and ask no AI gate. Settings → Coach always
+ * facts routes are data routes and ask no AI gate. The same holds for the
+ * stored reminders (`<CoachRemindersSection>`). Settings → Coach always
  * shows this card; while that page is not reachable, Settings → AI shows it
  * through `<StoredCoachMemory>` below, whenever rows exist.
  */
@@ -51,6 +52,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { toast } from "sonner";
 import { apiDelete, apiGet } from "@/lib/api/api-fetch";
 import { CoachConversationsMemoryCard } from "@/components/settings/coach-conversations-memory-card";
+import { CoachRemindersSection } from "@/components/settings/coach-reminders-section";
 
 /** Closed enum mirrored from the server `CoachFact.category` column. */
 const FACT_CATEGORIES = [
@@ -310,6 +312,7 @@ export function StoredCoachMemory({
         isAuthenticated={isAuthenticated}
         hideWhenEmpty
       />
+      <CoachRemindersSection isAuthenticated={isAuthenticated} hideWhenEmpty />
     </>
   );
 }

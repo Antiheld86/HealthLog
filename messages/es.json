@@ -5794,7 +5794,8 @@
         "deleteConfirmTitle": "¿Eliminar este recordatorio?",
         "deleteConfirmBody": "Deja de aparecer. Lo que ya has registrado no cambia.",
         "deleteConfirmAction": "Eliminar",
-        "detail": "Las que vencen aparecen aquí y en el Coach."
+        "detail": "Las que vencen aparecen aquí y en el Coach.",
+        "readOnlyNote": "El Coach no está disponible ahora mismo, pero aún puedes leer y eliminar tus recordatorios."
       },
       "aboutMe": {
         "title": "Sobre mí",

@@ -21,6 +21,16 @@ vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
 
+// The reminders card reads the Coach capability off `/api/auth/me`; the
+// react-query mock above carries no context for the real hook to read.
+vi.mock("@/hooks/use-ai-capability", () => ({
+  useAiCapability: () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
+}));
+
 const authState: { disableCoach: boolean } = { disableCoach: false };
 vi.mock("@/hooks/use-auth", () => ({
   useAuth: () => ({

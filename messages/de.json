@@ -5794,7 +5794,8 @@
         "deleteConfirmTitle": "Diese Erinnerung löschen?",
         "deleteConfirmBody": "Sie wird nicht mehr ausgelöst. An bereits erfassten Daten ändert sich nichts.",
         "deleteConfirmAction": "Löschen",
-        "detail": "Fällige erscheinen hier und beim Coach."
+        "detail": "Fällige erscheinen hier und beim Coach.",
+        "readOnlyNote": "Der Coach ist gerade nicht verfügbar, deine Erinnerungen kannst du aber weiter lesen und löschen."
       },
       "aboutMe": {
         "title": "Über mich",

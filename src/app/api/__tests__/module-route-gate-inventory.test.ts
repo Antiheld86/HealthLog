@@ -330,6 +330,11 @@ const EXEMPT_ROUTES: ReadonlyArray<string> = [
   // The stored plans list. Its sibling `[id]` route keeps the Coach gate on
   // PATCH (confirming a proposal is Coach use) and erases without it.
   "src/app/api/coach/plans/route.ts",
+  // Not listed, by the same rule: `coach/reminders/route.ts` lists without the
+  // Coach gate but keeps it on POST (creating one is Coach use), and
+  // `coach/reminders/[id]/route.ts` erases without it but keeps it on PATCH.
+  // Both files still carry a gate, so the walk counts them as gated and an
+  // entry here would fail the "does not hide a gate" check below.
   "src/app/api/insights/chat/[id]/route.ts",
   "src/app/api/insights/chat/messages/[id]/feedback/route.ts",
   // The Today digest and its dismiss: data, with the AI parts masked by the
