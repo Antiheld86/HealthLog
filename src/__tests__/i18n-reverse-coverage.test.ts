@@ -74,7 +74,7 @@ const DYNAMIC_ALLOWLIST_PREFIXES = [
  */
 const EXEMPT_TEMPLATES: Record<string, string> = {
   "insights.${scope}-status.${locale}":
-    "auditLog action name for the per-metric status cache (statusCacheAction), not an i18n key",
+    "the per-metric status note name (statusCacheAction), not an i18n key",
   "insights.${scope}.${locale}":
     "auditLog action name for the previous-insight memory read (getPreviousInsightContext), not an i18n key",
   "apiErrors.${errorCode}":

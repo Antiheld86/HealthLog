@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/db";
+import { writeStatusNegativeWindow } from "@/lib/insights/status-cache";
 import { annotate } from "@/lib/logging/context";
 
 /**
@@ -16,13 +16,12 @@ import { annotate } from "@/lib/logging/context";
  * status route is now read-only: a cache miss enqueues an out-of-band
  * generation. If the provider stalls inside the worker, nothing stops the
  * next navigation from enqueuing again, and again — a stalled provider
- * turns into a re-enqueue storm. So the timeout path writes a short-TTL
- * negative stub (`{ timeout:true, model:"timeout-stub", retryAt }`). The
- * read-only resolver honours it: while the stub is fresh it returns
- * `preparing` WITHOUT re-enqueuing; once `retryAt` passes the stub is stale
- * and the next visit re-attempts. The stub is NEVER served as assessment
- * text — `readFreshStatusText` still rejects every timeout stub by marker,
- * so a transient stall can't hide the real assessment for the day.
+ * turns into a re-enqueue storm. So the timeout path opens a short
+ * negative-cache window on the note (`retryAt`, `negativeReason`). The
+ * read-only resolver honours it: while the window is open it returns
+ * `preparing` WITHOUT re-enqueuing; once `retryAt` passes the next visit
+ * re-attempts. The window never replaces or hides a stored note, so a
+ * transient stall can't hide the real assessment for the day.
  */
 
 /**
@@ -53,20 +52,12 @@ export async function persistTimeoutNegativeStub(args: {
   reason: StatusFallbackReason;
 }): Promise<void> {
   try {
-    await prisma.auditLog.create({
-      data: {
-        userId: args.userId,
-        action: args.cacheAction,
-        details: JSON.stringify({
-          dateKey: args.todayKey,
-          timeout: true,
-          model: "timeout-stub",
-          reason: args.reason,
-          retryAt: new Date(
-            Date.now() + TIMEOUT_NEGATIVE_CACHE_MS,
-          ).toISOString(),
-        }),
-      },
+    await writeStatusNegativeWindow({
+      userId: args.userId,
+      cacheAction: args.cacheAction,
+      todayKey: args.todayKey,
+      reason: args.reason,
+      retryAt: new Date(Date.now() + TIMEOUT_NEGATIVE_CACHE_MS),
     });
   } catch {
     // Negative cache is best-effort — never throw out of the timeout path.

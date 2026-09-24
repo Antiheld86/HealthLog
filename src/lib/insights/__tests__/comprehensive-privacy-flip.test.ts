@@ -37,6 +37,15 @@ vi.mock("@/lib/db", () => ({
     auditLog: { deleteMany: vi.fn() },
   },
 }));
+// The `briefing` capability is available in these fixtures; the refusal
+// path has its own test in comprehensive-generate-force.test.ts.
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForRecord: vi.fn(async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  })),
+}));
 vi.mock("@/lib/ai/provider", () => ({
   resolveProviderChain: (...a: unknown[]) => resolveProviderChain(...a),
   resolveProvider: (...a: unknown[]) => resolveProvider(...a),

@@ -20,12 +20,16 @@ import {
   normalizeLocale,
   type SupportedLocale,
 } from "@/lib/insights/status-shared";
-import { isTimeoutStub, statusCacheAction } from "@/lib/insights/status-cache";
+import {
+  statusCacheAction,
+  statusNotesWrittenSince,
+} from "@/lib/insights/status-cache";
 import {
   metricIdForMeasurementType,
   metricStatusScope,
 } from "@/lib/insights/metric-status-registry";
 import { annotate } from "@/lib/logging/context";
+import { aiCapabilityForRecord } from "@/lib/ai/capabilities/gate";
 import type { MeasurementType } from "@/generated/prisma/client";
 
 /**
@@ -146,6 +150,17 @@ export async function invalidateStatusInsightsForTypes(
   }
   if (scopes.size === 0) return;
 
+  // No enqueue while status notes are unavailable for this record: the worker
+  // would refuse anyway, and the queue should not carry work nobody may do.
+  const capability = await aiCapabilityForRecord(userId, "statusText");
+  if (!capability.available) {
+    annotate({
+      action: { name: "insights.status.invalidate.skipped" },
+      meta: { reason: capability.reason },
+    });
+    return;
+  }
+
   // v1.8.7 — regenerate only the user's resolved locale, matching the
   // read-path (every `*-status` GET serves `normalizeLocale(user.locale)`).
   // Warming both locales doubled provider spend on every sync, half of it
@@ -223,6 +238,14 @@ export async function enqueueStatusRefillForUser(
   userId: string,
   locale: SupportedLocale,
 ): Promise<number> {
+  const capability = await aiCapabilityForRecord(userId, "statusText");
+  if (!capability.available) {
+    annotate({
+      action: { name: "insights.status.refill.skipped" },
+      meta: { reason: capability.reason },
+    });
+    return 0;
+  }
   const scopes = new Set<InsightStatusScope>(PER_STATUS_SCOPES);
   try {
     // `groupBy` compiles to a server-side `GROUP BY` — Prisma's
@@ -252,11 +275,10 @@ export async function enqueueStatusRefillForUser(
  * real (non-stub) assessment. Those scopes are skipped by the ingest
  * invalidator so a fresh assessment survives the sync drip.
  *
- * One indexed read per user (a single `findMany` over this user's recent
- * status-cache rows, newest-first) answers it for every candidate scope at
- * once — cheaper than a per-scope probe and bounded by `take`. A timeout
- * stub never counts as fresh (it carries no real assessment), so a scope
- * that recently stalled still gets a retry enqueued.
+ * One indexed read per user answers it for every candidate scope at once.
+ * Only a stored note counts: a row that carries nothing but a negative-cache
+ * window is not fresh, so a scope that recently stalled still gets a retry
+ * enqueued.
  */
 async function findRecentlyWarmedScopes(
   userId: string,
@@ -273,37 +295,15 @@ async function findRecentlyWarmedScopes(
     actionToScope.set(statusCacheAction(scope, locale), scope);
   }
 
-  const rows = await prisma.auditLog.findMany({
-    where: {
-      userId,
-      action: { in: candidateActions },
-      createdAt: { gte: cutoff },
-    },
-    orderBy: { createdAt: "desc" },
-    select: { action: true, details: true },
+  const written = await statusNotesWrittenSince({
+    userId,
+    cacheActions: candidateActions,
+    since: cutoff,
   });
-
   const fresh = new Set<InsightStatusScope>();
-  for (const row of rows) {
-    const scope = actionToScope.get(row.action);
-    if (!scope || fresh.has(scope)) continue;
-    if (!row.details) continue;
-    try {
-      const parsed = JSON.parse(row.details) as {
-        model?: string;
-        timeout?: boolean;
-        text?: string;
-      };
-      // A stub is not a real assessment — let a stalled scope retry.
-      if (isTimeoutStub(parsed)) continue;
-      if (typeof parsed.text !== "string" || parsed.text.trim().length === 0) {
-        continue;
-      }
-      fresh.add(scope);
-    } catch {
-      // Malformed payload — treat as not-fresh so the scope refreshes.
-      continue;
-    }
+  for (const action of written) {
+    const scope = actionToScope.get(action);
+    if (scope) fresh.add(scope);
   }
   return fresh;
 }

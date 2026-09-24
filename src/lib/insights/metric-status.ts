@@ -197,11 +197,11 @@ export async function generateMetricStatus(args: {
       metric: scope,
       locale,
     });
-    // v1.16.13 — `consent-missing` serves the same no-key fallback (see
-    // bmi-status); no enqueue happens for it.
-    if (outcome.kind === "no-provider" || outcome.kind === "consent-missing") {
+    // Unavailable for any reason serves the deterministic line and enqueues
+    // nothing. `hasProvider` is provider presence only.
+    if (outcome.kind === "unavailable") {
       return {
-        hasProvider: false,
+        hasProvider: outcome.hasProvider,
         text: getNoKeyGeneralStatusText(locale),
         cached: true,
         updatedAt: null,
@@ -500,7 +500,7 @@ export async function generateMetricStatus(args: {
   const outcome = await runStatusCompletion({
     userId: args.userId,
     cacheAction,
-    consentSurface: "insights",
+    capability: "statusText",
     systemPrompt: getMetricArchetypeSystemPrompt(meta, locale),
     userPrompt: getMetricArchetypeUserPrompt(
       meta,
@@ -564,11 +564,7 @@ export async function generateMetricStatus(args: {
     userId: args.userId,
     cacheAction,
     todayKey,
-    locale,
     text,
-    providerType: outcome.providerType,
-    model: outcome.model,
-    tokensUsed: outcome.tokensUsed,
     snapshotHash,
   });
 

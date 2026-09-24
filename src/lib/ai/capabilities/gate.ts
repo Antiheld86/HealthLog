@@ -150,3 +150,22 @@ export async function aiCapabilityForJob(
     return resolveAiCapability(key, null);
   }
 }
+
+/**
+ * One capability for one record, from wherever the caller runs. Inside an
+ * authenticated request it is the request's view (masked to the active grant,
+ * memoised with every other capability read of the request); outside one it
+ * is the worker's view under the worker's own authority.
+ *
+ * For code that serves stored model text on both paths: a status note read on
+ * a page visit and the same read inside the nightly batch must answer the same
+ * question without the caller knowing which path it is on.
+ */
+export async function aiCapabilityForRecord(
+  recordId: string,
+  key: AiCapabilityKey,
+): Promise<AiCapabilityState> {
+  return getEvent()?.getAuth()?.user_id
+    ? getAiCapability(key, { recordId })
+    : aiCapabilityForJob(recordId, key);
+}

@@ -32,7 +32,7 @@
  *     for falls back to its own single-card path, never crashing the cycle.
  *
  * The cache + read contract is untouched: `finalize` persists the SAME
- * `auditLog` row (`persistStatusInsight`, or the richer medication-compliance
+ * status note (`persistStatusInsight`, or the per-medication items
  * shape via a custom closure) the standalone generator wrote, so every card
  * keeps reading per-metric results with the same keys.
  */
@@ -125,7 +125,7 @@ export async function runPreparedStatusCard(
   const outcome: StatusProviderResult = await runStatusCompletion({
     userId: prepared.userId,
     cacheAction: prepared.cacheAction,
-    consentSurface: "insights",
+    capability: "statusText",
     systemPrompt: prepared.systemPrompt,
     userPrompt: prepared.userPrompt,
     temperature: prepared.temperature,

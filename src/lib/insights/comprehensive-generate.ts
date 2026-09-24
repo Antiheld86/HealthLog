@@ -78,6 +78,7 @@ import {
   BriefingBudgetExceededError,
   runBriefingCompletion,
 } from "@/lib/insights/briefing-provider";
+import { aiCapabilityForRecord } from "@/lib/ai/capabilities/gate";
 import {
   chainRequiresServerManagedConsent,
   hasActiveConsentForSurface,
@@ -142,6 +143,8 @@ export type GenerateOutcome =
   | {
       status: "skipped";
       reason:
+        /** The `briefing` capability is unavailable for another reason. */
+        | "unavailable"
         | "no-provider"
         | "no-consent"
         | "budget"
@@ -655,6 +658,27 @@ export async function generateComprehensiveInsight(
     Date.now() - dbUser.insightsCachedAt.getTime() < CACHE_TTL_MS
   ) {
     return { status: "cached" };
+  }
+
+  // The `briefing` capability at the wire, before the chain is resolved (a
+  // Codex chain may refresh a token on resolve). Callers resolve it too (the
+  // route before it enqueues, the nightly pass before this call); switches,
+  // the AI analysis opt-out and consent can change in between.
+  const capability = await aiCapabilityForRecord(userId, "briefing");
+  if (!capability.available) {
+    annotate({
+      action: { name: "insights.comprehensive.unavailable" },
+      meta: { reason: capability.reason },
+    });
+    return {
+      status: "skipped",
+      reason:
+        capability.reason === "no_provider"
+          ? "no-provider"
+          : capability.reason === "consent_required"
+            ? "no-consent"
+            : "unavailable",
+    };
   }
 
   const chain = await resolveProviderChain(userId);

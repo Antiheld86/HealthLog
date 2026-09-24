@@ -15,6 +15,19 @@ vi.mock("@/lib/logging/context", () => ({ annotate: vi.fn() }));
 // prisma double, so this is only a guard against accidental real-DB use.
 vi.mock("@/lib/db", () => ({ prisma: {} }));
 
+// The `periodNarrative` capability decides whether model-written prose may be
+// served. Available unless a test says otherwise.
+const { aiCapabilityForRecord } = vi.hoisted(() => ({
+  aiCapabilityForRecord: vi.fn(),
+}));
+vi.mock("@/lib/ai/capabilities/gate", () => ({ aiCapabilityForRecord }));
+
+const UNAVAILABLE = {
+  available: false,
+  reason: "user_disabled",
+  onDeviceAllowed: false,
+} as const;
+
 import {
   generatePeriodNarrative,
   readPeriodNarrative,
@@ -107,7 +120,29 @@ function makePrisma(seedRow?: FakeRow) {
   };
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  aiCapabilityForRecord.mockResolvedValue({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  });
+});
+
+function seededRow(over: Partial<FakeRow> = {}): FakeRow {
+  return {
+    userId: "u1",
+    period: "week",
+    locale: "en",
+    dateKey: "2026-05-15",
+    encryptedContent: new Uint8Array(Buffer.from("enc:old", "utf8")),
+    provenanceJson: null,
+    providerType: "openai",
+    promptVersion: NARRATIVE_PROMPT_VERSION,
+    updatedAt: new Date(),
+    ...over,
+  };
+}
 
 describe("buildNarrativeUserPrompt", () => {
   it("renders metrics, drivers, and the FDR footer with the prompt version", () => {
@@ -150,16 +185,20 @@ describe("generatePeriodNarrative — descriptive generation", () => {
   it("passes a descriptive-never-causal system prompt to the provider", async () => {
     const prisma = makePrisma();
     let systemPrompt = "";
-    const runCompletion = vi.fn(async (args: { systemPrompt: string }) => {
-      systemPrompt = args.systemPrompt;
-      return {
-        kind: "ok" as const,
-        content: "ok",
-        providerType: "openai",
-        model: "m",
-        tokensUsed: 1,
-      };
-    });
+    let capability = "";
+    const runCompletion = vi.fn(
+      async (args: { systemPrompt: string; capability: string }) => {
+        systemPrompt = args.systemPrompt;
+        capability = args.capability;
+        return {
+          kind: "ok" as const,
+          content: "ok",
+          providerType: "openai",
+          model: "m",
+          tokensUsed: 1,
+        };
+      },
+    );
     await generatePeriodNarrative("u1", {
       period: "week",
       locale: "en",
@@ -174,6 +213,8 @@ describe("generatePeriodNarrative — descriptive generation", () => {
     // v1.21.0 (coach C1 MEDIUM-1) — the retrospective now carries the shared
     // warm tone contract verbatim, matching the briefing's house voice.
     expect(systemPrompt).toContain(toneContract.en);
+    // The chokepoint re-checks this narrative's own capability at the wire.
+    expect(capability).toBe("periodNarrative");
   });
 });
 
@@ -208,7 +249,10 @@ describe("generatePeriodNarrative — honesty floor", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       prisma: prisma as any,
       buildContext: async () => readyContext() as PeriodNarrativeResult,
-      runCompletion: async () => ({ kind: "none" as const }),
+      runCompletion: async () => ({
+        kind: "none" as const,
+        reason: "no_provider" as const,
+      }),
     });
     expect(outcome).toEqual({
       status: "generated",
@@ -290,5 +334,83 @@ describe("generatePeriodNarrative — cache + regenerate", () => {
     );
     expect(read?.text).toBe("fresh");
     expect(read?.providerType).toBe("anthropic");
+  });
+});
+
+describe("period narrative — the periodNarrative capability", () => {
+  it("readPeriodNarrative hides a model-written row while the capability is unavailable", async () => {
+    const prisma = makePrisma(seededRow({ providerType: "openai" }));
+    aiCapabilityForRecord.mockResolvedValue(UNAVAILABLE);
+    const read = await readPeriodNarrative(
+      "u1",
+      "week",
+      "en",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      prisma as any,
+    );
+    expect(read).toBeNull();
+    expect(aiCapabilityForRecord).toHaveBeenCalledWith("u1", "periodNarrative");
+  });
+
+  it("readPeriodNarrative still serves the deterministic narrative, which is data", async () => {
+    const prisma = makePrisma(
+      seededRow({
+        providerType: "deterministic",
+        encryptedContent: new Uint8Array(
+          Buffer.from("enc:Your weight eased down.", "utf8"),
+        ),
+      }),
+    );
+    aiCapabilityForRecord.mockResolvedValue(UNAVAILABLE);
+    const read = await readPeriodNarrative(
+      "u1",
+      "week",
+      "en",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      prisma as any,
+    );
+    expect(read?.text).toBe("Your weight eased down.");
+    expect(aiCapabilityForRecord).not.toHaveBeenCalled();
+  });
+
+  it("does not short-circuit on a fresh model-written row it may not serve", async () => {
+    const prisma = makePrisma(seededRow({ providerType: "openai" }));
+    aiCapabilityForRecord.mockResolvedValue(UNAVAILABLE);
+    // The chokepoint refuses on the same capability, so the deterministic
+    // narrative replaces the hidden prose in place.
+    const runCompletion = vi.fn(async () => ({
+      kind: "none" as const,
+      reason: "user_disabled" as const,
+    }));
+    const outcome = await generatePeriodNarrative("u1", {
+      period: "week",
+      locale: "en",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      prisma: prisma as any,
+      buildContext: async () => readyContext() as PeriodNarrativeResult,
+      runCompletion,
+    });
+    expect(outcome).toEqual({
+      status: "generated",
+      providerType: "deterministic",
+    });
+    expect(runCompletion).toHaveBeenCalledTimes(1);
+    expect(prisma._get()?.providerType).toBe("deterministic");
+  });
+
+  it("still short-circuits on a fresh deterministic row whatever the capability says", async () => {
+    const prisma = makePrisma(seededRow({ providerType: "deterministic" }));
+    aiCapabilityForRecord.mockResolvedValue(UNAVAILABLE);
+    const runCompletion = vi.fn();
+    const outcome = await generatePeriodNarrative("u1", {
+      period: "week",
+      locale: "en",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      prisma: prisma as any,
+      buildContext: async () => readyContext() as PeriodNarrativeResult,
+      runCompletion,
+    });
+    expect(outcome).toEqual({ status: "cached" });
+    expect(runCompletion).not.toHaveBeenCalled();
   });
 });

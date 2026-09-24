@@ -64,7 +64,18 @@ const { resolveProviderChain, resolveProvider } = vi.hoisted(() => ({
   resolveProviderChain: vi.fn(),
   resolveProvider: vi.fn(),
 }));
-vi.mock("@/lib/ai/provider", () => ({ resolveProviderChain, resolveProvider }));
+vi.mock("@/lib/ai/provider", () => ({
+  resolveProviderChain,
+  resolveProvider,
+  probeProviderPresence: vi.fn(async () => true),
+}));
+
+// The capability re-check at the wire. Available by default so the budget is
+// what these tests isolate; one test below flips it.
+const { aiCapabilityForRecord } = vi.hoisted(() => ({
+  aiCapabilityForRecord: vi.fn(),
+}));
+vi.mock("@/lib/ai/capabilities/gate", () => ({ aiCapabilityForRecord }));
 
 const { runRawCompletionWithFallback } = vi.hoisted(() => ({
   runRawCompletionWithFallback: vi.fn(),
@@ -94,7 +105,7 @@ function completionArgs(overrides: Record<string, unknown> = {}) {
     cacheAction: "status:test",
     systemPrompt: "system",
     userPrompt: "user",
-    consentSurface: "insights" as const,
+    capability: "statusText" as const,
     ...overrides,
   };
 }
@@ -113,6 +124,40 @@ beforeEach(() => {
   ledgerOperator = 0;
   resolveProviderChain.mockResolvedValue(OPERATOR_CHAIN);
   resolveProvider.mockResolvedValue({ type: "none" });
+  aiCapabilityForRecord.mockResolvedValue({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  });
+});
+
+describe("runStatusCompletion — capability at the wire", () => {
+  it("returns none with the capability's reason and never resolves the chain when the capability is unavailable", async () => {
+    aiCapabilityForRecord.mockResolvedValue({
+      available: false,
+      reason: "user_disabled",
+      onDeviceAllowed: false,
+    });
+
+    const outcome = await runStatusCompletion(
+      completionArgs({ capability: "periodNarrative" }) as never,
+    );
+
+    expect(outcome).toEqual({ kind: "none", reason: "user_disabled" });
+    expect(aiCapabilityForRecord).toHaveBeenCalledWith("u1", "periodNarrative");
+    expect(resolveProviderChain).not.toHaveBeenCalled();
+    expect(resolveProvider).not.toHaveBeenCalled();
+    expect(runRawCompletionWithFallback).not.toHaveBeenCalled();
+    // Nothing reserved against the day's ledger either.
+    expect(ledgerTotal).toBe(0);
+  });
+
+  it("returns none with reason no_provider when the chain is empty", async () => {
+    resolveProviderChain.mockResolvedValue([]);
+    const outcome = await runStatusCompletion(completionArgs() as never);
+    expect(outcome).toEqual({ kind: "none", reason: "no_provider" });
+    expect(runRawCompletionWithFallback).not.toHaveBeenCalled();
+  });
 });
 
 describe("runStatusCompletion — ledger accounting", () => {
