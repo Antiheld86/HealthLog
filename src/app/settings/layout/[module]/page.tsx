@@ -84,7 +84,7 @@ export default async function SettingsLayoutModulePage({ params }: PageProps) {
     >
       <RecordSettingsSectionGate section="layout">
         <section aria-labelledby={headingId} className="space-y-6">
-          <LayoutModuleGate moduleGate={layoutGroupModule(group.id)}>
+          <LayoutModuleGate moduleKey={layoutGroupModule(group.id)}>
             <Body />
           </LayoutModuleGate>
         </section>

@@ -23,13 +23,13 @@ import type { ModuleKey } from "@/lib/modules/registry";
  * diverges the initial render and cannot trigger a React #418 mismatch.
  *
  * Groups the surface map gives no owner (dashboard / insights / vorsorge)
- * pass `moduleGate={undefined}` and always render.
+ * pass `moduleKey={undefined}` and always render.
  */
 export function LayoutModuleGate({
-  moduleGate,
+  moduleKey,
   children,
 }: {
-  moduleGate?: ModuleKey;
+  moduleKey?: ModuleKey;
   children: React.ReactNode;
 }) {
   const hydrated = useMounted();
@@ -37,9 +37,7 @@ export function LayoutModuleGate({
   const router = useRouter();
 
   const disabled =
-    hydrated &&
-    moduleGate !== undefined &&
-    user?.modules?.[moduleGate] === false;
+    hydrated && moduleKey !== undefined && user?.modules?.[moduleKey] === false;
 
   React.useEffect(() => {
     if (disabled) {
