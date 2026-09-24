@@ -8255,6 +8255,7 @@
       "saving": "Salvataggio…",
       "cancel": "Annulla",
       "saveError": "Impossibile salvare. Riprova.",
+      "emptyHint": "Scegli un flusso o un sintomo per salvare questo giorno, oppure usa in alto il pulsante di inizio mestruazioni.",
       "intermenstrualBleeding": "Spotting tra i cicli",
       "pregnancyTest": "Test di gravidanza",
       "progesteroneTest": "Test del progesterone",

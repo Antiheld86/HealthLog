@@ -285,6 +285,41 @@ function verdictFromLoggedStart(
 }
 
 /**
+ * The 1-based day of the logged cycle `date` falls in, or null when the record
+ * cannot say.
+ *
+ * This is the per-date sibling of the verdict's `dayOfCycle`, and it answers
+ * for the date asked about rather than for today. A date belongs to the latest
+ * logged start at or before it. A cycle that has a successor is closed, so any
+ * day inside it is a recorded fact. The open cycle runs through today and is
+ * held to the same ceiling as the verdict: past the typical length plus the
+ * grace window the count is the engine's open-ended window, not an observed
+ * day. No count before the first logged start, and none after today.
+ *
+ * `starts` must be sorted ascending.
+ */
+export function resolveCycleDay(
+  date: string,
+  starts: readonly string[],
+  today: string,
+  profile?: CycleProfileLengths,
+): number | null {
+  if (dayDiff(date, today) > 0) return null;
+  let idx = -1;
+  for (let i = 0; i < starts.length; i++) {
+    if (dayDiff(date, starts[i]) >= 0) idx = i;
+    else break;
+  }
+  if (idx < 0) return null;
+  const day = dayDiff(date, starts[idx]) + 1;
+  const isOpenCycle = idx === starts.length - 1;
+  if (isOpenCycle && day > typicalCycleLength(profile) + OVERDUE_GRACE_DAYS) {
+    return null;
+  }
+  return day;
+}
+
+/**
  * Resolve everything a client needs to render the cycle ring and its caption.
  * The only place in the product that decides any of it.
  */

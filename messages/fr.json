@@ -8255,6 +8255,7 @@
       "saving": "Enregistrement…",
       "cancel": "Annuler",
       "saveError": "Enregistrement impossible. Réessaie.",
+      "emptyHint": "Choisis un flux ou un symptôme pour enregistrer cette journée, ou utilise le bouton de début des règles ci-dessus.",
       "intermenstrualBleeding": "Saignements entre les règles",
       "pregnancyTest": "Test de grossesse",
       "progesteroneTest": "Test de progestérone",

@@ -51,7 +51,7 @@ import { CUSTOM_SYMPTOM_ICON_ALLOWLIST } from "@/lib/cycle/custom-symptoms-share
 import { FieldInfo } from "./field-info";
 import { CYCLE_SYMPTOM_CATALOG } from "./symptom-catalog";
 import { FLOW_HUE, PHASE_HUE } from "./phase-tokens";
-import type { CyclePhase, CycleGoal } from "./types";
+import type { CalendarDay, CyclePhase, CycleGoal } from "./types";
 import {
   useCreateCustomSymptom,
   useCustomSymptoms,
@@ -311,6 +311,89 @@ export function noteCount(s: DayLogFormState): number {
   return s.note.trim() ? 1 : 0;
 }
 
+/**
+ * Whether the form holds nothing a new day-log would record.
+ *
+ * Saving such a form used to write an empty row: the request succeeded, the
+ * sheet closed, and the calendar had nothing to draw, so a person who picked
+ * a past date and pressed Save to mark it saw the save "do nothing". A new
+ * entry now needs at least one thing to store. An existing row keeps Save
+ * enabled, because emptying it is a real edit.
+ */
+export function isBlankDayLog(s: DayLogFormState): boolean {
+  return (
+    s.flow === null &&
+    !s.intermenstrual &&
+    resolveBbt(s.bbt) === null &&
+    s.opk === null &&
+    s.mucus === null &&
+    s.cervixPosition === null &&
+    s.cervixFirmness === null &&
+    s.cervixOpening === null &&
+    !s.intercourse &&
+    s.pregnancyTest === null &&
+    s.progesteroneTest === null &&
+    s.contraceptive === null &&
+    s.note.trim() === "" &&
+    s.symptoms.size === 0
+  );
+}
+
+/**
+ * What the sheet may do with the form right now.
+ *
+ * `hydrated` is false between opening a date and its stored row arriving.
+ * In that window the form still holds the PREVIOUS date's values and row id,
+ * so a quick Save used to PATCH the other date's row and Delete would have
+ * removed it. Nothing writes until the form belongs to the date on screen.
+ */
+export function dayLogSaveState({
+  hydrated,
+  rowId,
+  form,
+}: {
+  hydrated: boolean;
+  rowId: string | null;
+  form: DayLogFormState;
+}): { rowId: string | null; canSave: boolean; blankNewEntry: boolean } {
+  if (!hydrated) return { rowId: null, canSave: false, blankNewEntry: false };
+  const blankNewEntry = rowId === null && isBlankDayLog(form);
+  return { rowId, canSave: !blankNewEntry, blankNewEntry };
+}
+
+/** The sheet's per-date context, read off the calendar grid for that date. */
+export interface SheetDayContext {
+  startsCycle: boolean;
+  periodEndable: boolean;
+  phase: CyclePhase | null;
+  dayOfCycle: number | null;
+}
+
+/**
+ * Resolve what the sheet says about `date` from the server's grid day for it.
+ * The grid may hold the same date twice where the anchored read and the
+ * month read overlap; the later entry wins, as it does in the calendar.
+ * A date the grid does not hold gets no claims at all.
+ */
+export function sheetDayContext(
+  date: string,
+  days: readonly CalendarDay[],
+): SheetDayContext {
+  let day: CalendarDay | undefined;
+  for (let i = days.length - 1; i >= 0; i--) {
+    if (days[i].date === date) {
+      day = days[i];
+      break;
+    }
+  }
+  return {
+    startsCycle: day?.isCycleStart ?? false,
+    periodEndable: day?.periodEndable ?? false,
+    phase: day?.phase ?? null,
+    dayOfCycle: day?.cycleDay ?? null,
+  };
+}
+
 /** The MIN_CYCLES gate the phase-education card uses — mirrored here so the
  * sheet's phase-context header makes the same honesty claim (no phase label
  * until prediction is on, not raw-chart, and at least three cycles seen). */
@@ -329,17 +412,21 @@ export interface LogDaySheetProps {
    */
   startsCycle?: boolean;
   /**
-   * Whether a period is currently open (today is in the MENSTRUAL phase) — gates
-   * the one-tap "end period" affordance so it never shows when no period is in
-   * progress (QA M2).
+   * Whether a one-tap period end can land on `date` (the server's per-date
+   * `periodEndable`). It used to follow TODAY's phase, so the button was
+   * missing on every back-dated period and appeared on unrelated dates
+   * whenever today happened to be a bleeding day.
    */
-  activePeriod?: boolean;
+  periodEndable?: boolean;
   /**
-   * The active cycle phase from the calendar read (or null). Drives the
+   * The phase of `date` from the calendar read (or null). Drives the
    * hue-tinted phase-context header so the sheet visually belongs to the ring.
    */
   phase?: CyclePhase | null;
-  /** Day-of-cycle for the header ("Day 14 · Ovulatory"); null when no cycle. */
+  /**
+   * The cycle day of `date` for the header ("Day 14 · Ovulatory"); null when
+   * the date sits in no logged cycle. Never today's count.
+   */
   dayOfCycle?: number | null;
   /**
    * The user's cycle goal — fertility goals (TTC / avoid-pregnancy) auto-open
@@ -501,7 +588,7 @@ export function LogDaySheet({
   date,
   today,
   startsCycle = false,
-  activePeriod = false,
+  periodEndable = false,
   phase = null,
   dayOfCycle = null,
   goal,
@@ -611,6 +698,7 @@ export function LogDaySheet({
   } else if (!open && lastFormKey !== null) {
     setLastFormKey(null);
   }
+  const hydrated = open && lastFormKey === formKey;
 
   function toggleSymptom(key: string) {
     setSymptoms((prev) => {
@@ -651,16 +739,20 @@ export function LogDaySheet({
     symptoms,
   };
 
+  const saveState = dayLogSaveState({ hydrated, rowId, form: formState });
+  const currentRowId = saveState.rowId;
+
   async function handleSave() {
+    if (!saveState.canSave) return;
     // v1.16.4 — catch so a rejected save doesn't escape as an unhandled
     // rejection; the inline `logDay.isError || patchDay.isError` strip in the
     // footer carries the visible failure signal and the sheet stays open.
     try {
-      if (rowId) {
+      if (currentRowId) {
         // Editing an existing row → PATCH with explicit nulls so a deselected
         // chip actually CLEARS (the POST merge can only add/keep — QA W-2).
         await patchDay.mutateAsync({
-          id: rowId,
+          id: currentRowId,
           patch: buildDayLogPatch(formState),
         });
       } else {
@@ -695,9 +787,9 @@ export function LogDaySheet({
   }
 
   async function handleDelete() {
-    if (!rowId) return;
+    if (!currentRowId) return;
     try {
-      await deleteDay.mutateAsync(rowId);
+      await deleteDay.mutateAsync(currentRowId);
       onOpenChange(false);
     } catch {
       /* toast shown by useDeleteDayLog onError */
@@ -733,7 +825,7 @@ export function LogDaySheet({
       contentWidth="lg"
       footer={
         <>
-          {rowId ? (
+          {currentRowId ? (
             <ConfirmButton
               slot="cycle-day-delete"
               variant="outline"
@@ -760,7 +852,11 @@ export function LogDaySheet({
           >
             {t("cycle.sheet.cancel")}
           </Button>
-          <Button onClick={handleSave} disabled={busy}>
+          <Button
+            onClick={handleSave}
+            disabled={busy || !saveState.canSave}
+            data-slot="cycle-day-save"
+          >
             {saving ? (
               <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" />
             ) : null}
@@ -782,7 +878,8 @@ export function LogDaySheet({
 
       {/* One-tap period boundaries — available on any selected date so a
           forgotten day-1 can be corrected retroactively (M3). "End period"
-          shows only while a period is actually open (M2). The labels drop the
+          shows only where it can land: inside the first days of the logged
+          cycle the selected date belongs to. The labels drop the
           word "today" on a back-dated day: they always wrote to the selected
           date, and saying otherwise is how a correction reads as a mistake. */}
       <div className="flex flex-wrap gap-2">
@@ -802,7 +899,7 @@ export function LogDaySheet({
             ? t("cycle.startedPeriod")
             : t("cycle.startedPeriodOnDate")}
         </Button>
-        {activePeriod ? (
+        {periodEndable ? (
           <Button
             variant="outline"
             className="flex-1 justify-start gap-2"
@@ -1196,6 +1293,15 @@ export function LogDaySheet({
           aria-label={t("cycle.sheet.note")}
         />
       </SheetSection>
+
+      {saveState.blankNewEntry ? (
+        <p
+          className="text-muted-foreground text-xs"
+          data-slot="cycle-day-empty-hint"
+        >
+          {t("cycle.sheet.emptyHint")}
+        </p>
+      ) : null}
 
       {logDay.isError || patchDay.isError ? (
         <p className="text-destructive text-sm" role="alert">

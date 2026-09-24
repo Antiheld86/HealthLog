@@ -8255,6 +8255,7 @@
       "saving": "Zapisywanie…",
       "cancel": "Anuluj",
       "saveError": "Nie udało się zapisać. Spróbuj ponownie.",
+      "emptyHint": "Wybierz krwawienie lub objaw, aby zapisać ten dzień, albo użyj przycisku początku miesiączki powyżej.",
       "intermenstrualBleeding": "Plamienie między okresami",
       "pregnancyTest": "Test ciążowy",
       "progesteroneTest": "Test progesteronu",

@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { CycleRing } from "./cycle-ring";
 import { CycleCalendar } from "./cycle-calendar";
 import { CycleHistoryChart } from "./cycle-history-chart";
-import { LogDaySheet } from "./log-day-sheet";
+import { LogDaySheet, sheetDayContext } from "./log-day-sheet";
 import { PhaseEducationCard } from "./phase-education-card";
 import { PredictionsPanel } from "./predictions-panel";
 import { CyclePhaseHeadline, CyclePhaseCrosstab } from "./cycle-phase-crosstab";
@@ -469,13 +469,10 @@ export function CycleView() {
         onOpenChange={setSheetOpen}
         date={selectedDate}
         today={today}
-        startsCycle={
-          calendarDays.find((d) => d.date === selectedDate)?.isCycleStart ??
-          false
-        }
-        activePeriod={verdict?.phase === "MENSTRUAL"}
-        phase={verdict?.phase ?? null}
-        dayOfCycle={verdict?.dayOfCycle ?? null}
+        // Everything the sheet says about the day is about THAT day: its own
+        // cycle day, its own phase, whether a period end can land on it. The
+        // verdict answers for today and only ever labelled today correctly.
+        {...sheetDayContext(selectedDate, calendarDays)}
         goal={goal}
         predictionEnabled={calProfile?.predictionEnabled ?? false}
         rawChartMode={calProfile?.rawChartMode ?? false}

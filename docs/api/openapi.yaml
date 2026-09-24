@@ -30687,6 +30687,19 @@ components:
                   isCycleStart:
                     type: boolean
                     description: Whether a logged cycle opens on this day. Deleting this day's log removes that cycle start with it.
+                  cycleDay:
+                    anyOf:
+                      - type: integer
+                        minimum: -9007199254740991
+                        maximum: 9007199254740991
+                      - type: "null"
+                    description: The 1-based day of the logged cycle this date belongs to. Null before the first logged start, after today,
+                      or once an open cycle has run past the point where the verdict stops counting. For today it equals
+                      verdict.dayOfCycle.
+                  periodEndable:
+                    type: boolean
+                    description: Whether a one-tap period end (POST /api/cycle/period, action end) on this date lands inside the first days
+                      of a logged cycle. Resolved per date, independent of today's phase.
                   flow:
                     anyOf:
                       - $ref: "#/components/schemas/FlowLevel"
@@ -30738,6 +30751,8 @@ components:
                   - isPredictedOvulation
                   - isPeriodLogged
                   - isCycleStart
+                  - cycleDay
+                  - periodEndable
                   - flow
                   - hasSymptoms
                   - confidence

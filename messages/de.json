@@ -8255,6 +8255,7 @@
       "saving": "Speichern…",
       "cancel": "Abbrechen",
       "saveError": "Konnte nicht gespeichert werden. Versuch es erneut.",
+      "emptyHint": "Wähle eine Stärke oder ein Symptom, um diesen Tag zu speichern, oder nutze oben den Knopf für den Periodenbeginn.",
       "intermenstrualBleeding": "Schmierblutung zwischen Perioden",
       "pregnancyTest": "Schwangerschaftstest",
       "progesteroneTest": "Progesterontest",

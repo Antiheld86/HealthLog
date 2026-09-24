@@ -8,8 +8,12 @@ import {
   intimacyCount,
   testsCount,
   noteCount,
+  isBlankDayLog,
+  dayLogSaveState,
+  sheetDayContext,
   type DayLogFormState,
 } from "../log-day-sheet";
+import type { CalendarDay } from "../types";
 
 function blank(): DayLogFormState {
   return {
@@ -202,5 +206,118 @@ describe("section summary-badge counts (v1.17.0)", () => {
     expect(noteCount(blank())).toBe(0);
     expect(noteCount({ ...blank(), note: "   " })).toBe(0);
     expect(noteCount({ ...blank(), note: "tired today" })).toBe(1);
+  });
+});
+
+describe("saving a day (#1004)", () => {
+  it("treats a form with nothing picked as blank", () => {
+    expect(isBlankDayLog(blank())).toBe(true);
+    // A disturbed-flag or protection toggle alone records nothing: both only
+    // mean something next to the value they qualify.
+    expect(isBlankDayLog({ ...blank(), bbtDisturbed: true })).toBe(true);
+    expect(isBlankDayLog({ ...blank(), protectedSex: true })).toBe(true);
+    expect(isBlankDayLog({ ...blank(), note: "   " })).toBe(true);
+  });
+
+  it("treats any recorded sign as content", () => {
+    expect(isBlankDayLog({ ...blank(), flow: "LIGHT" })).toBe(false);
+    expect(isBlankDayLog({ ...blank(), intermenstrual: true })).toBe(false);
+    expect(isBlankDayLog({ ...blank(), bbt: "36.5" })).toBe(false);
+    expect(isBlankDayLog({ ...blank(), mucus: "DRY" })).toBe(false);
+    expect(isBlankDayLog({ ...blank(), intercourse: true })).toBe(false);
+    expect(isBlankDayLog({ ...blank(), note: "headache" })).toBe(false);
+    expect(
+      isBlankDayLog({ ...blank(), symptoms: new Map([["cramps", null]]) }),
+    ).toBe(false);
+  });
+
+  it("does not save an empty new entry, so no empty row lands unseen", () => {
+    const state = dayLogSaveState({
+      hydrated: true,
+      rowId: null,
+      form: blank(),
+    });
+    expect(state.canSave).toBe(false);
+    expect(state.blankNewEntry).toBe(true);
+  });
+
+  it("still saves an emptied existing entry, because clearing is an edit", () => {
+    const state = dayLogSaveState({
+      hydrated: true,
+      rowId: "row-1",
+      form: blank(),
+    });
+    expect(state.canSave).toBe(true);
+    expect(state.rowId).toBe("row-1");
+  });
+
+  it("neither saves nor names a row before the date's own entry has loaded", () => {
+    // The form still holds the previously opened date. A Save here used to
+    // PATCH that other date's row.
+    const state = dayLogSaveState({
+      hydrated: false,
+      rowId: "row-of-another-date",
+      form: { ...blank(), flow: "HEAVY" },
+    });
+    expect(state.canSave).toBe(false);
+    expect(state.rowId).toBeNull();
+  });
+});
+
+function gridDay(date: string, over: Partial<CalendarDay> = {}): CalendarDay {
+  return {
+    date,
+    phase: null,
+    isPredictedPeriod: false,
+    isFertileWindow: false,
+    isPredictedOvulation: false,
+    isPeriodLogged: false,
+    isCycleStart: false,
+    cycleDay: null,
+    periodEndable: false,
+    flow: null,
+    hasSymptoms: false,
+    confidence: 0,
+    basalBodyTempC: null,
+    ovulationTest: null,
+    cervicalMucus: null,
+    ...over,
+  };
+}
+
+describe("sheetDayContext (#1004)", () => {
+  it("describes the selected date from its own grid day", () => {
+    const ctx = sheetDayContext("2026-01-27", [
+      gridDay("2026-01-26", { isCycleStart: true, cycleDay: 1 }),
+      gridDay("2026-01-27", {
+        cycleDay: 2,
+        periodEndable: true,
+        phase: "MENSTRUAL",
+      }),
+    ]);
+    expect(ctx).toEqual({
+      startsCycle: false,
+      periodEndable: true,
+      phase: "MENSTRUAL",
+      dayOfCycle: 2,
+    });
+  });
+
+  it("makes no claim about a date the grid does not hold", () => {
+    expect(sheetDayContext("2025-12-01", [gridDay("2026-01-26")])).toEqual({
+      startsCycle: false,
+      periodEndable: false,
+      phase: null,
+      dayOfCycle: null,
+    });
+  });
+
+  it("takes the later of two overlapping grid reads, as the calendar does", () => {
+    const ctx = sheetDayContext("2026-04-01", [
+      gridDay("2026-04-01", { cycleDay: null }),
+      gridDay("2026-04-01", { cycleDay: 4, periodEndable: true }),
+    ]);
+    expect(ctx.dayOfCycle).toBe(4);
+    expect(ctx.periodEndable).toBe(true);
   });
 });
