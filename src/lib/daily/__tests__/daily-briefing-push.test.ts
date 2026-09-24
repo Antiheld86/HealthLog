@@ -82,7 +82,6 @@ function makeDeps(
   return {
     dispatch,
     loadDigest: async () => makeDigest(),
-    isModuleEnabled: async () => true,
     ...over,
   } as DailyBriefingDispatchDeps & { dispatch: ReturnType<typeof vi.fn> };
 }
@@ -253,17 +252,27 @@ describe("maybeDispatchDailyBriefing", () => {
     expect(deps.dispatch).not.toHaveBeenCalled();
   });
 
-  it("insights module off → no dispatch", async () => {
+  it("AI analysis off: the push still goes out with the deterministic line", async () => {
+    // The digest the loader returns when the briefing capability is
+    // unavailable: no lead, no top signal, the score floor as the line.
     const prisma = makePrisma({});
-    const deps = makeDeps({ isModuleEnabled: async () => false });
+    const deps = makeDeps({
+      loadDigest: async () =>
+        makeDigest({
+          briefingLead: null,
+          topSignal: null,
+          line: "Your health score today is 82.",
+        }),
+    });
     const result = await maybeDispatchDailyBriefing(
       prisma,
       "u1",
       IN_WINDOW,
       deps,
     );
-    expect(result).toBe("module-off");
-    expect(deps.dispatch).not.toHaveBeenCalled();
+    expect(result).toBe("sent");
+    const payload = JSON.stringify(deps.dispatch.mock.calls[0]);
+    expect(payload).toContain("Your health score today is 82.");
   });
 
   it("frequency cap: an ok ledger row earlier the SAME local day suppresses the second push", async () => {

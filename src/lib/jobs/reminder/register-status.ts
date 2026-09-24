@@ -663,7 +663,6 @@ export async function registerStatusQueues(
               suppressed_frequency: summary.suppressedFrequency,
               no_digest: summary.noDigest,
               opted_out: summary.optedOut,
-              module_off: summary.moduleOff,
               no_channel: summary.noChannel,
               outside_window: summary.outsideWindow,
               failed: summary.failed,
