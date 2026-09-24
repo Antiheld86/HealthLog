@@ -409,12 +409,8 @@ describe("generateWeightStatusForUser — judged against the stored target (#100
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       thresholdsJson,
     } as never);
-    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
     vi.mocked(prisma.measurement.findMany).mockResolvedValue(records as never);
     vi.mocked(prisma.moodEntry.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.auditLog.create).mockResolvedValue({
-      createdAt: new Date(),
-    } as never);
     const captured: { userPrompt: string | null } = { userPrompt: null };
     stubCompletion('{"summary":"OK"}', captured);
     await generateWeightStatusForUser("user-1", { locale: "en" });
