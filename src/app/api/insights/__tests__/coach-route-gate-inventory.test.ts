@@ -41,7 +41,6 @@ const NON_COACH_GATED_ROUTES: ReadonlyArray<string> = [
   "src/app/api/insights/blood-pressure-status/route.ts",
   "src/app/api/insights/bmi-status/route.ts",
   "src/app/api/insights/cards/route.ts",
-  "src/app/api/insights/correlations/route.ts",
   "src/app/api/insights/medication-compliance-status/route.ts",
   // v1.8.7.1 — generic per-HealthKit-metric assessment. Gated on the
   // same `insightStatus` sub-flag as the seven specialised status routes.
@@ -65,6 +64,9 @@ const NOT_COACH_OWNED_ROUTES: ReadonlyArray<string> = [
   // prose. Disabling Coach must not break these reads — the user can
   // still inspect and reconfigure the chain that gets re-enabled.
   "src/app/api/insights/provider-chain/route.ts",
+  // Correlation statistics: computed, never written by a model. The switch
+  // that used to gate them was retired because it stopped no AI work.
+  "src/app/api/insights/correlations/route.ts",
   "src/app/api/insights/settings/route.ts",
   // Read-only data feeds — `/targets` is a non-assistant Zielwerte
   // page driven by classifications, not LLM prose; the GLP-1 timeline

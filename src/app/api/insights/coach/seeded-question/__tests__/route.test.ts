@@ -12,6 +12,9 @@ const findUniqueMock = vi.fn().mockResolvedValue({ notificationPrefs: null });
 vi.mock("@/lib/db", () => ({
   prisma: {
     user: { findUnique: (...args: unknown[]) => findUniqueMock(...args) },
+    // No settings row: every assistant switch at its default (on). A switch
+    // read that fails now fails closed, so the row has to be readable.
+    appSettings: { findUnique: vi.fn().mockResolvedValue(null) },
   },
 }));
 
