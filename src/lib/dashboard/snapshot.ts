@@ -60,6 +60,11 @@ import {
 } from "@/lib/analytics/effective-range";
 import { deriveBpWindow90 } from "@/lib/analytics/window-confidence";
 import {
+  resolveWeightTrend,
+  weightTrendReferenceKg,
+  type WeightTrendJudgement,
+} from "@/lib/targets/weight-trend";
+import {
   probeRollupCoverage,
   type RollupCoverageMap,
 } from "@/lib/rollups/measurement-coverage";
@@ -436,6 +441,15 @@ export interface DashboardSnapshot {
      * (additive contract) so older cached snapshots / fixtures stay valid.
      */
     sleepSourceDiscrepancy?: SleepSourceDiscrepancy | null;
+    /**
+     * v1.39 — which way a weight change counts as progress, judged against
+     * the person's own stored target (`src/lib/targets/weight-trend.ts`).
+     * The weight tile colours its arrow, delta and comparison caption by
+     * `direction`; a client never re-derives it. Optional on the type
+     * (additive contract) so older cached snapshots stay valid; the live
+     * builder always sets it.
+     */
+    weightTrend?: WeightTrendJudgement;
   };
   /** Thick phase — null on a rollup-coverage miss. */
   extras: DashboardSnapshotExtras | null;
@@ -1413,6 +1427,8 @@ export async function buildDashboardSnapshot(
 
   const gender = toProfileSex(user.gender);
 
+  const weightTargetOverride = resolveWeightTargetOverride(user.thresholdsJson);
+
   return {
     user: {
       username: user.displayName?.trim() || user.username,
@@ -1433,7 +1449,7 @@ export async function buildDashboardSnapshot(
       // v1.34 — the user's own weight target, when they set one, replaces the
       // height-derived band on the tile + the chart. Resolved off the same
       // `thresholdsJson` blob the health score reads.
-      weightTargetOverride: resolveWeightTargetOverride(user.thresholdsJson),
+      weightTargetOverride,
     }),
     tiles: {
       summaries: slim.summaries,
@@ -1446,6 +1462,12 @@ export async function buildDashboardSnapshot(
       // disabled sleep module carries no sleep annotation either.
       sleepSourceDiscrepancy:
         modules.sleep === false ? null : slimRaw.sleepSourceDiscrepancy,
+      // v1.39 — the weight tile's progress direction, judged against the
+      // stored target from the same summary the tile renders.
+      weightTrend: resolveWeightTrend(
+        weightTargetOverride,
+        weightTrendReferenceKg(slim.summaries.WEIGHT),
+      ),
     },
     extras: extrasResult?.extras ?? null,
     medsToday,

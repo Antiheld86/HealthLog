@@ -396,3 +396,43 @@ describe("generateWeightStatusForUser — token-leak hardening (v1.4.27 F16)", (
     expect(notes[0].text).not.toContain("metric:");
   });
 });
+
+describe("generateWeightStatusForUser — judged against the stored target (#1006)", () => {
+  async function snapshotFor(thresholdsJson: unknown) {
+    const now = new Date();
+    const records = Array.from({ length: 40 }, (_, day) => ({
+      type: "WEIGHT",
+      // Rising from 58 toward a 65–70 target over the last forty days.
+      value: 60 - day * 0.05,
+      measuredAt: new Date(now.getTime() - day * dayMs),
+    }));
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      thresholdsJson,
+    } as never);
+    vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.measurement.findMany).mockResolvedValue(records as never);
+    vi.mocked(prisma.moodEntry.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.auditLog.create).mockResolvedValue({
+      createdAt: new Date(),
+    } as never);
+    const captured: { userPrompt: string | null } = { userPrompt: null };
+    stubCompletion('{"summary":"OK"}', captured);
+    await generateWeightStatusForUser("user-1", { locale: "en" });
+    return JSON.parse(captured.userPrompt!.match(/\{[\s\S]*\}/)![0]);
+  }
+
+  it("below the target, the model reads gaining as progress", async () => {
+    const snapshot = await snapshotFor({ WEIGHT: { min: 65, max: 70 } });
+    expect(snapshot.weight.target).toMatchObject({
+      position: "below",
+      progress: "gaining",
+    });
+    expect(snapshot.weight.signal.direction).toBe("higher-better");
+  });
+
+  it("without a target, no direction is claimed", async () => {
+    const snapshot = await snapshotFor(null);
+    expect(snapshot.weight.target).toBeUndefined();
+    expect(snapshot.weight.signal.direction).toBe("target-band");
+  });
+});

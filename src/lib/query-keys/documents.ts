@@ -55,6 +55,13 @@ export const documentKeys = {
   inboundDocumentPicker: (q: string) =>
     ["documents", "inbound", "picker", q] as const,
   /**
+   * The whole vault as a link-picker option list (every page, walked at the
+   * list route's ceiling), shared by the visit and vaccination forms. Own
+   * segment because the shape is a flat document array, not a page.
+   */
+  inboundDocumentVaultPicker: () =>
+    ["documents", "inbound", "vault-picker"] as const,
+  /**
    * Storage usage + effective limits (`GET /api/documents/inbound/usage`).
    * Invalidated through the `["documents"]` prefix after every upload /
    * delete so the quota bar tracks reality.

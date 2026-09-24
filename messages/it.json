@@ -9034,6 +9034,11 @@
       "mmrv": "MPRV (morbillo, parotite, rosolia, varicella)",
       "hepa-hepb": "Epatite A e B",
       "hepa-typhoid": "Epatite A e febbre tifoide"
+    },
+    "renewal": {
+      "overdue": "Richiamo scaduto dal {date}",
+      "dueSoon": "Richiamo previsto il {date}",
+      "current": "Prossimo richiamo il {date}"
     }
   },
   "illness": {
@@ -9881,7 +9886,10 @@
       "uploadedMeta": "Aggiunto il {date} · {size}",
       "share": "Condividi",
       "labValuesLink": "Vedi {count} valori di laboratorio",
-      "visitsLabel": "Appartiene all'appuntamento"
+      "visitsLabel": "Appartiene all'appuntamento",
+      "vaccinationsLabel": "Vaccinazioni",
+      "noVisitsToLink": "Nessuna visita registrata finora.",
+      "noVaccinationsToLink": "Nessuna vaccinazione registrata finora."
     },
     "dropOverlay": {
       "title": "Rilascia i file per caricarli",
@@ -10825,7 +10833,9 @@
       "selectAll": "Seleziona tutto",
       "searchPlaceholder": "Cerca",
       "searchNoMatch": "Nessun risultato",
-      "remove": "Rimuovi"
+      "remove": "Rimuovi",
+      "suggested": "Intorno a questa data",
+      "loadError": "Impossibile caricare l’elenco."
     }
   }
 }

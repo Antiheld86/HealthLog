@@ -9034,6 +9034,11 @@
       "mmrv": "MMRV (odra, świnka, różyczka, ospa wietrzna)",
       "hepa-hepb": "WZW typu A i B",
       "hepa-typhoid": "WZW typu A i dur brzuszny"
+    },
+    "renewal": {
+      "overdue": "Dawka przypominająca zaległa od {date}",
+      "dueSoon": "Dawka przypominająca {date}",
+      "current": "Następna dawka przypominająca {date}"
     }
   },
   "illness": {
@@ -9881,7 +9886,10 @@
       "uploadedMeta": "Dodano {date} · {size}",
       "share": "Udostępnij",
       "labValuesLink": "Zobacz {count} wyników laboratoryjnych",
-      "visitsLabel": "Należy do wizyty"
+      "visitsLabel": "Należy do wizyty",
+      "vaccinationsLabel": "Szczepienia",
+      "noVisitsToLink": "Nie zapisano jeszcze żadnych wizyt.",
+      "noVaccinationsToLink": "Nie zapisano jeszcze żadnych szczepień."
     },
     "dropOverlay": {
       "title": "Upuść pliki, aby je przesłać",
@@ -10825,7 +10833,9 @@
       "selectAll": "Zaznacz wszystko",
       "searchPlaceholder": "Szukaj",
       "searchNoMatch": "Brak wyników",
-      "remove": "Usuń"
+      "remove": "Usuń",
+      "suggested": "Wokół tej daty",
+      "loadError": "Nie udało się wczytać listy."
     }
   }
 }

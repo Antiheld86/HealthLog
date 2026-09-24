@@ -9034,6 +9034,11 @@
       "mmrv": "MMRV (Masern, Mumps, Röteln, Varizellen)",
       "hepa-hepb": "Hepatitis A und B",
       "hepa-typhoid": "Hepatitis A und Typhus"
+    },
+    "renewal": {
+      "overdue": "Auffrischung fällig seit {date}",
+      "dueSoon": "Auffrischung fällig am {date}",
+      "current": "Nächste Auffrischung {date}"
     }
   },
   "illness": {
@@ -9881,7 +9886,10 @@
       "uploadedMeta": "Hinzugefügt am {date} · {size}",
       "share": "Teilen",
       "labValuesLink": "{count} Laborwerte ansehen",
-      "visitsLabel": "Gehört zu Termin"
+      "visitsLabel": "Gehört zu Termin",
+      "vaccinationsLabel": "Impfungen",
+      "noVisitsToLink": "Noch keine Termine erfasst.",
+      "noVaccinationsToLink": "Noch keine Impfungen erfasst."
     },
     "dropOverlay": {
       "title": "Zum Hochladen ablegen",
@@ -10825,7 +10833,9 @@
       "selectAll": "Alle auswählen",
       "searchPlaceholder": "Suchen",
       "searchNoMatch": "Kein Treffer",
-      "remove": "Entfernen"
+      "remove": "Entfernen",
+      "suggested": "Um dieses Datum",
+      "loadError": "Die Liste konnte nicht geladen werden."
     }
   }
 }

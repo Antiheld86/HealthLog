@@ -61,9 +61,7 @@ import {
   apiPatch,
   apiPost,
 } from "@/lib/api/api-fetch";
-import { encounterKindText } from "@/components/encounters/encounter-labels";
 import { useFormatters, useTranslations } from "@/lib/i18n/context";
-import type { EncounterKind } from "@/generated/prisma/client";
 import { useCoachLaunch } from "@/lib/insights/coach-launch-context";
 import { invalidateKeys, queryKeys } from "@/lib/query-keys";
 import {
@@ -80,6 +78,7 @@ import {
 } from "@/lib/validations/inbound-documents";
 import { DocumentAiSection } from "./document-ai-section";
 import { DocumentEncounterSuggestion } from "./document-encounter-suggestion";
+import { DocumentRecordLinks } from "./document-record-links";
 import { DocumentFactsSection } from "./document-facts-review";
 import { VaccinationDocumentSuggestion } from "@/components/vaccinations/vaccination-document-suggestion";
 import { DocumentSummaryBlock } from "./document-summary-block";
@@ -102,6 +101,7 @@ type PatchInput = {
   documentDate?: string | null;
   episodeIds?: string[];
   encounterIds?: string[];
+  vaccinationIds?: string[];
 };
 
 /**
@@ -408,6 +408,8 @@ export function DocumentDetailSheet({
   const indexDoc = useIndexDocument();
 
   const [mutationError, setMutationError] = useState<string | null>(null);
+  /** Bumped on a failed write; remounts the link block onto server state. */
+  const [linkResets, setLinkResets] = useState(0);
   const [shareOpen, setShareOpen] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   /**
@@ -463,11 +465,22 @@ export function DocumentDetailSheet({
         `/api/documents/inbound/${documentId}`,
         input,
       ),
-    onSuccess: () => {
+    onSuccess: (_data, input) => {
       setMutationError(null);
-      void invalidateKeys(queryClient, [queryKeys.documents()]);
+      // A link written from this side changes what the visit's and the
+      // dose's own views list, so their reads refresh with the vault's.
+      void invalidateKeys(queryClient, [
+        queryKeys.documents(),
+        ...(input.encounterIds !== undefined ? [queryKeys.encounters()] : []),
+        ...(input.vaccinationIds !== undefined
+          ? [queryKeys.vaccinations()]
+          : []),
+      ]);
     },
-    onError: () => setMutationError(t("documents.detail.saveError")),
+    onError: () => {
+      setMutationError(t("documents.detail.saveError"));
+      setLinkResets((n) => n + 1);
+    },
   });
 
   const restore = useMutation({
@@ -1074,36 +1087,16 @@ export function DocumentDetailSheet({
                 />
               ) : null}
 
-              {/* "Belongs to visit" — read-only here on purpose. The filing
-                  happens at the moment the document arrives, or from the
-                  visit's own sheet; a second editor for the same link would
-                  be a second place the set can be changed. Each row deep-links
-                  to the vault filtered to that visit. */}
-              {doc.encounterLinks.length > 0 ? (
-                <div className="space-y-1.5" data-slot="document-visit-links">
-                  <p className="text-sm leading-none font-medium">
-                    {t("documents.detail.visitsLabel")}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {doc.encounterLinks.map((link) => (
-                      <Link
-                        key={link.encounterId}
-                        href={`/documents?encounter=${encodeURIComponent(link.encounterId)}`}
-                        className="bg-muted text-foreground hover:bg-muted/70 focus-visible:ring-ring/50 inline-flex max-w-64 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs focus-visible:ring-[3px] focus-visible:outline-none"
-                      >
-                        <span className="truncate">
-                          {encounterKindText(t, link.kind as EncounterKind)}
-                        </span>
-                        {link.occurredAt ? (
-                          <span className="text-muted-foreground shrink-0">
-                            {format.date(link.occurredAt)}
-                          </span>
-                        ) : null}
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
+              {/* Which visits and doses this page is filed against, and — for
+                  someone who may manage the vault — the links themselves.
+                  Keyed on the write-failure count so a refused write drops
+                  the local selection back to what the server confirmed. */}
+              <DocumentRecordLinks
+                key={`${doc.id}:${linkResets}`}
+                doc={doc}
+                canManage={canManageDocuments}
+                onChange={(part) => patch.mutate(part)}
+              />
 
               {/* Staged-facts review + the stored-text extract recovery. The
                   existing extract/confirm chain finally gets its control on

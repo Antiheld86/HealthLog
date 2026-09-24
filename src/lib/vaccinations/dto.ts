@@ -30,6 +30,7 @@ import {
 } from "@/lib/practitioners/dto";
 import { resolveCatalogEntry } from "@/lib/vaccinations/vaccine-catalog";
 import type { SeriesPosition } from "@/lib/vaccinations/series";
+import type { VaccinationRenewalDTO } from "@/lib/vaccinations/renewal";
 
 /**
  * One page a dose was transcribed from, as the caller is allowed to see it.
@@ -162,4 +163,11 @@ export function toVaccinationDTO(
 /** The list response: one array, newest dose first. */
 export interface VaccinationListDTO {
   vaccinations: VaccinationDTO[];
+  /**
+   * v1.39 — each antigen's renewal state, from the booster reminder the
+   * person confirmed (`src/lib/vaccinations/renewal.ts`). An antigen with no
+   * confirmed booster is absent. `null` when the caller acts under a grant
+   * that does not cover the measurements section the reminders live in.
+   */
+  renewals: VaccinationRenewalDTO[] | null;
 }

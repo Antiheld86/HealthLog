@@ -157,6 +157,10 @@ import { mergeSlimAndThickAnalytics } from "@/lib/analytics/merge-slim-thick";
 import { isWindowSufficient } from "@/lib/analytics/window-confidence";
 import { buildDashboardBands, viewerBandProfile } from "@/lib/dashboard/bands";
 import { resolveWeightTargetOverride } from "@/lib/analytics/effective-range";
+import {
+  resolveWeightTrend,
+  weightTrendReferenceKg,
+} from "@/lib/targets/weight-trend";
 import { toProfileSex } from "@/lib/profile/sex";
 import { apiGet } from "@/lib/api/api-fetch";
 
@@ -766,24 +770,36 @@ export default function DashboardPageClient({
   // client-side band at all and waits for the snapshot's, which resolve
   // against the record.
   const inSharedRecord = user?.accountAccess?.active != null;
-  const clientBands = useMemo(
+  const clientBandProfile = useMemo(
     () =>
-      buildDashboardBands(
-        viewerBandProfile(
-          {
-            dateOfBirth: user?.dateOfBirth ? new Date(user.dateOfBirth) : null,
-            gender: toProfileSex(user?.gender),
-            heightCm: user?.heightCm ?? null,
-            weightTargetOverride: resolveWeightTargetOverride(
-              thresholdsData?.overrides ?? null,
-            ),
-          },
-          inSharedRecord,
-        ),
+      viewerBandProfile(
+        {
+          dateOfBirth: user?.dateOfBirth ? new Date(user.dateOfBirth) : null,
+          gender: toProfileSex(user?.gender),
+          heightCm: user?.heightCm ?? null,
+          weightTargetOverride: resolveWeightTargetOverride(
+            thresholdsData?.overrides ?? null,
+          ),
+        },
+        inSharedRecord,
       ),
     [user, thresholdsData, inSharedRecord],
   );
+  const clientBands = useMemo(
+    () => buildDashboardBands(clientBandProfile),
+    [clientBandProfile],
+  );
   const bands = serverBands ?? clientBands;
+  // v1.39 — which way a weight change counts as progress, judged against the
+  // stored target. The snapshot carries the server's answer; the
+  // snapshot-disabled fallback asks the same resolver from the same profile
+  // the band fallback above reads, so the two paths cannot disagree.
+  const weightTrend =
+    (snapshotEnabled ? snapshotQuery.data?.tiles.weightTrend : undefined) ??
+    resolveWeightTrend(
+      clientBandProfile.weightTargetOverride,
+      weightTrendReferenceKg(w),
+    );
   const bpTargets = bands.bpTargets;
   const weightRange = bands.weightRange;
   // The range hint tooltip prints its band bounds in the display unit, so scale
@@ -1028,7 +1044,7 @@ export default function DashboardPageClient({
                 slope30={w?.slope30 ?? null}
                 trend7Delta={tdd("WEIGHT", summaryToTrend7Delta(w))}
                 icon={Activity}
-                directionSentiment="up-bad"
+                directionSentiment={weightTrend.direction}
                 compareBaseline={compareBaseline}
                 compareDelta={tdd("WEIGHT", tileCompareDelta(w))}
                 staleDays={tileStaleDays("WEIGHT")}

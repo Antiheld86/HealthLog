@@ -7,8 +7,9 @@
  * doses by their component antigen and shows where each series stands, with the
  * numbers resolved server-side (`src/lib/vaccinations/series.ts`) so this
  * client never re-derives "N von M". Neutral cards, status through a discreet
- * badge only — no red card, no overdue tint. It reproduces the record; it does
- * not adjudicate what is due.
+ * badge only — no red card. It reproduces the record; it does not adjudicate
+ * what is due. The one status shown is the booster the person planned, on the
+ * antigen's heading (see `vaccination-list.tsx`).
  */
 import { useState } from "react";
 import { Plus, Syringe } from "lucide-react";
@@ -121,6 +122,7 @@ export function VaccinationsView() {
       ) : records.length > 0 ? (
         <VaccinationList
           records={records}
+          renewals={data?.renewals}
           onEdit={canManageProfile ? openEdit : undefined}
         />
       ) : (

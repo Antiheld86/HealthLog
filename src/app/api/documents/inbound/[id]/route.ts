@@ -23,11 +23,15 @@ import { prisma } from "@/lib/db";
 import {
   loadConditionLinks,
   loadDocumentEncounterLinks,
+  loadDocumentVaccinationLinks,
   narrowOwnedEncounterIds,
   narrowOwnedEpisodeIds,
+  narrowOwnedVaccinationIds,
   replaceConditionLinks,
   replaceEncounterLinks,
+  replaceVaccinationLinks,
 } from "@/lib/documents/links";
+import { actingDomainVisibility } from "@/lib/sharing/acting-domains";
 import { serialiseDocumentDetail } from "@/lib/documents/store";
 import { annotate } from "@/lib/logging/context";
 import { requireModuleEnabled } from "@/lib/modules/gate";
@@ -81,7 +85,7 @@ async function enforceWriteRateLimit(userId: string): Promise<Response | null> {
  */
 export const GET = apiHandler(
   async (_request: NextRequest, { params }: RouteParams) => {
-    const { user } = await requireRecordAuth("read", "documents");
+    const { user, grantId } = await requireRecordAuth("read", "documents");
     const gate = await requireModuleEnabled(user.id, "inboundDocuments");
     if (!gate.enabled) return gate.response;
 
@@ -97,18 +101,26 @@ export const GET = apiHandler(
       });
     }
 
-    const [links, visitLinks, contentIndex, thumbnail] = await Promise.all([
-      loadConditionLinks(user.id, [document.id]),
-      loadDocumentEncounterLinks(user.id, [document.id]),
-      prisma.documentContentIndex.findUnique({
-        where: { documentId: document.id },
-        select: { source: true },
-      }),
-      prisma.documentThumbnail.findUnique({
-        where: { documentId: document.id },
-        select: { id: true },
-      }),
-    ]);
+    // The doses a page records live in the health background, not in the
+    // vault. A grant that opened the vault was never consent for that side
+    // of the seam, so the list is withheld (null) rather than read.
+    const visible = await actingDomainVisibility(prisma, grantId);
+    const [links, visitLinks, doseLinks, contentIndex, thumbnail] =
+      await Promise.all([
+        loadConditionLinks(user.id, [document.id]),
+        loadDocumentEncounterLinks(user.id, [document.id]),
+        visible("profile")
+          ? loadDocumentVaccinationLinks(user.id, [document.id])
+          : Promise.resolve(null),
+        prisma.documentContentIndex.findUnique({
+          where: { documentId: document.id },
+          select: { source: true },
+        }),
+        prisma.documentThumbnail.findUnique({
+          where: { documentId: document.id },
+          select: { id: true },
+        }),
+      ]);
 
     annotate({
       action: { name: "documents.inbound.get" },
@@ -124,6 +136,7 @@ export const GET = apiHandler(
         toContentIndexSource(contentIndex?.source),
         thumbnail !== null,
         visitLinks.get(document.id) ?? [],
+        doseLinks === null ? null : (doseLinks.get(document.id) ?? []),
       ),
     );
   },
@@ -196,6 +209,22 @@ export const PATCH = apiHandler(
       nextEncounterIds = narrowed;
     }
 
+    // Replace-set vaccination links, same semantics and same refusal. The
+    // table is the one the dose's own form writes from the other end.
+    let nextVaccinationIds: string[] | undefined;
+    if (parsed.data.vaccinationIds !== undefined) {
+      const narrowed = await narrowOwnedVaccinationIds(
+        user.id,
+        parsed.data.vaccinationIds,
+      );
+      if (narrowed === null) {
+        return apiError("Vaccination not found", 404, {
+          errorCode: "documents.inbound.vaccinationNotFound",
+        });
+      }
+      nextVaccinationIds = narrowed;
+    }
+
     // No mass assignment — each editable column is set explicitly only when
     // the client sent it. `userId` is never a body field.
     const data: Prisma.InboundDocumentUpdateInput = {};
@@ -225,28 +254,42 @@ export const PATCH = apiHandler(
       );
     }
 
+    if (nextVaccinationIds !== undefined) {
+      await replaceVaccinationLinks(
+        prisma,
+        user.id,
+        existing.id,
+        nextVaccinationIds,
+      );
+    }
+
     const document = await prisma.inboundDocument.findFirstOrThrow({
       where: { id: existing.id },
       omit: { contentEncrypted: true },
       include: { facts: { orderBy: { createdAt: "asc" } } },
     });
-    const [links, visitLinks, contentIndex, thumbnail] = await Promise.all([
-      loadConditionLinks(user.id, [document.id]),
-      loadDocumentEncounterLinks(user.id, [document.id]),
-      prisma.documentContentIndex.findUnique({
-        where: { documentId: document.id },
-        select: { source: true },
-      }),
-      prisma.documentThumbnail.findUnique({
-        where: { documentId: document.id },
-        select: { id: true },
-      }),
-    ]);
+    // PATCH is owner-only (bare `requireAuth()`), so every section is the
+    // caller's own and the dose list is always readable here.
+    const [links, visitLinks, doseLinks, contentIndex, thumbnail] =
+      await Promise.all([
+        loadConditionLinks(user.id, [document.id]),
+        loadDocumentEncounterLinks(user.id, [document.id]),
+        loadDocumentVaccinationLinks(user.id, [document.id]),
+        prisma.documentContentIndex.findUnique({
+          where: { documentId: document.id },
+          select: { source: true },
+        }),
+        prisma.documentThumbnail.findUnique({
+          where: { documentId: document.id },
+          select: { id: true },
+        }),
+      ]);
 
     const touched = [
       ...Object.keys(data),
       ...(nextEpisodeIds !== undefined ? ["episodeIds"] : []),
       ...(nextEncounterIds !== undefined ? ["encounterIds"] : []),
+      ...(nextVaccinationIds !== undefined ? ["vaccinationIds"] : []),
     ];
 
     await auditLog("documents.inbound.update", {
@@ -272,6 +315,7 @@ export const PATCH = apiHandler(
         toContentIndexSource(contentIndex?.source),
         thumbnail !== null,
         visitLinks.get(document.id) ?? [],
+        doseLinks.get(document.id) ?? [],
       ),
     );
   },

@@ -1201,6 +1201,24 @@ export const dashboardSnapshotResponse = z
         .describe(
           "Non-null when two writer buckets reported clearly different asleep totals for the latest night's main session (> 45 min apart and > 20% of the larger total). Observational only — the served summary stays the winning writer's totals; clients may show a discreet 'sources disagree' hint next to the sleep tile's headline. Null when the writers agree or the sleep module is off; optional for older cached snapshots.",
         ),
+      weightTrend: z
+        .object({
+          direction: z
+            .enum(["up-good", "up-bad", "hold"])
+            .describe(
+              "How the weight tile colours a change. `up-good`: a rise is progress (below the target band). `up-bad`: a fall is progress (above the band, and the reading when no target is stored). `hold`: the weight is inside the band, so a flat change is progress and a move either way is neutral, never a setback.",
+            ),
+          targetPosition: z
+            .enum(["below", "inside", "above"])
+            .nullable()
+            .describe(
+              "Where the 7-day average (else the latest reading) sits against the person's own stored weight target. Null when no target is stored or there is no reading.",
+            ),
+        })
+        .optional()
+        .describe(
+          "Which way a weight change counts as progress, judged against the person's own stored target rather than assuming a fall is good. Render the arrow, 7-day delta and comparison caption from `direction`; do not recompute it. Optional for older cached snapshots; when absent, treat it as `up-bad`.",
+        ),
     }),
     extras: z
       .object({

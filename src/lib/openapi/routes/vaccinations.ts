@@ -175,11 +175,33 @@ const vaccination = z
       "One administered dose. `occurredAt` is a day at UTC midnight — the source record carries dates, never times. `series` carries one entry per component antigen, so a combined preparation reports several at once and each may be at a different position: a dose can be a booster for one antigen and a first dose for another in the same act. An empty `series` means the dose has no resolvable antigen (free text only, or a slug this release does not know) and nothing is guessed from the name. `note` is the decrypted free text, or null on a key-rotation gap — fail-soft, never a 500. `reminderId` names the booster reminder this dose settled, when one matched. `documents` is present on the detail response and absent from the list.",
   });
 
-const vaccinationList = z.object({ vaccinations: z.array(vaccination) }).meta({
-  id: "VaccinationList",
-  description:
-    "The caller's immunization history, newest dose first, with every entry's series already resolved over the whole live set — never over the filtered page, which would report the oldest dose in a window as the first ever given.",
-});
+const vaccinationRenewal = z
+  .object({
+    antigen: z.string(),
+    reminderId: z.string(),
+    dueAt: z.string(),
+    daysUntil: z.number().int(),
+    state: z.enum(["current", "dueSoon", "overdue"]),
+  })
+  .meta({
+    id: "VaccinationRenewal",
+    description:
+      "One antigen's renewal state, read from the booster reminder the person confirmed for it (`dueAt` is that reminder's next due instant). `daysUntil` counts calendar days on the person's own clock and is negative once the date has passed. `state` is `overdue` once it has passed, `dueSoon` within 30 days, `current` otherwise. Render from `state`; do not recompute it. Nothing here is derived from age, history or the catalogue: an antigen without a confirmed booster has no entry.",
+  });
+
+const vaccinationList = z
+  .object({
+    vaccinations: z.array(vaccination),
+    renewals: z.array(vaccinationRenewal).nullable().meta({
+      description:
+        "Each antigen's renewal state, earliest due first. Null when the caller acts under a grant that does not cover the measurements section the booster reminders live in.",
+    }),
+  })
+  .meta({
+    id: "VaccinationList",
+    description:
+      "The caller's immunization history, newest dose first, with every entry's series already resolved over the whole live set — never over the filtered page, which would report the oldest dose in a window as the first ever given.",
+  });
 
 const vaccinationSuggestion = z
   .object({
