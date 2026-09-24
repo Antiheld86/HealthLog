@@ -8,9 +8,11 @@ const getAssistantFlags = vi.fn();
 vi.mock("@/lib/rate-limit", () => ({
   checkRateLimit: (...a: unknown[]) => checkRateLimit(...a),
 }));
-vi.mock("@/lib/feature-flags", () => ({
-  getAssistantFlags: (...a: unknown[]) => getAssistantFlags(...a),
-}));
+vi.mock("@/lib/feature-flags", async () =>
+  (
+    await import("@/__tests__/helpers/assistant-switches-mock")
+  ).mockAssistantSwitches(() => getAssistantFlags()),
+);
 // Never reach the real generator (which imports the provider chain).
 vi.mock("@/lib/insights/narrative/period-narrative-generate", () => ({
   generatePeriodNarrative: vi.fn(),

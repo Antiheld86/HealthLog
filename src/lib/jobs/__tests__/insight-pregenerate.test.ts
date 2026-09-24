@@ -40,9 +40,11 @@ vi.mock("@/lib/logging/context", async () => {
     annotate: (...a: unknown[]) => annotateSpy(...a),
   };
 });
-vi.mock("@/lib/feature-flags", () => ({
-  getAssistantFlags: (...a: unknown[]) => getAssistantFlags(...a),
-}));
+vi.mock("@/lib/feature-flags", async () =>
+  (
+    await import("@/__tests__/helpers/assistant-switches-mock")
+  ).mockAssistantSwitches(() => getAssistantFlags()),
+);
 // Per-user capabilities, keyed by capability; every test starts with both
 // halves available and overrides one or both.
 type CapabilityState = {

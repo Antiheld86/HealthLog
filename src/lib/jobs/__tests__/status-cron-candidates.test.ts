@@ -17,9 +17,11 @@ import fs from "node:fs";
 import path from "node:path";
 
 const getAssistantFlags = vi.fn();
-vi.mock("@/lib/feature-flags", () => ({
-  getAssistantFlags: (...a: unknown[]) => getAssistantFlags(...a),
-}));
+vi.mock("@/lib/feature-flags", async () =>
+  (
+    await import("@/__tests__/helpers/assistant-switches-mock")
+  ).mockAssistantSwitches(() => getAssistantFlags()),
+);
 
 import { findStatusCronCandidates } from "../status-cron-candidates";
 import { PREGENERATE_STALE_MS } from "../insight-pregenerate";

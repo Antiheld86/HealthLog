@@ -48,9 +48,11 @@ vi.mock("@/lib/ai/server-provider-health", () => ({
   readServerProviderHealth: vi.fn(),
 }));
 
-vi.mock("@/lib/feature-flags", () => ({
-  getAssistantFlags: vi.fn(),
-}));
+vi.mock("@/lib/feature-flags", async () =>
+  (
+    await import("@/__tests__/helpers/assistant-switches-mock")
+  ).mockAssistantSwitches(vi.fn()),
+);
 
 vi.mock("@/lib/sharing/provider-work-authority", () => ({
   providerWorkAuthorityForRecord: vi.fn(() => ({ origin: "owner" })),
