@@ -300,6 +300,25 @@ describe("the replaced maps and guards stay gone", () => {
     expect(hits).toEqual([]);
   });
 
+  it("every discovery-matrix caller passes the record's module map", () => {
+    // `modules` is a required option, so omitting it fails to compile; this
+    // catches the other way to get it wrong, a hand-built map, by requiring
+    // each calling file to resolve the record's own. A file that forwards a
+    // map it received from its caller would need an entry here.
+    const callers = sources.filter(
+      (s) =>
+        /\bassembleDiscoveryMatrix\s*\(/.test(s.code) &&
+        s.rel !== "lib/insights/discovery-matrix.ts",
+    );
+    expect(callers.length).toBeGreaterThanOrEqual(4);
+    for (const caller of callers) {
+      expect(caller.code, caller.rel).toMatch(/\bresolveModuleMap\s*\(/);
+      expect(caller.code, caller.rel).toMatch(
+        /assembleDiscoveryMatrix\s*\([\s\S]*?\bmodules\b/,
+      );
+    }
+  });
+
   it("the dashboard maps are views, built from the surface map and nowhere else", () => {
     const widgetModules = sources.find(
       (s) => s.rel === "lib/dashboard/widget-modules.ts",

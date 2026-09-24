@@ -33,6 +33,7 @@ import {
   DISCOVERY_BEHAVIOURS,
   DISCOVERY_OUTCOMES,
 } from "@/lib/insights/correlation-discovery";
+import { resolveModuleMap } from "@/lib/modules/gate";
 import { assembleDiscoveryMatrix } from "@/lib/insights/discovery-matrix";
 import {
   decisionForEvidence,
@@ -98,10 +99,13 @@ export async function getRelevantCorrelationsForMetric(
     // scans, so a card can never be missing a pair the page would show. The
     // measurement read stays `"raw"` (the route's rollup read-swap is a
     // read-cost choice, not a channel-set one; see the option's doc comment).
+    // A channel whose module is off never enters the scan, so the card is
+    // never grounded on a module the person switched off.
     const { series } = await assembleDiscoveryMatrix(userId, {
       tz,
       since,
       fetchMode: "raw",
+      modules: await resolveModuleMap(userId),
     });
 
     const result = discoverCorrelations(series, { locale });
