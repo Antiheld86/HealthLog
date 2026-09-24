@@ -32,7 +32,7 @@ import { HeroStrip } from "@/components/insights/hero-strip";
 import { AiSetupHint } from "@/components/insights/ai-setup-hint";
 import { OverviewSectionBoundary } from "@/components/insights/overview-section-boundary";
 import { isSurfaceVisible } from "@/lib/modules/surface";
-import { useCycleRingHasDial } from "@/components/cycle/use-cycle";
+import { useCycleRingDial } from "@/components/cycle/use-cycle";
 import { useInsightsAdvisorQuery } from "@/components/insights/use-insights-advisor";
 import { useAnalyticsQuery } from "@/lib/queries/use-analytics-query";
 import { useDashboardSnapshot } from "@/lib/queries/use-dashboard-snapshot";
@@ -373,9 +373,10 @@ export default function InsightsPageClient() {
     "overview:cycle-ring",
     user?.modules,
   );
-  const cycleRingDial = useCycleRingHasDial(
-    isAuthenticated && cycleRingVisible,
-  );
+  // Until that read answers the strip keeps its skeleton, so it never paints
+  // Strain first and swaps it for the ring when the calendar lands.
+  const cycleRing = useCycleRingDial(isAuthenticated && cycleRingVisible);
+  const cycleRingDial = cycleRing.dial;
 
   // A failed comprehensive read no longer replaces the page. The payload only
   // decides the "no data yet" empty state below; every section on the page
@@ -467,7 +468,7 @@ export default function InsightsPageClient() {
     "wellness-scores": (
       <WellnessScores
         read={dashboardDerived.read}
-        isLoading={dashboardDerived.isLoading}
+        isLoading={dashboardDerived.isLoading || cycleRing.pending}
         isError={dashboardDerived.isError}
         refetch={dashboardDerived.refetch}
         // v1.15.3 — the cycle ring rides the scores strip as a gated sibling

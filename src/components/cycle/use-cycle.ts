@@ -130,15 +130,23 @@ export function useCycleRingCalendar(enabled = true) {
 }
 
 /**
- * Whether the cycle ring would draw a dial today. The wellness strip asks
- * this before it gives the ring a cell (and takes Strain's place for it): the
- * ring renders nothing without an active cycle, and a cell reserved for it
- * would sit empty in the row.
+ * Whether the cycle ring would draw a dial today, and whether that is still
+ * unknown. The wellness strip asks this before it gives the ring a cell (and
+ * takes Strain's place for it): the ring renders nothing without an active
+ * cycle, and a cell reserved for it would sit empty in the row. While the
+ * calendar read is `pending` the strip holds its skeleton, so it never paints
+ * Strain and then swaps it for the ring. A failed read settles to no dial.
  */
-export function useCycleRingHasDial(enabled: boolean): boolean {
+export function useCycleRingDial(enabled: boolean): {
+  dial: boolean;
+  pending: boolean;
+} {
   const calendar = useCycleRingCalendar(enabled);
   const verdict = calendar.data?.verdict;
-  return enabled && verdict?.phase != null && verdict.dayOfCycle != null;
+  return {
+    dial: enabled && verdict?.phase != null && verdict.dayOfCycle != null,
+    pending: enabled && calendar.isPending,
+  };
 }
 
 export function useCycleHistory(limit = 24) {
