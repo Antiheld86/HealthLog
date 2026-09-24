@@ -10825,7 +10825,9 @@
       "selectAll": "Seleccionar todo",
       "searchPlaceholder": "Buscar",
       "searchNoMatch": "Sin coincidencias",
-      "remove": "Quitar"
+      "remove": "Quitar",
+      "suggested": "En torno a esta fecha",
+      "loadError": "No se pudo cargar la lista."
     }
   }
 }

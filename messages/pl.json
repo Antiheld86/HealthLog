@@ -10825,7 +10825,9 @@
       "selectAll": "Zaznacz wszystko",
       "searchPlaceholder": "Szukaj",
       "searchNoMatch": "Brak wyników",
-      "remove": "Usuń"
+      "remove": "Usuń",
+      "suggested": "Wokół tej daty",
+      "loadError": "Nie udało się wczytać listy."
     }
   }
 }

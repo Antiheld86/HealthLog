@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ResponsiveSheet } from "@/components/ui/responsive-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { useTranslations } from "@/lib/i18n/context";
 import { cn } from "@/lib/utils";
 
@@ -131,6 +132,9 @@ export function EntityLinkPicker({
   onChange,
   searchPlaceholder,
   emptyLabel,
+  error = false,
+  errorLabel,
+  onRetry,
 }: {
   icon: LucideIcon;
   title: string;
@@ -142,6 +146,14 @@ export function EntityLinkPicker({
   onChange: (ids: string[]) => void;
   searchPlaceholder: string;
   emptyLabel: string;
+  /**
+   * The option read failed. Renders an error row with Retry instead of the
+   * empty label: a failed read must never pass for "nothing to link", which
+   * is exactly how a refused page size once hid a whole vault.
+   */
+  error?: boolean;
+  errorLabel?: string;
+  onRetry?: () => void;
 }) {
   const { t } = useTranslations();
   const [open, setOpen] = useState(false);
@@ -175,8 +187,14 @@ export function EntityLinkPicker({
         ) : null}
       </div>
 
-      {pending ? (
+      {pending && !error ? (
         <Skeleton className="h-9 w-full rounded-md" />
+      ) : error ? (
+        <QueryErrorRow
+          message={errorLabel}
+          onRetry={onRetry}
+          slot={`${slot}-error`}
+        />
       ) : options.length === 0 ? (
         <p className="text-muted-foreground text-xs">{emptyLabel}</p>
       ) : (

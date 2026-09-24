@@ -10825,7 +10825,9 @@
       "selectAll": "Tout sélectionner",
       "searchPlaceholder": "Rechercher",
       "searchNoMatch": "Aucun résultat",
-      "remove": "Retirer"
+      "remove": "Retirer",
+      "suggested": "Autour de cette date",
+      "loadError": "Impossible de charger la liste."
     }
   }
 }

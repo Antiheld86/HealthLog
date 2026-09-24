@@ -10825,7 +10825,9 @@
       "selectAll": "전체 선택",
       "searchPlaceholder": "검색",
       "searchNoMatch": "결과 없음",
-      "remove": "제거"
+      "remove": "제거",
+      "suggested": "이 날짜 전후",
+      "loadError": "목록을 불러오지 못했습니다."
     }
   }
 }
