@@ -22,9 +22,11 @@
  *
  * Not in this list, and deliberately:
  *
- *   - `assistant.disabled.<surface>` is built from a template at runtime
- *     (`src/lib/feature-flags/index.ts`), so the surface segment is open.
- *     `assistant.disabled.coach` is the one the iOS contract names.
+ *   - `assistant.disabled.<switch>` is built from a template at runtime
+ *     (`src/lib/ai/capabilities/refusal.ts`, and the retired
+ *     `src/lib/feature-flags/index.ts` gate), so the last segment is open. It
+ *     is one of `coach`, `briefing`, `insightStatus`, `documentAi` and
+ *     `enabled`; `assistant.disabled.coach` is the one the iOS contract names.
  *   - The integration-probe classes — `credentials_rejected`, `rate_limited`,
  *     `upstream_error`, `timeout`, `connection_failed`, and the per-provider
  *     additions beside them — are chosen by each `/test` route's own
@@ -36,6 +38,7 @@
  */
 export const ERROR_CODE_CATALOGUE: Readonly<Record<string, readonly string[]>> =
   {
+    ai: ["ai.provider.none", "ai.record.notPermitted", "ai.unavailable"],
     ai_provider: ["ai_provider.invalid", "ai_provider.no_fields"],
     allergy: ["allergy.invalid"],
     analytics: ["analytics.invalid_query"],

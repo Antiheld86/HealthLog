@@ -97,10 +97,11 @@ function outermost(
 }
 
 function innermost(
-  reasons: readonly AiUnavailableReason[],
+  reasons: readonly (AiUnavailableReason | null)[],
 ): AiUnavailableReason | null {
   let best: AiUnavailableReason | null = null;
   for (const reason of reasons) {
+    if (reason === null) continue;
     if (best === null || REASON_RANK.get(reason)! > REASON_RANK.get(best)!) {
       best = reason;
     }
@@ -127,24 +128,35 @@ function moduleReason(
   }
 }
 
+interface ModuleFinding {
+  reason: AiUnavailableReason | null;
+  /** The owning module the reason is about, when it is about one. */
+  module: ModuleKey | null;
+}
+
 /**
  * The module layer for one capability. `all` needs every owning module and
  * reports the outermost reason among those that are off. `any` needs one: it
  * is available as soon as one path is, and otherwise reports the INNERMOST
  * reason, because moving that one layer is enough to open the capability.
  */
-function modulesReason(
+function modulesFinding(
   def: AiCapabilityDefinition,
   moduleAccess: Readonly<Record<ModuleKey, ModuleAccessState>>,
-): AiUnavailableReason | null {
+): ModuleFinding {
   const { mode, keys } = def.modules;
-  if (keys.length === 0) return null;
-  const reasons = keys.map((key) =>
-    moduleReason(key, moduleAccess[key] ?? "unavailable"),
-  );
-  if (mode === "all") return outermost(reasons);
-  if (reasons.some((reason) => reason === null)) return null;
-  return innermost(reasons as AiUnavailableReason[]);
+  const findings: ModuleFinding[] = keys.map((key) => ({
+    reason: moduleReason(key, moduleAccess[key] ?? "unavailable"),
+    module: key,
+  }));
+  const closed = findings.filter((finding) => finding.reason !== null);
+  if (closed.length === 0) return { reason: null, module: null };
+  if (mode === "any" && closed.length < findings.length) {
+    return { reason: null, module: null };
+  }
+  const pick = mode === "all" ? outermost : innermost;
+  const reason = pick(closed.map((finding) => finding.reason!));
+  return closed.find((finding) => finding.reason === reason)!;
 }
 
 /** The entries in the order this capability would pick from. */
@@ -233,25 +245,54 @@ function stateFor(reason: AiUnavailableReason | null): AiCapabilityState {
   };
 }
 
+/** Why one capability is unavailable, with the module it is about. */
+export interface AiCapabilityFinding {
+  reason: AiUnavailableReason | null;
+  /**
+   * The owning module behind a module-layer reason (`module_disabled`,
+   * `user_disabled`, or an `operator_disabled` that came from the operator's
+   * module availability rather than a switch). `null` otherwise.
+   */
+  module: ModuleKey | null;
+}
+
+/**
+ * The full finding for one capability. `null` inputs mean the loader failed.
+ * The refusal envelope reads the module to name `module.disabled` correctly;
+ * everything else only needs the state.
+ */
+export function explainAiCapability(
+  key: AiCapabilityKey,
+  inputs: AiCapabilityInputs | null,
+): AiCapabilityFinding {
+  if (inputs === null) return { reason: "check_failed", module: null };
+  const def = AI_CAPABILITIES[key];
+  const { switches } = inputs;
+  const switchReason: AiUnavailableReason | null =
+    !switches.enabled || !switches[def.operatorSwitch]
+      ? "operator_disabled"
+      : null;
+  const modules = modulesFinding(def, inputs.moduleAccess);
+  const reason = outermost([
+    switchReason,
+    inputs.providerWorkAdmitted ? null : "not_permitted_for_record",
+    modules.reason,
+    providerReason(def, inputs.provider),
+    consentReason(def, inputs.provider, inputs.activeConsentKinds),
+  ]);
+  // The switch outranks a module the operator also turned off: name the
+  // module only when the switch is not what closed it.
+  const aboutModule =
+    reason !== null && reason === modules.reason && switchReason === null;
+  return { reason, module: aboutModule ? modules.module : null };
+}
+
 /** Resolve one capability. `null` inputs mean the loader failed. */
 export function resolveAiCapability(
   key: AiCapabilityKey,
   inputs: AiCapabilityInputs | null,
 ): AiCapabilityState {
-  if (inputs === null) return stateFor("check_failed");
-  const def = AI_CAPABILITIES[key];
-  const { switches } = inputs;
-  return stateFor(
-    outermost([
-      !switches.enabled || !switches[def.operatorSwitch]
-        ? "operator_disabled"
-        : null,
-      inputs.providerWorkAdmitted ? null : "not_permitted_for_record",
-      modulesReason(def, inputs.moduleAccess),
-      providerReason(def, inputs.provider),
-      consentReason(def, inputs.provider, inputs.activeConsentKinds),
-    ]),
-  );
+  return stateFor(explainAiCapability(key, inputs).reason);
 }
 
 /** Resolve every capability. `null` inputs resolve all to `check_failed`. */
