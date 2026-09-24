@@ -81,7 +81,11 @@ vi.mock("@/lib/ai/provider-runner", async () => {
   };
 });
 
-vi.mock("@/lib/ai/provider", () => ({
+// The chain the turn runs through is stubbed; provider PRESENCE is the real
+// probe, which reads the credential the seeded user carries, because the
+// `coach` capability is resolved from it before the turn starts.
+vi.mock("@/lib/ai/provider", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/ai/provider")>()),
   resolveProviderChain: vi.fn(async () => [
     {
       providerType: "openai",
@@ -109,6 +113,10 @@ async function seedUserWithSession(): Promise<{ userId: string }> {
       username: "coach-user",
       email: "coach@example.test",
       role: "USER",
+      // The person's own OpenAI key (presence only): the `coach` capability
+      // needs a provider, and a personal key needs no consent receipt.
+      aiProvider: "OPENAI",
+      aiOpenaiKeyEncrypted: "v1:presence-only",
     },
   });
   const session = await prisma.session.create({
