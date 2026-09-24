@@ -232,6 +232,12 @@ export const ENCRYPTED_COLUMNS: readonly EncryptedColumn[] = [
   // ───── Insight narratives (Bytes column) ─────
   { model: "InsightNarrative", field: "encryptedContent", kind: "bytes" },
 
+  // ───── v1.39.0 status notes (Bytes columns) ─────
+  // Both nullable: a row can carry only a negative-cache window, and only the
+  // medication-compliance card stores per-item lines.
+  { model: "InsightStatusCache", field: "textEncrypted", kind: "bytes" },
+  { model: "InsightStatusCache", field: "itemsEncrypted", kind: "bytes" },
+
   // ───── v1.31.0 data-arrival spine (Bytes column) ─────
   // Nullable: the reaction marker is written on every salient arrival, but the
   // generated line only exists where a provider was reachable and in budget.
