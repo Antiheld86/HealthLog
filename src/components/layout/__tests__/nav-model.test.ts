@@ -90,7 +90,7 @@ describe("nav-model utility tail (N-1 — one shared list)", () => {
 
 describe("visibleNavDestinations module gate", () => {
   it("includes Cycle (between Mood and Medications) only when its module is enabled", () => {
-    // v1.18.0 — cycle is `requiresModule: "cycle"` and reads the delegated
+    // v1.18.0 — cycle is owned by `cycle` in the surface map and reads the delegated
     // `cycle` key from the same resolved module map every other gate uses.
     // v1.19.1 (S4) — cycle sits in the head block, after Mood and before the
     // fixed Medications → … → Achievements spine.
