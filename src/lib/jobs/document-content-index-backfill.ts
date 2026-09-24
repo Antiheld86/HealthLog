@@ -30,8 +30,10 @@
  * (`src/lib/jobs/reminder/register-maintenance.ts`) so pg-boss provisions it.
  */
 import { AI_BUDGETS } from "@/lib/ai/ai-budgets";
+import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
 import {
   assertDocumentEgressConsent,
+  isExternalDocumentEgress,
   ConsentRequiredError,
 } from "@/lib/ai/consent-guard";
 import {
@@ -96,7 +98,8 @@ export interface ContentIndexBackfillSummary {
    * reservation existed; a later run retries.
    */
   failed: number;
-  reason: "ok" | "no-provider" | "no-consent" | "budget-reached";
+  reason:
+    "ok" | "no-provider" | "no-consent" | "budget-reached" | "unavailable";
 }
 
 /**
@@ -173,11 +176,34 @@ export async function runContentIndexBackfillForUser(
       failed: stale.failed,
       reason: "no-provider",
     };
+  // An external pick is document AI and needs the `documentAi` capability
+  // (the operator's switches, the vault module, the extraction consent). A
+  // local pick keeps the document on the machine and indexes as before.
+  if (isExternalDocumentEgress(pick.providerType)) {
+    const capability = await aiCapabilityForJob(userId, "documentAi");
+    if (!capability.available) {
+      annotate({
+        action: { name: "documents.contentIndex.backfillSkipped" },
+        meta: { reason: capability.reason },
+      });
+      return {
+        indexed: 0,
+        retokenised: stale.retokenised,
+        skipped: 0,
+        failed: stale.failed,
+        reason:
+          capability.reason === "consent_required"
+            ? "no-consent"
+            : capability.reason === "no_provider"
+              ? "no-provider"
+              : "unavailable",
+      };
+    }
+  }
   try {
     await assertDocumentEgressConsent({
       userId,
       providerType: pick.providerType,
-      surface: "insights",
     });
   } catch (err) {
     if (err instanceof ConsentRequiredError) {

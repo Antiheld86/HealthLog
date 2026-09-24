@@ -54,6 +54,8 @@ import type { PrismaClient } from "@/generated/prisma/client";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getAssistantFlags } from "@/lib/feature-flags";
 import { annotate } from "@/lib/logging/context";
+import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
+import { userIdsWithModuleOff } from "@/lib/jobs/ai-job-candidates";
 import type { SupportedLocale } from "@/lib/insights/status-shared";
 import { resolveJobLocale } from "@/lib/i18n/job-locale";
 import {
@@ -504,10 +506,11 @@ interface PregenerateCandidate {
 }
 
 /**
- * Discovery query — coach-enabled users with a stale or missing
- * comprehensive-insight cache, oldest-cache-first so the staleest users
- * are served before the per-run cap bites. Exported so the cron test
- * can pin the WHERE shape without a live LLM.
+ * Discovery query — users with AI analysis on (the `insights` module) and a
+ * stale or missing comprehensive-insight cache, oldest-cache-first so the
+ * staleest users are served before the per-run cap bites. Hiding the Coach
+ * no longer excludes anyone: it hides the Coach and nothing else. Exported
+ * so the cron test can pin the WHERE shape without a live LLM.
  */
 export async function findPregenerateCandidates(
   prisma: PrismaClient,
@@ -515,9 +518,10 @@ export async function findPregenerateCandidates(
   cap: number,
 ): Promise<PregenerateCandidate[]> {
   const staleBefore = new Date(now.getTime() - PREGENERATE_STALE_MS);
+  const optedOut = await userIdsWithModuleOff(prisma, "insights");
   return prisma.user.findMany({
     where: {
-      disableCoach: false,
+      ...(optedOut.length > 0 ? { id: { notIn: optedOut } } : {}),
       OR: [
         { insightsCachedAt: null },
         { insightsCachedAt: { lt: staleBefore } },
@@ -620,6 +624,26 @@ export async function runInsightPregenerate(
     // sibling consumer in this candidate's warm reuses it. Scoped per user so
     // no cross-user object can leak.
     await withFeatureCacheScope(async () => {
+      // The two capabilities this pass serves, resolved before any snapshot
+      // or rate-limit write: the briefing for the comprehensive insight, the
+      // status notes for the per-metric warm. Each half runs only when its
+      // own capability is available; the chokepoints re-check at the wire.
+      const [briefing, statusText] = await Promise.all([
+        aiCapabilityForJob(candidate.id, "briefing"),
+        aiCapabilityForJob(candidate.id, "statusText"),
+      ]);
+      if (!briefing.available && !statusText.available) {
+        result.skipped++;
+        annotate({
+          action: { name: "insights.pregenerate.skipped" },
+          meta: {
+            briefing: briefing.reason,
+            status_text: statusText.reason,
+          },
+        });
+        return;
+      }
+
       // Budget gate — one COMPREHENSIVE pre-generation per user per 20 h.
       // The route's on-demand path uses a different bucket
       // (`insights:${userId}`), so this never starves a user's manual
@@ -628,18 +652,25 @@ export async function runInsightPregenerate(
       // the 02:xx status crons already skipped every pregenerate candidate
       // on the assumption that THIS pass warms their cards — exiting early
       // here left those cards cold until the first on-visit generation.
-      const budget = await checkRateLimit(
-        `insight-pregenerate:${candidate.id}`,
-        1,
-        PREGENERATE_BUDGET_WINDOW_MS,
-      );
+      const budget = briefing.available
+        ? await checkRateLimit(
+            `insight-pregenerate:${candidate.id}`,
+            1,
+            PREGENERATE_BUDGET_WINDOW_MS,
+          )
+        : null;
 
       // The stored locale, then the operator default: a NULL column used to
       // resolve to English here, so a German-language instance warmed its
       // briefings in English every night.
       const locale = await resolveJobLocale(candidate.locale);
-      let outcome: GenerateOutcome | null = null;
-      if (!budget.allowed) {
+      if (budget === null) {
+        result.skipped++;
+        annotate({
+          action: { name: "insights.pregenerate.skipped" },
+          meta: { briefing: briefing.reason },
+        });
+      } else if (!budget.allowed) {
         result.budgetBlocked++;
       } else {
         // Force a fresh generation: the discovery window (20 h) is shorter
@@ -709,7 +740,7 @@ export async function runInsightPregenerate(
           // before the morning visit instead of waiting for the next night.
           await enqueueRetry({ userId: candidate.id, locale });
         } else {
-          outcome = bounded.value;
+          const outcome = bounded.value;
           switch (outcome.status) {
             case "generated":
               result.generated++;
@@ -758,11 +789,12 @@ export async function runInsightPregenerate(
       // consent-skipped included) because the 02:xx status crons skip every
       // pregenerate candidate on the assumption that THIS pass covers them.
       //
-      // The only outcome with nothing to warm is a missing provider
-      // (`skipped`/`no-provider`): the per-card generators would no-op to
-      // their fallbacks anyway, so the pass is skipped to save the
-      // chain-resolves.
-      if (outcome?.status === "skipped" && outcome.reason === "no-provider") {
+      // Nothing to warm when the status notes themselves are unavailable.
+      if (!statusText.available) {
+        annotate({
+          action: { name: "insights.pregenerate.status_skipped" },
+          meta: { reason: statusText.reason },
+        });
         return;
       }
       result.assessmentsWarmed += await warmStatus(candidate.id, [locale]);
@@ -881,17 +913,22 @@ export async function forceWarmUser(
       metricAssessmentsWarmed: 0,
     };
 
-    // v1.9.0 — gate each section on the flag for the surface it actually
-    // warms, matching the route. The HTTP route admits this job on the per-user
-    // `insightStatus` surface, so warming the per-status + generic-metric cards
-    // must run whenever `insightStatus` is enabled. Only the comprehensive
-    // briefing belongs to the `briefing` surface — gating the whole warm on
-    // `briefing` (the previous behaviour) let an operator's global `briefing`
-    // kill-switch silently suppress the assessment cards the user has enabled.
-    // When the master assistant switch is off both flags resolve false, so the
-    // whole thing still no-ops.
-    const flags = await getAssistantFlags();
-    if (!flags.briefing && !flags.insightStatus) return result;
+    // Each section runs on its own capability, resolved for this user under
+    // the job's authority: the comprehensive briefing on `briefing`, the
+    // per-status and generic-metric notes on `statusText`. One unavailable
+    // half never suppresses the other; both unavailable makes the job a
+    // no-op before any snapshot is built.
+    const [briefing, statusText] = await Promise.all([
+      aiCapabilityForJob(userId, "briefing"),
+      aiCapabilityForJob(userId, "statusText"),
+    ]);
+    if (!briefing.available && !statusText.available) {
+      annotate({
+        action: { name: "insights.pregenerate.force.skipped" },
+        meta: { briefing: briefing.reason, status_text: statusText.reason },
+      });
+      return result;
+    }
 
     // v1.16.8 — warm only the caller's resolved locale. The old dual-locale
     // warm compensated for the comprehensive write's cross-locale per-status
@@ -926,7 +963,7 @@ export async function forceWarmUser(
     //   3. daily cap — at most FORCE_WARM_DAILY_LIMIT forced attempts per
     //      rolling 24 h, so even a client bug that defeats 1+2 cannot turn
     //      the forced path into an unmetered generation loop.
-    if (flags.briefing) {
+    if (briefing.available) {
       let freshness: {
         insightsCachedAt: Date | null;
         insightsWarmFailedAt: Date | null;
@@ -1066,15 +1103,15 @@ export async function forceWarmUser(
       }
     }
 
-    // Run the per-status + generic-metric warm passes whenever the
-    // `insightStatus` surface is enabled, regardless of the comprehensive
+    // Run the per-status + generic-metric warm passes whenever `statusText`
+    // is available, regardless of the comprehensive
     // outcome. Each generator independently no-ops to its no-key fallback when
     // no provider is configured (no LLM call) and serves its fallback without
     // persisting on a per-card timeout, so running them after a failed
     // comprehensive is safe and bounded by their own per-card budgets. The only
     // outcome that has nothing to warm is a missing provider, and the
     // generators detect that themselves at near-zero cost.
-    if (flags.insightStatus) {
+    if (statusText.available) {
       // Refill-only (v1.16.8): a card already generated today is a cheap
       // cache read; a cold card runs its generator, whose content-hash gate
       // skips the LLM when the underlying data did not change. There is no

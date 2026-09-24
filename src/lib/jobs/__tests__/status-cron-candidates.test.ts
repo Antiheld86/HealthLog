@@ -3,10 +3,12 @@
  *
  * Pins the three gates the discovery applies:
  *   1. the operator assistant kill-switch (`insightStatus` flag),
- *   2. the per-user `disableCoach: false` filter,
- *   3. the pregenerate-candidate skip (configured provider + stale
- *      comprehensive cache → the 04:30 pass owns the user; the 02:xx
- *      crons keep fresh-cache and provider-less accounts),
+ *   2. the per-user AI-analysis opt-out (the `insights` module switched off
+ *      drops the account from the candidate query; `disableCoach` plays no
+ *      part any more),
+ *   3. the pregenerate-candidate skip (a stale or missing comprehensive
+ *      cache → the 04:30 pass owns the user; the 02:xx crons keep the
+ *      fresh-cache accounts), applied only while `briefing` is on,
  * plus the mood-status queue registration in the worker source (the
  * v1.4.37 dead-queue class guard).
  */
@@ -30,15 +32,6 @@ interface FakeUserRow {
   id: string;
   locale: string | null;
   insightsCachedAt: Date | null;
-  aiProvider: string | null;
-  aiProviderChain: unknown;
-  aiAnthropicKeyEncrypted: string | null;
-  aiLocalKeyEncrypted: string | null;
-  aiOpenaiKeyEncrypted: string | null;
-  aiBaseUrl: string | null;
-  codexConnectionStatus: string | null;
-  codexAccessTokenEncrypted: string | null;
-  codexRefreshTokenEncrypted: string | null;
 }
 
 function userRow(overrides: Partial<FakeUserRow> = {}): FakeUserRow {
@@ -46,32 +39,23 @@ function userRow(overrides: Partial<FakeUserRow> = {}): FakeUserRow {
     id: "u1",
     locale: "de",
     insightsCachedAt: null,
-    aiProvider: null,
-    aiProviderChain: null,
-    aiAnthropicKeyEncrypted: null,
-    aiLocalKeyEncrypted: null,
-    aiOpenaiKeyEncrypted: null,
-    aiBaseUrl: null,
-    codexConnectionStatus: null,
-    codexAccessTokenEncrypted: null,
-    codexRefreshTokenEncrypted: null,
     ...overrides,
   };
 }
 
-function makePrisma(
-  users: FakeUserRow[],
-  adminAiKeyEncrypted: string | null = null,
-) {
+function makePrisma(users: FakeUserRow[], optedOut: string[] = []) {
   const findMany = vi.fn().mockResolvedValue(users);
-  const findUnique = vi.fn().mockResolvedValue({ adminAiKeyEncrypted });
+  const queryRaw = vi.fn().mockResolvedValue(optedOut.map((id) => ({ id })));
+  const findUnique = vi.fn();
   return {
     prisma: {
       user: { findMany },
       appSettings: { findUnique },
+      $queryRaw: queryRaw,
     },
     findMany,
     findUnique,
+    queryRaw,
   };
 }
 
@@ -93,63 +77,80 @@ describe("findStatusCronCandidates — gates", () => {
       briefing: false,
       insightStatus: false,
     });
-    const { prisma, findMany } = makePrisma([userRow()]);
+    const { prisma, findMany, queryRaw } = makePrisma([userRow()]);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await findStatusCronCandidates(prisma as any, NOW);
     expect(result).toEqual([]);
     expect(findMany).not.toHaveBeenCalled();
+    expect(queryRaw).not.toHaveBeenCalled();
   });
 
-  it("filters discovery to disableCoach: false", async () => {
+  it("does not filter on disableCoach: hiding the Coach is not an AI opt-out", async () => {
     const { prisma, findMany } = makePrisma([userRow()]);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await findStatusCronCandidates(prisma as any, NOW);
-    expect(findMany.mock.calls[0][0].where).toEqual({ disableCoach: false });
+    expect(findMany.mock.calls[0][0].where).toEqual({});
+    expect(JSON.stringify(findMany.mock.calls[0][0])).not.toContain(
+      "disableCoach",
+    );
   });
 
-  it("skips a pregenerate candidate (configured provider + stale cache)", async () => {
-    const { prisma } = makePrisma([
-      userRow({
-        id: "stale-with-provider",
-        insightsCachedAt: STALE_AT,
-        aiAnthropicKeyEncrypted: "enc",
-      }),
-    ]);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await findStatusCronCandidates(prisma as any, NOW);
-    expect(result).toEqual([]);
-  });
-
-  it("keeps a provider user whose comprehensive cache is still fresh", async () => {
-    const { prisma } = makePrisma([
-      userRow({
-        id: "fresh-with-provider",
-        insightsCachedAt: FRESH_AT,
-        aiAnthropicKeyEncrypted: "enc",
-      }),
-    ]);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await findStatusCronCandidates(prisma as any, NOW);
-    expect(result).toEqual([{ id: "fresh-with-provider", locale: "de" }]);
-  });
-
-  it("keeps a provider-less user even with a stale cache (no pregenerate claim)", async () => {
-    const { prisma } = makePrisma([
-      userRow({ id: "no-provider", insightsCachedAt: STALE_AT }),
-    ]);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await findStatusCronCandidates(prisma as any, NOW);
-    expect(result).toEqual([{ id: "no-provider", locale: "de" }]);
-  });
-
-  it("counts the operator's shared admin key as a configured provider", async () => {
-    const { prisma } = makePrisma(
-      [userRow({ id: "admin-covered", insightsCachedAt: STALE_AT })],
-      "admin-enc",
+  it("drops the accounts that switched the insights module off", async () => {
+    const { prisma, findMany, queryRaw } = makePrisma(
+      [userRow({ id: "kept", insightsCachedAt: FRESH_AT })],
+      ["opted-out-a", "opted-out-b"],
     );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await findStatusCronCandidates(prisma as any, NOW);
+    expect(queryRaw).toHaveBeenCalledTimes(1);
+    // The module key rides as a bound parameter, never spliced.
+    expect(queryRaw.mock.calls[0].slice(1)).toContain("insights");
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      id: { notIn: ["opted-out-a", "opted-out-b"] },
+    });
+    expect(result).toEqual([{ id: "kept", locale: "de" }]);
+  });
+
+  it("skips a pregenerate candidate (stale cache)", async () => {
+    const { prisma } = makePrisma([
+      userRow({ id: "stale", insightsCachedAt: STALE_AT }),
+    ]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await findStatusCronCandidates(prisma as any, NOW);
     expect(result).toEqual([]);
+  });
+
+  it("skips a never-warmed user (null cache belongs to pregenerate)", async () => {
+    const { prisma } = makePrisma([
+      userRow({ id: "never", insightsCachedAt: null }),
+    ]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await findStatusCronCandidates(prisma as any, NOW);
+    expect(result).toEqual([]);
+  });
+
+  it("keeps a user whose comprehensive cache is still fresh", async () => {
+    const { prisma } = makePrisma([
+      userRow({ id: "fresh", insightsCachedAt: FRESH_AT }),
+      userRow({ id: "stale", insightsCachedAt: STALE_AT }),
+    ]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await findStatusCronCandidates(prisma as any, NOW);
+    expect(result).toEqual([{ id: "fresh", locale: "de" }]);
+  });
+
+  it("reads no provider credentials and no operator admin key", async () => {
+    const { prisma, findMany, findUnique } = makePrisma([
+      userRow({ id: "fresh", insightsCachedAt: FRESH_AT }),
+    ]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await findStatusCronCandidates(prisma as any, NOW);
+    expect(findMany.mock.calls[0][0].select).toEqual({
+      id: true,
+      locale: true,
+      insightsCachedAt: true,
+    });
+    expect(findUnique).not.toHaveBeenCalled();
   });
 
   it("keeps every user when the briefing surface is off (the 04:30 pass no-ops)", async () => {
@@ -159,18 +160,16 @@ describe("findStatusCronCandidates — gates", () => {
       briefing: false,
       insightStatus: true,
     });
-    const { prisma, findUnique } = makePrisma([
-      userRow({
-        id: "stale-with-provider",
-        insightsCachedAt: STALE_AT,
-        aiAnthropicKeyEncrypted: "enc",
-      }),
+    const { prisma } = makePrisma([
+      userRow({ id: "stale", insightsCachedAt: STALE_AT }),
+      userRow({ id: "never", insightsCachedAt: null }),
     ]);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await findStatusCronCandidates(prisma as any, NOW);
-    expect(result).toEqual([{ id: "stale-with-provider", locale: "de" }]);
-    // No admin-key read needed when the skip never applies.
-    expect(findUnique).not.toHaveBeenCalled();
+    expect(result).toEqual([
+      { id: "stale", locale: "de" },
+      { id: "never", locale: "de" },
+    ]);
   });
 });
 

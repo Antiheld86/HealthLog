@@ -230,7 +230,6 @@ async function handleTextExtract(
   await assertDocumentEgressConsent({
     userId,
     providerType: pick.providerType,
-    surface: "insights",
   });
 
   const rl = await checkDocumentAiRateLimit(userId);
@@ -347,7 +346,6 @@ async function handleStoredExtract(
   await assertDocumentEgressConsent({
     userId,
     providerType: pick.providerType,
-    surface: "insights",
   });
 
   const rl = await checkDocumentAiRateLimit(userId);
@@ -433,7 +431,6 @@ async function handleVisionExtract(
   await assertDocumentEgressConsent({
     userId,
     providerType: pick.providerType,
-    surface: "insights",
   });
 
   const rl = await checkDocumentAiRateLimit(userId);

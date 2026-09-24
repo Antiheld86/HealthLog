@@ -33,6 +33,7 @@
  * (`src/lib/jobs/reminder/register-maintenance.ts`) so pg-boss provisions it.
  */
 import { documentAutoReadEnabled } from "@/lib/documents/document-settings";
+import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
 import { prisma } from "@/lib/db";
 import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { enqueueDocumentSummary } from "@/lib/jobs/document-summary";
@@ -88,6 +89,18 @@ export async function runSummaryCatchUpForUser(
     annotate({
       action: { name: "documents.autoRead.catchUpSkipped" },
       meta: { reason: "opt-out" },
+    });
+    return { enqueued: 0, capped: false };
+  }
+
+  // The `documentAi` capability, once for the whole pass, before any document
+  // is listed: a switch off, no provider or no extraction consent means there
+  // is nothing the per-document jobs could do.
+  const capability = await aiCapabilityForJob(userId, "documentAi");
+  if (!capability.available) {
+    annotate({
+      action: { name: "documents.autoRead.catchUpSkipped" },
+      meta: { reason: capability.reason },
     });
     return { enqueued: 0, capped: false };
   }

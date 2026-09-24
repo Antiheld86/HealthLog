@@ -42,6 +42,14 @@ vi.mock("@/lib/ai/coach/budget", () => budgetMocks);
 
 vi.mock("@/lib/logging/context", () => ({ annotate: vi.fn() }));
 
+// The composer resolves the `coach` capability before the chain. Available
+// by default so the consent logic below is what each case exercises.
+const aiCapabilityForJob = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForJob,
+  aiCapabilityForRecord: vi.fn(),
+}));
+
 import {
   composeNudgeWithAI,
   createNudgeAiTickBudget,
@@ -78,6 +86,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   provider = makeProvider();
   latestActiveReceipt.mockResolvedValue(null);
+  aiCapabilityForJob.mockResolvedValue({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  });
   budgetMocks.reserveBudget.mockResolvedValue({
     allowed: true,
     reserved: 160,
@@ -168,5 +181,26 @@ describe("composeNudgeWithAI — server-managed consent gate", () => {
 
     expect(await composeNudgeWithAI(params())).toBeNull();
     expect(provider.generateCompletion).not.toHaveBeenCalled();
+  });
+
+  it("returns the template before resolving any chain when the coach capability is unavailable", async () => {
+    aiCapabilityForJob.mockResolvedValue({
+      available: false,
+      reason: "user_disabled",
+      onDeviceAllowed: false,
+    });
+    resolveProviderChain.mockResolvedValue([
+      { providerType: "openai", instance: provider },
+    ]);
+    const p = params();
+
+    expect(await composeNudgeWithAI(p)).toBeNull();
+    expect(aiCapabilityForJob).toHaveBeenCalledWith("user-1", "coach");
+    expect(resolveProviderChain).not.toHaveBeenCalled();
+    expect(budgetMocks.reserveBudget).not.toHaveBeenCalled();
+    expect(provider.generateCompletion).not.toHaveBeenCalled();
+    expect(p.tickBudget.remainingCount).toBe(
+      createNudgeAiTickBudget().remainingCount,
+    );
   });
 });

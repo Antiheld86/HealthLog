@@ -23,6 +23,10 @@ vi.mock("@/lib/documents/document-settings", () => ({
 vi.mock("@/lib/jobs/document-summary", () => ({
   enqueueDocumentSummary: vi.fn(),
 }));
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForJob: vi.fn(),
+  aiCapabilityForRecord: vi.fn(),
+}));
 
 import {
   enqueueSummaryCatchUp,
@@ -35,10 +39,12 @@ import { getGlobalBoss } from "@/lib/jobs/boss-instance";
 import { documentAutoReadEnabled } from "@/lib/documents/document-settings";
 import { enqueueDocumentSummary } from "@/lib/jobs/document-summary";
 import { annotate } from "@/lib/logging/context";
+import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
 
 const findMany = vi.mocked(prisma.inboundDocument.findMany);
 const mockEnqueueSummary = vi.mocked(enqueueDocumentSummary);
 const mockAutoRead = vi.mocked(documentAutoReadEnabled);
+const mockCapability = vi.mocked(aiCapabilityForJob);
 
 /** Serve `total` document ids across the job's id-cursor paged walk. */
 function serveDocuments(total: number) {
@@ -59,6 +65,11 @@ function serveDocuments(total: number) {
 beforeEach(() => {
   vi.clearAllMocks();
   mockAutoRead.mockResolvedValue(true);
+  mockCapability.mockResolvedValue({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  });
   mockEnqueueSummary.mockResolvedValue({ enqueued: true });
 });
 
@@ -110,6 +121,30 @@ describe("runSummaryCatchUpForUser", () => {
     expect(mockEnqueueSummary).not.toHaveBeenCalled();
     expect(findMany).not.toHaveBeenCalled();
   });
+
+  it.each(["operator_disabled", "no_provider", "consent_required"] as const)(
+    "does nothing when the documentAi capability is unavailable (%s)",
+    async (reason) => {
+      serveDocuments(5);
+      mockCapability.mockResolvedValue({
+        available: false,
+        reason,
+        onDeviceAllowed: false,
+      });
+
+      const result = await runSummaryCatchUpForUser("user-1");
+
+      expect(mockCapability).toHaveBeenCalledWith("user-1", "documentAi");
+      expect(result).toEqual({ enqueued: 0, capped: false });
+      // Refused before a single document is listed.
+      expect(findMany).not.toHaveBeenCalled();
+      expect(mockEnqueueSummary).not.toHaveBeenCalled();
+      expect(annotate).toHaveBeenCalledWith({
+        action: { name: "documents.autoRead.catchUpSkipped" },
+        meta: { reason },
+      });
+    },
+  );
 
   it("routes work through the ordinary summary job, granting nothing itself", async () => {
     // The per-document job is what re-asserts egress consent and reserves the

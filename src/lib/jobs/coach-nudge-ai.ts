@@ -35,6 +35,7 @@
 import type { CoachNudgeTrigger } from "@/lib/jobs/coach-nudge";
 import type { Locale } from "@/lib/i18n/config";
 import { resolveProviderChain } from "@/lib/ai/provider";
+import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
 import {
   chainRequiresServerManagedConsent,
   hasActiveConsentForSurface,
@@ -173,6 +174,18 @@ export const composeNudgeWithAI: ComposeNudgeWithAI = async (params) => {
   }
 
   try {
+    // The capability at the wire, before the chain is resolved (a Codex
+    // chain may refresh a token on resolve). The cron checked it for the
+    // candidate already; a switch can flip within the tick.
+    const coach = await aiCapabilityForJob(params.userId, "coach");
+    if (!coach.available) {
+      annotate({
+        action: { name: "coach.nudge.ai.unavailable" },
+        meta: { reason: coach.reason },
+      });
+      return null;
+    }
+
     const chain = await resolveProviderChain(params.userId);
     if (chain.length === 0) return null;
 

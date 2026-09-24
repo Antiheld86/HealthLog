@@ -294,7 +294,6 @@ export async function streamFencedReply(
     await assertDocumentEgressConsent({
       userId,
       providerType: pick.providerType,
-      surface: "insights",
     });
   }
 

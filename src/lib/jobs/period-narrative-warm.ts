@@ -26,6 +26,8 @@ import {
   mayDispatchProviderWork,
   withProviderWorkAuthority,
 } from "@/lib/sharing/provider-work-authority";
+import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
+import { userIdsWithModuleOff } from "@/lib/jobs/ai-job-candidates";
 import { annotate } from "@/lib/logging/context";
 import {
   generatePeriodNarrative,
@@ -96,7 +98,8 @@ interface NarrativeCandidate {
 }
 
 /**
- * Discovery query — coach-enabled users, oldest-narrative-first so the
+ * Discovery query — users with AI analysis on (the `insights` module),
+ * oldest-narrative-first so the
  * staleest users are served before the per-run cap bites. Whether a user has
  * a provider / enough history is confirmed inside the generator (skipped /
  * insufficient), so a provider-less or sparse account costs at most one cheap
@@ -113,8 +116,9 @@ export async function findNarrativeCandidates(
   prisma: PrismaClient,
   cap: number,
 ): Promise<NarrativeCandidate[]> {
+  const optedOut = await userIdsWithModuleOff(prisma, "insights");
   const users: NarrativeCandidate[] = await prisma.user.findMany({
-    where: { disableCoach: false },
+    where: optedOut.length > 0 ? { id: { notIn: optedOut } } : {},
     select: { id: true, locale: true },
   });
   if (users.length <= cap) return users;
@@ -175,6 +179,23 @@ export async function runPeriodNarrativeWarm(
   result.total = candidates.length;
 
   for (const candidate of candidates) {
+    // The nightly pass exists for the model-written narrative. Unavailable,
+    // it skips the user before the context build and the budget write; the
+    // deterministic narrative is written on the next read instead (the
+    // single-user warm below runs whatever the capability says).
+    const capability = await aiCapabilityForJob(
+      candidate.id,
+      "periodNarrative",
+    );
+    if (!capability.available) {
+      result.skipped++;
+      annotate({
+        action: { name: "insights.narrative.warm.skipped" },
+        meta: { reason: capability.reason },
+      });
+      continue;
+    }
+
     const budget = await checkRateLimit(
       `period-narrative:${candidate.id}`,
       1,
@@ -254,8 +275,10 @@ export async function warmOneNarrative(
   if (!payload.userId || !payload.period) return null;
   const authority = payload.authority;
   if (!authority || !(await mayDispatchProviderWork(authority))) return null;
-  const flags = await getAssistantFlags();
-  if (!flags.briefing && !flags.insightStatus) return null;
+  // No switch check here: this warm also writes the deterministic narrative,
+  // which is data. The model half is refused by the provider chokepoint when
+  // `periodNarrative` is unavailable, and the generator then writes the
+  // deterministic text instead.
   return withProviderWorkAuthority(authority, () =>
     generate(payload.userId!, {
       period: payload.period!,

@@ -63,9 +63,10 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-const isModuleEnabled = vi.fn();
-vi.mock("@/lib/modules/gate", () => ({
-  isModuleEnabled: (...a: unknown[]) => isModuleEnabled(...a),
+const aiCapabilityForJob = vi.fn();
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForJob: (...a: unknown[]) => aiCapabilityForJob(...a),
+  aiCapabilityForRecord: vi.fn(),
 }));
 const resolveProviderChain = vi.fn();
 vi.mock("@/lib/ai/provider", () => ({
@@ -196,7 +197,11 @@ beforeEach(async () => {
   labResultFindMany.mockResolvedValue([]);
   queryRaw.mockResolvedValue([{ total_tokens: 1_400, operator_tokens: 1_400 }]);
   executeRaw.mockResolvedValue(1);
-  isModuleEnabled.mockResolvedValue(true);
+  aiCapabilityForJob.mockResolvedValue({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  });
   chainRequiresServerManagedConsent.mockReturnValue(false);
   hasActiveConsentForSurface.mockResolvedValue(true);
   // v1.38.19 — the claim reservation is no longer a
@@ -219,18 +224,32 @@ beforeEach(async () => {
 });
 
 describe("reaction line — degradation", () => {
-  it("insights opt-out refuses before provider resolution or spend", async () => {
-    isModuleEnabled.mockResolvedValue(false);
+  it.each([
+    "user_disabled",
+    "module_disabled",
+    "operator_disabled",
+    "no_provider",
+    "consent_required",
+  ] as const)(
+    "an unavailable reactionLines capability (%s) refuses before the digest, provider resolution or spend",
+    async (reason) => {
+      aiCapabilityForJob.mockResolvedValue({
+        available: false,
+        reason,
+        onDeviceAllowed: false,
+      });
 
-    const outcome = await runReactionLine(JOB);
+      const outcome = await runReactionLine(JOB);
 
-    expect(outcome).toEqual({
-      status: "skipped",
-      reason: "module_disabled",
-    });
-    expect(resolveProviderChain).not.toHaveBeenCalled();
-    expect(reserveBudget).not.toHaveBeenCalled();
-  });
+      expect(aiCapabilityForJob).toHaveBeenCalledWith("u1", "reactionLines");
+      expect(outcome).toEqual({ status: "skipped", reason });
+      expect(userFindUnique).not.toHaveBeenCalled();
+      expect(loadDailyDigest).not.toHaveBeenCalled();
+      expect(resolveProviderChain).not.toHaveBeenCalled();
+      expect(reserveBudget).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
+    },
+  );
 
   it("grounds the prompt in the exact reading that triggered the arrival", async () => {
     measurementFindMany.mockResolvedValue([

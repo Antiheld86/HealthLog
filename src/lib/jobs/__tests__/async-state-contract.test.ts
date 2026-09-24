@@ -79,6 +79,10 @@ vi.mock("@/lib/ai/coach/budget", () => ({
   resolveDailyCapFor: vi.fn(() => 1000),
   resolveCostOwner: vi.fn(() => "operator" as const),
 }));
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForJob: vi.fn(),
+  aiCapabilityForRecord: vi.fn(),
+}));
 vi.mock("@/lib/ai/ai-budgets", () => ({
   AI_BUDGETS: {
     documentSummary: { temperature: 0.3, maxTokens: 600 },
@@ -109,6 +113,10 @@ import {
   ConsentRequiredError,
 } from "@/lib/ai/consent-guard";
 import { reserveBudget } from "@/lib/ai/coach/budget";
+import {
+  aiCapabilityForJob,
+  aiCapabilityForRecord,
+} from "@/lib/ai/capabilities/gate";
 
 const DOC = {
   id: "doc-1",
@@ -163,6 +171,13 @@ beforeEach(() => {
     locale: "en",
   } as never);
   vi.mocked(documentAutoReadEnabled).mockResolvedValue(true);
+  for (const resolve of [aiCapabilityForJob, aiCapabilityForRecord]) {
+    vi.mocked(resolve).mockResolvedValue({
+      available: true,
+      reason: null,
+      onDeviceAllowed: true,
+    });
+  }
   vi.mocked(resolveDocumentVisionProvider).mockResolvedValue(PICK as never);
   vi.mocked(assertDocumentEgressConsent).mockResolvedValue(undefined);
   vi.mocked(loadOwnedDocument).mockResolvedValue(DOC as never);
@@ -201,6 +216,39 @@ describe("contract (a): every runDocumentSummaryJob branch writes a terminal sta
       name: "opt-out heals PENDING to NONE",
       setup: () => {
         vi.mocked(documentAutoReadEnabled).mockResolvedValue(false);
+      },
+      state: "NONE",
+    },
+    {
+      name: "documentAi unavailable for want of a provider",
+      setup: () => {
+        vi.mocked(aiCapabilityForJob).mockResolvedValue({
+          available: false,
+          reason: "no_provider",
+          onDeviceAllowed: true,
+        });
+      },
+      state: "UNAVAILABLE",
+    },
+    {
+      name: "documentAi unavailable for want of a consent receipt",
+      setup: () => {
+        vi.mocked(aiCapabilityForJob).mockResolvedValue({
+          available: false,
+          reason: "consent_required",
+          onDeviceAllowed: true,
+        });
+      },
+      state: "UNAVAILABLE",
+    },
+    {
+      name: "documentAi switched off by the operator",
+      setup: () => {
+        vi.mocked(aiCapabilityForJob).mockResolvedValue({
+          available: false,
+          reason: "operator_disabled",
+          onDeviceAllowed: false,
+        });
       },
       state: "NONE",
     },
@@ -395,6 +443,21 @@ describe("contract (a): every runDocumentIndex branch records the attempt", () =
 describe("contract (b): enqueue never claims a pending state its job cannot resolve", () => {
   it("enqueueDocumentSummary with the opt-in OFF claims nothing and mints no job", async () => {
     vi.mocked(documentAutoReadEnabled).mockResolvedValue(false);
+    const send = vi.fn().mockResolvedValue("job-1");
+    vi.mocked(getGlobalBoss).mockReturnValue({ send } as never);
+
+    const result = await enqueueDocumentSummary("user-1", "doc-1");
+    expect(result).toEqual({ enqueued: false });
+    expect(send).not.toHaveBeenCalled();
+    expect(summaryStateWrites()).toEqual([]);
+  });
+
+  it("enqueueDocumentSummary with documentAi unavailable claims nothing and mints no job", async () => {
+    vi.mocked(aiCapabilityForRecord).mockResolvedValue({
+      available: false,
+      reason: "consent_required",
+      onDeviceAllowed: true,
+    });
     const send = vi.fn().mockResolvedValue("job-1");
     vi.mocked(getGlobalBoss).mockReturnValue({ send } as never);
 

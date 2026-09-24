@@ -23,6 +23,10 @@
  */
 import { AI_BUDGETS } from "@/lib/ai/ai-budgets";
 import {
+  aiCapabilityForJob,
+  aiCapabilityForRecord,
+} from "@/lib/ai/capabilities/gate";
+import {
   assertDocumentEgressConsent,
   ConsentRequiredError,
 } from "@/lib/ai/consent-guard";
@@ -135,6 +139,39 @@ export async function runDocumentSummaryJob(
     return;
   }
 
+  // The `documentAi` capability before a provider is picked or the document is
+  // decrypted: the operator's switches (the master and "Reading documents"),
+  // the vault module, provider presence and the extraction consent. The
+  // auto-read toggle above is the trigger, not the consent.
+  const capability = await aiCapabilityForJob(userId, "documentAi");
+  if (!capability.available) {
+    if (
+      capability.reason === "no_provider" ||
+      capability.reason === "consent_required"
+    ) {
+      // An attempt that could not run, recorded as such.
+      await markSummaryState(userId, documentId, "UNAVAILABLE");
+    } else {
+      // A switch turned off means this job was never to run at all. Only the
+      // PENDING this job was meant to resolve goes back to NONE; a recorded
+      // UNAVAILABLE or WITHHELD is an earlier real attempt and stays.
+      await prisma.inboundDocument.updateMany({
+        where: {
+          id: documentId,
+          userId,
+          deletedAt: null,
+          summaryState: "PENDING",
+        },
+        data: { summaryState: "NONE" },
+      });
+    }
+    annotate({
+      action: { name: "documents.summary.autoSkipped" },
+      meta: { documentId, reason: capability.reason },
+    });
+    return;
+  }
+
   // Resolve the DOCUMENT-order vision provider (local-first, codex last). No
   // vision-capable provider configured → graceful no-op (unlike the index job,
   // there is no local text-layer fallback for a descriptive summary).
@@ -149,14 +186,13 @@ export async function runDocumentSummaryJob(
   }
 
   // Re-assert egress consent for the picked provider. A local pick is ungated;
-  // an external pick is authorised by the `documentsAutoAiRead` opt-in checked
-  // above (the toggle short-circuits the gate). Belt-and-braces: a consent race
-  // (opt-out flipped mid-flight) resolves to a no-op, never an egress.
+  // an external pick needs an active extraction receipt (`ai_extraction` or
+  // `ai_full`); the auto-read toggle mints one but is not one. A consent race
+  // (a revoke mid-flight) resolves to a no-op, never an egress.
   try {
     await assertDocumentEgressConsent({
       userId,
       providerType: pick.providerType,
-      surface: "insights",
     });
   } catch (err) {
     await markSummaryState(userId, documentId, "UNAVAILABLE");
@@ -316,6 +352,17 @@ export async function enqueueDocumentSummary(
       annotate({
         action: { name: "documents.summary.autoSkipped" },
         meta: { documentId, reason: "opt-out" },
+      });
+      return { enqueued: false };
+    }
+    // Nothing is queued that the capability already refuses (a switch off,
+    // no provider, no extraction consent): the document stays NONE and the
+    // view offers the manual action, exactly as with the opt-in off.
+    const capability = await aiCapabilityForRecord(userId, "documentAi");
+    if (!capability.available) {
+      annotate({
+        action: { name: "documents.summary.autoSkipped" },
+        meta: { documentId, reason: capability.reason },
       });
       return { enqueued: false };
     }

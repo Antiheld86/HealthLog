@@ -32,7 +32,8 @@
  *
  * Mutation checks: adding `await requireAssistantSurface("coach")` to any
  * route outside the frozen list turns guard 3 red by file name; removing the
- * `documentAi` entry from `AWAITING_READER` turns guard 2 red; putting
+ * `aiCapabilityForJob(userId, "documentAi")` calls from the document jobs
+ * turns guard 2 red for `documentAi`; putting
  * `assistantCorrelationsEnabled` back on the schema turns guard 1 red.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -99,13 +100,10 @@ const PLUMBING = [
  * Switches with no reader yet, and why that is correct for now. An entry is
  * a claim with an expiry: the test below fails as soon as a reader appears.
  */
-const AWAITING_READER: Record<string, string> = {
-  documentAi:
-    "The capabilities it covers (documentAi, labsOcr, medicationExtract) are " +
-    "resolved and published, but the document, lab-scan and medication " +
-    "extraction routes move onto requireAiCapability in the same release; " +
-    "until then the master switch is what stops them.",
-};
+// Empty since the document jobs resolve `documentAi` (the summary job, its
+// catch-up pass and the index backfill). A new switch that ships before its
+// reader is listed here with the reason.
+const AWAITING_READER: Record<string, string> = {};
 
 /**
  * Every file that still calls the retired gate. Only ever shrinks.

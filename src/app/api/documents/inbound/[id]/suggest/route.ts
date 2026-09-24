@@ -135,7 +135,6 @@ async function handleTextSuggest(
   await assertDocumentEgressConsent({
     userId,
     providerType: pick.providerType,
-    surface: "insights",
   });
 
   const rl = await checkDocumentAiRateLimit(userId);
@@ -228,7 +227,6 @@ async function handleVisionSuggest(
   await assertDocumentEgressConsent({
     userId,
     providerType: pick.providerType,
-    surface: "insights",
   });
 
   const rl = await checkDocumentAiRateLimit(userId);

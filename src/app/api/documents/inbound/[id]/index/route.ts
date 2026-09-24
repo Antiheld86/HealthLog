@@ -192,7 +192,6 @@ async function handleVisionIndex(
   await assertDocumentEgressConsent({
     userId,
     providerType: pick.providerType,
-    surface: "insights",
   });
 
   const rl = await checkDocumentAiRateLimit(userId);

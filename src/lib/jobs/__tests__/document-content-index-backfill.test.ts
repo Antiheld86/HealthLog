@@ -42,7 +42,16 @@ vi.mock("@/lib/documents/provider-order", () => ({
 }));
 vi.mock("@/lib/ai/consent-guard", () => ({
   assertDocumentEgressConsent: vi.fn().mockResolvedValue(undefined),
+  // Mirrors the real rule: only the self-hosted `local` provider stays on the
+  // machine.
+  isExternalDocumentEgress: vi.fn(
+    (providerType: string) => providerType !== "local",
+  ),
   ConsentRequiredError: class ConsentRequiredError extends Error {},
+}));
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForJob: vi.fn(),
+  aiCapabilityForRecord: vi.fn(),
 }));
 vi.mock("@/lib/ai/coach/budget", () => ({
   buildDateKey: vi.fn(() => "2026-07-07"),
@@ -65,6 +74,7 @@ import {
   ConsentRequiredError,
 } from "@/lib/ai/consent-guard";
 import { reserveBudget } from "@/lib/ai/coach/budget";
+import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
 import {
   decryptIndexText,
   upsertContentIndex,
@@ -90,6 +100,11 @@ const doc = (id: string) => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(aiCapabilityForJob).mockResolvedValue({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  });
   vi.mocked(reserveBudget).mockResolvedValue({
     allowed: true,
     reserved: 1,
@@ -163,6 +178,67 @@ describe("runContentIndexBackfillForUser", () => {
       reason: "no-consent",
     });
     expect(upsertContentIndex).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["consent_required", "no-consent"],
+    ["operator_disabled", "unavailable"],
+    ["module_disabled", "unavailable"],
+    ["no_provider", "no-provider"],
+  ] as const)(
+    "refuses an external pick before any document is read when documentAi is unavailable (%s → %s)",
+    async (reason, summaryReason) => {
+      vi.mocked(resolveDocumentVisionProvider).mockResolvedValue(PICK as never);
+      vi.mocked(aiCapabilityForJob).mockResolvedValue({
+        available: false,
+        reason,
+        onDeviceAllowed: false,
+      });
+      vi.mocked(prisma.inboundDocument.findMany).mockResolvedValue([
+        { id: "d1" },
+      ] as never);
+
+      const result = await runContentIndexBackfillForUser("user-1");
+
+      expect(aiCapabilityForJob).toHaveBeenCalledWith("user-1", "documentAi");
+      expect(result).toEqual({
+        indexed: 0,
+        retokenised: 0,
+        skipped: 0,
+        failed: 0,
+        reason: summaryReason,
+      });
+      expect(assertDocumentEgressConsent).not.toHaveBeenCalled();
+      expect(prisma.inboundDocument.findMany).not.toHaveBeenCalled();
+      expect(reserveBudget).not.toHaveBeenCalled();
+      expect(transcribeDocument).not.toHaveBeenCalled();
+      expect(upsertContentIndex).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not ask the documentAi capability for a local pick", async () => {
+    vi.mocked(resolveDocumentVisionProvider).mockResolvedValue({
+      chain: [{ providerType: "local", instance: {} }],
+      pick: {
+        entry: { providerType: "local", instance: {} },
+        providerType: "local",
+        pdfSupported: false,
+      },
+    } as never);
+    vi.mocked(aiCapabilityForJob).mockResolvedValue({
+      available: false,
+      reason: "consent_required",
+      onDeviceAllowed: true,
+    });
+    vi.mocked(prisma.inboundDocument.findMany).mockResolvedValue([
+      { id: "d1" },
+    ] as never);
+
+    const result = await runContentIndexBackfillForUser("user-1");
+
+    expect(aiCapabilityForJob).not.toHaveBeenCalled();
+    expect(result.reason).toBe("ok");
+    expect(result.indexed).toBe(1);
   });
 
   it("indexes the not-yet-indexed documents", async () => {

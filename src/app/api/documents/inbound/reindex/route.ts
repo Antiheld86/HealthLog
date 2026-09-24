@@ -56,7 +56,6 @@ export const POST = apiHandler(async (request) => {
   await assertDocumentEgressConsent({
     userId: user.id,
     providerType: pick.providerType,
-    surface: "insights",
   });
 
   const { enqueued: jobCreated } = await enqueueContentIndexBackfill(user.id);

@@ -113,13 +113,12 @@ describe("streamFencedReply — consent fan-out", () => {
       docs: [doc("a", "x"), doc("b", "y"), doc("c", "z")],
     });
     expect(assertDocumentEgressConsent).toHaveBeenCalledTimes(3);
-    expect(assertDocumentEgressConsent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "user-1",
-        providerType: "anthropic",
-        surface: "insights",
-      }),
-    );
+    // The document rule is the extraction receipt for the picked provider;
+    // no chat surface rides along to widen it.
+    expect(assertDocumentEgressConsent).toHaveBeenCalledWith({
+      userId: "user-1",
+      providerType: "anthropic",
+    });
   });
 
   it("refuses (throws) with ZERO egress + no user turn persisted when ANY document's consent fails", async () => {

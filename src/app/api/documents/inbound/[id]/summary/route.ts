@@ -332,7 +332,6 @@ async function handleTextSummary(
     await assertDocumentEgressConsent({
       userId,
       providerType: pick.providerType,
-      surface: "insights",
     });
   } catch (err) {
     // Refused before any dispatch — the slot goes back with the refusal.
@@ -403,7 +402,6 @@ async function handleVisionSummary(
   await assertDocumentEgressConsent({
     userId,
     providerType: pick.providerType,
-    surface: "insights",
   });
 
   const rl = await checkDocumentAiRateLimit(userId);
