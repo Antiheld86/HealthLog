@@ -1,7 +1,7 @@
 import type { AIProvider, CompletionResult } from "./types";
 import { prisma } from "@/lib/db";
 import { decrypt } from "@/lib/crypto";
-import { CodexClient } from "./codex-client";
+import { CodexClient, resolveCodexVisionSlug } from "./codex-client";
 import { OpenAIClient } from "./openai-client";
 import { AnthropicClient } from "./anthropic-client";
 import { LocalOpenAICompatibleClient } from "./local-client";
@@ -20,7 +20,18 @@ import {
   providerCredentialPolicy,
   providerWorkAuthorityForRecord,
   type ProviderCredentialPolicy,
+  type ProviderWorkAuthority,
 } from "@/lib/sharing/provider-work-authority";
+import { memoizePerRequest } from "@/lib/request-cache";
+import type { AiModality } from "@/lib/ai/capabilities/types";
+import type {
+  ProviderEntryPresence,
+  ProviderPresence,
+} from "@/lib/ai/capabilities/resolve";
+import {
+  supportsVisionForConfig,
+  type VisionProviderType,
+} from "./vision-capability";
 
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -680,60 +691,15 @@ export function userRowHasProviderCredential(
 }
 
 /**
- * Async single-user variant of `userRowHasProviderCredential`: two
- * narrow presence reads (user credential columns + the admin key flag),
- * no decrypt, no network. Used by read paths that only need to know
- * whether a generation could ever produce provider-backed text (e.g.
- * the dashboard snapshot's `briefingState: "no-provider"`).
+ * Whether any provider could serve text for this record: the presence probe,
+ * as a boolean. Used by read paths that only need to know whether a generation
+ * could ever produce provider-backed text (e.g. the dashboard snapshot's
+ * `briefingState: "no-provider"`).
  */
 export async function hasAnyConfiguredProvider(
   userId: string,
 ): Promise<boolean> {
-  const authority = providerWorkAuthorityForRecord(userId);
-  if (providerCredentialPolicy(authority) === "deny") return false;
-  const userRow = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      aiProvider: true,
-      aiProviderChain: true,
-      aiAnthropicKeyEncrypted: true,
-      aiLocalKeyEncrypted: true,
-      aiOpenaiKeyEncrypted: true,
-      aiBaseUrl: true,
-      aiCompatBaseUrl: true,
-      aiCompatModel: true,
-      aiModel: true,
-      codexConnectionStatus: true,
-      codexAccessTokenEncrypted: true,
-      codexRefreshTokenEncrypted: true,
-      useCentralCodex: true,
-      managedProfileAt: true,
-    },
-  });
-  if (!userRow) return false;
-  const policy = providerCredentialPolicy(authority, userRow.managedProfileAt);
-  const settings = await prisma.appSettings.findUnique({
-    where: { id: "singleton" },
-    select: {
-      adminAiKeyEncrypted: true,
-      adminCodexConnectionStatus: true,
-      adminCodexAccessTokenEncrypted: true,
-      adminCodexRefreshTokenEncrypted: true,
-      adminCodexAccountIdEncrypted: true,
-    },
-  });
-  if (
-    userRowHasProviderCredential(
-      userRow,
-      !!settings?.adminAiKeyEncrypted,
-      policy,
-    )
-  ) {
-    return true;
-  }
-  // A user with no personal provider can still be served by the operator's
-  // shared central Codex when they opted in and the operator connected it.
-  return userRow.useCentralCodex && appSettingsCentralCodexConnected(settings);
+  return probeProviderPresence(userId, "text");
 }
 
 /**
@@ -837,60 +803,206 @@ function resolveManagedByFromRow(
 
 /**
  * Effective AI availability for a user: whether any provider can serve
- * them, and which origin manages it. One narrow user read plus the
- * shared admin-key flag — no decrypt, no network. Feeds the
- * `GET /api/user/ai-provider` response so the iOS Coach surfaces even
- * when the operator's admin-managed key is the only thing configured.
+ * them, and which origin manages it. The presence probe, projected; feeds the
+ * `GET /api/user/ai-provider` response so the iOS Coach surfaces even when the
+ * operator's admin-managed key is the only thing configured.
  */
 export async function resolveProviderAvailability(
   userId: string,
 ): Promise<{ aiAvailable: boolean; managedBy: ProviderManagedBy | null }> {
-  const authority = providerWorkAuthorityForRecord(userId);
-  if (providerCredentialPolicy(authority) === "deny") {
-    return { aiAvailable: false, managedBy: null };
-  }
-  const userRow = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      aiProvider: true,
-      aiProviderChain: true,
-      aiAnthropicKeyEncrypted: true,
-      aiLocalKeyEncrypted: true,
-      aiOpenaiKeyEncrypted: true,
-      aiBaseUrl: true,
-      aiCompatBaseUrl: true,
-      aiCompatModel: true,
-      aiModel: true,
-      codexConnectionStatus: true,
-      codexAccessTokenEncrypted: true,
-      codexRefreshTokenEncrypted: true,
-      useCentralCodex: true,
-      managedProfileAt: true,
+  const presence = await probeProviderChain(userId);
+  return presence.entries.length > 0
+    ? { aiAvailable: true, managedBy: presence.managedBy }
+    : { aiAvailable: false, managedBy: null };
+}
+
+// ── The one presence definition ────────────────────────────────────────────
+
+/** The credential-presence columns the probe reads off the record's row. */
+const PRESENCE_USER_SELECT = {
+  aiProvider: true,
+  aiProviderChain: true,
+  aiAnthropicKeyEncrypted: true,
+  aiLocalKeyEncrypted: true,
+  aiOpenaiKeyEncrypted: true,
+  aiBaseUrl: true,
+  aiCompatBaseUrl: true,
+  aiCompatModel: true,
+  aiModel: true,
+  codexConnectionStatus: true,
+  codexAccessTokenEncrypted: true,
+  codexRefreshTokenEncrypted: true,
+  useCentralCodex: true,
+  managedProfileAt: true,
+  labsLocalOcrEnabled: true,
+} as const;
+
+const PRESENCE_SETTINGS_SELECT = {
+  adminAiKeyEncrypted: true,
+  adminAiModel: true,
+  adminCodexConnectionStatus: true,
+  adminCodexAccessTokenEncrypted: true,
+  adminCodexRefreshTokenEncrypted: true,
+  adminCodexAccountIdEncrypted: true,
+} as const;
+
+const NO_PRESENCE: ProviderPresence = Object.freeze({
+  entries: [],
+  localOcrEnabled: false,
+  managedBy: null,
+});
+
+/**
+ * Whether one chain entry's model can read an image. Mirrors the model each
+ * entry runs on (`src/lib/labs/ocr-capability.ts`): the Codex paths use the
+ * working Codex slug, the operator's slot uses the operator's model, every
+ * other entry the person's own.
+ */
+function entryVision(
+  providerType: string,
+  userModel: string | null,
+  adminModel: string | null,
+): boolean {
+  const model =
+    providerType === "codex" || providerType === "admin-codex"
+      ? resolveCodexVisionSlug()
+      : providerType === "admin-openai"
+        ? adminModel
+        : userModel;
+  return supportsVisionForConfig(providerType as VisionProviderType, model);
+}
+
+/**
+ * The provider chain that would serve a record, presence only: which entries
+ * hold a usable credential, in the order a chain run would try them, whether
+ * each can read an image, the person's in-browser OCR opt-in, and where the
+ * serving credential comes from.
+ *
+ * This is the ONE definition of "is a provider configured". It never decrypts
+ * a key, builds a client, refreshes a Codex token or touches the network, so a
+ * `true` can still meet a dead key at call time; the generation path reports
+ * that as a failed generation. It follows the chain resolution
+ * (`resolveProviderChain`) entry by entry, appends the operator's central
+ * Codex only behind the person's opt-in, falls back to the legacy single
+ * provider only for a chain that resolves empty, and applies the credential
+ * policy of the provider-work authority: a delegate's chain is empty and a
+ * guardian's is the operator's key alone.
+ *
+ * Memoised per request and record, so the account payload, a capability gate
+ * and a presence read on one request share two point reads.
+ */
+export function probeProviderChain(
+  recordId: string,
+  authority: ProviderWorkAuthority | null = providerWorkAuthorityForRecord(
+    recordId,
+  ),
+): Promise<ProviderPresence> {
+  const basePolicy = providerCredentialPolicy(authority);
+  if (basePolicy === "deny") return Promise.resolve(NO_PRESENCE);
+  return memoizePerRequest(
+    `provider-presence:${recordId}:${authority?.origin ?? "none"}`,
+    async () => {
+      const [row, settings] = await Promise.all([
+        prisma.user.findUnique({
+          where: { id: recordId },
+          select: PRESENCE_USER_SELECT,
+        }),
+        prisma.appSettings.findUnique({
+          where: { id: "singleton" },
+          select: PRESENCE_SETTINGS_SELECT,
+        }),
+      ]);
+      if (!row) return NO_PRESENCE;
+      const policy = providerCredentialPolicy(authority, row.managedProfileAt);
+      const adminKey = !!settings?.adminAiKeyEncrypted;
+      const adminModel = settings?.adminAiModel ?? null;
+      const vision = (providerType: string): ProviderEntryPresence => ({
+        providerType,
+        vision: entryVision(providerType, row.aiModel, adminModel),
+      });
+
+      if (policy === "deny") return NO_PRESENCE;
+      if (policy === "operator-default") {
+        return {
+          entries: adminKey ? [vision("admin-openai")] : [],
+          // A guardian's in-browser OCR is not the record's opt-in to use.
+          localOcrEnabled: false,
+          managedBy: adminKey ? "server" : null,
+        };
+      }
+
+      const codexConnected =
+        row.codexConnectionStatus === "connected" &&
+        !!row.codexAccessTokenEncrypted &&
+        !!row.codexRefreshTokenEncrypted;
+      const entries: ProviderEntryPresence[] = [];
+      for (const entry of parseProviderChain(row.aiProviderChain ?? null)) {
+        if (!entry.enabled) continue;
+        const present = (() => {
+          switch (entry.providerType) {
+            case "codex":
+              return codexConnected;
+            case "openai":
+              return !!row.aiOpenaiKeyEncrypted;
+            case "anthropic":
+              return !!row.aiAnthropicKeyEncrypted;
+            case "local":
+              return !!row.aiBaseUrl;
+            case "openai-compatible":
+              return !!(
+                row.aiCompatBaseUrl &&
+                (row.aiCompatModel || row.aiModel)
+              );
+            case "admin-openai":
+              return adminKey;
+            default:
+              // `admin-codex` is never resolved from a stored chain entry.
+              return false;
+          }
+        })();
+        if (present) entries.push(vision(entry.providerType));
+      }
+      if (row.useCentralCodex && appSettingsCentralCodexConnected(settings)) {
+        entries.push(vision("admin-codex"));
+      }
+      if (entries.length === 0 && userRowHasProviderCredential(row, adminKey)) {
+        // The legacy single-provider fallback, tagged as the operator's slot
+        // the way every consumer of it tags it (the consent gate included).
+        entries.push(vision("admin-openai"));
+      }
+
+      let managedBy = resolveManagedByFromRow(row, adminKey, policy);
+      if (
+        managedBy === null &&
+        row.useCentralCodex &&
+        appSettingsCentralCodexConnected(settings)
+      ) {
+        managedBy = "server";
+      }
+      return {
+        entries,
+        localOcrEnabled: row.labsLocalOcrEnabled,
+        managedBy: entries.length > 0 ? managedBy : null,
+      };
     },
-  });
-  if (!userRow) return { aiAvailable: false, managedBy: null };
-  const policy = providerCredentialPolicy(authority, userRow.managedProfileAt);
-  const settings = await prisma.appSettings.findUnique({
-    where: { id: "singleton" },
-    select: {
-      adminAiKeyEncrypted: true,
-      adminCodexConnectionStatus: true,
-      adminCodexAccessTokenEncrypted: true,
-      adminCodexRefreshTokenEncrypted: true,
-      adminCodexAccountIdEncrypted: true,
-    },
-  });
-  const managedBy = resolveManagedByFromRow(
-    userRow,
-    !!settings?.adminAiKeyEncrypted,
-    policy,
   );
-  if (managedBy !== null) return { aiAvailable: true, managedBy };
-  // The operator's shared central Codex is operator-managed egress ("server").
-  if (userRow.useCentralCodex && appSettingsCentralCodexConnected(settings)) {
-    return { aiAvailable: true, managedBy: "server" };
-  }
-  return { aiAvailable: false, managedBy: null };
+}
+
+/**
+ * Whether any configured provider could serve this modality for the record.
+ * `text` needs any entry; `document` needs one that reads images, or a text
+ * entry the person's in-browser OCR feeds.
+ */
+export async function probeProviderPresence(
+  recordId: string,
+  modality: AiModality = "text",
+): Promise<boolean> {
+  const presence = await probeProviderChain(recordId);
+  if (modality === "text") return presence.entries.length > 0;
+  return (
+    presence.entries.some((entry) => entry.vision) ||
+    (presence.localOcrEnabled && presence.entries.length > 0)
+  );
 }
 
 /**

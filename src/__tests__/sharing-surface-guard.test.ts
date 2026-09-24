@@ -2953,13 +2953,29 @@ describe("(g) the MANAGE route set is frozen", () => {
     for (const name of [
       "resolveProvider",
       "resolveProviderChain",
-      "hasAnyConfiguredProvider",
-      "resolveProviderAvailability",
+      "probeProviderChain",
     ]) {
       const resolver = functionSource("lib/ai/provider.ts", name);
       expect(resolver.length, `${name} not found`).toBeGreaterThan(0);
       expect(resolver, `${name} ignores sharing authority`).toContain(
         "providerCredentialPolicy",
+      );
+    }
+    // The presence helpers answer through the one probe, which applies the
+    // policy above; a helper that read credentials itself would be a second
+    // definition of presence with its own chance to skip the policy.
+    for (const name of [
+      "hasAnyConfiguredProvider",
+      "resolveProviderAvailability",
+      "probeProviderPresence",
+    ]) {
+      const helper = functionSource("lib/ai/provider.ts", name);
+      expect(helper.length, `${name} not found`).toBeGreaterThan(0);
+      expect(helper, `${name} bypasses the presence probe`).toMatch(
+        /probeProvider(?:Chain|Presence)\(/,
+      );
+      expect(helper, `${name} reads credentials itself`).not.toContain(
+        "prisma.",
       );
     }
   });
