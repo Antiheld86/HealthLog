@@ -16,6 +16,15 @@ import type { InsightStatusData } from "@/hooks/use-insight-status";
  * so SSR renders its stub — enough to verify the assessment slot.
  */
 
+// AI surfaces paint only while their capability is available; these tests
+// cover the painted surface, so every capability reads available here.
+vi.mock("@/hooks/use-ai-capability", () => ({
+  useAiCapability: () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
+}));
 vi.mock("next/dynamic", () => ({
   default: () => {
     const Stub = () => <div data-slot="healthkit-chart-stub" />;

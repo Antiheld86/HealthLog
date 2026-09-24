@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TileHeader } from "@/components/insights/tile-header";
@@ -14,7 +12,7 @@ import { formatUpdatedLabel } from "@/lib/i18n/relative-time";
 import { stripChartTokens } from "@/lib/insights/chart-tokens";
 import { ProseBlocks } from "@/components/insights/prose-blocks";
 import { cn } from "@/lib/utils";
-import { useFeatureFlags } from "@/hooks/use-feature-flags";
+import { useAiCapability } from "@/hooks/use-ai-capability";
 import { AskCoachIconButton } from "@/components/insights/ask-coach-action";
 import type { CoachLaunchScope } from "@/lib/insights/coach-launch-context";
 import type { AssessmentStatus } from "@/lib/insights/status-shared";
@@ -83,6 +81,14 @@ interface InsightStatusCardProps {
    * instead of only seeding the composer. Defaults to false.
    */
   coachAutoSend?: boolean;
+  /**
+   * Whether the card's text is written by a model. True for every status
+   * note, which only shows while the `statusText` capability is available.
+   * The score anatomy passes false: its assessment is composed from the
+   * numbers and only upgraded to model text by the server, so it shows
+   * whatever the AI state.
+   */
+  aiAuthored?: boolean;
 }
 
 // ─── Main Component ───────────────────────────────────────
@@ -99,13 +105,15 @@ export function InsightStatusCard({
   coachQuestion,
   coachScope,
   coachAutoSend,
+  aiAuthored = true,
 }: InsightStatusCardProps) {
   const { t } = useTranslations();
-  const flags = useFeatureFlags();
-  // v1.4.31 — operator can hide every per-metric status card
-  // app-wide. The delta number stays; the LLM narration card is
-  // suppressed in full so the layout collapses naturally.
-  if (!flags.insightStatus) return null;
+  const statusText = useAiCapability("statusText");
+  // A status note is model-written text, so the card is hidden, never an
+  // error or a "connect a provider" hint, while the `statusText` capability
+  // is unavailable for any reason. The numbers around it stay; the layout
+  // collapses naturally.
+  if (aiAuthored && !statusText.available) return null;
 
   const displayText =
     assessment?.kind === "generated" ||
@@ -208,31 +216,6 @@ export function InsightStatusCard({
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground text-sm">{message}</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const isNoProvider =
-    assessment?.kind === "no-provider" ||
-    (!assessment && !hasProvider && !displayText);
-  if (isNoProvider) {
-    return (
-      <Card className="gap-2 py-3 opacity-80 md:py-4">
-        <CardHeader>
-          <TileHeader icon={nodeIcon(icon)} title={title} />
-        </CardHeader>
-        <CardContent className="flex flex-col gap-1.5">
-          <p className="text-muted-foreground text-sm">
-            {t("insights.noProviderConfigured")}
-          </p>
-          <Link
-            href="/settings/ai"
-            data-slot="insight-status-no-provider-cta"
-            className="text-primary text-sm font-medium underline-offset-4 hover:underline"
-          >
-            {t("insights.noProviderAction")}
-          </Link>
         </CardContent>
       </Card>
     );

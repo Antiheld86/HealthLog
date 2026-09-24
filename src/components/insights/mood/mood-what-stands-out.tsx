@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { TrendingUp } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { TileHeader } from "@/components/insights/tile-header";
@@ -43,16 +44,15 @@ export function MoodWhatStandsOut({
   const { isAuthenticated } = useAuth();
   const { t } = useTranslations();
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.insightsCorrelations(),
     queryFn: async () => {
-      // 403 = operator disabled the surface; any rejection (ApiError)
-      // degrades to the card's isError → render-nothing path.
+      // Correlations are statistics, never gated on AI; a rejection is a
+      // real failure and renders the error row with a retry.
       return apiGet<CorrelationDiscoveryResponse>("/api/insights/correlations");
     },
     enabled: isAuthenticated,
     staleTime: 60_000,
-    // The surface is optional — don't retry a deliberate 403 into noise.
     retry: false,
   });
 
@@ -79,13 +79,11 @@ export function MoodWhatStandsOut({
           />
         ) : null}
         {isError ? (
-          <p
-            data-slot="mood-discovery-error"
-            role="alert"
-            className="text-destructive text-sm"
-          >
-            {t("insights.pattern.loadError")}
-          </p>
+          <QueryErrorRow
+            slot="mood-discovery-error"
+            message={t("insights.pattern.loadError")}
+            onRetry={() => void refetch()}
+          />
         ) : null}
         {!isLoading && !isError && data && !hasDiscovered ? (
           <p

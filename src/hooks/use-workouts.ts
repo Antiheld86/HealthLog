@@ -70,6 +70,12 @@ export interface UseWorkoutsOptions {
   since?: string;
   /** Optional sport-type filter. Pass through the canonical string. */
   sportType?: string;
+  /**
+   * Whether to read at all. A probe on a surface that shows workouts only
+   * while the Workouts module is on passes the module answer here, so a
+   * switched-off module is never asked for rows. Defaults to true.
+   */
+  enabled?: boolean;
 }
 
 async function fetchWorkouts(
@@ -108,7 +114,7 @@ export function useWorkouts(opts: UseWorkoutsOptions = {}): UseWorkoutsResult {
       sportType: opts.sportType,
     }),
     queryFn: () => fetchWorkouts(opts),
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && opts.enabled !== false,
     staleTime: 60 * 1000,
   });
 

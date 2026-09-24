@@ -5,6 +5,7 @@ import { Sparkles } from "lucide-react";
 import { useTranslations } from "@/lib/i18n/context";
 import { useDerivedMetric } from "./use-derived-metric";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { InsightStatusCard } from "@/components/insights/insight-status-card";
 import type {
   ReadinessValue,
@@ -161,8 +162,21 @@ export function CompositeScoreAnatomy({
     </>
   );
 
+  if (query.isError) {
+    // A failed read is not "insufficient data": the score may well exist.
+    // Say it failed and offer a retry instead of an empty anatomy.
+    return (
+      <div className={className}>
+        <QueryErrorRow
+          slot="composite-anatomy-error"
+          onRetry={() => void query.refetch()}
+        />
+      </div>
+    );
+  }
+
   if (!data) {
-    // Network/abort fallback — render the insufficient state honestly.
+    // Settled without a payload — render the insufficient state honestly.
     return (
       <ScoreAnatomyView
         title={title}
@@ -276,6 +290,9 @@ export function CompositeScoreAnatomy({
           icon={<Sparkles className="h-5 w-5" />}
           text={assessment.text}
           hasProvider
+          // Composed from the numbers; the server swaps in model text only
+          // while `statusText` is available, so the card shows either way.
+          aiAuthored={false}
           updatedAt={assessment.updatedAt}
           // The outbound edge. Same shared opener + auto-send hand-off the
           // metric pages use, so the answer lands directly instead of only

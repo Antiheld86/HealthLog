@@ -22,11 +22,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { QueryErrorCard } from "@/components/ui/query-error-card";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { TileHeader } from "@/components/insights/tile-header";
 import { SubPageShell } from "@/components/insights/sub-page-shell";
 import { useAuth } from "@/hooks/use-auth";
 import { useWorkouts } from "@/hooks/use-workouts";
+import { isSurfaceVisible } from "@/lib/modules/surface";
 import { useTranslations } from "@/lib/i18n/context";
 import { apiGet } from "@/lib/api/api-fetch";
 import { queryKeys } from "@/lib/query-keys";
@@ -135,7 +136,8 @@ function CatalogRow({
   present,
 }: {
   entry: CatalogEntry;
-  present: boolean | null;
+  /** `"unknown"` while the read that decides this row failed. */
+  present: boolean | null | "unknown";
 }) {
   const { t } = useTranslations();
 
@@ -154,6 +156,7 @@ function CatalogRow({
   }
 
   const isPresent = present === true;
+  const unknown = present === "unknown";
 
   return (
     <div
@@ -166,12 +169,12 @@ function CatalogRow({
           <span className="text-foreground text-sm font-medium">
             {t(entry.nameKey)}
           </span>
-          <StatusBadge present={isPresent} />
+          {unknown ? null : <StatusBadge present={isPresent} />}
         </div>
         <p className="text-muted-foreground text-xs">{t(entry.sourceKey)}</p>
       </div>
       <div className="shrink-0">
-        {isPresent && entry.href ? (
+        {unknown ? null : isPresent && entry.href ? (
           <Button size="sm" variant="ghost" asChild>
             <Link href={entry.href}>
               {t("metricCatalog.viewCta")}
@@ -194,9 +197,35 @@ function CatalogRow({
   );
 }
 
+/** Which read decides whether a catalog row has data. */
+type ProbeId = "analytics" | "comprehensive" | "workouts" | "nutrients" | "ecg";
+
+function probeForEntry(entry: CatalogEntry): ProbeId {
+  if (entry.id === "ecg") return "ecg";
+  if (entry.metric === "MOOD" || entry.metric === "MEDICATION") {
+    return "comprehensive";
+  }
+  if (entry.metric === "WORKOUTS") return "workouts";
+  if (entry.metric === "NUTRIENTS") return "nutrients";
+  return "analytics";
+}
+
+/**
+ * The surface id of the sub-page a catalog row links to, so a row whose
+ * module is switched off drops out through the one surface map. Rows without
+ * a sub-page (info rows, the ECG row) have no owner and always show.
+ */
+function entrySurfaceId(entry: CatalogEntry): string | null {
+  const slug = entry.href?.startsWith("/insights/")
+    ? entry.href.slice("/insights/".length).split(/[/?#]/)[0]
+    : null;
+  return slug ? `insights-page:${slug}` : null;
+}
+
 export default function MetricCatalogPage() {
   const { t } = useTranslations();
   const { isAuthenticated, user } = useAuth();
+  const modules = user?.modules;
 
   const analyticsQuery = useAnalyticsQuery({ slice: "summaries" });
 
@@ -206,7 +235,10 @@ export default function MetricCatalogPage() {
     enabled: isAuthenticated,
   });
 
-  const workoutsProbe = useWorkouts({ limit: 1 });
+  // Probe workouts only while the module shows; a switched-off module is
+  // never asked for rows, and its row is dropped below.
+  const workoutsVisible = isSurfaceVisible("insights-page:workouts", modules);
+  const workoutsProbe = useWorkouts({ limit: 1, enabled: workoutsVisible });
 
   const nutrientsModuleEnabled = user?.modules?.nutrients === true;
   const nutrientsProbe = useQuery({
@@ -236,6 +268,43 @@ export default function MetricCatalogPage() {
 
   const grouped = catalogEntriesByGroup();
 
+  // M1 fix (`.planning/audits/2026-07-18-qa-ui.md`) — every probe backing
+  // `availability` is async; while one is in flight `hasMetricData()` reads
+  // an undefined summary and would report "absent". Each row waits on the
+  // ONE probe that decides it, and a failed probe marks only its own rows
+  // unknown with a retry inside their group: one failing read never replaces
+  // the whole page, and never reads as an honest "Not tracked yet".
+  const probes: Record<
+    ProbeId,
+    { isLoading: boolean; isError: boolean; retry: () => void }
+  > = {
+    analytics: {
+      isLoading: analyticsQuery.isLoading,
+      isError: analyticsQuery.isError,
+      retry: () => void analyticsQuery.refetch(),
+    },
+    comprehensive: {
+      isLoading: comprehensiveQuery.isLoading,
+      isError: comprehensiveQuery.isError,
+      retry: () => void comprehensiveQuery.refetch(),
+    },
+    workouts: {
+      isLoading: workoutsProbe.isLoading,
+      isError: workoutsProbe.isError,
+      retry: () => workoutsProbe.refetch(),
+    },
+    nutrients: {
+      isLoading: nutrientsModuleEnabled && nutrientsProbe.isLoading,
+      isError: nutrientsModuleEnabled && nutrientsProbe.isError,
+      retry: () => void nutrientsProbe.refetch(),
+    },
+    ecg: {
+      isLoading: ecgQuery.isLoading,
+      isError: ecgQuery.isError,
+      retry: () => void ecgQuery.refetch(),
+    },
+  };
+
   function isPresent(entry: CatalogEntry): boolean | null {
     if (entry.kind === "info") return null;
     if (entry.id === "ecg") return ecgQuery.data?.hasRecordings === true;
@@ -243,49 +312,11 @@ export default function MetricCatalogPage() {
     return hasMetricData(entry.metric, availability);
   }
 
-  // M1 fix (`.planning/audits/2026-07-18-qa-ui.md`) — every probe backing
-  // `availability` is async; while any of them is still in flight,
-  // `hasMetricData()` reads an undefined summary and reports "absent" for
-  // every metric. Gate the rows on the probes' aggregate loading/error
-  // state instead of letting a cold load or a failed batch masquerade as
-  // an honest "Not tracked yet".
-  const isLoading = Boolean(
-    isAuthenticated &&
-    (analyticsQuery.isLoading ||
-      comprehensiveQuery.isLoading ||
-      workoutsProbe.isLoading ||
-      ecgQuery.isLoading ||
-      (nutrientsModuleEnabled && nutrientsProbe.isLoading)),
-  );
-
-  const isError = Boolean(
-    analyticsQuery.isError ||
-    comprehensiveQuery.isError ||
-    workoutsProbe.isError ||
-    ecgQuery.isError ||
-    (nutrientsModuleEnabled && nutrientsProbe.isError),
-  );
-
-  function retryAll() {
-    void analyticsQuery.refetch();
-    void comprehensiveQuery.refetch();
-    workoutsProbe.refetch();
-    void ecgQuery.refetch();
-    if (nutrientsModuleEnabled) void nutrientsProbe.refetch();
-  }
-
-  if (isError) {
-    return (
-      <SubPageShell
-        title={t("metricCatalog.title")}
-        description={t("metricCatalog.description")}
-      >
-        <QueryErrorCard
-          description={t("metricCatalog.loadError")}
-          onRetry={retryAll}
-        />
-      </SubPageShell>
-    );
+  function isEntryVisible(entry: CatalogEntry): boolean {
+    // Nutrients keeps its own module-off row with the way to switch it on.
+    if (entry.id === "nutrients") return true;
+    const surfaceId = entrySurfaceId(entry);
+    return surfaceId === null || isSurfaceVisible(surfaceId, modules);
   }
 
   return (
@@ -295,8 +326,16 @@ export default function MetricCatalogPage() {
     >
       <div className="space-y-6">
         {CATALOG_GROUP_ORDER.map((group) => {
-          const entries = grouped.get(group) ?? [];
+          const entries = (grouped.get(group) ?? []).filter(isEntryVisible);
           if (entries.length === 0) return null;
+          const failed = [
+            ...new Set(
+              entries
+                .filter((entry) => entry.kind !== "info")
+                .map(probeForEntry)
+                .filter((id) => isAuthenticated && probes[id].isError),
+            ),
+          ];
           const Icon = GROUP_ICONS[group];
           // Nutrients rides the metabolic group but needs a module-off
           // branch (B1 — the tab-strip pill requires the module ON before
@@ -314,7 +353,14 @@ export default function MetricCatalogPage() {
                   title={t(CATALOG_GROUP_HEADER_KEYS[group])}
                 />
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-2">
+                {failed.length > 0 ? (
+                  <QueryErrorRow
+                    slot="catalog-group-error"
+                    message={t("metricCatalog.loadError")}
+                    onRetry={() => failed.forEach((id) => probes[id].retry())}
+                  />
+                ) : null}
                 <div className="divide-border divide-y">
                   {entries.map((entry) => {
                     if (entry.id === "nutrients" && !nutrientsModuleEnabled) {
@@ -348,14 +394,22 @@ export default function MetricCatalogPage() {
                         </div>
                       );
                     }
-                    if (isLoading && entry.kind !== "info") {
+                    const probe =
+                      entry.kind === "info"
+                        ? null
+                        : probes[probeForEntry(entry)];
+                    if (isAuthenticated && probe?.isLoading) {
                       return <CatalogRowSkeleton key={entry.id} />;
                     }
                     return (
                       <CatalogRow
                         key={entry.id}
                         entry={entry}
-                        present={isPresent(entry)}
+                        present={
+                          isAuthenticated && probe?.isError
+                            ? "unknown"
+                            : isPresent(entry)
+                        }
                       />
                     );
                   })}

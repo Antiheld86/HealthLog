@@ -13,7 +13,7 @@ import { apiGet } from "@/lib/api/api-fetch";
 // pulls neither the ECG label map/helpers nor the dynamically-loaded ECG
 // component into this eager bundle.
 import { ECG_OVERVIEW_LIMIT } from "@/lib/insights/ecg-overview-limit";
-import { useFeatureFlags } from "@/hooks/use-feature-flags";
+import { useAiCapability } from "@/hooks/use-ai-capability";
 import { useInsightsLayoutQuery } from "@/hooks/use-insights-layout";
 import { usePullToRefresh } from "@/hooks/use-pull-to-refresh";
 import { PullToRefreshIndicator } from "@/components/ui/pull-to-refresh-indicator";
@@ -26,10 +26,12 @@ import { useScrollResetOnRoute } from "@/hooks/use-scroll-reset-on-route";
 import { useTranslations } from "@/lib/i18n/context";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { QueryErrorCard } from "@/components/ui/query-error-card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { HeroStrip } from "@/components/insights/hero-strip";
+import { AiSetupHint } from "@/components/insights/ai-setup-hint";
+import { OverviewSectionBoundary } from "@/components/insights/overview-section-boundary";
+import { isSurfaceVisible } from "@/lib/modules/surface";
 import { useInsightsAdvisorQuery } from "@/components/insights/use-insights-advisor";
 import { useAnalyticsQuery } from "@/lib/queries/use-analytics-query";
 import { useDashboardSnapshot } from "@/lib/queries/use-dashboard-snapshot";
@@ -73,9 +75,6 @@ function BlockSkeleton({
     />
   );
 }
-
-/** Stable reference so the trends row does not re-select on every render. */
-const HIDDEN_MOOD = ["mood"] as const;
 
 const DailyBriefing = dynamic(
   () =>
@@ -295,13 +294,11 @@ export default function InsightsPageClient() {
   // callbacks).
   useScrollResetOnRoute();
 
-  // v1.4.27 R3d MB4 — Coach drawer state lives in the layout-level
-  // `<CoachLaunchProvider>`; the drawer is mounted next to the provider in
-  // `src/app/insights/layout.tsx`. v1.18.7 removed the hero-band coach
-  // entry points (the action button + suggested-prompt chips), so the
-  // overview page no longer reads the launch context — the drawer + its
-  // own launcher stay untouched.
-  const flags = useFeatureFlags();
+  // The AI parts of the overview (the daily briefing card, the hero's
+  // briefing paragraph and the trend sentences, which all ride the advisor
+  // read) follow the `briefing` capability on `/api/auth/me`. Everything else
+  // on this page is data and never waits on it.
+  const briefing = useAiCapability("briefing");
 
   // v1.4.36 W1 — drop the page-level `isLoading` gate that used to
   // block the entire shell on `/api/insights/comprehensive`. The
@@ -312,7 +309,7 @@ export default function InsightsPageClient() {
   // empty-state branch only fires once the query has resolved AND
   // reported zero measurements; while it's in-flight the page paints
   // the regular shell and the tiles fill in as their data lands.
-  const { data, isLoading, isFetched, isError, refetch } = useQuery({
+  const { data, isLoading, isFetched, isError } = useQuery({
     queryKey: queryKeys.insightsComprehensive(),
     queryFn: async () => {
       try {
@@ -367,28 +364,17 @@ export default function InsightsPageClient() {
   // Settings → Insights, reached via the top-right cog on the tab strip.
   const { layout } = useInsightsLayoutQuery(isAuthenticated);
 
-  // Error branch — a transient 500 / network drop (after the query's
-  // retries are exhausted) settles the comprehensive query with no data.
-  // Without this gate the page would fall through to the "no data yet —
-  // add a measurement" empty-state, which reads false for a user with
-  // history. Surface an error + a Retry that refetches the one query,
-  // mirroring the <VitalsDashboard> error pattern.
-  if (isError) {
-    return (
-      <div data-slot="insights-overview-error">
-        <QueryErrorCard
-          description={t("insights.loadError")}
-          onRetry={() => refetch()}
-        />
-      </div>
-    );
-  }
-
+  // A failed comprehensive read no longer replaces the page. The payload only
+  // decides the "no data yet" empty state below; every section on the page
+  // owns its own read and its own error row, so one failing read (#975: the
+  // comprehensive route refused while an AI switch was off) cannot take the
+  // hero, the scores and the other sections down with it. On failure the page
+  // simply does not claim "no data yet" and renders the sections.
   // Empty-state shortcut — only paint once the comprehensive query has
   // resolved AND reported zero measurements. While it's in-flight we
   // fall through to the streamed shell so the user gets the hero +
   // skeleton tiles inside the first paint budget.
-  if (!isLoading && isFetched && !data) {
+  if (!isLoading && isFetched && !isError && !data) {
     return (
       <EmptyState
         icon={<TrendingUp className="size-6" />}
@@ -414,7 +400,14 @@ export default function InsightsPageClient() {
     mounted && user?.username?.trim() && user.username.trim().length > 0
       ? user.username.split(/\s+/)[0]
       : null;
-  const briefingPayload = advisor.payload?.dailyBriefing ?? null;
+  // The advisor read only fires while the briefing is available, so with it
+  // unavailable these stay null: the hero keeps its fallback subtitle and the
+  // trends row its built-in captions.
+  const briefingPayload = briefing.available
+    ? (advisor.payload?.dailyBriefing ?? null)
+    : null;
+  const modules = user?.modules;
+  const cycleRingVisible = isSurfaceVisible("overview:cycle-ring", modules);
   const heroStripUpdatedAt = advisor.payload?.cachedAt ?? null;
 
   // v1.4.36 QA C2 — no `<Suspense>` wrappers below. The mother page is
@@ -471,38 +464,29 @@ export default function InsightsPageClient() {
         // v1.18.0 — gate on the resolved `modules.cycle` flag (per-user toggle
         // AND the operator server-wide kill-switch) so an operator-off
         // instance never renders the ring nor fires its calendar read.
-        extraTile={
-          user?.modules?.cycle === true ? <CycleRingTile /> : undefined
-        }
+        extraTile={cycleRingVisible ? <CycleRingTile /> : undefined}
         // v1.15.5 — when the cycle ring is shown it TAKES the Strain slot:
         // hide Strain so the strip stays compact instead of growing a sixth
         // tile. Strain stays visible for non-cycle accounts.
-        hideStrain={user?.modules?.cycle === true}
+        hideStrain={cycleRingVisible}
       />
     ),
-    "daily-briefing": flags.briefing ? (
+    // Hidden, never an error card, while the briefing is unavailable for any
+    // reason (the operator's switch, the AI analysis opt-out, no provider,
+    // missing consent). A missing provider is said once, calmly, by the
+    // setup hint above the sections, not on this card.
+    "daily-briefing": briefing.available ? (
       <DailyBriefing
         briefing={briefingPayload}
         updatedAt={heroStripUpdatedAt}
         loading={advisor.isLoading}
         onRegenerate={advisor.regenerate}
         regenerating={advisor.isRegenerating}
-        // v1.15.20 — the read path reports a 422 (no provider configured)
-        // as its own outcome; swap the futile regenerate CTA for a quiet
-        // Settings → AI hint instead of an eternal "preparing" loop.
-        noProvider={advisor.readOutcome === "no-provider"}
-        // v1.18.9 (#4) — a (stale) cached briefing is shown but no provider
-        // is connected, so it can never refresh. Pair the relative-age
-        // footer with a discreet connect-provider hint. Only fires when a
-        // briefing is actually rendered (the empty-state path owns the
-        // `noProvider` branch above).
-        noProviderStale={briefingPayload !== null && !advisor.hasProvider}
         // v1.25 — the last generation attempt failed. On a held briefing this
         // adds a discreet "couldn't refresh — retry" footer hint; on an empty
         // card it swaps the generic empty state for an honest "couldn't
-        // generate" one. Suppressed when no provider is configured (that hint
-        // owns the surface and a retry would be futile).
-        generationFailed={advisor.generationFailed && advisor.hasProvider}
+        // generate" one.
+        generationFailed={advisor.generationFailed}
         // v1.25.3 — failure class points the empty-state hint at the right
         // lever (raise the response timeout vs re-check the provider).
         generationFailureClass={advisor.generationFailureClass}
@@ -516,27 +500,35 @@ export default function InsightsPageClient() {
     trends: (
       <TrendsRow
         briefing={briefingPayload}
-        // Same module gate the tab strip applies to the Mood pill: with
-        // the mood module off, the trends row does not chart mood either.
-        hiddenMetrics={user?.modules?.mood === false ? HIDDEN_MOOD : undefined}
-        annotations={advisor.payload?.trendAnnotations ?? null}
-        loading={advisor.isLoading || advisor.isRegenerating}
+        annotations={
+          briefing.available
+            ? (advisor.payload?.trendAnnotations ?? null)
+            : null
+        }
+        loading={
+          briefing.available && (advisor.isLoading || advisor.isRegenerating)
+        }
       />
     ),
-    "period-review": flags.briefing ? (
-      <PeriodNarrativeCard enabled={isAuthenticated} />
-    ) : null,
+    // The period review always renders: its narrative is composed from the
+    // numbers, and the server only swaps in model-written text while the
+    // `periodNarrative` capability is available for this record.
+    "period-review": <PeriodNarrativeCard enabled={isAuthenticated} />,
     // v1.15.2 — gated cycle teaser. Render only for a cycle-tracking account;
     // for everyone else this is nothing (no card, no layout gap). The card
     // itself stays silent until its reads resolve.
-    "cycle-summary": user?.cycleTrackingEnabled ? (
+    "cycle-summary": isSurfaceVisible("overview:cycle-summary", modules) ? (
       <CycleInsightSummaryCard />
     ) : null,
     signals: <CoincidentDeviationCard enabled={isAuthenticated} />,
     "rhythm-events": <RhythmEventsCard enabled={isAuthenticated} />,
     "health-status": <HealthStatusCard enabled={isAuthenticated} />,
-    breathing: <BreathingScreeningCard enabled={isAuthenticated} />,
-    "labs-changes": <LabsChangesCard enabled={isAuthenticated} />,
+    breathing: isSurfaceVisible("overview:breathing", modules) ? (
+      <BreathingScreeningCard enabled={isAuthenticated} />
+    ) : null,
+    "labs-changes": isSurfaceVisible("overview:labs-changes", modules) ? (
+      <LabsChangesCard enabled={isAuthenticated} />
+    ) : null,
     ecg: <EcgSection enabled={isAuthenticated} limit={ECG_OVERVIEW_LIMIT} />,
   };
 
@@ -562,11 +554,6 @@ export default function InsightsPageClient() {
         briefing={briefingPayload}
         updatedAt={heroStripUpdatedAt}
         userName={heroGreetingName}
-        // v1.18.9 (#4) — the hero subtitle is the cached briefing paragraph;
-        // when it can never refresh (no AI provider) pair the "Generated
-        // <relative>" line with a discreet connect-provider hint, matching
-        // the briefing card footer. Only when a briefing is actually shown.
-        noProviderStale={briefingPayload !== null && !advisor.hasProvider}
         // The Health Score lives in the band's right column and NOWHERE else
         // on this page. It is deliberately not a registry section: an id a
         // saved layout has never seen merges in as default-INVISIBLE
@@ -587,6 +574,10 @@ export default function InsightsPageClient() {
         // retry there refetches the payload that carries every pillar.
         onScoreRetry={() => void analyticsQuery.refetch()}
       />
+
+      {/* The one place the overview mentions AI setup: only while no
+          provider is configured and this person could set one up. */}
+      <AiSetupHint />
 
       {/* v1.15.18 — the inline "Anpassen" toggle was removed. Customising the
           overview (section show/hide + order) and sorting the nav pills now
@@ -617,7 +608,13 @@ export default function InsightsPageClient() {
            Each registry node is wrapped in a keyed Fragment so React keeps a
            stable identity across a reorder. */
         orderedSectionIds.map((id) => (
-          <Fragment key={id}>{SECTION_REGISTRY[id]}</Fragment>
+          <Fragment key={id}>
+            {SECTION_REGISTRY[id] === null ? null : (
+              <OverviewSectionBoundary sectionId={id}>
+                {SECTION_REGISTRY[id]}
+              </OverviewSectionBoundary>
+            )}
+          </Fragment>
         ))
       )}
     </div>
