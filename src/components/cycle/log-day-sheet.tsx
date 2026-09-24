@@ -88,9 +88,9 @@ import type {
  * detailed form posts a single day-log (flow, symptoms, BBT, OPK, mucus,
  * intercourse + protection, free-text note). The write is optimistic-ish
  * (the mutation invalidates the cycle keys on success so the calendar +
- * wheel repaint); the symptom chips reuse the mood-tag chip styling.
+ * wheel repaint); symptoms list one per line with their intensity beside them.
  *
- * a11y: every chip is a real `<button>` with `aria-pressed`; the sheet
+ * a11y: every chip and symptom toggle is a real `<button>` with `aria-pressed`; the sheet
  * footer sticky-pins Save/Cancel.
  */
 
@@ -964,9 +964,9 @@ export function LogDaySheet({
                 <cat.icon className="h-3.5 w-3.5" aria-hidden="true" />
                 {t(cat.labelKey)}
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="space-y-1.5">
                 {cat.symptoms.map((s) => (
-                  <SymptomChip
+                  <SymptomRow
                     key={s.key}
                     symptomKey={s.key}
                     icon={s.icon}
@@ -988,9 +988,9 @@ export function LogDaySheet({
               <Tag className="h-3.5 w-3.5" aria-hidden="true" />
               {t("cycle.symptomCategory.custom")}
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="space-y-1.5">
               {(customSymptoms.data?.symptoms ?? []).map((s) => (
-                <SymptomChip
+                <SymptomRow
                   key={s.key}
                   symptomKey={s.key}
                   icon={customIcon(s.icon)}
@@ -1334,12 +1334,19 @@ function Field({
 }
 
 /**
- * One symptom chip + its inline 1-4 severity selector (shared by the seeded
- * catalogue chips and the custom chips so both render identically). A custom
- * chip additionally carries a tiny remove (×) affordance that soft-hides the
- * symptom from the catalogue.
+ * One symptom per line: the toggle on the left, its optional 1-4 intensity
+ * on the right (shared by the seeded catalogue and the custom symptoms so both
+ * render identically). A custom row additionally carries a remove control that
+ * soft-hides the symptom from the catalogue.
+ *
+ * The intensity used to appear inline next to a chip in a wrapping row, so
+ * selecting a symptom widened its chip and pushed every chip after it along,
+ * often right out from under the finger reaching for the intensity. The row
+ * now reserves the intensity's space whether or not it is shown: selecting a
+ * symptom changes colours and reveals the intensity in place, and nothing on
+ * the sheet moves.
  */
-function SymptomChip({
+export function SymptomRow({
   symptomKey,
   icon: Icon,
   label,
@@ -1375,26 +1382,41 @@ function SymptomChip({
   }
 
   return (
-    <div className="flex items-center gap-1">
-      <span className="relative inline-flex items-center">
-        <Chip active={active} onClick={() => onToggle(symptomKey)}>
-          <span className="flex items-center gap-1.5">
-            <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-            {label}
-          </span>
-        </Chip>
-        {custom ? (
+    <div
+      className="flex items-center gap-2"
+      data-slot="cycle-symptom-row"
+      data-symptom={symptomKey}
+      data-active={active ? "true" : "false"}
+    >
+      <button
+        type="button"
+        aria-pressed={active}
+        onClick={() => onToggle(symptomKey)}
+        className={cn(
+          "focus-visible:ring-ring/50 flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-md border px-3 py-1.5 text-left text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none sm:min-h-9",
+          active
+            ? "border-primary bg-primary/10 text-primary"
+            : "border-border text-foreground hover:bg-accent",
+        )}
+      >
+        <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+        {/* Wraps rather than truncates: the intensity column leaves a narrow
+            label on a phone, and a symptom name cut to "Breast tendern…" is
+            not a name. A wrapped row is taller in both states, so it still
+            never moves on select. */}
+        <span className="min-w-0 leading-snug break-words">{label}</span>
+      </button>
+      {custom ? (
+        <>
           <button
             type="button"
             onClick={() => setConfirmRemove(true)}
             disabled={deleteCustom.isPending}
             aria-label={t("cycle.symptom.custom.remove", { label })}
-            className="border-border bg-background text-muted-foreground hover:text-destructive hover:border-destructive focus-visible:ring-ring/50 relative -ml-1.5 grid size-4 shrink-0 place-items-center rounded-full border transition-colors before:absolute before:-inset-2 before:content-[''] focus-visible:ring-2 focus-visible:outline-none"
+            className="text-muted-foreground hover:text-destructive hover:bg-accent focus-visible:ring-ring/50 grid size-11 shrink-0 place-items-center rounded-md transition-colors focus-visible:ring-2 focus-visible:outline-none sm:size-9"
           >
-            <X className="size-2.5" aria-hidden="true" />
+            <X className="size-4" aria-hidden="true" />
           </button>
-        ) : null}
-        {custom ? (
           <ConfirmDialog
             slot="cycle-custom-symptom-remove"
             open={confirmRemove}
@@ -1405,41 +1427,45 @@ function SymptomChip({
             pending={deleteCustom.isPending}
             onConfirm={handleRemove}
           />
-        ) : null}
-      </span>
-      {active ? (
-        <div
-          className="flex gap-0.5"
-          role="group"
-          aria-label={t("cycle.sheet.severity")}
-        >
-          {SEVERITY_LEVELS.map((lvl) => (
-            <button
-              key={lvl}
-              type="button"
-              aria-pressed={severity === lvl}
-              aria-label={t("cycle.sheet.severityLevel", { level: lvl })}
-              onClick={() => onSeverity(symptomKey, lvl)}
-              className={cn(
-                "focus-visible:ring-ring/50 grid size-11 place-items-center rounded-full border text-xs tabular-nums transition-colors focus-visible:ring-2 focus-visible:outline-none sm:size-8",
-                severity === lvl
-                  ? "border-primary bg-primary/15 text-primary font-semibold"
-                  : "border-border text-muted-foreground hover:bg-accent",
-              )}
-            >
-              {lvl}
-            </button>
-          ))}
-        </div>
+        </>
       ) : null}
+      {/* Always laid out, only shown while the symptom is selected: the
+          reserved width is what keeps the row still when it appears. */}
+      <div
+        className={cn("flex shrink-0 gap-1", !active && "invisible")}
+        role="group"
+        aria-label={t("cycle.sheet.severity")}
+        aria-hidden={active ? undefined : true}
+        data-slot="cycle-symptom-severity"
+      >
+        {SEVERITY_LEVELS.map((lvl) => (
+          <button
+            key={lvl}
+            type="button"
+            aria-pressed={severity === lvl}
+            aria-label={t("cycle.sheet.severityLevel", { level: lvl })}
+            onClick={() => onSeverity(symptomKey, lvl)}
+            disabled={!active}
+            tabIndex={active ? undefined : -1}
+            className={cn(
+              "focus-visible:ring-ring/50 grid size-11 place-items-center rounded-full border text-xs tabular-nums transition-colors focus-visible:ring-2 focus-visible:outline-none sm:size-9",
+              severity === lvl
+                ? "border-primary bg-primary/15 text-primary font-semibold"
+                : "border-border text-muted-foreground hover:bg-accent",
+            )}
+          >
+            {lvl}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
 
 /**
- * The dashed ghost-chip in the symptom grid that opens a compact label + icon
- * popover to mint a new custom symptom. Matches the chip grid (same rounded-
- * full pill, same size) so it reads as part of the grid, not a foreign button.
+ * The dashed ghost row at the end of the custom symptoms that opens a compact
+ * label + icon popover to mint a new custom symptom. Same height and shape as
+ * a symptom row so it reads as part of the list, not a foreign button.
  */
 function AddSymptomChip({ onCreated }: { onCreated: (key: string) => void }) {
   const { t } = useTranslations();
@@ -1486,9 +1512,9 @@ function AddSymptomChip({ onCreated }: { onCreated: (key: string) => void }) {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="border-border text-muted-foreground hover:border-primary hover:text-primary focus-visible:ring-ring/50 inline-flex items-center gap-1.5 rounded-full border border-dashed px-3 py-1.5 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none"
+          className="border-border text-muted-foreground hover:border-primary hover:text-primary focus-visible:ring-ring/50 flex min-h-11 w-full items-center gap-2 rounded-md border border-dashed px-3 py-1.5 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none sm:min-h-9"
         >
-          <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+          <Plus className="size-3.5" aria-hidden="true" />
           {t("cycle.symptom.custom.add")}
         </button>
       </PopoverTrigger>
