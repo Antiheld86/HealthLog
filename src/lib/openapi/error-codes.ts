@@ -128,6 +128,7 @@ export const ERROR_CODE_CATALOGUE: Readonly<Record<string, readonly string[]>> =
       "documents.inbound.restoreGone",
       "documents.inbound.uploadBusy",
       "documents.inbound.uploadTimeout",
+      "documents.inbound.vaccinationNotFound",
     ],
     encounter: [
       "encounter.invalid",

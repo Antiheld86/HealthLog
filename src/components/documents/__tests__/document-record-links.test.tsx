@@ -1,0 +1,145 @@
+import { describe, expect, it, vi } from "vitest";
+import { renderToStaticMarkup } from "react-dom/server";
+
+vi.mock("@/hooks/use-auth", () => ({
+  useAuth: () => ({ user: { modules: { vaccinations: true } } }),
+}));
+vi.mock("@/hooks/use-encounters", () => ({
+  useEncounters: () => ({
+    data: { upcoming: [], past: [] },
+    isPending: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
+vi.mock("@/components/vaccinations/use-vaccinations", () => ({
+  useVaccinations: () => ({
+    data: {
+      vaccinations: [
+        {
+          id: "dose-1",
+          occurredAt: "1991-04-02T00:00:00.000Z",
+          catalogEntry: {
+            slug: "tetanus",
+            atc: "J07AM01",
+            category: "standard",
+          },
+          vaccineName: null,
+        },
+      ],
+    },
+    isPending: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+}));
+
+import { I18nProvider } from "@/lib/i18n/context";
+import type { InboundDocumentDetailDto } from "@/lib/validations/inbound-documents";
+import { DocumentRecordLinks, recordOptions } from "../document-record-links";
+
+function doc(
+  over: Partial<InboundDocumentDetailDto> = {},
+): InboundDocumentDetailDto {
+  return {
+    id: "doc-1",
+    kind: "VACCINATION",
+    title: "Childhood record",
+    filename: null,
+    mimeType: "application/pdf",
+    byteSize: 1,
+    status: "STORED",
+    providerType: null,
+    reportDate: null,
+    documentDate: "1991-04-02",
+    errorReason: null,
+    factCount: 0,
+    pendingCount: 0,
+    conditionLinks: [],
+    encounterLinks: [],
+    servingClass: "inline",
+    hasContentIndex: false,
+    contentIndexSource: null,
+    lastIndexAttemptAt: null,
+    lastIndexOutcome: null,
+    hasThumbnail: false,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    facts: [],
+    vaccinationLinks: [],
+    summary: null,
+    summaryGeneratedAt: null,
+    summaryState: "NONE",
+    ...over,
+  } as InboundDocumentDetailDto;
+}
+
+function render(node: React.ReactNode) {
+  return renderToStaticMarkup(
+    <I18nProvider initialLocale="en">{node}</I18nProvider>,
+  );
+}
+
+describe("recordOptions", () => {
+  it("puts records near the document first and groups the rest by year", () => {
+    const options = recordOptions(
+      [
+        {
+          id: "late",
+          label: "Tetanus",
+          occurredAt: "2010-06-01T00:00:00.000Z",
+        },
+        { id: "near", label: "Polio", occurredAt: "1991-04-05T00:00:00.000Z" },
+      ],
+      "1991-04-02",
+      { suggested: "Around this date", date: (iso) => iso.slice(0, 10) },
+    );
+    expect(options.map((o) => o.id)).toEqual(["near", "late"]);
+    expect(options[0]!.group?.key).toBe("suggested");
+    expect(options[1]!.group).toEqual({ key: "2010", label: "2010" });
+  });
+});
+
+describe("<DocumentRecordLinks>", () => {
+  it("lets a manager link the page to doses and visits", () => {
+    const html = render(
+      <DocumentRecordLinks doc={doc()} canManage onChange={() => undefined} />,
+    );
+    expect(html).toContain('data-slot="document-vaccination-links"');
+    expect(html).toContain('data-slot="document-vaccination-links-add"');
+    expect(html).toContain('data-slot="document-visit-links"');
+  });
+
+  it("shows a read-only reader the doses the page is filed against", () => {
+    const html = render(
+      <DocumentRecordLinks
+        doc={doc({
+          vaccinationLinks: [
+            {
+              vaccinationId: "dose-1",
+              occurredAt: "1991-04-02T00:00:00.000Z",
+              catalogSlug: null,
+              vaccineName: "DTP",
+            },
+          ],
+        })}
+        canManage={false}
+        onChange={() => undefined}
+      />,
+    );
+    expect(html).toContain('data-slot="document-vaccination-link"');
+    expect(html).toContain("DTP");
+    expect(html).not.toContain('data-slot="document-vaccination-links-add"');
+  });
+
+  it("shows no dose block at all when the grant withholds the doses", () => {
+    const html = render(
+      <DocumentRecordLinks
+        doc={doc({ vaccinationLinks: null })}
+        canManage
+        onChange={() => undefined}
+      />,
+    );
+    expect(html).not.toContain("document-vaccination-links");
+  });
+});

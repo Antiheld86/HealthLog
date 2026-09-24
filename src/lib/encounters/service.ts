@@ -73,6 +73,8 @@ const TARGET_DOMAIN: Record<LinkTargetKind, ShareDomain> = {
   labResult: "labs",
   conditionEpisode: "illness",
   encounter: "profile",
+  // A dose lives in the health background, like the visit itself.
+  vaccination: "profile",
 };
 
 /**

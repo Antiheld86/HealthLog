@@ -16,7 +16,7 @@ export type LinkSourceKind = "encounter" | "document" | "vaccination";
 
 /** The record a link points at. */
 export type LinkTargetKind =
-  "document" | "labResult" | "conditionEpisode" | "encounter";
+  "document" | "labResult" | "conditionEpisode" | "encounter" | "vaccination";
 
 export interface LinkRequest {
   userId: string;
@@ -187,6 +187,18 @@ const ENCOUNTER_ENDPOINT: EndpointSpec = {
   date: (row) => asDate(row.occurredAt),
 };
 
+const VACCINATION_ENDPOINT: EndpointSpec = {
+  delegate: (tx) => narrow<OwnedRowDelegate>(tx.vaccinationRecord),
+  select: { id: true, antigenSlug: true, vaccineName: true, occurredAt: true },
+  // The person's own wording first, then the catalogue slug. A caller that
+  // renders a dose resolves the slug through its own bundle instead (see
+  // `loadDocumentVaccinationLinks`); this label is the fallback every
+  // generic consumer of the service gets.
+  label: (row) =>
+    asString(row.vaccineName) ?? asString(row.antigenSlug) ?? String(row.id),
+  date: (row) => asDate(row.occurredAt),
+};
+
 const CONDITION_ENDPOINT: EndpointSpec = {
   delegate: (tx) => narrow<OwnedRowDelegate>(tx.illnessEpisode),
   select: { id: true, label: true, onsetAt: true },
@@ -254,6 +266,18 @@ const LINK_TABLES: Partial<
     sourceColumn: "vaccinationId",
     targetColumn: "documentId",
     target: DOCUMENT_ENDPOINT,
+  },
+  // The SAME table as `vaccination:document`, read from the other end, like
+  // `document:encounter` beside it. A childhood record covering a dozen doses
+  // is filed from the document's own sheet in one pass rather than dose by
+  // dose; the dose's form and the document's sheet write one table, so they
+  // cannot disagree about what is filed where. A second direction, not a
+  // second vaccination table.
+  "document:vaccination": {
+    delegate: (tx) => narrow<LinkRowDelegate>(tx.vaccinationDocumentLink),
+    sourceColumn: "documentId",
+    targetColumn: "vaccinationId",
+    target: VACCINATION_ENDPOINT,
   },
 };
 

@@ -98,7 +98,7 @@ const inboundFactEditRequest = inboundFactEditSchema.meta({
 const documentUpdateRequest = documentUpdateSchema.meta({
   id: "DocumentUpdateRequest",
   description:
-    "Metadata edit for a stored document: `title` (user label; null clears it), `kind` (category), `documentDate` (user filing date, YYYY-MM-DD; null clears it), `episodeIds` (REPLACE-SET of condition links — the document's links become exactly this set; an empty array unlinks everything; every id must be a live episode of the caller or the whole request answers 404), `encounterIds` (the same replace-set semantics over the caller's visits). At least one field required. No `userId` field — narrowed from the session and fed to the Prisma `where` with the row id.",
+    "Metadata edit for a stored document: `title` (user label; null clears it), `kind` (category), `documentDate` (user filing date, YYYY-MM-DD; null clears it), `episodeIds` (REPLACE-SET of condition links — the document's links become exactly this set; an empty array unlinks everything; every id must be a live episode of the caller or the whole request answers 404), `encounterIds` (the same replace-set semantics over the caller's visits), `vaccinationIds` (the same replace-set semantics over the caller's vaccination doses, up to 100 so one childhood record can be filed against a whole primary schedule). At least one field required. No `userId` field — narrowed from the session and fed to the Prisma `where` with the row id.",
 });
 
 const documentBulkRequest = documentBulkSchema.meta({
@@ -156,6 +156,19 @@ const encounterLink = z
       "A link to one of the caller's visits — \"this letter belongs to that appointment\". `kind` is the visit-kind ENUM CONSTANT rather than a rendered name: unlike a condition label, which is the person's own words, a visit kind is one of eight closed values whose human name the reader's own bundle owns, so publishing the constant is what lets a German reader and an English one each see it named correctly.",
   });
 
+const vaccinationLink = z
+  .object({
+    vaccinationId: z.string(),
+    occurredAt: z.string().nullable(),
+    catalogSlug: z.string().nullable(),
+    vaccineName: z.string().nullable(),
+  })
+  .meta({
+    id: "DocumentVaccinationLink",
+    description:
+      "A link to one of the caller's vaccination doses — \"this page records that dose\". `catalogSlug` is the catalogue entry when this release still knows the dose's slug, for the reader's own bundle to name; null is the signal to show `vaccineName`, the person's own wording. The same table the dose's own `/api/vaccinations/{id}/links` writes from the other end.",
+  });
+
 const inboundDocument = z
   .object({
     id: z.string(),
@@ -203,6 +216,10 @@ const inboundDocument = z
 const inboundDocumentDetail = inboundDocument
   .extend({
     facts: z.array(extractedFact),
+    vaccinationLinks: z.array(vaccinationLink).nullable().meta({
+      description:
+        "Vaccination doses this document is filed against. Null when the caller acts inside somebody else's record under a grant that does not cover the health background the doses live in: the page is shared, the doses are not, and an empty list would claim the page records none.",
+    }),
     summary: z.string().nullable(),
     summaryGeneratedAt: z.string().nullable(),
     summaryState: z.enum(DOCUMENT_SUMMARY_STATES),

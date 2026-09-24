@@ -366,6 +366,24 @@ export interface DocumentEncounterLinkDto {
   occurredAt: string | null;
 }
 
+/**
+ * One vaccination link on a document detail DTO — "this page records that
+ * dose".
+ *
+ * `catalogSlug` is the catalogue entry when this release still knows the
+ * dose's slug, so the reader's own bundle names it
+ * (`vaccinations.catalog.<slug>`); `null` is the signal to show
+ * `vaccineName`, the person's own wording. The same degrade the vaccination
+ * DTO's `catalogEntry: null` carries.
+ */
+export interface DocumentVaccinationLinkDto {
+  vaccinationId: string;
+  /** ISO-8601 instant of the dose (UTC midnight — a Pass carries dates). */
+  occurredAt: string | null;
+  catalogSlug: string | null;
+  vaccineName: string | null;
+}
+
 /** The document DTO (list + detail). */
 export interface InboundDocumentDto {
   id: string;
@@ -429,6 +447,13 @@ export interface InboundDocumentDto {
 
 export interface InboundDocumentDetailDto extends InboundDocumentDto {
   facts: ExtractedFactDto[];
+  /**
+   * Doses this document is filed against, newest link last. `null` when the
+   * caller acts inside somebody else's record under a grant that does not
+   * cover the health background the doses live in: the page is shared, the
+   * doses are not, and an empty list would claim the page records none.
+   */
+  vaccinationLinks: DocumentVaccinationLinkDto[] | null;
   /**
    * Short (3-4 sentence) plain-language summary of WHAT the document is,
    * generated once in the background after upload when the `documentsAutoAiRead`
@@ -620,6 +645,20 @@ const encounterIdList = z
   .max(DOCUMENT_MAX_ENCOUNTER_LINKS);
 
 /**
+ * Max vaccination links a single document may carry / receive per request.
+ *
+ * Higher than the visit and condition bounds on purpose. One childhood
+ * record routinely covers every dose of a whole primary schedule, which is
+ * well past twenty rows, and it is the normal case rather than an edge one.
+ * The link service's own per-call ceiling is the bound.
+ */
+export const DOCUMENT_MAX_VACCINATION_LINKS = 100;
+
+const vaccinationIdList = z
+  .array(z.string().trim().min(1).max(40))
+  .max(DOCUMENT_MAX_VACCINATION_LINKS);
+
+/**
  * The store-only upload metadata (the multipart form fields beside the file).
  * Every field is optional — a bare file upload is valid and lands as a STORED
  * document with no title / category / filing date. `episodeIds` pre-links the
@@ -665,6 +704,11 @@ export const documentUpdateSchema = z
     episodeIds: episodeIdList.optional(),
     /** Replace-set visit links, same semantics as `episodeIds`. */
     encounterIds: encounterIdList.optional(),
+    /**
+     * Replace-set vaccination links, same semantics. The same table the
+     * dose's own form writes from the other end.
+     */
+    vaccinationIds: vaccinationIdList.optional(),
   })
   .refine(
     (d) =>
@@ -672,7 +716,8 @@ export const documentUpdateSchema = z
       d.kind !== undefined ||
       d.documentDate !== undefined ||
       d.episodeIds !== undefined ||
-      d.encounterIds !== undefined,
+      d.encounterIds !== undefined ||
+      d.vaccinationIds !== undefined,
     { message: "Provide at least one field to update" },
   );
 

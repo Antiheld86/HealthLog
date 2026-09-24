@@ -9881,7 +9881,10 @@
       "uploadedMeta": "Añadido el {date} · {size}",
       "share": "Compartir",
       "labValuesLink": "Ver {count} valores de laboratorio",
-      "visitsLabel": "Pertenece a la cita"
+      "visitsLabel": "Pertenece a la cita",
+      "vaccinationsLabel": "Vacunas",
+      "noVisitsToLink": "Aún no hay consultas registradas.",
+      "noVaccinationsToLink": "Aún no hay vacunas registradas."
     },
     "dropOverlay": {
       "title": "Suelta los archivos para subirlos",

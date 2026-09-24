@@ -9881,7 +9881,10 @@
       "uploadedMeta": "Ajouté le {date} · {size}",
       "share": "Partager",
       "labValuesLink": "Voir {count} valeurs de laboratoire",
-      "visitsLabel": "Rattaché au rendez-vous"
+      "visitsLabel": "Rattaché au rendez-vous",
+      "vaccinationsLabel": "Vaccinations",
+      "noVisitsToLink": "Aucune consultation enregistrée pour l’instant.",
+      "noVaccinationsToLink": "Aucune vaccination enregistrée pour l’instant."
     },
     "dropOverlay": {
       "title": "Déposez les fichiers pour les téléverser",

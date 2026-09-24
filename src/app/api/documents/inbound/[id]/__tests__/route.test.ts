@@ -28,6 +28,14 @@ vi.mock("@/lib/db", () => ({
       deleteMany: vi.fn(),
       createMany: vi.fn(),
     },
+    vaccinationDocumentLink: {
+      findMany: vi.fn(),
+      deleteMany: vi.fn(),
+      createMany: vi.fn(),
+    },
+    vaccinationRecord: {
+      findMany: vi.fn(),
+    },
     documentContentIndex: {
       findUnique: vi.fn(),
     },
@@ -73,6 +81,10 @@ vi.mock("@/lib/rate-limit", () => ({
 }));
 
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
+// Owner by default (every section open); the redaction case narrows it.
+vi.mock("@/lib/sharing/acting-domains", () => ({
+  actingDomainVisibility: vi.fn(async () => () => true),
+}));
 vi.mock("@/lib/auth/audit", () => ({
   auditLog: vi.fn().mockResolvedValue(undefined),
 }));
@@ -89,10 +101,12 @@ vi.mock("next/headers", () => ({
   })),
 }));
 
-import { PATCH } from "../route";
+import { GET, PATCH } from "../route";
+import { actingDomainVisibility } from "@/lib/sharing/acting-domains";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { requireModuleEnabled } from "@/lib/modules/gate";
+import { auditLog } from "@/lib/auth/audit";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -141,6 +155,16 @@ beforeEach(() => {
     [] as never,
   );
   vi.mocked(prisma.encounter.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.vaccinationDocumentLink.findMany).mockResolvedValue(
+    [] as never,
+  );
+  vi.mocked(prisma.vaccinationRecord.findMany).mockResolvedValue([] as never);
+  vi.mocked(prisma.vaccinationDocumentLink.deleteMany).mockResolvedValue({
+    count: 0,
+  } as never);
+  vi.mocked(prisma.vaccinationDocumentLink.createMany).mockResolvedValue({
+    count: 0,
+  } as never);
   vi.mocked(prisma.documentConditionLink.findMany).mockResolvedValue(
     [] as never,
   );
@@ -265,5 +289,142 @@ describe("PATCH /api/documents/inbound/[id]", () => {
     expect(res.status).toBe(404);
     expect(prisma.documentConditionLink.deleteMany).not.toHaveBeenCalled();
     expect(prisma.documentConditionLink.createMany).not.toHaveBeenCalled();
+  });
+
+  it("replace-sets vaccination links from vaccinationIds and audits the change", async () => {
+    vi.mocked(prisma.inboundDocument.findFirst).mockResolvedValue({
+      id: "doc-1",
+    } as never);
+    vi.mocked(prisma.vaccinationRecord.findMany).mockResolvedValue([
+      { id: "dose-1" },
+      { id: "dose-2" },
+    ] as never);
+    vi.mocked(prisma.inboundDocument.findFirstOrThrow).mockResolvedValue(
+      docRow() as never,
+    );
+
+    const res = await PATCH(
+      mkReq("doc-1", { vaccinationIds: ["dose-1", "dose-2"] }) as never,
+      ctx("doc-1") as never,
+    );
+    expect(res.status).toBe(200);
+    // The owner-narrowing read is scoped by the session user and the
+    // tombstone, never by anything the body carried.
+    const narrowWhere = vi.mocked(prisma.vaccinationRecord.findMany).mock
+      .calls[0]![0]!.where!;
+    expect(narrowWhere).toMatchObject({ userId: "user-1", deletedAt: null });
+    expect(prisma.vaccinationDocumentLink.deleteMany).toHaveBeenCalledWith({
+      where: {
+        userId: "user-1",
+        documentId: "doc-1",
+        vaccinationId: { notIn: ["dose-1", "dose-2"] },
+      },
+    });
+    expect(prisma.vaccinationDocumentLink.createMany).toHaveBeenCalledWith({
+      data: [
+        { documentId: "doc-1", vaccinationId: "dose-1", userId: "user-1" },
+        { documentId: "doc-1", vaccinationId: "dose-2", userId: "user-1" },
+      ],
+      skipDuplicates: true,
+    });
+    expect(prisma.inboundDocument.update).not.toHaveBeenCalled();
+    expect(vi.mocked(auditLog)).toHaveBeenCalledWith(
+      "documents.inbound.update",
+      expect.objectContaining({
+        details: expect.objectContaining({ fields: ["vaccinationIds"] }),
+      }),
+    );
+    const body = await res.json();
+    expect(body.data.vaccinationLinks).toEqual([]);
+  });
+
+  it("refuses a foreign dose with a 404-shaped response and writes nothing", async () => {
+    vi.mocked(prisma.inboundDocument.findFirst).mockResolvedValue({
+      id: "doc-1",
+    } as never);
+    vi.mocked(prisma.vaccinationRecord.findMany).mockResolvedValue([] as never);
+
+    const res = await PATCH(
+      mkReq("doc-1", { vaccinationIds: ["dose-foreign"] }) as never,
+      ctx("doc-1") as never,
+    );
+    expect(res.status).toBe(404);
+    expect(prisma.vaccinationDocumentLink.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.vaccinationDocumentLink.createMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses more dose links than one request may carry", async () => {
+    const ids = Array.from({ length: 101 }, (_, i) => `dose-${i}`);
+    const res = await PATCH(
+      mkReq("doc-1", { vaccinationIds: ids }) as never,
+      ctx("doc-1") as never,
+    );
+    expect(res.status).toBe(422);
+    expect(prisma.inboundDocument.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/documents/inbound/[id] — vaccination links", () => {
+  function getReq(id: string): NextRequest {
+    return new NextRequest(
+      new URL(`http://localhost/api/documents/inbound/${id}`),
+    );
+  }
+
+  beforeEach(() => {
+    vi.mocked(prisma.inboundDocument.findFirst).mockResolvedValue(
+      docRow() as never,
+    );
+    vi.mocked(prisma.vaccinationDocumentLink.findMany).mockResolvedValue([
+      { documentId: "doc-1", vaccinationId: "dose-1" },
+      { documentId: "doc-1", vaccinationId: "dose-2" },
+    ] as never);
+    // First read: the link service's target re-read; second: the identity
+    // read that lets the client name each dose.
+    vi.mocked(prisma.vaccinationRecord.findMany).mockResolvedValue([
+      {
+        id: "dose-1",
+        antigenSlug: "tetanus",
+        vaccineName: null,
+        occurredAt: new Date("1991-04-02T00:00:00.000Z"),
+      },
+      {
+        id: "dose-2",
+        antigenSlug: "no-longer-in-catalogue",
+        vaccineName: "DTP",
+        occurredAt: new Date("1991-06-02T00:00:00.000Z"),
+      },
+    ] as never);
+  });
+
+  it("lists every dose the page is filed against, named for the reader's bundle", async () => {
+    const res = await GET(getReq("doc-1") as never, ctx("doc-1") as never);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.vaccinationLinks).toEqual([
+      {
+        vaccinationId: "dose-1",
+        occurredAt: "1991-04-02T00:00:00.000Z",
+        catalogSlug: "tetanus",
+        vaccineName: null,
+      },
+      {
+        vaccinationId: "dose-2",
+        occurredAt: "1991-06-02T00:00:00.000Z",
+        catalogSlug: null,
+        vaccineName: "DTP",
+      },
+    ]);
+  });
+
+  it("withholds the doses from a grant that does not cover the health background", async () => {
+    vi.mocked(actingDomainVisibility).mockResolvedValueOnce(
+      (domain) => domain !== "profile",
+    );
+    const res = await GET(getReq("doc-1") as never, ctx("doc-1") as never);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.vaccinationLinks).toBeNull();
+    expect(prisma.vaccinationDocumentLink.findMany).not.toHaveBeenCalled();
   });
 });

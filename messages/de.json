@@ -9881,7 +9881,10 @@
       "uploadedMeta": "Hinzugefügt am {date} · {size}",
       "share": "Teilen",
       "labValuesLink": "{count} Laborwerte ansehen",
-      "visitsLabel": "Gehört zu Termin"
+      "visitsLabel": "Gehört zu Termin",
+      "vaccinationsLabel": "Impfungen",
+      "noVisitsToLink": "Noch keine Termine erfasst.",
+      "noVaccinationsToLink": "Noch keine Impfungen erfasst."
     },
     "dropOverlay": {
       "title": "Zum Hochladen ablegen",

@@ -9881,7 +9881,10 @@
       "uploadedMeta": "Added {date} · {size}",
       "share": "Share",
       "labValuesLink": "View {count} lab values",
-      "visitsLabel": "Belongs to visit"
+      "visitsLabel": "Belongs to visit",
+      "vaccinationsLabel": "Vaccinations",
+      "noVisitsToLink": "No visits recorded yet.",
+      "noVaccinationsToLink": "No vaccinations recorded yet."
     },
     "dropOverlay": {
       "title": "Drop files to upload",

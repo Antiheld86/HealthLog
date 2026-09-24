@@ -27639,12 +27639,20 @@ components:
             type: string
             minLength: 1
             maxLength: 40
+        vaccinationIds:
+          maxItems: 100
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 40
       description: "Metadata edit for a stored document: `title` (user label; null clears it), `kind` (category),
         `documentDate` (user filing date, YYYY-MM-DD; null clears it), `episodeIds` (REPLACE-SET of condition links —
         the document's links become exactly this set; an empty array unlinks everything; every id must be a live episode
         of the caller or the whole request answers 404), `encounterIds` (the same replace-set semantics over the
-        caller's visits). At least one field required. No `userId` field — narrowed from the session and fed to the
-        Prisma `where` with the row id."
+        caller's visits), `vaccinationIds` (the same replace-set semantics over the caller's vaccination doses, up to
+        100 so one childhood record can be filed against a whole primary schedule). At least one field required. No
+        `userId` field — narrowed from the session and fed to the Prisma `where` with the row id."
     InboundExtractRequest:
       anyOf:
         - type: object
@@ -30203,20 +30211,20 @@ components:
                 documents.inbound.notIndexed, documents.inbound.pdfNeedsAnthropic,
                 documents.inbound.providerUnsupported, documents.inbound.quotaExceeded, documents.inbound.rateLimited,
                 documents.inbound.restoreDuplicate, documents.inbound.restoreGone, documents.inbound.uploadBusy,
-                documents.inbound.uploadTimeout; encounter — encounter.invalid, encounter.link.invalid,
-                encounter.practitioner-not-found, encounter.reminder-conflict, encounter.reminder-not-found; environment
-                — environment.invalid, environment.no_home, environment.range_too_large, environment.travel.not_found;
-                export — export.selection.empty, export.selection.unknown_leaf; familyHistory — familyHistory.invalid;
-                feedback — feedback.body.invalid; health_score_config — health_score_config.invalid,
-                health_score_config.too_narrow; illness — illness.day-log.invalid, illness.disabled,
-                illness.episode.chronic-no-resolve, illness.episode.invalid, illness.episode.invalid-window,
-                illness.episode.parent-not-found, illness.insights.invalid; import — import.write_failed; ingest —
-                ingest.rate_limited; insights — insights.generate.budgetExceeded, insights.generate.outboundScreened,
-                insights.generate.profileScopeChanged, insights.generate.scopeChanged; labs —
-                labs.biomarker.create.invalid, labs.biomarker.duplicate, labs.biomarker.notFound,
-                labs.biomarker.update.invalid, labs.biomarker.update.referenceRangeInvalid, labs.create.invalid,
-                labs.ocr.budgetExceeded, labs.ocr.extractFailed, labs.ocr.fileTooLarge, labs.ocr.fileType,
-                labs.ocr.localOcrDisabled, labs.ocr.pdfNeedsAnthropic, labs.ocr.providerUnsupported,
+                documents.inbound.uploadTimeout, documents.inbound.vaccinationNotFound; encounter — encounter.invalid,
+                encounter.link.invalid, encounter.practitioner-not-found, encounter.reminder-conflict,
+                encounter.reminder-not-found; environment — environment.invalid, environment.no_home,
+                environment.range_too_large, environment.travel.not_found; export — export.selection.empty,
+                export.selection.unknown_leaf; familyHistory — familyHistory.invalid; feedback — feedback.body.invalid;
+                health_score_config — health_score_config.invalid, health_score_config.too_narrow; illness —
+                illness.day-log.invalid, illness.disabled, illness.episode.chronic-no-resolve, illness.episode.invalid,
+                illness.episode.invalid-window, illness.episode.parent-not-found, illness.insights.invalid; import —
+                import.write_failed; ingest — ingest.rate_limited; insights — insights.generate.budgetExceeded,
+                insights.generate.outboundScreened, insights.generate.profileScopeChanged,
+                insights.generate.scopeChanged; labs — labs.biomarker.create.invalid, labs.biomarker.duplicate,
+                labs.biomarker.notFound, labs.biomarker.update.invalid, labs.biomarker.update.referenceRangeInvalid,
+                labs.create.invalid, labs.ocr.budgetExceeded, labs.ocr.extractFailed, labs.ocr.fileTooLarge,
+                labs.ocr.fileType, labs.ocr.localOcrDisabled, labs.ocr.pdfNeedsAnthropic, labs.ocr.providerUnsupported,
                 labs.ocr.rateLimited, labs.restore.invalid, labs.result.notFound, labs.update.invalid,
                 labs.update.linkedFieldsImmutable, labs.update.numericExpected, labs.update.qualitativeExpected,
                 labs.update.referenceRangeInvalid, labs.update.sourceReferenceRangeInvalid; managed_profile —
@@ -62810,6 +62818,15 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ExtractedFact"
+        vaccinationLinks:
+          anyOf:
+            - type: array
+              items:
+                $ref: "#/components/schemas/DocumentVaccinationLink"
+            - type: "null"
+          description: "Vaccination doses this document is filed against. Null when the caller acts inside somebody else's record
+            under a grant that does not cover the health background the doses live in: the page is shared, the doses are
+            not, and an empty list would claim the page records none."
         summary:
           anyOf:
             - type: string
@@ -62851,6 +62868,7 @@ components:
         - createdAt
         - updatedAt
         - facts
+        - vaccinationLinks
         - summary
         - summaryGeneratedAt
         - summaryState
@@ -62939,6 +62957,33 @@ components:
         with per-field provenance + a confidence gate. STATED status only — codes (SNOMED/ICD-10/LOINC/RxNorm/ATC) are
         present only when the document wrote them; no range-flag, no inferred links. `needsReview` is true when the fact
         scored below the confidence floor (it cannot be approved until edited).
+    DocumentVaccinationLink:
+      type: object
+      properties:
+        vaccinationId:
+          type: string
+        occurredAt:
+          anyOf:
+            - type: string
+            - type: "null"
+        catalogSlug:
+          anyOf:
+            - type: string
+            - type: "null"
+        vaccineName:
+          anyOf:
+            - type: string
+            - type: "null"
+      required:
+        - vaccinationId
+        - occurredAt
+        - catalogSlug
+        - vaccineName
+      additionalProperties: false
+      description: A link to one of the caller's vaccination doses — "this page records that dose". `catalogSlug` is the
+        catalogue entry when this release still knows the dose's slug, for the reader's own bundle to name; null is the
+        signal to show `vaccineName`, the person's own wording. The same table the dose's own
+        `/api/vaccinations/{id}/links` writes from the other end.
     InboundDocumentUpdateEnvelope:
       type: object
       properties:
