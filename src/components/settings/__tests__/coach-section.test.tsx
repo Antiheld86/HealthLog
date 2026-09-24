@@ -16,6 +16,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({ data: null, isLoading: false, refetch: vi.fn() }),
+  useInfiniteQuery: () => ({ data: undefined, isLoading: false }),
   useMutation: () => ({ mutate: vi.fn(), isPending: false }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));

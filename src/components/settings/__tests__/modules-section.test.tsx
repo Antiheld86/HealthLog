@@ -63,21 +63,18 @@ vi.mock("@/hooks/use-auth", async () => {
   return { ...actual, useAuth: () => authSpy() };
 });
 
-// The hub now renders a live coach switch, so it reads the operator assistant
-// flag matrix (`flags.coach`) to decide whether the operator killed Coach
-// server-wide. Mock the hook directly so the SSR pass doesn't need a
-// `<QueryClientProvider>`; default all-on.
-import type { AssistantFlagSet } from "@/hooks/use-feature-flags";
-const ALL_ON_FLAGS: AssistantFlagSet = {
-  enabled: true,
-  coach: true,
-  briefing: true,
-  insightStatus: true,
-  documentAi: true,
+// The hub renders a live coach switch and reads the `coach` AI capability to
+// decide whether the operator switched the Coach off server-wide. Mock the
+// hook directly so the SSR pass doesn't need a `<QueryClientProvider>`.
+import type { AiCapabilityState } from "@/lib/ai/capabilities/types";
+const COACH_AVAILABLE: AiCapabilityState = {
+  available: true,
+  reason: null,
+  onDeviceAllowed: true,
 };
-const flagsSpy = vi.fn<() => AssistantFlagSet>(() => ALL_ON_FLAGS);
-vi.mock("@/hooks/use-feature-flags", () => ({
-  useFeatureFlags: () => flagsSpy(),
+const coachSpy = vi.fn<() => AiCapabilityState>(() => COACH_AVAILABLE);
+vi.mock("@/hooks/use-ai-capability", () => ({
+  useAiCapability: () => coachSpy(),
 }));
 
 function buildUser(
@@ -133,7 +130,7 @@ beforeEach(() => {
     user: buildUser({}),
     isAuthenticated: true,
   }));
-  flagsSpy.mockImplementation(() => ALL_ON_FLAGS);
+  coachSpy.mockImplementation(() => COACH_AVAILABLE);
 });
 
 afterEach(() => {
@@ -295,7 +292,11 @@ describe("<ModulesSection>", () => {
 
     it("disables the switch + shows a hint when the operator killed Coach", () => {
       // Operator assistant master flag off → coach is unavailable server-wide.
-      flagsSpy.mockImplementation(() => ({ ...ALL_ON_FLAGS, coach: false }));
+      coachSpy.mockImplementation(() => ({
+        available: false,
+        reason: "operator_disabled",
+        onDeviceAllowed: false,
+      }));
       const html = render();
       const coachTag = html.match(
         /<button[^>]*id="module-toggle-coach"[^>]*>/,

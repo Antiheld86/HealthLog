@@ -44,6 +44,11 @@ import { HealthProfileFactsManager } from "@/components/records/health-profile-f
 
 export function AnamnesisSection() {
   const { t } = useTranslations();
+  // The inclusion card and the about-me note only feed AI surfaces, so they
+  // follow the person's two AI opt-outs: the Coach module and "AI analysis"
+  // (the `insights` module, which since v1.39 governs model-written text and
+  // nothing else). They are opt-outs, not capabilities, on purpose: somebody
+  // without a provider yet can still write the note the AI will read later.
   const coachEnabled = useModuleEnabled("coach");
   const insightsEnabled = useModuleEnabled("insights");
   return (

@@ -19,11 +19,15 @@
  */
 
 import { AiInsightsCard } from "@/components/settings/ai/ai-insights-card";
+import { OperatorOffNotice } from "@/components/settings/ai/operator-off-notice";
+import { StoredCoachMemory } from "@/components/settings/coach-memory-section";
+import { AiSetupHint } from "@/components/insights/ai-setup-hint";
 import { useAuth } from "@/hooks/use-auth";
 import { useMounted } from "@/hooks/use-mounted";
+import { isSurfaceVisible } from "@/lib/modules/surface";
 
 export function AiSection() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   // v1.16.6 — the auth query can resolve before this boundary
   // hydrates; every `disabled={!isAuthenticated}` binding in the child
   // cards would then disagree with the SSR HTML (React #418). Gate the
@@ -36,5 +40,23 @@ export function AiSection() {
   // v1.18.6 (W9) — the visible heading + subtitle now come from the shared
   // `<SettingsSectionFrame>` in the route; this body is the single provider
   // card. (The "About me" context moved to Settings → Account in v1.18.1 D8.)
-  return <AiInsightsCard isAuthenticated={authed} />;
+  //
+  // v1.39 — above the provider card: what the operator has switched off (so
+  // nothing below reads as broken), and the one calm setup hint while no
+  // provider is configured. Below it: what the Coach stored, while Settings →
+  // Coach is not reachable, so it can always be read and deleted.
+  const coachSettingsReachable = isSurfaceVisible(
+    "settings:coach",
+    user?.modules,
+  );
+  return (
+    <div className="space-y-6">
+      <OperatorOffNotice />
+      <AiSetupHint surface="settings" />
+      <AiInsightsCard isAuthenticated={authed} />
+      {authed && !coachSettingsReachable ? (
+        <StoredCoachMemory isAuthenticated={authed} />
+      ) : null}
+    </div>
+  );
 }

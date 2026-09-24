@@ -74,12 +74,20 @@ export interface ChecklistInputs {
   /**
    * True iff any AI provider can serve this user — a personal key,
    * a local model, an OAuth sign-in, OR the operator's shared key.
-   * Derived from `/api/user/ai-provider`'s `aiAvailable`, so the row
-   * self-satisfies the moment insights become reachable (including on a
+   * `ai.provider.configured` from `GET /api/auth/me`, so the row
+   * self-satisfies the moment a provider is set up (including on a
    * deployment that ships a shared operator key). Presence-only — it
    * never decrypts a credential or probes liveness.
    */
   insightsConfigured: boolean;
+  /**
+   * Whether AI can be set up from here at all (`ai.provider.canConfigure`):
+   * false while the operator has AI switched off and inside a record
+   * somebody else owns. The AI row exists only when true. HealthLog is
+   * complete without AI, so the list never carries a to-do nobody on this
+   * screen can finish.
+   */
+  aiConfigurable: boolean;
   /** Dismissed item ids (per-item localStorage state). */
   dismissedIds: ReadonlySet<ChecklistItemId>;
   /**
@@ -197,12 +205,16 @@ export function buildChecklist(inputs: ChecklistInputs): ChecklistItem[] {
       href: "/settings/notifications",
       dismissed: inputs.dismissedIds.has("notifications"),
     },
-    {
-      id: "insights",
-      done: inputs.insightsConfigured,
-      href: "/settings/ai",
-      dismissed: inputs.dismissedIds.has("insights"),
-    },
+    ...(inputs.aiConfigurable
+      ? [
+          {
+            id: "insights" as const,
+            done: inputs.insightsConfigured,
+            href: "/settings/ai",
+            dismissed: inputs.dismissedIds.has("insights"),
+          },
+        ]
+      : []),
   ];
   if (!inputs.onboarding) return items;
   // The visit row exists only for the answer that asked for it; every other
