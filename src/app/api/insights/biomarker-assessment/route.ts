@@ -12,6 +12,12 @@
  * provider. The generator regenerates ONLY when the latest reading
  * fingerprint changes, so an idle marker re-stamps cached text without an
  * LLM round-trip.
+ *
+ * A mixed read: the note is served, and warmed, only while the `statusText`
+ * AI capability is available. Otherwise the route answers 200 with no note
+ * and an `ai` state saying why, without reading the cache or queueing
+ * anything. The `insights` module (the AI analysis opt-out) folds into the
+ * capability.
  */
 import { NextRequest } from "next/server";
 import { z } from "zod/v4";
@@ -19,8 +25,8 @@ import { apiSuccess, returnAllZodIssues } from "@/lib/api-response";
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
-import { requireAssistantSurface } from "@/lib/feature-flags";
-import { requireModuleEnabled } from "@/lib/modules/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
+import { unavailableStatusBody } from "@/lib/insights/status-unavailable";
 import { generateBiomarkerStatus } from "@/lib/insights/biomarker-status";
 import { resolveMetricStatusLocale } from "@/lib/insights/metric-status";
 
@@ -35,10 +41,6 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // record, which is not a section a scoped grant can name. The miss behind it
   // enqueues nothing while a delegate is holding the request.
   const { user } = await requireRecordAuth("manage", "record");
-  const m = await requireModuleEnabled(user.id, "insights");
-  if (!m.enabled) return m.response;
-  await requireAssistantSurface("insightStatus");
-
   const parsed = querySchema.safeParse({
     biomarkerId: request.nextUrl.searchParams.get("biomarkerId"),
   });
@@ -48,6 +50,15 @@ export const GET = apiHandler(async (request: NextRequest) => {
       meta: { issue_count: parsed.error.issues.length },
     });
     return returnAllZodIssues(parsed.error, 422);
+  }
+
+  const ai = await aiCapabilityToServe(user.id, "statusText");
+  if (!ai.available) {
+    annotate({
+      action: { name: "insights.biomarker-status.unavailable" },
+      meta: { reason: ai.reason },
+    });
+    return apiSuccess(await unavailableStatusBody(user.id, ai));
   }
 
   const localeParam = request.nextUrl.searchParams.get("locale");
@@ -71,5 +82,5 @@ export const GET = apiHandler(async (request: NextRequest) => {
     meta: { biomarkerId: parsed.data.biomarkerId },
   });
 
-  return apiSuccess(result);
+  return apiSuccess({ ...result, ai });
 });

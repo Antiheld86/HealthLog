@@ -19,6 +19,7 @@ import {
   recordRefusal,
   stdResponses,
 } from "./shared";
+import { aiCapabilityState } from "./profile";
 
 // v1.4.25 W16b — typed workout batch ingest response envelope. Mirrors
 // the measurements batch shape but reports the `workouts` count rather
@@ -239,6 +240,9 @@ const workoutDetailResponse = z
     // feature was live, over the duration floor, under the day's cap and with
     // a provider reachable. Reading this endpoint never generates one.
     aiInsight: workoutActivityInsight.nullable(),
+    ai: aiCapabilityState.describe(
+      "The `workoutInsights` AI capability. While it is unavailable `aiInsight` is null and the stored paragraph is not even read.",
+    ),
     canonicalId: z.string(),
     /**
      * The canonical session before this one in the same sport, or null when
@@ -284,7 +288,7 @@ export const workoutPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Measurements"],
       summary: "Workout detail (v1.4.32)",
       description:
-        "Single-workout envelope. Owns the optional `WorkoutRoute` GeoJSON geometry + `canonicalId` pointer that resolves to the cluster winner so deep-links into non-canonical twin rows can redirect cleanly. Additive enrichment fields (`hrSeries`, `zones`, `splits`, `sportContext`) are computed server-side. `aiInsight` is a pure read of a per-workout paragraph written by a background job when the workout landed; it is null for every workout that predates the feature or was re-synced, and reading this endpoint never generates one. `compact=1` (sent by the web client) drops the raw `samples.samples` HR blob and `route.sampleTimestamps` array from the response; without it the payload is byte-identical to the v1.4.32 contract. Cross-user rows surface as 404 (existence channel sealed).",
+        "Single-workout envelope. Owns the optional `WorkoutRoute` GeoJSON geometry + `canonicalId` pointer that resolves to the cluster winner so deep-links into non-canonical twin rows can redirect cleanly. Additive enrichment fields (`hrSeries`, `zones`, `splits`, `sportContext`) are computed server-side. `aiInsight` is a pure read of a per-workout paragraph written by a background job when the workout landed; it is null for every workout that predates the feature or was re-synced, and while the `workoutInsights` AI capability is unavailable (`ai` says why), and reading this endpoint never generates one. `compact=1` (sent by the web client) drops the raw `samples.samples` HR blob and `route.sampleTimestamps` array from the response; without it the payload is byte-identical to the v1.4.32 contract. Cross-user rows surface as 404 (existence channel sealed).",
       requestParams: {
         path: z.object({ id: z.string() }),
         query: z.object({

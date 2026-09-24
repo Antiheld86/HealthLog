@@ -1,8 +1,8 @@
 /**
  * `POST /api/daily/digest/dismiss` — the Today rail dismiss surface.
  *
- * Under test: cookie/Bearer auth narrows the user, the `insights` module gate
- * returns a 403 `module.disabled` envelope when off, an `itemKey` that isn't
+ * Under test: cookie/Bearer auth narrows the user, the `insights` module (the
+ * AI analysis opt-out) no longer refuses a dismissal, an `itemKey` that isn't
  * namespaced under a dismissible kind 422s BEFORE any DB write, and the happy
  * path upserts the `DismissedPriorityItem` row scoped to the caller.
  */
@@ -98,7 +98,7 @@ describe("POST /api/daily/digest/dismiss", () => {
     expect(prisma.dismissedPriorityItem.upsert).not.toHaveBeenCalled();
   });
 
-  it("returns the 403 module.disabled envelope when insights is off", async () => {
+  it("accepts a dismissal with the insights module (the AI analysis opt-out) off", async () => {
     vi.mocked(requireModuleEnabled).mockResolvedValue({
       enabled: false,
       response: apiError('Module "insights" is not enabled', 403, {
@@ -109,8 +109,9 @@ describe("POST /api/daily/digest/dismiss", () => {
     const res = await callPost(
       makeReq({ itemKey: "milestone:record_first:WEIGHT:2026-07-16" }),
     );
-    expect(res.status).toBe(403);
-    expect(prisma.dismissedPriorityItem.upsert).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(requireModuleEnabled).not.toHaveBeenCalled();
+    expect(prisma.dismissedPriorityItem.upsert).toHaveBeenCalled();
   });
 
   it("422s an itemKey that isn't namespaced under a dismissible kind — an actionable item can never be dismissed", async () => {

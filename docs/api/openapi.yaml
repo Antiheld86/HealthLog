@@ -4209,10 +4209,10 @@ paths:
         resolves to the cluster winner so deep-links into non-canonical twin rows can redirect cleanly. Additive
         enrichment fields (`hrSeries`, `zones`, `splits`, `sportContext`) are computed server-side. `aiInsight` is a
         pure read of a per-workout paragraph written by a background job when the workout landed; it is null for every
-        workout that predates the feature or was re-synced, and reading this endpoint never generates one. `compact=1`
-        (sent by the web client) drops the raw `samples.samples` HR blob and `route.sampleTimestamps` array from the
-        response; without it the payload is byte-identical to the v1.4.32 contract. Cross-user rows surface as 404
-        (existence channel sealed).
+        workout that predates the feature or was re-synced, and while the `workoutInsights` AI capability is unavailable
+        (`ai` says why), and reading this endpoint never generates one. `compact=1` (sent by the web client) drops the
+        raw `samples.samples` HR blob and `route.sampleTimestamps` array from the response; without it the payload is
+        byte-identical to the v1.4.32 contract. Cross-user rows surface as 404 (existence channel sealed).
       parameters:
         - in: path
           name: id
@@ -4233,7 +4233,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GetWorkoutResponse"
         "401": *a1
-        "403": &a16
+        "403": &a17
           description: 'Module disabled for this account: the user (or operator) has the module turned off. `meta.errorCode` =
             `module.disabled` and `meta.module` carries the disabled module key (e.g. "sleep"). Returned even for a
             valid Bearer token. Clients hide the whole module surface end-to-end rather than retry.'
@@ -8466,13 +8466,13 @@ paths:
       tags:
         - Insights
       summary: List the caller's Coach conversations
-      description: v1.18.0 — cursor-paginated list of the caller's Coach conversations for the history rail, most-recent
+      description: "v1.18.0 — cursor-paginated list of the caller's Coach conversations for the history rail, most-recent
         activity first. Metadata only (id, title, timestamps, message count); message bodies are not decrypted here.
         `limit` defaults to 20, capped at 50; pass the returned `nextCursor` back as `cursor` for the next page (null at
         the end). v1.30.2 — optional `q` narrows the page to conversations whose TITLE contains the text
         (case-insensitive substring, capped at 200 chars); message bodies are encrypted at rest and are not searched.
-        Coach-gated (`requireAssistantSurface("coach")`); a disabled surface 403s. Auth via cookie or Bearer; the owner
-        is narrowed from the session.
+        Never AI-gated: stored conversations are the person's data and stay listable, readable and deletable while the
+        Coach is unavailable for any reason. Auth via cookie or Bearer; the owner is narrowed from the session."
       parameters:
         - name: cursor
           in: query
@@ -8511,16 +8511,19 @@ paths:
       tags:
         - Insights
       summary: Send a Coach turn (streaming reply)
-      description: "v1.18.0 — sends a user turn and streams the assistant reply as Server-Sent Events. The response is
-        `text/event-stream`, not JSON: one `data: <json>\\n\\n` frame per event. Frame `type` is one of `token` (a chunk
+      description: 'v1.18.0 — sends a user turn and streams the assistant reply as Server-Sent Events. The response is
+        `text/event-stream`, not JSON: one `data: <json>\n\n` frame per event. Frame `type` is one of `token` (a chunk
         of reply text: `{ type, token }`), `provenance` (the evidence envelope: `{ type, metricSource }`), `suggestion`
         (a cadence-suggestion card: `{ type, suggestion }`), `reasoning` (v1.18.9, optional reasoning-summary text: `{
         type, text }` — emitted only by reasoning-capable providers; absent otherwise), `done` (`{ type, conversationId,
         messageId, usage? }` — v1.18.9 adds the optional `usage` envelope `{ totalTokens, promptTokens?,
         completionTokens?, model? }`, server-authoritative; clients display it, never recompute), or `error` (`{ type,
-        code, message }`). The HTTP status is 200 even for a provider/refusal outcome — clients dispatch on the `error`
-        frame, not the status. Clients ignore unknown frame types (additive evolution). Omitting `conversationId` starts
-        a new conversation. Coach-gated; budget- and rate-limited. Auth via cookie or Bearer."
+        code, message, reason? }`). The HTTP status is 200 even for a provider/refusal outcome — clients dispatch on the
+        `error` frame, not the status. Clients ignore unknown frame types (additive evolution). Omitting
+        `conversationId` starts a new conversation. Requires the `coach` AI capability, checked right after auth: an
+        unavailable Coach is refused with the capability envelope before the stream opens, except a missing provider,
+        which keeps its `coach.provider.none` error frame and adds `reason: "no_provider"`. Budget- and rate-limited.
+        Auth via cookie or Bearer.'
       requestBody:
         required: true
         content:
@@ -8537,8 +8540,11 @@ paths:
                 description: "SSE frames: `data: <json>\\n\\n`. See the operation description for the per-`type` frame shapes."
         "401": *a1
         "403":
-          description: "Coach surface disabled (`errorCode: assistant.disabled.coach`) or AI consent required (`errorCode:
-            consent.ai.required`)."
+          description: "The `coach` AI capability is unavailable for this record. `meta.capability` = `coach` and `meta.reason`
+            says which layer refused: the operator's switch (`assistant.disabled.coach`, or `assistant.disabled.enabled`
+            for the master switch), an owning module or the person's own AI opt-out (`module.disabled` with
+            `meta.module`), a delegate inside somebody else's record (`ai.record.notPermitted`), or a missing consent
+            receipt (`consent.ai.required`). Nothing was generated, read from a stored model answer, or enqueued."
           content:
             application/json:
               schema:
@@ -8551,15 +8557,22 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "422": *a4
         "429": *a5
+        "503": &a16
+          description: "The AI capability could not be resolved (its inputs could not be read) and the answer failed closed:
+            `meta.errorCode` = `ai.unavailable`, `meta.reason` = `check_failed`. Retry later; no data depends on it."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
   /api/insights/chat/{id}:
     get:
       tags:
         - Insights
       summary: Read one Coach conversation with all messages
-      description: v1.18.0 — returns one conversation with every message decrypted server-side and ordered oldest-first, plus
+      description: "v1.18.0 — returns one conversation with every message decrypted server-side and ordered oldest-first, plus
         the rolling `summary` when one is on file. The client renders the bodies directly; no decryption key is
         involved. A foreign / unknown id maps to 404 (never 403) so the existence channel does not leak across accounts.
-        Coach-gated. Auth via cookie or Bearer.
+        Never AI-gated: a stored conversation stays readable while the Coach is unavailable. Auth via cookie or Bearer."
       parameters:
         - name: id
           in: path
@@ -8590,7 +8603,7 @@ paths:
       description: Sets the conversation's title. The only field this verb writes — the body is `.strict()`, so an
         unrecognised key is REFUSED rather than ignored, unlike most partial updates on this surface. The title is
         trimmed and must be 1..80 characters after trimming. A foreign or unknown id maps to 404 (never 403), so the
-        existence channel does not leak across accounts. Coach-gated. Auth via cookie or Bearer; the caller is always
+        existence channel does not leak across accounts. Never AI-gated. Auth via cookie or Bearer; the caller is always
         resolved as themselves, so a conversation in a shared record is not reachable here.
       parameters:
         - name: id
@@ -8632,8 +8645,8 @@ paths:
       tags:
         - Insights
       summary: Delete one Coach conversation
-      description: v1.18.0 — hard-deletes a conversation and every message under it. A foreign / unknown id maps to 404 (never
-        403). Coach-gated. Auth via cookie or Bearer.
+      description: "v1.18.0 — hard-deletes a conversation and every message under it. A foreign / unknown id maps to 404
+        (never 403). Never AI-gated: erasure works while the Coach is unavailable. Auth via cookie or Bearer."
       parameters:
         - name: id
           in: path
@@ -8890,10 +8903,11 @@ paths:
       tags:
         - Insights
       summary: List the caller's durable Coach facts
-      description: v1.11.1 — returns the active facts the Coach has extracted about the caller (highest-confidence then newest
-        first), each decrypted on the fly. The GDPR 'what do you know about me' surface. Coach-gated
-        (`requireAssistantSurface("coach")`). Auth via cookie or Bearer; the owner is always narrowed from the session,
-        never the body. Undecryptable rows are omitted rather than failing the read.
+      description: "v1.11.1 — returns the active facts the Coach has extracted about the caller (highest-confidence then
+        newest first), each decrypted on the fly. The GDPR 'what do you know about me' surface. Never AI-gated: the
+        facts stay readable and erasable while the Coach is unavailable for any reason. Auth via cookie or Bearer; the
+        owner is always narrowed from the session, never the body. Undecryptable rows are omitted rather than failing
+        the read."
       responses:
         "200":
           description: The caller's active facts.
@@ -8909,7 +8923,7 @@ paths:
         - Insights
       summary: Forget all of the caller's Coach facts
       description: "v1.11.1 — bulk 'forget what you know about me': soft-deletes every active fact for the caller and returns
-        the count cleared. Idempotent (a second call clears 0). Coach-gated. Auth via cookie or Bearer."
+        the count cleared. Idempotent (a second call clears 0). Never AI-gated. Auth via cookie or Bearer."
       responses:
         "200":
           description: All active facts cleared; the count is returned.
@@ -8927,7 +8941,7 @@ paths:
       summary: Forget one Coach fact
       description: "v1.11.1 — soft-deletes a single fact owned by the caller. An unknown / cross-user / already-deleted id is
         an idempotent no-op returning `{ deleted: false }`, never revealing whether the id exists under another account.
-        Coach-gated. Auth via cookie or Bearer."
+        Never AI-gated. Auth via cookie or Bearer."
       responses:
         "200":
           description: "The fact was soft-deleted (`deleted: true`) or the id matched nothing the caller owns (`deleted: false`)."
@@ -8943,12 +8957,13 @@ paths:
       tags:
         - Insights
       summary: Whether an unopened Coach message is waiting
-      description: v1.18.6 (CCH-03) — server-authoritative unread signal for the Coach FAB. `unread` is true when the caller's
-        newest Coach ASSISTANT message (a proactive nudge or any reply) is newer than `User.coachLastSeenAt`; a user who
-        has never opened the Coach reads an existing nudge as unread exactly once. `nudgedAt` carries that newest
-        assistant-message timestamp (null when none exists) so the client can key a local seen-mirror on a stable value.
-        Coach-gated (`requireAssistantSurface("coach")`); a disabled surface 403s. Auth via cookie or Bearer; the owner
-        is narrowed from the session.
+      description: "v1.18.6 (CCH-03) — server-authoritative unread signal for the Coach FAB. `unread` is true when the
+        caller's newest Coach ASSISTANT message (a proactive nudge or any reply) is newer than `User.coachLastSeenAt`; a
+        user who has never opened the Coach reads an existing nudge as unread exactly once. `nudgedAt` carries that
+        newest assistant-message timestamp (null when none exists) so the client can key a local seen-mirror on a stable
+        value. Never refused for an AI reason: while the `coach` capability is unavailable the answer is the quiet `{
+        unread: false, nudgedAt: null, conversationId: null }` with `ai` saying why. Auth via cookie or Bearer; the
+        owner is narrowed from the session."
       responses:
         "200":
           description: The current unread state.
@@ -8965,11 +8980,11 @@ paths:
       tags:
         - Insights
       summary: Mark the Coach as opened (clear the unread dot)
-      description: v1.18.6 (CCH-03) — opening the Coach (drawer or full page) stamps `User.coachLastSeenAt = now()`, so `GET
+      description: "v1.18.6 (CCH-03) — opening the Coach (drawer or full page) stamps `User.coachLastSeenAt = now()`, so `GET
         /api/insights/coach/nudge-status` then reports no assistant message newer than the stamp and the FAB drops the
         unread dot. Server-authoritative, so the cleared state follows the caller across web + iOS rather than just the
         opening device. No request body — the timestamp is server-minted, so a client can never backdate the stamp to
-        suppress a future nudge. Coach-gated; a disabled surface 403s. Auth via cookie or Bearer.
+        suppress a future nudge. Never AI-gated: a timestamp on the caller's own row. Auth via cookie or Bearer."
       responses:
         "200":
           description: The Coach was marked opened; the stamp is echoed back.
@@ -8985,10 +9000,13 @@ paths:
       tags:
         - Insights
       summary: Read the caller's self-context
-      description: v1.16.0 — returns the structured self-context (free text plus chronic conditions, allergies, coach focus)
+      description: "v1.16.0 — returns the structured self-context (free text plus chronic conditions, allergies, coach focus)
         the Coach system prompt and the daily briefing inject as a delimited, user-provided context block, alongside any
         pending clarifying questions. Every field is stored encrypted at rest; an undecryptable payload reads as null
-        (fail closed). Auth via cookie or Bearer; the owner is always narrowed from the session.
+        (fail closed). The questions are the one AI part: stored questions cannot be told apart by origin, so while the
+        `aboutMeQuestions` capability is unavailable an outstanding set is replaced by the deterministic completion
+        hints for the same profile, and `ai` says why. Auth via cookie or Bearer; the owner is always narrowed from the
+        session."
       responses:
         "200":
           description: The stored fields (null when never written / cleared) plus pending clarifying questions.
@@ -9006,11 +9024,11 @@ paths:
       description: "v1.16.0 — persists the free text (4 000-char cap) and the three structured fields (500-char cap each)
         encrypted at rest; caps are enforced before encryption. Structured fields are optional: omitted leaves the
         stored value untouched, an empty string clears it. After a non-empty save the server derives up to 3 clarifying
-        questions (AI when a provider and the daily Coach token budget allow, deterministic completion hints otherwise)
-        and returns them as `pendingQuestions`. Rate-limited per user. Optimistic concurrency (v1.32.21): send
-        `baseUpdatedAt` (the `updatedAt` from a prior read) and the write 409s if the stored self-context changed since;
-        omit it for the legacy unconditional write. The token is per-surface (`UserHealthProfile.updatedAt`), so it is
-        not perturbed by unrelated account writes."
+        questions (AI when the `aboutMeQuestions` capability is available and the daily Coach token budget allows,
+        deterministic completion hints otherwise, with no provider call) and returns them as `pendingQuestions`.
+        Rate-limited per user. Optimistic concurrency (v1.32.21): send `baseUpdatedAt` (the `updatedAt` from a prior
+        read) and the write 409s if the stored self-context changed since; omit it for the legacy unconditional write.
+        The token is per-surface (`UserHealthProfile.updatedAt`), so it is not perturbed by unrelated account writes."
       requestBody:
         required: true
         content:
@@ -9853,9 +9871,9 @@ paths:
       tags:
         - Insights
       summary: Rate a Coach assistant message
-      description: Persists a helpful/unhelpful rating for a single Coach reply. Reuses the v1.4.16 RecommendationFeedback
+      description: "Persists a helpful/unhelpful rating for a single Coach reply. Reuses the v1.4.16 RecommendationFeedback
         table via the polymorphic `targetType` column. The aggregator buckets ratings by (promptVersion, tone,
-        verbosity).
+        verbosity). Never AI-gated: a rating on a message that already exists calls no model."
       requestBody:
         required: true
         content:
@@ -9959,7 +9977,11 @@ paths:
       summary: Unified dashboard first-paint snapshot
       description: "Assembles every above-the-fold tile field in one round-trip from the rollup / mood / widget helpers plus a
         read-only lift of the pre-generated daily briefing. Two-phase: `tiles` always present, `extras` nullable on a
-        rollup-coverage miss. No LLM is reachable from this path. Cookie or Bearer auth."
+        rollup-coverage miss. No LLM is reachable from this path. The briefing is model text: it, its recall
+        (`briefingMemory`) and its timestamp are served only while the `briefing` AI capability is available for the
+        record, decided on every read rather than cached with the body; `briefingAi` carries the state and
+        `briefingState` reads `no-provider` or `disabled` otherwise. Every other field is data and never depends on AI.
+        Cookie or Bearer auth."
       responses:
         "200":
           description: Dashboard snapshot.
@@ -9975,37 +9997,22 @@ paths:
     get:
       tags:
         - Insights
-      summary: Comprehensive AI insights bundle
-      description: Full Insights surface — daily briefing, recommendations with rationale, optional weekly report + storyboard
-        annotations. Strict-schema validated server-side. Requires an active ConsentReceipt when the resolved provider
-        chain egresses via the operator's server-managed key (see POST /api/consent/ai).
+      summary: The Insights overview's computed read
+      description: "The main read of the Insights overview: summaries, classifications, correlations, medication compliance
+        and rule alerts, all computed from the record. No provider is called and no AI switch, opt-out, provider or
+        consent refuses it; `hasProvider` is provider presence only. The `ai` block beside the body says whether the
+        briefing and the status notes that decorate the overview can be shown, resolved per request. Served
+        stale-while-revalidate; `revalidating` marks a stale body. Delegable at MANAGE level over the whole record.
+        Cookie or Bearer auth."
       responses:
         "200":
-          description: Insights bundle.
+          description: The overview read.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/InsightsComprehensiveResponseEnvelope"
         "401": *a1
-        "403":
-          description: >-
-            AI consent required: no active ConsentReceipt for the server-managed provider. `meta.errorCode` =
-            `consent.ai.required`. Mint a receipt via POST /api/consent/ai before retrying.
-
-
-            Refused: this request named a record the caller may not act on (`meta.errorCode` = `sharing.access.denied`).
-            Byte-identical for an account that does not exist, an account that granted nothing, a grant whose sections
-            do not reach this surface, and a read grant on a request that writes — the response carries no reason, so it
-            is not an account-enumeration oracle. The reason reaches the record owner's activity feed and the operator's
-            audit trail instead. On the cookie transport the same code answers one further case: a session that has
-            entered a shared record and sends a request without its record-context assertion, which is a client older
-            than the fence — leave the record and reload. A request that names no record but the caller's own never
-            reaches this response, so a client that never switches and never sends the per-request account selector will
-            not see it.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
+        "403": *a9
         "422": *a4
         "429": *a5
   /api/insights/cards:
@@ -10013,11 +10020,11 @@ paths:
       tags:
         - Insights
       summary: Insight cards (iOS adapter)
-      description: "v1.4.31 — the native-client adapter over the same alert rule engine the web comprehensive surface
+      description: 'v1.4.31 — the native-client adapter over the same alert rule engine the web comprehensive surface
         consumes: measurements, BP-in-target, weight trend, pulse, and cadence-aware medication compliance are fed
         through `generateAlerts()` and each resulting `HealthAlert` is re-shaped to the iOS Insight card model.
-        Deterministic — no LLM call on this path. Module-gated on `insights` and the operator `insightStatus` assistant
-        surface. Auth via cookie or Bearer."
+        Deterministic — no LLM call on this path, so no AI switch, opt-out or module refuses it. Every card is a rule
+        alert: `provider` is `"rules"` and `summary` is never null. Auth via cookie or Bearer.'
       responses:
         "200":
           description: The list of insight cards (possibly empty).
@@ -10026,7 +10033,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/InsightsCardsEnvelope"
         "401": *a1
-        "403": *a11
+        "403": *a9
         "422": *a4
         "429": *a5
   /api/insights/pregenerate:
@@ -10034,12 +10041,15 @@ paths:
       tags:
         - Insights
       summary: Warm all AI assessments for the calling user
-      description: v1.8.7.1 — enqueue a full warm of every AI assessment for the authenticated user (comprehensive insight +
+      description: "v1.8.7.1 — enqueue a full warm of every AI assessment for the authenticated user (comprehensive insight +
         the seven specialised status cards + every data-bearing generic metric assessment) in the active locale, so the
         read-only status GETs serve cached text instantly. Returns immediately; the generation runs out of band on the
-        worker. Empty metrics and provider-less accounts never trigger an LLM call. Short anti-spam bucket
-        (`insights-warm:<userId>`, one warm per 3 minutes) → 429 on a tight loop. Auth via cookie or Bearer; `userId` is
-        taken from the session, never the body.
+        worker. Covers two AI capabilities, `briefing` and `statusText`, and never refuses: with neither available it
+        answers `queued: false` and enqueues nothing (and spends no anti-spam bucket); with one available it enqueues
+        and the worker checks each half before it builds anything. The `ai` block says which half can run. Empty metrics
+        and provider-less accounts never trigger an LLM call. Short anti-spam bucket (`insights-warm:<userId>`, one warm
+        per 3 minutes) → 429 on a tight loop. Auth via cookie or Bearer; `userId` is taken from the session, never the
+        body."
       requestBody:
         required: false
         content:
@@ -10048,7 +10058,8 @@ paths:
               $ref: "#/components/schemas/InsightsPregenerateRequest"
       responses:
         "200":
-          description: Warm accepted and enqueued. The work runs on the worker; poll the read-only status routes for the text.
+          description: "`queued: true`: the warm was enqueued; the work runs on the worker, so poll the read-only status routes
+            for the text. `queued: false`: neither capability is available and nothing was enqueued; `ai` says why."
           content:
             application/json:
               schema:
@@ -10124,9 +10135,11 @@ paths:
         point of it: `hasProvider: false` means no warm pass can ever refresh what is shown, so stop polling and offer
         to connect one; `generationFailed` means the last attempt failed and the text is HELD rather than fresh;
         `generationFailureClass` says which lever to point at; and `briefingOmittedReason: "ungrounded"` means a
-        generation SUCCEEDED and the grounding gate withheld the briefing, which is a different state from a failure.
-        Gated on the Coach assistant surface — an operator who turns Coach off empties every advisor consumer. Cookie or
-        Bearer auth; the caller is always resolved as themselves, so this read cannot be delegated to a shared record.'
+        generation SUCCEEDED and the grounding gate withheld the briefing, which is a different state from a failure. A
+        pure AI read: the payload is the model-written briefing and nothing else, so it requires the `briefing` AI
+        capability and refuses with the capability envelope before the cache is read; stored briefing text is never
+        served, and no warm is enqueued, while the capability is unavailable. Cookie or Bearer auth; the caller is
+        always resolved as themselves, so this read cannot be delegated to a shared record.'
       responses:
         "200":
           description: The cached payload, or the empty shape when nothing is cached. Always 200 — an absent briefing is a normal
@@ -10137,12 +10150,25 @@ paths:
                 $ref: "#/components/schemas/InsightsGenerateReadEnvelope"
         "401": *a1
         "403":
-          description: The operator has switched the Coach assistant surface off (`meta.errorCode` = `assistant.disabled.coach`).
+          description: "The `briefing` AI capability is unavailable for this record. `meta.capability` = `briefing` and
+            `meta.reason` says which layer refused: the operator's switch (`assistant.disabled.briefing`, or
+            `assistant.disabled.enabled` for the master switch), an owning module or the person's own AI opt-out
+            (`module.disabled` with `meta.module`), a delegate inside somebody else's record (`ai.record.notPermitted`),
+            or a missing consent receipt (`consent.ai.required`). Nothing was generated, read from a stored model
+            answer, or enqueued."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "422":
+          description: "No configured AI provider can serve the `briefing` capability: `meta.errorCode` = `ai.provider.none`,
+            `meta.reason` = `no_provider`."
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "429": *a5
+        "503": *a16
     post:
       tags:
         - Insights
@@ -10158,8 +10184,9 @@ paths:
         true`, and so does an exhausted quota when the fresh cache merely lacked a briefing — and a request that TIMES
         OUT client-side may still complete on the server, writing the briefing to the cache or a dated failure marker,
         which is exactly the pair the read GET reports so a client can settle an aborted regenerate by polling rather
-        than guessing. Gated on the Coach assistant surface, consent-gated when the resolved chain egresses through the
-        operator's server-managed key. Cookie or Bearer auth; not delegable."
+        than guessing. Requires the `briefing` AI capability (the operator's briefing switch, the AI analysis opt-out, a
+        provider, and consent when the chain egresses through the operator's server-managed key), checked before any
+        read or provider work. Cookie or Bearer auth; not delegable."
       requestBody:
         required: false
         content:
@@ -10176,8 +10203,12 @@ paths:
                 $ref: "#/components/schemas/InsightsGeneratePostEnvelope"
         "401": *a1
         "403":
-          description: The Coach assistant surface is off (`assistant.disabled.coach`), or the resolved chain egresses through the
-            operator's key and no consent receipt is on file (`consent.ai.required`).
+          description: "The `briefing` AI capability is unavailable for this record. `meta.capability` = `briefing` and
+            `meta.reason` says which layer refused: the operator's switch (`assistant.disabled.briefing`, or
+            `assistant.disabled.enabled` for the master switch), an owning module or the person's own AI opt-out
+            (`module.disabled` with `meta.module`), a delegate inside somebody else's record (`ai.record.notPermitted`),
+            or a missing consent receipt (`consent.ai.required`). Nothing was generated, read from a stored model
+            answer, or enqueued."
           content:
             application/json:
               schema:
@@ -10191,10 +10222,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "422":
-          description: No AI provider is configured anywhere for this account, or the provider answered something that was not
-            valid JSON (`meta.errorCode` = `ai_response_truncated` when the answer was cut off mid-stream rather than
-            malformed), or the finished prose was withheld by the outbound safety screen
-            (`insights.generate.outboundScreened`).
+          description: No AI provider can serve the `briefing` capability (`meta.errorCode` = `ai.provider.none`, `meta.reason` =
+            `no_provider`), or the provider answered something that was not valid JSON (`meta.errorCode` =
+            `ai_response_truncated` when the answer was cut off mid-stream rather than malformed), or the finished prose
+            was withheld by the outbound safety screen (`insights.generate.outboundScreened`).
           content:
             application/json:
               schema:
@@ -10209,8 +10240,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "503":
-          description: Every provider in the chain failed for a reason that is not a rate limit — auth, timeout or an upstream
+          description: "Every provider in the chain failed for a reason that is not a rate limit — auth, timeout or an upstream
             5xx. A dated failure marker is written, so the read GET reports the briefing as held rather than fresh.
+            Also: the `briefing` capability could not be resolved (`meta.errorCode` = `ai.unavailable`, `meta.reason` =
+            `check_failed`); nothing was generated."
           content:
             application/json:
               schema:
@@ -10317,10 +10350,10 @@ paths:
         the two server-authoritative lines a metric sub-page renders above its chart. Pure compute over the baseline and
         correlation engines: no provider call and no cache table, so web and native decode the same DTO rather than each
         deriving one. Line two arrives as a finished sentence in the reader's language and is printed verbatim, so the
-        resolved locale decides the row; a correlation failure degrades it to null and never sinks line one.
-        Module-gated on `insights` and gated on the Coach assistant surface, because the strip is the ambient Coach
-        presence on that page. Shared analytics-read budget. Delegable at MANAGE level over the whole record: it is
-        computed across the record with no provider on the path. Cookie or Bearer auth."
+        resolved locale decides the row; a correlation failure degrades it to null and never sinks line one. Both lines
+        are computed, so no AI switch, opt-out or module refuses it (the name is historical). Shared analytics-read
+        budget. Delegable at MANAGE level over the whole record: it is computed across the record with no provider on
+        the path. Cookie or Bearer auth."
       parameters:
         - in: query
           name: metric
@@ -10337,7 +10370,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CoachReadStripEnvelope"
         "401": *a1
-        "403": *a11
+        "403": *a9
         "422": *a4
         "429": *a5
   /api/insights/coach/seeded-question:
@@ -10350,8 +10383,10 @@ paths:
         SERVER-side and the client renders it rather than recomputing. `signal: null` is the ordinary answer and means
         the hero keeps its neutral greeting — never a fabricated opener. Two different causes produce that null and are
         indistinguishable on the wire: nothing crossed the notability gate, or the account has turned proactive
-        suggestions off, in which case the detector does not run at all. Module-gated on `insights` and on the Coach
-        assistant surface. Shared analytics-read budget. Cookie or Bearer auth; not delegable."
+        suggestions off, in which case the detector does not run at all. The opener exists only to open the Coach, so it
+        is served only while the `coach` AI capability is available; otherwise the answer is the same neutral `signal:
+        null` and `ai` says why. Never refused for an AI reason. Shared analytics-read budget. Cookie or Bearer auth;
+        not delegable."
       responses:
         "200":
           description: The opener, or the neutral null.
@@ -10360,7 +10395,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/CoachSeededQuestionEnvelope"
         "401": *a1
-        "403": *a16
         "422": *a4
         "429": *a5
   /api/insights/narrative:
@@ -10374,9 +10408,12 @@ paths:
         the no-key demo gets a retrospective on the next read. `revalidating` reports whether this read enqueued a warm,
         and is always FALSE on a delegated request: the route warms unconditionally rather than on a miss, so without
         that suppression a manager's first navigation here would be an egress of the owner's record the owner never
-        asked for. Rows are keyed per locale, so `locale` selects a different stored row rather than translating one.
-        Module-gated on `insights` and on the `insightStatus` assistant surface. Delegable at MANAGE level over the
-        whole record. Cookie or Bearer auth."
+        asked for. Rows are keyed per locale, so `locale` selects a different stored row rather than translating one. A
+        mixed read: a narrative the deterministic composer wrote is data and always served; one a model wrote is served
+        only while the `periodNarrative` AI capability is available, otherwise `narrative` is null and `ai` says why.
+        While the capability is unavailable a warm is enqueued only when nothing servable exists (the worker then writes
+        the deterministic narrative). Never refused for an AI reason. Delegable at MANAGE level over the whole record.
+        Cookie or Bearer auth."
       parameters:
         - in: query
           name: period
@@ -10406,7 +10443,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NarrativeEnvelope"
         "401": *a1
-        "403": *a11
+        "403": *a9
         "422": *a4
         "429": *a5
   /api/insights/glp1-timeline:
@@ -10457,8 +10494,9 @@ paths:
         grain instead of empty — `resolution` says which, and `tension` is always null on an hourly day because that
         read needs per-sample resolution. The bar for a tension window is deliberately high; under-flagging is the
         intended failure mode, and it is awareness, never a diagnosis. `date` is STRICT here, unlike the forgiving date
-        filters elsewhere on the surface: anything but a `YYYY-MM-DD` literal is a 422. Module-gated on `insights`.
-        Delegable at MANAGE level over the whole record. Cookie or Bearer auth."
+        filters elsewhere on the surface: anything but a `YYYY-MM-DD` literal is a 422. Pulse is a core vital, so no
+        module gates it and no AI switch refuses it. Delegable at MANAGE level over the whole record. Cookie or Bearer
+        auth."
       parameters:
         - in: query
           name: date
@@ -10478,7 +10516,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/IntradayPulseEnvelope"
         "401": *a1
-        "403": *a11
+        "403": *a9
         "422": *a4
         "429": *a5
   /api/insights/settings:
@@ -10602,8 +10640,11 @@ paths:
         - Insights
       summary: Blood-pressure assessment
       description: "Data-driven plain-language assessment of the user's recent blood-pressure readings. Read-only: a cache
-        miss warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate). Auth via
-        cookie or Bearer."
+        miss warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate). The note
+        is model text: it is served, and warmed, only while the `statusText` AI capability is available. Otherwise the
+        answer is 200 with the note null, `preparing` false, `hasProvider` as provider presence and `ai` naming the
+        reason; nothing is read from the cache or queued. Never refused for an AI reason, and the `insights` module (the
+        AI analysis opt-out) is folded into the capability. Auth via cookie or Bearer."
       parameters:
         - in: query
           name: locale
@@ -10631,8 +10672,11 @@ paths:
         - Insights
       summary: Pulse assessment
       description: "Data-driven plain-language assessment of the user's recent resting-pulse readings. Read-only: a cache miss
-        warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate). Auth via cookie
-        or Bearer."
+        warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate). The note is
+        model text: it is served, and warmed, only while the `statusText` AI capability is available. Otherwise the
+        answer is 200 with the note null, `preparing` false, `hasProvider` as provider presence and `ai` naming the
+        reason; nothing is read from the cache or queued. Never refused for an AI reason, and the `insights` module (the
+        AI analysis opt-out) is folded into the capability. Auth via cookie or Bearer."
       parameters:
         - in: query
           name: locale
@@ -10660,8 +10704,11 @@ paths:
         - Insights
       summary: Weight assessment
       description: "Data-driven plain-language assessment of the user's recent weight trend. Read-only: a cache miss warms a
-        generation out of band and serves the last-good text meanwhile (stale-while-revalidate). Auth via cookie or
-        Bearer."
+        generation out of band and serves the last-good text meanwhile (stale-while-revalidate). The note is model text:
+        it is served, and warmed, only while the `statusText` AI capability is available. Otherwise the answer is 200
+        with the note null, `preparing` false, `hasProvider` as provider presence and `ai` naming the reason; nothing is
+        read from the cache or queued. Never refused for an AI reason, and the `insights` module (the AI analysis
+        opt-out) is folded into the capability. Auth via cookie or Bearer."
       parameters:
         - in: query
           name: locale
@@ -10689,8 +10736,11 @@ paths:
         - Insights
       summary: BMI assessment
       description: "Data-driven plain-language assessment of the user's body-mass index. Read-only: a cache miss warms a
-        generation out of band and serves the last-good text meanwhile (stale-while-revalidate). Auth via cookie or
-        Bearer."
+        generation out of band and serves the last-good text meanwhile (stale-while-revalidate). The note is model text:
+        it is served, and warmed, only while the `statusText` AI capability is available. Otherwise the answer is 200
+        with the note null, `preparing` false, `hasProvider` as provider presence and `ai` naming the reason; nothing is
+        read from the cache or queued. Never refused for an AI reason, and the `insights` module (the AI analysis
+        opt-out) is folded into the capability. Auth via cookie or Bearer."
       parameters:
         - in: query
           name: locale
@@ -10718,8 +10768,11 @@ paths:
         - Insights
       summary: Mood assessment
       description: "Data-driven plain-language assessment of the user's recent mood entries. Read-only: a cache miss warms a
-        generation out of band and serves the last-good text meanwhile (stale-while-revalidate). Auth via cookie or
-        Bearer."
+        generation out of band and serves the last-good text meanwhile (stale-while-revalidate). The note is model text:
+        it is served, and warmed, only while the `statusText` AI capability is available. Otherwise the answer is 200
+        with the note null, `preparing` false, `hasProvider` as provider presence and `ai` naming the reason; nothing is
+        read from the cache or queued. Never refused for an AI reason, and the `insights` module (the AI analysis
+        opt-out) is folded into the capability. Auth via cookie or Bearer."
       parameters:
         - in: query
           name: locale
@@ -10748,7 +10801,11 @@ paths:
       summary: Medication-compliance assessment
       description: "Data-driven plain-language assessment of the user's medication compliance — an overall `summary` plus a
         per-medication note array. Read-only: a cache miss warms a generation out of band and serves the last-good
-        envelope meanwhile (stale-while-revalidate). Auth via cookie or Bearer."
+        envelope meanwhile (stale-while-revalidate). The note is model text: it is served, and warmed, only while the
+        `statusText` AI capability is available. Otherwise the answer is 200 with the note null, `preparing` false,
+        `hasProvider` as provider presence and `ai` naming the reason; nothing is read from the cache or queued. Never
+        refused for an AI reason, and the `insights` module (the AI analysis opt-out) is folded into the capability.
+        Auth via cookie or Bearer."
       parameters:
         - in: query
           name: locale
@@ -10779,7 +10836,10 @@ paths:
         sleep, glucose, body composition, gait, audio exposure, …). One generic route covering ~30 metric pages via
         archetype prompt templates + per-metric metadata. Read-only: a cache miss warms a generation out of band and
         serves the last-good text meanwhile (stale-while-revalidate). An unknown `metric` 422s against the closed
-        registry enum. Auth via cookie or Bearer."
+        registry enum. The note is model text: it is served, and warmed, only while the `statusText` AI capability is
+        available. Otherwise the answer is 200 with the note null, `preparing` false, `hasProvider` as provider presence
+        and `ai` naming the reason; nothing is read from the cache or queued. Never refused for an AI reason, and the
+        `insights` module (the AI analysis opt-out) is folded into the capability. Auth via cookie or Bearer."
       parameters:
         - in: query
           name: metric
@@ -10871,7 +10931,10 @@ paths:
         Identical envelope to the metric-status card so the `InsightStatusCard` consumes it unchanged. Read-only: a
         cache miss warms a generation out of band and serves the last-good text meanwhile (stale-while-revalidate); the
         assessment regenerates only when a new reading lands. A marker with no numeric readings returns `insufficient`
-        without an LLM call. Auth via cookie or Bearer."
+        without an LLM call. The note is model text: it is served, and warmed, only while the `statusText` AI capability
+        is available. Otherwise the answer is 200 with the note null, `preparing` false, `hasProvider` as provider
+        presence and `ai` naming the reason; nothing is read from the cache or queued. Never refused for an AI reason,
+        and the `insights` module (the AI analysis opt-out) is folded into the capability. Auth via cookie or Bearer."
       parameters:
         - in: query
           name: biomarkerId
@@ -10916,7 +10979,10 @@ paths:
         cache table. Returns the flat `Derived<T>` union so the native client can decode one stable shape and combine
         values across metrics. `windowDays` widens or narrows the trailing window a metric summarises;
         `provenance.windowDays` always reports the window actually used and `coverage.historyDays` the days that
-        actually backed it. Auth via cookie or Bearer.
+        actually backed it. Never refused for an AI reason and not gated on the `insights` module (the AI analysis
+        opt-out). The one AI part is the warmer model-written `assessment` text, served (and warmed) only while the
+        `statusText` capability is available; otherwise the deterministic assessment stands and `ai` says why. Auth via
+        cookie or Bearer.
       parameters:
         - in: query
           name: metric
@@ -11022,7 +11088,8 @@ paths:
         `metric:type` token sub-targets a VITALS_BASELINE vital); the server fans out under a bounded limiter with the
         profile loaded once and returns a map keyed by the per-request token. Collapses the Insights cold-mount fan-out
         of 14+ independent single-metric requests — the pool-starvation class that surfaces as a hang-then-recover. The
-        single-metric route stays for the per-score detail pages. Auth via cookie or Bearer.
+        single-metric route stays for the per-score detail pages. Deterministic assessments only, so no AI gate and no
+        `insights` module gate; each metric keeps its own owning module. Auth via cookie or Bearer.
       parameters:
         - in: query
           name: metrics
@@ -11082,8 +11149,7 @@ paths:
         NEVER decrypts or returns the waveform — the per-recording strip is fetched on demand from GET
         /api/insights/ecg/{id}. Reflects only the recording device's certified on-device classification, verbatim;
         HealthLog never re-classifies an ECG or produces a diagnosis. Data-availability-gated: an empty account returns
-        `hasRecordings: false`. Module-gated on `insights`; no assistant-surface gate and no LLM call. Auth via cookie
-        or Bearer."
+        `hasRecordings: false`. Device data: no module gate, no AI gate and no LLM call. Auth via cookie or Bearer."
       responses:
         "200":
           description: The ECG recording list (possibly empty).
@@ -11092,7 +11158,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/EcgListResponseEnvelope"
         "401": *a1
-        "403": *a11
+        "403": *a9
         "422": *a4
         "429": *a5
     post:
@@ -11107,8 +11173,8 @@ paths:
         or revise one. `source` accepts `APPLE_HEALTH` only; `userId` comes from the session and is never a body field.
         Unknown body keys are rejected with a 422 naming them. No `Idempotency-Key` is needed: the recording carries its
         own identity, so a retry resolves to the same row by construction — see `status` for what a re-post reports.
-        Limits: 32 768 samples, 2 MB body, 60 recordings per minute per user. Module-gated on `insights`; no
-        assistant-surface gate and no LLM call. Auth via cookie or Bearer."
+        Limits: 32 768 samples, 2 MB body, 60 recordings per minute per user. Device data: never refused because AI is
+        off or the AI analysis opt-out is on; no module gate and no LLM call. Auth via cookie or Bearer."
       requestBody:
         required: true
         content:
@@ -11130,7 +11196,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/EcgIngestCreatedEnvelope"
         "401": *a1
-        "403": *a16
         "422": *a4
         "429": *a5
   /api/insights/ecg/{id}:
@@ -11138,13 +11203,13 @@ paths:
       tags:
         - Insights
       summary: One ECG recording with waveform
-      description: v1.28.50 — one recording's decrypted waveform plus metadata and the DEVICE's verbatim classification.
+      description: "v1.28.50 — one recording's decrypted waveform plus metadata and the DEVICE's verbatim classification.
         Ownership is narrowed in the query where (`{ id, userId }`) so a cross-user read is structurally impossible; a
         foreign or unknown id 404s (existence sealed). The waveform is AES-256-GCM at rest, decrypted through the
         fail-closed codec. By default the ~9000-sample strip is min/max-decimated to ~2500 display points so R-wave
         peaks survive; `?full=1` returns the raw array. HealthLog does not interpret the trace, measure intervals,
-        annotate beats, or emit a verdict of its own. Module-gated on `insights`; no assistant-surface gate and no LLM
-        call. `no-store`. Auth via cookie or Bearer.
+        annotate beats, or emit a verdict of its own. Device data: no module gate, no AI gate and no LLM call.
+        `no-store`. Auth via cookie or Bearer."
       parameters:
         - in: path
           name: id
@@ -11170,7 +11235,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/EcgDetailResponseEnvelope"
         "401": *a1
-        "403": *a11
+        "403": *a9
         "404":
           description: No ECG recording with that id for the authenticated user (existence sealed — a foreign id is
             indistinguishable from a missing one).
@@ -11192,8 +11257,8 @@ paths:
         it never re-classifies and never produces a HealthLog diagnosis. `classification` carries the full six-value
         verdict set (the three ECG verdicts plus the two walking-steadiness severities plus the neutral FIRED verdict) —
         a distinct, wider enum than the three-value one on GET /api/insights/ecg. Data-availability-gated: an account
-        with no event rows returns `hasEvents: false`. Module-gated on `insights`; no assistant-surface gate and no LLM
-        call. Auth via cookie or Bearer."
+        with no event rows returns `hasEvents: false`. Device data: no module gate, no AI gate and no LLM call. Auth via
+        cookie or Bearer."
       responses:
         "200":
           description: The device-flagged event timeline (possibly empty).
@@ -11202,7 +11267,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RhythmEventsResponseEnvelope"
         "401": *a1
-        "403": *a11
+        "403": *a9
         "422": *a4
         "429": *a5
   /api/insights/correlations:
@@ -11210,11 +11275,12 @@ paths:
       tags:
         - Insights
       summary: Correlation discovery (FDR-controlled)
-      description: v1.10.0 — scans a curated behaviour × outcome matrix (daylight / mood / glucose / BP / steps × sleep / HRV
+      description: "v1.10.0 — scans a curated behaviour × outcome matrix (daylight / mood / glucose / BP / steps × sleep / HRV
         / resting HR / weight), lag-joins each behaviour day to the next day's outcome, runs Pearson with the exact
         Student-t p-value, and applies Benjamini-Hochberg FDR control across every tested pair. Only
         statistically-defensible pairs surface, each carrying n, r, p, and the BH-adjusted q. Descriptive, never causal.
-        Gated by the operator `correlations` assistant surface. Auth via cookie or Bearer.
+        Statistics, not model output: no AI switch, opt-out or `insights` module gate refuses them. Auth via cookie or
+        Bearer."
       responses:
         "200":
           description: The discovered correlations + the tested-pair count.
@@ -11232,7 +11298,7 @@ paths:
         - Insights
       summary: List current correlation patterns
       description: Returns the authenticated account's currently accepted persisted correlation identities, evidence, and
-        dismissal timestamps.
+        dismissal timestamps. Statistics, not model output, so no AI or `insights` module gate applies.
       responses:
         "200":
           description: Current persisted correlation patterns.
@@ -11241,7 +11307,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CorrelationPatternListResponseEnvelope"
         "401": *a1
-        "403": *a11
+        "403": *a9
         "422": *a4
         "429": *a5
   /api/insights/patterns/{id}:
@@ -11250,7 +11316,7 @@ paths:
         - Insights
       summary: Update correlation pattern dismissal
       description: Dismisses or restores one current account-owned pattern. A dismissal remains effective until the accepted
-        evidence changes materially.
+        evidence changes materially. No AI or `insights` module gate applies.
       parameters:
         - in: path
           name: id
@@ -11271,7 +11337,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateCorrelationPatternResponseEnvelope"
         "401": *a1
-        "403": *a11
+        "403": *a9
         "404":
           description: No current pattern with that id for this account.
           content:
@@ -11357,7 +11423,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MoodDailySeriesEnvelope"
         "401": *a1
-        "403": *a16
+        "403": *a17
         "422": *a4
         "429": *a5
   /api/mood/insights:
@@ -11379,7 +11445,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MoodAggregatesEnvelope"
         "401": *a1
-        "403": *a16
+        "403": *a17
         "422": *a4
         "429": *a5
   /api/mood/prognosis:
@@ -11512,7 +11578,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MoodCustomTagPatchEnvelope"
         "401": *a1
-        "404": &a17
+        "404": &a18
           description: Not found / not owned by the caller.
           content:
             application/json:
@@ -11547,7 +11613,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MoodCustomTagDeleteEnvelope"
         "401": *a1
-        "404": *a17
+        "404": *a18
         "422": *a4
         "429": *a5
   /api/mood/tags/{key}/hidden:
@@ -11583,7 +11649,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "401": *a1
-        "404": *a17
+        "404": *a18
         "422": *a4
         "429": *a5
   /api/mood/tags/groups:
@@ -11636,7 +11702,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MoodTagGroupPatchEnvelope"
         "401": *a1
-        "404": *a17
+        "404": *a18
         "422": *a4
         "429": *a5
     delete:
@@ -11667,7 +11733,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MoodTagGroupDeleteEnvelope"
         "401": *a1
-        "404": *a17
+        "404": *a18
         "422": *a4
         "429": *a5
   /api/mood/tags/layout:
@@ -11832,7 +11898,7 @@ paths:
                 $ref: "#/components/schemas/MoodEntryEnvelope"
         "401": *a1
         "403": *a9
-        "409": &a18
+        "409": &a19
           description: A mood entry with the same `(date, moodLoggedAt)` instant already exists. `meta.errorCode` =
             `mood.duplicate_timestamp`. Only a request without `externalId` can answer this — with one, the write
             upserts in place.
@@ -11864,7 +11930,7 @@ paths:
                 $ref: "#/components/schemas/MoodEntryEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a17
+        "404": *a18
         "422": *a4
         "429": *a5
     put:
@@ -11899,8 +11965,8 @@ paths:
                 $ref: "#/components/schemas/MoodEntryEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a17
-        "409": *a18
+        "404": *a18
+        "409": *a19
         "422": *a4
         "429": *a5
     delete:
@@ -11926,7 +11992,7 @@ paths:
                 $ref: "#/components/schemas/MoodEntryDeleteEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a17
+        "404": *a18
         "422": *a4
         "429": *a5
   /api/mood-entries/restore:
@@ -12076,7 +12142,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PutNtfySettingsResponse"
-        "400": &a19
+        "400": &a20
           description: Body is not parseable JSON.
           content:
             application/json:
@@ -12089,13 +12155,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "413": &a20
+        "413": &a21
           description: Body exceeds 64 KiB.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "415": &a21
+        "415": &a22
           description: Content-Type is not `application/json`.
           content:
             application/json:
@@ -12155,7 +12221,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PutTelegramSettingsResponse"
-        "400": *a19
+        "400": *a20
         "401": *a1
         "403":
           description: The operator switched Telegram off for this instance and the body asked to enable it. No webhook was
@@ -12170,8 +12236,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "413": *a20
-        "415": *a21
+        "413": *a21
+        "415": *a22
         "422":
           description: Body matched neither accepted shape; or `enabled` is true without both a bot token and a chat id; or the
             deployment's `APP_URL` is not a public HTTPS host on port 80/88/443/8443; or Telegram refused the webhook
@@ -12225,10 +12291,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PutWebhookSettingsResponse"
-        "400": *a19
+        "400": *a20
         "401": *a1
-        "413": *a20
-        "415": *a21
+        "413": *a21
+        "415": *a22
         "422":
           description: Body matched neither accepted shape, or `enabled` is true while no webhook URL is stored; or the URL is on
             a private network the operator has not listed in `NOTIFICATION_PRIVATE_ORIGINS` (`meta.errorCode` =
@@ -12785,7 +12851,7 @@ paths:
                 anyOf:
                   - $ref: "#/components/schemas/ConsentLatestForKindEnvelope"
                   - $ref: "#/components/schemas/ConsentLatestByKindEnvelope"
-        "400": &a22
+        "400": &a23
           description: "`kind` was present but is not one of `ai_full`, `ai_insights_only`, `ai_coach`, `ai_extraction`.
             Multi-issue envelope; nothing was read or revoked. The consent family answers 400 here where the rest of the
             API answers 422."
@@ -12845,7 +12911,7 @@ paths:
                 anyOf:
                   - $ref: "#/components/schemas/ConsentRevokeForKindEnvelope"
                   - $ref: "#/components/schemas/ConsentRevokeAllEnvelope"
-        "400": *a22
+        "400": *a23
         "401": *a1
         "422": *a4
         "429": *a5
@@ -13131,7 +13197,7 @@ paths:
                 $ref: "#/components/schemas/MeasurementReminderEnvelope"
         "401": *a1
         "403": *a9
-        "404": &a23
+        "404": &a24
           description: Measurement reminder not found / not owned.
           content:
             application/json:
@@ -13166,7 +13232,7 @@ paths:
                 $ref: "#/components/schemas/MeasurementReminderPatchEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a23
+        "404": *a24
         "422": *a4
         "429": *a5
     delete:
@@ -13189,7 +13255,7 @@ paths:
                 $ref: "#/components/schemas/MeasurementReminderDeleteEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a23
+        "404": *a24
         "422": *a4
         "429": *a5
   /api/measurement-reminders/{id}/satisfy:
@@ -13214,7 +13280,7 @@ paths:
                 $ref: "#/components/schemas/MeasurementReminderSatisfyEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a23
+        "404": *a24
         "422": *a4
         "429": *a5
   /api/measurement-reminders/{id}/complete:
@@ -13242,7 +13308,7 @@ paths:
                 $ref: "#/components/schemas/MeasurementReminderCompleteEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a23
+        "404": *a24
         "422": *a4
         "429": *a5
   /api/measurement-reminders/{id}/skip:
@@ -13272,7 +13338,7 @@ paths:
                 $ref: "#/components/schemas/MeasurementReminderSkipEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a23
+        "404": *a24
         "422": *a4
         "429": *a5
   /api/measurement-reminders/{id}/snooze:
@@ -13306,7 +13372,7 @@ paths:
                 $ref: "#/components/schemas/MeasurementReminderSnoozeEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a23
+        "404": *a24
         "422": *a4
         "429": *a5
   /api/measurement-reminders/{id}/history:
@@ -13347,7 +13413,7 @@ paths:
                 $ref: "#/components/schemas/MeasurementReminderHistoryEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a23
+        "404": *a24
         "422": *a4
         "429": *a5
   /api/labs:
@@ -13471,7 +13537,7 @@ paths:
                 $ref: "#/components/schemas/GetLabResultResponse"
         "401": *a1
         "403": *a9
-        "404": &a24
+        "404": &a25
           description: Lab result not found (or owned by another user).
           content:
             application/json:
@@ -13506,7 +13572,7 @@ paths:
                 $ref: "#/components/schemas/UpdateLabResultResponse"
         "401": *a1
         "403": *a9
-        "404": *a24
+        "404": *a25
         "422": *a4
         "429": *a5
     delete:
@@ -13529,7 +13595,7 @@ paths:
                 $ref: "#/components/schemas/DeleteLabResultResponse"
         "401": *a1
         "403": *a9
-        "404": *a24
+        "404": *a25
         "422": *a4
         "429": *a5
   /api/labs/restore:
@@ -13712,7 +13778,7 @@ paths:
                 $ref: "#/components/schemas/CreateBiomarkerResponse"
         "401": *a1
         "403": *a9
-        "409": &a26
+        "409": &a27
           description: A biomarker with this name already exists for the caller.
           content:
             application/json:
@@ -13741,7 +13807,7 @@ paths:
                 $ref: "#/components/schemas/GetBiomarkerResponse"
         "401": *a1
         "403": *a9
-        "404": &a25
+        "404": &a26
           description: Biomarker not found (or owned by another user).
           content:
             application/json:
@@ -13776,8 +13842,8 @@ paths:
                 $ref: "#/components/schemas/UpdateBiomarkerResponse"
         "401": *a1
         "403": *a9
-        "404": *a25
-        "409": *a26
+        "404": *a26
+        "409": *a27
         "422": *a4
         "429": *a5
     delete:
@@ -13800,7 +13866,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteBiomarkerResponse"
         "401": *a1
-        "404": *a25
+        "404": *a26
         "422": *a4
         "429": *a5
   /api/encounters:
@@ -13939,7 +14005,7 @@ paths:
                 $ref: "#/components/schemas/GetEncounterEnvelope"
         "401": *a1
         "403": *a9
-        "404": &a27
+        "404": &a28
           description: Visit not found (or owned by another user).
           content:
             application/json:
@@ -13973,7 +14039,7 @@ paths:
                 $ref: "#/components/schemas/UpdateEncounterEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a27
+        "404": *a28
         "422": *a4
         "429": *a5
     delete:
@@ -13998,7 +14064,7 @@ paths:
                 $ref: "#/components/schemas/DeleteEncounterEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a27
+        "404": *a28
         "422": *a4
         "429": *a5
   /api/encounters/{id}/restore:
@@ -14024,7 +14090,7 @@ paths:
                 $ref: "#/components/schemas/RestoreEncounterEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a27
+        "404": *a28
         "422": *a4
         "429": *a5
   /api/encounters/{id}/links:
@@ -14054,7 +14120,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/LinkEncounterEnvelope"
         "401": *a1
-        "404": *a27
+        "404": *a28
         "422": *a4
         "429": *a5
     delete:
@@ -14083,7 +14149,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UnlinkEncounterEnvelope"
         "401": *a1
-        "404": *a27
+        "404": *a28
         "422": *a4
         "429": *a5
   /api/practitioners:
@@ -14162,7 +14228,7 @@ paths:
                 $ref: "#/components/schemas/GetPractitionerEnvelope"
         "401": *a1
         "403": *a9
-        "404": &a28
+        "404": &a29
           description: Practitioner not found (or owned by another user).
           content:
             application/json:
@@ -14196,7 +14262,7 @@ paths:
                 $ref: "#/components/schemas/UpdatePractitionerEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a28
+        "404": *a29
         "422": *a4
         "429": *a5
     delete:
@@ -14220,7 +14286,7 @@ paths:
                 $ref: "#/components/schemas/DeletePractitionerEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a28
+        "404": *a29
         "422": *a4
         "429": *a5
   /api/practitioners/{id}/restore:
@@ -14246,7 +14312,7 @@ paths:
                 $ref: "#/components/schemas/RestorePractitionerEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a28
+        "404": *a29
         "422": *a4
         "429": *a5
   /api/vaccinations:
@@ -14341,7 +14407,7 @@ paths:
                 $ref: "#/components/schemas/GetVaccinationEnvelope"
         "401": *a1
         "403": *a9
-        "404": &a29
+        "404": &a30
           description: Vaccination not found (or owned by another user).
           content:
             application/json:
@@ -14376,7 +14442,7 @@ paths:
                 $ref: "#/components/schemas/UpdateVaccinationEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a29
+        "404": *a30
         "422": *a4
         "429": *a5
     delete:
@@ -14401,7 +14467,7 @@ paths:
                 $ref: "#/components/schemas/DeleteVaccinationEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a29
+        "404": *a30
         "422": *a4
         "429": *a5
   /api/vaccinations/{id}/restore:
@@ -14426,7 +14492,7 @@ paths:
                 $ref: "#/components/schemas/RestoreVaccinationEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a29
+        "404": *a30
         "422": *a4
         "429": *a5
   /api/vaccinations/{id}/booster:
@@ -14492,7 +14558,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "404": *a29
+        "404": *a30
         "422": *a4
         "429": *a5
   /api/vaccinations/suggest:
@@ -14550,7 +14616,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/LinkVaccinationEnvelope"
         "401": *a1
-        "404": *a29
+        "404": *a30
         "422": *a4
         "429": *a5
     delete:
@@ -14579,7 +14645,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UnlinkVaccinationEnvelope"
         "401": *a1
-        "404": *a29
+        "404": *a30
         "422": *a4
         "429": *a5
   /api/illness/episodes:
@@ -14663,7 +14729,7 @@ paths:
                 $ref: "#/components/schemas/GetIllnessEpisodeEnvelope"
         "401": *a1
         "403": *a9
-        "404": &a30
+        "404": &a31
           description: Illness episode not found (or owned by another user).
           content:
             application/json:
@@ -14698,7 +14764,7 @@ paths:
                 $ref: "#/components/schemas/UpdateIllnessEpisodeEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a30
+        "404": *a31
         "422": *a4
         "429": *a5
     delete:
@@ -14722,7 +14788,7 @@ paths:
                 $ref: "#/components/schemas/DeleteIllnessEpisodeEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a30
+        "404": *a31
         "422": *a4
         "429": *a5
   /api/illness/episodes/{id}/restore:
@@ -14750,7 +14816,7 @@ paths:
                 $ref: "#/components/schemas/RestoreIllnessEpisodeEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a30
+        "404": *a31
         "409": *a7
         "422": *a4
         "429": *a5
@@ -14783,7 +14849,7 @@ paths:
                 $ref: "#/components/schemas/ResolveIllnessEpisodeEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a30
+        "404": *a31
         "422": *a4
         "429": *a5
   /api/illness/episodes/{id}/day-logs:
@@ -14834,7 +14900,7 @@ paths:
                 $ref: "#/components/schemas/GetIllnessDayLogEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a30
+        "404": *a31
         "422": *a4
         "429": *a5
     post:
@@ -14871,7 +14937,7 @@ paths:
                 $ref: "#/components/schemas/UpsertIllnessDayLogCreatedEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a30
+        "404": *a31
         "422": *a4
         "429": *a5
   /api/illness/episodes/{id}/correlation:
@@ -14898,7 +14964,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/IllnessCorrelationEnvelope"
         "401": *a1
-        "404": *a30
+        "404": *a31
         "422": *a4
         "429": *a5
   /api/illness/insights:
@@ -15114,7 +15180,7 @@ paths:
                 $ref: "#/components/schemas/GetAllergyEnvelope"
         "401": *a1
         "403": *a9
-        "404": &a31
+        "404": &a32
           description: Allergy not found (or owned by another user).
           content:
             application/json:
@@ -15148,7 +15214,7 @@ paths:
                 $ref: "#/components/schemas/UpdateAllergyEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a31
+        "404": *a32
         "422": *a4
         "429": *a5
     delete:
@@ -15172,7 +15238,7 @@ paths:
                 $ref: "#/components/schemas/DeleteAllergyEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a31
+        "404": *a32
         "422": *a4
         "429": *a5
   /api/family-history:
@@ -15246,7 +15312,7 @@ paths:
                 $ref: "#/components/schemas/GetFamilyHistoryEnvelope"
         "401": *a1
         "403": *a9
-        "404": &a32
+        "404": &a33
           description: Family history entry not found (or owned by another user).
           content:
             application/json:
@@ -15280,7 +15346,7 @@ paths:
                 $ref: "#/components/schemas/UpdateFamilyHistoryEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a32
+        "404": *a33
         "422": *a4
         "429": *a5
     delete:
@@ -15304,7 +15370,7 @@ paths:
                 $ref: "#/components/schemas/DeleteFamilyHistoryEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a32
+        "404": *a33
         "422": *a4
         "429": *a5
   /api/documents/inbound:
@@ -15790,7 +15856,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/InboundExtractEnvelope"
         "401": *a1
-        "403": &a33
+        "403": &a34
           description: "AI refusal: the `documentAi` capability is unavailable for this record. The envelope carries
             `meta.errorCode`, `meta.capability` and `meta.reason` (one of `AiUnavailableReason`).
             `assistant.disabled.documentAi` — the operator turned off reading documents, or every AI feature (the master
@@ -15814,7 +15880,7 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "422": *a4
         "429": *a5
-        "503": &a34
+        "503": &a35
           description: "`ai.unavailable` — the inputs behind the AI capability could not be read, and the answer failed closed.
             Nothing was sent. Retry later."
           content:
@@ -15876,10 +15942,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/DocumentSuggestEnvelope"
         "401": *a1
-        "403": *a33
+        "403": *a34
         "422": *a4
         "429": *a5
-        "503": *a34
+        "503": *a35
   /api/documents/inbound/{id}/summary:
     post:
       tags:
@@ -15958,10 +16024,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/DocumentSummaryEnvelope"
         "401": *a1
-        "403": *a33
+        "403": *a34
         "422": *a4
         "429": *a5
-        "503": *a34
+        "503": *a35
   /api/documents/inbound/{id}/index:
     post:
       tags:
@@ -16018,10 +16084,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/DocumentIndexEnvelope"
         "401": *a1
-        "403": *a33
+        "403": *a34
         "422": *a4
         "429": *a5
-        "503": *a34
+        "503": *a35
   /api/documents/inbound/{id}/chat:
     post:
       tags:
@@ -16061,10 +16127,10 @@ paths:
                 type: string
                 description: "SSE frames: `data: <json>\\n\\n`. See the operation description for the per-`type` frame shapes."
         "401": *a1
-        "403": *a33
+        "403": *a34
         "422": *a4
         "429": *a5
-        "503": *a34
+        "503": *a35
     get:
       tags:
         - Documents
@@ -16127,10 +16193,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/DocumentReindexEnvelope"
         "401": *a1
-        "403": *a33
+        "403": *a34
         "422": *a4
         "429": *a5
-        "503": *a34
+        "503": *a35
   /api/documents/inbound/{id}/facts/{factId}:
     patch:
       tags:
@@ -16237,7 +16303,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreateCustomMetricResponse"
         "401": *a1
-        "409": &a36
+        "409": &a37
           description: A custom metric with this name already exists for the caller.
           content:
             application/json:
@@ -16266,7 +16332,7 @@ paths:
                 $ref: "#/components/schemas/GetCustomMetricResponse"
         "401": *a1
         "403": *a9
-        "404": &a35
+        "404": &a36
           description: Custom metric not found (or owned by another user).
           content:
             application/json:
@@ -16300,8 +16366,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateCustomMetricResponse"
         "401": *a1
-        "404": *a35
-        "409": *a36
+        "404": *a36
+        "409": *a37
         "422": *a4
         "429": *a5
     delete:
@@ -16324,7 +16390,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteCustomMetricResponse"
         "401": *a1
-        "404": *a35
+        "404": *a36
         "422": *a4
         "429": *a5
   /api/custom-metrics/{id}/entries:
@@ -16368,7 +16434,7 @@ paths:
                 $ref: "#/components/schemas/ListCustomMetricEntriesEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a35
+        "404": *a36
         "422": *a4
         "429": *a5
     post:
@@ -16397,7 +16463,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreateCustomMetricEntryResponse"
         "401": *a1
-        "404": *a35
+        "404": *a36
         "409": *a7
         "422": *a4
         "429": *a10
@@ -16433,7 +16499,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateCustomMetricEntryResponse"
         "401": *a1
-        "404": &a37
+        "404": &a38
           description: Custom metric entry not found (or owned by another user).
           content:
             application/json:
@@ -16466,7 +16532,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteCustomMetricEntryResponse"
         "401": *a1
-        "404": *a37
+        "404": *a38
         "422": *a4
         "429": *a5
   /api/custom-metrics/{id}/entries/restore:
@@ -16875,7 +16941,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientOverviewEnvelope"
         "401": *a1
-        "403": &a38
+        "403": &a39
           description: >-
             The opt-in `nutrients` module is off for this account (errorCode `module.disabled`). Stop syncing and do not
             retry; offer the enable-in-settings hint. Only run the HealthKit read-authorization flow while the module is
@@ -16930,7 +16996,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientDailySeriesEnvelope"
         "401": *a1
-        "403": *a38
+        "403": *a39
         "422": *a4
         "429": *a5
   /api/nutrients/water:
@@ -16959,7 +17025,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientWaterWriteEnvelope"
         "401": *a1
-        "403": *a38
+        "403": *a39
         "409": *a7
         "422": *a4
         "429": *a5
@@ -17461,26 +17527,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WithingsCredentialsUpdateEnvelope"
-        "400": &a39
+        "400": &a40
           description: Body is not parseable JSON.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "401": *a1
-        "413": &a40
+        "413": &a41
           description: Body exceeds 64 KiB.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "415": &a41
+        "415": &a42
           description: Content-Type is not `application/json`.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "422": &a42
+        "422": &a43
           description: "`clientId` and `clientSecret` are both required and each must be 1–200 characters. The envelope carries a
             single fixed message, not per-field issues."
           content:
@@ -17666,11 +17732,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FitbitCredentialsUpdateEnvelope"
-        "400": *a39
+        "400": *a40
         "401": *a1
-        "413": *a40
-        "415": *a41
-        "422": *a42
+        "413": *a41
+        "415": *a42
+        "422": *a43
         "429": *a5
     delete:
       tags:
@@ -17813,11 +17879,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GoogleHealthCredentialsUpdateEnvelope"
-        "400": *a39
+        "400": *a40
         "401": *a1
-        "413": *a40
-        "415": *a41
-        "422": *a42
+        "413": *a41
+        "415": *a42
+        "422": *a43
         "429": *a5
     delete:
       tags:
@@ -17970,11 +18036,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OuraCredentialsUpdateEnvelope"
-        "400": *a39
+        "400": *a40
         "401": *a1
-        "413": *a40
-        "415": *a41
-        "422": *a42
+        "413": *a41
+        "415": *a42
+        "422": *a43
         "429": *a5
     delete:
       tags:
@@ -18050,21 +18116,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/OuraTestEnvelope"
         "401": *a1
-        "422": &a43
+        "422": &a44
           description: No usable connection for this provider — nothing stored, or the stored grant could no longer be resolved
             into an access token. `meta.errorCode` = `not_configured`.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "429": &a44
+        "429": &a45
           description: More than 5 requests in 60 s from this user. `meta.errorCode` = `rate_limited_self` — this is the local
             limiter, distinct from a `rate_limited` 502 which is the provider's.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "502": &a45
+        "502": &a46
           description: "The probe did not complete. `meta.errorCode` names the class: `credentials_rejected` (the provider
             answered 401/403 — the stored grant is gone), `rate_limited` (the PROVIDER answered 429, which is not this
             endpoint's own limiter), `upstream_error` (5xx), `timeout` (no answer within 5 s), `connection_failed`
@@ -18109,11 +18175,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PolarCredentialsUpdateEnvelope"
-        "400": *a39
+        "400": *a40
         "401": *a1
-        "413": *a40
-        "415": *a41
-        "422": *a42
+        "413": *a41
+        "415": *a42
+        "422": *a43
         "429": *a5
     delete:
       tags:
@@ -18189,9 +18255,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/PolarTestEnvelope"
         "401": *a1
-        "422": *a43
-        "429": *a44
-        "502": *a45
+        "422": *a44
+        "429": *a45
+        "502": *a46
   /api/strava/credentials:
     get:
       tags:
@@ -18227,11 +18293,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/StravaCredentialsUpdateEnvelope"
-        "400": *a39
+        "400": *a40
         "401": *a1
-        "413": *a40
-        "415": *a41
-        "422": *a42
+        "413": *a41
+        "415": *a42
+        "422": *a43
         "429": *a5
     delete:
       tags:
@@ -18309,9 +18375,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/StravaTestEnvelope"
         "401": *a1
-        "422": *a43
-        "429": *a44
-        "502": *a45
+        "422": *a44
+        "429": *a45
+        "502": *a46
   /api/integrations/status:
     get:
       tags:
@@ -18347,7 +18413,7 @@ paths:
                 $ref: "#/components/schemas/FitbitResumeEnvelope"
         "401": *a1
         "422": *a4
-        "429": *a44
+        "429": *a45
   /api/integrations/fitbit/test:
     post:
       tags:
@@ -18365,9 +18431,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/FitbitIntegrationTestEnvelope"
         "401": *a1
-        "422": *a43
-        "429": *a44
-        "502": *a45
+        "422": *a44
+        "429": *a45
+        "502": *a46
   /api/integrations/google-health/resume:
     post:
       tags:
@@ -18384,7 +18450,7 @@ paths:
                 $ref: "#/components/schemas/GoogleHealthResumeEnvelope"
         "401": *a1
         "422": *a4
-        "429": *a44
+        "429": *a45
   /api/integrations/google-health/test:
     post:
       tags:
@@ -18417,9 +18483,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "422": *a43
-        "429": *a44
-        "502": *a45
+        "422": *a44
+        "429": *a45
+        "502": *a46
   /api/integrations/whoop/resume:
     post:
       tags:
@@ -18436,7 +18502,7 @@ paths:
                 $ref: "#/components/schemas/WhoopResumeEnvelope"
         "401": *a1
         "422": *a4
-        "429": *a44
+        "429": *a45
   /api/integrations/whoop/test:
     post:
       tags:
@@ -18453,9 +18519,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/WhoopIntegrationTestEnvelope"
         "401": *a1
-        "422": *a43
-        "429": *a44
-        "502": *a45
+        "422": *a44
+        "429": *a45
+        "502": *a46
   /api/integrations/withings/resume:
     post:
       tags:
@@ -18473,7 +18539,7 @@ paths:
                 $ref: "#/components/schemas/WithingsResumeEnvelope"
         "401": *a1
         "422": *a4
-        "429": *a44
+        "429": *a45
   /api/integrations/withings/test:
     post:
       tags:
@@ -18491,8 +18557,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/WithingsIntegrationTestEnvelope"
         "401": *a1
-        "422": *a43
-        "429": *a44
+        "422": *a44
+        "429": *a45
         "502":
           description: "The probe did not complete. The shared codes apply (`credentials_rejected`, `rate_limited`,
             `upstream_error`, `timeout`, `connection_failed`) and this path adds one of its own:
@@ -18510,8 +18576,9 @@ paths:
       summary: The unified daily digest
       description: "Assembles the day's read from already-cached data: the nightly briefing lifted read-only from the insights
         cache, the dashboard-snapshot health score / meds-today / sleep freshness, plus deterministic integration-status
-        and Vorsorge reads for the 'worth a look' rail. No provider call, no warm-on-mount. Requires the insights
-        module. Cookie or Bearer auth."
+        and Vorsorge reads for the 'worth a look' rail. No provider call, no warm-on-mount. No module gate and no AI
+        gate: the digest is data, and the `insights` module is the AI analysis opt-out. Its AI parts follow their
+        capabilities, published in `ai`. Cookie or Bearer auth."
       responses:
         "200":
           description: The daily digest.
@@ -18520,7 +18587,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DailyDigestEnvelope"
         "401": *a1
-        "403": *a11
+        "403": *a9
         "422": *a4
         "429": *a5
   /api/daily/digest/dismiss:
@@ -18532,8 +18599,7 @@ paths:
         ecg_new_recording, tension_window. The ACTIONABLE kinds (dose_window, sync_issue, preventive_care,
         coach_checkin) are structurally unreachable: itemKey must be namespaced under one of the three dismissible kinds
         or the request 422s before any lookup runs. Persisted server-side so the dismissal survives reload / a second
-        device; an upsert, so a repeat dismiss of the same instance is a no-op. Requires the insights module. Cookie or
-        Bearer auth."
+        device; an upsert, so a repeat dismiss of the same instance is a no-op. No module gate. Cookie or Bearer auth."
       requestBody:
         required: true
         content:
@@ -18556,7 +18622,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/DismissPriorityItemEnvelope"
         "401": *a1
-        "403": *a16
         "422": *a4
         "429": *a5
   /api/dashboard/chart-overlay-prefs:
@@ -18729,7 +18794,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RecordActivityEnvelope"
         "401": *a1
-        "403": &a46
+        "403": &a47
           description: Refused. `meta.errorCode` is `sharing.not_permitted` when the request was made while acting on another
             account (grant management is never delegable), or `sharing.access.denied` when the caller may not act as the
             account they named. The latter is byte-identical for an account that does not exist and one that granted
@@ -18754,7 +18819,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AccountGrantListEnvelope"
         "401": *a1
-        "403": *a46
+        "403": *a47
         "422": *a4
         "429": *a5
     post:
@@ -18849,7 +18914,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AcceptedAccountGrantEnvelope"
         "401": *a1
-        "403": *a46
+        "403": *a47
         "404":
           description: No such invitation for this account.
           content:
@@ -18893,7 +18958,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RevokedAccountGrantEnvelope"
         "401": *a1
-        "403": *a46
+        "403": *a47
         "404":
           description: No such grant on this account's record.
           content:
@@ -18934,7 +18999,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RenouncedAccountGrantEnvelope"
         "401": *a1
-        "403": *a46
+        "403": *a47
         "404":
           description: No such grant held by this account.
           content:
@@ -19316,7 +19381,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "401": *a1
-        "403": *a46
+        "403": *a47
         "409":
           description: "The record this browser session is on is not the record the request asserted. `meta.errorCode` is
             `sharing.session.changed`. It is not a refusal of access — the caller may well be entitled to both records —
@@ -19646,7 +19711,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/McpConnectionListEnvelope"
         "401": *a1
-        "403": &a47
+        "403": &a48
           description: The operator has disabled the API instance-wide. Every route in this module refuses while that setting is
             off, for a cookie session as well as for a Bearer token; it is not a per-user permission and retrying will
             not help.
@@ -19679,7 +19744,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/McpConnectionRevokeEnvelope"
         "401": *a1
-        "403": *a47
+        "403": *a48
         "404":
           description: No live connection with this id for this caller — also the answer for an already-revoked one, so a repeat
             revoke is 404 rather than an idempotent 200.
@@ -19706,7 +19771,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/McpConnectorTokenListEnvelope"
         "401": *a1
-        "403": *a47
+        "403": *a48
         "422": *a4
         "429": *a5
     post:
@@ -19736,7 +19801,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "401": *a1
-        "403": *a47
+        "403": *a48
         "413":
           description: Body exceeds 16 KiB.
           content:
@@ -19779,7 +19844,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/McpConnectorTokenRevokeEnvelope"
         "401": *a1
-        "403": *a47
+        "403": *a48
         "404":
           description: No `health:read` token with this id for this caller. An already-revoked token is still found, so a repeat
             revoke answers 200.
@@ -19837,7 +19902,7 @@ paths:
       description: Returns the named family's resolved settings for the record the session is acting on. Cookie session or
         Bearer, while acting on a managed record the caller guards.
       parameters:
-        - &a48
+        - &a49
           name: family
           in: path
           required: true
@@ -19881,7 +19946,7 @@ paths:
         ride the audit row. Body capped at 64 KiB. Cookie session or Bearer, while acting on a managed record the caller
         guards.
       parameters:
-        - *a48
+        - *a49
       requestBody:
         required: true
         content:
@@ -20033,7 +20098,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/EnvironmentOverviewEnvelope"
         "401": *a1
-        "403": *a16
+        "403": *a17
         "422": *a4
         "429": *a5
   /api/environment/home:
@@ -20070,7 +20135,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/EnvironmentHomeEnvelope"
         "401": *a1
-        "403": *a16
+        "403": *a17
         "413":
           description: Body exceeds 4 KiB.
           content:
@@ -20124,7 +20189,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/EnvironmentBackfillEnvelope"
         "401": *a1
-        "403": *a16
+        "403": *a17
         "409":
           description: No home location is set, so there is nothing to resolve the days against. `meta.errorCode` =
             `environment.no_home`.
@@ -20183,7 +20248,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/EnvironmentGeocodeEnvelope"
         "401": *a1
-        "403": *a16
+        "403": *a17
         "422":
           description: "`q` was missing, empty after trimming, or longer than 120 characters. `meta.errorCode` =
             `environment.invalid`."
@@ -20222,7 +20287,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreateEnvironmentTravelEnvelope"
         "401": *a1
-        "403": *a16
+        "403": *a17
         "413":
           description: Body exceeds 4 KiB.
           content:
@@ -20275,7 +20340,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteEnvironmentTravelEnvelope"
         "401": *a1
-        "403": *a16
+        "403": *a17
         "404":
           description: No such override for this account. `meta.errorCode` = `environment.travel.not_found`. Also the answer for
             an id owned by somebody else — existence is not leaked.
@@ -20416,13 +20481,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdminBackupDocument"
-        "403": &a49
+        "403": &a50
           description: Caller is not an admin. `requireAdmin()` is cookie-only, so a Bearer token lands here whatever its scope.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "404": &a50
+        "404": &a51
           description: No stored copy with this id.
           content:
             application/json:
@@ -20481,8 +20546,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "403": *a49
-        "404": *a50
+        "403": *a50
+        "404": *a51
         "409":
           description: Either the payload declares a different owner than the stored row, or a request under the same
             `Idempotency-Key` is still in flight. Nothing was changed.
@@ -40607,6 +40672,10 @@ components:
           anyOf:
             - $ref: "#/components/schemas/WorkoutActivityInsight"
             - type: "null"
+        ai:
+          description: The `workoutInsights` AI capability. While it is unavailable `aiInsight` is null and the stored paragraph
+            is not even read.
+          $ref: "#/components/schemas/AiCapabilityState"
         canonicalId:
           type: string
         previousWorkoutId:
@@ -40638,6 +40707,7 @@ components:
         - splits
         - sportContext
         - aiInsight
+        - ai
         - canonicalId
         - previousWorkoutId
       additionalProperties: false
@@ -40824,6 +40894,51 @@ components:
         - paragraph
         - generatedAt
       additionalProperties: false
+    AiUnavailableReason:
+      type: string
+      enum:
+        - check_failed
+        - operator_disabled
+        - not_permitted_for_record
+        - module_disabled
+        - user_disabled
+        - no_provider
+        - consent_required
+      description: "Why an AI capability is unavailable, listed in precedence order; only the outermost reason that applies is
+        reported, because it names the layer that would have to change first. `check_failed` — an input could not be
+        read and the answer failed closed. `operator_disabled` — the operator's master switch, the capability's own
+        switch, or the operator's instance-wide availability of its module. `not_permitted_for_record` — AI work is not
+        admitted for this record (a delegate inside somebody else's record). `module_disabled` — an owning module is off
+        for this record, by its own switch or by the edge of the active grant. `user_disabled` — the record's own AI
+        opt-out: the Coach preference for the Coach, the `insights` module (AI analysis) for everything else.
+        `no_provider` — no configured provider can serve this capability's input. `consent_required` — the provider
+        chain needs an AI consent receipt and none is active. The list is closed; a client that meets a value it does
+        not know treats the capability as unavailable."
+    AiCapabilityState:
+      type: object
+      properties:
+        available:
+          type: boolean
+        reason:
+          anyOf:
+            - $ref: "#/components/schemas/AiUnavailableReason"
+            - type: "null"
+          description: "`null` exactly when `available` is true."
+        onDeviceAllowed:
+          type: boolean
+          description: "Whether an on-device model may do this work. False for `operator_disabled`, `not_permitted_for_record`,
+            `module_disabled`, `user_disabled` and `check_failed`: the operator's and the person's decisions hold on the
+            device too. True otherwise, since a missing server provider or a missing consent for server egress do not
+            concern a model that runs on the device. Resolved here so the client never decides which reasons apply off
+            the server."
+      required:
+        - available
+        - reason
+        - onDeviceAllowed
+      additionalProperties: false
+      description: "One AI capability, resolved for one record from every layer that can say no. Render from it; never
+        recompute it. Data never depends on it: measurements, scores, statistics and device records load whatever it
+        says."
     BatchWorkoutsResponse:
       type: object
       properties:
@@ -44720,7 +44835,9 @@ components:
         aiAvailable:
           type: boolean
           description: True when ANY provider can serve this user — including the operator's server-managed key when the user set
-            none. iOS keys Coach visibility off this.
+            none — AND the operator's master AI switch is on. With every AI capability switched off there is no AI
+            available, whatever is configured. iOS keys Coach visibility off this. The per-capability answer is `ai` on
+            `/api/auth/me`.
         managedBy:
           anyOf:
             - type: string
@@ -44789,9 +44906,11 @@ components:
           type: boolean
           description: "Whether the shared provider may honestly be offered to this caller in one tap. True only when all of: the
             operator's provider is the one that would serve them (`managedBy: \"server\"`), `serverProviderHealth` is
-            `healthy`, the operator's assistant master + coach flags are on, the acting record holds its own credentials
-            (a managed profile never does), the caller holds no receipt yet, and the instance is not running in demo
-            mode (where the grant the tap makes is refused at the edge). Anything unknown makes it false."
+            `healthy`, the operator keeps at least one capability the consent would unlock switched on (the Coach, the
+            daily briefing, or reading documents; the master switch off turns all three off), the acting record holds
+            its own credentials (a managed profile never does), the caller holds no receipt yet, and the instance is not
+            running in demo mode (where the grant the tap makes is refused at the edge). Anything unknown makes it
+            false."
         serverProviderConsent:
           type: boolean
           description: Whether this caller already holds an active `ai_full` / `ai_coach` receipt — the grant `POST
@@ -48708,10 +48827,14 @@ components:
                 - type: "null"
               description: Conversation holding the newest assistant message; null when none exists. The client deep-links into it
                 (`/coach?c=<id>`) on the unread path.
+            ai:
+              description: The `coach` capability. While unavailable the three fields above are the quiet empty values.
+              $ref: "#/components/schemas/AiCapabilityState"
           required:
             - nudgedAt
             - unread
             - conversationId
+            - ai
           additionalProperties: false
         error:
           type: "null"
@@ -48804,6 +48927,9 @@ components:
               type: integer
               minimum: -9007199254740991
               maximum: 9007199254740991
+            ai:
+              description: The `aboutMeQuestions` capability behind model-written questions.
+              $ref: "#/components/schemas/AiCapabilityState"
           required:
             - aboutMe
             - conditions
@@ -48814,6 +48940,7 @@ components:
             - updatedAt
             - maxChars
             - fieldMaxChars
+            - ai
           additionalProperties: false
         error:
           type: "null"
@@ -48878,6 +49005,9 @@ components:
               type: integer
               minimum: -9007199254740991
               maximum: 9007199254740991
+            ai:
+              description: The `aboutMeQuestions` capability the derivation ran under.
+              $ref: "#/components/schemas/AiCapabilityState"
           required:
             - aboutMe
             - conditions
@@ -48888,6 +49018,7 @@ components:
             - updatedAt
             - maxChars
             - fieldMaxChars
+            - ai
           additionalProperties: false
         error:
           type: "null"
@@ -51166,15 +51297,23 @@ components:
             - preparing
             - disabled
             - no-provider
+          description: "`disabled` whenever the `briefing` AI capability is unavailable for a reason other than a missing provider
+            (then `briefingAi` names it); `no-provider` when no provider can serve it."
         briefingUpdatedAt:
           anyOf:
             - type: string
             - type: "null"
         briefingStale:
           type: boolean
-          description: True when `briefing` carries the last good (expired-TTL) briefing while a refresh is pending (`preparing`)
-            or impossible (`no-provider`). Render the stale content with its `briefingUpdatedAt` timestamp instead of a
-            blank tile.
+          description: True when `briefing` carries the last good (expired-TTL) briefing while a refresh is pending (`preparing`).
+            Render the stale content with its `briefingUpdatedAt` timestamp instead of a blank tile.
+        briefingAi:
+          description: "The `briefing` AI capability for this record, applied on every read after the cache: while it is
+            unavailable `briefing`, `briefingMemory` and `briefingUpdatedAt` are null, whatever the cache holds.
+            Nullable and optional so older cached bodies stay valid."
+          anyOf:
+            - $ref: "#/components/schemas/AiCapabilityState"
+            - type: "null"
         generatedAt:
           type: string
       required:
@@ -51464,14 +51603,33 @@ components:
             in the background. The client keeps polling on `revalidating` (bounded) so the open page converges on the
             fresh body.
           type: boolean
+        hasProvider:
+          description: "Whether a configured AI provider exists for the record: provider presence and nothing else. False never
+            means the operator switched AI off or consent is missing; `ai` says that."
+          type: boolean
+        ai:
+          type: object
+          properties:
+            briefing:
+              $ref: "#/components/schemas/AiCapabilityState"
+            statusText:
+              $ref: "#/components/schemas/AiCapabilityState"
+          required:
+            - briefing
+            - statusText
+          additionalProperties: false
+          description: "Whether the AI parts that decorate the overview can be shown: the daily briefing and the per-metric status
+            notes. Resolved per request, never cached with the body. The overview itself is computed data and loads
+            whatever these say."
       required:
         - summary
         - recommendations
         - citations
         - warnings
+        - ai
       additionalProperties: false
-      description: AI-generated insights bundle. Strict-schema validated server-side; Coach-routed when the insight surface
-        needs day-level grounding.
+      description: The Insights overview's computed read. No provider is called on this path; every figure is computed from
+        the record.
     InsightsCardsEnvelope:
       type: object
       properties:
@@ -51542,7 +51700,8 @@ components:
           pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$
         provider:
           type: string
-          description: Lower-cased AI provider label for the account (e.g. `claude`).
+          description: "Who wrote the card: always `rules`, the threshold engine. It used to echo the account's AI provider
+            although no model wrote any card."
       required:
         - id
         - title
@@ -51577,19 +51736,30 @@ components:
       properties:
         queued:
           type: boolean
-          description: True when the full warm was accepted and enqueued.
+          description: True when the warm was accepted and enqueued; false when neither AI capability it covers is available, in
+            which case nothing was enqueued.
         locale:
           type: string
-          enum:
-            - de
-            - en
           description: The locale the assessments are being warmed in.
+        ai:
+          type: object
+          properties:
+            briefing:
+              $ref: "#/components/schemas/AiCapabilityState"
+            statusText:
+              $ref: "#/components/schemas/AiCapabilityState"
+          required:
+            - briefing
+            - statusText
+          additionalProperties: false
+          description: The two capabilities the warm covers. The worker skips the half whose capability is unavailable.
       required:
         - queued
         - locale
+        - ai
       additionalProperties: false
-      description: Acknowledgement that a full assessment warm was enqueued for the calling user. The generation runs out of
-        band; the text lands in the read-only status routes.
+      description: Acknowledgement of a full assessment warm for the calling user, or of why none was enqueued. The generation
+        runs out of band; the text lands in the read-only status routes.
     AnalyticsEnvelope:
       type: object
       properties:
@@ -53098,10 +53268,14 @@ components:
               additionalProperties: false
             - type: "null"
           description: Null whenever nothing crossed the detector's confidence and notability gate, AND whenever the account has
-            turned proactive suggestions off — the two are indistinguishable on the wire, and both mean the hero keeps
-            its neutral greeting rather than showing a fabricated opener.
+            turned proactive suggestions off, AND whenever the `coach` capability is unavailable (then `ai` says why) —
+            all mean the hero keeps its neutral greeting rather than showing a fabricated opener.
+        ai:
+          description: The `coach` capability the opener exists for.
+          $ref: "#/components/schemas/AiCapabilityState"
       required:
         - signal
+        - ai
       additionalProperties: false
       description: Today's single most notable derived wellness signal, resolved server-side into a tappable opener for the
         Coach's blank-chat hero. The client renders the resolved DTO and never recomputes the selection.
@@ -53152,18 +53326,23 @@ components:
                 - updatedAt
               additionalProperties: false
             - type: "null"
-          description: Null when no row exists for this period and locale yet.
+          description: Null when no row exists for this period and locale yet, and when the stored row is model-written while the
+            `periodNarrative` capability is unavailable (a deterministic row is always served).
         revalidating:
           type: boolean
           description: "True when this read enqueued a warm. Always FALSE on a delegated request even when the row is stale: this
             route warms unconditionally rather than on a miss, so a manager's first navigation here would otherwise be
             an egress of the owner's record the owner never asked for. The stale row is still served; only the warm is
-            withheld."
+            withheld. Also false while `periodNarrative` is unavailable and a servable row exists."
+        ai:
+          description: The `periodNarrative` capability behind model-written narratives.
+          $ref: "#/components/schemas/AiCapabilityState"
       required:
         - period
         - locale
         - narrative
         - revalidating
+        - ai
       additionalProperties: false
       description: The latest generated period retrospective. Read-only by construction — it never blocks on a provider,
         serves the last good row immediately, and warms out of band.
@@ -53893,13 +54072,14 @@ components:
       properties:
         hasProvider:
           type: boolean
-          description: False when the user has no usable AI provider — `text` then carries the generic no-key guidance.
+          description: "Whether a configured AI provider exists for the record: provider presence and nothing else. It is never
+            false because the operator switched notes off or consent is missing; `ai` says that."
         text:
           anyOf:
             - type: string
             - type: "null"
-          description: The assessment narrative (plain text, rendered as React text children). Null while a first generation is
-            preparing.
+          description: The assessment note (plain text, rendered as React text children). Null while a first generation is
+            preparing, and whenever the `statusText` capability is unavailable (see `ai`).
         cached:
           type: boolean
           description: True when `text` is served from cache (incl. last-good).
@@ -53919,11 +54099,16 @@ components:
             flight. The client keeps polling on `preparing || revalidating` (bounded) so the open card upgrades to the
             warmed assessment without a remount.
           type: boolean
+        ai:
+          description: The `statusText` capability behind the note. While it is unavailable the note is null, `preparing` is
+            false, the cache is not read and nothing is warmed.
+          $ref: "#/components/schemas/AiCapabilityState"
       required:
         - hasProvider
         - text
         - cached
         - updatedAt
+        - ai
       additionalProperties: false
       description: "Specialised per-metric assessment envelope (blood-pressure, pulse, weight, bmi, mood). Identical shape to
         the generic metric-status card so the `InsightStatusCard` consumes it unchanged. Read-only +
@@ -54018,12 +54203,14 @@ components:
       properties:
         hasProvider:
           type: boolean
-          description: False when the user has no usable AI provider — `summary` then carries the generic no-key guidance.
+          description: "Whether a configured AI provider exists for the record: provider presence and nothing else. It is never
+            false because the operator switched notes off or consent is missing; `ai` says that."
         summary:
           anyOf:
             - type: string
             - type: "null"
-          description: The overall compliance narrative (plain text). Null while a first generation is preparing.
+          description: The overall compliance note (plain text). Null while a first generation is preparing, and whenever the
+            `statusText` capability is unavailable (see `ai`).
         medications:
           type: array
           items:
@@ -54047,12 +54234,17 @@ components:
           description: True when the envelope is served from last-good cache (stale-while-revalidate) while a fresh generation is
             in flight. The client keeps polling on `preparing || revalidating` (bounded).
           type: boolean
+        ai:
+          description: The `statusText` capability behind the note. While it is unavailable `summary` is null, `medications` is
+            empty, `preparing` is false, the cache is not read and nothing is warmed.
+          $ref: "#/components/schemas/AiCapabilityState"
       required:
         - hasProvider
         - summary
         - medications
         - cached
         - updatedAt
+        - ai
       additionalProperties: false
       description: Medication-compliance assessment envelope. Unlike the other six specialised cards it carries a `summary`
         plus a per-medication `text` array rather than a single `text` field. Read-only + stale-while-revalidate.
@@ -54091,13 +54283,15 @@ components:
       properties:
         hasProvider:
           type: boolean
-          description: False when the user has no usable AI provider — `text` then carries the generic no-key guidance.
+          description: "Whether a configured AI provider exists for the record: provider presence and nothing else. It is never
+            false because the operator switched notes off or consent is missing; `ai` says that."
         text:
           anyOf:
             - type: string
             - type: "null"
-          description: The assessment narrative (plain text, rendered as React text children). Null while a first generation is
-            preparing, or when the metric has insufficient data.
+          description: The assessment note (plain text, rendered as React text children). Null while a first generation is
+            preparing, when the metric has insufficient data, and whenever the `statusText` capability is unavailable
+            (see `ai`).
         cached:
           type: boolean
           description: True when `text` is served from cache (incl. last-good).
@@ -54119,13 +54313,18 @@ components:
           type: boolean
         insufficient:
           description: True when the metric has no readings; no assessment is generated (no LLM call). The card shows its
-            insufficient-data state.
+            insufficient-data state. Still computed while `ai` is unavailable.
           type: boolean
+        ai:
+          description: The `statusText` capability behind the note. While it is unavailable the note is null, `preparing` is
+            false, the cache is not read and nothing is warmed.
+          $ref: "#/components/schemas/AiCapabilityState"
       required:
         - hasProvider
         - text
         - cached
         - updatedAt
+        - ai
       additionalProperties: false
       description: "Generic per-metric assessment envelope. Identical shape to the seven specialised `*-status` cards so the
         `InsightStatusCard` consumes it unchanged. Read-only + stale-while-revalidate: a cache miss warms a generation
@@ -54152,13 +54351,15 @@ components:
       properties:
         hasProvider:
           type: boolean
-          description: False when the user has no usable AI provider — `text` then carries the generic no-key guidance.
+          description: "Whether a configured AI provider exists for the record: provider presence and nothing else. It is never
+            false because the operator switched notes off or consent is missing; `ai` says that."
         text:
           anyOf:
             - type: string
             - type: "null"
-          description: The assessment narrative (plain text, rendered as React text children). Null while a first generation is
-            preparing, or when the marker has no numeric readings.
+          description: The assessment note (plain text, rendered as React text children). Null while a first generation is
+            preparing, when the marker has no numeric readings, and whenever the `statusText` capability is unavailable
+            (see `ai`).
         cached:
           type: boolean
           description: True when `text` is served from cache (incl. last-good).
@@ -54182,11 +54383,16 @@ components:
           description: True when the marker has no numeric readings; no assessment is generated (no LLM call). The card is not
             rendered.
           type: boolean
+        ai:
+          description: The `statusText` capability behind the note. While it is unavailable the note is null, `preparing` is
+            false, the cache is not read and nothing is warmed.
+          $ref: "#/components/schemas/AiCapabilityState"
       required:
         - hasProvider
         - text
         - cached
         - updatedAt
+        - ai
       additionalProperties: false
       description: "Per-biomarker assessment envelope. Identical shape to the generic metric-status card so the
         `InsightStatusCard` consumes it unchanged. Read-only + stale-while-revalidate: a cache miss warms a generation
@@ -54276,7 +54482,12 @@ components:
           description: "v1.13.2 — short 'why is this score what it is' explanation, keyed to the SAME requested id (only for the
             per-score ids READINESS, SLEEP_SCORE, RECOVERY_SCORE, STRAIN_SCORE, STRESS_SCORE). Null for any other metric
             and whenever status !== 'ok'. Always non-empty when present: a deterministic text fills it (so provider-less
-            accounts + the demo always get one) and warmer AI prose overrides it once cached."
+            accounts + the demo always get one) and warmer AI prose overrides it once cached, but only while the
+            `statusText` AI capability is available; otherwise the deterministic text is served and nothing is warmed."
+        ai:
+          description: The `statusText` capability behind the model-written assessment. Present on the single-metric route; absent
+            on the batch route, whose assessments are always the deterministic text.
+          $ref: "#/components/schemas/AiCapabilityState"
       required:
         - metric
         - status
@@ -59545,51 +59756,6 @@ components:
         else's, `available` is false with a null `reason` and `ai.reason` says why. A missing consent receipt leaves the
         scan offered (`ai.reason = \"consent_required\"`), because the scan is where the person is asked for it. No
         provider call is made."
-    AiCapabilityState:
-      type: object
-      properties:
-        available:
-          type: boolean
-        reason:
-          anyOf:
-            - $ref: "#/components/schemas/AiUnavailableReason"
-            - type: "null"
-          description: "`null` exactly when `available` is true."
-        onDeviceAllowed:
-          type: boolean
-          description: "Whether an on-device model may do this work. False for `operator_disabled`, `not_permitted_for_record`,
-            `module_disabled`, `user_disabled` and `check_failed`: the operator's and the person's decisions hold on the
-            device too. True otherwise, since a missing server provider or a missing consent for server egress do not
-            concern a model that runs on the device. Resolved here so the client never decides which reasons apply off
-            the server."
-      required:
-        - available
-        - reason
-        - onDeviceAllowed
-      additionalProperties: false
-      description: "One AI capability, resolved for one record from every layer that can say no. Render from it; never
-        recompute it. Data never depends on it: measurements, scores, statistics and device records load whatever it
-        says."
-    AiUnavailableReason:
-      type: string
-      enum:
-        - check_failed
-        - operator_disabled
-        - not_permitted_for_record
-        - module_disabled
-        - user_disabled
-        - no_provider
-        - consent_required
-      description: "Why an AI capability is unavailable, listed in precedence order; only the outermost reason that applies is
-        reported, because it names the layer that would have to change first. `check_failed` — an input could not be
-        read and the answer failed closed. `operator_disabled` — the operator's master switch, the capability's own
-        switch, or the operator's instance-wide availability of its module. `not_permitted_for_record` — AI work is not
-        admitted for this record (a delegate inside somebody else's record). `module_disabled` — an owning module is off
-        for this record, by its own switch or by the edge of the active grant. `user_disabled` — the record's own AI
-        opt-out: the Coach preference for the Coach, the `insights` module (AI analysis) for everything else.
-        `no_provider` — no configured provider can serve this capability's input. `consent_required` — the provider
-        chain needs an AI consent receipt and none is active. The list is closed; a client that meets a value it does
-        not know treats the capability as unavailable."
     OcrExtractEnvelope:
       type: object
       properties:
@@ -66685,12 +66851,14 @@ components:
                 - delta
               additionalProperties: false
             - type: "null"
-          description: Clinical-priority top signal, lifted from the cached briefing.
+          description: Clinical-priority top signal, lifted from the cached briefing. Null while the `briefing` capability is
+            unavailable.
         briefingLead:
           anyOf:
             - type: string
             - type: "null"
-          description: First sentence of the cached briefing paragraph.
+          description: First sentence of the cached briefing paragraph. Null while the `briefing` capability is unavailable;
+            `line` then falls to its deterministic floor.
         line:
           type: string
           description: "Push / lock-screen line: cached-AI lead with a deterministic floor."
@@ -66728,8 +66896,26 @@ components:
             - type: string
             - type: "null"
           description: One-sentence generated reaction to that arrival, standing for the rest of the local day. Null whenever no
-            line was generated (no provider, no consent, budget exhausted, or generation failed) — consumers fall back
-            to `briefingLead` / `line`. Additive since v1.31.0.
+            line was generated (no provider, no consent, budget exhausted, or generation failed), and whenever the
+            `reactionLines` capability is unavailable, however recent the stored line — consumers fall back to
+            `briefingLead` / `line`. Additive since v1.31.0.
+        ai:
+          type: object
+          properties:
+            briefing:
+              $ref: "#/components/schemas/AiCapabilityState"
+            coach:
+              $ref: "#/components/schemas/AiCapabilityState"
+            reactionLines:
+              $ref: "#/components/schemas/AiCapabilityState"
+          required:
+            - briefing
+            - coach
+            - reactionLines
+          additionalProperties: false
+          description: "The three AI capabilities the digest carries text or a card for: `briefing` (the lead and top signal),
+            `coach` (the Coach check-in card, which opens the Coach) and `reactionLines` (the reaction line). Everything
+            else in the digest is data."
       required:
         - generatedAt
         - phase
@@ -66741,6 +66927,7 @@ components:
         - worthALook
         - justIn
         - reactionLine
+        - ai
       additionalProperties: false
       description: The one data spine of the daily-value system — composed from already-cached data, never a fresh AI call.
         Consumed by the Today surface, the daily push, and a future iOS widget.

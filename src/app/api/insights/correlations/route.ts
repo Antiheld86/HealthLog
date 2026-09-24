@@ -23,11 +23,7 @@ import { apiError, apiSuccess } from "@/lib/api-response";
 import { cachedSwr, caches, type ServerCache } from "@/lib/cache/server-cache";
 import { annotate } from "@/lib/logging/context";
 import { checkAnalyticsReadRateLimit } from "@/lib/rate-limit";
-import {
-  MODULE_KEYS,
-  requireModuleEnabled,
-  resolveModuleMap,
-} from "@/lib/modules/gate";
+import { MODULE_KEYS, resolveModuleMap } from "@/lib/modules/gate";
 import { isSurfaceVisible, type SurfaceModuleMap } from "@/lib/modules/surface";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
 import { prisma } from "@/lib/db";
@@ -71,12 +67,10 @@ export const GET = apiHandler(async () => {
     return apiError("Too many analytics requests. Please retry later.", 429);
   }
 
-  const m = await requireModuleEnabled(user.id, "insights");
-  if (!m.enabled) return m.response;
-
-  // No assistant switch: this is statistics, not model output. The retired
-  // Correlations switch gated it and nothing model-written; an operator's AI
-  // switches never take a computation down.
+  // No AI gate and no `insights` module gate: this is statistics, not model
+  // output. The retired Correlations switch gated it and nothing model-written;
+  // an operator's AI switches, and the person's AI analysis opt-out, never
+  // take a computation down.
 
   // Reader's locale for the narrated `interpretation` — the correlation cards
   // render this string verbatim, so it MUST be localised (cookie / User.locale /

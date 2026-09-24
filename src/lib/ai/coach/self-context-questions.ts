@@ -181,17 +181,23 @@ async function resolveQuestionsChain(
  * Derive the pending questions for a freshly saved self-context.
  * Never throws — every failure path lands on the deterministic
  * fallback so the PUT route stays robust.
+ *
+ * `aiAvailable` is the caller's resolved `aboutMeQuestions` capability. When
+ * it is false the deterministic fallback is the whole answer: no provider is
+ * resolved, no budget reserved, nothing leaves the server.
  */
 export async function deriveClarifyingQuestions(
   userId: string,
   ctx: SelfContext,
   locale: string | null | undefined,
-  includedSections: readonly HealthProfileAiSection[] = DEFAULT_HEALTH_PROFILE_AI_SECTIONS,
+  includedSections: readonly HealthProfileAiSection[],
+  options: { aiAvailable: boolean },
 ): Promise<{ questions: string[]; source: "ai" | "fallback" }> {
   const fallback = () => ({
     questions: buildFallbackQuestions(ctx, locale, includedSections),
     source: "fallback" as const,
   });
+  if (!options.aiAvailable) return fallback();
   const included = new Set(includedSections);
   // A free-form model reply cannot be proven not to cross into an omitted
   // field. Partial inclusion therefore stays on the closed deterministic

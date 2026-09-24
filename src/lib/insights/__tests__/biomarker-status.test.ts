@@ -31,6 +31,11 @@ vi.mock("@/lib/ai/capabilities/gate", () => ({
     reason: null,
     onDeviceAllowed: true,
   }),
+  aiCapabilityToServe: async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
 }));
 
 import { prisma } from "@/lib/db";

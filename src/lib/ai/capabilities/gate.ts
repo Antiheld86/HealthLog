@@ -185,3 +185,42 @@ export async function aiCapabilityForRecord(
     ? getAiCapability(key, { recordId })
     : aiCapabilityForJob(recordId, key);
 }
+
+/**
+ * Whether text a model already wrote for a record may be SHOWN, answered from
+ * the record's own state, whoever is reading.
+ *
+ * Serving stored text and starting model work are different questions. A
+ * delegate inside somebody else's record may not start model work there
+ * (`not_permitted_for_record`: no generation, no warm, no chat on the owner's
+ * key), but reads the owner's stored briefing, narrative, status notes and
+ * workout notes exactly when the owner would. So this resolves the record's
+ * operator switches, its modules and AI opt-outs, its provider and its
+ * consent, under the record's own authority (`system`, as a job would, which
+ * also answers a managed profile correctly), unmasked by the viewer's grant.
+ *
+ * Use it only to decide whether stored model text is served. Anything that
+ * generates, warms or enqueues asks `getAiCapability` / `requireAiCapability`
+ * (the viewer's view) instead. Never throws.
+ */
+export async function aiCapabilityToServe(
+  recordId: string,
+  key: AiCapabilityKey,
+): Promise<AiCapabilityState> {
+  try {
+    const inputs = await loadAiCapabilityInputs({
+      recordId,
+      authority: {
+        origin: "system",
+        recordUserId: recordId,
+        actorUserId: null,
+        grantId: null,
+      },
+      sections: null,
+      recordKind: "self",
+    });
+    return resolveAiCapability(key, inputs);
+  } catch {
+    return resolveAiCapability(key, null);
+  }
+}

@@ -10,6 +10,17 @@
  *
  * `userId` is narrowed from the session/Bearer (never a query field); an
  * unknown `period` 422s via the closed enum.
+ *
+ * A mixed read. The narrative is data when the deterministic composer wrote
+ * it and model output when a provider did. Model-written text is served only
+ * while the record's `periodNarrative` capability is available (answered from
+ * the record's own state, so a delegate reads the owner's narrative exactly
+ * when the owner would); otherwise `narrative` is null and `ai` says why. The
+ * warm is enqueued only when the capability is available, or when no row
+ * exists at all (the worker then writes the deterministic narrative); never
+ * for a delegate. The `insights` module is the AI analysis
+ * opt-out and is folded into the capability, so it no longer refuses the
+ * route.
  */
 import { NextRequest } from "next/server";
 import { z } from "zod/v4";
@@ -18,8 +29,8 @@ import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
 import { locales, defaultLocale, type Locale } from "@/lib/i18n/config";
-import { requireAssistantSurface } from "@/lib/feature-flags";
-import { requireModuleEnabled } from "@/lib/modules/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
+import { prisma } from "@/lib/db";
 import { readPeriodNarrative } from "@/lib/insights/narrative/period-narrative-generate";
 import {
   PERIOD_DAYS,
@@ -57,9 +68,6 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // record, which is not a section a scoped grant can name. The miss behind it
   // enqueues nothing while a delegate is holding the request.
   const { user } = await requireRecordAuth("manage", "record");
-  const m = await requireModuleEnabled(user.id, "insights");
-  if (!m.enabled) return m.response;
-  await requireAssistantSurface("insightStatus");
 
   const parsed = narrativeQuerySchema.safeParse({
     period: request.nextUrl.searchParams.get("period"),
@@ -80,10 +88,26 @@ export const GET = apiHandler(async (request: NextRequest) => {
   });
   const locale = narrowLocale(resolved);
 
+  // Whether model-written text may be shown is the record's own answer,
+  // whoever is reading; the reader already applies it (a model-written row
+  // reads as absent while it may not be shown). Starting a warm for a
+  // delegate stays suppressed below.
+  const ai = await aiCapabilityToServe(user.id, "periodNarrative");
   const existing = await readPeriodNarrative(user.id, period, locale);
   const isFresh =
     existing !== null &&
     Date.now() - new Date(existing.updatedAt).getTime() < NARRATIVE_FRESH_MS;
+  // With AI unavailable a warm only helps when no row exists at all: the
+  // worker then writes the deterministic narrative. A hidden model-written
+  // row must not be overwritten by one (turning AI back on brings it back),
+  // and a stale deterministic row is served as it is.
+  const mayWarm =
+    ai.available ||
+    (existing === null &&
+      (await prisma.insightNarrative.findUnique({
+        where: { userId_period_locale: { userId: user.id, period, locale } },
+        select: { id: true },
+      })) === null);
 
   // Read-only: never block on the provider. Warm out of band whenever the row
   // is stale / missing. The generator produces AI prose when a provider is
@@ -98,7 +122,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // The stale row is still served; only the warm is withheld.
   let revalidating = false;
   const generationSuppressed = delegatedGenerationSuppressed();
-  if (!isFresh && !generationSuppressed) {
+  if (!isFresh && mayWarm && !generationSuppressed) {
     void enqueueNarrativeWarm({ userId: user.id, period, locale });
     revalidating = true;
   }
@@ -110,6 +134,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
       has_narrative: existing !== null,
       revalidating,
       generation_suppressed: generationSuppressed,
+      ai_reason: ai.reason,
     },
   });
 
@@ -124,5 +149,6 @@ export const GET = apiHandler(async (request: NextRequest) => {
         }
       : null,
     revalidating,
+    ai,
   });
 });

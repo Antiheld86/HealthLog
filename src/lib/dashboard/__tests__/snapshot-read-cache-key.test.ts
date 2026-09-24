@@ -23,6 +23,14 @@ vi.mock("@/lib/db", () => ({ prisma: {} }));
 vi.mock("@/lib/dashboard/snapshot", () => ({
   buildDashboardSnapshot: (...args: unknown[]) =>
     buildDashboardSnapshot(...(args as [])),
+  applyBriefingCapability: (body: unknown) => body,
+}));
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityToServe: async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
 }));
 vi.mock("@/lib/i18n/server-locale", () => ({
   resolveServerLocale: (...args: unknown[]) =>

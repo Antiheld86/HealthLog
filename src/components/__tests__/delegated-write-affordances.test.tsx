@@ -188,6 +188,7 @@ import type { EncounterDTO } from "@/lib/encounters/dto";
 import { queryKeys } from "@/lib/query-keys";
 import type { DailyDigest } from "@/lib/daily/digest";
 import type { MeasurementReminder } from "@/hooks/use-measurement-reminders";
+import { DIGEST_AI_AVAILABLE } from "@/__tests__/helpers/ai-capability-fixtures";
 
 function render(
   access: AccountAccess,
@@ -344,6 +345,7 @@ describe("the medication card menu", () => {
 
 const DIGEST: DailyDigest = {
   generatedAt: "2026-08-03T06:00:00.000Z",
+  ai: DIGEST_AI_AVAILABLE,
   phase: "final",
   sleepPending: false,
   score: null,

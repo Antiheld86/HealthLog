@@ -8,7 +8,9 @@
  * all history.
  *
  * Cookie OR Bearer auth via `requireAuth()`; `userId` is narrowed from the
- * resolved session — never a body field. Gated on the `insights` module. The
+ * resolved session — never a body field. Pulse is a core vital, so no module
+ * gates it; the `insights` module is the AI analysis opt-out, and this read
+ * calls no model. The
  * `date` defaults to the user's local today; anything but a `YYYY-MM-DD`
  * literal is a 422 via `returnAllZodIssues`. The frontend day navigator
  * pages this same route backward through prior days — a day outside
@@ -20,7 +22,6 @@ import { z } from "zod";
 
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiSuccess, returnAllZodIssues } from "@/lib/api-response";
-import { requireModuleEnabled } from "@/lib/modules/gate";
 import { NO_STORE_BUT_BFCACHE } from "@/lib/http/cache-headers";
 import { resolveUserTimezone } from "@/lib/tz/resolver";
 import { userDayKey } from "@/lib/tz/format";
@@ -40,8 +41,6 @@ export const GET = apiHandler(async (req: Request) => {
   // v1.37.0 — MANAGE-level read: computed over the whole record, with no
   // provider anywhere on the path.
   const { user } = await requireRecordAuth("manage", "record");
-  const m = await requireModuleEnabled(user.id, "insights");
-  if (!m.enabled) return m.response;
 
   const url = new URL(req.url);
   const parsed = querySchema.safeParse({

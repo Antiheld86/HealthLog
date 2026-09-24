@@ -32,7 +32,6 @@ import type { Locale } from "@/lib/i18n/config";
 import { resolveJobLocale } from "@/lib/i18n/job-locale";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 import type { ServerTranslator } from "@/lib/i18n/server-translator";
-import { isModuleEnabled } from "@/lib/modules/gate";
 import { wallClockInTz } from "@/lib/tz/wall-clock";
 import { userDayKey } from "@/lib/tz/format";
 import { dispatchNotification } from "@/lib/notifications/dispatcher";
@@ -72,7 +71,6 @@ export type DailyBriefingDispatchResult =
   | "suppressed-frequency"
   | "no-digest"
   | "opted-out"
-  | "module-off"
   | "outside-window"
   | "no-channel"
   | "missing-user"
@@ -81,7 +79,6 @@ export type DailyBriefingDispatchResult =
 export interface DailyBriefingDispatchDeps {
   dispatch?: typeof dispatchNotification;
   loadDigest?: (user: User, now: Date, locale: Locale) => Promise<DailyDigest>;
-  isModuleEnabled?: typeof isModuleEnabled;
 }
 
 function loadDailyBriefingDigest(
@@ -137,10 +134,15 @@ export function buildDailyBriefingPush(
  *   1. user missing            → `missing-user`
  *   2. no opt-in (default OFF) → `opted-out` (no enabled DAILY_BRIEFING pref)
  *   3. outside morning window  → `outside-window`
- *   4. insights module off     → `module-off`
- *   5. already pushed today    → `suppressed-frequency` (push_attempts ledger)
- *   6. digest not substantive  → `no-digest`
- *   7. dispatch; no channel    → `no-channel`; else `sent`.
+ *   4. already pushed today    → `suppressed-frequency` (push_attempts ledger)
+ *   5. digest not substantive  → `no-digest`
+ *   6. dispatch; no channel    → `no-channel`; else `sent`.
+ *
+ * No module gate. The `insights` module is the AI analysis opt-out: with it
+ * off (or AI unavailable for any other reason) the digest carries no briefing
+ * lead or top signal, and the push body falls to the digest's deterministic
+ * line (the score, or the all-clear). A digest with nothing deterministic to
+ * say is skipped as `no-digest`, like any other.
  */
 export async function maybeDispatchDailyBriefing(
   prisma: PrismaClient,
@@ -150,7 +152,6 @@ export async function maybeDispatchDailyBriefing(
 ): Promise<DailyBriefingDispatchResult> {
   const dispatch = deps.dispatch ?? dispatchNotification;
   const loadDigest = deps.loadDigest ?? loadDailyBriefingDigest;
-  const moduleGate = deps.isModuleEnabled ?? isModuleEnabled;
 
   try {
     const user = await prisma.user.findUnique({ where: { id: userId } });
@@ -185,13 +186,6 @@ export async function maybeDispatchDailyBriefing(
         meta: { local_hour: hour },
       });
       return "outside-window";
-    }
-
-    // Insights is the digest's home module; a user who turned it off gets no
-    // digest surfaces at all, so no morning push either.
-    if (!(await moduleGate(userId, "insights"))) {
-      annotate({ action: { name: "daily.briefing_push.module_off" } });
-      return "module-off";
     }
 
     // One per user per LOCAL day. Anchored on the `push_attempts` ledger the

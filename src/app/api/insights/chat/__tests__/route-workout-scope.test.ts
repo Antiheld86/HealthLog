@@ -41,11 +41,14 @@ const { isModuleEnabled } = vi.hoisted(() => ({
   isModuleEnabled: vi.fn(async () => true),
 }));
 vi.mock("@/lib/modules/gate", () => ({
-  requireModuleEnabled: vi.fn(async () => ({ enabled: true })),
   isModuleEnabled,
 }));
-vi.mock("@/lib/feature-flags", () => ({
-  requireAssistantSurface: vi.fn(async () => undefined),
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  requireAiCapability: vi.fn(async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  })),
 }));
 vi.mock("@/lib/api-response", () => ({
   apiError: (error: string, status: number) => ({ data: null, error, status }),

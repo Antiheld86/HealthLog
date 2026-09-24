@@ -81,16 +81,21 @@ vi.mock("@/lib/insights/comprehensive-aggregator", () => ({
 }));
 
 vi.mock("@/lib/ai/provider", () => ({
-  resolveProvider: vi.fn(async () => ({ type: "none" })),
+  probeProviderPresence: vi.fn(async () => false),
+}));
+
+// The per-request `ai` block beside the body. Pinned here so the envelope
+// assertions do not depend on the capability loader's own reads.
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityToServe: vi.fn(),
 }));
 
 vi.mock("@/lib/medication-category", () => ({
   getMedicationCategories: vi.fn(async () => ({})),
 }));
 
-// The route gates on the `insights` module. Mock it default-enabled so the
-// envelope assertions ride through; the module-off coverage lives in the
-// module route-gate inventory test.
+// The route no longer gates on the `insights` module (the AI analysis
+// opt-out); the mock stays so a test can prove the route never asks it.
 vi.mock("@/lib/modules/gate", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/modules/gate")>()),
   requireModuleEnabled: vi.fn().mockResolvedValue({ enabled: true }),
@@ -100,6 +105,8 @@ vi.mock("@/lib/modules/gate", async (importOriginal) => ({
 import { GET } from "../route";
 import { getSession } from "@/lib/auth/session";
 import { requireModuleEnabled } from "@/lib/modules/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
+import { probeProviderPresence } from "@/lib/ai/provider";
 import { prisma } from "@/lib/db";
 import { buildComprehensiveAggregate } from "@/lib/insights/comprehensive-aggregator";
 import { checkAnalyticsReadRateLimit } from "@/lib/rate-limit";
@@ -125,6 +132,12 @@ beforeEach(() => {
   vi.resetAllMocks();
   // resetAllMocks drops the module gate's default; restore it.
   vi.mocked(requireModuleEnabled).mockResolvedValue({ enabled: true } as never);
+  vi.mocked(aiCapabilityToServe).mockResolvedValue({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  });
+  vi.mocked(probeProviderPresence).mockResolvedValue(false);
   __resetAllCachesForTests();
   // v1.15.20 — default to an allowing analytics-read budget.
   vi.mocked(checkAnalyticsReadRateLimit).mockResolvedValue({
@@ -248,6 +261,64 @@ describe("GET /api/insights/comprehensive — envelope shape", () => {
 
     const res = await callGet(makeReq());
     expect(res.status).toBe(200);
+  });
+
+  it("answers with the AI analysis opt-out on, and publishes why the AI parts are absent", async () => {
+    vi.mocked(requireModuleEnabled).mockResolvedValue({
+      enabled: false,
+      response: new Response(null, { status: 403 }),
+    } as never);
+    vi.mocked(aiCapabilityToServe).mockResolvedValue({
+      available: false,
+      reason: "user_disabled",
+      onDeviceAllowed: false,
+    });
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    (buildComprehensiveAggregate as ReturnType<typeof vi.fn>).mockResolvedValue(
+      {
+        summaries: {},
+        bpRawRows: { sys: [], dia: [] },
+        weightRawRows: [],
+        dailyByType: {},
+        firstMeasurementAt: null,
+        totalMeasurements: 0,
+      },
+    );
+
+    const res = await callGet(makeReq());
+    expect(res.status).toBe(200);
+    expect(requireModuleEnabled).not.toHaveBeenCalled();
+    const body = (await res.json()) as {
+      data: { ai: Record<string, { reason: string }> };
+    };
+    expect(body.data.ai.briefing.reason).toBe("user_disabled");
+    expect(body.data.ai.statusText.reason).toBe("user_disabled");
+    expect(
+      vi
+        .mocked(aiCapabilityToServe)
+        .mock.calls.map((c) => c[1])
+        .sort(),
+    ).toEqual(["briefing", "statusText"]);
+  });
+
+  it("reports hasProvider from the presence probe, never from building a client", async () => {
+    vi.mocked(probeProviderPresence).mockResolvedValue(true);
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    (buildComprehensiveAggregate as ReturnType<typeof vi.fn>).mockResolvedValue(
+      {
+        summaries: {},
+        bpRawRows: { sys: [], dia: [] },
+        weightRawRows: [],
+        dailyByType: {},
+        firstMeasurementAt: null,
+        totalMeasurements: 0,
+      },
+    );
+
+    const res = await callGet(makeReq());
+    const body = (await res.json()) as { data: { hasProvider: boolean } };
+    expect(body.data.hasProvider).toBe(true);
+    expect(probeProviderPresence).toHaveBeenCalledWith("user-comp-1");
   });
 
   it("computes BMI from aggregate WEIGHT.latest and user heightCm", async () => {

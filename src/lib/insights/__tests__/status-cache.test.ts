@@ -30,6 +30,8 @@ vi.mock("@/lib/ai/coach/bytes-codec", () => ({
 const aiCapabilityForRecord = vi.fn();
 vi.mock("@/lib/ai/capabilities/gate", () => ({
   aiCapabilityForRecord: (...a: unknown[]) => aiCapabilityForRecord(...a),
+  aiCapabilityToServe: (...args: unknown[]) =>
+    (aiCapabilityForRecord as (...a: unknown[]) => unknown)(...args),
 }));
 
 const probeProviderPresence = vi.fn();

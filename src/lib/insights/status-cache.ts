@@ -1,7 +1,7 @@
 import type { MeasurementType } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { decryptFromBytes, encryptToBytes } from "@/lib/ai/coach/bytes-codec";
-import { aiCapabilityForRecord } from "@/lib/ai/capabilities/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 import type { AiUnavailableReason } from "@/lib/ai/capabilities/types";
 import { probeProviderPresence } from "@/lib/ai/provider";
 import {
@@ -161,10 +161,12 @@ async function readStatusNote(
 
 /**
  * Whether stored status notes may be served, or re-dated, for this record.
- * Every reader and both unchanged-data gates ask this first.
+ * Every reader and both unchanged-data gates ask this first. Answered from
+ * the record's own state, so a delegate reads the owner's notes exactly when
+ * the owner would; starting work is a separate question (see below).
  */
 async function statusTextServable(userId: string): Promise<boolean> {
-  return (await aiCapabilityForRecord(userId, "statusText")).available;
+  return (await aiCapabilityToServe(userId, "statusText")).available;
 }
 
 /**
@@ -708,7 +710,9 @@ export async function resolveReadOnlyStatusMiss(args: {
   metric: InsightStatusScope;
   locale: SupportedLocale;
 }): Promise<ReadOnlyMissOutcome> {
-  const capability = await aiCapabilityForRecord(args.userId, "statusText");
+  // Serving view: whether the record's notes may be shown at all. Starting
+  // work for a delegate is refused by the suppression branch below.
+  const capability = await aiCapabilityToServe(args.userId, "statusText");
   if (!capability.available) {
     const reason = capability.reason ?? "check_failed";
     annotate({

@@ -4,7 +4,14 @@ import { NextRequest } from "next/server";
 vi.mock("@/lib/db", () => ({
   prisma: {
     appSettings: { findUnique: vi.fn().mockResolvedValue(null) },
+    measurement: { count: vi.fn() },
   },
+}));
+// The `statusText` capability decides whether the note is served; the
+// unavailable body's provider-presence probe is stubbed.
+vi.mock("@/lib/ai/capabilities/gate", () => ({ aiCapabilityToServe: vi.fn() }));
+vi.mock("@/lib/ai/provider", () => ({
+  probeProviderPresence: vi.fn(async () => true),
 }));
 
 // v1.18.0 — the route now resolves the `insights` module gate after
@@ -55,6 +62,7 @@ import { getSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import { generateMetricStatus } from "@/lib/insights/metric-status";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -77,6 +85,11 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(prisma.appSettings.findUnique).mockResolvedValue(null as never);
   vi.mocked(requireModuleEnabled).mockResolvedValue({ enabled: true });
+  vi.mocked(aiCapabilityToServe).mockResolvedValue({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  });
 });
 
 describe("GET /api/insights/metric-status", () => {
@@ -126,18 +139,29 @@ describe("GET /api/insights/metric-status", () => {
     expect(res.status).toBe(401);
   });
 
-  it("403s + errorCode when insightStatus is disabled", async () => {
-    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
-    vi.mocked(prisma.appSettings.findUnique).mockResolvedValueOnce({
-      assistantEnabled: true,
-      assistantCoachEnabled: true,
-      assistantBriefingEnabled: true,
-      assistantInsightStatusEnabled: false,
-      assistantDocumentAiEnabled: true,
-    } as never);
-    const res = await callGet(makeReq("SLEEP_DURATION"));
-    expect(res.status).toBe(403);
-    const body = (await res.json()) as { meta?: { errorCode?: string } };
-    expect(body.meta?.errorCode).toBe("assistant.disabled.insightStatus");
-  });
+  it.each([
+    [0, true],
+    [3, false],
+  ] as const)(
+    "answers 200 with no note while statusText is unavailable (%i readings → insufficient %s)",
+    async (readings, insufficient) => {
+      vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+      vi.mocked(aiCapabilityToServe).mockResolvedValue({
+        available: false,
+        reason: "operator_disabled",
+        onDeviceAllowed: false,
+      });
+      vi.mocked(prisma.measurement.count).mockResolvedValue(readings as never);
+      const res = await callGet(makeReq("RESTING_HEART_RATE"));
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { data: Record<string, unknown> };
+      expect(body.data).toMatchObject({
+        text: null,
+        preparing: false,
+        insufficient,
+        ai: { available: false, reason: "operator_disabled" },
+      });
+      expect(generateMetricStatus).not.toHaveBeenCalled();
+    },
+  );
 });

@@ -52,7 +52,7 @@ const SERVER_MANAGED_PROVIDER_TYPES: ReadonlySet<string> = new Set([
 
 /**
  * Error thrown when an external-LLM egress on a server-managed key is
- * attempted without an active consent receipt. Mirrors `AssistantDisabledError`
+ * attempted without an active consent receipt. Mirrors the AI capability refusal
  * so the api-handler renders the same 403 envelope shape the iOS client
  * already branches on:
  *

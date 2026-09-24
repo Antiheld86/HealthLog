@@ -21,10 +21,17 @@
  * `nudgedAt` carries the newest assistant-message timestamp so the FAB's
  * local seen-stamp keys on a stable value (kept for the existing client
  * contract).
+ *
+ * A mixed read: while the record's `coach` capability is unavailable
+ * (operator switch, opt-out, no provider, no consent) the route still answers
+ * 200, with the
+ * quiet shape `{ unread: false, nudgedAt: null, conversationId: null }` and
+ * an `ai` state saying why. There is no Coach to open, so there is nothing
+ * unread, and no app-open reminder is evaluated.
  */
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiSuccess } from "@/lib/api-response";
-import { requireAssistantSurface } from "@/lib/feature-flags";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 import { readCoachNudgeStatus } from "@/lib/ai/coach/nudge-status";
 import { evaluateCoachContextReminders } from "@/lib/ai/coach/context-reminders";
 import { prisma } from "@/lib/db";
@@ -46,9 +53,15 @@ export const GET = apiHandler(async () => {
   // budget and writes into their conversation, and reading whether the thread
   // has something unopened does neither.
   const { user, actor } = await requireRecordAuth("read", "record");
-  // Operator-level flag — an `AppSettings` singleton, unaffected by whose
-  // record is open.
-  await requireAssistantSurface("coach");
+  const ai = await aiCapabilityToServe(user.id, "coach");
+  if (!ai.available) {
+    return apiSuccess({
+      nudgedAt: null,
+      unread: false,
+      conversationId: null,
+      ai,
+    });
+  }
 
   // NEXT_APP_OPEN Coach reminders resolve here: this poll mounts with the
   // app chrome, which makes it the app-open signal itself. Owner-only — a
@@ -67,7 +80,7 @@ export const GET = apiHandler(async () => {
 
   // Shared with the `/coach` RSC prefetch (`src/app/coach/page.tsx`) so both
   // readers compute the unread signal identically.
-  return apiSuccess(await readCoachNudgeStatus(user.id));
+  return apiSuccess({ ...(await readCoachNudgeStatus(user.id)), ai });
 });
 
 export const dynamic = "force-dynamic";

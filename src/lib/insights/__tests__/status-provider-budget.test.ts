@@ -75,7 +75,10 @@ vi.mock("@/lib/ai/provider", () => ({
 const { aiCapabilityForRecord } = vi.hoisted(() => ({
   aiCapabilityForRecord: vi.fn(),
 }));
-vi.mock("@/lib/ai/capabilities/gate", () => ({ aiCapabilityForRecord }));
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForRecord,
+  aiCapabilityToServe: aiCapabilityForRecord,
+}));
 
 const { runRawCompletionWithFallback } = vi.hoisted(() => ({
   runRawCompletionWithFallback: vi.fn(),

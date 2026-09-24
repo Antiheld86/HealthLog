@@ -29,7 +29,8 @@ import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiError, apiSuccess } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { pickCanonicalWorkoutRows } from "@/lib/measurements/pick-canonical-workout-rows";
-import { isModuleEnabled, requireModuleEnabled } from "@/lib/modules/gate";
+import { requireModuleEnabled } from "@/lib/modules/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 import { getAgeFromDateOfBirth } from "@/lib/analytics/pulse-targets";
 import { decryptFromBytes } from "@/lib/ai/coach/bytes-codec";
 import { buildWorkoutHrSeries } from "@/lib/workouts/hr-series";
@@ -60,7 +61,11 @@ export const GET = apiHandler(
     // v1.18.0 B1 — gate the detail surface behind the workouts module.
     const gate = await requireModuleEnabled(user.id, "workouts");
     if (!gate.enabled) return gate.response;
-    const insightsEnabled = await isModuleEnabled(user.id, "insights");
+    // The stored Activity Insight paragraph is model text: it is read and
+    // served only while `workoutInsights` is available (operator switch, the
+    // AI analysis opt-out, provider presence, consent). Otherwise the row is
+    // not even loaded, `aiInsight` is null, and `ai` says why.
+    const ai = await aiCapabilityToServe(user.id, "workoutInsights");
 
     const row = await prisma.workout.findUnique({
       where: { id },
@@ -79,7 +84,7 @@ export const GET = apiHandler(
             sampleCount: true,
           },
         },
-        insight: insightsEnabled
+        insight: ai.available
           ? {
               select: { paragraphEncrypted: true, generatedAt: true },
             }
@@ -282,7 +287,7 @@ export const GET = apiHandler(
     // undecryptable paragraph degrades to no card, exactly like a workout that
     // never had one.
     let aiInsight: { paragraph: string; generatedAt: string } | null = null;
-    if (insightsEnabled && row.insight) {
+    if (ai.available && row.insight) {
       try {
         aiInsight = {
           paragraph: decryptFromBytes(row.insight.paragraphEncrypted),
@@ -331,6 +336,8 @@ export const GET = apiHandler(
       // re-synced one, every one on a provider-less install) serves null and
       // the page's `{aiInsight ? <card/> : null}` renders nothing.
       aiInsight,
+      // Whether the Activity Insight can be shown, and why not.
+      ai,
       // v1.4.32 — when the requested id is a non-canonical twin the
       // caller can redirect to `canonicalId` to land on the cluster
       // winner. `canonicalId === id` when the requested row already

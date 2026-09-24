@@ -43,7 +43,7 @@ vi.mock("@/lib/rate-limit", () => ({
 }));
 
 // Operator master flag = on by default; coach delegation keys off it.
-// Partial mock — api-handler imports `AssistantDisabledError` from here.
+// Partial mock: the rest of the module stays real.
 vi.mock("@/lib/feature-flags", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/feature-flags")>();
   return {

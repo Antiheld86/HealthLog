@@ -58,6 +58,8 @@ import {
   recordRefusal,
   stdResponses,
 } from "./shared";
+import { aiCheckFailedResponse, aiRefusal403Description } from "./ai-refusal";
+import { aiCapabilityState } from "./profile";
 import {
   AI_EXTRACTION_UNAVAILABLE_DESCRIPTION,
   aiExtractionRefusalDescription,
@@ -743,7 +745,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "List the caller's Coach conversations",
       description:
-        'v1.18.0 — cursor-paginated list of the caller\'s Coach conversations for the history rail, most-recent activity first. Metadata only (id, title, timestamps, message count); message bodies are not decrypted here. `limit` defaults to 20, capped at 50; pass the returned `nextCursor` back as `cursor` for the next page (null at the end). v1.30.2 — optional `q` narrows the page to conversations whose TITLE contains the text (case-insensitive substring, capped at 200 chars); message bodies are encrypted at rest and are not searched. Coach-gated (`requireAssistantSurface("coach")`); a disabled surface 403s. Auth via cookie or Bearer; the owner is narrowed from the session.',
+        "v1.18.0 — cursor-paginated list of the caller's Coach conversations for the history rail, most-recent activity first. Metadata only (id, title, timestamps, message count); message bodies are not decrypted here. `limit` defaults to 20, capped at 50; pass the returned `nextCursor` back as `cursor` for the next page (null at the end). v1.30.2 — optional `q` narrows the page to conversations whose TITLE contains the text (case-insensitive substring, capped at 200 chars); message bodies are encrypted at rest and are not searched. Never AI-gated: stored conversations are the person's data and stay listable, readable and deletable while the Coach is unavailable for any reason. Auth via cookie or Bearer; the owner is narrowed from the session.",
       parameters: [
         {
           name: "cursor",
@@ -788,7 +790,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Send a Coach turn (streaming reply)",
       description:
-        "v1.18.0 — sends a user turn and streams the assistant reply as Server-Sent Events. The response is `text/event-stream`, not JSON: one `data: <json>\\n\\n` frame per event. Frame `type` is one of `token` (a chunk of reply text: `{ type, token }`), `provenance` (the evidence envelope: `{ type, metricSource }`), `suggestion` (a cadence-suggestion card: `{ type, suggestion }`), `reasoning` (v1.18.9, optional reasoning-summary text: `{ type, text }` — emitted only by reasoning-capable providers; absent otherwise), `done` (`{ type, conversationId, messageId, usage? }` — v1.18.9 adds the optional `usage` envelope `{ totalTokens, promptTokens?, completionTokens?, model? }`, server-authoritative; clients display it, never recompute), or `error` (`{ type, code, message }`). The HTTP status is 200 even for a provider/refusal outcome — clients dispatch on the `error` frame, not the status. Clients ignore unknown frame types (additive evolution). Omitting `conversationId` starts a new conversation. Coach-gated; budget- and rate-limited. Auth via cookie or Bearer.",
+        'v1.18.0 — sends a user turn and streams the assistant reply as Server-Sent Events. The response is `text/event-stream`, not JSON: one `data: <json>\\n\\n` frame per event. Frame `type` is one of `token` (a chunk of reply text: `{ type, token }`), `provenance` (the evidence envelope: `{ type, metricSource }`), `suggestion` (a cadence-suggestion card: `{ type, suggestion }`), `reasoning` (v1.18.9, optional reasoning-summary text: `{ type, text }` — emitted only by reasoning-capable providers; absent otherwise), `done` (`{ type, conversationId, messageId, usage? }` — v1.18.9 adds the optional `usage` envelope `{ totalTokens, promptTokens?, completionTokens?, model? }`, server-authoritative; clients display it, never recompute), or `error` (`{ type, code, message, reason? }`). The HTTP status is 200 even for a provider/refusal outcome — clients dispatch on the `error` frame, not the status. Clients ignore unknown frame types (additive evolution). Omitting `conversationId` starts a new conversation. Requires the `coach` AI capability, checked right after auth: an unavailable Coach is refused with the capability envelope before the stream opens, except a missing provider, which keeps its `coach.provider.none` error frame and adds `reason: "no_provider"`. Budget- and rate-limited. Auth via cookie or Bearer.',
       requestBody: {
         required: true,
         content: {
@@ -810,14 +812,14 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           },
         },
         "403": {
-          description:
-            "Coach surface disabled (`errorCode: assistant.disabled.coach`) or AI consent required (`errorCode: consent.ai.required`).",
+          description: aiRefusal403Description("coach"),
           content: { "application/json": { schema: errorEnvelope } },
         },
         "413": {
           description: "Request body exceeds the 64 KB cap.",
           content: { "application/json": { schema: errorEnvelope } },
         },
+        "503": aiCheckFailedResponse,
         ...stdResponses,
       },
     },
@@ -827,7 +829,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Read one Coach conversation with all messages",
       description:
-        "v1.18.0 — returns one conversation with every message decrypted server-side and ordered oldest-first, plus the rolling `summary` when one is on file. The client renders the bodies directly; no decryption key is involved. A foreign / unknown id maps to 404 (never 403) so the existence channel does not leak across accounts. Coach-gated. Auth via cookie or Bearer.",
+        "v1.18.0 — returns one conversation with every message decrypted server-side and ordered oldest-first, plus the rolling `summary` when one is on file. The client renders the bodies directly; no decryption key is involved. A foreign / unknown id maps to 404 (never 403) so the existence channel does not leak across accounts. Never AI-gated: a stored conversation stays readable while the Coach is unavailable. Auth via cookie or Bearer.",
       parameters: [
         {
           name: "id",
@@ -860,7 +862,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Rename one Coach conversation",
       description:
-        "Sets the conversation's title. The only field this verb writes — the body is `.strict()`, so an unrecognised key is REFUSED rather than ignored, unlike most partial updates on this surface. The title is trimmed and must be 1..80 characters after trimming. A foreign or unknown id maps to 404 (never 403), so the existence channel does not leak across accounts. Coach-gated. Auth via cookie or Bearer; the caller is always resolved as themselves, so a conversation in a shared record is not reachable here.",
+        "Sets the conversation's title. The only field this verb writes — the body is `.strict()`, so an unrecognised key is REFUSED rather than ignored, unlike most partial updates on this surface. The title is trimmed and must be 1..80 characters after trimming. A foreign or unknown id maps to 404 (never 403), so the existence channel does not leak across accounts. Never AI-gated. Auth via cookie or Bearer; the caller is always resolved as themselves, so a conversation in a shared record is not reachable here.",
       parameters: [
         {
           name: "id",
@@ -906,7 +908,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Delete one Coach conversation",
       description:
-        "v1.18.0 — hard-deletes a conversation and every message under it. A foreign / unknown id maps to 404 (never 403). Coach-gated. Auth via cookie or Bearer.",
+        "v1.18.0 — hard-deletes a conversation and every message under it. A foreign / unknown id maps to 404 (never 403). Never AI-gated: erasure works while the Coach is unavailable. Auth via cookie or Bearer.",
       parameters: [
         {
           name: "id",
@@ -1130,7 +1132,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "List the caller's durable Coach facts",
       description:
-        "v1.11.1 — returns the active facts the Coach has extracted about the caller (highest-confidence then newest first), each decrypted on the fly. The GDPR 'what do you know about me' surface. Coach-gated (`requireAssistantSurface(\"coach\")`). Auth via cookie or Bearer; the owner is always narrowed from the session, never the body. Undecryptable rows are omitted rather than failing the read.",
+        "v1.11.1 — returns the active facts the Coach has extracted about the caller (highest-confidence then newest first), each decrypted on the fly. The GDPR 'what do you know about me' surface. Never AI-gated: the facts stay readable and erasable while the Coach is unavailable for any reason. Auth via cookie or Bearer; the owner is always narrowed from the session, never the body. Undecryptable rows are omitted rather than failing the read.",
       responses: {
         "200": {
           description: "The caller's active facts.",
@@ -1147,7 +1149,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Forget all of the caller's Coach facts",
       description:
-        "v1.11.1 — bulk 'forget what you know about me': soft-deletes every active fact for the caller and returns the count cleared. Idempotent (a second call clears 0). Coach-gated. Auth via cookie or Bearer.",
+        "v1.11.1 — bulk 'forget what you know about me': soft-deletes every active fact for the caller and returns the count cleared. Idempotent (a second call clears 0). Never AI-gated. Auth via cookie or Bearer.",
       responses: {
         "200": {
           description: "All active facts cleared; the count is returned.",
@@ -1169,7 +1171,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Forget one Coach fact",
       description:
-        "v1.11.1 — soft-deletes a single fact owned by the caller. An unknown / cross-user / already-deleted id is an idempotent no-op returning `{ deleted: false }`, never revealing whether the id exists under another account. Coach-gated. Auth via cookie or Bearer.",
+        "v1.11.1 — soft-deletes a single fact owned by the caller. An unknown / cross-user / already-deleted id is an idempotent no-op returning `{ deleted: false }`, never revealing whether the id exists under another account. Never AI-gated. Auth via cookie or Bearer.",
       responses: {
         "200": {
           description:
@@ -1192,7 +1194,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Whether an unopened Coach message is waiting",
       description:
-        'v1.18.6 (CCH-03) — server-authoritative unread signal for the Coach FAB. `unread` is true when the caller\'s newest Coach ASSISTANT message (a proactive nudge or any reply) is newer than `User.coachLastSeenAt`; a user who has never opened the Coach reads an existing nudge as unread exactly once. `nudgedAt` carries that newest assistant-message timestamp (null when none exists) so the client can key a local seen-mirror on a stable value. Coach-gated (`requireAssistantSurface("coach")`); a disabled surface 403s. Auth via cookie or Bearer; the owner is narrowed from the session.',
+        "v1.18.6 (CCH-03) — server-authoritative unread signal for the Coach FAB. `unread` is true when the caller's newest Coach ASSISTANT message (a proactive nudge or any reply) is newer than `User.coachLastSeenAt`; a user who has never opened the Coach reads an existing nudge as unread exactly once. `nudgedAt` carries that newest assistant-message timestamp (null when none exists) so the client can key a local seen-mirror on a stable value. Never refused for an AI reason: while the `coach` capability is unavailable the answer is the quiet `{ unread: false, nudgedAt: null, conversationId: null }` with `ai` saying why. Auth via cookie or Bearer; the owner is narrowed from the session.",
       responses: {
         ...recordRefusal(),
         "200": {
@@ -1218,6 +1220,9 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
                     .describe(
                       "Conversation holding the newest assistant message; null when none exists. The client deep-links into it (`/coach?c=<id>`) on the unread path.",
                     ),
+                  ai: aiCapabilityState.describe(
+                    "The `coach` capability. While unavailable the three fields above are the quiet empty values.",
+                  ),
                 }),
                 "CoachNudgeStatus",
               ),
@@ -1233,7 +1238,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Mark the Coach as opened (clear the unread dot)",
       description:
-        "v1.18.6 (CCH-03) — opening the Coach (drawer or full page) stamps `User.coachLastSeenAt = now()`, so `GET /api/insights/coach/nudge-status` then reports no assistant message newer than the stamp and the FAB drops the unread dot. Server-authoritative, so the cleared state follows the caller across web + iOS rather than just the opening device. No request body — the timestamp is server-minted, so a client can never backdate the stamp to suppress a future nudge. Coach-gated; a disabled surface 403s. Auth via cookie or Bearer.",
+        "v1.18.6 (CCH-03) — opening the Coach (drawer or full page) stamps `User.coachLastSeenAt = now()`, so `GET /api/insights/coach/nudge-status` then reports no assistant message newer than the stamp and the FAB drops the unread dot. Server-authoritative, so the cleared state follows the caller across web + iOS rather than just the opening device. No request body — the timestamp is server-minted, so a client can never backdate the stamp to suppress a future nudge. Never AI-gated: a timestamp on the caller's own row. Auth via cookie or Bearer.",
       responses: {
         "200": {
           description: "The Coach was marked opened; the stamp is echoed back.",
@@ -1259,7 +1264,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Read the caller's self-context",
       description:
-        "v1.16.0 — returns the structured self-context (free text plus chronic conditions, allergies, coach focus) the Coach system prompt and the daily briefing inject as a delimited, user-provided context block, alongside any pending clarifying questions. Every field is stored encrypted at rest; an undecryptable payload reads as null (fail closed). Auth via cookie or Bearer; the owner is always narrowed from the session.",
+        "v1.16.0 — returns the structured self-context (free text plus chronic conditions, allergies, coach focus) the Coach system prompt and the daily briefing inject as a delimited, user-provided context block, alongside any pending clarifying questions. Every field is stored encrypted at rest; an undecryptable payload reads as null (fail closed). The questions are the one AI part: stored questions cannot be told apart by origin, so while the `aboutMeQuestions` capability is unavailable an outstanding set is replaced by the deterministic completion hints for the same profile, and `ai` says why. Auth via cookie or Bearer; the owner is always narrowed from the session.",
       responses: {
         "200": {
           description:
@@ -1277,6 +1282,9 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
                   updatedAt: z.iso.datetime({ offset: true }).nullable(),
                   maxChars: z.number().int(),
                   fieldMaxChars: z.number().int(),
+                  ai: aiCapabilityState.describe(
+                    "The `aboutMeQuestions` capability behind model-written questions.",
+                  ),
                 }),
                 "GetCoachAboutMeResponse",
               ),
@@ -1290,7 +1298,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Write (or clear) the caller's self-context",
       description:
-        "v1.16.0 — persists the free text (4 000-char cap) and the three structured fields (500-char cap each) encrypted at rest; caps are enforced before encryption. Structured fields are optional: omitted leaves the stored value untouched, an empty string clears it. After a non-empty save the server derives up to 3 clarifying questions (AI when a provider and the daily Coach token budget allow, deterministic completion hints otherwise) and returns them as `pendingQuestions`. Rate-limited per user. Optimistic concurrency (v1.32.21): send `baseUpdatedAt` (the `updatedAt` from a prior read) and the write 409s if the stored self-context changed since; omit it for the legacy unconditional write. The token is per-surface (`UserHealthProfile.updatedAt`), so it is not perturbed by unrelated account writes.",
+        "v1.16.0 — persists the free text (4 000-char cap) and the three structured fields (500-char cap each) encrypted at rest; caps are enforced before encryption. Structured fields are optional: omitted leaves the stored value untouched, an empty string clears it. After a non-empty save the server derives up to 3 clarifying questions (AI when the `aboutMeQuestions` capability is available and the daily Coach token budget allows, deterministic completion hints otherwise, with no provider call) and returns them as `pendingQuestions`. Rate-limited per user. Optimistic concurrency (v1.32.21): send `baseUpdatedAt` (the `updatedAt` from a prior read) and the write 409s if the stored self-context changed since; omit it for the legacy unconditional write. The token is per-surface (`UserHealthProfile.updatedAt`), so it is not perturbed by unrelated account writes.",
       requestBody: {
         required: true,
         content: {
@@ -1318,6 +1326,9 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
                   updatedAt: z.iso.datetime({ offset: true }),
                   maxChars: z.number().int(),
                   fieldMaxChars: z.number().int(),
+                  ai: aiCapabilityState.describe(
+                    "The `aboutMeQuestions` capability the derivation ran under.",
+                  ),
                 }),
                 "PutCoachAboutMeResponse",
               ),
@@ -1929,7 +1940,7 @@ export const coachFeedbackPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Rate a Coach assistant message",
       description:
-        "Persists a helpful/unhelpful rating for a single Coach reply. Reuses the v1.4.16 RecommendationFeedback table via the polymorphic `targetType` column. The aggregator buckets ratings by (promptVersion, tone, verbosity).",
+        "Persists a helpful/unhelpful rating for a single Coach reply. Reuses the v1.4.16 RecommendationFeedback table via the polymorphic `targetType` column. The aggregator buckets ratings by (promptVersion, tone, verbosity). Never AI-gated: a rating on a message that already exists calls no model.",
       requestBody: {
         required: true,
         content: {

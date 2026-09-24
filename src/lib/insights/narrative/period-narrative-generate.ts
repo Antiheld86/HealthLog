@@ -32,7 +32,7 @@ import { annotate } from "@/lib/logging/context";
 import { AI_BUDGETS, REFERENCE_AI_SEED } from "@/lib/ai/ai-budgets";
 import { dayRotatedSeed } from "@/lib/ai/prompts/opener-archetype";
 import { runStatusCompletion } from "@/lib/insights/status-provider";
-import { aiCapabilityForRecord } from "@/lib/ai/capabilities/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 import {
   buildPeriodNarrativeContext,
   type NarrativePeriod,
@@ -565,14 +565,15 @@ export async function readPeriodNarrative(
 /**
  * Whether a stored narrative may be served: always for the deterministic
  * narrative, and for model-written prose only while `periodNarrative` is
- * available for the record.
+ * available for the record, answered from the record's own state whoever is
+ * reading.
  */
 async function narrativeServable(
   userId: string,
   providerType: string | null,
 ): Promise<boolean> {
   if (providerType === DETERMINISTIC_PROVIDER_TYPE) return true;
-  return (await aiCapabilityForRecord(userId, "periodNarrative")).available;
+  return (await aiCapabilityToServe(userId, "periodNarrative")).available;
 }
 
 /** Prisma `Bytes` ↔ ciphertext, mirroring the CoachMessage helper. */

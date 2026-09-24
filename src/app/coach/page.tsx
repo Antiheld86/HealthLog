@@ -5,8 +5,10 @@ import {
 } from "@tanstack/react-query";
 
 import { getUnswitchedSession } from "@/lib/auth/acting-carrier";
-import { requireAssistantSurface } from "@/lib/feature-flags";
 import { readCoachNudgeStatus } from "@/lib/ai/coach/nudge-status";
+import { loadAiCapabilityInputs } from "@/lib/ai/capabilities/load";
+import { resolveAiCapability } from "@/lib/ai/capabilities/resolve";
+import type { AiCapabilityState } from "@/lib/ai/capabilities/types";
 import { queryKeys } from "@/lib/query-keys";
 
 import CoachPageClient from "./page-client";
@@ -35,11 +37,12 @@ import CoachPageClient from "./page-client";
  *    immediate refetch. When the client query is disabled (a `?c=`/`?doc=`/
  *    `?scope=` deep-link makes it `enabled: false`) the seeded value simply
  *    sits unused — harmless.
- *  - Availability parity: prefetch only when the Coach surface is actually
- *    reachable — the operator `coach` assistant flag is ON
- *    (`requireAssistantSurface` throws otherwise) AND the user has not opted
- *    out (`disableCoach`). Mirrors the client's `!flags.coach || disableCoach`
- *    redirect gate, so a disabled account does no wasted work.
+ *  - Availability parity: prefetch only when the `coach` capability is
+ *    available for the caller's own record, resolved from every layer (the
+ *    operator switch, the `disableCoach` opt-out, provider presence and
+ *    consent) by the same resolver the API routes use. An unavailable Coach
+ *    does no wasted work. The seeded value carries the same `ai` state the
+ *    nudge-status route returns, so the hydrated shape equals the wire.
  *  - Left CLIENT-LAZY on purpose: the streaming conversation itself (the SSE
  *    thread, snapshot, any provider-touching path) is NOT prefetched or warmed
  *    — it depends on URL params + the nudge outcome and must never be triggered
@@ -52,6 +55,28 @@ import CoachPageClient from "./page-client";
  *  - Fail-soft: no session, the Coach being off, or a DB blip renders the page
  *    exactly as before this wrapper existed — the client cell owns the fetch.
  */
+/**
+ * The `coach` capability for the caller's own record. An RSC has no request
+ * event, so the route gate cannot resolve the record from it; the unswitched
+ * session is always the caller's own record, read with the owner's authority.
+ */
+async function coachCapabilityForOwnRecord(
+  userId: string,
+): Promise<AiCapabilityState> {
+  const inputs = await loadAiCapabilityInputs({
+    recordId: userId,
+    authority: {
+      origin: "owner",
+      recordUserId: userId,
+      actorUserId: userId,
+      grantId: null,
+    },
+    sections: null,
+    recordKind: "self",
+  });
+  return resolveAiCapability("coach", inputs);
+}
+
 export default async function CoachPage() {
   // Global SSR-prefetch kill-switch shared with the dashboard wrapper. The e2e
   // server sets `DASHBOARD_SSR_PREFETCH=false` so Playwright route mocks — which
@@ -63,15 +88,17 @@ export default async function CoachPage() {
   let dehydratedState = null;
   try {
     const session = await getUnswitchedSession();
-    if (session && !session.user.disableCoach) {
-      // Throws `AssistantDisabledError` when the operator flag is off → caught
-      // below, prefetch skipped, client path stands (and redirects to /insights).
-      await requireAssistantSurface("coach");
+    const ai = session
+      ? await coachCapabilityForOwnRecord(session.user.id)
+      : null;
+    // An unavailable Coach skips the prefetch; the client path stands (and
+    // redirects to /insights).
+    if (session && ai?.available) {
       const nudge = await readCoachNudgeStatus(session.user.id);
       const queryClient = new QueryClient();
       queryClient.setQueryData(
         queryKeys.coachNudgeStatus(),
-        JSON.parse(JSON.stringify(nudge)),
+        JSON.parse(JSON.stringify({ ...nudge, ai })),
       );
       dehydratedState = dehydrate(queryClient);
     }

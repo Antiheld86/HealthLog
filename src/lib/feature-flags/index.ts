@@ -2,10 +2,7 @@ import { prisma } from "@/lib/db";
 import { getEvent } from "@/lib/logging/context";
 import { memoizePerRequest } from "@/lib/request-cache";
 
-import type {
-  AiOperatorSwitch,
-  AiOperatorSwitchSet,
-} from "@/lib/ai/capabilities/types";
+import type { AiOperatorSwitchSet } from "@/lib/ai/capabilities/types";
 
 /**
  * The operator's assistant switches: input one of the AI capability resolver
@@ -20,9 +17,6 @@ import type {
  * also weighs modules, provider-work authority, provider presence and consent;
  * a route that serves or calls a model asks the resolver, not this file.
  */
-
-/** A sub-switch name. Also the last segment of `assistant.disabled.<switch>`. */
-export type AssistantSurface = AiOperatorSwitch;
 
 /** The resolved switch set, master applied. */
 export type AssistantFlagSet = AiOperatorSwitchSet;
@@ -103,42 +97,4 @@ export async function getAssistantFlags(): Promise<AssistantFlagSet> {
 export function resolveAssistantFlags(raw: AssistantFlagSet): AssistantFlagSet {
   if (!raw.enabled) return { ...ASSISTANT_FLAGS_OFF };
   return { ...raw };
-}
-
-/**
- * The operator-switch-only refusal, `403 { meta: { errorCode:
- * "assistant.disabled.<switch>" } }`.
- *
- * Being retired. It answers only the operator layer, so a route gated on it
- * refuses when a switch is off and says nothing about modules, consent or the
- * provider; `requireAiCapability` (`src/lib/ai/capabilities/gate.ts`) answers
- * all of them with the same code for the operator case. The routes that still
- * call `requireAssistantSurface` are frozen by
- * `src/lib/feature-flags/__tests__/no-dead-assistant-flag.test.ts`: the list
- * may only shrink, and this class goes with its last caller.
- */
-export class AssistantDisabledError extends Error {
-  readonly surface: AssistantSurface;
-  readonly errorCode: string;
-
-  constructor(surface: AssistantSurface) {
-    super(`Assistant surface "${surface}" is disabled on this server`);
-    this.name = "AssistantDisabledError";
-    this.surface = surface;
-    this.errorCode = `assistant.disabled.${surface}`;
-  }
-}
-
-/**
- * Throws `AssistantDisabledError` when the switch (or the master) is off.
- * Retired in favour of `requireAiCapability`; see the class above.
- */
-export async function requireAssistantSurface(
-  surface: AssistantSurface,
-): Promise<AssistantFlagSet> {
-  const flags = await getAssistantFlags();
-  if (!flags[surface]) {
-    throw new AssistantDisabledError(surface);
-  }
-  return flags;
 }

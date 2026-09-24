@@ -11,7 +11,9 @@
  * Mirrors the `/api/insights/derived` precedent: `apiHandler` wrapper, Zod
  * `safeParse` on the query (unknown `metric` → 422 via `returnAllZodIssues`),
  * cookie OR Bearer auth, `userId` narrowed from the session (never a query
- * field), insights-module gate, and the shared analytics-read budget.
+ * field), and the shared analytics-read budget. No AI gate and no module
+ * gate: both lines are computed, and the `insights` module is the AI analysis
+ * opt-out.
  */
 import { NextRequest } from "next/server";
 import { z } from "zod/v4";
@@ -19,8 +21,6 @@ import { apiError, apiSuccess, returnAllZodIssues } from "@/lib/api-response";
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { checkAnalyticsReadRateLimit } from "@/lib/rate-limit";
-import { requireModuleEnabled } from "@/lib/modules/gate";
-import { requireAssistantSurface } from "@/lib/feature-flags";
 import { measurementTypeEnum } from "@/lib/validations/measurement";
 import { buildCoachReadStrip } from "@/lib/insights/derived/coach-read";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
@@ -37,13 +37,9 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // provider anywhere on the path.
   const { user } = await requireRecordAuth("manage", "record");
 
-  const m = await requireModuleEnabled(user.id, "insights");
-  if (!m.enabled) return m.response;
-
-  // The strip is the ambient Coach presence on the metric page, so it
-  // gates on the Coach assistant matrix too: an operator who turns the
-  // Coach off must not see a "Coach read" line linger.
-  await requireAssistantSurface("coach");
+  // Pure compute over the baseline and correlation engines. The name is
+  // historical: no model writes either line, so neither the Coach switch nor
+  // the AI analysis opt-out refuses it.
 
   // Shared analytics-read budget — generous; caps a runaway navigation loop.
   const rl = await checkAnalyticsReadRateLimit(user.id);

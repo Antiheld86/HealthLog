@@ -5,7 +5,7 @@
  * (api-handler wraps every handler in `eventStorage.run(builder, …)`),
  * yet the gate helpers and snapshot builders re-read the same row on
  * every call. The Coach drawer opening fires five fetches in parallel,
- * each of which lands a `requireAssistantSurface("coach")` call —
+ * each of which resolves the AI capabilities —
  * five separate `SELECT` against `AppSettings.singleton` for the same
  * value within the same wall-clock millisecond.
  *
@@ -44,7 +44,7 @@ function getCache(builder: WideEventBuilder): Map<string, unknown> {
  * The cached value is the Promise itself, so concurrent callers within
  * the same request await one outstanding compute instead of starting
  * their own — important for the gate-cascade pattern where five
- * mounts fire `requireAssistantSurface()` in parallel.
+ * mounts resolve the same capabilities in parallel.
  */
 export function memoizePerRequest<T>(
   key: string,

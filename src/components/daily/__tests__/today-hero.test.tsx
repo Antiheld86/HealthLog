@@ -7,6 +7,7 @@ import { TodayHero } from "../today-hero";
 import type { DailyDigest } from "@/lib/daily/digest";
 import type { PriorityItem } from "@/lib/daily/priority-item";
 import { SCORE_VERSION } from "@/lib/analytics/score/types";
+import { DIGEST_AI_AVAILABLE } from "@/__tests__/helpers/ai-capability-fixtures";
 
 // The hero now wires the coach check-in card's keep / let-go taps through
 // `useCoachCheckinAction`, so it needs a QueryClient in the tree.
@@ -51,6 +52,7 @@ const syncItem: PriorityItem = {
 function digest(over: Partial<DailyDigest> = {}): DailyDigest {
   return {
     generatedAt: "2026-07-16T06:00:00.000Z",
+    ai: DIGEST_AI_AVAILABLE,
     phase: "final",
     sleepPending: false,
     score: {

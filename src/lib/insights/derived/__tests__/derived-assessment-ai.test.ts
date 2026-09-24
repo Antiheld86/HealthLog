@@ -23,7 +23,10 @@ vi.mock("@/lib/db", () => ({
   prisma: { user: { findUnique: (a: unknown) => findUnique(a) } },
 }));
 
-import { readFreshStatusText } from "@/lib/insights/status-cache";
+import {
+  readFreshStatusText,
+  resolveReadOnlyStatusMiss,
+} from "@/lib/insights/status-cache";
 import { runStatusCompletion } from "@/lib/insights/status-provider";
 import {
   resolveDerivedAssessment,
@@ -74,6 +77,7 @@ describe("resolveDerivedAssessment — per-user tz (QA F5)", () => {
       userId: "u-ny",
       derived: okDerived(),
       locale: "en",
+      aiAvailable: true,
       now: new Date("2026-06-20T23:30:00.000Z"), // Berlin: 06-21 already
     });
 
@@ -86,6 +90,49 @@ describe("resolveDerivedAssessment — per-user tz (QA F5)", () => {
       todayKey: string;
     };
     expect(call.todayKey).toBe("2026-06-20");
+  });
+});
+
+describe("resolveDerivedAssessment — AI unavailable", () => {
+  it("serves the deterministic text and neither reads stored model text nor warms", async () => {
+    // A fresh cached AI assessment exists: it must still not be served.
+    vi.mocked(readFreshStatusText).mockResolvedValue({
+      text: "model prose",
+      updatedAt: "2026-06-20T08:00:00.000Z",
+    } as never);
+
+    const result = await resolveDerivedAssessment({
+      metric: "RECOVERY_SCORE",
+      userId: "u-ny",
+      derived: okDerived(),
+      locale: "en",
+      aiAvailable: false,
+      now: new Date("2026-06-20T12:00:00.000Z"),
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.source).not.toBe("ai");
+    expect(result?.text).not.toBe("model prose");
+    expect(readFreshStatusText).not.toHaveBeenCalled();
+    expect(resolveReadOnlyStatusMiss).not.toHaveBeenCalled();
+  });
+
+  it("serves the stored model text while AI is available", async () => {
+    vi.mocked(readFreshStatusText).mockResolvedValue({
+      text: "model prose",
+      updatedAt: "2026-06-20T08:00:00.000Z",
+    } as never);
+
+    const result = await resolveDerivedAssessment({
+      metric: "RECOVERY_SCORE",
+      userId: "u-ny",
+      derived: okDerived(),
+      locale: "en",
+      aiAvailable: true,
+      now: new Date("2026-06-20T12:00:00.000Z"),
+    });
+
+    expect(result).toMatchObject({ text: "model prose", source: "ai" });
   });
 });
 

@@ -2,8 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { insightsPaths } from "../routes/insights/paths";
 
-describe("insight patterns module gate OpenAPI contract", () => {
-  it("documents module.disabled for list and dismissal updates", () => {
+/**
+ * Correlation patterns are statistics, not model output. The `insights`
+ * module is the AI analysis opt-out, so it no longer gates them, and the
+ * contract must not promise a `module.disabled` refusal the routes never
+ * send. The 403 that remains is the sharing fence.
+ */
+describe("insight patterns OpenAPI contract", () => {
+  it("documents the sharing refusal and no module refusal for list and dismissal updates", () => {
     const listResponses =
       insightsPaths["/api/insights/patterns"]?.get?.responses;
     const updateResponses =
@@ -11,7 +17,9 @@ describe("insight patterns module gate OpenAPI contract", () => {
 
     for (const responses of [listResponses, updateResponses]) {
       expect(Object.keys(responses ?? {})).toContain("403");
-      expect(responses?.["403"]?.description).toContain("module.disabled");
+      const description = responses?.["403"]?.description ?? "";
+      expect(description).toContain("sharing.access.denied");
+      expect(description).not.toContain("module.disabled");
     }
   });
 });

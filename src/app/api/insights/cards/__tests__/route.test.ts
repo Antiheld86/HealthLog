@@ -15,9 +15,8 @@ vi.mock("@/lib/db", () => ({
     measurement: { findMany: vi.fn() },
     medication: { findMany: vi.fn() },
     medicationIntakeEvent: { findMany: vi.fn() },
-    // v1.4.31 — gated on `assistant.insightStatus`; null row falls
-    // back to the all-on default so existing assertions ride
-    // through unchanged.
+    // The operator switches are read by nothing on this route any more; the
+    // mock stays so a test can prove a switch-off changes nothing.
     appSettings: { findUnique: vi.fn().mockResolvedValue(null) },
     // v1.28 perf — PULSE now reads through the DAY-rollup read-swap
     // (`probeRollupCoverage` + `readDayMeanSeries`). An empty coverage
@@ -28,10 +27,8 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-// v1.18.0 — the route now resolves the `insights` module gate after
-// `requireAuth()`. Mock it default-enabled so the existing assertions
-// (data shape + assistant-flag gating) ride through; the dedicated
-// off → 403 coverage lives in the route-gate inventory test.
+// The route no longer asks the `insights` module (the AI analysis opt-out);
+// the mock stays so a test can prove it is never consulted.
 vi.mock("@/lib/modules/gate", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/modules/gate")>()),
   requireModuleEnabled: vi.fn().mockResolvedValue({ enabled: true }),
@@ -80,7 +77,6 @@ beforeEach(() => {
   vi.mocked(prisma.user.findUnique).mockResolvedValue({
     heightCm: null,
     dateOfBirth: null,
-    aiProvider: null,
   } as never);
   vi.mocked(prisma.appSettings.findUnique).mockResolvedValue(null as never);
   // v1.28 perf — empty coverage probe routes PULSE through the
@@ -94,33 +90,29 @@ function makeReq(): NextRequest {
   return new NextRequest("http://localhost/api/insights/cards");
 }
 
-describe("GET /api/insights/cards — assistant-flag gate", () => {
-  it("returns 403 + errorCode when insightStatus is disabled", async () => {
+describe("GET /api/insights/cards — rule alerts are data", () => {
+  it("answers 200 with every AI switch off", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
-    vi.mocked(prisma.appSettings.findUnique).mockResolvedValueOnce({
-      assistantEnabled: true,
-      assistantCoachEnabled: true,
-      assistantBriefingEnabled: true,
+    vi.mocked(prisma.appSettings.findUnique).mockResolvedValue({
+      assistantEnabled: false,
+      assistantCoachEnabled: false,
+      assistantBriefingEnabled: false,
       assistantInsightStatusEnabled: false,
-      assistantDocumentAiEnabled: true,
+      assistantDocumentAiEnabled: false,
     } as never);
     const res = await callGet(makeReq());
-    expect(res.status).toBe(403);
-    const body = (await res.json()) as { meta?: { errorCode?: string } };
-    expect(body.meta?.errorCode).toBe("assistant.disabled.insightStatus");
+    expect(res.status).toBe(200);
   });
 
-  it("returns 403 when the master flag is off", async () => {
+  it("answers 200 with the AI analysis opt-out on, without asking the module", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
-    vi.mocked(prisma.appSettings.findUnique).mockResolvedValueOnce({
-      assistantEnabled: false,
-      assistantCoachEnabled: true,
-      assistantBriefingEnabled: true,
-      assistantInsightStatusEnabled: true,
-      assistantDocumentAiEnabled: true,
+    vi.mocked(requireModuleEnabled).mockResolvedValue({
+      enabled: false,
+      response: new Response(null, { status: 403 }),
     } as never);
     const res = await callGet(makeReq());
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
+    expect(requireModuleEnabled).not.toHaveBeenCalled();
   });
 });
 
@@ -165,19 +157,23 @@ describe("GET /api/insights/cards", () => {
     vi.mocked(prisma.measurement.findMany).mockResolvedValue(
       measurements as never,
     );
-    vi.mocked(prisma.user.findUnique).mockResolvedValue({
-      heightCm: null,
-      dateOfBirth: null,
-      aiProvider: "ANTHROPIC",
-    } as never);
-
     const res = await callGet(makeReq());
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      data: Array<{ severity: string; provider: string; title: string }>;
+      data: Array<{
+        severity: string;
+        provider: string;
+        title: string;
+        summary: string | null;
+      }>;
     };
     expect(body.data.length).toBeGreaterThan(0);
-    expect(body.data[0].provider).toBe("anthropic");
+    // The threshold engine wrote these, never a model: the provider says so
+    // and no card ever carries null text (a native decoder needs both).
+    for (const card of body.data) {
+      expect(card.provider).toBe("rules");
+      expect(typeof card.summary).toBe("string");
+    }
     expect(body.data.some((c) => c.severity === "alert")).toBe(true);
   });
 

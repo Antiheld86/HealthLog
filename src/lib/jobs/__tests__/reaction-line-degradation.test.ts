@@ -105,6 +105,7 @@ vi.mock("@/lib/ai/coach/bytes-codec", () => ({
 
 import { runReactionLine } from "@/lib/jobs/reaction-line";
 import { AiUnavailableError } from "@/lib/ai/capabilities/refusal";
+import { DIGEST_AI_AVAILABLE } from "@/__tests__/helpers/ai-capability-fixtures";
 
 const JOB = {
   userId: "u1",
@@ -124,6 +125,7 @@ const NOW = new Date("2026-07-16T09:00:00.000Z");
 function degradedDigest() {
   const input: DailyDigestInput = {
     now: NOW,
+    ai: DIGEST_AI_AVAILABLE,
     todayEndExclusive: new Date("2026-07-17T00:00:00.000Z"),
     modules: {},
     enabledHeroItemKinds: [...PRIORITY_ITEM_KINDS],

@@ -20,6 +20,7 @@ import {
 import { ANALYTICS_RANGES } from "@/lib/analytics/range-delta";
 import { PROVIDER_CHAIN_TYPES } from "@/lib/ai/provider-chain";
 import { PERIOD_DAYS } from "@/lib/insights/narrative/period-narrative";
+import { aiCapabilityState } from "../profile";
 
 /** The retrospective periods the narrative route accepts, read off the engine. */
 const NARRATIVE_PERIOD_VALUES = Object.keys(PERIOD_DAYS);
@@ -42,11 +43,25 @@ export const insightsComprehensiveResponse = z
       .describe(
         "True when the body is served from last-good cache (stale-while-revalidate) while a fresh aggregation runs in the background. The client keeps polling on `revalidating` (bounded) so the open page converges on the fresh body.",
       ),
+    hasProvider: z
+      .boolean()
+      .optional()
+      .describe(
+        "Whether a configured AI provider exists for the record: provider presence and nothing else. False never means the operator switched AI off or consent is missing; `ai` says that.",
+      ),
+    ai: z
+      .object({
+        briefing: aiCapabilityState,
+        statusText: aiCapabilityState,
+      })
+      .describe(
+        "Whether the AI parts that decorate the overview can be shown: the daily briefing and the per-metric status notes. Resolved per request, never cached with the body. The overview itself is computed data and loads whatever these say.",
+      ),
   })
   .meta({
     id: "InsightsComprehensiveResponse",
     description:
-      "AI-generated insights bundle. Strict-schema validated server-side; Coach-routed when the insight surface needs day-level grounding.",
+      "The Insights overview's computed read. No provider is called on this path; every figure is computed from the record.",
   });
 
 // v1.8.7.1 — generic per-HealthKit-metric assessment. The query enum is
@@ -73,13 +88,13 @@ export const metricStatusResponse = z
     hasProvider: z
       .boolean()
       .describe(
-        "False when the user has no usable AI provider — `text` then carries the generic no-key guidance.",
+        "Whether a configured AI provider exists for the record: provider presence and nothing else. It is never false because the operator switched notes off or consent is missing; `ai` says that.",
       ),
     text: z
       .string()
       .nullable()
       .describe(
-        "The assessment narrative (plain text, rendered as React text children). Null while a first generation is preparing, or when the metric has insufficient data.",
+        "The assessment note (plain text, rendered as React text children). Null while a first generation is preparing, when the metric has insufficient data, and whenever the `statusText` capability is unavailable (see `ai`).",
       ),
     cached: z
       .boolean()
@@ -104,8 +119,11 @@ export const metricStatusResponse = z
       .boolean()
       .optional()
       .describe(
-        "True when the metric has no readings; no assessment is generated (no LLM call). The card shows its insufficient-data state.",
+        "True when the metric has no readings; no assessment is generated (no LLM call). The card shows its insufficient-data state. Still computed while `ai` is unavailable.",
       ),
+    ai: aiCapabilityState.describe(
+      "The `statusText` capability behind the note. While it is unavailable the note is null, `preparing` is false, the cache is not read and nothing is warmed.",
+    ),
   })
   .meta({
     id: "MetricStatusResponse",
@@ -391,7 +409,12 @@ export const derivedMetricResponse = z
     assessment: derivedAssessment
       .nullable()
       .describe(
-        "v1.13.2 — short 'why is this score what it is' explanation, keyed to the SAME requested id (only for the per-score ids READINESS, SLEEP_SCORE, RECOVERY_SCORE, STRAIN_SCORE, STRESS_SCORE). Null for any other metric and whenever status !== 'ok'. Always non-empty when present: a deterministic text fills it (so provider-less accounts + the demo always get one) and warmer AI prose overrides it once cached.",
+        "v1.13.2 — short 'why is this score what it is' explanation, keyed to the SAME requested id (only for the per-score ids READINESS, SLEEP_SCORE, RECOVERY_SCORE, STRAIN_SCORE, STRESS_SCORE). Null for any other metric and whenever status !== 'ok'. Always non-empty when present: a deterministic text fills it (so provider-less accounts + the demo always get one) and warmer AI prose overrides it once cached, but only while the `statusText` AI capability is available; otherwise the deterministic text is served and nothing is warmed.",
+      ),
+    ai: aiCapabilityState
+      .optional()
+      .describe(
+        "The `statusText` capability behind the model-written assessment. Present on the single-metric route; absent on the batch route, whose assessments are always the deterministic text.",
       ),
   })
   .meta({
@@ -708,13 +731,13 @@ export const insightStatusResponse = z
     hasProvider: z
       .boolean()
       .describe(
-        "False when the user has no usable AI provider — `text` then carries the generic no-key guidance.",
+        "Whether a configured AI provider exists for the record: provider presence and nothing else. It is never false because the operator switched notes off or consent is missing; `ai` says that.",
       ),
     text: z
       .string()
       .nullable()
       .describe(
-        "The assessment narrative (plain text, rendered as React text children). Null while a first generation is preparing.",
+        "The assessment note (plain text, rendered as React text children). Null while a first generation is preparing, and whenever the `statusText` capability is unavailable (see `ai`).",
       ),
     cached: z
       .boolean()
@@ -735,6 +758,9 @@ export const insightStatusResponse = z
       .describe(
         "True when `text` is served from last-good cache (stale-while-revalidate) while a fresh generation is in flight. The client keeps polling on `preparing || revalidating` (bounded) so the open card upgrades to the warmed assessment without a remount.",
       ),
+    ai: aiCapabilityState.describe(
+      "The `statusText` capability behind the note. While it is unavailable the note is null, `preparing` is false, the cache is not read and nothing is warmed.",
+    ),
   })
   .meta({
     id: "InsightStatusResponse",
@@ -766,13 +792,13 @@ export const biomarkerAssessmentResponse = z
     hasProvider: z
       .boolean()
       .describe(
-        "False when the user has no usable AI provider — `text` then carries the generic no-key guidance.",
+        "Whether a configured AI provider exists for the record: provider presence and nothing else. It is never false because the operator switched notes off or consent is missing; `ai` says that.",
       ),
     text: z
       .string()
       .nullable()
       .describe(
-        "The assessment narrative (plain text, rendered as React text children). Null while a first generation is preparing, or when the marker has no numeric readings.",
+        "The assessment note (plain text, rendered as React text children). Null while a first generation is preparing, when the marker has no numeric readings, and whenever the `statusText` capability is unavailable (see `ai`).",
       ),
     cached: z
       .boolean()
@@ -799,6 +825,9 @@ export const biomarkerAssessmentResponse = z
       .describe(
         "True when the marker has no numeric readings; no assessment is generated (no LLM call). The card is not rendered.",
       ),
+    ai: aiCapabilityState.describe(
+      "The `statusText` capability behind the note. While it is unavailable the note is null, `preparing` is false, the cache is not read and nothing is warmed.",
+    ),
   })
   .meta({
     id: "BiomarkerAssessmentResponse",
@@ -814,13 +843,13 @@ export const medicationComplianceStatusResponse = z
     hasProvider: z
       .boolean()
       .describe(
-        "False when the user has no usable AI provider — `summary` then carries the generic no-key guidance.",
+        "Whether a configured AI provider exists for the record: provider presence and nothing else. It is never false because the operator switched notes off or consent is missing; `ai` says that.",
       ),
     summary: z
       .string()
       .nullable()
       .describe(
-        "The overall compliance narrative (plain text). Null while a first generation is preparing.",
+        "The overall compliance note (plain text). Null while a first generation is preparing, and whenever the `statusText` capability is unavailable (see `ai`).",
       ),
     medications: z
       .array(
@@ -859,6 +888,9 @@ export const medicationComplianceStatusResponse = z
       .describe(
         "True when the envelope is served from last-good cache (stale-while-revalidate) while a fresh generation is in flight. The client keeps polling on `preparing || revalidating` (bounded).",
       ),
+    ai: aiCapabilityState.describe(
+      "The `statusText` capability behind the note. While it is unavailable `summary` is null, `medications` is empty, `preparing` is false, the cache is not read and nothing is warmed.",
+    ),
   })
   .meta({
     id: "MedicationComplianceStatusResponse",
@@ -946,15 +978,25 @@ export const insightsPregenerateResponse = z
   .object({
     queued: z
       .boolean()
-      .describe("True when the full warm was accepted and enqueued."),
+      .describe(
+        "True when the warm was accepted and enqueued; false when neither AI capability it covers is available, in which case nothing was enqueued.",
+      ),
     locale: z
-      .enum(["de", "en"])
+      .string()
       .describe("The locale the assessments are being warmed in."),
+    ai: z
+      .object({
+        briefing: aiCapabilityState,
+        statusText: aiCapabilityState,
+      })
+      .describe(
+        "The two capabilities the warm covers. The worker skips the half whose capability is unavailable.",
+      ),
   })
   .meta({
     id: "InsightsPregenerateResponse",
     description:
-      "Acknowledgement that a full assessment warm was enqueued for the calling user. The generation runs out of band; the text lands in the read-only status routes.",
+      "Acknowledgement of a full assessment warm for the calling user, or of why none was enqueued. The generation runs out of band; the text lands in the read-only status routes.",
   });
 
 // v1.7.0 — unified dashboard first-paint snapshot. One GET that
@@ -1407,12 +1449,22 @@ export const dashboardSnapshotResponse = z
       .describe(
         "The briefing recall + forward-look: `recall` is the prior period's narrative headline, `forward` points ahead to the most salient trend drift (or a calm 'holding steady' line). Both are already-localised prose the client renders verbatim. Null when no prior narrative is on file or no briefing is shown. Optional so older cached snapshots without the field stay valid.",
       ),
-    briefingState: z.enum(["ready", "preparing", "disabled", "no-provider"]),
+    briefingState: z
+      .enum(["ready", "preparing", "disabled", "no-provider"])
+      .describe(
+        "`disabled` whenever the `briefing` AI capability is unavailable for a reason other than a missing provider (then `briefingAi` names it); `no-provider` when no provider can serve it.",
+      ),
     briefingUpdatedAt: z.string().nullable(),
     briefingStale: z
       .boolean()
       .describe(
-        "True when `briefing` carries the last good (expired-TTL) briefing while a refresh is pending (`preparing`) or impossible (`no-provider`). Render the stale content with its `briefingUpdatedAt` timestamp instead of a blank tile.",
+        "True when `briefing` carries the last good (expired-TTL) briefing while a refresh is pending (`preparing`). Render the stale content with its `briefingUpdatedAt` timestamp instead of a blank tile.",
+      ),
+    briefingAi: aiCapabilityState
+      .nullable()
+      .optional()
+      .describe(
+        "The `briefing` AI capability for this record, applied on every read after the cache: while it is unavailable `briefing`, `briefingMemory` and `briefingUpdatedAt` are null, whatever the cache holds. Nullable and optional so older cached bodies stay valid.",
       ),
     generatedAt: z.string(),
   })
@@ -1424,8 +1476,8 @@ export const dashboardSnapshotResponse = z
 
 // v1.4.31 — the iOS "cards" adapter over the same alert rule engine the
 // web comprehensive surface consumes. Each card is one `HealthAlert`
-// re-shaped to the iOS Insight model. Module-gated on `insights` and the
-// operator `insightStatus` assistant surface.
+// re-shaped to the iOS Insight model. Rule output, not model output, so no
+// AI or module gate applies.
 const insightCard = z
   .object({
     id: z.string().describe("Stable per-card id (e.g. `alert-1`)."),
@@ -1455,7 +1507,7 @@ const insightCard = z
     provider: z
       .string()
       .describe(
-        "Lower-cased AI provider label for the account (e.g. `claude`).",
+        "Who wrote the card: always `rules`, the threshold engine. It used to echo the account's AI provider although no model wrote any card.",
       ),
   })
   .meta({
@@ -2675,8 +2727,11 @@ export const coachSeededQuestionResponse = z
       })
       .nullable()
       .describe(
-        "Null whenever nothing crossed the detector's confidence and notability gate, AND whenever the account has turned proactive suggestions off — the two are indistinguishable on the wire, and both mean the hero keeps its neutral greeting rather than showing a fabricated opener.",
+        "Null whenever nothing crossed the detector's confidence and notability gate, AND whenever the account has turned proactive suggestions off, AND whenever the `coach` capability is unavailable (then `ai` says why) — all mean the hero keeps its neutral greeting rather than showing a fabricated opener.",
       ),
+    ai: aiCapabilityState.describe(
+      "The `coach` capability the opener exists for.",
+    ),
   })
   .meta({
     id: "CoachSeededQuestion",
@@ -2715,12 +2770,17 @@ export const narrativeResponse = z
         updatedAt: z.iso.datetime({ offset: true }),
       })
       .nullable()
-      .describe("Null when no row exists for this period and locale yet."),
+      .describe(
+        "Null when no row exists for this period and locale yet, and when the stored row is model-written while the `periodNarrative` capability is unavailable (a deterministic row is always served).",
+      ),
     revalidating: z
       .boolean()
       .describe(
-        "True when this read enqueued a warm. Always FALSE on a delegated request even when the row is stale: this route warms unconditionally rather than on a miss, so a manager's first navigation here would otherwise be an egress of the owner's record the owner never asked for. The stale row is still served; only the warm is withheld.",
+        "True when this read enqueued a warm. Always FALSE on a delegated request even when the row is stale: this route warms unconditionally rather than on a miss, so a manager's first navigation here would otherwise be an egress of the owner's record the owner never asked for. The stale row is still served; only the warm is withheld. Also false while `periodNarrative` is unavailable and a servable row exists.",
       ),
+    ai: aiCapabilityState.describe(
+      "The `periodNarrative` capability behind model-written narratives.",
+    ),
   })
   .meta({
     id: "NarrativeResponse",

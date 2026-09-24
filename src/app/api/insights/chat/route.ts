@@ -7,7 +7,11 @@
  * and a closing `done` frame carrying the persisted message ids.
  *
  * Behaviour:
- *   1. requireAuth() — cookie session OR bearer token (iOS app).
+ *   1. requireAuth() — cookie session OR bearer token (iOS app), then the
+ *      `coach` AI capability (operator switch, the Coach module and the
+ *      `disableCoach` opt-out, provider presence, consent). Refused with the
+ *      capability envelope, except `no_provider`, which keeps its
+ *      `coach.provider.none` SSE frame (now with `reason`).
  *   2. Validate body with `coachChatRequestSchema`.
  *   3. reserveBudget(resolveDailyCap(chain)) — 429 with
  *      `coach.budget.exceeded` when the day's token cap for the
@@ -41,8 +45,10 @@ import { redactOptional, redactSecrets } from "@/lib/logging/redact";
 import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { requireAssistantSurface } from "@/lib/feature-flags";
-import { isModuleEnabled, requireModuleEnabled } from "@/lib/modules/gate";
+import { isModuleEnabled } from "@/lib/modules/gate";
+import { requireAiCapability } from "@/lib/ai/capabilities/gate";
+import { AiUnavailableError } from "@/lib/ai/capabilities/refusal";
+import type { AiUnavailableReason } from "@/lib/ai/capabilities/types";
 
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
@@ -187,16 +193,38 @@ function flushTick(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+/**
+ * The `coach` capability gate for a turn. Every unavailable reason throws the
+ * capability envelope (`assistant.disabled.coach`, `module.disabled`,
+ * `consent.ai.required`, `ai.record.notPermitted`, `ai.unavailable`), except
+ * `no_provider`: the streaming clients already read that one as the
+ * `coach.provider.none` SSE frame, so it keeps that wire and gains `reason`.
+ * Returns the frame to send, or null when the Coach is available.
+ */
+async function coachCapabilityRefusal(): Promise<Response | null> {
+  try {
+    await requireAiCapability("coach");
+    return null;
+  } catch (err) {
+    if (err instanceof AiUnavailableError && err.reason === "no_provider") {
+      annotate({ action: { name: "insights.coach.noProvider" } });
+      return streamProviderError({
+        code: "coach.provider.none",
+        reason: "no_provider",
+      });
+    }
+    throw err;
+  }
+}
+
 async function handleChatRequest(request: NextRequest): Promise<Response> {
   const auth = await requireAuth();
-  // v1.18.0 — two-layer module gate (operator availability + per-user
-  // disableCoach) on top of the legacy assistant flag. 403 module.disabled.
-  const gate = await requireModuleEnabled(auth.user.id, "coach");
-  if (!gate.enabled) return gate.response;
-  // v1.4.31 — operator can disable the Coach surface app-wide.
-  // Throws AssistantDisabledError → apiHandler returns 403 +
-  // `errorCode: "assistant.disabled.coach"` per the iOS contract.
-  await requireAssistantSurface("coach");
+  // The `coach` capability, right after auth and before the rate limit and
+  // the body parse. It folds in what the Coach module gate, the operator
+  // switch and the `disableCoach` opt-out used to answer separately, plus
+  // provider presence and consent.
+  const refused = await coachCapabilityRefusal();
+  if (refused) return refused;
   const userId = auth.user.id;
 
   let body: unknown;
@@ -560,7 +588,10 @@ async function handleChatRequest(request: NextRequest): Promise<Response> {
       annotate({
         action: { name: "insights.coach.noProvider" },
       });
-      return streamProviderError({ code: "coach.provider.none" });
+      return streamProviderError({
+        code: "coach.provider.none",
+        reason: "no_provider",
+      });
     }
     chain.push({ providerType: "admin-openai", instance: legacy });
   }
@@ -578,6 +609,15 @@ async function handleChatRequest(request: NextRequest): Promise<Response> {
   // Ollama) falls back to the legacy snapshot-stuffing path verbatim, exactly
   // as before — the snapshot builder stays alive as the no-tools floor.
   const toolMode = chain.every((c) => c.instance.supportsTools !== false);
+
+  // The last check before the budget reservation and the provider call: the
+  // `coach` capability again, at the egress site, so the call site names its
+  // capability whatever happens to the gate at the top. Inside one request
+  // the capability inputs are memoised, so this answers from the same
+  // resolution as the top gate; a fresh read at the wire belongs to the
+  // provider chokepoints, not to this route.
+  const refusedAtEgress = await coachCapabilityRefusal();
+  if (refusedAtEgress) return refusedAtEgress;
 
   // v1.18.7 (SENIOR-DEV HIGH) — atomically RESERVE the day's budget before
   // the provider call. The reservation increments the day's total by the
@@ -1613,13 +1653,18 @@ async function reportCoachStreamDefect(err: unknown): Promise<void> {
   }
 }
 
-function streamProviderError(args: { code: string }): Response {
+function streamProviderError(args: {
+  code: string;
+  /** The capability reason, when the refusal came from one. */
+  reason?: AiUnavailableReason;
+}): Response {
   const stream = createSseStream((controller) => {
     controller.enqueue(
       encodeFrame({
         type: "error",
         code: args.code,
         message: args.code,
+        ...(args.reason ? { reason: args.reason } : {}),
       }),
     );
   });
@@ -1662,13 +1707,9 @@ const LIST_QUERY_MAX_LEN = 200;
  */
 export const GET = apiHandler(async (request: NextRequest) => {
   const auth = await requireAuth();
-  // v1.18.0 — same two-layer module gate as the SSE POST.
-  const gate = await requireModuleEnabled(auth.user.id, "coach");
-  if (!gate.enabled) return gate.response;
-  // v1.4.31 — same gate as the SSE POST. Hiding the rail when
-  // the operator has disabled Coach matches the FAB suppression
-  // on the client.
-  await requireAssistantSurface("coach");
+  // Never AI-gated and never module-gated: the conversation list is the
+  // person's stored data. It stays readable while the Coach is unavailable
+  // for any reason, so every thread can be found and deleted.
   const url = new URL(request.url);
   const cursor = url.searchParams.get("cursor");
   const limitRaw = url.searchParams.get("limit");

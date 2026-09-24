@@ -10,20 +10,25 @@ import { queryKeys } from "@/lib/query-keys";
  * The RSC wrapper (`src/app/coach/page.tsx`) dehydrates the coach nudge status
  * under `queryKeys.coachNudgeStatus()` so the auto-open-most-recent decision is
  * available at hydrate (collapsing the nudge → auto-open waterfall). These
- * tests pin: the exact client key; the read is only run when the Coach surface
- * is reachable (operator flag ON + not user-disabled); and every unreachable /
+ * tests pin: the exact client key; the read is only run when the `coach`
+ * capability is available for the caller's own record; and every unavailable /
  * error path fails soft. The streaming conversation is never prefetched here.
  */
 
 const getUnswitchedSession = vi.fn();
-const requireAssistantSurface = vi.fn();
+const loadAiCapabilityInputs = vi.fn();
+const resolveAiCapability = vi.fn();
 const readCoachNudgeStatus = vi.fn();
 
 vi.mock("@/lib/auth/acting-carrier", () => ({
   getUnswitchedSession: () => getUnswitchedSession(),
 }));
-vi.mock("@/lib/feature-flags", () => ({
-  requireAssistantSurface: (s: string) => requireAssistantSurface(s),
+vi.mock("@/lib/ai/capabilities/load", () => ({
+  loadAiCapabilityInputs: (scope: unknown) => loadAiCapabilityInputs(scope),
+}));
+vi.mock("@/lib/ai/capabilities/resolve", () => ({
+  resolveAiCapability: (key: string, inputs: unknown) =>
+    resolveAiCapability(key, inputs),
 }));
 vi.mock("@/lib/ai/coach/nudge-status", () => ({
   readCoachNudgeStatus: (id: string) => readCoachNudgeStatus(id),
@@ -36,6 +41,18 @@ const NUDGE = {
   nudgedAt: "2026-07-18T08:00:00.000Z",
   unread: true,
   conversationId: "c1",
+};
+
+const AVAILABLE = { available: true, reason: null, onDeviceAllowed: true };
+const USER_DISABLED = {
+  available: false,
+  reason: "user_disabled",
+  onDeviceAllowed: false,
+};
+const OPERATOR_DISABLED = {
+  available: false,
+  reason: "operator_disabled",
+  onDeviceAllowed: false,
 };
 
 afterEach(() => {
@@ -59,31 +76,65 @@ describe("/coach RSC prefetch", () => {
     getUnswitchedSession.mockResolvedValue({
       user: { id: "u1", disableCoach: false },
     });
-    requireAssistantSurface.mockResolvedValue({});
+    resolveAiCapability.mockReturnValue(AVAILABLE);
     readCoachNudgeStatus.mockResolvedValue(NUDGE);
 
     const el = (await CoachPage()) as ReactElement;
     const q = dehydratedQuery(el);
     expect(q).not.toBeNull();
     expect(q!.queryHash).toBe(hashKey(queryKeys.coachNudgeStatus()));
-    expect(q!.state.data).toEqual(NUDGE);
+    // The seeded value equals the route's wire shape, `ai` included.
+    expect(q!.state.data).toEqual({ ...NUDGE, ai: AVAILABLE });
+  });
+
+  it("resolves the Coach for the caller's own record with the owner's authority", async () => {
+    getUnswitchedSession.mockResolvedValue({
+      user: { id: "u1", disableCoach: false },
+    });
+    resolveAiCapability.mockReturnValue(AVAILABLE);
+    readCoachNudgeStatus.mockResolvedValue(NUDGE);
+
+    await CoachPage();
+    expect(loadAiCapabilityInputs).toHaveBeenCalledWith({
+      recordId: "u1",
+      authority: {
+        origin: "owner",
+        recordUserId: "u1",
+        actorUserId: "u1",
+        grantId: null,
+      },
+      sections: null,
+      recordKind: "self",
+    });
+    expect(resolveAiCapability.mock.calls[0]?.[0]).toBe("coach");
   });
 
   it("skips the prefetch when the user opted out of the Coach", async () => {
     getUnswitchedSession.mockResolvedValue({
       user: { id: "u1", disableCoach: true },
     });
+    resolveAiCapability.mockReturnValue(USER_DISABLED);
     const el = (await CoachPage()) as ReactElement;
     expect(el.type).not.toBe(HydrationBoundary);
-    expect(requireAssistantSurface).not.toHaveBeenCalled();
     expect(readCoachNudgeStatus).not.toHaveBeenCalled();
   });
 
-  it("fails soft when the operator Coach flag is off (surface throws)", async () => {
+  it("skips the prefetch when the operator turned the Coach off", async () => {
     getUnswitchedSession.mockResolvedValue({
       user: { id: "u1", disableCoach: false },
     });
-    requireAssistantSurface.mockRejectedValue(new Error("assistant disabled"));
+    resolveAiCapability.mockReturnValue(OPERATOR_DISABLED);
+
+    const el = (await CoachPage()) as ReactElement;
+    expect(el.type).not.toBe(HydrationBoundary);
+    expect(readCoachNudgeStatus).not.toHaveBeenCalled();
+  });
+
+  it("fails soft when the capability load throws", async () => {
+    getUnswitchedSession.mockResolvedValue({
+      user: { id: "u1", disableCoach: false },
+    });
+    loadAiCapabilityInputs.mockRejectedValueOnce(new Error("db blip"));
 
     const el = (await CoachPage()) as ReactElement;
     expect(el.type).not.toBe(HydrationBoundary);
@@ -94,7 +145,7 @@ describe("/coach RSC prefetch", () => {
     getUnswitchedSession.mockResolvedValue({
       user: { id: "u1", disableCoach: false },
     });
-    requireAssistantSurface.mockResolvedValue({});
+    resolveAiCapability.mockReturnValue(AVAILABLE);
     readCoachNudgeStatus.mockRejectedValue(new Error("db blip"));
 
     const el = (await CoachPage()) as ReactElement;
