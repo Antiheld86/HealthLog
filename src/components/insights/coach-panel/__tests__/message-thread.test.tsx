@@ -734,6 +734,33 @@ describe("errorCodeToI18nKey", () => {
     );
   });
 
+  // v1.39 — a refused turn names its reason. The capability refusals carry
+  // their code in `meta.errorCode`; each maps to copy that says what is off
+  // and who can change it, never the generic "provider unavailable".
+  it("maps each AI capability refusal to its own copy", () => {
+    expect(errorCodeToI18nKey("consent.ai.required")).toBe(
+      "insights.coach.errorConsent",
+    );
+    expect(errorCodeToI18nKey("ai.record.notPermitted")).toBe(
+      "insights.coach.errorNotPermitted",
+    );
+    expect(errorCodeToI18nKey("ai.unavailable")).toBe(
+      "insights.coach.errorUnavailable",
+    );
+    expect(errorCodeToI18nKey("ai.provider.none")).toBe(
+      "insights.coach.errorNoProvider",
+    );
+    expect(errorCodeToI18nKey("assistant.disabled.coach")).toBe(
+      "insights.coach.errorOperatorOff",
+    );
+    expect(errorCodeToI18nKey("assistant.disabled.enabled")).toBe(
+      "insights.coach.errorOperatorOff",
+    );
+    expect(errorCodeToI18nKey("module.disabled")).toBe(
+      "insights.coach.errorCoachOff",
+    );
+  });
+
   it("forward-compats unknown codes with the namespaced key", () => {
     expect(errorCodeToI18nKey("errorProvider")).toBe(
       "insights.coach.errorProvider",

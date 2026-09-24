@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { Logo } from "@/components/ui/logo";
 import { useAuth, useLogout } from "@/hooks/use-auth";
 import { useIsMobile } from "@/hooks/use-is-mobile";
+import { useNavModules } from "@/hooks/use-nav-modules";
 import { useMounted } from "@/hooks/use-mounted";
 import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import { useTheme } from "@/components/providers";
@@ -320,10 +321,12 @@ export function SidebarNav() {
   // The Settings entry needs them: a record-content page is offered only when
   // the grant manages the section its forms write.
   const manageableDomains = user?.accountAccess?.active?.manageableDomains;
+  // The Coach entry follows the `coach` AI capability, like every other
+  // Coach entry point; the rest of the map is `modules` unchanged.
+  const navModules = useNavModules();
   const visibleNavItems = useMemo(
-    () =>
-      visibleNavDestinations(user?.modules, mounted, sharedRecord, sections),
-    [user?.modules, mounted, sharedRecord, sections],
+    () => visibleNavDestinations(navModules, mounted, sharedRecord, sections),
+    [navModules, mounted, sharedRecord, sections],
   );
   // Collapsed = the user's stored choice, or — with no stored choice — a
   // viewport default: tablet widths (md–lg, e.g. an iPad held upright)

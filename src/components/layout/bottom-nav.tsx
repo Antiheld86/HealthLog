@@ -20,6 +20,7 @@ import {
 import { isSurfaceVisible } from "@/lib/modules/surface";
 import { useCallback, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { useNavModules } from "@/hooks/use-nav-modules";
 import { useMounted } from "@/hooks/use-mounted";
 import { useRecordCapabilities } from "@/hooks/use-record-capabilities";
 import {
@@ -107,15 +108,18 @@ export function BottomNav() {
   // feature destination that isn't a primary slot, plus the shared utility
   // tail. Cycle is gated by the same flag the sidebar uses, so the two
   // surfaces gate identically and cannot drift.
+  // The Coach entry follows the `coach` AI capability (a Coach that cannot
+  // answer is not offered); the sidebar reads the same map.
+  const navModules = useNavModules();
   const moreHub = useMemo<ReadonlyArray<NavLink>>(
     () =>
       mobileMoreHubDestinations({
-        modules: user?.modules,
+        modules: navModules,
         mounted,
         sharedRecord,
         sections,
       }),
-    [user?.modules, mounted, sharedRecord, sections],
+    [navModules, mounted, sharedRecord, sections],
   );
 
   // Every slot but Home asks two things: does sharing cover it, and does its
@@ -133,10 +137,10 @@ export function BottomNav() {
         // Insights drops out under a switch.
         (!sharedRecord || isDestinationInSharedRecord(item.href, sections)) &&
         mounted &&
-        isSurfaceVisible(`nav:${item.href}`, user?.modules)
+        isSurfaceVisible(`nav:${item.href}`, navModules)
       );
     },
-    [user?.modules, mounted, sharedRecord, sections],
+    [navModules, mounted, sharedRecord, sections],
   );
 
   // Both fixed flanks run through the ONE slot filter, so a module-gated

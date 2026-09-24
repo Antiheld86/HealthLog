@@ -24,8 +24,7 @@ import {
   useCoachPlanMutations,
   type CoachPlanDTO,
 } from "@/hooks/use-coach-plans";
-import { useFeatureFlags } from "@/hooks/use-feature-flags";
-import { useDisableCoach } from "@/hooks/use-disable-coach";
+import { useAiCapabilityAnswer } from "@/hooks/use-ai-capability";
 import { useTranslations } from "@/lib/i18n/context";
 import { formatDateOrRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -279,21 +278,17 @@ function CoachPlansBody() {
 
 export default function CoachPlansPage() {
   const router = useRouter();
-  const flags = useFeatureFlags();
-  const disableCoach = useDisableCoach();
+  // Same gate as `/coach`: the `coach` capability, acted on only once
+  // `/me` has answered.
+  const coach = useAiCapabilityAnswer("coach");
 
-  const coachUnavailable = !flags.coach || disableCoach;
-
-  // Same gating as `/coach`: operator master flag OR per-user opt-out
-  // redirects back to the Insights mother page so the route is never a
-  // dead-end.
   useEffect(() => {
-    if (coachUnavailable) {
+    if (coach !== null && !coach.available) {
       router.replace("/insights");
     }
-  }, [coachUnavailable, router]);
+  }, [coach, router]);
 
-  if (coachUnavailable) return null;
+  if (coach === null || !coach.available) return null;
 
   return (
     <div
