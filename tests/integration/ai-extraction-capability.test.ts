@@ -187,9 +187,8 @@ interface Envelope {
 }
 
 async function suggestText(documentId: string) {
-  const { POST } = await import(
-    "@/app/api/documents/inbound/[id]/suggest/route"
-  );
+  const { POST } =
+    await import("@/app/api/documents/inbound/[id]/suggest/route");
   const { NextRequest } = await import("next/server");
   const res = await POST(
     new NextRequest(
@@ -457,9 +456,8 @@ describe("document auto-read mints the extraction receipt", () => {
   it("writes ai_extraction, not ai_full", async () => {
     const user = await makeUser();
     await signIn(user.id);
-    const { PATCH } = await import(
-      "@/app/api/auth/me/documents-auto-ai-read/route"
-    );
+    const { PATCH } =
+      await import("@/app/api/auth/me/documents-auto-ai-read/route");
 
     const res = await PATCH(
       new Request("http://localhost/api/auth/me/documents-auto-ai-read", {
@@ -483,9 +481,8 @@ describe("background reads stop at the wire", () => {
     const user = await makeUser({ documentsAutoAiRead: true });
     await grantConsent(user.id, "ai_extraction");
     const document = await storeDocument(user.id);
-    const { indexDocumentContent } = await import(
-      "@/lib/documents/index-document"
-    );
+    const { indexDocumentContent } =
+      await import("@/lib/documents/index-document");
 
     // Open: the provider path is taken (the spy can see a call).
     await indexDocumentContent(user.id, document.id);
@@ -507,9 +504,8 @@ describe("background reads stop at the wire", () => {
     await grantConsent(user.id, "ai_extraction");
     const document = await storeDocument(user.id);
     await setSwitches({ assistantDocumentAiEnabled: false });
-    const { runDocumentSummaryJob } = await import(
-      "@/lib/jobs/document-summary"
-    );
+    const { runDocumentSummaryJob } =
+      await import("@/lib/jobs/document-summary");
 
     await runDocumentSummaryJob({
       userId: user.id,
@@ -529,9 +525,8 @@ describe("background reads stop at the wire", () => {
     const user = await makeUser({ documentsAutoAiRead: true });
     await grantConsent(user.id, "ai_extraction");
     const document = await storeDocument(user.id);
-    const { runDocumentSummaryJob } = await import(
-      "@/lib/jobs/document-summary"
-    );
+    const { runDocumentSummaryJob } =
+      await import("@/lib/jobs/document-summary");
 
     await runDocumentSummaryJob({
       userId: user.id,
