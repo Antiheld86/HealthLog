@@ -281,6 +281,10 @@ export const encounterDependentKeys = [
   // `invalidateReminderReads` helper, which carries it) — the digest is
   // typically unmounted while the user is on the visits surface.
   queryKeys.dailyDigest(),
+  // A visit's form links and unlinks documents, and the document's sheet
+  // seeds its replace-set visit picker from its own cached links: left
+  // stale, the next tap there would delete the link just made.
+  queryKeys.documents(),
 ];
 
 /**
@@ -300,6 +304,10 @@ export const encounterDependentKeys = [
 export const vaccinationDependentKeys = [
   queryKeys.vaccinations(),
   queryKeys.measurementReminders(),
+  // A dose's form links and unlinks documents, and the document's sheet
+  // seeds its replace-set dose picker from its own cached links: left stale,
+  // the next tap there would delete the link just made.
+  queryKeys.documents(),
 ];
 
 /**

@@ -103,7 +103,12 @@ describe("recordOptions", () => {
 describe("<DocumentRecordLinks>", () => {
   it("lets a manager link the page to doses and visits", () => {
     const html = render(
-      <DocumentRecordLinks doc={doc()} canManage onChange={() => undefined} />,
+      <DocumentRecordLinks
+        doc={doc()}
+        canManage
+        seedFresh
+        onChange={() => undefined}
+      />,
     );
     expect(html).toContain('data-slot="document-vaccination-links"');
     expect(html).toContain('data-slot="document-vaccination-links-add"');
@@ -124,6 +129,7 @@ describe("<DocumentRecordLinks>", () => {
           ],
         })}
         canManage={false}
+        seedFresh
         onChange={() => undefined}
       />,
     );
@@ -137,9 +143,26 @@ describe("<DocumentRecordLinks>", () => {
       <DocumentRecordLinks
         doc={doc({ vaccinationLinks: null })}
         canManage
+        seedFresh
         onChange={() => undefined}
       />,
     );
     expect(html).not.toContain("document-vaccination-links");
+  });
+
+  it("offers no picker until the document has been read since the sheet opened", () => {
+    // Each change is a replace-set write seeded from the document's links.
+    // Seeded from a cached copy that predates a link made on the dose's or
+    // the visit's own form, the first tap would silently delete that link.
+    const html = render(
+      <DocumentRecordLinks
+        doc={doc()}
+        canManage
+        seedFresh={false}
+        onChange={() => undefined}
+      />,
+    );
+    expect(html).not.toContain('data-slot="document-vaccination-links-add"');
+    expect(html).not.toContain('data-slot="document-visit-links-add"');
   });
 });

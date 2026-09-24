@@ -91,10 +91,24 @@ function doseName(
 export function DocumentRecordLinks({
   doc,
   canManage,
+  seedFresh,
+  seedError = false,
+  onRetrySeed,
   onChange,
 }: {
   doc: InboundDocumentDetailDto;
   canManage: boolean;
+  /**
+   * Whether `doc` was read from the server since the sheet opened. Every
+   * change is a replace-set write seeded from `doc`'s links, so a seed from a
+   * cached copy that predates a link made on the dose's or the visit's own
+   * form would delete that link on the first tap. The pickers wait for a
+   * fresh read instead.
+   */
+  seedFresh: boolean;
+  /** That fresh read failed; the pickers show the retry row instead. */
+  seedError?: boolean;
+  onRetrySeed?: () => void;
   onChange: (part: {
     encounterIds?: string[];
     vaccinationIds?: string[];
@@ -155,10 +169,13 @@ export function DocumentRecordLinks({
           icon={CalendarDays}
           title={t("documents.detail.visitsLabel")}
           slot="document-visit-links"
-          pending={encounters.isPending}
-          error={encounters.isError}
+          pending={encounters.isPending || !seedFresh}
+          error={encounters.isError || seedError}
           errorLabel={t("links.picker.loadError")}
-          onRetry={() => void encounters.refetch()}
+          onRetry={() => {
+            if (encounters.isError) void encounters.refetch();
+            if (seedError) onRetrySeed?.();
+          }}
           selected={visitIds ?? doc.encounterLinks.map((l) => l.encounterId)}
           onChange={(ids) => {
             setVisitIds(ids);
@@ -199,10 +216,13 @@ export function DocumentRecordLinks({
           icon={Syringe}
           title={t("documents.detail.vaccinationsLabel")}
           slot="document-vaccination-links"
-          pending={vaccinations.isPending}
-          error={vaccinations.isError}
+          pending={vaccinations.isPending || !seedFresh}
+          error={vaccinations.isError || seedError}
           errorLabel={t("links.picker.loadError")}
-          onRetry={() => void vaccinations.refetch()}
+          onRetry={() => {
+            if (vaccinations.isError) void vaccinations.refetch();
+            if (seedError) onRetrySeed?.();
+          }}
           selected={
             doseIds ??
             (doc.vaccinationLinks ?? []).map((link) => link.vaccinationId)
