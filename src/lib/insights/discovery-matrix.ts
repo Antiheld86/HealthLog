@@ -126,10 +126,16 @@ export interface DiscoveryMatrixOptions {
    * The record's resolved module map. A channel whose module is off
    * (`correlation:<key>` in the surface map: mood and its rated factors,
    * sleep, glucose, medication adherence, symptoms, weather) is left out of
-   * `series` and `byMetric`, so no statistic is computed over a module the
-   * person switched off. Omitted: every channel is kept.
+   * `series` and `byMetric`, so no statistic is computed, and no prompt is
+   * grounded, on a module the person switched off.
+   *
+   * Required, not optional: a caller that forgot it would scan every channel
+   * and nothing would notice, which is how the Coach tool, the metric card
+   * and the period narrative kept scanning switched-off modules after the
+   * route stopped. Omitting it is now a compile error. Pass
+   * `resolveModuleMap(userId)` for the record being read.
    */
-  modules?: SurfaceModuleMap;
+  modules: SurfaceModuleMap;
 }
 
 /** Per-channel reach, for the callers' wide-event annotations. */
@@ -167,6 +173,17 @@ export interface DiscoveryMatrix {
  * Leave out every channel whose owning module is off. Pure, and applied after
  * the fold so the order of what remains is the order it was folded in (the
  * ranking stability note on {@link assembleDiscoveryMatrix}).
+ *
+ * This changes the statistics of the pairs that remain, not only which pairs
+ * exist. Benjamini-Hochberg controls the false discovery rate across every
+ * pair tested, so a smaller channel set is a smaller family: each surviving
+ * pair's q-value is computed against fewer tests and is usually lower (never
+ * higher for the same p-values and rank order). Switching a module off can
+ * therefore let a borderline pair between two unrelated channels cross the
+ * FDR threshold, and switching it back on can push that pair back under.
+ * That is the correct correction for the question actually asked (the pairs
+ * over what the person tracks); it is also why a persisted pattern's q-value
+ * is only comparable to another computed under the same module set.
  */
 export function maskSeriesByModules(
   series: readonly NamedSeries[],

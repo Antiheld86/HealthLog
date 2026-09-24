@@ -57,6 +57,7 @@ const OPTS = {
   since: new Date("2026-03-01T00:00:00Z"),
   fetchMode: "tiered" as const,
   includeMoodFactors: true,
+  modules: {},
 };
 
 const keysOf = (series: { key: string }[]) => [
@@ -64,7 +65,7 @@ const keysOf = (series: { key: string }[]) => [
 ];
 
 describe("assembleDiscoveryMatrix — switched-off modules", () => {
-  it("keeps every channel without a module map", async () => {
+  it("keeps every channel with every module on", async () => {
     const { series } = await assembleDiscoveryMatrix("u1", OPTS);
     const keys = keysOf(series);
     for (const key of [
