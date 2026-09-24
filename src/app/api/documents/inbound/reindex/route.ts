@@ -3,17 +3,17 @@
  *
  * Enqueues a per-user job that indexes the caller's not-yet-indexed documents
  * (one provider transcription each, bounded + resumable). Gated on the module,
- * a configured vision provider, and the EXISTING AI consent (the worker
- * re-checks all three). The work runs off-request on pg-boss; this route only
+ * the `documentAi` capability, a configured vision provider, and a document
+ * consent receipt for that provider (the worker re-checks all of it). The work runs off-request on pg-boss; this route only
  * enqueues and returns immediately so the vault stays responsive.
  */
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import { apiError, apiSuccess, getClientIp } from "@/lib/api-response";
-import { assertDocumentEgressConsent } from "@/lib/ai/consent-guard";
+import { requireAiCapability } from "@/lib/ai/capabilities/gate";
 import { auditLog } from "@/lib/auth/audit";
 import { prisma } from "@/lib/db";
 import { enqueueContentIndexBackfill } from "@/lib/jobs/document-content-index-backfill";
-import { resolveDocumentVisionProvider } from "@/lib/documents/provider-order";
+import { requireDocumentVisionProvider } from "@/lib/documents/provider-order";
 import { annotate } from "@/lib/logging/context";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import { checkRateLimit, rateLimitHeaders } from "@/lib/rate-limit";
@@ -29,6 +29,10 @@ export const POST = apiHandler(async (request) => {
 
   const gate = await requireModuleEnabled(user.id, "inboundDocuments");
   if (!gate.enabled) return gate.response;
+
+  // The backfill transcribes each document through a model. The provider and
+  // the consent receipt are answered by the pick below.
+  await requireAiCapability("documentAi", { pickDecides: true });
 
   const rl = await checkRateLimit(
     `documents-reindex:${user.id}`,
@@ -47,17 +51,8 @@ export const POST = apiHandler(async (request) => {
 
   // Fail fast when the precondition is not met so the UI gets immediate
   // feedback rather than a silently no-op'd job.
-  const { pick } = await resolveDocumentVisionProvider(user.id);
-  if (!pick) {
-    return apiError("No vision-capable AI provider is configured", 422, {
-      errorCode: "documents.inbound.providerUnsupported",
-    });
-  }
-  await assertDocumentEgressConsent({
-    userId: user.id,
-    providerType: pick.providerType,
-    surface: "insights",
-  });
+  // The worker re-checks all of it per run.
+  await requireDocumentVisionProvider(user.id);
 
   const { enqueued: jobCreated } = await enqueueContentIndexBackfill(user.id);
 

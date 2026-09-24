@@ -9,6 +9,7 @@
  */
 import { type NextRequest } from "next/server";
 
+import { requireAiCapability } from "@/lib/ai/capabilities/gate";
 import { apiHandler, requireAuth } from "@/lib/api-handler";
 import {
   apiError,
@@ -47,6 +48,12 @@ export const POST = apiHandler(
 
     const gate = await requireModuleEnabled(userId, "inboundDocuments");
     if (!gate.enabled) return gate.response;
+
+    // Attaching prepares a fenced turn, which is Coach work over documents.
+    // Nothing is sent here, so the provider and the consent receipt wait for
+    // the turn. Detaching (DELETE) removes the person's own data and stays open.
+    await requireAiCapability("coach", { pickDecides: true });
+    await requireAiCapability("documentAi", { pickDecides: true });
 
     const { id: conversationId } = await params;
 

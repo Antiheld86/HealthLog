@@ -35,6 +35,7 @@ export const GET = apiHandler(async () => {
       reason: capability.reason,
       pdfSupported: capability.pdfSupported,
       egress: capability.egress,
+      aiReason: capability.ai.reason,
     },
   });
 

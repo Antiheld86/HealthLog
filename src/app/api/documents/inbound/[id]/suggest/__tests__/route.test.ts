@@ -27,14 +27,14 @@ vi.mock("@/lib/documents/assist", () => ({
   runDocumentAssist: vi.fn(),
   DocumentAssistError: class DocumentAssistError extends Error {},
 }));
-vi.mock("@/lib/documents/provider-order", () => ({
-  resolveDocumentVisionProvider: vi.fn(),
-  resolveDocumentTextProvider: vi.fn(),
-}));
-vi.mock("@/lib/ai/consent-guard", () => ({
-  assertDocumentEgressConsent: vi.fn().mockResolvedValue(undefined),
-  ConsentRequiredError: class ConsentRequiredError extends Error {},
-}));
+vi.mock("@/lib/documents/provider-order", async () =>
+  (await import("@/__tests__/helpers/provider-order-mock")).providerOrderMock(),
+);
+vi.mock("@/lib/ai/capabilities/gate", async () =>
+  (
+    await import("@/__tests__/helpers/provider-order-mock")
+  ).openCapabilityGateMock(),
+);
 vi.mock("@/lib/ai/coach/budget", () => ({
   buildDateKey: vi.fn(() => "2026-07-07"),
   reserveBudget: vi.fn().mockResolvedValue({ allowed: true, reserved: 1 }),

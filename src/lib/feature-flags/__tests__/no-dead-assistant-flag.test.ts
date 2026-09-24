@@ -31,9 +31,10 @@
  *      matcher that stopped matching cannot agree with an empty world.
  *
  * Mutation checks: adding `await requireAssistantSurface("coach")` to any
- * route outside the frozen list turns guard 3 red by file name; removing the
- * `documentAi` entry from `AWAITING_READER` turns guard 2 red; putting
- * `assistantCorrelationsEnabled` back on the schema turns guard 1 red.
+ * route outside the frozen list turns guard 3 red by file name; deleting the
+ * `requireAiCapability("documentAi"` calls from the document routes (the only
+ * reader of that switch's capabilities in the route tree) turns guard 2 red;
+ * putting `assistantCorrelationsEnabled` back on the schema turns guard 1 red.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -99,13 +100,7 @@ const PLUMBING = [
  * Switches with no reader yet, and why that is correct for now. An entry is
  * a claim with an expiry: the test below fails as soon as a reader appears.
  */
-const AWAITING_READER: Record<string, string> = {
-  documentAi:
-    "The capabilities it covers (documentAi, labsOcr, medicationExtract) are " +
-    "resolved and published, but the document, lab-scan and medication " +
-    "extraction routes move onto requireAiCapability in the same release; " +
-    "until then the master switch is what stops them.",
-};
+const AWAITING_READER: Record<string, string> = {};
 
 /**
  * Every file that still calls the retired gate. Only ever shrinks.
@@ -132,7 +127,6 @@ const RETIRED_GATE_CALLERS = [
   "src/app/api/insights/pregenerate/route.ts",
   "src/app/api/insights/pulse-status/route.ts",
   "src/app/api/insights/weight-status/route.ts",
-  "src/app/api/medications/extract/route.ts",
   "src/app/coach/page.tsx",
 ];
 

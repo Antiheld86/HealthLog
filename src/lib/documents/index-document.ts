@@ -3,8 +3,13 @@
  * both the per-document auto-index-on-upload job and the corpus backfill.
  *
  * Provider resolution follows the DOCUMENT order (local-first, codex last —
- * `resolveDocumentVisionProvider`), NOT the cost-first app-wide chain, and the
- * external egress is governed by the per-user `documentsAutoAiRead` opt-in:
+ * `resolveDocumentVisionProvider`), NOT the cost-first app-wide chain. That
+ * pick re-checks the `documentAi` capability for the provider it picked: with
+ * the operator's switch off, the module off, or (for a pick that leaves the
+ * machine) no extraction consent receipt, there is no pick and the tree goes
+ * straight to the provider-free text-layer path below, so search keeps working
+ * with AI off. The external egress is further governed by the per-user
+ * `documentsAutoAiRead` opt-in:
  *
  *   1. LOCAL PROVIDER (a self-hosted vision model) — never egresses, so it runs
  *      whenever it is the document-order pick, toggle-independent.
@@ -149,7 +154,15 @@ export interface ResolvedIndexProvider {
 export async function resolveIndexProvider(
   userId: string,
 ): Promise<ResolvedIndexProvider> {
-  const { chain, pick } = await resolveDocumentVisionProvider(userId);
+  // A pick the `documentAi` capability refused comes back null, which lands on
+  // the local text-layer path exactly like having no provider at all.
+  const { chain, pick, withheld } = await resolveDocumentVisionProvider(userId);
+  if (withheld) {
+    annotate({
+      action: { name: "documents.contentIndex.providerWithheld" },
+      meta: { reason: withheld.reason },
+    });
+  }
   let consentOk = false;
   if (pick) {
     if (!isExternalDocumentEgress(pick.providerType)) {
