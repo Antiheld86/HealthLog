@@ -6790,34 +6790,35 @@
     "monitoringTestSuccess": "Wysłano zdarzenie testowe",
     "monitoringTestFailed": "Test monitorowania nie powiódł się",
     "assistant": {
-      "title": "Powierzchnie asystenta",
-      "description": "Każdy przełącznik ukrywa powierzchnię opartą na modelu w całej aplikacji bez usuwania konfiguracji dostawcy.",
+      "title": "Asystent",
+      "description": "Każdy przełącznik zatrzymuje pracę AI, którą obejmuje, i ukrywa jej tekst, a dane i wyniki nadal się wczytują.",
       "master": {
         "title": "Asystent włączony",
-        "description": "Główny wyłącznik dla każdej powierzchni opartej na modelu. Gdy wyłączony, każda opcja podrzędna jest wymuszana na off."
+        "description": "Główny przełącznik wszystkich funkcji AI. Gdy jest wyłączony, nic nie trafia do modelu, a wszystkie przełączniki poniżej są wyłączone."
       },
       "coach": {
         "title": "Coach",
-        "description": "Szuflada czatu, przycisk uruchamiający i mobilny FAB na każdej stronie Insights."
+        "description": "Czat, utrzymanie pamięci Coacha i podpowiedzi AI. Zapisane rozmowy nadal można czytać i usuwać."
       },
       "briefing": {
         "title": "Codzienny briefing",
-        "description": "Karta briefingu, narracja hero strip, siatka rekomendacji i akcja Regeneruj."
+        "description": "Codzienny briefing, jego pierwsze zdania w innych miejscach aplikacji i podsumowania okresów pisane przez model."
       },
       "insightStatus": {
-        "title": "Karty statusu",
-        "description": "Karty statusu na metrykę na każdej podstronie /insights."
+        "title": "Notatki o stanie",
+        "description": "Krótkie notatki, które model pisze do pomiarów i wskaźników, notatki o treningach i linie reakcji. Największa część zużycia tokenów."
       },
-      "correlations": {
-        "title": "Korelacje",
-        "description": "Narracja kafelka korelacji w przeglądzie Insights."
+      "documentAi": {
+        "title": "Czytanie dokumentów",
+        "description": "Czytanie zapisanych dokumentów przez AI, skanowanie wyników badań laboratoryjnych i odczytywanie leków z tekstu. Największa część danych opuszczających serwer."
       }
     },
     "modules": {
       "title": "Dostępność modułów",
       "description": "Wyłącz moduł dla całego serwera.",
       "saveError": "Nie udało się zaktualizować dostępności modułów.",
-      "detail": "Moduł wyłączony tutaj jest nieaktywny dla każdego konta, niezależnie od preferencji użytkownika. Domeny podstawowe (waga, ciśnienie, tętno, leki) są zawsze włączone i nie można ich wyłączyć."
+      "detail": "Moduł wyłączony tutaj jest nieaktywny dla każdego konta, niezależnie od preferencji użytkownika. Domeny podstawowe (waga, ciśnienie, tętno, leki) są zawsze włączone i nie można ich wyłączyć.",
+      "coachFollowsSwitch": "Podlega przełącznikowi Coach w sekcji Asystent."
     },
     "invites": {
       "title": "Zaproszenia",
@@ -8846,8 +8847,8 @@
       "description": "Czat AI oparty na Twoich danych."
     },
     "insights": {
-      "label": "Insights",
-      "description": "Analizy AI, briefing i korelacje."
+      "label": "Analiza AI",
+      "description": "Briefing, notatki o stanie i notatki o treningach pisane przez model, nigdy Twoje dane ani wyniki."
     },
     "doctorReport": {
       "label": "Raport dla lekarza",

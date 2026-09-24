@@ -100,7 +100,7 @@ beforeEach(() => {
     coach: true,
     briefing: true,
     insightStatus: true,
-    correlations: true,
+    documentAi: true,
   });
   vi.mocked(providerCredentialPolicy).mockReturnValue("personal");
   vi.mocked(hasActiveConsentForSurface).mockResolvedValue(false);
@@ -513,7 +513,7 @@ describe("GET /api/user/ai-provider — the shared-provider offer", () => {
       coach: false,
       briefing: true,
       insightStatus: true,
-      correlations: true,
+      documentAi: true,
     });
     await expect(read()).resolves.toMatchObject({
       serverProviderHealth: "healthy",

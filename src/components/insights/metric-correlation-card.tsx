@@ -3,7 +3,6 @@
 import { Spline } from "lucide-react";
 
 import { useAnalyticsQuery } from "@/lib/queries/use-analytics-query";
-import { useFeatureFlags } from "@/hooks/use-feature-flags";
 import { useTranslations } from "@/lib/i18n/context";
 import type {
   CorrelationKind,
@@ -58,7 +57,6 @@ interface MetricCorrelationCardProps {
 
 export function MetricCorrelationCard({ slug }: MetricCorrelationCardProps) {
   const { t } = useTranslations();
-  const flags = useFeatureFlags();
   const key = SLUG_TO_CORRELATION[slug];
 
   // Read the thick slice; correlations live only on the default payload.
@@ -70,7 +68,8 @@ export function MetricCorrelationCard({ slug }: MetricCorrelationCardProps) {
   });
   const analytics = data as AnalyticsWithCorrelations | undefined;
 
-  if (!flags.correlations || !key) return null;
+  // Statistics, not model output: no AI switch decides whether they show.
+  if (!key) return null;
 
   const result = analytics?.correlations?.[key];
   if (!result || result.status !== "ok") return null;

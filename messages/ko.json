@@ -6769,34 +6769,35 @@
     "monitoringTestSuccess": "테스트 이벤트를 보냈어요",
     "monitoringTestFailed": "모니터링 테스트에 실패했어요",
     "assistant": {
-      "title": "어시스턴트 화면",
-      "description": "각 토글은 제공자 설정을 지우지 않고 모델 기반 화면만 앱 전체에서 숨겨요.",
+      "title": "어시스턴트",
+      "description": "각 스위치는 해당 AI 작업을 멈추고 그 텍스트를 숨기며, 데이터와 점수는 계속 표시됩니다.",
       "master": {
         "title": "어시스턴트 사용",
-        "description": "모든 모델 기반 화면의 마스터 스위치예요. 끄면 아래 하위 항목이 전부 강제로 꺼져요."
+        "description": "모든 AI 기능의 기본 스위치입니다. 끄면 어떤 데이터도 모델로 전송되지 않으며 아래의 모든 스위치가 꺼집니다."
       },
       "coach": {
         "title": "코치",
-        "description": "모든 인사이트 페이지의 채팅 서랍, 실행 버튼, 모바일 FAB."
+        "description": "채팅, 코치 메모리 관리, AI 알림. 저장된 대화는 계속 읽고 삭제할 수 있습니다."
       },
       "briefing": {
         "title": "데일리 브리핑",
-        "description": "브리핑 카드, 히어로 스트립 설명, 추천 그리드, 다시 생성 동작."
+        "description": "데일리 브리핑, 앱의 다른 곳에 표시되는 브리핑 첫 문장, 모델이 쓴 기간 요약."
       },
       "insightStatus": {
-        "title": "상태 카드",
-        "description": "모든 /insights 하위 페이지의 지표별 상태 카드."
+        "title": "상태 메모",
+        "description": "모델이 측정값과 지표마다 쓰는 짧은 메모, 운동 메모, 반응 문장. 토큰 사용량의 대부분을 차지합니다."
       },
-      "correlations": {
-        "title": "상관관계",
-        "description": "인사이트 개요의 상관관계 타일 설명."
+      "documentAi": {
+        "title": "문서 읽기",
+        "description": "저장된 문서의 AI 읽기, 검사 결과지 스캔, 텍스트에서 약물 추출. 서버 밖으로 나가는 데이터의 대부분을 차지합니다."
       }
     },
     "modules": {
       "title": "모듈 사용 여부",
       "description": "서버 전체에서 모듈을 끌 수 있어요.",
       "saveError": "모듈 사용 여부를 바꾸지 못했어요.",
-      "detail": "여기서 끈 모듈은 개인 설정과 관계없이 모든 계정에서 꺼져요. 핵심 영역(체중, 혈압, 맥박, 복약)은 항상 켜져 있고 끌 수 없어요."
+      "detail": "여기서 끈 모듈은 개인 설정과 관계없이 모든 계정에서 꺼져요. 핵심 영역(체중, 혈압, 맥박, 복약)은 항상 켜져 있고 끌 수 없어요.",
+      "coachFollowsSwitch": "어시스턴트의 코치 스위치를 따릅니다."
     },
     "invites": {
       "title": "초대",
@@ -8846,8 +8847,8 @@
       "description": "내 데이터를 근거로 하는 AI 대화."
     },
     "insights": {
-      "label": "인사이트",
-      "description": "AI 분석, 브리핑, 상관관계."
+      "label": "AI 분석",
+      "description": "모델이 쓴 브리핑, 상태 메모, 운동 메모이며 데이터와 점수는 포함되지 않습니다."
     },
     "doctorReport": {
       "label": "진료용 리포트",

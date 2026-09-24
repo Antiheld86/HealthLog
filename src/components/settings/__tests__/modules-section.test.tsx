@@ -73,7 +73,7 @@ const ALL_ON_FLAGS: AssistantFlagSet = {
   coach: true,
   briefing: true,
   insightStatus: true,
-  correlations: true,
+  documentAi: true,
 };
 const flagsSpy = vi.fn<() => AssistantFlagSet>(() => ALL_ON_FLAGS);
 vi.mock("@/hooks/use-feature-flags", () => ({

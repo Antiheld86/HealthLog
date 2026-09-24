@@ -12,8 +12,9 @@ import { useQueryClientMounted } from "@/hooks/_internal/use-query-client-safe";
  * shape directly so callers can rely on a typed structure.
  *
  * The matrix gates every assistant-driven surface on the web —
- * Coach + chat, Daily Briefing, per-metric status cards, correlation
- * narration. iOS reads the same
+ * Coach + chat, Daily Briefing, per-metric status notes, reading
+ * documents. Deprecated: `ai` on `GET /api/auth/me` (read through
+ * `useAiCapability`) is the resolved answer per capability. iOS reads the same
  * endpoint and uses the same matrix; the contract is locked per
  * `.planning/RESPONSE-TO-IOS-TEAM-2026-05-16.md` §3 R5.
  */
@@ -27,8 +28,8 @@ export interface AssistantFlagSet {
   briefing: boolean;
   /** Per-metric status cards on every `/insights/<metric>` sub-page. */
   insightStatus: boolean;
-  /** Correlation narration tile on the mother page. */
-  correlations: boolean;
+  /** Document vault reads, lab report scans, medication text extraction. */
+  documentAi: boolean;
 }
 
 interface FeatureFlagsPayload {
@@ -41,7 +42,7 @@ export const DEFAULT_ASSISTANT_FLAGS: AssistantFlagSet = Object.freeze({
   coach: true,
   briefing: true,
   insightStatus: true,
-  correlations: true,
+  documentAi: true,
 });
 
 async function fetchFeatureFlags(): Promise<FeatureFlagsPayload> {

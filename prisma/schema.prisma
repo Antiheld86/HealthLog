@@ -4751,24 +4751,24 @@ model AppSettings {
   // 32 chars) plus headroom.
   defaultUserTimezone String? @map("default_user_timezone") @db.VarChar(64)
 
-  // v1.4.31 — Assistant-surface operator feature flags. The master
-  // gates every LLM-driven surface app-wide; four sub-flags carve
-  // the visibility cut per surface (Coach drawer + chat, Daily
-  // Briefing + advisor, per-metric status cards, correlation
-  // narration). Defaults preserve the
-  // v1.4.30 behaviour (every surface visible) so upgrades require
-  // no admin action. The runtime resolver in
-  // `src/lib/feature-flags/index.ts` forces every sub-flag false
-  // when the master is off. Locked per
-  // `.planning/RESPONSE-TO-IOS-TEAM-2026-05-16.md` §3 R5: the same
-  // flag matrix gates server-routed AND iOS on-device surfaces, so
-  // operators can opt out of every assistant surface regardless of
-  // where the model runs.
+  // The operator's assistant switches. The master stops every AI capability
+  // (model calls and model-written text alike); the four sub-switches each
+  // cover a cost or egress profile: the Coach, the daily briefing and period
+  // narratives, per-reading status notes (status text, workout notes, reaction
+  // lines) and reading documents (the document vault, lab scans, medication
+  // extraction). They never gate data: a switch that is off hides and stops AI
+  // work, and every measurement, score and statistic keeps loading. Resolved
+  // with every other AI layer in `src/lib/ai/capabilities/`, and published per
+  // record on `GET /api/auth/me` as `ai`. Defaults keep every capability on so
+  // an upgrade needs no admin action.
+  //
+  // The Coach switch is also the operator's only Coach switch: the Coach key in
+  // `moduleAvailabilityJson` was folded into it (migration 0343) and is ignored.
   assistantEnabled              Boolean @default(true) @map("assistant_enabled")
   assistantCoachEnabled         Boolean @default(true) @map("assistant_coach_enabled")
   assistantBriefingEnabled      Boolean @default(true) @map("assistant_briefing_enabled")
   assistantInsightStatusEnabled Boolean @default(true) @map("assistant_insight_status_enabled")
-  assistantCorrelationsEnabled  Boolean @default(true) @map("assistant_correlations_enabled")
+  assistantDocumentAiEnabled    Boolean @default(true) @map("assistant_document_ai_enabled")
 
   // v1.18.0 — operator-level server-wide module availability. A DISABLED
   // allowlist mirroring the per-user `User.modulePreferencesJson`: absent /

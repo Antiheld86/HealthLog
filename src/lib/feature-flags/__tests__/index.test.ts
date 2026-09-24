@@ -24,6 +24,7 @@ import {
   ASSISTANT_FLAGS_DEFAULT,
   AssistantDisabledError,
   getAssistantFlags,
+  loadAssistantSwitches,
   requireAssistantSurface,
   resolveAssistantFlags,
 } from "../index";
@@ -42,7 +43,7 @@ describe("resolveAssistantFlags", () => {
       coach: true,
       briefing: false,
       insightStatus: true,
-      correlations: false,
+      documentAi: false,
     };
     expect(resolveAssistantFlags(input)).toEqual(input);
   });
@@ -53,14 +54,14 @@ describe("resolveAssistantFlags", () => {
       coach: true,
       briefing: true,
       insightStatus: true,
-      correlations: true,
+      documentAi: true,
     };
     expect(resolveAssistantFlags(input)).toEqual({
       enabled: false,
       coach: false,
       briefing: false,
       insightStatus: false,
-      correlations: false,
+      documentAi: false,
     });
   });
 });
@@ -78,7 +79,7 @@ describe("getAssistantFlags", () => {
       assistantCoachEnabled: false,
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: false,
-      assistantCorrelationsEnabled: true,
+      assistantDocumentAiEnabled: true,
     });
     const flags = await getAssistantFlags();
     expect(flags).toEqual({
@@ -86,7 +87,7 @@ describe("getAssistantFlags", () => {
       coach: false,
       briefing: true,
       insightStatus: false,
-      correlations: true,
+      documentAi: true,
     });
   });
 
@@ -96,7 +97,7 @@ describe("getAssistantFlags", () => {
       assistantCoachEnabled: true,
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
-      assistantCorrelationsEnabled: true,
+      assistantDocumentAiEnabled: true,
     });
     const flags = await getAssistantFlags();
     expect(flags).toEqual({
@@ -104,14 +105,37 @@ describe("getAssistantFlags", () => {
       coach: false,
       briefing: false,
       insightStatus: false,
-      correlations: false,
+      documentAi: false,
     });
   });
 
-  it("falls back to defaults on a Prisma error", async () => {
+  it("fails closed on a Prisma error: every switch reads off", async () => {
+    // A database blip must not switch every AI egress on. Safe now, because
+    // no data read depends on a switch.
     FIND.mockRejectedValue(new Error("db down"));
     const flags = await getAssistantFlags();
-    expect(flags).toEqual(ASSISTANT_FLAGS_DEFAULT);
+    expect(flags).toEqual({
+      enabled: false,
+      coach: false,
+      briefing: false,
+      insightStatus: false,
+      documentAi: false,
+    });
+  });
+});
+
+describe("loadAssistantSwitches", () => {
+  it("tells a read failure apart from a set of switches that are off", async () => {
+    FIND.mockRejectedValue(new Error("db down"));
+    expect(await loadAssistantSwitches()).toBeNull();
+    FIND.mockResolvedValue({
+      assistantEnabled: false,
+      assistantCoachEnabled: true,
+      assistantBriefingEnabled: true,
+      assistantInsightStatusEnabled: true,
+      assistantDocumentAiEnabled: true,
+    });
+    expect((await loadAssistantSwitches())?.enabled).toBe(false);
   });
 });
 
@@ -122,7 +146,7 @@ describe("requireAssistantSurface", () => {
       assistantCoachEnabled: true,
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
-      assistantCorrelationsEnabled: true,
+      assistantDocumentAiEnabled: true,
     });
     const flags = await requireAssistantSurface("coach");
     expect(flags.coach).toBe(true);
@@ -134,7 +158,7 @@ describe("requireAssistantSurface", () => {
       assistantCoachEnabled: false,
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
-      assistantCorrelationsEnabled: true,
+      assistantDocumentAiEnabled: true,
     });
     await expect(requireAssistantSurface("coach")).rejects.toThrow(
       AssistantDisabledError,
@@ -147,7 +171,7 @@ describe("requireAssistantSurface", () => {
       assistantCoachEnabled: true,
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
-      assistantCorrelationsEnabled: true,
+      assistantDocumentAiEnabled: true,
     });
     await expect(requireAssistantSurface("briefing")).rejects.toThrow(
       AssistantDisabledError,
@@ -155,9 +179,9 @@ describe("requireAssistantSurface", () => {
   });
 
   it("AssistantDisabledError carries the surface-tagged errorCode", () => {
-    const err = new AssistantDisabledError("correlations");
-    expect(err.surface).toBe("correlations");
-    expect(err.errorCode).toBe("assistant.disabled.correlations");
+    const err = new AssistantDisabledError("insightStatus");
+    expect(err.surface).toBe("insightStatus");
+    expect(err.errorCode).toBe("assistant.disabled.insightStatus");
   });
 });
 
@@ -173,7 +197,7 @@ describe("per-request memoisation", () => {
       assistantCoachEnabled: true,
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
-      assistantCorrelationsEnabled: true,
+      assistantDocumentAiEnabled: true,
     });
     // Pin a stable stub object so every `getEvent()` inside this test
     // returns the same reference — the memo keys on identity, so a
@@ -195,7 +219,7 @@ describe("per-request memoisation", () => {
       assistantCoachEnabled: true,
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
-      assistantCorrelationsEnabled: true,
+      assistantDocumentAiEnabled: true,
     });
 
     mockEvent = { addWarning: vi.fn(), id: "req-1" };

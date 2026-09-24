@@ -12,10 +12,12 @@ import { SettingsToggle } from "./_shared";
 import { apiGet, apiPut } from "@/lib/api/api-fetch";
 
 /**
- * v1.4.31 — operator-side panel for the five assistant feature
- * flags. The master toggle gates the whole assistant; four
- * sub-toggles carve specific surfaces (Coach, Daily Briefing,
- * per-metric status cards, correlation narration).
+ * Operator-side panel for the five assistant switches. The master stops
+ * every AI feature; four sub-switches each stop one cost or egress profile:
+ * the Coach, the daily briefing, status notes (per-reading notes, workout
+ * notes, reaction lines) and reading documents (the vault, lab scans,
+ * medication extraction). A switch stops AI work and hides AI text; data,
+ * charts and scores keep loading either way.
  *
  * UX:
  *   - Master toggle at the top. When off, the sub-toggles are
@@ -33,14 +35,14 @@ interface AssistantFlagsResponse {
     assistantCoachEnabled: boolean;
     assistantBriefingEnabled: boolean;
     assistantInsightStatusEnabled: boolean;
-    assistantCorrelationsEnabled: boolean;
+    assistantDocumentAiEnabled: boolean;
   };
   resolved: {
     enabled: boolean;
     coach: boolean;
     briefing: boolean;
     insightStatus: boolean;
-    correlations: boolean;
+    documentAi: boolean;
   };
 }
 
@@ -69,8 +71,10 @@ function useUpdateAssistantFlags() {
     },
     onSuccess: (data) => {
       client.setQueryData(queryKeys.adminAssistantFlags(), data);
-      // Bust the runtime `/api/feature-flags` cache so the operator
-      // sees the toggled surface react within the same session.
+      // Every record's resolved AI capabilities ride the account payload,
+      // and the deprecated switch projection is still read on the web;
+      // bust both so the operator sees the change within the session.
+      client.invalidateQueries({ queryKey: queryKeys.authMe() });
       client.invalidateQueries({ queryKey: queryKeys.featureFlags() });
       toast.success(t("common.saved"));
     },
@@ -143,11 +147,11 @@ export function AssistantSection() {
             disabled={disabledSubs}
           />
           <SettingsToggle
-            label={t("admin.assistant.correlations.title")}
-            description={t("admin.assistant.correlations.description")}
-            checked={raw?.assistantCorrelationsEnabled ?? true}
+            label={t("admin.assistant.documentAi.title")}
+            description={t("admin.assistant.documentAi.description")}
+            checked={raw?.assistantDocumentAiEnabled ?? true}
             onCheckedChange={(checked) =>
-              mutation.mutate({ assistantCorrelationsEnabled: checked })
+              mutation.mutate({ assistantDocumentAiEnabled: checked })
             }
             disabled={disabledSubs}
           />

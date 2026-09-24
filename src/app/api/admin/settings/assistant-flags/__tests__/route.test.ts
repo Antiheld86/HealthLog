@@ -45,7 +45,7 @@ const ALL_ON = {
   assistantCoachEnabled: true,
   assistantBriefingEnabled: true,
   assistantInsightStatusEnabled: true,
-  assistantCorrelationsEnabled: true,
+  assistantDocumentAiEnabled: true,
 };
 
 beforeEach(() => {
@@ -138,7 +138,7 @@ describe("PUT /api/admin/settings/assistant-flags", () => {
     expect(body.data.resolved.coach).toBe(false);
     expect(body.data.resolved.briefing).toBe(false);
     expect(body.data.resolved.insightStatus).toBe(false);
-    expect(body.data.resolved.correlations).toBe(false);
+    expect(body.data.resolved.documentAi).toBe(false);
   });
 
   it("rejects an empty body", async () => {

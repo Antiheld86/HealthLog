@@ -517,7 +517,7 @@ describe("PUT /api/admin/settings — assistant flags", () => {
     assistantCoachEnabled: false,
     assistantBriefingEnabled: true,
     assistantInsightStatusEnabled: true,
-    assistantCorrelationsEnabled: true,
+    assistantDocumentAiEnabled: true,
   };
 
   beforeEach(() => {
@@ -559,18 +559,18 @@ describe("PUT /api/admin/settings — assistant flags", () => {
       assistantCoachEnabled: false,
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
-      assistantCorrelationsEnabled: true,
+      assistantDocumentAiEnabled: true,
     });
   });
 
   it("audits the flag it changed", async () => {
-    await PUT(jsonReq({ assistantCorrelationsEnabled: false }));
+    await PUT(jsonReq({ assistantDocumentAiEnabled: false }));
 
     expect(auditLog).toHaveBeenCalledWith(
       "admin.settings.update",
       expect.objectContaining({
         details: expect.objectContaining({
-          assistantCorrelationsEnabled: false,
+          assistantDocumentAiEnabled: false,
         }),
       }),
     );
@@ -594,7 +594,7 @@ describe("GET /api/admin/settings — assistant flags", () => {
       assistantCoachEnabled: true,
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
-      assistantCorrelationsEnabled: true,
+      assistantDocumentAiEnabled: true,
     });
   });
 

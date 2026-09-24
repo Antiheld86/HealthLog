@@ -80,7 +80,7 @@ function buildClient(flags: Partial<AssistantFlagSet>): QueryClient {
       coach: true,
       briefing: true,
       insightStatus: true,
-      correlations: true,
+      documentAi: true,
       ...flags,
     },
   });

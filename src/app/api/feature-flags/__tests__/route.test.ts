@@ -71,7 +71,7 @@ describe("GET /api/feature-flags", () => {
           coach: boolean;
           briefing: boolean;
           insightStatus: boolean;
-          correlations: boolean;
+          documentAi: boolean;
         };
       };
       error: null;
@@ -83,7 +83,7 @@ describe("GET /api/feature-flags", () => {
       coach: true,
       briefing: true,
       insightStatus: true,
-      correlations: true,
+      documentAi: true,
     });
   });
 
@@ -94,7 +94,7 @@ describe("GET /api/feature-flags", () => {
       assistantCoachEnabled: true,
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
-      assistantCorrelationsEnabled: true,
+      assistantDocumentAiEnabled: true,
     });
 
     const res = await GET(req());
@@ -109,7 +109,7 @@ describe("GET /api/feature-flags", () => {
       coach: false,
       briefing: false,
       insightStatus: false,
-      correlations: false,
+      documentAi: false,
     });
   });
 
@@ -120,7 +120,7 @@ describe("GET /api/feature-flags", () => {
       assistantCoachEnabled: false,
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: false,
-      assistantCorrelationsEnabled: true,
+      assistantDocumentAiEnabled: true,
     });
 
     const res = await GET(req());
@@ -135,7 +135,7 @@ describe("GET /api/feature-flags", () => {
       coach: false,
       briefing: true,
       insightStatus: false,
-      correlations: true,
+      documentAi: true,
     });
   });
 

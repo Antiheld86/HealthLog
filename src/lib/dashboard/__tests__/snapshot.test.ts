@@ -217,7 +217,7 @@ beforeEach(() => {
     coach: true,
     briefing: true,
     insightStatus: true,
-    correlations: true,
+    documentAi: true,
   });
   fakePrisma.measurement.findMany.mockResolvedValue([]);
   fakePrisma.moodEntry.findMany.mockResolvedValue([]);
@@ -655,7 +655,7 @@ describe("buildDashboardSnapshot — briefingState matrix", () => {
       coach: false,
       briefing: false,
       insightStatus: false,
-      correlations: false,
+      documentAi: false,
     });
     const snap = await buildDashboardSnapshot(
       fakePrisma,

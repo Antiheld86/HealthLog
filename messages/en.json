@@ -6790,34 +6790,35 @@
     "monitoringTestSuccess": "Test event sent",
     "monitoringTestFailed": "Monitoring test failed",
     "assistant": {
-      "title": "Assistant Surfaces",
-      "description": "Each toggle hides a model-driven surface app-wide without removing the provider configuration.",
+      "title": "Assistant",
+      "description": "Each switch stops the AI work it covers and hides its text, while data and scores keep loading.",
       "master": {
         "title": "Assistant enabled",
-        "description": "Master switch for every model-driven surface. When off, every sub-flag below is forced off."
+        "description": "Master switch for every AI feature. When off, nothing is sent to a model and every switch below is off."
       },
       "coach": {
         "title": "Coach",
-        "description": "Chat drawer, launcher button, and the mobile FAB on every Insights page."
+        "description": "Chat, upkeep of the Coach's memory, and AI nudges. Stored conversations stay readable and deletable."
       },
       "briefing": {
         "title": "Daily Briefing",
-        "description": "Briefing card, hero strip narration, recommendations grid, and the regenerate action."
+        "description": "The daily briefing, its opening lines elsewhere in the app, and period summaries written by a model."
       },
       "insightStatus": {
-        "title": "Status cards",
-        "description": "Per-metric status cards on every /insights sub-page."
+        "title": "Status notes",
+        "description": "Short notes a model writes per reading and metric, workout notes and reaction lines. The largest share of token use."
       },
-      "correlations": {
-        "title": "Correlations",
-        "description": "Correlation tile narration on the Insights overview."
+      "documentAi": {
+        "title": "Reading documents",
+        "description": "AI reading of stored documents, lab report scans and medication extraction from text. The largest share of data leaving the server."
       }
     },
     "modules": {
       "title": "Module availability",
       "description": "Turn a module off for the whole server.",
       "saveError": "Could not update module availability.",
-      "detail": "A module disabled here is off for every account regardless of personal preference. Core domains (weight, blood pressure, pulse, medications) are always on and cannot be disabled."
+      "detail": "A module disabled here is off for every account regardless of personal preference. Core domains (weight, blood pressure, pulse, medications) are always on and cannot be disabled.",
+      "coachFollowsSwitch": "Follows the Coach switch under Assistant."
     },
     "invites": {
       "title": "Invites",
@@ -8846,8 +8847,8 @@
       "description": "AI chat grounded in your own data."
     },
     "insights": {
-      "label": "Insights",
-      "description": "AI analysis, briefing, and correlations."
+      "label": "AI analysis",
+      "description": "Briefing, status notes and workout notes written by a model, never your data or scores."
     },
     "doctorReport": {
       "label": "Doctor report",

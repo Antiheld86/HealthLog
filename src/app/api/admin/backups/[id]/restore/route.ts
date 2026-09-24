@@ -527,8 +527,8 @@ const handler = apiHandler(
               assistantBriefingEnabled: settings.assistantBriefingEnabled,
               assistantInsightStatusEnabled:
                 settings.assistantInsightStatusEnabled,
-              assistantCorrelationsEnabled:
-                settings.assistantCorrelationsEnabled,
+              assistantDocumentAiEnabled:
+                settings.assistantDocumentAiEnabled ?? true,
               moduleAvailabilityJson: settings.moduleAvailabilityJson as never,
               documentMaxFileBytes: settings.documentMaxFileBytes,
               documentQuotaBytes: BigInt(settings.documentQuotaBytes),

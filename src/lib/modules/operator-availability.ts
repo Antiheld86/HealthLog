@@ -28,12 +28,25 @@
  * CORE domains (weight, BP, pulse, medications) are NOT `ModuleKey`s, are
  * never written here, and the admin write endpoint refuses them — the
  * measurement engine + meds can never be disabled.
+ *
+ * The Coach is the one module whose operator layer does not live in the blob.
+ * The operator has exactly one Coach switch, `AppSettings.assistantCoachEnabled`
+ * (master applied), and the Coach's availability here IS that switch. Two
+ * operator Coach switches meant two places to look for one answer; migration
+ * 0343 folded the blob's `coach` key into the switch and removed it, and a
+ * `coach` key that still turns up in the blob is ignored.
  */
 import { prisma } from "@/lib/db";
+import { getAssistantFlags } from "@/lib/feature-flags";
 import { getEvent } from "@/lib/logging/context";
 import { memoizePerRequest } from "@/lib/request-cache";
 
-import { MODULE_KEYS, isModuleKey, type ModuleKey } from "./registry";
+import {
+  MODULE_KEYS,
+  SWITCH_OWNED_MODULE_KEYS,
+  isModuleKey,
+  type ModuleKey,
+} from "./registry";
 
 /**
  * The resolved operator availability map: one boolean per toggleable
@@ -51,6 +64,7 @@ export type OperatorModuleAvailability = Record<ModuleKey, boolean>;
  */
 export function resolveOperatorAvailability(
   raw: unknown,
+  coachSwitch = true,
 ): OperatorModuleAvailability {
   const blob =
     raw != null && typeof raw === "object" && !Array.isArray(raw)
@@ -62,7 +76,25 @@ export function resolveOperatorAvailability(
     // Only an explicit `false` disables; everything else is available.
     out[key] = blob[key] !== false;
   }
+  // The Coach follows the operator's Coach switch, never the blob.
+  out.coach = coachSwitch;
   return out;
+}
+
+/** The raw availability blob; a read error reads as "nothing disabled". */
+async function loadAvailabilityBlob(): Promise<unknown> {
+  try {
+    const settings = await prisma.appSettings.findUnique({
+      where: { id: "singleton" },
+      select: { moduleAvailabilityJson: true },
+    });
+    return settings?.moduleAvailabilityJson ?? null;
+  } catch {
+    getEvent()?.addWarning(
+      "Failed to load operator module availability, defaulting to all-available",
+    );
+    return null;
+  }
 }
 
 /**
@@ -73,19 +105,17 @@ export function resolveOperatorAvailability(
  */
 export async function getOperatorModuleAvailability(): Promise<OperatorModuleAvailability> {
   return memoizePerRequest("operator-module-availability", async () => {
-    try {
-      const settings = await prisma.appSettings.findUnique({
-        where: { id: "singleton" },
-        select: { moduleAvailabilityJson: true },
-      });
-      return resolveOperatorAvailability(settings?.moduleAvailabilityJson);
-    } catch {
-      getEvent()?.addWarning(
-        "Failed to load operator module availability, defaulting to all-available",
-      );
-      return resolveOperatorAvailability(null);
-    }
+    const [blob, switches] = await Promise.all([
+      loadAvailabilityBlob(),
+      getAssistantFlags(),
+    ]);
+    return resolveOperatorAvailability(blob, switches.coach);
   });
+}
+
+/** A module key whose operator layer the blob owns (every key but the Coach). */
+function isBlobOwnedKey(key: string): key is ModuleKey {
+  return isModuleKey(key) && !SWITCH_OWNED_MODULE_KEYS.includes(key);
 }
 
 /**
@@ -110,13 +140,13 @@ export function mergeAvailabilityPatch(
     !Array.isArray(existing)
   ) {
     for (const [k, v] of Object.entries(existing as Record<string, unknown>)) {
-      if (isModuleKey(k) && typeof v === "boolean") {
+      if (isBlobOwnedKey(k) && typeof v === "boolean") {
         merged[k] = v;
       }
     }
   }
   for (const [k, v] of Object.entries(patch)) {
-    if (isModuleKey(k)) {
+    if (isBlobOwnedKey(k)) {
       merged[k] = v;
     }
   }

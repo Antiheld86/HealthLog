@@ -194,36 +194,21 @@ describe("GET /api/insights/correlations", () => {
     expect(secondBody.data).toEqual(firstBody.data);
   });
 
-  it("returns 403 + errorCode when the correlations flag is off", async () => {
+  it("serves the statistics with every assistant switch off", async () => {
+    // Correlations are computed, not written by a model, so no AI switch
+    // decides whether they load. The switch that used to gate them is gone.
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
     (
       prisma.appSettings.findUnique as ReturnType<typeof vi.fn>
-    ).mockResolvedValueOnce({
-      assistantEnabled: true,
-      assistantCoachEnabled: true,
-      assistantBriefingEnabled: true,
-      assistantInsightStatusEnabled: true,
-      assistantCorrelationsEnabled: false,
-    });
-    const res = await callGet(makeReq());
-    expect(res.status).toBe(403);
-    const body = (await res.json()) as { meta?: { errorCode?: string } };
-    expect(body.meta?.errorCode).toBe("assistant.disabled.correlations");
-  });
-
-  it("returns 403 when the master flag is off (sub-flag forced)", async () => {
-    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
-    (
-      prisma.appSettings.findUnique as ReturnType<typeof vi.fn>
-    ).mockResolvedValueOnce({
+    ).mockResolvedValue({
       assistantEnabled: false,
-      assistantCoachEnabled: true,
-      assistantBriefingEnabled: true,
-      assistantInsightStatusEnabled: true,
-      assistantCorrelationsEnabled: true,
+      assistantCoachEnabled: false,
+      assistantBriefingEnabled: false,
+      assistantInsightStatusEnabled: false,
+      assistantDocumentAiEnabled: false,
     });
     const res = await callGet(makeReq());
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
   });
 
   it("returns 429 when the shared analytics-read budget is exhausted", async () => {

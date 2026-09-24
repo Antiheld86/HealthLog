@@ -53,7 +53,7 @@ describe("useFeatureFlags", () => {
                   coach: false,
                   briefing: true,
                   insightStatus: false,
-                  correlations: true,
+                  documentAi: true,
                 },
               },
             }),
@@ -73,7 +73,7 @@ describe("useFeatureFlags", () => {
         coach: false,
         briefing: true,
         insightStatus: false,
-        correlations: true,
+        documentAi: true,
       },
     });
 

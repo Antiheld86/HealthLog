@@ -232,7 +232,7 @@ describe("GET /api/insights/comprehensive — envelope shape", () => {
       assistantCoachEnabled: false,
       assistantBriefingEnabled: false,
       assistantInsightStatusEnabled: false,
-      assistantCorrelationsEnabled: false,
+      assistantDocumentAiEnabled: false,
     });
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
     (buildComprehensiveAggregate as ReturnType<typeof vi.fn>).mockResolvedValue(

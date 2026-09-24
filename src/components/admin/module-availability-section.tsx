@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ToggleLeft } from "lucide-react";
 import { toast } from "sonner";
@@ -11,6 +12,7 @@ import { queryKeys } from "@/lib/query-keys";
 import {
   MODULE_KEYS,
   MODULE_REGISTRY,
+  SWITCH_OWNED_MODULE_KEYS,
   isCodeDisabledModule,
 } from "@/lib/modules/registry";
 import type { ModuleKey } from "@/lib/modules/registry";
@@ -106,6 +108,32 @@ export function ModuleAvailabilitySection() {
             // Default-available until the read resolves; an explicit `false`
             // from the operator layer is the only thing that turns it off.
             const available = availability?.[key] ?? true;
+            // The Coach has one operator switch, on the assistant panel. The
+            // row stays so the operator sees its state here, read-only, with
+            // the way to the switch that decides it.
+            if (SWITCH_OWNED_MODULE_KEYS.includes(key)) {
+              return (
+                <div
+                  key={key}
+                  className="space-y-1"
+                  data-slot="module-availability-switch-owned"
+                >
+                  <SettingsToggle
+                    label={t(def.labelKey)}
+                    description={t("admin.modules.coachFollowsSwitch")}
+                    checked={available}
+                    onCheckedChange={() => {}}
+                    disabled
+                  />
+                  <Link
+                    href="/admin/coach"
+                    className="text-primary text-xs underline-offset-4 hover:underline"
+                  >
+                    {t("admin.assistant.title")}
+                  </Link>
+                </div>
+              );
+            }
             return (
               <SettingsToggle
                 key={key}

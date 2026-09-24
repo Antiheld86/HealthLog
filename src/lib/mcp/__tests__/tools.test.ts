@@ -24,7 +24,7 @@ vi.mock("@/lib/feature-flags", () => ({
     coach: true,
     briefing: true,
     insightStatus: true,
-    correlations: true,
+    documentAi: true,
   })),
 }));
 // v1.22.0 — `search` reads the record directly via Prisma; stub it so the
@@ -1410,7 +1410,7 @@ describe("get_ecg_recordings — v1.30 coverage review (G3)", () => {
       coach: true,
       briefing: true,
       insightStatus: false,
-      correlations: true,
+      documentAi: true,
     } as never);
     const result = (await tool("get_ecg_recordings").run(CTX, {})) as {
       present: boolean;

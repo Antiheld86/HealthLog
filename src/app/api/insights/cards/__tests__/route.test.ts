@@ -94,7 +94,7 @@ describe("GET /api/insights/cards — assistant-flag gate", () => {
       assistantCoachEnabled: true,
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: false,
-      assistantCorrelationsEnabled: true,
+      assistantDocumentAiEnabled: true,
     } as never);
     const res = await callGet(makeReq());
     expect(res.status).toBe(403);
@@ -109,7 +109,7 @@ describe("GET /api/insights/cards — assistant-flag gate", () => {
       assistantCoachEnabled: true,
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
-      assistantCorrelationsEnabled: true,
+      assistantDocumentAiEnabled: true,
     } as never);
     const res = await callGet(makeReq());
     expect(res.status).toBe(403);

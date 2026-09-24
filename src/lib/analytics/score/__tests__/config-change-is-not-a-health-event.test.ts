@@ -400,7 +400,7 @@ beforeEach(() => {
     coach: false,
     briefing: false,
     insightStatus: false,
-    correlations: false,
+    documentAi: false,
   });
   hasAnyConfiguredProvider.mockResolvedValue(false);
   buildMedsTodayBlock.mockResolvedValue({

@@ -2,67 +2,62 @@ import { prisma } from "@/lib/db";
 import { getEvent } from "@/lib/logging/context";
 import { memoizePerRequest } from "@/lib/request-cache";
 
+import type {
+  AiOperatorSwitch,
+  AiOperatorSwitchSet,
+} from "@/lib/ai/capabilities/types";
+
 /**
- * v1.4.31 — Assistant-surface operator feature flags.
+ * The operator's assistant switches: input one of the AI capability resolver
+ * (`src/lib/ai/capabilities/`), and nothing more.
  *
- * Five boolean toggles on `AppSettings` carve the visibility cut for
- * the LLM-driven surfaces. The master flag is a single kill-switch;
- * the four sub-flags carve specific surfaces.
+ * `AppSettings.assistant*Enabled` holds a master and four sub-switches. The
+ * master always wins: every sub-switch reads false when it is off, before the
+ * set leaves this module, so no reader composes `master && sub`.
  *
- * `assistant.enabled = false` forces every sub-flag false in the
- * resolved shape — the master always wins. This means a server-side
- * caller never has to compose `master && sub`; reading
- * `flags.coach` already accounts for both layers.
- *
- * Per `.planning/RESPONSE-TO-IOS-TEAM-2026-05-16.md` §3 R5: the
- * matrix gates BOTH server-routed AND iOS on-device assistant
- * surfaces. The `GET /api/feature-flags` endpoint projects this
- * shape so iOS reads the same authoritative set the web reads.
+ * What a switch decides is AI work and AI text, never data. Whether a given
+ * capability is available for a given record is the resolver's answer, which
+ * also weighs modules, provider-work authority, provider presence and consent;
+ * a route that serves or calls a model asks the resolver, not this file.
  */
 
-/** The four assistant sub-flags the operator can carve. */
-export type AssistantSurface =
-  "coach" | "briefing" | "insightStatus" | "correlations";
+/** A sub-switch name. Also the last segment of `assistant.disabled.<switch>`. */
+export type AssistantSurface = AiOperatorSwitch;
 
-export interface AssistantFlagSet {
-  /** Master kill-switch — when false, every sub-flag is forced false. */
-  enabled: boolean;
-  /** Coach drawer, chat SSE, history rail, feedback. */
-  coach: boolean;
-  /** Daily Briefing card + advisor recommendations + regen icon. */
-  briefing: boolean;
-  /** Per-metric status cards on every `/insights/<metric>` sub-page. */
-  insightStatus: boolean;
-  /** Correlation narration tile on the mother page. */
-  correlations: boolean;
-}
+/** The resolved switch set, master applied. */
+export type AssistantFlagSet = AiOperatorSwitchSet;
 
-/** All-on default; mirrors v1.4.30 behaviour for fresh installs. */
+/** Every switch on: the column defaults, and what a fresh install reads. */
 export const ASSISTANT_FLAGS_DEFAULT: AssistantFlagSet = Object.freeze({
   enabled: true,
   coach: true,
   briefing: true,
   insightStatus: true,
-  correlations: true,
+  documentAi: true,
+});
+
+/** Every switch off: the answer when the switches could not be read. */
+const ASSISTANT_FLAGS_OFF: AssistantFlagSet = Object.freeze({
+  enabled: false,
+  coach: false,
+  briefing: false,
+  insightStatus: false,
+  documentAi: false,
 });
 
 /**
- * Load the assistant flag set from `AppSettings`. Read-through pattern
- * matches `getGlobalServiceAvailability()` — null/error/missing-row all
- * fall back to defaults so the assistant stays visible on first boot.
+ * Load the switches, or `null` when they could not be read.
  *
- * The master always wins: every sub-flag is forced false when the
- * master is off, before the resolved set leaves this function.
+ * A missing row reads as the column defaults (every switch on), which is what
+ * an instance that never saved its settings has. A read ERROR is different: it
+ * is `null`, and the capability resolver turns that into `check_failed` for
+ * every capability. Failing closed is safe now that no data depends on a
+ * switch; failing open meant a database blip switched every AI egress on.
  *
- * v1.4.33 — memoised per-request so a single Coach-drawer open that
- * fires five gated fetches in parallel (`/api/insights/chat`,
- * `/api/insights/comprehensive`, six `/api/insights/<metric>-status`
- * routes, the rail list) reads `AppSettings.singleton` once instead of
- * five times. The cache lives on the active `WideEventBuilder` so it
- * goes away with the request; behaviour outside an event context (unit
- * tests, background jobs) stays unchanged.
+ * Memoised per request, so a page that fires several gated reads at once reads
+ * the singleton row once.
  */
-export async function getAssistantFlags(): Promise<AssistantFlagSet> {
+export function loadAssistantSwitches(): Promise<AssistantFlagSet | null> {
   return memoizePerRequest("assistant-flags", async () => {
     try {
       const settings = await prisma.appSettings.findUnique({
@@ -72,56 +67,55 @@ export async function getAssistantFlags(): Promise<AssistantFlagSet> {
           assistantCoachEnabled: true,
           assistantBriefingEnabled: true,
           assistantInsightStatusEnabled: true,
-          assistantCorrelationsEnabled: true,
+          assistantDocumentAiEnabled: true,
         },
       });
-
-      const master = settings?.assistantEnabled ?? true;
       return resolveAssistantFlags({
-        enabled: master,
+        enabled: settings?.assistantEnabled ?? true,
         coach: settings?.assistantCoachEnabled ?? true,
         briefing: settings?.assistantBriefingEnabled ?? true,
         insightStatus: settings?.assistantInsightStatusEnabled ?? true,
-        correlations: settings?.assistantCorrelationsEnabled ?? true,
+        documentAi: settings?.assistantDocumentAiEnabled ?? true,
       });
     } catch {
       getEvent()?.addWarning(
-        "Failed to load assistant feature flags, using defaults",
+        "Failed to load assistant switches; every AI capability is off for this request",
       );
-      return ASSISTANT_FLAGS_DEFAULT;
+      return null;
     }
   });
 }
 
 /**
- * Pure resolver — given a raw set of master + sub-flag values, return
- * the operator-effective shape. Exposed for unit tests and for the
- * admin PUT handler that needs to echo the resolved set after a write.
+ * The switch set, failing closed: every switch reads off when the row could
+ * not be read. For callers that need a plain set rather than the distinction
+ * between "off" and "unknown".
+ */
+export async function getAssistantFlags(): Promise<AssistantFlagSet> {
+  return (await loadAssistantSwitches()) ?? ASSISTANT_FLAGS_OFF;
+}
+
+/**
+ * Pure resolver: given the raw column values, return the operator-effective
+ * set. Exposed for unit tests and for the admin handlers that echo the
+ * resolved set after a write.
  */
 export function resolveAssistantFlags(raw: AssistantFlagSet): AssistantFlagSet {
-  if (!raw.enabled) {
-    return {
-      enabled: false,
-      coach: false,
-      briefing: false,
-      insightStatus: false,
-      correlations: false,
-    };
-  }
+  if (!raw.enabled) return { ...ASSISTANT_FLAGS_OFF };
   return { ...raw };
 }
 
 /**
- * Error class thrown by `requireAssistantSurface()` when the operator
- * has disabled the surface. The api-handler catches it and returns
- * the 403 envelope per the iOS contract (R5):
+ * The operator-switch-only refusal, `403 { meta: { errorCode:
+ * "assistant.disabled.<switch>" } }`.
  *
- *   { data: null, error: "...", meta: { errorCode: "assistant.disabled.<surface>" } }
- *
- * Older iOS clients that predate the v1.4.31 contract surface this as
- * a generic 403 (their existing 403-handler covers the case); v1.4.31+
- * clients read the `errorCode` to render an inline operator-disabled
- * notice.
+ * Being retired. It answers only the operator layer, so a route gated on it
+ * refuses when a switch is off and says nothing about modules, consent or the
+ * provider; `requireAiCapability` (`src/lib/ai/capabilities/gate.ts`) answers
+ * all of them with the same code for the operator case. The routes that still
+ * call `requireAssistantSurface` are frozen by
+ * `src/lib/feature-flags/__tests__/no-dead-assistant-flag.test.ts`: the list
+ * may only shrink, and this class goes with its last caller.
  */
 export class AssistantDisabledError extends Error {
   readonly surface: AssistantSurface;
@@ -136,10 +130,8 @@ export class AssistantDisabledError extends Error {
 }
 
 /**
- * Server-side gate helper. Throws `AssistantDisabledError` when the
- * relevant surface (or the master) is off. Routes call this near the
- * top, after auth and rate-limit, and let the apiHandler catch turn
- * it into the 403 envelope.
+ * Throws `AssistantDisabledError` when the switch (or the master) is off.
+ * Retired in favour of `requireAiCapability`; see the class above.
  */
 export async function requireAssistantSurface(
   surface: AssistantSurface,

@@ -6790,34 +6790,35 @@
     "monitoringTestSuccess": "Evento de prueba enviado",
     "monitoringTestFailed": "La prueba de monitorización falló",
     "assistant": {
-      "title": "Superficies del asistente",
-      "description": "Cada conmutador oculta una superficie impulsada por el modelo en toda la aplicación sin retirar la configuración del proveedor.",
+      "title": "Asistente",
+      "description": "Cada interruptor detiene el trabajo de IA que cubre y oculta su texto, mientras los datos y puntuaciones siguen cargándose.",
       "master": {
         "title": "Asistente activado",
-        "description": "Interruptor maestro para cada superficie impulsada por el modelo. Cuando está desactivado, todas las opciones secundarias se fuerzan a off."
+        "description": "Interruptor general de todas las funciones de IA. Si está desactivado, no se envía nada a ningún modelo y todos los interruptores de abajo quedan desactivados."
       },
       "coach": {
         "title": "Coach",
-        "description": "Drawer de chat, botón de lanzamiento y FAB móvil en cada página de Insights."
+        "description": "Chat, mantenimiento de la memoria del Coach y avisos de IA. Las conversaciones guardadas se pueden seguir leyendo y borrando."
       },
       "briefing": {
         "title": "Briefing diario",
-        "description": "Tarjeta de briefing, narración del hero strip, cuadrícula de recomendaciones y la acción Regenerar."
+        "description": "El briefing diario, sus primeras líneas en otras partes de la app y los resúmenes de periodo escritos por un modelo."
       },
       "insightStatus": {
-        "title": "Tarjetas de estado",
-        "description": "Tarjetas de estado por métrica en cada sub-página /insights."
+        "title": "Notas de estado",
+        "description": "Notas breves que un modelo escribe por medición y métrica, notas de entrenamiento y líneas de reacción. La mayor parte del consumo de tokens."
       },
-      "correlations": {
-        "title": "Correlaciones",
-        "description": "Narración de la tarjeta de correlación en la vista general de Insights."
+      "documentAi": {
+        "title": "Lectura de documentos",
+        "description": "Lectura con IA de documentos guardados, escaneo de informes de laboratorio y extracción de medicamentos a partir de texto. La mayor parte de los datos que salen del servidor."
       }
     },
     "modules": {
       "title": "Disponibilidad de módulos",
       "description": "Desactiva un módulo para todo el servidor.",
       "saveError": "No se pudo actualizar la disponibilidad de módulos.",
-      "detail": "Un módulo desactivado aquí queda apagado para todas las cuentas, sin importar la preferencia personal. Los dominios principales (peso, presión arterial, pulso, medicación) están siempre activos y no se pueden desactivar."
+      "detail": "Un módulo desactivado aquí queda apagado para todas las cuentas, sin importar la preferencia personal. Los dominios principales (peso, presión arterial, pulso, medicación) están siempre activos y no se pueden desactivar.",
+      "coachFollowsSwitch": "Sigue el interruptor del Coach en Asistente."
     },
     "invites": {
       "title": "Invitaciones",
@@ -8846,8 +8847,8 @@
       "description": "Chat de IA basado en tus propios datos."
     },
     "insights": {
-      "label": "Insights",
-      "description": "Análisis de IA, resumen y correlaciones."
+      "label": "Análisis con IA",
+      "description": "Briefing, notas de estado y notas de entrenamiento escritas por un modelo, nunca tus datos ni puntuaciones."
     },
     "doctorReport": {
       "label": "Informe médico",

@@ -6790,34 +6790,35 @@
     "monitoringTestSuccess": "Evento di prova inviato",
     "monitoringTestFailed": "Test di monitoraggio non riuscito",
     "assistant": {
-      "title": "Superfici dell'assistente",
-      "description": "Ogni interruttore nasconde una superficie guidata dal modello in tutta l'app senza rimuovere la configurazione del provider.",
+      "title": "Assistente",
+      "description": "Ogni interruttore ferma il lavoro di IA che copre e ne nasconde il testo, mentre dati e punteggi continuano a caricarsi.",
       "master": {
         "title": "Assistente attivo",
-        "description": "Interruttore master per ogni superficie guidata dal modello. Quando spento, ogni opzione secondaria qui sotto è forzata su off."
+        "description": "Interruttore principale per tutte le funzioni di IA. Se è disattivato, nulla viene inviato a un modello e tutti gli interruttori sottostanti sono disattivati."
       },
       "coach": {
         "title": "Coach",
-        "description": "Drawer chat, pulsante di lancio e FAB mobile su ogni pagina Insights."
+        "description": "Chat, manutenzione della memoria del Coach e promemoria IA. Le conversazioni salvate restano leggibili ed eliminabili."
       },
       "briefing": {
         "title": "Briefing giornaliero",
-        "description": "Scheda briefing, narrazione hero strip, griglia raccomandazioni e l'azione Rigenera."
+        "description": "Il briefing giornaliero, le sue prime righe in altre parti dell'app e i riepiloghi di periodo scritti da un modello."
       },
       "insightStatus": {
-        "title": "Schede di stato",
-        "description": "Schede di stato per metrica su ogni sotto-pagina /insights."
+        "title": "Note di stato",
+        "description": "Brevi note che un modello scrive per misurazione e metrica, note sugli allenamenti e righe di reazione. La quota maggiore del consumo di token."
       },
-      "correlations": {
-        "title": "Correlazioni",
-        "description": "Narrazione del tile di correlazione sulla panoramica Insights."
+      "documentAi": {
+        "title": "Lettura dei documenti",
+        "description": "Lettura con IA dei documenti salvati, scansione dei referti di laboratorio ed estrazione dei farmaci dal testo. La quota maggiore dei dati che lasciano il server."
       }
     },
     "modules": {
       "title": "Disponibilità dei moduli",
       "description": "Disattiva un modulo per l'intero server.",
       "saveError": "Impossibile aggiornare la disponibilità dei moduli.",
-      "detail": "Un modulo disattivato qui è spento per ogni account, indipendentemente dalle preferenze personali. I domini principali (peso, pressione, polso, farmaci) sono sempre attivi e non possono essere disattivati."
+      "detail": "Un modulo disattivato qui è spento per ogni account, indipendentemente dalle preferenze personali. I domini principali (peso, pressione, polso, farmaci) sono sempre attivi e non possono essere disattivati.",
+      "coachFollowsSwitch": "Segue l'interruttore Coach in Assistente."
     },
     "invites": {
       "title": "Inviti",
@@ -8846,8 +8847,8 @@
       "description": "Chat IA basata sui tuoi dati."
     },
     "insights": {
-      "label": "Insights",
-      "description": "Analisi IA, briefing e correlazioni."
+      "label": "Analisi IA",
+      "description": "Briefing, note di stato e note sugli allenamenti scritte da un modello, mai i tuoi dati o punteggi."
     },
     "doctorReport": {
       "label": "Referto medico",

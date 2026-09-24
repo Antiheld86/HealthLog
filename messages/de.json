@@ -6790,34 +6790,35 @@
     "monitoringTestSuccess": "Testevent wurde gesendet",
     "monitoringTestFailed": "Monitoring-Test fehlgeschlagen",
     "assistant": {
-      "title": "Assistenz-Oberflächen",
-      "description": "Jeder Toggle versteckt eine modellgestützte Oberfläche app-weit, ohne die Provider-Konfiguration zu entfernen.",
+      "title": "Assistenz",
+      "description": "Jeder Schalter stoppt die KI-Arbeit, die er abdeckt, und blendet ihren Text aus, Daten und Werte laden weiter.",
       "master": {
         "title": "Assistent aktiv",
-        "description": "Hauptschalter für jede modellgestützte Oberfläche. Wenn aus, sind alle Unter-Optionen unten zwangsweise aus."
+        "description": "Hauptschalter für alle KI-Funktionen. Ist er aus, wird nichts an ein Modell gesendet, und alle Schalter darunter sind aus."
       },
       "coach": {
         "title": "Coach",
-        "description": "Chat-Drawer, Launch-Button und die mobile FAB auf jeder Insights-Seite."
+        "description": "Chat, Pflege des Coach-Gedächtnisses und KI-Hinweise. Gespeicherte Gespräche bleiben lesbar und löschbar."
       },
       "briefing": {
         "title": "Tagesbriefing",
-        "description": "Briefing-Karte, Hero-Erzähltext, Empfehlungen und der Regenerieren-Knopf."
+        "description": "Das Tagesbriefing, seine Einleitung an anderen Stellen der App und Zeitraum-Zusammenfassungen, die ein Modell schreibt."
       },
       "insightStatus": {
-        "title": "Status-Karten",
-        "description": "Pro-Metrik-Status-Karten auf jeder /insights-Unterseite."
+        "title": "Statusnotizen",
+        "description": "Kurze Notizen, die ein Modell pro Messwert und Kennzahl schreibt, Trainingsnotizen und Reaktionszeilen. Der größte Anteil am Token-Verbrauch."
       },
-      "correlations": {
-        "title": "Korrelationen",
-        "description": "Erzähl-Kachel zur Korrelation auf der Insights-Übersicht."
+      "documentAi": {
+        "title": "Dokumente lesen",
+        "description": "KI-Lesen gespeicherter Dokumente, Scans von Laborbefunden und das Erkennen von Medikamenten aus Text. Der größte Anteil der Daten, die den Server verlassen."
       }
     },
     "modules": {
       "title": "Modulverfügbarkeit",
       "description": "Schalte ein Modul für den gesamten Server ab.",
       "saveError": "Modulverfügbarkeit konnte nicht aktualisiert werden.",
-      "detail": "Ein hier deaktiviertes Modul ist für jedes Konto aus — unabhängig von den persönlichen Einstellungen. Kerndaten (Gewicht, Blutdruck, Puls, Medikamente) sind immer aktiv und lassen sich nicht abschalten."
+      "detail": "Ein hier deaktiviertes Modul ist für jedes Konto aus — unabhängig von den persönlichen Einstellungen. Kerndaten (Gewicht, Blutdruck, Puls, Medikamente) sind immer aktiv und lassen sich nicht abschalten.",
+      "coachFollowsSwitch": "Folgt dem Coach-Schalter unter Assistenz."
     },
     "invites": {
       "title": "Einladungen",
@@ -8846,8 +8847,8 @@
       "description": "KI-Chat mit Bezug zu deinen Daten."
     },
     "insights": {
-      "label": "Insights",
-      "description": "KI-Analysen, Briefing und Korrelationen."
+      "label": "KI-Analyse",
+      "description": "Briefing, Statusnotizen und Trainingsnotizen, die ein Modell schreibt, nie deine Daten oder Werte."
     },
     "doctorReport": {
       "label": "Arztbericht",

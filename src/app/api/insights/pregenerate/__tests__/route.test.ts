@@ -101,7 +101,7 @@ describe("POST /api/insights/pregenerate", () => {
       assistantCoachEnabled: false,
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: true,
-      assistantCorrelationsEnabled: true,
+      assistantDocumentAiEnabled: true,
     } as never);
     const res = await callPost(makeReq());
     expect(res.status).toBe(200);
@@ -115,7 +115,7 @@ describe("POST /api/insights/pregenerate", () => {
       assistantCoachEnabled: true,
       assistantBriefingEnabled: true,
       assistantInsightStatusEnabled: false,
-      assistantCorrelationsEnabled: true,
+      assistantDocumentAiEnabled: true,
     } as never);
     const res = await callPost(makeReq());
     expect(res.status).toBe(403);
