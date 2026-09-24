@@ -37,6 +37,7 @@ import {
   type InsightMetric,
 } from "@/lib/insights/metric-availability";
 import type { ModuleKey } from "@/lib/modules/registry";
+import { isSurfaceVisible } from "@/lib/modules/surface";
 
 /**
  * v1.4.25 W4 — routed tab strip for `/insights`.
@@ -393,32 +394,6 @@ export const SUB_PAGE_TABS: Record<
 };
 
 /**
- * v1.18.0 — slug → module gate. A sub-page pill belonging to a toggleable
- * module is hidden when that module is disabled in the account's resolved
- * module map (from `GET /api/auth/me`'s `modules`), on TOP of the data +
- * layout gates. Slugs absent from this map are core metrics (BP, pulse,
- * weight, body composition, activity, cardio, hearing, environment,
- * medications …) and never gate on a module — only on data availability.
- *
- * `labs` has no metric pill; it surfaces via the left nav only. The
- * Recovery pill is gated separately below (it has no slug — it is a
- * composite always-present link, so it reads the `recovery` module key
- * directly in `buildTabs`).
- */
-const SUB_PAGE_MODULE: Partial<Record<SubPageSlug, ModuleKey>> = {
-  mood: "mood",
-  sleep: "sleep",
-  "breathing-disturbances": "sleep",
-  "blood-glucose": "glucose",
-  workouts: "workouts",
-  // v1.29 — the nutrients pill gates on the opt-in `nutrients` module
-  // alone; there is no data floor on top (see `hasNutrients` in
-  // `insights-layout-shell.tsx` — reachability, not row count, is the
-  // gate once the user has opted in).
-  nutrients: "nutrients",
-};
-
-/**
  * v1.18.0 — a partial `ModuleKey → enabled` map (the `modules` field
  * `GET /api/auth/me` returns; cycle + coach already delegated). A pill
  * gated by a module is hidden only when its key resolves to an explicit
@@ -427,14 +402,17 @@ const SUB_PAGE_MODULE: Partial<Record<SubPageSlug, ModuleKey>> = {
  */
 export type InsightsModuleMap = Partial<Record<ModuleKey, boolean>>;
 
-/** True unless the slug's module is explicitly disabled in the map. */
+/**
+ * True unless the slug's module is explicitly off. A sub-page's owner comes
+ * from the one surface map (`insights-page:<slug>`), the same entry the
+ * direct-URL notice reads, so a pill and its page cannot disagree. Slugs with
+ * no entry are core metrics and gate on data only.
+ */
 function isSlugModuleEnabled(
   slug: SubPageSlug,
   modules: InsightsModuleMap | undefined,
 ): boolean {
-  const key = SUB_PAGE_MODULE[slug];
-  if (!key) return true;
-  return modules?.[key] !== false;
+  return isSurfaceVisible(`insights-page:${slug}`, modules);
 }
 
 /**
@@ -510,7 +488,7 @@ function buildTabs(
   // group child `order` follows the layout (via `orderedSlugs` below),
   // falling back to `SUB_PAGE_GROUP_ORDER` when the layout is absent.
   // v1.18.0 — a THIRD gate on top of data + layout: a pill belonging to a
-  // toggleable module (mood / sleep / glucose / workouts) is hidden when
+  // toggleable module (the `insights-page:*` surfaces) is hidden when
   // that module is disabled in the account's resolved module map. Core
   // metric pills carry no module key and pass this gate unconditionally.
   const visibleSlugs = availability
@@ -551,7 +529,7 @@ function buildTabs(
   // `summaries[METRIC].count` to gate on — the page data-gates every block
   // and falls back to a calm empty note. The pill is otherwise present like
   // Overview, but it is hidden when the `recovery` module is disabled.
-  if (modules?.recovery !== false) {
+  if (isSurfaceVisible("insights-page:recovery", modules)) {
     entries.push({
       kind: "link",
       href: `${INSIGHTS_OVERVIEW_PATH}/recovery`,

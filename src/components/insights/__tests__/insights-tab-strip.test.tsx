@@ -546,6 +546,28 @@ describe("<InsightsTabStrip> — module enable/disable gate (v1.18.0)", () => {
     expect(enabled).toContain('href="/insights/recovery"');
   });
 
+  it("hides the Medications pill with the medications module off", () => {
+    const withMeds: InsightInputs = {
+      ...moduleAvailability,
+      hasMedication: true,
+    };
+    const on = render(
+      <InsightsTabStrip
+        availability={withMeds}
+        modules={{ medications: true }}
+      />,
+    );
+    expect(on).toContain('href="/insights/medications"');
+    const off = render(
+      <InsightsTabStrip
+        availability={withMeds}
+        modules={{ medications: false }}
+      />,
+    );
+    expect(off).not.toContain('href="/insights/medications"');
+    expect(off).toContain(">Overview<");
+  });
+
   it("fails open: an empty / omitted module map keeps every module pill", () => {
     // Default-on contract — a stale /me payload (no module map) must not
     // blank the strip. An empty map and an omitted prop both keep pills.
