@@ -24,6 +24,11 @@ vi.mock("@/hooks/use-record-capabilities", () => ({
   }),
 }));
 
+// Every module on: this file is about the discard guard, not the module mask.
+vi.mock("@/hooks/use-auth", () => ({
+  useAuth: () => ({ user: { modules: {} } }),
+}));
+
 vi.mock("react", async (importOriginal) => {
   const actual = await importOriginal<typeof ReactModule>();
   return {

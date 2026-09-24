@@ -60,7 +60,7 @@ import {
 interface TourProps {
   /**
    * Resolved module map (`GET /api/auth/me`'s `modules`). Stops whose
-   * `requiresModule` resolves to `false` are dropped; the counter total
+   * page belongs to a switched-off module are dropped; the counter total
    * tracks the resolved list so "Schritt n/total" stays honest.
    */
   modules?: TourModuleMap;

@@ -48,7 +48,7 @@ import { SUB_SHELL_GRID_FLOOR } from "@/components/layout/shell-metrics";
 import { useAuth } from "@/hooks/use-auth";
 import { useMounted } from "@/hooks/use-mounted";
 import { useTranslations } from "@/lib/i18n/context";
-import type { ModuleKey } from "@/lib/modules/registry";
+import { isSurfaceVisible } from "@/lib/modules/surface";
 import { isSettingsDestinationListedForRecord } from "@/lib/record-settings/classification";
 import {
   SETTINGS_SECTION_SLUGS,
@@ -106,14 +106,6 @@ interface SettingsSection {
   icon: LucideIcon;
   /** 2026-07-17 UX/IA audit (M6) — which sidebar group this entry renders under. */
   group: SettingsSectionGroup;
-  /**
-   * v1.18.0 (S5) — per-submodule entries are listed only when their module
-   * is enabled. When set, the nav entry hides if the resolved
-   * `useAuth().user.modules` map has the key explicitly `false`. The gate
-   * fails OPEN (a missing key reads as enabled) so a stale `/me` payload
-   * never blanks an entry. Omitted = always shown (global / CORE entries).
-   */
-  moduleGate?: ModuleKey;
 }
 
 /**
@@ -268,13 +260,13 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   },
   // v1.25 (W-ENV) — Environmental context: home location, travel overrides,
   // and the weather/daylight backfill. Module-gated on the opt-in
-  // `environment` module, so the entry only appears once the user turns it on.
+  // `environment` module (`settings:environment` in the surface map), so the
+  // entry only appears once the user turns it on.
   {
     slug: "environment",
     titleKey: "settings.sections.environment.title",
     icon: CloudSun,
     group: "healthProfile",
-    moduleGate: "environment",
   },
   // ── AI ──
   {
@@ -284,14 +276,14 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     group: "ai",
   },
   // v1.18.0 (S5) — Coach: the Coach preference cards get their own entry,
-  // shown only when the coach module is enabled. The AI entry above keeps
+  // shown only when the coach module is enabled (`settings:coach` in the
+  // surface map). The AI entry above keeps
   // provider / model / BYOK configuration.
   {
     slug: "coach",
     titleKey: "settings.sections.coach.title",
     icon: Bot,
     group: "ai",
-    moduleGate: "coach",
   },
   // ── Connectivity ──
   {
@@ -411,8 +403,9 @@ export function SettingsShell({
   // is enabled. Read from the resolved `useAuth().user.modules` map (the
   // same map the Module hub, nav, and Insights pills gate off). Fail OPEN
   // (`!== false`): a missing key, or a not-yet-resolved `/me` payload,
-  // reads as enabled so an entry never silently disappears. Entries with
-  // no `moduleGate` (global / CORE) are always shown.
+  // reads as enabled so an entry never silently disappears. A section's
+  // owner comes from the surface map (`settings:<slug>`); sections with no
+  // owner (global / CORE) are always shown.
   //
   // v1.25.9 — the module filter must NOT run during SSR / the first client
   // paint. `useAuth().user` resolves from the `/api/auth/me` query, which is
@@ -435,9 +428,7 @@ export function SettingsShell({
   const activeRecord = user?.accountAccess?.active ?? null;
   const allVisibleSections = SETTINGS_SECTIONS.filter(
     (section) =>
-      !hydrated ||
-      !section.moduleGate ||
-      modules?.[section.moduleGate] !== false,
+      !hydrated || isSurfaceVisible(`settings:${section.slug}`, modules),
   );
 
   // The server has already resolved which record is active, and which

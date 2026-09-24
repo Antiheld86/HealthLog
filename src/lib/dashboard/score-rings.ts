@@ -25,22 +25,18 @@
  *     taken, `yellow` while doses remain — never `red`: pending doses in
  *     the morning are not an alert state.
  *
- * Module gating rides the client-safe `SCORE_RING_MODULE` map in
- * `@/lib/dashboard-layout` (mirroring the derived routes'
- * `DERIVED_MODULE`: readiness/recovery → recovery module, sleep score →
- * sleep module, MED_COMPLIANCE → medications) plus the `insights` gate
- * every derived read sits behind.
+ * Module gating reads the surface map (`score-ring:<id>` in
+ * `@/lib/modules/surface`): readiness/recovery → recovery, sleep score →
+ * sleep, MED_COMPLIANCE → medications. The derived scores are data, so the
+ * `insights` key (AI analysis) gates no ring.
  *
  * Every ring resolves fail-soft: a throwing engine drops its ring, never
  * the snapshot.
  */
 import type { PrismaClient } from "@/generated/prisma/client";
 import type { ModuleKey } from "@/lib/modules/gate";
-import {
-  SCORE_RING_IDS,
-  SCORE_RING_MODULE,
-  type ScoreRingId,
-} from "@/lib/dashboard-layout";
+import { SCORE_RING_IDS, type ScoreRingId } from "@/lib/dashboard-layout";
+import { isSurfaceVisible } from "@/lib/modules/surface";
 import {
   computeDerivedMetric,
   loadBaselineProfile,
@@ -122,12 +118,7 @@ export async function buildScoreRingsBlock(
 ): Promise<DashboardScoreRing[]> {
   const eligible = selected.filter((id) => {
     if (!(SCORE_RING_IDS as readonly string[]).includes(id)) return false;
-    if (modules[SCORE_RING_MODULE[id]] === false) return false;
-    // The derived scores are an insights-layer read everywhere else
-    // (`/api/insights/derived*` sits behind the insights module) — the
-    // snapshot honours the same gate.
-    if (DERIVED_RING_METRIC[id] && modules.insights === false) return false;
-    return true;
+    return isSurfaceVisible(`score-ring:${id}`, modules);
   });
   if (eligible.length === 0) return [];
 

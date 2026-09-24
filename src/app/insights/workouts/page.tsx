@@ -34,10 +34,10 @@ import InsightsWorkoutsPageClient from "./page-client";
  *  - The dehydrated first page is JSON-round-tripped and wrapped in TanStack's
  *    `{ pages, pageParams }` infinite-data shape. Prisma `Date`s therefore
  *    hydrate as the same ISO strings produced by the client wire response.
- *  - Module-gate parity: the client page bounces a workouts-off account
- *    (`useModulePageGuard`), and the API route refuses it server-side; skip the
- *    prefetch when the module is off so a disabled page never seeds a cache it
- *    will not read.
+ *  - Module-gate parity: the shell answers a workouts-off account with the
+ *    module notice instead of this page (`ModulePageGate`), and the API route
+ *    refuses it server-side; skip the prefetch when the module is off so a
+ *    disabled page never seeds a cache it will not read.
  *  - The client cell keeps its own fetch (`staleTime: 60s`): the prefetch seeds
  *    fresh data, so the mounted cell paints immediately and only refetches once
  *    the TTL lapses — the "empty then fills" flash is gone without dropping the

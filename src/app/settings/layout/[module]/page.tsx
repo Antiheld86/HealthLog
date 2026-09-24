@@ -4,6 +4,7 @@ import { LayoutModuleGate } from "@/components/settings/layout-module-gate";
 import { RecordSettingsSectionGate } from "@/components/settings/record-settings-section-gate";
 import {
   LAYOUT_GROUPS,
+  layoutGroupModule,
   LAYOUT_GROUP_IDS,
   isLayoutGroupId,
 } from "@/components/settings/layout-groups";
@@ -83,7 +84,7 @@ export default async function SettingsLayoutModulePage({ params }: PageProps) {
     >
       <RecordSettingsSectionGate section="layout">
         <section aria-labelledby={headingId} className="space-y-6">
-          <LayoutModuleGate moduleGate={group.moduleGate}>
+          <LayoutModuleGate moduleKey={layoutGroupModule(group.id)}>
             <Body />
           </LayoutModuleGate>
         </section>

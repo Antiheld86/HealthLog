@@ -10163,8 +10163,7 @@
         "dayInvalid": "The entries carried a date the server couldn't accept. This can happen when the clock or time zone on the sending side is wrong — it's worth checking.",
         "upsertFailed": "These entries reached the server, but a problem on this end kept them from being saved. There's nothing you need to do.",
         "unknown": "These entries arrived but couldn't be stored."
-      },
-      "moduleEnableError": "The nutrients module couldn't be turned on. Please try again."
+      }
     },
     "hydration": {
       "referenceMeta": "Reference intake {value} {unit}/day · EFSA"

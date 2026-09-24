@@ -57,6 +57,11 @@ import {
   type MoodFactorWindowFetch,
 } from "@/lib/insights/correlation-channel-series";
 import { loadUserSourcePriority } from "@/lib/rollups/measurement-read";
+import {
+  correlationChannelSurfaceId,
+  isSurfaceVisible,
+  type SurfaceModuleMap,
+} from "@/lib/modules/surface";
 
 /**
  * How the measurement channels are read.
@@ -117,6 +122,14 @@ export interface DiscoveryMatrixOptions {
    * measurement read instead of a second one.
    */
   extraMeasurementTypes?: readonly MeasurementType[];
+  /**
+   * The record's resolved module map. A channel whose module is off
+   * (`correlation:<key>` in the surface map: mood and its rated factors,
+   * sleep, glucose, medication adherence, symptoms, weather) is left out of
+   * `series` and `byMetric`, so no statistic is computed over a module the
+   * person switched off. Omitted: every channel is kept.
+   */
+  modules?: SurfaceModuleMap;
 }
 
 /** Per-channel reach, for the callers' wide-event annotations. */
@@ -148,6 +161,20 @@ export interface DiscoveryMatrix {
    */
   byMetric: Map<string, DailySeriesPoint[]>;
   diagnostics: DiscoveryMatrixDiagnostics;
+}
+
+/**
+ * Leave out every channel whose owning module is off. Pure, and applied after
+ * the fold so the order of what remains is the order it was folded in (the
+ * ranking stability note on {@link assembleDiscoveryMatrix}).
+ */
+export function maskSeriesByModules(
+  series: readonly NamedSeries[],
+  modules: SurfaceModuleMap | null | undefined,
+): NamedSeries[] {
+  return series.filter((s) =>
+    isSurfaceVisible(correlationChannelSurfaceId(s.key), modules),
+  );
 }
 
 /**
@@ -302,8 +329,14 @@ export async function assembleDiscoveryMatrix(
     byMetric.set(key, factorPoints);
   }
 
+  for (const key of [...byMetric.keys()]) {
+    if (!isSurfaceVisible(correlationChannelSurfaceId(key), opts.modules)) {
+      byMetric.delete(key);
+    }
+  }
+
   return {
-    series,
+    series: maskSeriesByModules(series, opts.modules),
     byMetric,
     diagnostics: {
       measurementsCapped: measurements.measurementsCapped,

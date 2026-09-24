@@ -8,9 +8,9 @@
  * blank page — so the slot must honour the same per-user map the
  * Insights slot and the More hub already do.
  *
- * Watched red: with the `requiresModule: "medications"` entry removed
- * from PRIMARY_LEFT (the pre-fix ungated pin) the module-off test fails
- * with the tab still present. Verified red against the pre-fix bar.
+ * Watched red: with `nav:/medications` removed from the surface map (the
+ * pre-fix ungated pin) the module-off test fails with the tab still
+ * present.
  */
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -67,6 +67,13 @@ describe("<BottomNav> mounted module gate", () => {
     expect(html).not.toContain('href="/medications"');
     // Siblings unaffected.
     expect(html).toContain('href="/"');
+    expect(html).toContain('href="/insights"');
+    mockUserRef.value = { id: "u1", modules: {} };
+  });
+
+  it("keeps the Insights slot with AI analysis off", () => {
+    mockUserRef.value = { id: "u1", modules: { insights: false } };
+    const html = render();
     expect(html).toContain('href="/insights"');
     mockUserRef.value = { id: "u1", modules: {} };
   });

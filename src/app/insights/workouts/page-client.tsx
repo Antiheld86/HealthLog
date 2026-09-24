@@ -1,12 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Activity, Loader2 } from "lucide-react";
+import { Activity } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useTranslations } from "@/lib/i18n/context";
 import { useInfiniteWorkouts } from "@/hooks/use-workouts";
-import { useModulePageGuard } from "@/hooks/use-module-page-guard";
 import { MetricEmptyState } from "@/components/insights/metric-empty-state";
 import { SubPageShell } from "@/components/insights/sub-page-shell";
 import { WorkoutList } from "@/components/insights/workout-list";
@@ -42,7 +41,6 @@ import { QueryErrorCard } from "@/components/ui/query-error-card";
  */
 export default function InsightsWorkoutsPageClient() {
   const { t, tCount } = useTranslations();
-  const { ready } = useModulePageGuard("workouts");
   const [sportType, setSportType] = useState<string | undefined>(undefined);
   const {
     workouts,
@@ -75,15 +73,6 @@ export default function InsightsWorkoutsPageClient() {
     const label = t(key);
     return label === key ? sport : label;
   };
-
-  // v1.18.0 B1 — bounce a direct URL hit on a disabled-workouts account.
-  if (!ready) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="text-primary h-8 w-8 animate-spin motion-reduce:animate-none" />
-      </div>
-    );
-  }
 
   return (
     <SubPageShell

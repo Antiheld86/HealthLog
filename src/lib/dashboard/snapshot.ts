@@ -135,8 +135,8 @@ export {
   SUMMARY_TYPE_MODULE,
 } from "@/lib/dashboard/widget-modules";
 import {
-  WIDGET_MODULE_BY_ID,
   gateSummariesByModules,
+  hideModuleWidgets,
   unavailableWidgetIds,
 } from "@/lib/dashboard/widget-modules";
 
@@ -1079,38 +1079,22 @@ function isThickPhaseWarm(coverage: RollupCoverageMap): boolean {
 }
 
 /**
- * v1.18.0 — force every widget whose module is disabled to invisible on
- * the resolved layout (both `visible` and `tileVisible`). Order is
- * preserved so a re-enable restores the user's saved position. Pure
- * projection — the persisted `dashboardWidgetsJson` is untouched; only
- * what the snapshot publishes is gated.
+ * The layout the snapshot publishes: widgets of a switched-off module, and
+ * widgets that cannot paint for this account, forced invisible. Same rule the
+ * Settings screen hides their toggles with, so the dashboard and the switches
+ * never disagree. The stored layout is untouched.
  */
 function gateLayoutByModules(
   layout: DashboardLayout,
   modules: Record<ModuleKey, boolean>,
   summaries: Record<string, DataSummary>,
 ): DashboardLayout {
-  // Widgets that cannot paint for THIS account, on the same rule the
-  // Settings screen hides their toggle with — so the layout the dashboard
-  // renders and the switches the user is offered never disagree.
   const unavailable = new Set(
     unavailableWidgetIds(modules, {
       hasSdnn: (summaries.HEART_RATE_VARIABILITY?.count ?? 0) > 0,
     }),
   );
-  return {
-    ...layout,
-    widgets: layout.widgets.map((w) => {
-      const moduleKey = WIDGET_MODULE_BY_ID[w.id];
-      if (moduleKey && modules[moduleKey] === false) {
-        return { ...w, visible: false, tileVisible: false };
-      }
-      if (unavailable.has(w.id)) {
-        return { ...w, visible: false, tileVisible: false };
-      }
-      return w;
-    }),
-  };
+  return hideModuleWidgets(layout, modules, unavailable);
 }
 
 /**

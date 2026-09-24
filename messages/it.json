@@ -10163,8 +10163,7 @@
         "dayInvalid": "Le voci riportavano una data che il server non ha potuto accettare. Questo può succedere quando l'orologio o il fuso orario dal lato che invia i dati non sono corretti: vale la pena controllare.",
         "upsertFailed": "Queste voci hanno raggiunto il server, ma un problema da questa parte ne ha impedito il salvataggio. Non devi fare nulla.",
         "unknown": "Queste voci sono arrivate ma non è stato possibile salvarle."
-      },
-      "moduleEnableError": "Non è stato possibile attivare il modulo nutrienti. Riprova."
+      }
     },
     "hydration": {
       "referenceMeta": "Apporto di riferimento {value} {unit}/giorno · EFSA"

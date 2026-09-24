@@ -8,25 +8,48 @@ import { ModuleDisabledNotice } from "@/components/layout/module-disabled-notice
 import {
   isNavDestinationActive,
   NAV_DESTINATIONS,
+  navDestinationModule,
 } from "@/components/layout/nav-model";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslations } from "@/lib/i18n/context";
+import type { ModuleKey } from "@/lib/modules/registry";
+import { surfaceModule } from "@/lib/modules/surface";
+
+const INSIGHTS_PREFIX = "/insights/";
 
 /**
- * v1.39 (C2) — the page of a module that is switched off answers with an
- * empty state that names the switch (design spec §After the flow), in one
- * place for every module page.
+ * The module that owns the page at `pathname`, from the one surface map.
  *
- * The setup flow switches modules OFF for a new record — an explicit `false`
- * for every module the answers did not name — and the navigation drops the
- * entry. A person who reaches the page anyway (a bookmark, a link in a
- * report, the tour) used to get the page's own empty state, which said
- * "nothing here yet" about a module that is not there at all. This maps the
- * route to the module through the navigation model's own gate, so a module
- * page and its nav entry can never disagree about which switch they follow,
- * and renders the shared notice with the one action that can help: the
- * Modules settings, offered only when the record's own switch is what is off.
+ * An Insights sub-page answers by its slug (`insights-page:<slug>`), so
+ * `/insights/mood` and `/insights/workouts/<id>` follow their own module while
+ * `/insights` itself follows none. Every other page answers through the nav
+ * destination it sits under (`nav:<href>`), most specific first.
+ */
+export function moduleOwningPath(pathname: string): ModuleKey | undefined {
+  if (pathname.startsWith(INSIGHTS_PREFIX)) {
+    const slug = pathname.slice(INSIGHTS_PREFIX.length).split("/")[0];
+    const owner = surfaceModule(`insights-page:${slug}`);
+    if (owner !== undefined) return owner;
+  }
+  const destination = NAV_DESTINATIONS.find((d) =>
+    isNavDestinationActive(d.href, pathname),
+  );
+  return destination ? navDestinationModule(destination) : undefined;
+}
+
+/**
+ * A page of a module that is switched off answers with an inline notice that
+ * names the reason, in one place for every module page: top-level pages
+ * (`/mood`, `/labs` …) and Insights sub-pages (`/insights/mood`,
+ * `/insights/sleep`, `/insights/medications` …) alike.
+ *
+ * A person who reaches such a page anyway (a bookmark, a link in a report,
+ * the tour) gets the notice rather than a redirect, which would drop where
+ * they were, and rather than the page's own error rows, which would say
+ * "could not be loaded" about a module that is not there. The notice reads
+ * the reason from `moduleAccess` and offers Settings only when the record's
+ * own switch is what is off.
  *
  * Paint, not enforcement: every route behind a module refuses on its own
  * through the server gate. Mounted inside the shell, which renders children
@@ -38,19 +61,18 @@ export function ModulePageGate({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { t } = useTranslations();
 
-  const destination = NAV_DESTINATIONS.find(
-    (d) => d.requiresModule && isNavDestinationActive(d.href, pathname),
-  );
-  const moduleKey = destination?.requiresModule;
+  const moduleKey = moduleOwningPath(pathname);
   const off = moduleKey !== undefined && user?.modules?.[moduleKey] === false;
+  if (!off) return <>{children}</>;
 
-  if (!off || !destination || !moduleKey) return <>{children}</>;
-
-  const Icon = destination.icon;
+  const destination = NAV_DESTINATIONS.find((d) =>
+    isNavDestinationActive(d.href, pathname),
+  );
+  const Icon = destination?.icon;
   return (
     <ModuleDisabledNotice
       moduleKey={moduleKey}
-      icon={<Icon className="size-6" />}
+      icon={Icon ? <Icon className="size-6" /> : undefined}
       action={
         <Button asChild size="sm">
           <Link href="/settings/modules" data-slot="module-off-open-settings">
