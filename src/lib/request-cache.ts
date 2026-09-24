@@ -35,6 +35,22 @@ function getCache(builder: WideEventBuilder): Map<string, unknown> {
   return cache;
 }
 
+export interface MemoizeOptions {
+  /**
+   * Read afresh on every call inside a background event.
+   *
+   * A request is short and acts for one record, so one read of the operator's
+   * switches serves all of it. A background job opens one wide event for its
+   * whole run, and a nightly pass loops over every user inside it: a cached
+   * switch, module map, provider presence or consent set would be the answer
+   * from the start of the run, served to every later user and to the wire
+   * re-check, so turning the Assistant off at 02:05 would not stop the pass
+   * that began at 02:00. Every input that decides whether AI work may run
+   * sets this.
+   */
+  freshInBackground?: boolean;
+}
+
 /**
  * Memoise `factory()` for the lifetime of the current request. Returns
  * the factory's result directly when no event context is active so
@@ -49,9 +65,13 @@ function getCache(builder: WideEventBuilder): Map<string, unknown> {
 export function memoizePerRequest<T>(
   key: string,
   factory: () => Promise<T>,
+  options: MemoizeOptions = {},
 ): Promise<T> {
   const event = getEvent();
   if (!event) {
+    return factory();
+  }
+  if (options.freshInBackground && event.getKind() === "background") {
     return factory();
   }
   const cache = getCache(event);

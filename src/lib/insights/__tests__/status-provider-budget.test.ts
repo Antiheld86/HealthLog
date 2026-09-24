@@ -188,6 +188,31 @@ describe("runStatusCompletion — capability at the wire", () => {
     );
   });
 
+  it("drops a reply whose consent was withdrawn while the call was in flight", async () => {
+    mockProviderReply(40);
+    // Open when the request leaves; withdrawn by the time the reply is back.
+    aiEgressRefusal
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(
+        new AiUnavailableError("statusText", "consent_required"),
+      );
+
+    const outcome = await runStatusCompletion(completionArgs() as never);
+
+    expect(outcome).toEqual({ kind: "none", reason: "consent_required" });
+    // Re-checked against the provider that actually answered.
+    expect(aiEgressRefusal).toHaveBeenLastCalledWith("statusText", "u1", [
+      "admin-openai",
+    ]);
+    // The tokens were spent upstream and stay on the ledger.
+    expect(ledgerTotal).toBe(40);
+    expect(annotate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        meta: expect.objectContaining({ at: "reply" }),
+      }),
+    );
+  });
+
   it("returns none with reason no_provider when the chain is empty", async () => {
     resolveProviderChain.mockResolvedValue([]);
     const outcome = await runStatusCompletion(completionArgs() as never);

@@ -114,10 +114,6 @@ export async function openCycleAt(
   if (absorbed) {
     moved.absorbedCycleId = absorbed.id;
     moved.absorbedStartDate = absorbed.startDate;
-    await db.menstrualCycle.update({
-      where: { id: absorbed.id },
-      data: { deletedAt: new Date(), syncVersion: { increment: 1 } },
-    });
   }
 
   // Close the prior open cycle: its end is the day before this start.
@@ -160,11 +156,25 @@ export async function openCycleAt(
     create: { userId, startDate: date, tz, isPredicted: false, ...carried },
     update: {
       deletedAt: null,
+      absorbedIntoId: null,
       isPredicted: false,
       ...carried,
       syncVersion: { increment: 1 },
     },
   });
+
+  // The folded start is soft-deleted and names the start that absorbed it,
+  // so taking this start back (a mis-tap) can give it back.
+  if (absorbed) {
+    await db.menstrualCycle.update({
+      where: { id: absorbed.id },
+      data: {
+        deletedAt: new Date(),
+        absorbedIntoId: cycle.id,
+        syncVersion: { increment: 1 },
+      },
+    });
+  }
 
   // Re-anchor the FOLLOWING neighbour's side of the boundary.
   const next = await db.menstrualCycle.findFirst({
@@ -342,13 +352,21 @@ export async function ensureCycleForBleedingDay(
  * body behind every way of taking a period start back: deleting the day-log
  * that opened it, clearing that day's flow, and deleting the cycle itself.
  *
+ * A start this one folded in when it was opened (a later start within one
+ * period, see `openCycleAt`) comes back: the earlier start was the mistake,
+ * so the later one was the real first day all along.
+ *
  * Returns null when no live cycle starts on that date.
  */
 export async function removeCycleStartedOn(
   db: CycleDb,
   userId: string,
   date: string,
-): Promise<{ cycleId: string; reanchored: ReanchoredCycle | null } | null> {
+): Promise<{
+  cycleId: string;
+  reanchored: ReanchoredCycle | null;
+  restoredCycleIds: string[];
+} | null> {
   const opened = await db.menstrualCycle.findFirst({
     where: { userId, deletedAt: null, startDate: date },
     select: { id: true },
@@ -359,6 +377,23 @@ export async function removeCycleStartedOn(
     where: { id: opened.id },
     data: { deletedAt: new Date(), syncVersion: { increment: 1 } },
   });
+  // Give back the starts it folded in, before any boundary is re-derived, so
+  // the cycle before this one closes against them rather than reopening.
+  const restored = await db.menstrualCycle.findMany({
+    where: { userId, absorbedIntoId: opened.id, deletedAt: { not: null } },
+    orderBy: { startDate: "asc" },
+    select: { id: true, startDate: true },
+  });
+  for (const row of restored) {
+    await db.menstrualCycle.update({
+      where: { id: row.id },
+      data: {
+        deletedAt: null,
+        absorbedIntoId: null,
+        syncVersion: { increment: 1 },
+      },
+    });
+  }
   const reanchored = await reanchorAfterRemovedStart(db, userId, date);
   // The removed cycle's days go back to the cycle before it (or to none).
   const prior = await db.menstrualCycle.findFirst({
@@ -370,7 +405,34 @@ export async function removeCycleStartedOn(
     where: { userId, cycleId: opened.id },
     data: { cycleId: prior?.id ?? null, syncVersion: { increment: 1 } },
   });
-  return { cycleId: opened.id, reanchored };
+  // A restored start owns its span again, and its own end is re-derived from
+  // whatever was logged after it while it was folded.
+  for (const row of restored) {
+    const next = await db.menstrualCycle.findFirst({
+      where: { userId, deletedAt: null, startDate: { gt: row.startDate } },
+      orderBy: { startDate: "asc" },
+      select: { startDate: true },
+    });
+    await db.menstrualCycle.update({
+      where: { id: row.id },
+      data: {
+        endDate: next ? addDays(next.startDate, -1) : null,
+        lengthDays: next ? dayDiff(next.startDate, row.startDate) : null,
+      },
+    });
+    await attributeDaysToCycle(
+      db,
+      userId,
+      row.id,
+      row.startDate,
+      next?.startDate ?? null,
+    );
+  }
+  return {
+    cycleId: opened.id,
+    reanchored,
+    restoredCycleIds: restored.map((row) => row.id),
+  };
 }
 
 /** The boundary columns the re-derivation moved, for the audit row. */

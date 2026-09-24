@@ -33,7 +33,7 @@ import type {
   MeasurementType,
   RollupGranularity,
 } from "@/generated/prisma/client";
-import { isNearUtc } from "@/lib/tz/format";
+import { isNearUtc, isValidTimezone } from "@/lib/tz/format";
 import {
   ensureUserRollupsFresh,
   readRollupBuckets,
@@ -400,7 +400,12 @@ async function readBand(
   // straight to the live path keyed in their zone. The coarser bands stay
   // on the UTC-anchored rollups — a few hours of offset moves bucket
   // MEMBERSHIP at week/month/year grain by at most one edge reading.
-  if (granularity === "DAY" && tz && !isNearUtc(tz, new Date(now))) {
+  if (
+    granularity === "DAY" &&
+    tz &&
+    isValidTimezone(tz) &&
+    !isNearUtc(tz, new Date(now))
+  ) {
     return readBandLive(userId, type, granularity, from, to, tz);
   }
   // `readRollupBuckets` never throws — an empty / missing partition yields

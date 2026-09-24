@@ -709,6 +709,40 @@ describe("reaction line — degradation", () => {
     expectSurfaceStillWorks();
   });
 
+  it("consent withdrawn while the call was in flight: writes no line", async () => {
+    resolveProviderChain.mockResolvedValue([
+      {
+        providerType: "openai",
+        instance: {
+          generateCompletion: vi.fn().mockResolvedValue({
+            content: "A solid night, deeper than your recent stretch.",
+            tokensUsed: 1_100,
+            cachedInputTokens: 100,
+          }),
+        },
+      },
+    ]);
+    aiEgressRefusal
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(
+        new AiUnavailableError("reactionLines", "consent_required"),
+      );
+
+    const outcome = await runReactionLine(JOB);
+
+    expect(outcome).toEqual({ status: "skipped", reason: "consent_required" });
+    expect(aiEgressRefusal).toHaveBeenLastCalledWith("reactionLines", "u1", [
+      "openai",
+    ]);
+    expect(
+      updateMany.mock.calls.some(
+        ([arg]) =>
+          (arg as { data?: { lineEncrypted?: unknown } }).data
+            ?.lineEncrypted instanceof Uint8Array,
+      ),
+    ).toBe(false);
+  });
+
   it("a committed line is never regenerated — the unique row is the throttle", async () => {
     findUnique.mockResolvedValue({ id: "r1", generatedAt: new Date() });
     resolveProviderChain.mockResolvedValue([

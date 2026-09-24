@@ -36,10 +36,7 @@ import {
   resolveProviderChain,
 } from "@/lib/ai/provider";
 import type { ProviderChainResolved } from "@/lib/ai/provider-runner";
-import {
-  chainRequiresServerManagedConsent,
-  hasActiveConsentForSurface,
-} from "@/lib/ai/consent-guard";
+import { aiEgressRefusal } from "@/lib/ai/capabilities/egress";
 import { singleUserTurn } from "@/lib/ai/types";
 import {
   buildDateKey,
@@ -213,18 +210,24 @@ export async function deriveClarifyingQuestions(
     const chain = await resolveQuestionsChain(userId);
     if (chain === null) return fallback();
 
-    // Consent gate — BEFORE the snapshot is built, let alone sent. This
-    // prompt ships the complete Coach snapshot, so a chain that could egress
-    // via the operator's server-managed credential needs an active
-    // `ai_coach` / `ai_full` receipt. BYOK / local / ChatGPT-OAuth chains are
-    // the user's own egress and stay ungated, matching every other surface.
-    if (
-      chainRequiresServerManagedConsent(chain) &&
-      !(await hasActiveConsentForSurface(userId, "coach"))
-    ) {
+    // The wire re-check — BEFORE the snapshot is built, let alone sent. The
+    // capability table's `aboutMeQuestions` row decides which receipts cover
+    // this prompt and when one is needed (a chain that could reach the
+    // operator's key or the shared central Codex; a person's own key, their
+    // ChatGPT account or a local model need none), so this path and the
+    // capability the route resolved cannot disagree.
+    const refusal = await aiEgressRefusal(
+      "aboutMeQuestions",
+      userId,
+      chain.map((entry) => entry.providerType),
+    );
+    if (refusal) {
       annotate({
-        action: { name: "coach.self_context.consent_required" },
-        meta: { self_context_questions_source: "fallback" },
+        action: { name: "coach.self_context.egress_refused" },
+        meta: {
+          self_context_questions_source: "fallback",
+          reason: refusal.reason,
+        },
       });
       return fallback();
     }

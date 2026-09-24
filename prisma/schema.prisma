@@ -7113,9 +7113,14 @@ model MenstrualCycle {
 
   /// Per-row IANA timezone the date strings are anchored to (NULL =
   /// legacy Europe/Berlin), mirroring MoodEntry.tz.
-  tz          String?
-  syncVersion Int       @default(0) @map("sync_version")
-  deletedAt   DateTime? @map("deleted_at")
+  tz             String?
+  syncVersion    Int       @default(0) @map("sync_version")
+  deletedAt      DateTime? @map("deleted_at")
+  /// The start that folded this one in (a start logged a few days earlier is
+  /// the same period entered out of order). Set only on the soft-deleted,
+  /// folded row; removing the absorbing start restores every row naming it
+  /// (`removeCycleStartedOn`). Cleared when the row is live again.
+  absorbedIntoId String?   @map("absorbed_into_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

@@ -49,35 +49,40 @@ const ASSISTANT_FLAGS_OFF: AssistantFlagSet = Object.freeze({
  * switch; failing open meant a database blip switched every AI egress on.
  *
  * Memoised per request, so a page that fires several gated reads at once reads
- * the singleton row once.
+ * the singleton row once. Read afresh on every call inside a background job,
+ * whose one event spans a whole multi-user pass.
  */
 export function loadAssistantSwitches(): Promise<AssistantFlagSet | null> {
-  return memoizePerRequest("assistant-flags", async () => {
-    try {
-      const settings = await prisma.appSettings.findUnique({
-        where: { id: "singleton" },
-        select: {
-          assistantEnabled: true,
-          assistantCoachEnabled: true,
-          assistantBriefingEnabled: true,
-          assistantInsightStatusEnabled: true,
-          assistantDocumentAiEnabled: true,
-        },
-      });
-      return resolveAssistantFlags({
-        enabled: settings?.assistantEnabled ?? true,
-        coach: settings?.assistantCoachEnabled ?? true,
-        briefing: settings?.assistantBriefingEnabled ?? true,
-        insightStatus: settings?.assistantInsightStatusEnabled ?? true,
-        documentAi: settings?.assistantDocumentAiEnabled ?? true,
-      });
-    } catch {
-      getEvent()?.addWarning(
-        "Failed to load assistant switches; every AI capability is off for this request",
-      );
-      return null;
-    }
-  });
+  return memoizePerRequest(
+    "assistant-flags",
+    async () => {
+      try {
+        const settings = await prisma.appSettings.findUnique({
+          where: { id: "singleton" },
+          select: {
+            assistantEnabled: true,
+            assistantCoachEnabled: true,
+            assistantBriefingEnabled: true,
+            assistantInsightStatusEnabled: true,
+            assistantDocumentAiEnabled: true,
+          },
+        });
+        return resolveAssistantFlags({
+          enabled: settings?.assistantEnabled ?? true,
+          coach: settings?.assistantCoachEnabled ?? true,
+          briefing: settings?.assistantBriefingEnabled ?? true,
+          insightStatus: settings?.assistantInsightStatusEnabled ?? true,
+          documentAi: settings?.assistantDocumentAiEnabled ?? true,
+        });
+      } catch {
+        getEvent()?.addWarning(
+          "Failed to load assistant switches; every AI capability is off for this request",
+        );
+        return null;
+      }
+    },
+    { freshInBackground: true },
+  );
 }
 
 /**

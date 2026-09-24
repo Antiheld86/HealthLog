@@ -41,8 +41,9 @@ vi.mock("@/lib/db", () => ({
 // path has its own test in comprehensive-generate-force.test.ts.
 // The wire re-check (`aiEgressRefusal`) passes in these fixtures; its refusal
 // arm has its own test in comprehensive-budget-refusal.test.ts.
+const aiEgressRefusal = vi.fn();
 vi.mock("@/lib/ai/capabilities/egress", () => ({
-  aiEgressRefusal: vi.fn(async () => null),
+  aiEgressRefusal: (...a: unknown[]) => aiEgressRefusal(...a),
 }));
 vi.mock("@/lib/ai/capabilities/gate", () => ({
   aiCapabilityForRecord: vi.fn(async () => ({
@@ -139,6 +140,47 @@ beforeEach(() => {
   extractFeatures.mockResolvedValue(FEATURES);
   userUpdate.mockResolvedValue({});
   getSelfContextTextForUser.mockResolvedValue(null);
+  aiEgressRefusal.mockResolvedValue(null);
+});
+
+describe("generateComprehensiveInsight — consent withdrawn in flight", () => {
+  it("drops the reply instead of writing it back over the purge", async () => {
+    findUnique.mockResolvedValue({
+      insightsPrivacyMode: "aggregated",
+      insightsCachedAt: new Date(Date.now() - 26 * 60 * 60 * 1000),
+      insightsCachedText: JSON.stringify({ dailyBriefing: { p: "old" } }),
+      insightsExcludeMetrics: [],
+      insightsSnapshotHash: "0".repeat(64),
+    });
+    runRawCompletionWithFallback.mockResolvedValue({
+      result: {
+        content: JSON.stringify({ dailyBriefing: { p: "new" } }),
+        tokensUsed: 10,
+        providerType: "openai",
+        model: "m",
+      },
+      workingProvider: { providerType: "openai" },
+      fallbackHops: [],
+    });
+    userUpdateMany.mockResolvedValue({ count: 1 });
+    const { AiUnavailableError } =
+      await import("@/lib/ai/capabilities/refusal");
+    // Open at the wire; withdrawn by the time the reply is back.
+    aiEgressRefusal
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(
+        new AiUnavailableError("briefing", "consent_required"),
+      );
+
+    const outcome = await generateComprehensiveInsight("u1", { locale: "de" });
+
+    expect(outcome).toEqual({ status: "skipped", reason: "no-consent" });
+    expect(aiEgressRefusal).toHaveBeenLastCalledWith("briefing", "u1", [
+      "openai",
+    ]);
+    expect(userUpdateMany).not.toHaveBeenCalled();
+    expect(invalidateUserInsights).not.toHaveBeenCalled();
+  });
 });
 
 describe("generateComprehensiveInsight — scope/version commit guard", () => {

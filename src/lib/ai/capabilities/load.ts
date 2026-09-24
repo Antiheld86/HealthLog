@@ -56,13 +56,17 @@ export interface AiCapabilityScope {
 
 /** The kinds of the record's active consent receipts. */
 function loadActiveConsentKinds(recordId: string): Promise<Set<string>> {
-  return memoizePerRequest(`ai-consent-kinds:${recordId}`, async () => {
-    const rows = await prisma.consentReceipt.findMany({
-      where: { userId: recordId, revokedAt: null },
-      select: { kind: true },
-    });
-    return new Set(rows.map((row) => row.kind));
-  });
+  return memoizePerRequest(
+    `ai-consent-kinds:${recordId}`,
+    async () => {
+      const rows = await prisma.consentReceipt.findMany({
+        where: { userId: recordId, revokedAt: null },
+        select: { kind: true },
+      });
+      return new Set(rows.map((row) => row.kind));
+    },
+    { freshInBackground: true },
+  );
 }
 
 function scopeKey(scope: AiCapabilityScope): string {
@@ -114,6 +118,7 @@ export function loadAiCapabilityInputs(
         return null;
       }
     },
+    { freshInBackground: true },
   );
 }
 

@@ -86,6 +86,12 @@ function byLocalDay(
 
 const EXPECTED = { "2026-09-10": 1100, "2026-09-11": 10 };
 
+/** The ladder puts Withings first for pulse, so its two readings are the day. */
+const CANON_EXPECTED = [
+  { day: "2026-09-10", value: 95, count: 2, min: 90, max: 100 },
+  { day: "2026-09-11", value: 64, count: 1, min: 64, max: 64 },
+];
+
 describe("daily series buckets by the user's calendar day (#1026)", () => {
   for (const tz of ["Europe/Berlin", "Asia/Kolkata", "America/New_York"]) {
     it(`chart daily read agrees with the local day (${tz})`, async () => {
@@ -124,4 +130,58 @@ describe("daily series buckets by the user's calendar day (#1026)", () => {
       expect(byLocalDay(rows, tz)).toEqual(EXPECTED);
     });
   }
+
+  it("collapses a day to its canonical source before folding it", async () => {
+    // Two sources on one day: only the ladder's pick is folded, and the
+    // mean, count and spread all come from that one source.
+    const prisma = getPrismaClient();
+    const user = await prisma.user.create({
+      data: {
+        username: "tz-canon",
+        email: "tz-canon@example.test",
+        role: "USER",
+        timezone: "Europe/Berlin",
+      },
+    });
+    const at = (h: number) => localHmAsUtc(DAY, "Europe/Berlin", h, 0);
+    await prisma.measurement.createMany({
+      data: [
+        { value: 60, source: "APPLE_HEALTH" as const, measuredAt: at(8) },
+        { value: 70, source: "APPLE_HEALTH" as const, measuredAt: at(9) },
+        { value: 90, source: "WITHINGS" as const, measuredAt: at(10) },
+        { value: 100, source: "WITHINGS" as const, measuredAt: at(12) },
+        { value: 50, source: "MANUAL" as const, measuredAt: at(11) },
+        // The next day has one source only.
+        {
+          value: 64,
+          source: "WITHINGS" as const,
+          measuredAt: localHmAsUtc(NEXT_DAY, "Europe/Berlin", 7, 0),
+        },
+      ].map((r) => ({
+        ...r,
+        userId: user.id,
+        type: "PULSE" as const,
+        unit: "bpm",
+      })),
+    });
+    const rows = await readLiveBuckets({
+      userId: user.id,
+      type: "PULSE",
+      from: new Date("2026-09-05T00:00:00Z"),
+      to: new Date("2026-09-15T00:00:00Z"),
+      cap: 366,
+      priorityJson: null,
+      grain: "daily",
+      timeZone: "Europe/Berlin",
+    });
+    expect(
+      rows.map((r) => ({
+        day: userDayKey(new Date(r.measuredAt), "Europe/Berlin"),
+        value: r.value,
+        count: r.count,
+        min: r.minValue,
+        max: r.maxValue,
+      })),
+    ).toEqual(CANON_EXPECTED);
+  });
 });

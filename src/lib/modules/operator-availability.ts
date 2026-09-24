@@ -104,13 +104,45 @@ async function loadAvailabilityBlob(): Promise<unknown> {
  * all-available so the modules stay visible on first boot.
  */
 export async function getOperatorModuleAvailability(): Promise<OperatorModuleAvailability> {
-  return memoizePerRequest("operator-module-availability", async () => {
-    const [blob, switches] = await Promise.all([
-      loadAvailabilityBlob(),
-      getAssistantFlags(),
-    ]);
-    return resolveOperatorAvailability(blob, switches.coach);
-  });
+  return memoizePerRequest(
+    "operator-module-availability",
+    async () => {
+      const [blob, switches] = await Promise.all([
+        loadAvailabilityBlob(),
+        getAssistantFlags(),
+      ]);
+      return resolveOperatorAvailability(blob, switches.coach);
+    },
+    { freshInBackground: true },
+  );
+}
+
+/**
+ * Bring an instance settings pair written before migration 0343 forward.
+ *
+ * Until 0343 the operator turned the Coach off in module availability
+ * (`{ coach: false }`); since then the Coach switch alone carries that answer
+ * and the availability key is ignored. The migration folded every live row; a
+ * restored backup from before it needs the same fold, or the Coach it had off
+ * comes back on and the dead key sits in the blob. Returns the pair to write.
+ */
+export function foldLegacyCoachAvailability(
+  moduleAvailabilityJson: unknown,
+  assistantCoachEnabled: boolean,
+): { moduleAvailabilityJson: unknown; assistantCoachEnabled: boolean } {
+  if (
+    typeof moduleAvailabilityJson !== "object" ||
+    moduleAvailabilityJson === null ||
+    Array.isArray(moduleAvailabilityJson) ||
+    !("coach" in moduleAvailabilityJson)
+  ) {
+    return { moduleAvailabilityJson, assistantCoachEnabled };
+  }
+  const { coach, ...rest } = moduleAvailabilityJson as Record<string, unknown>;
+  return {
+    moduleAvailabilityJson: rest,
+    assistantCoachEnabled: coach === false ? false : assistantCoachEnabled,
+  };
 }
 
 /** A module key whose operator layer the blob owns (every key but the Coach). */

@@ -61,6 +61,7 @@ import { loadDenseMeasurementBuckets } from "./dense-buckets";
 import { summariseDenseBuckets } from "./measurement-series";
 import { emptyGlucoseClinical } from "./glucose-panel";
 import { buildAdministrationLedger, buildGlp1Block } from "./medications";
+import { validTimezoneOr } from "@/lib/tz/format";
 import {
   loadAllergies,
   loadAnamnesis,
@@ -145,7 +146,7 @@ export async function collectDoctorReportData(
       insurerIkNumber: true,
     },
   });
-  const reportTz = userProfile?.timezone ?? "Europe/Berlin";
+  const reportTz = validTimezoneOr(userProfile?.timezone, "Europe/Berlin");
 
   const aggregateDenseTypes = days > DENSE_REPORT_RAW_WINDOW_DAYS;
   const densePulse = aggregateDenseTypes && !excluded.includes("PULSE");

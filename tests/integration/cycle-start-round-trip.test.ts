@@ -236,6 +236,66 @@ describe("logging a period start and taking it back", () => {
     expect(await liveShapes()).toEqual(before);
   });
 
+  it("gives back the start a mis-tapped earlier start folded in", async () => {
+    // A start a few days after another is the same period entered late, so
+    // the earlier tap folds it in. When the earlier tap was the mistake,
+    // taking it back has to bring the real start back too, not reopen the
+    // cycle before it.
+    await loginAs(USER_ID);
+    await seedHistory();
+    await startPeriod("2026-08-10");
+    const before = await liveShapes();
+    const realStart = await getPrismaClient().menstrualCycle.findFirstOrThrow({
+      where: { userId: USER_ID, startDate: "2026-08-10" },
+      select: { id: true },
+    });
+
+    await startPeriod("2026-08-05");
+    const during = await liveShapes();
+    expect(during.map((c) => c.startDate)).not.toContain("2026-08-10");
+    expect(during.at(-1)?.startDate).toBe("2026-08-05");
+
+    const misTap = await getPrismaClient().menstrualCycle.findFirstOrThrow({
+      where: { userId: USER_ID, startDate: "2026-08-05" },
+      select: { id: true },
+    });
+    const { DELETE } = await import("@/app/api/cycle/cycles/[id]/route");
+    const res = await DELETE(
+      jsonRequest(`/api/cycle/cycles/${misTap.id}`, "DELETE"),
+      { params: Promise.resolve({ id: misTap.id }) },
+    );
+    expect(res.status).toBe(204);
+
+    expect(await liveShapes()).toEqual(before);
+    // The real start's own day is its own again.
+    const dayLog = await getPrismaClient().cycleDayLog.findFirstOrThrow({
+      where: { userId: USER_ID, date: "2026-08-10" },
+      select: { cycleId: true },
+    });
+    expect(dayLog.cycleId).toBe(realStart.id);
+  });
+
+  it("gives back the folded start when the mis-tap's day-log is deleted", async () => {
+    await loginAs(USER_ID);
+    await seedHistory();
+    await startPeriod("2026-08-10");
+    const before = await liveShapes();
+
+    await startPeriod("2026-08-05");
+    const dayLog = await getPrismaClient().cycleDayLog.findFirstOrThrow({
+      where: { userId: USER_ID, date: "2026-08-05" },
+      select: { id: true },
+    });
+    const { DELETE } = await import("@/app/api/cycle/day-logs/[id]/route");
+    const res = await DELETE(
+      jsonRequest(`/api/cycle/day-logs/${dayLog.id}`, "DELETE"),
+      { params: Promise.resolve({ id: dayLog.id }) },
+    );
+    expect(res.status).toBe(204);
+
+    expect(await liveShapes()).toEqual(before);
+  });
+
   it("leaves a day-log that opened no cycle alone", async () => {
     // A plain entry on a day that is not a cycle start must not take a cycle
     // with it when it is deleted.
