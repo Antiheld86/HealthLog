@@ -5756,8 +5756,10 @@ paths:
       description: Runs the user's free-text description through the Coach provider chain and returns a citation-guarded
         partial payload the wizard merges onto whatever the user already typed. `name` and `dose` are dropped when not
         substring-matched in the original text so the wizard cannot land a hallucinated brand or dose. `cadenceKind` /
-        `doseUnit` / `weekdays` are closed enums; numeric fields are clamped. Rate-limited 10 requests / 5 minutes /
-        user, gated against the daily Coach token budget.
+        `doseUnit` / `weekdays` are closed enums; numeric fields are clamped. Answers under the `medicationExtract`
+        capability (the operator's reading-documents switch; free-text medication input is health data, so any provider
+        in the chain that leaves the machine needs an active `ai_extraction` or `ai_full` consent receipt). Rate-limited
+        10 requests / 5 minutes / user, gated against the daily Coach token budget (429 `coach.budget.exceeded`).
       requestBody:
         required: true
         content:
@@ -5772,6 +5774,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/MedicationExtractResponse"
         "401": *a1
+        "403":
+          description: "AI refusal: the `medicationExtract` capability is unavailable for this record. The envelope carries
+            `meta.errorCode`, `meta.capability` and `meta.reason` (one of `AiUnavailableReason`).
+            `assistant.disabled.documentAi` — the operator turned off reading documents, or every AI feature (the master
+            switch). `ai.record.notPermitted` — AI work is not admitted inside this record (a delegate acting in
+            somebody else's record). `consent.ai.required` — the provider this request would reach leaves the machine
+            and the record holds no active `ai_extraction` or `ai_full` receipt; only a self-hosted model is exempt. The
+            question is answered for the provider actually picked, so it can differ from the published capability when a
+            text-mode read takes a different provider than a vision read would."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "422": *a4
         "429": *a5
         "502":
@@ -5781,7 +5796,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "503":
-          description: No AI provider configured for the calling user (or operator).
+          description: 'No answer could be produced. `meta.errorCode = "ai.provider.none"` (with `meta.capability` and
+            `meta.reason = "no_provider"`): no AI provider is configured for the calling user or the operator — the
+            status predates the capability envelope and is kept for clients that branch on it. `ai.unavailable`: the
+            capability could not be resolved and failed closed. No code: every provider in the chain failed.'
           content:
             application/json:
               schema:
@@ -6357,6 +6375,12 @@ paths:
 
 
         Two ceilings: 5 per minute and 50 per day, per user.
+
+
+        With the operator's master AI switch off the probe is refused (403 `assistant.disabled.enabled`, `meta.reason =
+        "operator_disabled"`): no AI call leaves the server then, and this is an AI call. When the switches cannot be
+        read the answer fails closed with 403 `ai.unavailable` (`meta.reason = "check_failed"`) rather than the usual
+        503, for the no-5xx reason above.
       requestBody:
         required: false
         content:
@@ -6372,6 +6396,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/AiTestEnvelope"
         "401": *a1
+        "403":
+          description: The operator's master AI switch is off (`meta.errorCode = "assistant.disabled.enabled"`), or the switches
+            could not be read (`ai.unavailable`). Nothing was sent.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "413":
           description: Body exceeds 64 KiB.
           content:
@@ -6387,14 +6418,16 @@ paths:
         "422":
           description: Nothing could be probed. Either the override body failed validation, or the resolved configuration is not
             usable — no provider selected, a required key or base URL missing, a model name missing for the gateway,
-            ChatGPT OAuth not connected, or a base URL pointing at an internal host. The message names which.
+            ChatGPT OAuth not connected, or a base URL pointing at an internal host. The message names which; a resolved
+            configuration with no provider at all carries `meta.errorCode = "ai.provider.none"`.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "429":
           description: "One of three ceilings: 5 probes per minute, 50 per day, or the account's daily AI token budget is
-            exhausted. The message distinguishes them."
+            exhausted. The message distinguishes them; the budget refusal also carries `meta.errorCode =
+            \"ai.budget.exceeded\"`."
           content:
             application/json:
               schema:
@@ -7949,11 +7982,14 @@ paths:
 
 
         Turning it ON does two further things a caller should expect. It is itself the standing consent act, so the
-        write appends an `ai_full` `ConsentReceipt` — the same receipt POST /api/consent/ai/web mints, and one DELETE
-        /api/consent/ai/latest revokes without touching this flag. And a genuine OFF→ON flip schedules a bounded
-        catch-up over the documents already in the vault, because the summary job is enqueued at upload time and would
-        otherwise only ever apply to future uploads. The catch-up is fire-and-forget and re-runs every consent and
-        budget gate per document.
+        write appends an `ai_extraction` `ConsentReceipt` unless one that covers document reads (`ai_extraction` or
+        `ai_full`) is already active. The receipt covers reading documents, lab reports and medication text and nothing
+        else: the Coach and the AI analysis keep asking for their own consent (earlier releases minted `ai_full` here,
+        and those receipts stay valid). DELETE /api/consent/ai/latest?kind=ai_extraction revokes it without touching
+        this flag. And a genuine OFF→ON flip schedules a bounded catch-up over the documents already in the vault,
+        because the summary job is enqueued at upload time and would otherwise only ever apply to future uploads; it is
+        skipped while the `documentAi` capability is closed for the record. The catch-up is fire-and-forget and re-runs
+        every consent and budget gate per document.
 
 
         The body cap here is 1 KB, far tighter than the 64 KB its siblings allow — a payload above it is refused with
@@ -8628,12 +8664,15 @@ paths:
         coach conversation, as Server-Sent Events (`text/event-stream`: one `data: <json>\\n\\n` frame per event;
         `token` / `done` / `error`, HTTP 200 even for a provider/refusal outcome). FENCED by construction: NO tools, NO
         health snapshot; every attached document is fenced as untrusted DATA (per-document header fields
-        marker-scrubbed); the single picked provider is egress-consent-checked once per attached document (403
-        `consent.ai.required` if any fails); the reply is numerically grounded against the LIVE attachments' figures
-        only. `conversationId` continues an existing fenced thread; `attachmentIds` (first-turn ONLY, min 1, max 5)
-        creates a fresh fenced thread — supplying BOTH is a 422. The body is `.strict()`: `scope` / `guidedQuestion` /
-        `prefill` / `userId` are rejected. A plain tool conversation 404s here. Module-gated on `inboundDocuments`;
-        rate-limited (shared `document-chat` bucket). Renders as plain text (no markdown). Auth via cookie or Bearer."
+        marker-scrubbed); answers under the `coach` and `documentAi` capabilities, both re-checked for the single picked
+        provider immediately before anything is sent (403 with the capability envelope when either is closed;
+        `consent.ai.required` when that provider leaves the machine without an `ai_extraction` / `ai_full` receipt; no
+        provider is the `documents.chat.provider.none` error frame); the reply is numerically grounded against the LIVE
+        attachments' figures only. `conversationId` continues an existing fenced thread; `attachmentIds` (first-turn
+        ONLY, min 1, max 5) creates a fresh fenced thread — supplying BOTH is a 422. The body is `.strict()`: `scope` /
+        `guidedQuestion` / `prefill` / `userId` are rejected. A plain tool conversation 404s here. Module-gated on
+        `inboundDocuments`; rate-limited (shared `document-chat` bucket). Renders as plain text (no markdown). Auth via
+        cookie or Bearer."
       requestBody:
         required: true
         content:
@@ -8650,8 +8689,18 @@ paths:
                 description: "SSE frames: `data: <json>\\n\\n`. See the operation description for the per-`type` frame shapes."
         "401": *a1
         "403":
-          description: "AI consent required for an external provider (`errorCode: consent.ai.required`). A 422 (`stdResponses`)
-            covers an un-indexed / unavailable attachment (`coach.fenced.attachmentUnavailable`), the attachment cap
+          description: "AI refusal: the `documentAi` capability is unavailable for this record. The envelope carries
+            `meta.errorCode`, `meta.capability` and `meta.reason` (one of `AiUnavailableReason`).
+            `assistant.disabled.documentAi` — the operator turned off reading documents, or every AI feature (the master
+            switch). `module.disabled` with `meta.module = \"inboundDocuments\"` — the module is off for this record.
+            `ai.record.notPermitted` — AI work is not admitted inside this record (a delegate acting in somebody else's
+            record). `consent.ai.required` — the provider this request would reach leaves the machine and the record
+            holds no active `ai_extraction` or `ai_full` receipt; only a self-hosted model is exempt. The question is
+            answered for the provider actually picked, so it can differ from the published capability when a text-mode
+            read takes a different provider than a vision read would. The route also answers under `coach`, with the
+            same envelope and that capability's own codes (`assistant.disabled.coach`, `module.disabled` with
+            `meta.module = \"coach\"` when the Coach is off for the record). A 422 (`stdResponses`) covers an un-indexed
+            / unavailable attachment (`coach.fenced.attachmentUnavailable`), the attachment cap
             (`coach.fenced.attachmentLimit`), or `attachmentIds` sent with a `conversationId`
             (`coach.fenced.attachmentConflict`)."
           content:
@@ -8660,6 +8709,13 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "422": *a4
         "429": *a5
+        "503":
+          description: "`ai.unavailable` — the inputs behind the AI capability could not be read, and the answer failed closed.
+            Nothing was sent. Retry later."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
   /api/insights/chat/{id}/attachments:
     post:
       tags:
@@ -8669,7 +8725,9 @@ paths:
         its sticky `documentScoped` flag TRUE (the one legal, privilege-reducing tool→fenced transition; audit-logged
         when a flip occurs). Validates the document is owned + live + indexed + within the 5-document cap. Idempotent:
         attaching an already-attached document is a 200. A foreign / unknown conversation or document maps to 404.
-        Module-gated on `inboundDocuments`; rate-limited. Auth via cookie or Bearer."
+        Module-gated on `inboundDocuments`; answers under the `coach` and `documentAi` capabilities (nothing is sent to
+        a provider here, so a missing provider or consent receipt is left to the next turn); rate-limited. Detaching
+        (DELETE) is never refused for AI reasons: it removes the person's own data. Auth via cookie or Bearer."
       parameters:
         - name: id
           in: path
@@ -8691,6 +8749,22 @@ paths:
               schema:
                 $ref: "#/components/schemas/CoachAttachmentsResponse"
         "401": *a1
+        "403":
+          description: "AI refusal: the `documentAi` capability is unavailable for this record. The envelope carries
+            `meta.errorCode`, `meta.capability` and `meta.reason` (one of `AiUnavailableReason`).
+            `assistant.disabled.documentAi` — the operator turned off reading documents, or every AI feature (the master
+            switch). `module.disabled` with `meta.module = \"inboundDocuments\"` — the module is off for this record.
+            `ai.record.notPermitted` — AI work is not admitted inside this record (a delegate acting in somebody else's
+            record). `consent.ai.required` — the provider this request would reach leaves the machine and the record
+            holds no active `ai_extraction` or `ai_full` receipt; only a self-hosted model is exempt. The question is
+            answered for the provider actually picked, so it can differ from the published capability when a text-mode
+            read takes a different provider than a vision read would. The route also answers under `coach`, with the
+            same envelope and that capability's own codes (`assistant.disabled.coach`, `module.disabled` with
+            `meta.module = \"coach\"` when the Coach is off for the record)."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "404":
           description: Conversation or document not found / not owned.
           content:
@@ -8699,6 +8773,13 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "422": *a4
         "429": *a5
+        "503":
+          description: "`ai.unavailable` — the inputs behind the AI capability could not be read, and the answer failed closed.
+            Nothing was sent. Retry later."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
   /api/insights/chat/{id}/attachments/{documentId}:
     delete:
       tags:
@@ -13491,12 +13572,16 @@ paths:
         provider; ≤ 12 MiB) is run through the user's vision-capable provider; the upload lives in memory only and is
         never persisted or logged. TEXT (`application/json`, opt-in local OCR): the browser OCR's the image
         (tesseract.js) and POSTs `{ mode: \"text\", text }` — only the extracted text reaches the server, so a text-only
-        provider (e.g. ChatGPT-OAuth) reaches the same review/commit flow. Both modes are gated by AI consent, a
-        per-user hourly rate bucket (default 6, operator-tunable via `LABS_OCR_LIMIT_PER_HOUR`; a slot is only consumed
-        when the scan reaches the provider, and the 429 carries `Retry-After`, the `X-RateLimit-*` triple and
-        `meta.retryAt`), and the per-day token budget, and return proposed rows for the mandatory human review screen —
-        nothing is written. Extracted content is treated as untrusted (prompt-injection); the review step is the safety
-        boundary."
+        provider (e.g. ChatGPT-OAuth) reaches the same review/commit flow. Both modes are model work and answer under
+        the `labsOcr` capability (the operator's reading-documents switch, the labs module, and — because a lab report
+        is a document — an active `ai_extraction` or `ai_full` consent receipt for any provider that leaves the machine,
+        checked for the provider actually picked: the first vision-capable entry in vision mode, the chain head in text
+        mode). No provider is 422 `labs.ocr.providerUnsupported`; text mode without the local-OCR opt-in is 422
+        `labs.ocr.localOcrDisabled`. Then both pass a per-user hourly rate bucket (default 6, operator-tunable via
+        `LABS_OCR_LIMIT_PER_HOUR`; a slot is only consumed when the scan reaches the provider, and the 429 carries
+        `Retry-After`, the `X-RateLimit-*` triple and `meta.retryAt`) and the per-day token budget, and return proposed
+        rows for the mandatory human review screen — nothing is written. Extracted content is treated as untrusted
+        (prompt-injection); the review step is the safety boundary."
       requestBody:
         required: true
         content:
@@ -13521,8 +13606,29 @@ paths:
               schema:
                 $ref: "#/components/schemas/OcrExtractEnvelope"
         "401": *a1
+        "403":
+          description: "AI refusal: the `labsOcr` capability is unavailable for this record. The envelope carries
+            `meta.errorCode`, `meta.capability` and `meta.reason` (one of `AiUnavailableReason`).
+            `assistant.disabled.documentAi` — the operator turned off reading documents, or every AI feature (the master
+            switch). `module.disabled` with `meta.module = \"labs\"` — the module is off for this record.
+            `ai.record.notPermitted` — AI work is not admitted inside this record (a delegate acting in somebody else's
+            record). `consent.ai.required` — the provider this request would reach leaves the machine and the record
+            holds no active `ai_extraction` or `ai_full` receipt; only a self-hosted model is exempt. The question is
+            answered for the provider actually picked, so it can differ from the published capability when a text-mode
+            read takes a different provider than a vision read would."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "422": *a4
         "429": *a5
+        "503":
+          description: "`ai.unavailable` — the inputs behind the AI capability could not be read, and the answer failed closed.
+            Nothing was sent. Retry later."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
   /api/labs/ocr/commit:
     post:
       tags:
@@ -15404,7 +15510,11 @@ paths:
         `mode` / `pdfSupported` / `egress` match exactly what the document AI routes do. `egress` is vendor-blind:
         `\"local\"` (a self-hosted model — the document never leaves the operator's machine) or `\"external\"` (a
         third-party AI service). The vault shows a per-egress notice before any external document read; sending a
-        document to any external provider also requires an active AI-consent receipt."
+        document to any external provider also requires an active `ai_extraction` or `ai_full` consent receipt. `ai` is
+        the `documentAi` capability for the record: when the operator turned reading documents off, the module is off,
+        or the record is somebody else's, `available` is false with a null `reason` and `ai.reason` says why. A missing
+        consent receipt leaves the read offered (`ai.reason = \"consent_required\"`), because the read is where the
+        person is asked for it."
       responses:
         "200":
           description: Document-AI capability flags + egress class.
@@ -15636,14 +15746,16 @@ paths:
         - Documents
       summary: Extract facts from a stored document
       description: "Optional AI enhancement on an already-stored document. Runs the dedicated OCR/vision provider over the
-        stored original and stages STRUCTURED FACTS for review. AI-consent / rate / budget gated. With no provider
-        configured this returns 422 (`documents.inbound.providerUnsupported`) — the stored document is untouched, only
-        the enhancement fails. Three modes: VISION (empty body) decrypts and scans the stored original (PDF needs an
-        Anthropic vision provider); TEXT (`application/json`, opt-in local OCR) `{ mode: \"text\", text }` structures
-        browser-OCR'd text; STORED (`application/json`) `{ mode: \"stored\" }` structures the document's own stored
-        extracted text (its content index) — the manual recovery for a skipped/failed automatic staging run, 422
-        `documents.inbound.notIndexed` when no stored text exists. Extraction reproduces what the document states — it
-        never interprets. Nothing reaches the structured stores here; the confirm route is the only write path."
+        stored original and stages STRUCTURED FACTS for review. Answers under the `documentAi` capability (403 with the
+        capability envelope when it is closed), then rate / budget gated. With no provider configured this returns 422
+        (`documents.inbound.providerUnsupported`, with `meta.capability` and `meta.reason = \"no_provider\"`) — the
+        stored document is untouched, only the enhancement fails. Three modes: VISION (empty body) decrypts and scans
+        the stored original (PDF needs an Anthropic vision provider); TEXT (`application/json`, opt-in local OCR) `{
+        mode: \"text\", text }` structures browser-OCR'd text; STORED (`application/json`) `{ mode: \"stored\" }`
+        structures the document's own stored extracted text (its content index) — the manual recovery for a
+        skipped/failed automatic staging run, 422 `documents.inbound.notIndexed` when no stored text exists. Extraction
+        reproduces what the document states — it never interprets. Nothing reaches the structured stores here; the
+        confirm route is the only write path."
       parameters:
         - name: id
           in: path
@@ -15664,6 +15776,20 @@ paths:
               schema:
                 $ref: "#/components/schemas/InboundExtractEnvelope"
         "401": *a1
+        "403": &a33
+          description: "AI refusal: the `documentAi` capability is unavailable for this record. The envelope carries
+            `meta.errorCode`, `meta.capability` and `meta.reason` (one of `AiUnavailableReason`).
+            `assistant.disabled.documentAi` — the operator turned off reading documents, or every AI feature (the master
+            switch). `module.disabled` with `meta.module = \"inboundDocuments\"` — the module is off for this record.
+            `ai.record.notPermitted` — AI work is not admitted inside this record (a delegate acting in somebody else's
+            record). `consent.ai.required` — the provider this request would reach leaves the machine and the record
+            holds no active `ai_extraction` or `ai_full` receipt; only a self-hosted model is exempt. The question is
+            answered for the provider actually picked, so it can differ from the published capability when a text-mode
+            read takes a different provider than a vision read would."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
         "409":
           description: "Re-extraction refused: at least one fact on this document is already APPROVED. `meta.errorCode` =
             `documents.inbound.alreadyPartlyConfirmed`. Re-extracting would sever committed-record provenance and
@@ -15674,6 +15800,13 @@ paths:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "422": *a4
         "429": *a5
+        "503": &a34
+          description: "`ai.unavailable` — the inputs behind the AI capability could not be read, and the answer failed closed.
+            Nothing was sent. Retry later."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
   /api/documents/inbound/{id}/suggest:
     post:
       tags:
@@ -15681,13 +15814,13 @@ paths:
       summary: Suggest filing metadata (drafts only)
       description: "Optional AI assist on an already-stored document. Runs ONE provider call over the stored original (VISION,
         empty body) or browser-OCR'd text (TEXT, `application/json` `{ mode: \"text\", text }`, opt-in local OCR) and
-        returns a `{ title, kind, documentDate }` DRAFT for the edit form. AI-consent / rate / budget gated (shares the
-        per-user document-AI bucket with extract/summary/index — default 6/hour, operator-tunable via
-        `DOCUMENT_AI_LIMIT_PER_HOUR`; a slot is only consumed when the request reaches the provider, and the 429 carries
-        `Retry-After`, the `X-RateLimit-Limit` / `-Remaining` / `-Reset` triple, and `meta.retryAt`). WRITES NOTHING —
-        never stages facts, never flips status; the user reviews and saves. 422
-        (`documents.inbound.providerUnsupported`) with no provider configured. Never interprets or diagnoses; the title
-        is a neutral filing label."
+        returns a `{ title, kind, documentDate }` DRAFT for the edit form. Answers under the `documentAi` capability
+        (403 with the capability envelope when it is closed), then rate / budget gated (shares the per-user document-AI
+        bucket with extract/summary/index — default 6/hour, operator-tunable via `DOCUMENT_AI_LIMIT_PER_HOUR`; a slot is
+        only consumed when the request reaches the provider, and the 429 carries `Retry-After`, the `X-RateLimit-Limit`
+        / `-Remaining` / `-Reset` triple, and `meta.retryAt`). WRITES NOTHING — never stages facts, never flips status;
+        the user reviews and saves. 422 (`documents.inbound.providerUnsupported`) with no provider configured. Never
+        interprets or diagnoses; the title is a neutral filing label."
       parameters:
         - name: id
           in: path
@@ -15729,8 +15862,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/DocumentSuggestEnvelope"
         "401": *a1
+        "403": *a33
         "422": *a4
         "429": *a5
+        "503": *a34
   /api/documents/inbound/{id}/summary:
     post:
       tags:
@@ -15741,7 +15876,9 @@ paths:
         while `persist=true&replace=true` explicitly replaces an existing summary. `?mode=text` returns transient raw
         transcribed text. Neither result reaches coach memory, snapshots, structured stores, or the search index. The
         summary is descriptive only and never a diagnosis. Same VISION (empty body) / TEXT (`application/json` `{ mode:
-        "text", text }`, opt-in local OCR) dispatch as extract. AI-consent / rate / budget gated. 422 with no provider.'
+        "text", text }`, opt-in local OCR) dispatch as extract. Answers under the `documentAi` capability (403 with the
+        capability envelope when it is closed), then rate / budget gated. 422 `documents.inbound.providerUnsupported`
+        with no provider.'
       parameters:
         - name: id
           in: path
@@ -15807,22 +15944,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/DocumentSummaryEnvelope"
         "401": *a1
+        "403": *a33
         "422": *a4
         "429": *a5
+        "503": *a34
   /api/documents/inbound/{id}/index:
     post:
       tags:
         - Documents
       summary: Build / refresh the content-search index
       description: "Populates or refreshes one document's content-search index so search matches INSIDE its body. VISION
-        (empty body) decrypts the stored original and runs one provider transcription (AI-consent / rate / budget
-        gated); TEXT (`application/json` `{ mode: \"text\", text }`, opt-in local OCR) indexes browser-OCR'd text with
-        no provider egress. Persists ONLY AES-256-GCM ciphertext of the text plus opaque HMAC token hashes — no
-        plaintext body, no plaintext token. Gated on the existing AI consent (no separate per-user toggle). Idempotent;
-        re-indexing overwrites in place. A successful index continues into the same lab auto-staging the background
-        worker performs (still-STORED lab-looking document with no facts, both modules on, provider + consent eligible);
-        `labFactsStaged` reports how many facts were staged PENDING for review — confirmation stays the only write into
-        Labs."
+        (empty body) decrypts the stored original and runs one provider transcription (answers under the `documentAi`
+        capability — 403 with the capability envelope when it is closed, including a missing `ai_extraction` / `ai_full`
+        receipt for a provider that leaves the machine — then rate / budget gated); TEXT (`application/json` `{ mode:
+        \"text\", text }`, opt-in local OCR) indexes browser-OCR'd text with no provider egress and stays available with
+        AI off, so search keeps working. Persists ONLY AES-256-GCM ciphertext of the text plus opaque HMAC token hashes
+        — no plaintext body, no plaintext token. Idempotent; re-indexing overwrites in place. A successful index
+        continues into the same lab auto-staging the background worker performs (still-STORED lab-looking document with
+        no facts, both modules on, provider + consent eligible); `labFactsStaged` reports how many facts were staged
+        PENDING for review — confirmation stays the only write into Labs."
       parameters:
         - name: id
           in: path
@@ -15864,8 +16004,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/DocumentIndexEnvelope"
         "401": *a1
+        "403": *a33
         "422": *a4
         "429": *a5
+        "503": *a34
   /api/documents/inbound/{id}/chat:
     post:
       tags:
@@ -15878,10 +16020,12 @@ paths:
         grounded ONLY in the document's indexed text — NO health snapshot, NO tools, NO other document. The document
         text is fenced as untrusted DATA (prompt-injection defence); the inbound message + every prior turn are
         injection-screened and the reply is dose/risk-screened + numerically grounded against the document's own
-        figures. Available only for a content-indexed document (422 `documents.inbound.notIndexed` otherwise).
-        AI-consent-gated (403 `consent.ai.required` for an external provider), budget- and rate-limited. Omitting
-        `conversationId` starts a new thread. Renders as plain text on the client (no markdown). Auth via cookie or
-        Bearer."
+        figures. Available only for a content-indexed document (422 `documents.inbound.notIndexed` otherwise). Answers
+        under the `documentAi` capability (403 with the capability envelope when it is closed; `consent.ai.required` for
+        a provider that leaves the machine without an `ai_extraction` / `ai_full` receipt), budget- and rate-limited; no
+        provider is the `documents.chat.provider.none` error frame. Reading the history (GET) stays available whatever
+        the capability says. Omitting `conversationId` starts a new thread. Renders as plain text on the client (no
+        markdown). Auth via cookie or Bearer."
       parameters:
         - name: id
           in: path
@@ -15903,14 +16047,10 @@ paths:
                 type: string
                 description: "SSE frames: `data: <json>\\n\\n`. See the operation description for the per-`type` frame shapes."
         "401": *a1
-        "403":
-          description: "AI consent required for an external provider (`errorCode: consent.ai.required`)."
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
+        "403": *a33
         "422": *a4
         "429": *a5
+        "503": *a34
     get:
       tags:
         - Documents
@@ -15959,9 +16099,11 @@ paths:
         - Documents
       summary: Index all documents for content search
       description: Enqueues a background job that content-indexes the caller's not-yet-indexed documents (one provider
-        transcription each, bounded + resumable). Gated on the module, a configured vision provider (422
-        `documents.inbound.providerUnsupported` otherwise), and the existing AI consent (403 otherwise). Returns
-        immediately; the work runs off-request on the queue.
+        transcription each, bounded + resumable). Gated on the module, the `documentAi` capability (403 with the
+        capability envelope), a configured vision provider (422 `documents.inbound.providerUnsupported` otherwise), and
+        an `ai_extraction` / `ai_full` consent receipt when that provider leaves the machine (403
+        `consent.ai.required`). Returns immediately; the work runs off-request on the queue, which re-checks the
+        capability before every read.
       responses:
         "200":
           description: How many live documents the enqueued backfill still has to index (0 when everything is indexed or no job
@@ -15971,8 +16113,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/DocumentReindexEnvelope"
         "401": *a1
+        "403": *a33
         "422": *a4
         "429": *a5
+        "503": *a34
   /api/documents/inbound/{id}/facts/{factId}:
     patch:
       tags:
@@ -16079,7 +16223,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreateCustomMetricResponse"
         "401": *a1
-        "409": &a34
+        "409": &a36
           description: A custom metric with this name already exists for the caller.
           content:
             application/json:
@@ -16108,7 +16252,7 @@ paths:
                 $ref: "#/components/schemas/GetCustomMetricResponse"
         "401": *a1
         "403": *a9
-        "404": &a33
+        "404": &a35
           description: Custom metric not found (or owned by another user).
           content:
             application/json:
@@ -16142,8 +16286,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateCustomMetricResponse"
         "401": *a1
-        "404": *a33
-        "409": *a34
+        "404": *a35
+        "409": *a36
         "422": *a4
         "429": *a5
     delete:
@@ -16166,7 +16310,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteCustomMetricResponse"
         "401": *a1
-        "404": *a33
+        "404": *a35
         "422": *a4
         "429": *a5
   /api/custom-metrics/{id}/entries:
@@ -16210,7 +16354,7 @@ paths:
                 $ref: "#/components/schemas/ListCustomMetricEntriesEnvelope"
         "401": *a1
         "403": *a9
-        "404": *a33
+        "404": *a35
         "422": *a4
         "429": *a5
     post:
@@ -16239,7 +16383,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CreateCustomMetricEntryResponse"
         "401": *a1
-        "404": *a33
+        "404": *a35
         "409": *a7
         "422": *a4
         "429": *a10
@@ -16275,7 +16419,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/UpdateCustomMetricEntryResponse"
         "401": *a1
-        "404": &a35
+        "404": &a37
           description: Custom metric entry not found (or owned by another user).
           content:
             application/json:
@@ -16308,7 +16452,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/DeleteCustomMetricEntryResponse"
         "401": *a1
-        "404": *a35
+        "404": *a37
         "422": *a4
         "429": *a5
   /api/custom-metrics/{id}/entries/restore:
@@ -16717,7 +16861,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientOverviewEnvelope"
         "401": *a1
-        "403": &a36
+        "403": &a38
           description: >-
             The opt-in `nutrients` module is off for this account (errorCode `module.disabled`). Stop syncing and do not
             retry; offer the enable-in-settings hint. Only run the HealthKit read-authorization flow while the module is
@@ -16772,7 +16916,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientDailySeriesEnvelope"
         "401": *a1
-        "403": *a36
+        "403": *a38
         "422": *a4
         "429": *a5
   /api/nutrients/water:
@@ -16801,7 +16945,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NutrientWaterWriteEnvelope"
         "401": *a1
-        "403": *a36
+        "403": *a38
         "409": *a7
         "422": *a4
         "429": *a5
@@ -17303,26 +17447,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WithingsCredentialsUpdateEnvelope"
-        "400": &a37
+        "400": &a39
           description: Body is not parseable JSON.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "401": *a1
-        "413": &a38
+        "413": &a40
           description: Body exceeds 64 KiB.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "415": &a39
+        "415": &a41
           description: Content-Type is not `application/json`.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "422": &a40
+        "422": &a42
           description: "`clientId` and `clientSecret` are both required and each must be 1–200 characters. The envelope carries a
             single fixed message, not per-field issues."
           content:
@@ -17508,11 +17652,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FitbitCredentialsUpdateEnvelope"
-        "400": *a37
+        "400": *a39
         "401": *a1
-        "413": *a38
-        "415": *a39
-        "422": *a40
+        "413": *a40
+        "415": *a41
+        "422": *a42
         "429": *a5
     delete:
       tags:
@@ -17655,11 +17799,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GoogleHealthCredentialsUpdateEnvelope"
-        "400": *a37
+        "400": *a39
         "401": *a1
-        "413": *a38
-        "415": *a39
-        "422": *a40
+        "413": *a40
+        "415": *a41
+        "422": *a42
         "429": *a5
     delete:
       tags:
@@ -17812,11 +17956,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OuraCredentialsUpdateEnvelope"
-        "400": *a37
+        "400": *a39
         "401": *a1
-        "413": *a38
-        "415": *a39
-        "422": *a40
+        "413": *a40
+        "415": *a41
+        "422": *a42
         "429": *a5
     delete:
       tags:
@@ -17892,21 +18036,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/OuraTestEnvelope"
         "401": *a1
-        "422": &a41
+        "422": &a43
           description: No usable connection for this provider — nothing stored, or the stored grant could no longer be resolved
             into an access token. `meta.errorCode` = `not_configured`.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "429": &a42
+        "429": &a44
           description: More than 5 requests in 60 s from this user. `meta.errorCode` = `rate_limited_self` — this is the local
             limiter, distinct from a `rate_limited` 502 which is the provider's.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "502": &a43
+        "502": &a45
           description: "The probe did not complete. `meta.errorCode` names the class: `credentials_rejected` (the provider
             answered 401/403 — the stored grant is gone), `rate_limited` (the PROVIDER answered 429, which is not this
             endpoint's own limiter), `upstream_error` (5xx), `timeout` (no answer within 5 s), `connection_failed`
@@ -17951,11 +18095,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PolarCredentialsUpdateEnvelope"
-        "400": *a37
+        "400": *a39
         "401": *a1
-        "413": *a38
-        "415": *a39
-        "422": *a40
+        "413": *a40
+        "415": *a41
+        "422": *a42
         "429": *a5
     delete:
       tags:
@@ -18031,9 +18175,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/PolarTestEnvelope"
         "401": *a1
-        "422": *a41
-        "429": *a42
-        "502": *a43
+        "422": *a43
+        "429": *a44
+        "502": *a45
   /api/strava/credentials:
     get:
       tags:
@@ -18069,11 +18213,11 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/StravaCredentialsUpdateEnvelope"
-        "400": *a37
+        "400": *a39
         "401": *a1
-        "413": *a38
-        "415": *a39
-        "422": *a40
+        "413": *a40
+        "415": *a41
+        "422": *a42
         "429": *a5
     delete:
       tags:
@@ -18151,9 +18295,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/StravaTestEnvelope"
         "401": *a1
-        "422": *a41
-        "429": *a42
-        "502": *a43
+        "422": *a43
+        "429": *a44
+        "502": *a45
   /api/integrations/status:
     get:
       tags:
@@ -18189,7 +18333,7 @@ paths:
                 $ref: "#/components/schemas/FitbitResumeEnvelope"
         "401": *a1
         "422": *a4
-        "429": *a42
+        "429": *a44
   /api/integrations/fitbit/test:
     post:
       tags:
@@ -18207,9 +18351,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/FitbitIntegrationTestEnvelope"
         "401": *a1
-        "422": *a41
-        "429": *a42
-        "502": *a43
+        "422": *a43
+        "429": *a44
+        "502": *a45
   /api/integrations/google-health/resume:
     post:
       tags:
@@ -18226,7 +18370,7 @@ paths:
                 $ref: "#/components/schemas/GoogleHealthResumeEnvelope"
         "401": *a1
         "422": *a4
-        "429": *a42
+        "429": *a44
   /api/integrations/google-health/test:
     post:
       tags:
@@ -18259,9 +18403,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "422": *a41
-        "429": *a42
-        "502": *a43
+        "422": *a43
+        "429": *a44
+        "502": *a45
   /api/integrations/whoop/resume:
     post:
       tags:
@@ -18278,7 +18422,7 @@ paths:
                 $ref: "#/components/schemas/WhoopResumeEnvelope"
         "401": *a1
         "422": *a4
-        "429": *a42
+        "429": *a44
   /api/integrations/whoop/test:
     post:
       tags:
@@ -18295,9 +18439,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/WhoopIntegrationTestEnvelope"
         "401": *a1
-        "422": *a41
-        "429": *a42
-        "502": *a43
+        "422": *a43
+        "429": *a44
+        "502": *a45
   /api/integrations/withings/resume:
     post:
       tags:
@@ -18315,7 +18459,7 @@ paths:
                 $ref: "#/components/schemas/WithingsResumeEnvelope"
         "401": *a1
         "422": *a4
-        "429": *a42
+        "429": *a44
   /api/integrations/withings/test:
     post:
       tags:
@@ -18333,8 +18477,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/WithingsIntegrationTestEnvelope"
         "401": *a1
-        "422": *a41
-        "429": *a42
+        "422": *a43
+        "429": *a44
         "502":
           description: "The probe did not complete. The shared codes apply (`credentials_rejected`, `rate_limited`,
             `upstream_error`, `timeout`, `connection_failed`) and this path adds one of its own:
@@ -18571,7 +18715,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RecordActivityEnvelope"
         "401": *a1
-        "403": &a44
+        "403": &a46
           description: Refused. `meta.errorCode` is `sharing.not_permitted` when the request was made while acting on another
             account (grant management is never delegable), or `sharing.access.denied` when the caller may not act as the
             account they named. The latter is byte-identical for an account that does not exist and one that granted
@@ -18596,7 +18740,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AccountGrantListEnvelope"
         "401": *a1
-        "403": *a44
+        "403": *a46
         "422": *a4
         "429": *a5
     post:
@@ -18691,7 +18835,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AcceptedAccountGrantEnvelope"
         "401": *a1
-        "403": *a44
+        "403": *a46
         "404":
           description: No such invitation for this account.
           content:
@@ -18735,7 +18879,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RevokedAccountGrantEnvelope"
         "401": *a1
-        "403": *a44
+        "403": *a46
         "404":
           description: No such grant on this account's record.
           content:
@@ -18776,7 +18920,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/RenouncedAccountGrantEnvelope"
         "401": *a1
-        "403": *a44
+        "403": *a46
         "404":
           description: No such grant held by this account.
           content:
@@ -19158,7 +19302,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "401": *a1
-        "403": *a44
+        "403": *a46
         "409":
           description: "The record this browser session is on is not the record the request asserted. `meta.errorCode` is
             `sharing.session.changed`. It is not a refusal of access — the caller may well be entitled to both records —
@@ -19488,7 +19632,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/McpConnectionListEnvelope"
         "401": *a1
-        "403": &a45
+        "403": &a47
           description: The operator has disabled the API instance-wide. Every route in this module refuses while that setting is
             off, for a cookie session as well as for a Bearer token; it is not a per-user permission and retrying will
             not help.
@@ -19521,7 +19665,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/McpConnectionRevokeEnvelope"
         "401": *a1
-        "403": *a45
+        "403": *a47
         "404":
           description: No live connection with this id for this caller — also the answer for an already-revoked one, so a repeat
             revoke is 404 rather than an idempotent 200.
@@ -19548,7 +19692,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/McpConnectorTokenListEnvelope"
         "401": *a1
-        "403": *a45
+        "403": *a47
         "422": *a4
         "429": *a5
     post:
@@ -19578,7 +19722,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
         "401": *a1
-        "403": *a45
+        "403": *a47
         "413":
           description: Body exceeds 16 KiB.
           content:
@@ -19621,7 +19765,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/McpConnectorTokenRevokeEnvelope"
         "401": *a1
-        "403": *a45
+        "403": *a47
         "404":
           description: No `health:read` token with this id for this caller. An already-revoked token is still found, so a repeat
             revoke answers 200.
@@ -19679,7 +19823,7 @@ paths:
       description: Returns the named family's resolved settings for the record the session is acting on. Cookie session or
         Bearer, while acting on a managed record the caller guards.
       parameters:
-        - &a46
+        - &a48
           name: family
           in: path
           required: true
@@ -19723,7 +19867,7 @@ paths:
         ride the audit row. Body capped at 64 KiB. Cookie session or Bearer, while acting on a managed record the caller
         guards.
       parameters:
-        - *a46
+        - *a48
       requestBody:
         required: true
         content:
@@ -20258,13 +20402,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdminBackupDocument"
-        "403": &a47
+        "403": &a49
           description: Caller is not an admin. `requireAdmin()` is cookie-only, so a Bearer token lands here whatever its scope.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "404": &a48
+        "404": &a50
           description: No stored copy with this id.
           content:
             application/json:
@@ -20323,8 +20467,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
-        "403": *a47
-        "404": *a48
+        "403": *a49
+        "404": *a50
         "409":
           description: Either the payload declares a different owner than the stored row, or a request under the same
             `Idempotency-Key` is still in flight. Nothing was changed.
@@ -30032,36 +30176,36 @@ components:
                 (`credentials_rejected`, `rate_limited`, `upstream_error`, `timeout`, `connection_failed` and the
                 per-provider additions) are enumerated in each `/test` operation instead, where the differences can be
                 stated; and a 401 raised by a route checking a credential of its own may carry no code at all. ai —
-                ai.provider.none, ai.record.notPermitted, ai.unavailable; ai_provider — ai_provider.invalid,
-                ai_provider.no_fields; allergy — allergy.invalid; analytics — analytics.invalid_query; anamnesis —
-                anamnesis.fact.conflict, anamnesis.fact.currentExists, anamnesis.fact.invalidValue; auth —
-                auth.admin.required, auth.already_authenticated, auth.mfa.code_invalid, auth.missing,
-                auth.refresh.invalid, auth.refresh.reuse, auth.refresh.revoked, auth.scope.insufficient,
-                auth.stepup.required, auth.token.expired, auth.token.invalid; backup — backup.payload.undecryptable,
-                backup.section.missing; coach — coach.conversation.invalidTitle, coach.conversation.notFound,
-                coach.fenced.attachmentConflict, coach.fenced.attachmentLimit, coach.fenced.attachmentNotFound,
-                coach.fenced.attachmentNotIndexed, coach.fenced.attachmentRequired, coach.fenced.attachmentUnavailable,
-                coach.fenced.invalid, coach.request.invalid; coach-prefs — coach-prefs.body.invalid_json,
-                coach-prefs.body.invalid_shape; consent — consent.ai.required; cycle — cycle.bulk.invalid,
-                cycle.bulk.too_large, cycle.calendar.invalid, cycle.calendar.range, cycle.cycles.invalid,
-                cycle.day-log.conflict, cycle.day-log.invalid, cycle.disabled, cycle.period.invalid,
-                cycle.symptom.custom.invalid, cycle.symptom.custom.limit; cycle-prefs — cycle-prefs.body.invalid_json,
-                cycle-prefs.invalid; disable-coach — disable-coach.body.invalid_json; documents —
-                documents.chat.conversationNotFound, documents.chat.invalid, documents.inbound.alreadyConfirmed,
-                documents.inbound.alreadyPartlyConfirmed, documents.inbound.budgetExceeded,
-                documents.inbound.decryptFailed, documents.inbound.encounterNotFound, documents.inbound.episodeNotFound,
-                documents.inbound.extractFailed, documents.inbound.factNotFound, documents.inbound.factNotPending,
-                documents.inbound.factTypeMismatch, documents.inbound.fileTooLarge, documents.inbound.fileType,
-                documents.inbound.invalidMetadata, documents.inbound.invalidQuery, documents.inbound.invalidUpdate,
-                documents.inbound.localOcrDisabled, documents.inbound.notFound, documents.inbound.notIndexed,
-                documents.inbound.pdfNeedsAnthropic, documents.inbound.providerUnsupported,
-                documents.inbound.quotaExceeded, documents.inbound.rateLimited, documents.inbound.restoreDuplicate,
-                documents.inbound.restoreGone, documents.inbound.uploadBusy, documents.inbound.uploadTimeout; encounter
-                — encounter.invalid, encounter.link.invalid, encounter.practitioner-not-found,
-                encounter.reminder-conflict, encounter.reminder-not-found; environment — environment.invalid,
-                environment.no_home, environment.range_too_large, environment.travel.not_found; export —
-                export.selection.empty, export.selection.unknown_leaf; familyHistory — familyHistory.invalid; feedback —
-                feedback.body.invalid; health_score_config — health_score_config.invalid,
+                ai.budget.exceeded, ai.provider.none, ai.record.notPermitted, ai.unavailable; ai_provider —
+                ai_provider.invalid, ai_provider.no_fields; allergy — allergy.invalid; analytics —
+                analytics.invalid_query; anamnesis — anamnesis.fact.conflict, anamnesis.fact.currentExists,
+                anamnesis.fact.invalidValue; auth — auth.admin.required, auth.already_authenticated,
+                auth.mfa.code_invalid, auth.missing, auth.refresh.invalid, auth.refresh.reuse, auth.refresh.revoked,
+                auth.scope.insufficient, auth.stepup.required, auth.token.expired, auth.token.invalid; backup —
+                backup.payload.undecryptable, backup.section.missing; coach — coach.budget.exceeded,
+                coach.conversation.invalidTitle, coach.conversation.notFound, coach.fenced.attachmentConflict,
+                coach.fenced.attachmentLimit, coach.fenced.attachmentNotFound, coach.fenced.attachmentNotIndexed,
+                coach.fenced.attachmentRequired, coach.fenced.attachmentUnavailable, coach.fenced.invalid,
+                coach.request.invalid; coach-prefs — coach-prefs.body.invalid_json, coach-prefs.body.invalid_shape;
+                consent — consent.ai.required; cycle — cycle.bulk.invalid, cycle.bulk.too_large, cycle.calendar.invalid,
+                cycle.calendar.range, cycle.cycles.invalid, cycle.day-log.conflict, cycle.day-log.invalid,
+                cycle.disabled, cycle.period.invalid, cycle.symptom.custom.invalid, cycle.symptom.custom.limit;
+                cycle-prefs — cycle-prefs.body.invalid_json, cycle-prefs.invalid; disable-coach —
+                disable-coach.body.invalid_json; documents — documents.chat.conversationNotFound,
+                documents.chat.invalid, documents.inbound.alreadyConfirmed, documents.inbound.alreadyPartlyConfirmed,
+                documents.inbound.budgetExceeded, documents.inbound.decryptFailed, documents.inbound.encounterNotFound,
+                documents.inbound.episodeNotFound, documents.inbound.extractFailed, documents.inbound.factNotFound,
+                documents.inbound.factNotPending, documents.inbound.factTypeMismatch, documents.inbound.fileTooLarge,
+                documents.inbound.fileType, documents.inbound.invalidMetadata, documents.inbound.invalidQuery,
+                documents.inbound.invalidUpdate, documents.inbound.localOcrDisabled, documents.inbound.notFound,
+                documents.inbound.notIndexed, documents.inbound.pdfNeedsAnthropic,
+                documents.inbound.providerUnsupported, documents.inbound.quotaExceeded, documents.inbound.rateLimited,
+                documents.inbound.restoreDuplicate, documents.inbound.restoreGone, documents.inbound.uploadBusy,
+                documents.inbound.uploadTimeout; encounter — encounter.invalid, encounter.link.invalid,
+                encounter.practitioner-not-found, encounter.reminder-conflict, encounter.reminder-not-found; environment
+                — environment.invalid, environment.no_home, environment.range_too_large, environment.travel.not_found;
+                export — export.selection.empty, export.selection.unknown_leaf; familyHistory — familyHistory.invalid;
+                feedback — feedback.body.invalid; health_score_config — health_score_config.invalid,
                 health_score_config.too_narrow; illness — illness.day-log.invalid, illness.disabled,
                 illness.episode.chronic-no-resolve, illness.episode.invalid, illness.episode.invalid-window,
                 illness.episode.parent-not-found, illness.insights.invalid; import — import.write_failed; ingest —
@@ -59304,17 +59448,69 @@ components:
             - type: "null"
         pdfSupported:
           type: boolean
+        ai:
+          $ref: "#/components/schemas/AiCapabilityState"
       required:
         - available
         - mode
         - reason
         - pdfSupported
+        - ai
       additionalProperties: false
-      description: Whether the caller's configured AI provider can ingest a lab report (drives the UI's scan affordance).
+      description: "Whether the caller's configured AI provider can ingest a lab report (drives the UI's scan affordance).
         `mode` is `vision` when the provider reads the image directly, `text` when the image is OCR'd in-browser and
         only the extracted text is sent (opt-in local OCR for text-only providers), or null when unavailable. `reason`
         explains an unavailable state; `pdfSupported` is true when the provider reads PDFs natively (Anthropic) or the
-        server-side rasterizer can render the pages for any other vision provider. No provider call is made.
+        server-side rasterizer can render the pages for any other vision provider. `ai` is the `labsOcr` capability for
+        the record: when the operator turned reading documents off, the labs module is off, or the record is somebody
+        else's, `available` is false with a null `reason` and `ai.reason` says why. A missing consent receipt leaves the
+        scan offered (`ai.reason = \"consent_required\"`), because the scan is where the person is asked for it. No
+        provider call is made."
+    AiCapabilityState:
+      type: object
+      properties:
+        available:
+          type: boolean
+        reason:
+          anyOf:
+            - $ref: "#/components/schemas/AiUnavailableReason"
+            - type: "null"
+          description: "`null` exactly when `available` is true."
+        onDeviceAllowed:
+          type: boolean
+          description: "Whether an on-device model may do this work. False for `operator_disabled`, `not_permitted_for_record`,
+            `module_disabled`, `user_disabled` and `check_failed`: the operator's and the person's decisions hold on the
+            device too. True otherwise, since a missing server provider or a missing consent for server egress do not
+            concern a model that runs on the device. Resolved here so the client never decides which reasons apply off
+            the server."
+      required:
+        - available
+        - reason
+        - onDeviceAllowed
+      additionalProperties: false
+      description: "One AI capability, resolved for one record from every layer that can say no. Render from it; never
+        recompute it. Data never depends on it: measurements, scores, statistics and device records load whatever it
+        says."
+    AiUnavailableReason:
+      type: string
+      enum:
+        - check_failed
+        - operator_disabled
+        - not_permitted_for_record
+        - module_disabled
+        - user_disabled
+        - no_provider
+        - consent_required
+      description: "Why an AI capability is unavailable, listed in precedence order; only the outermost reason that applies is
+        reported, because it names the layer that would have to change first. `check_failed` — an input could not be
+        read and the answer failed closed. `operator_disabled` — the operator's master switch, the capability's own
+        switch, or the operator's instance-wide availability of its module. `not_permitted_for_record` — AI work is not
+        admitted for this record (a delegate inside somebody else's record). `module_disabled` — an owning module is off
+        for this record, by its own switch or by the edge of the active grant. `user_disabled` — the record's own AI
+        opt-out: the Coach preference for the Coach, the `insights` module (AI analysis) for everything else.
+        `no_provider` — no configured provider can serve this capability's input. `consent_required` — the provider
+        chain needs an AI consent receipt and none is active. The list is closed; a client that meets a value it does
+        not know treats the capability as unavailable."
     OcrExtractEnvelope:
       type: object
       properties:
@@ -62318,12 +62514,15 @@ components:
                 - local
                 - external
             - type: "null"
+        ai:
+          $ref: "#/components/schemas/AiCapabilityState"
       required:
         - available
         - mode
         - reason
         - pdfSupported
         - egress
+        - ai
       additionalProperties: false
     DocumentUsageEnvelope:
       type: object
@@ -62370,6 +62569,9 @@ components:
             additionalProperties: false
         assistAvailable:
           type: boolean
+          description: "Whether a document read can run for this record now: a provider can serve it and the `documentAi`
+            capability is not closed by the operator, the module or the sharing grant. The same answer as `available` on
+            GET /api/documents/inbound/capability."
         contentIndex:
           type: object
           properties:
@@ -62608,12 +62810,13 @@ components:
         WHAT the document is, generated once and then served from storage; it is descriptive only, never a diagnosis.
         `summaryGeneratedAt` is when it was generated (null until then). `summaryState` says what became of it, because
         a null `summary` on its own is ambiguous: NONE = never attempted (the `documentsAutoAiRead` opt-in was off at
-        upload, or the document predates it — no backfill reaches these), PENDING = a job is enqueued or running, READY
-        = stored and returned in `summary`, WITHHELD = generated but blocked by the outbound safety screen and therefore
-        never returned as text, UNAVAILABLE = attempted and could not produce one (no vision provider, spent budget,
-        withdrawn consent, unreadable file, provider error). Only PENDING may be presented as "being generated";
-        WITHHELD and UNAVAILABLE are both re-attemptable via POST `/api/documents/inbound/{id}/summary`. Treat an
-        unknown value as UNAVAILABLE when decoding.'
+        upload, reading documents with AI was closed for the record at upload, or the document predates it — no backfill
+        reaches these), PENDING = a job is enqueued or running, READY = stored and returned in `summary`, WITHHELD =
+        generated but blocked by the outbound safety screen and therefore never returned as text, UNAVAILABLE =
+        attempted and could not produce one (no vision provider, spent budget, withdrawn consent, unreadable file,
+        provider error). Only PENDING may be presented as "being generated"; WITHHELD and UNAVAILABLE are both
+        re-attemptable via POST `/api/documents/inbound/{id}/summary`. Treat an unknown value as UNAVAILABLE when
+        decoding.'
     ExtractedFact:
       type: object
       properties:
@@ -67797,51 +68000,6 @@ components:
         model-written follow-up questions on the about-me profile (a deterministic set stays). `documentAi` — suggest,
         summary, extract, index and chat over a stored document. `labsOcr` — reading a lab report image.
         `medicationExtract` — turning a typed medication description into a schedule.
-    AiUnavailableReason:
-      type: string
-      enum:
-        - check_failed
-        - operator_disabled
-        - not_permitted_for_record
-        - module_disabled
-        - user_disabled
-        - no_provider
-        - consent_required
-      description: "Why an AI capability is unavailable, listed in precedence order; only the outermost reason that applies is
-        reported, because it names the layer that would have to change first. `check_failed` — an input could not be
-        read and the answer failed closed. `operator_disabled` — the operator's master switch, the capability's own
-        switch, or the operator's instance-wide availability of its module. `not_permitted_for_record` — AI work is not
-        admitted for this record (a delegate inside somebody else's record). `module_disabled` — an owning module is off
-        for this record, by its own switch or by the edge of the active grant. `user_disabled` — the record's own AI
-        opt-out: the Coach preference for the Coach, the `insights` module (AI analysis) for everything else.
-        `no_provider` — no configured provider can serve this capability's input. `consent_required` — the provider
-        chain needs an AI consent receipt and none is active. The list is closed; a client that meets a value it does
-        not know treats the capability as unavailable."
-    AiCapabilityState:
-      type: object
-      properties:
-        available:
-          type: boolean
-        reason:
-          anyOf:
-            - $ref: "#/components/schemas/AiUnavailableReason"
-            - type: "null"
-          description: "`null` exactly when `available` is true."
-        onDeviceAllowed:
-          type: boolean
-          description: "Whether an on-device model may do this work. False for `operator_disabled`, `not_permitted_for_record`,
-            `module_disabled`, `user_disabled` and `check_failed`: the operator's and the person's decisions hold on the
-            device too. True otherwise, since a missing server provider or a missing consent for server egress do not
-            concern a model that runs on the device. Resolved here so the client never decides which reasons apply off
-            the server."
-      required:
-        - available
-        - reason
-        - onDeviceAllowed
-      additionalProperties: false
-      description: "One AI capability, resolved for one record from every layer that can say no. Render from it; never
-        recompute it. Data never depends on it: measurements, scores, statistics and device records load whatever it
-        says."
     AiProviderState:
       type: object
       properties:
