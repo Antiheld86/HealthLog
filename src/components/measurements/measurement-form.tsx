@@ -47,7 +47,7 @@ import {
 
 const MAX_COMMENT_LENGTH = MEASUREMENT_NOTES_MAX_LENGTH;
 
-const MEASUREMENT_TYPES = [
+export const MEASUREMENT_TYPES = [
   {
     value: "BLOOD_PRESSURE",
     labelKey: "measurements.typeBloodPressure",
@@ -103,6 +103,46 @@ const MEASUREMENT_TYPES = [
     unit: "kg",
     placeholder: "3.2",
     placeholderImperial: "7",
+  },
+  // The rest of what a body-composition scale reports. The server has
+  // accepted all of these since the Withings and Apple Health work; only this
+  // list lagged, so a reading typed off the scale's display had no row. The
+  // guard in `measurement-form-body-composition.test.ts` keeps the two lists
+  // from drifting again.
+  {
+    value: "FAT_MASS",
+    labelKey: "measurements.typeFatMass",
+    unit: "kg",
+    placeholder: "18",
+    placeholderImperial: "40",
+  },
+  {
+    value: "FAT_FREE_MASS",
+    labelKey: "measurements.typeFatFreeMass",
+    unit: "kg",
+    placeholder: "58",
+    placeholderImperial: "128",
+  },
+  {
+    value: "LEAN_BODY_MASS",
+    labelKey: "measurements.typeLeanBodyMass",
+    unit: "kg",
+    placeholder: "55",
+    placeholderImperial: "121",
+  },
+  {
+    value: "MUSCLE_MASS",
+    labelKey: "measurements.typeMuscleMass",
+    unit: "kg",
+    placeholder: "52",
+    placeholderImperial: "115",
+  },
+  {
+    // A scale's own rating (Withings prints 1-12), not a percent.
+    value: "VISCERAL_FAT",
+    labelKey: "measurements.typeVisceralFat",
+    unitKey: "measurements.unitRating",
+    placeholder: "7",
   },
   {
     value: "OXYGEN_SATURATION",

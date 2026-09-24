@@ -760,6 +760,7 @@
     "typeWaistToHeight": "Waist-to-height ratio",
     "unitScore": "pts",
     "unitRatio": "ratio",
+    "unitRating": "rating",
     "typeWho5Score": "WHO-5 score",
     "typeSciScore": "SCI score"
   },
