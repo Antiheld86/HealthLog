@@ -5794,7 +5794,8 @@
         "deleteConfirmTitle": "Eliminare questo promemoria?",
         "deleteConfirmBody": "Non verrà più mostrato. Quanto hai già registrato resta invariato.",
         "deleteConfirmAction": "Elimina",
-        "detail": "Quelle in scadenza compaiono qui e nel Coach."
+        "detail": "Quelle in scadenza compaiono qui e nel Coach.",
+        "readOnlyNote": "Il Coach non è disponibile al momento, ma puoi ancora leggere ed eliminare i tuoi promemoria."
       },
       "aboutMe": {
         "title": "Su di me",

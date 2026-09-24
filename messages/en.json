@@ -5794,7 +5794,8 @@
         "deleteConfirmTitle": "Delete this reminder?",
         "deleteConfirmBody": "It stops being raised. Anything you have already recorded is untouched.",
         "deleteConfirmAction": "Delete",
-        "detail": "Due ones show up here and on the Coach."
+        "detail": "Due ones show up here and on the Coach.",
+        "readOnlyNote": "The Coach is not available right now, but you can still read and delete your reminders."
       },
       "aboutMe": {
         "title": "About me",

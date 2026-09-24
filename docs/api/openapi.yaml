@@ -9593,11 +9593,11 @@ paths:
       tags:
         - Insights
       summary: List the caller's Coach reminders
-      description: v1.22 (B2/B6) — the durable "remind me about X" memory the Coach captured inline, decrypted on the fly,
+      description: 'v1.22 (B2/B6) — the durable "remind me about X" memory the Coach captured inline, decrypted on the fly,
         soonest-due first. Pass `?status=` (one status or a comma set like `due,surfaced` for the in-app tile); omitted
-        returns the non-terminal set (proposed + active + due + surfaced). Coach-gated
-        (`requireModuleEnabled("coach")`). Auth via cookie or Bearer; the owner is narrowed from the session.
-        Undecryptable rows are omitted.
+        returns the non-terminal set (proposed + active + due + surfaced). Not gated on the Coach: the reminders belong
+        to the caller and stay readable while the Coach is unavailable (v1.39). Auth via cookie or Bearer; the owner is
+        narrowed from the session. Undecryptable rows are omitted.'
       parameters:
         - name: status
           in: query
@@ -9614,24 +9614,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CoachRemindersList"
         "401": *a1
-        "403":
-          description: >-
-            Coach surface disabled.
-
-
-            Refused: this request named a record the caller may not act on (`meta.errorCode` = `sharing.access.denied`).
-            Byte-identical for an account that does not exist, an account that granted nothing, a grant whose sections
-            do not reach this surface, and a read grant on a request that writes — the response carries no reason, so it
-            is not an account-enumeration oracle. The reason reaches the record owner's activity feed and the operator's
-            audit trail instead. On the cookie transport the same code answers one further case: a session that has
-            entered a shared record and sends a request without its record-context assertion, which is a client older
-            than the fence — leave the record and reload. A request that names no record but the caller's own never
-            reaches this response, so a client that never switches and never sends the per-request account selector will
-            not see it.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
+        "403": *a9
         "422": *a4
         "429": *a5
     post:
@@ -9719,7 +9702,8 @@ paths:
         - Insights
       summary: Soft-delete one Coach reminder
       description: "v1.22 — soft-deletes a single reminder owned by the caller. An unknown / cross-user / already-deleted id
-        is an idempotent no-op returning `{ deleted: false }`. Coach-gated. Auth via cookie or Bearer."
+        is an idempotent no-op returning `{ deleted: false }`. Not gated on the Coach: erasing a stored reminder works
+        while the Coach is unavailable (v1.39). Auth via cookie or Bearer."
       parameters:
         - name: id
           in: path

@@ -14,6 +14,11 @@
  * no-op rather than a P2025 throw — the existence channel never leaks across
  * accounts. PATCH on a 0-count match returns 404; DELETE returns the idempotent
  * `{ deleted: false }`.
+ *
+ * PATCH is Coach use (it confirms, resolves or reschedules what the Coach
+ * captured) and is gated by `requireModuleEnabled(userId, "coach")`. DELETE is
+ * not: erasing one's own stored reminder never depends on the Coach being
+ * available, the same rule as the stored facts, conversations and plans.
  */
 import type { NextRequest } from "next/server";
 
@@ -152,8 +157,6 @@ export const PATCH = apiHandler(async (req: NextRequest, ctx: RouteCtx) => {
 export const DELETE = apiHandler(
   async (_request: NextRequest, ctx: RouteCtx) => {
     const { user } = await requireAuth();
-    const gate = await requireModuleEnabled(user.id, "coach");
-    if (!gate.enabled) return gate.response;
 
     const limited = await enforceMutateLimit("delete", user.id);
     if (limited) return limited;
