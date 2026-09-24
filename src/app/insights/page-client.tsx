@@ -32,6 +32,7 @@ import { HeroStrip } from "@/components/insights/hero-strip";
 import { AiSetupHint } from "@/components/insights/ai-setup-hint";
 import { OverviewSectionBoundary } from "@/components/insights/overview-section-boundary";
 import { isSurfaceVisible } from "@/lib/modules/surface";
+import { useCycleRingHasDial } from "@/components/cycle/use-cycle";
 import { useInsightsAdvisorQuery } from "@/components/insights/use-insights-advisor";
 import { useAnalyticsQuery } from "@/lib/queries/use-analytics-query";
 import { useDashboardSnapshot } from "@/lib/queries/use-dashboard-snapshot";
@@ -364,6 +365,18 @@ export default function InsightsPageClient() {
   // Settings → Insights, reached via the top-right cog on the tab strip.
   const { layout } = useInsightsLayoutQuery(isAuthenticated);
 
+  // The cycle ring takes a cell in the scores strip (and Strain's place) only
+  // when it would draw a dial today. With the cycle module on but no active
+  // cycle the ring renders nothing, and a cell reserved for it sat empty in
+  // the row. Same calendar read the ring makes, so no extra request.
+  const cycleRingVisible = isSurfaceVisible(
+    "overview:cycle-ring",
+    user?.modules,
+  );
+  const cycleRingDial = useCycleRingHasDial(
+    isAuthenticated && cycleRingVisible,
+  );
+
   // A failed comprehensive read no longer replaces the page. The payload only
   // decides the "no data yet" empty state below; every section on the page
   // owns its own read and its own error row, so one failing read (#975: the
@@ -407,7 +420,6 @@ export default function InsightsPageClient() {
     ? (advisor.payload?.dailyBriefing ?? null)
     : null;
   const modules = user?.modules;
-  const cycleRingVisible = isSurfaceVisible("overview:cycle-ring", modules);
   const heroStripUpdatedAt = advisor.payload?.cachedAt ?? null;
 
   // v1.4.36 QA C2 — no `<Suspense>` wrappers below. The mother page is
@@ -464,11 +476,12 @@ export default function InsightsPageClient() {
         // v1.18.0 — gate on the resolved `modules.cycle` flag (per-user toggle
         // AND the operator server-wide kill-switch) so an operator-off
         // instance never renders the ring nor fires its calendar read.
-        extraTile={cycleRingVisible ? <CycleRingTile /> : undefined}
+        // v1.39 — and only once the ring has a dial to draw (see above).
+        extraTile={cycleRingDial ? <CycleRingTile /> : undefined}
         // v1.15.5 — when the cycle ring is shown it TAKES the Strain slot:
         // hide Strain so the strip stays compact instead of growing a sixth
         // tile. Strain stays visible for non-cycle accounts.
-        hideStrain={cycleRingVisible}
+        hideStrain={cycleRingDial}
       />
     ),
     // Hidden, never an error card, while the briefing is unavailable for any
