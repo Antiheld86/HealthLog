@@ -44,8 +44,8 @@ vi.mock("@/lib/dashboard/snapshot", async (importOriginal) => ({
 }));
 // The per-read briefing capability; its own behaviour is pinned in
 // `snapshot-read-briefing-capability.test.ts`.
-vi.mock("@/lib/ai/capabilities/record", () => ({
-  aiCapabilityForRecord: async () => ({
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityToServe: async () => ({
     available: true,
     reason: null,
     onDeviceAllowed: true,

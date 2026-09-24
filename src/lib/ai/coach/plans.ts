@@ -335,7 +335,7 @@ export async function extractAndStorePlanProposals(
   const result = await runCompletion({
     userId,
     cacheAction: "coach.plans",
-    consentSurface: "coach",
+    capability: "coach",
     systemPrompt: extractionSystemPrompt(opts?.locale),
     userPrompt: buildUserPrompt(turns, existingSignatures),
     temperature: 0.2,

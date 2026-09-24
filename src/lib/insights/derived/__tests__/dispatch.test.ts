@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+// Day-mean reads fold per-day aggregates in SQL; the fake folds the mocked
+// `measurement.findMany` rows with the same rules.
+vi.mock("@/lib/measurements/day-aggregates", async () => ({
+  readDayAggregates: (
+    await import("@/lib/measurements/__tests__/fake-day-aggregates")
+  ).fakeReadDayAggregates,
+}));
+
 vi.mock("@/lib/db", () => ({
   prisma: {
     measurement: { findMany: vi.fn().mockResolvedValue([]) },

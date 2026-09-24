@@ -15,7 +15,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const deleteMany = vi.fn();
-const auditFindMany = vi.fn();
+const noteFindMany = vi.fn();
+const aiCapabilityForRecord = vi.fn();
 const enqueueStatusGeneration = vi.fn();
 const userFindUnique = vi.fn();
 const measurementFindMany = vi.fn();
@@ -23,9 +24,9 @@ const measurementGroupBy = vi.fn();
 
 vi.mock("@/lib/db", () => ({
   prisma: {
-    auditLog: {
+    insightStatusCache: {
       deleteMany: (...a: unknown[]) => deleteMany(...a),
-      findMany: (...a: unknown[]) => auditFindMany(...a),
+      findMany: (...a: unknown[]) => noteFindMany(...a),
     },
     user: { findUnique: (...a: unknown[]) => userFindUnique(...a) },
     measurement: {
@@ -41,6 +42,21 @@ vi.mock("@/lib/jobs/insight-status-generate-shared", () => ({
   enqueueStatusGeneration: (...a: unknown[]) => enqueueStatusGeneration(...a),
 }));
 
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForRecord: (...a: unknown[]) => aiCapabilityForRecord(...a),
+  aiCapabilityForJob: vi.fn(async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  })),
+}));
+
+const UNAVAILABLE = {
+  available: false,
+  reason: "user_disabled",
+  onDeviceAllowed: false,
+};
+
 import {
   enqueueStatusRefillForUser,
   invalidateStatusInsightsForTypes,
@@ -51,7 +67,12 @@ beforeEach(() => {
   deleteMany.mockResolvedValue({ count: 0 });
   // Default: no recently-warmed cache rows, so every dirtied scope is stale
   // and refreshes — the pre-debounce contract the bulk of these tests pin.
-  auditFindMany.mockResolvedValue([]);
+  noteFindMany.mockResolvedValue([]);
+  aiCapabilityForRecord.mockResolvedValue({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  });
   enqueueStatusGeneration.mockResolvedValue(undefined);
   userFindUnique.mockResolvedValue({ locale: "de" });
   measurementFindMany.mockResolvedValue([]);
@@ -138,7 +159,15 @@ describe("invalidateStatusInsightsForTypes", () => {
 
   it("is a no-op for an empty type set (no DB call)", async () => {
     await invalidateStatusInsightsForTypes("u1", []);
-    expect(auditFindMany).not.toHaveBeenCalled();
+    expect(noteFindMany).not.toHaveBeenCalled();
+    expect(enqueueStatusGeneration).not.toHaveBeenCalled();
+  });
+
+  it("enqueues nothing while statusText is unavailable for the record", async () => {
+    aiCapabilityForRecord.mockResolvedValue(UNAVAILABLE);
+    await invalidateStatusInsightsForTypes("u1", ["WEIGHT", "PULSE"]);
+    expect(aiCapabilityForRecord).toHaveBeenCalledWith("u1", "statusText");
+    expect(noteFindMany).not.toHaveBeenCalled();
     expect(enqueueStatusGeneration).not.toHaveBeenCalled();
   });
 
@@ -201,18 +230,15 @@ describe("invalidateStatusInsightsForTypes", () => {
   });
 
   describe("ingest-invalidation debounce (v1.9.0; a 1 h minimum gap since v1.16.8)", () => {
-    /** Build a recent (within-window) real assessment cache row. */
+    /** A recent (within-window) stored note, as the probe selects it. */
     function freshRow(scope: string, locale = "de") {
-      return {
-        action: `insights.${scope}-status.${locale}`,
-        details: JSON.stringify({ text: "fresh assessment", model: "gpt" }),
-      };
+      return { metric: scope, locale };
     }
 
     it("skips a scope whose assessment was warmed within the gap", async () => {
       // `general` was regenerated within the gap; a fresh WEIGHT sample
       // must not re-enqueue it. weight + bmi are still stale, so they refresh.
-      auditFindMany.mockResolvedValue([freshRow("general")]);
+      noteFindMany.mockResolvedValue([freshRow("general")]);
       await invalidateStatusInsightsForTypes("u1", ["WEIGHT"]);
       expect(enqueuedScopes()).toEqual(["bmi", "weight"]);
     });
@@ -224,13 +250,13 @@ describe("invalidateStatusInsightsForTypes", () => {
       // hash gate, which makes a no-change run a free timestamp refresh —
       // this is what lets same-day data be narrated same-day without
       // reopening the per-batch regeneration storm.
-      auditFindMany.mockResolvedValue([]);
+      noteFindMany.mockResolvedValue([]);
       await invalidateStatusInsightsForTypes("u1", ["WEIGHT"]);
       expect(enqueuedScopes()).toEqual(["bmi", "general", "weight"]);
     });
 
     it("is a complete no-op (no enqueue) when every scope is fresh", async () => {
-      auditFindMany.mockResolvedValue([
+      noteFindMany.mockResolvedValue([
         freshRow("weight"),
         freshRow("bmi"),
         freshRow("general"),
@@ -239,16 +265,14 @@ describe("invalidateStatusInsightsForTypes", () => {
       expect(enqueueStatusGeneration).not.toHaveBeenCalled();
     });
 
-    it("treats a recent timeout stub as not-fresh and still refreshes the scope", async () => {
-      // A stub carries no real assessment, so a scope that recently stalled
-      // must retry rather than be debounced into staying cold.
-      auditFindMany.mockResolvedValue([
-        {
-          action: "insights.general-status.de",
-          details: JSON.stringify({ model: "timeout-stub", text: "stub" }),
-        },
-      ]);
+    it("counts only a stored note as fresh, so a recently stalled scope still refreshes", async () => {
+      // A row that carries only a negative-cache window has no note, so a
+      // scope that recently stalled must retry rather than be debounced into
+      // staying cold. The probe asks the database for noted rows only; with
+      // none returned, every dirtied scope refreshes.
       await invalidateStatusInsightsForTypes("u1", ["WEIGHT"]);
+      const where = noteFindMany.mock.calls[0][0].where;
+      expect(where.textEncrypted).toEqual({ not: null });
       expect(enqueuedScopes()).toEqual(["bmi", "general", "weight"]);
     });
 
@@ -256,23 +280,23 @@ describe("invalidateStatusInsightsForTypes", () => {
       userFindUnique.mockResolvedValue({ locale: "en" });
       const before = Date.now();
       await invalidateStatusInsightsForTypes("u1", ["WEIGHT"]);
-      const where = auditFindMany.mock.calls[0][0].where;
+      const where = noteFindMany.mock.calls[0][0].where;
       expect(where.userId).toBe("u1");
-      // Only the en cache actions for the dirtied scopes are probed.
-      expect(new Set(where.action.in)).toEqual(
-        new Set([
-          "insights.weight-status.en",
-          "insights.bmi-status.en",
-          "insights.general-status.en",
-        ]),
-      );
+      // Only the en notes for the dirtied scopes are probed.
+      expect(
+        new Set(
+          (where.OR as { metric: string; locale: string }[]).map(
+            (k) => `${k.metric}.${k.locale}`,
+          ),
+        ),
+      ).toEqual(new Set(["weight.en", "bmi.en", "general.en"]));
       // The recency floor is ONE hour in the past. The 6 h wall this
       // started as kept same-day data from being narrated same-day (the
       // nightly warm restarted the window, so a morning reading stayed
       // un-narrated until tomorrow); the 1 h gap only bounds worker-run
       // frequency, while the worker's content-hash gate keeps an
       // unchanged re-run at zero LLM calls.
-      const cutoff = (where.createdAt.gte as Date).getTime();
+      const cutoff = (where.generatedAt.gte as Date).getTime();
       const oneHour = 60 * 60 * 1000;
       expect(before - cutoff).toBeGreaterThanOrEqual(oneHour - 5_000);
       expect(before - cutoff).toBeLessThanOrEqual(oneHour + 60_000);
@@ -323,15 +347,19 @@ describe("enqueueStatusRefillForUser", () => {
   it("bypasses the ingest debounce — an explicit regenerate refills even freshly-warmed scopes", async () => {
     // Every scope reads as freshly warmed; the refill must NOT consult the
     // freshness probe at all (the user is explicitly asking).
-    auditFindMany.mockResolvedValue([
-      {
-        action: "insights.general-status.en",
-        details: JSON.stringify({ text: "fresh assessment", model: "gpt" }),
-      },
-    ]);
+    noteFindMany.mockResolvedValue([{ metric: "general", locale: "en" }]);
     await enqueueStatusRefillForUser("u1", "en");
-    expect(auditFindMany).not.toHaveBeenCalled();
+    expect(noteFindMany).not.toHaveBeenCalled();
     expect(enqueuedScopes()).toContain("general");
+  });
+
+  it("refills nothing and returns 0 while statusText is unavailable", async () => {
+    aiCapabilityForRecord.mockResolvedValue(UNAVAILABLE);
+    measurementGroupBy.mockResolvedValue([{ type: "BLOOD_GLUCOSE" }]);
+    const count = await enqueueStatusRefillForUser("u1", "de");
+    expect(count).toBe(0);
+    expect(enqueueStatusGeneration).not.toHaveBeenCalled();
+    expect(measurementGroupBy).not.toHaveBeenCalled();
   });
 
   it("still refills the specialised scopes when the generic-scope discovery read fails", async () => {

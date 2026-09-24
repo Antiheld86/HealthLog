@@ -223,6 +223,29 @@ function consentNeeded(
   );
 }
 
+/**
+ * Whether sending to exactly these providers needs a receipt under the
+ * capability's consent rule. The egress re-check asks it about the providers a
+ * route actually picked, so the answer at the wire comes from the same rule the
+ * published capability does. Pass the one picked provider for a single-pick
+ * read, or the whole chain for a cascade.
+ */
+export function consentNeededForProviders(
+  key: AiCapabilityKey,
+  providerTypes: readonly string[],
+): boolean {
+  return consentNeeded(AI_CAPABILITIES[key], {
+    // Every entry named here is one the route will send to, so each counts as
+    // able to read the input.
+    entries: providerTypes.map((providerType) => ({
+      providerType,
+      vision: true,
+    })),
+    localOcrEnabled: false,
+    managedBy: null,
+  });
+}
+
 function consentReason(
   def: AiCapabilityDefinition,
   provider: ProviderPresence,

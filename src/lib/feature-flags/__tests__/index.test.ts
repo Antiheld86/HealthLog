@@ -22,10 +22,8 @@ vi.mock("@/lib/logging/context", () => ({
 import { prisma } from "@/lib/db";
 import {
   ASSISTANT_FLAGS_DEFAULT,
-  AssistantDisabledError,
   getAssistantFlags,
   loadAssistantSwitches,
-  requireAssistantSurface,
   resolveAssistantFlags,
 } from "../index";
 
@@ -136,52 +134,6 @@ describe("loadAssistantSwitches", () => {
       assistantDocumentAiEnabled: true,
     });
     expect((await loadAssistantSwitches())?.enabled).toBe(false);
-  });
-});
-
-describe("requireAssistantSurface", () => {
-  it("returns the resolved flag set when the surface is enabled", async () => {
-    FIND.mockResolvedValue({
-      assistantEnabled: true,
-      assistantCoachEnabled: true,
-      assistantBriefingEnabled: true,
-      assistantInsightStatusEnabled: true,
-      assistantDocumentAiEnabled: true,
-    });
-    const flags = await requireAssistantSurface("coach");
-    expect(flags.coach).toBe(true);
-  });
-
-  it("throws AssistantDisabledError when the sub-flag is off", async () => {
-    FIND.mockResolvedValue({
-      assistantEnabled: true,
-      assistantCoachEnabled: false,
-      assistantBriefingEnabled: true,
-      assistantInsightStatusEnabled: true,
-      assistantDocumentAiEnabled: true,
-    });
-    await expect(requireAssistantSurface("coach")).rejects.toThrow(
-      AssistantDisabledError,
-    );
-  });
-
-  it("throws AssistantDisabledError when the master kills the surface", async () => {
-    FIND.mockResolvedValue({
-      assistantEnabled: false,
-      assistantCoachEnabled: true,
-      assistantBriefingEnabled: true,
-      assistantInsightStatusEnabled: true,
-      assistantDocumentAiEnabled: true,
-    });
-    await expect(requireAssistantSurface("briefing")).rejects.toThrow(
-      AssistantDisabledError,
-    );
-  });
-
-  it("AssistantDisabledError carries the surface-tagged errorCode", () => {
-    const err = new AssistantDisabledError("insightStatus");
-    expect(err.surface).toBe("insightStatus");
-    expect(err.errorCode).toBe("assistant.disabled.insightStatus");
   });
 });
 

@@ -62,15 +62,9 @@ vi.mock("@/lib/documents/auto-stage-labs", () => ({
 vi.mock("@/lib/labs/ocr-upload", () => ({
   detectOcrMimeType: vi.fn(() => "application/pdf"),
 }));
-vi.mock("@/lib/ai/consent-guard", () => {
-  class ConsentRequiredError extends Error {}
-  return {
-    ConsentRequiredError,
-    assertDocumentEgressConsent: vi.fn(),
-    isExternalDocumentEgress: (providerType: string) =>
-      providerType !== "local",
-  };
-});
+vi.mock("@/lib/ai/consent-guard", () => ({
+  isExternalDocumentEgress: (providerType: string) => providerType !== "local",
+}));
 vi.mock("@/lib/ai/coach/budget", () => ({
   buildDateKey: vi.fn(() => "2026-08-13"),
   reserveBudget: vi.fn(),
@@ -78,6 +72,10 @@ vi.mock("@/lib/ai/coach/budget", () => ({
   resolveDailyCap: vi.fn(() => 1000),
   resolveDailyCapFor: vi.fn(() => 1000),
   resolveCostOwner: vi.fn(() => "operator" as const),
+}));
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForJob: vi.fn(),
+  aiCapabilityForRecord: vi.fn(),
 }));
 vi.mock("@/lib/ai/ai-budgets", () => ({
   AI_BUDGETS: {
@@ -104,11 +102,12 @@ import {
   transcribeDocument,
 } from "@/lib/documents/describe";
 import { localExtractText } from "@/lib/documents/local-extract";
-import {
-  assertDocumentEgressConsent,
-  ConsentRequiredError,
-} from "@/lib/ai/consent-guard";
+import { AiUnavailableError } from "@/lib/ai/capabilities/refusal";
 import { reserveBudget } from "@/lib/ai/coach/budget";
+import {
+  aiCapabilityForJob,
+  aiCapabilityForRecord,
+} from "@/lib/ai/capabilities/gate";
 
 const DOC = {
   id: "doc-1",
@@ -121,6 +120,7 @@ const DOC = {
 
 const PICK = {
   chain: [{ providerType: "anthropic", instance: {} }],
+  withheld: null,
   pick: {
     entry: { providerType: "anthropic", instance: {} },
     providerType: "anthropic",
@@ -163,8 +163,14 @@ beforeEach(() => {
     locale: "en",
   } as never);
   vi.mocked(documentAutoReadEnabled).mockResolvedValue(true);
+  for (const resolve of [aiCapabilityForJob, aiCapabilityForRecord]) {
+    vi.mocked(resolve).mockResolvedValue({
+      available: true,
+      reason: null,
+      onDeviceAllowed: true,
+    });
+  }
   vi.mocked(resolveDocumentVisionProvider).mockResolvedValue(PICK as never);
-  vi.mocked(assertDocumentEgressConsent).mockResolvedValue(undefined);
   vi.mocked(loadOwnedDocument).mockResolvedValue(DOC as never);
   vi.mocked(prepareVisionInput).mockResolvedValue({
     ok: true,
@@ -205,21 +211,66 @@ describe("contract (a): every runDocumentSummaryJob branch writes a terminal sta
       state: "NONE",
     },
     {
-      name: "no provider configured",
+      // Presence says no provider, but that is the pick's to decide; with no
+      // pick either, the attempt is recorded as one that could not run.
+      name: "documentAi unavailable for want of a provider, no pick",
       setup: () => {
+        vi.mocked(aiCapabilityForJob).mockResolvedValue({
+          available: false,
+          reason: "no_provider",
+          onDeviceAllowed: true,
+        });
         vi.mocked(resolveDocumentVisionProvider).mockResolvedValue({
           chain: [],
           pick: null,
+          withheld: null,
         } as never);
       },
       state: "UNAVAILABLE",
     },
     {
-      name: "consent refused",
+      // Presence says a receipt is missing, but the document order lands on a
+      // pick that needs none: the pick decides, and the summary is written.
+      name: "documentAi presence wants a receipt the pick does not need",
       setup: () => {
-        vi.mocked(assertDocumentEgressConsent).mockRejectedValue(
-          new ConsentRequiredError("insights"),
-        );
+        vi.mocked(aiCapabilityForJob).mockResolvedValue({
+          available: false,
+          reason: "consent_required",
+          onDeviceAllowed: true,
+        });
+      },
+      state: "READY",
+    },
+    {
+      name: "documentAi switched off by the operator",
+      setup: () => {
+        vi.mocked(aiCapabilityForJob).mockResolvedValue({
+          available: false,
+          reason: "operator_disabled",
+          onDeviceAllowed: false,
+        });
+      },
+      state: "NONE",
+    },
+    {
+      name: "no provider configured",
+      setup: () => {
+        vi.mocked(resolveDocumentVisionProvider).mockResolvedValue({
+          chain: [],
+          pick: null,
+          withheld: null,
+        } as never);
+      },
+      state: "UNAVAILABLE",
+    },
+    {
+      name: "consent refused at the pick's wire re-check",
+      setup: () => {
+        vi.mocked(resolveDocumentVisionProvider).mockResolvedValue({
+          chain: PICK.chain,
+          pick: null,
+          withheld: new AiUnavailableError("documentAi", "consent_required"),
+        } as never);
       },
       state: "UNAVAILABLE",
     },
@@ -309,6 +360,7 @@ describe("contract (a): every runDocumentIndex branch records the attempt", () =
         vi.mocked(resolveDocumentVisionProvider).mockResolvedValue({
           chain: [],
           pick: null,
+          withheld: null,
         } as never);
       },
       outcome: null,
@@ -319,6 +371,7 @@ describe("contract (a): every runDocumentIndex branch records the attempt", () =
         vi.mocked(resolveDocumentVisionProvider).mockResolvedValue({
           chain: [],
           pick: null,
+          withheld: null,
         } as never);
         vi.mocked(localExtractText).mockResolvedValue({
           ok: false,
@@ -402,6 +455,39 @@ describe("contract (b): enqueue never claims a pending state its job cannot reso
     expect(result).toEqual({ enqueued: false });
     expect(send).not.toHaveBeenCalled();
     expect(summaryStateWrites()).toEqual([]);
+  });
+
+  it("enqueueDocumentSummary with documentAi switched off claims nothing and mints no job", async () => {
+    vi.mocked(aiCapabilityForRecord).mockResolvedValue({
+      available: false,
+      reason: "operator_disabled",
+      onDeviceAllowed: false,
+    });
+    const send = vi.fn().mockResolvedValue("job-1");
+    vi.mocked(getGlobalBoss).mockReturnValue({ send } as never);
+
+    const result = await enqueueDocumentSummary("user-1", "doc-1");
+    expect(result).toEqual({ enqueued: false });
+    expect(send).not.toHaveBeenCalled();
+    expect(summaryStateWrites()).toEqual([]);
+  });
+
+  it("enqueueDocumentSummary leaves a missing receipt to the job's pick, whose every branch is terminal", async () => {
+    // Presence cannot say whether the document-order pick needs a receipt, so
+    // the enqueue does not refuse on it; contract (a) pins that the job then
+    // writes a terminal state for both a withheld pick and a served one.
+    vi.mocked(aiCapabilityForRecord).mockResolvedValue({
+      available: false,
+      reason: "consent_required",
+      onDeviceAllowed: true,
+    });
+    const send = vi.fn().mockResolvedValue("job-1");
+    vi.mocked(getGlobalBoss).mockReturnValue({ send } as never);
+
+    const result = await enqueueDocumentSummary("user-1", "doc-1");
+    expect(result).toEqual({ enqueued: true });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(summaryStateWrites()).toContain("PENDING");
   });
 
   it("enqueueDocumentSummary claims PENDING only once a job id exists", async () => {

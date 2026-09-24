@@ -31,6 +31,13 @@ export interface CalendarDay {
   isPeriodLogged: boolean;
   /** Whether a logged cycle opens on this day. */
   isCycleStart: boolean;
+  /**
+   * The 1-based day of the logged cycle this date belongs to, resolved by the
+   * server for THIS date (not today). Null when the record cannot say.
+   */
+  cycleDay: number | null;
+  /** Whether the one-tap period end can land on this date. */
+  periodEndable: boolean;
   flow: string | null;
   hasSymptoms: boolean;
   confidence: number;

@@ -5,6 +5,8 @@
  */
 import { z } from "zod/v4";
 import type { ZodOpenApiObject } from "zod-openapi";
+
+import { aiExtractionRefusalDescription } from "../ai-extraction-refusals";
 import {
   createMedicationSchema,
   updateMedicationSchema,
@@ -1336,7 +1338,7 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       summary:
         "Extract scheduling fields from a free-text medication description",
       description:
-        "Runs the user's free-text description through the Coach provider chain and returns a citation-guarded partial payload the wizard merges onto whatever the user already typed. `name` and `dose` are dropped when not substring-matched in the original text so the wizard cannot land a hallucinated brand or dose. `cadenceKind` / `doseUnit` / `weekdays` are closed enums; numeric fields are clamped. Rate-limited 10 requests / 5 minutes / user, gated against the daily Coach token budget.",
+        "Runs the user's free-text description through the Coach provider chain and returns a citation-guarded partial payload the wizard merges onto whatever the user already typed. `name` and `dose` are dropped when not substring-matched in the original text so the wizard cannot land a hallucinated brand or dose. `cadenceKind` / `doseUnit` / `weekdays` are closed enums; numeric fields are clamped. Answers under the `medicationExtract` capability (the operator's reading-documents switch; free-text medication input is health data, so any provider in the chain that leaves the machine needs an active `ai_extraction` or `ai_full` consent receipt). Rate-limited 10 requests / 5 minutes / user, gated against the daily Coach token budget (429 `coach.budget.exceeded`).",
       requestBody: {
         required: true,
         content: {
@@ -1360,9 +1362,13 @@ export const medicationPaths: NonNullable<ZodOpenApiObject["paths"]> = {
             "Upstream provider returned an empty, unparseable, or off-schema reply.",
           content: { "application/json": { schema: errorEnvelope } },
         },
+        "403": {
+          description: aiExtractionRefusalDescription("medicationExtract"),
+          content: { "application/json": { schema: errorEnvelope } },
+        },
         "503": {
           description:
-            "No AI provider configured for the calling user (or operator).",
+            'No answer could be produced. `meta.errorCode = "ai.provider.none"` (with `meta.capability` and `meta.reason = "no_provider"`): no AI provider is configured for the calling user or the operator — the status predates the capability envelope and is kept for clients that branch on it. `ai.unavailable`: the capability could not be resolved and failed closed. No code: every provider in the chain failed.',
           content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,

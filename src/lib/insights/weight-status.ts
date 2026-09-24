@@ -193,13 +193,13 @@ export async function prepareWeightStatusForUser(
       metric: "weight",
       locale,
     });
-    // v1.16.13 — `consent-missing` serves the same no-key fallback (see
-    // bmi-status); no enqueue happens for it.
-    if (outcome.kind === "no-provider" || outcome.kind === "consent-missing") {
+    // Unavailable for any reason serves the deterministic line and enqueues
+    // nothing. `hasProvider` is provider presence only.
+    if (outcome.kind === "unavailable") {
       return {
         phase: "served",
         result: {
-          hasProvider: false,
+          hasProvider: outcome.hasProvider,
           text: getNoKeyWeightStatusText(locale),
           cached: true,
           updatedAt: null,
@@ -668,11 +668,7 @@ export async function prepareWeightStatusForUser(
         userId,
         cacheAction,
         todayKey,
-        locale,
         text: summary,
-        providerType: outcome.providerType,
-        model: outcome.model,
-        tokensUsed: outcome.tokensUsed,
         snapshotHash,
         // v1.18.11 (P6) — persist the input fingerprint so tomorrow's input
         // gate can skip the rebuild when nothing salient changed.

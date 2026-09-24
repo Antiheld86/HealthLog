@@ -33,9 +33,6 @@ vi.mock("@/lib/modules/gate", async (importOriginal) => ({
   requireModuleEnabled: vi.fn().mockResolvedValue({ enabled: true }),
   resolveModuleMap: vi.fn().mockResolvedValue({}),
 }));
-vi.mock("@/lib/feature-flags", () => ({
-  requireAssistantSurface: vi.fn().mockResolvedValue(undefined),
-}));
 vi.mock("@/lib/rate-limit", () => ({
   checkAnalyticsReadRateLimit: vi.fn(),
 }));

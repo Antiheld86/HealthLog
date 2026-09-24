@@ -42,9 +42,6 @@ import { MODULE_KEYS, type ModuleKey } from "@/lib/modules/registry";
  *                   module is the AI analysis opt-out and gates only AI parts;
  *                   the data routes that happen to live under
  *                   `/api/insights` are EXEMPT below.
- *        - coach  → `requireAssistantSurface("coach")`, the retired gate,
- *                   still recognised for the one route outside these trees
- *                   that has not moved to its capability yet.
  *
  *   3. EXEMPT — an explicit, COMMENTED allowlist of routes that serve a
  *      toggleable domain but are deliberately NOT gated, each with the
@@ -253,10 +250,9 @@ const EXEMPT_ROUTES: ReadonlyArray<string> = [
   // affordance), not the row store. The extract route is read-only vision
   // assistance, the commit route writes the user's own confirmed lab rows,
   // and the capability probe is an infra availability check carrying no
-  // module data. All three are owner-scoped and AI-gated (consent / budget /
-  // rate); the module toggle hiding the surface does not need to wedge them.
+  // module data. The extract route is not listed: it names the `labsOcr` AI
+  // capability, which carries the labs module, so it counts as gated.
   "src/app/api/labs/ocr/capability/route.ts",
-  "src/app/api/labs/ocr/extract/route.ts",
   "src/app/api/labs/ocr/commit/route.ts",
   // ── DATA LAYER (medications) ──────────────────────────────────────
   // v1.18.1 (D3) — medications graduated from CORE to a toggleable module,
@@ -277,9 +273,9 @@ const EXEMPT_ROUTES: ReadonlyArray<string> = [
   // per-medication importer below: it writes intake rows and reads its own job.
   "src/app/api/medications/intake/dose-history-import/route.ts",
   "src/app/api/medications/intake/dose-history-import/[jobId]/status/route.ts",
-  // NB: `medications/extract` is NOT exempt — it gates on
-  // `requireAssistantSurface("coach")` (the NL-extraction is an assistant
-  // surface), so the inventory already counts it as a delegated gate.
+  // `medications/extract` is not listed: it is model work under the
+  // `medicationExtract` AI capability (no owning module; medications is a
+  // core domain for extraction), and a capability call counts as the gate.
   "src/app/api/medications/[id]/route.ts",
   "src/app/api/medications/[id]/api-endpoint/route.ts",
   "src/app/api/medications/[id]/cadence/route.ts",
@@ -421,10 +417,10 @@ const EXEMPT_ROUTES: ReadonlyArray<string> = [
 
 const MODULE_GATE_NEEDLE = "requireModuleEnabled(";
 const CYCLE_GATE_NEEDLE = "requireCycleEnabled(";
-const COACH_GATE_NEEDLE = 'requireAssistantSurface("coach")';
 // An AI capability resolves its owning modules and the AI opt-out, so a route
 // that names one is gated on them.
-const AI_CAPABILITY_GATE = /\b(?:requireAiCapability|getAiCapability)\s*\(/;
+const AI_CAPABILITY_GATE =
+  /\b(?:requireAiCapability|getAiCapability|aiCapabilityToServe)\s*\(/;
 // v1.18.1 — the illness journal's thin gate wrapper. `requireIllnessEnabled`
 // delegates to `requireModuleEnabled(userId, "illness")` and re-stamps the
 // illness-specific errorCode, exactly mirroring how `cycle` delegates to
@@ -679,7 +675,6 @@ describe("module API route gate inventory", () => {
 
       if (fileHasCall(text, MODULE_GATE_NEEDLE)) continue;
       if (fileHasCall(text, CYCLE_GATE_NEEDLE)) continue;
-      if (fileHasCall(text, COACH_GATE_NEEDLE)) continue;
       if (fileHasCall(text, ILLNESS_GATE_NEEDLE)) continue;
       if (fileHasCapabilityGate(text)) continue;
 
@@ -801,7 +796,6 @@ describe("module API route gate inventory", () => {
       if (
         fileHasCall(text, MODULE_GATE_NEEDLE) ||
         fileHasCall(text, CYCLE_GATE_NEEDLE) ||
-        fileHasCall(text, COACH_GATE_NEEDLE) ||
         fileHasCall(text, ILLNESS_GATE_NEEDLE) ||
         fileHasCapabilityGate(text)
       ) {

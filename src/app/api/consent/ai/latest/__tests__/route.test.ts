@@ -1,24 +1,30 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
-// v1.16.16 — `createReceipt` + `revokeLatest` run inside a transaction; the
-// mock runs the callback against the same proxy.
+// v1.16.16 — `createReceipt` and the withdrawal run inside a transaction;
+// the mock runs the callback against the same proxy. The withdrawal also
+// purges the regenerable AI text, so the proxy carries those delegates too.
 type TxFn = (tx: unknown) => unknown;
 
 vi.mock("@/lib/db", () => {
-  const consentReceipt = {
-    create: vi.fn(),
-    findFirst: vi.fn(),
-    findMany: vi.fn(),
-    update: vi.fn(),
-    updateMany: vi.fn(),
-  };
-  return {
-    prisma: {
-      consentReceipt,
-      $transaction: vi.fn((fn: TxFn) => fn({ consentReceipt })),
+  const prisma = {
+    consentReceipt: {
+      create: vi.fn(),
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+      count: vi.fn(),
     },
+    insightStatusCache: { deleteMany: vi.fn() },
+    user: { updateMany: vi.fn() },
+    insightNarrative: { deleteMany: vi.fn() },
+    arrivalReaction: { updateMany: vi.fn() },
+    workoutInsight: { deleteMany: vi.fn() },
+    $transaction: vi.fn(),
   };
+  prisma.$transaction.mockImplementation((fn: TxFn) => fn(prisma));
+  return { prisma };
 });
 
 vi.mock("@/lib/rate-limit", () => ({
@@ -78,9 +84,21 @@ beforeEach(() => {
   vi.mocked(auditLog).mockResolvedValue(undefined);
   // Re-arm rate-limit + transaction pass-throughs cleared by reset.
   vi.mocked(checkConsentRateLimit).mockResolvedValue(RL_OK);
-  $transaction.mockImplementation((fn: TxFn) =>
-    fn({ consentReceipt: prisma.consentReceipt }),
-  );
+  $transaction.mockImplementation((fn: TxFn) => fn(prisma));
+  // Default: another receipt still covers the analysis, so no purge runs.
+  // The purge cases below set this to 0.
+  vi.mocked(prisma.consentReceipt.count).mockResolvedValue(1 as never);
+  for (const deleteMany of [
+    prisma.insightStatusCache.deleteMany,
+    prisma.insightNarrative.deleteMany,
+    prisma.workoutInsight.deleteMany,
+  ]) {
+    vi.mocked(deleteMany).mockResolvedValue({ count: 0 } as never);
+  }
+  vi.mocked(prisma.user.updateMany).mockResolvedValue({ count: 0 } as never);
+  vi.mocked(prisma.arrivalReaction.updateMany).mockResolvedValue({
+    count: 0,
+  } as never);
 });
 
 describe("GET /api/consent/ai/latest", () => {
@@ -278,14 +296,15 @@ describe("DELETE /api/consent/ai/latest", () => {
     const createdAt = new Date("2026-05-18T10:00:01.000Z");
     const revokedAt = new Date("2026-05-18T11:00:00.000Z");
 
-    // v1.16.16 — `revokeLatest` runs per kind in `consentKindEnum.options`
-    // order: ai_full → ai_insights_only → ai_coach. The `updateMany` count
-    // gates the follow-up re-read. ai_full + ai_coach revoke a row;
-    // ai_insights_only has none (count 0, no re-read).
+    // The withdrawal runs per kind in `consentKindEnum.options` order:
+    // ai_full → ai_insights_only → ai_coach → ai_extraction. The
+    // `updateMany` count gates the follow-up re-read. ai_full + ai_coach
+    // revoke a row; the others have none (count 0, no re-read).
     vi.mocked(prisma.consentReceipt.updateMany)
       .mockResolvedValueOnce({ count: 1 } as never) // ai_full
       .mockResolvedValueOnce({ count: 0 } as never) // ai_insights_only
-      .mockResolvedValueOnce({ count: 1 } as never); // ai_coach
+      .mockResolvedValueOnce({ count: 1 } as never) // ai_coach
+      .mockResolvedValueOnce({ count: 0 } as never); // ai_extraction
     vi.mocked(prisma.consentReceipt.findFirst)
       .mockResolvedValueOnce({
         id: "rcpt-full",
@@ -320,6 +339,80 @@ describe("DELETE /api/consent/ai/latest", () => {
       "ai_coach",
       "ai_full",
     ]);
+  });
+});
+
+describe("DELETE /api/consent/ai/latest — purge of regenerable AI text", () => {
+  const revokedRow = {
+    id: "rcpt-1",
+    userId: "user-1",
+    kind: "ai_insights_only",
+    artefact: "PDF",
+    signedAt: new Date("2026-05-18T10:00:00.000Z"),
+    revokedAt: new Date("2026-05-18T11:00:00.000Z"),
+    createdAt: new Date("2026-05-18T10:00:01.000Z"),
+  };
+
+  it("deletes the regenerable text and writes a counts-only purge audit row when nothing covers the analysis any more", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    vi.mocked(prisma.consentReceipt.updateMany).mockResolvedValue({
+      count: 1,
+    } as never);
+    vi.mocked(prisma.consentReceipt.findFirst).mockResolvedValue(
+      revokedRow as never,
+    );
+    vi.mocked(prisma.consentReceipt.count).mockResolvedValue(0 as never);
+    vi.mocked(prisma.insightStatusCache.deleteMany).mockResolvedValue({
+      count: 4,
+    } as never);
+
+    const res = await DELETE(
+      new NextRequest(
+        "http://localhost/api/consent/ai/latest?kind=ai_insights_only",
+        { method: "DELETE" },
+      ),
+    );
+    expect(res.status).toBe(200);
+    expect(prisma.insightStatusCache.deleteMany).toHaveBeenCalledWith({
+      where: { userId: "user-1" },
+    });
+    expect(prisma.workoutInsight.deleteMany).toHaveBeenCalledWith({
+      where: { userId: "user-1" },
+    });
+    expect(auditLog).toHaveBeenCalledWith("consent.ai.purge", {
+      userId: "user-1",
+      details: {
+        statusNotes: 4,
+        briefing: 0,
+        narratives: 0,
+        reactionLines: 0,
+        workoutParagraphs: 0,
+      },
+    });
+  });
+
+  it("keeps the text while another receipt still covers the analysis", async () => {
+    vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
+    vi.mocked(prisma.consentReceipt.updateMany).mockResolvedValue({
+      count: 1,
+    } as never);
+    vi.mocked(prisma.consentReceipt.findFirst).mockResolvedValue(
+      revokedRow as never,
+    );
+    vi.mocked(prisma.consentReceipt.count).mockResolvedValue(1 as never);
+
+    const res = await DELETE(
+      new NextRequest(
+        "http://localhost/api/consent/ai/latest?kind=ai_insights_only",
+        { method: "DELETE" },
+      ),
+    );
+    expect(res.status).toBe(200);
+    expect(prisma.insightStatusCache.deleteMany).not.toHaveBeenCalled();
+    expect(auditLog).not.toHaveBeenCalledWith(
+      "consent.ai.purge",
+      expect.anything(),
+    );
   });
 });
 

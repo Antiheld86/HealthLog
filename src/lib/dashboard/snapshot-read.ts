@@ -34,7 +34,7 @@ import {
   type DashboardSnapshot,
   type SnapshotUserInput,
 } from "@/lib/dashboard/snapshot";
-import { aiCapabilityForRecord } from "@/lib/ai/capabilities/record";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
 import type { Locale } from "@/lib/i18n/config";
 
@@ -123,12 +123,13 @@ export async function readDashboardSnapshotCached(
       annotate,
       SNAPSHOT_CACHE_TTL_MS,
     ),
-    aiCapabilityForRecord(user.id, "briefing"),
+    aiCapabilityToServe(user.id, "briefing"),
   ]);
 
-  // The briefing is model text: shown only while the `briefing` capability is
-  // available for this record, decided on every read rather than baked into
-  // the cached body.
+  // The briefing is model text: shown only while the record's `briefing`
+  // capability is available, decided on every read rather than baked into
+  // the cached body. The record's own state decides, whoever is reading, so a
+  // delegate sees the owner's briefing exactly when the owner would.
   const body = applyBriefingCapability(cached, briefingAi);
 
   return { body, locale };

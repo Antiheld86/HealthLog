@@ -64,14 +64,14 @@ const RESOLUTION_HELPERS = [
   "resolveProviderForTest",
 ] as const;
 
-/** The two sanctioned consent APIs. Either satisfies the guard. */
+/** The sanctioned consent APIs in the consent guard. Any satisfies the guard. */
 const CONSENT_HELPERS = [
   // Chain-shaped: throw-form and predicate-form.
   "assertConsentForChain",
   "chainRequiresServerManagedConsent",
   "hasActiveConsentForSurface",
-  // Document-class, pick-shaped.
-  "assertDocumentEgressConsent",
+  // Document-class, pick-shaped (the receipt itself is read by the capability
+  // egress re-check below).
   "isExternalDocumentEgress",
 ] as const;
 
@@ -108,9 +108,23 @@ function resolvesAProvider(source: string): boolean {
   return RESOLUTION_HELPERS.some((h) => imported.includes(h));
 }
 
+/**
+ * The capability re-check at the wire. It answers the consent question for the
+ * providers a caller is about to send to, from the receipt kinds the capability
+ * table declares, so it is a consent helper in its own right.
+ */
+const CAPABILITY_EGRESS_HELPERS = [
+  "assertAiEgress",
+  "aiEgressRefusal",
+] as const;
+
 function importsAConsentHelper(source: string): boolean {
   const imported = importedNamesFrom(source, "@/lib/ai/consent-guard");
-  return CONSENT_HELPERS.some((h) => imported.includes(h));
+  const egress = importedNamesFrom(source, "@/lib/ai/capabilities/egress");
+  return (
+    CONSENT_HELPERS.some((h) => imported.includes(h)) ||
+    CAPABILITY_EGRESS_HELPERS.some((h) => egress.includes(h))
+  );
 }
 
 /**
@@ -125,8 +139,6 @@ function importsAConsentHelper(source: string): boolean {
  */
 const ALLOWLIST: Record<string, string> = {
   // --- Capability / config probes: resolve a chain, never call it. ---
-  "lib/labs/ocr-capability.ts":
-    "Resolves the chain to REPORT which entry could do vision/text OCR (mode, reason, pdfSupported). Makes no completion call. Every consumer that then egresses a document is gated at its own call site with assertDocumentEgressConsent.",
   "app/api/insights/provider-chain/route.ts":
     "Lists the user's configured chain and which entry is active, for the settings UI. Constructs clients but never calls generateCompletion. No health data in the request or the response.",
 

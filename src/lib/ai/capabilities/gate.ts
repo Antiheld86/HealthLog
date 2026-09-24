@@ -40,7 +40,11 @@ import { providerWorkAuthorityForRecord } from "@/lib/sharing/provider-work-auth
 import { loadAiCapabilityInputs, type AiCapabilityScope } from "./load";
 import { explainAiCapability, resolveAiCapability } from "./resolve";
 import { AiUnavailableError, type NoProviderRefusal } from "./refusal";
-import type { AiCapabilityKey, AiCapabilityState } from "./types";
+import {
+  PICK_DECIDED_REASONS,
+  type AiCapabilityKey,
+  type AiCapabilityState,
+} from "./types";
 
 export interface AiGateOptions {
   /**
@@ -50,6 +54,15 @@ export interface AiGateOptions {
   recordId?: string;
   /** The route's own `no_provider` refusal, where a client already reads it. */
   noProvider?: NoProviderRefusal;
+  /**
+   * Leave `no_provider` and `consent_required` to the provider the route
+   * actually picks. The resolver answers both from presence, which is right
+   * for the published payload but can differ from a route that reads the
+   * chain in its own order (a text-mode document read takes the chain head,
+   * not the first vision entry). A route that sets this must run the pick
+   * through `assertAiEgress` / `aiEgressRefusal`, which answers both exactly.
+   */
+  pickDecides?: boolean;
 }
 
 /**
@@ -118,7 +131,10 @@ export async function requireAiCapability(
   } catch {
     finding = { reason: "check_failed", module: null };
   }
-  if (finding.reason !== null) {
+  if (
+    finding.reason !== null &&
+    !(options.pickDecides && PICK_DECIDED_REASONS.has(finding.reason))
+  ) {
     throw new AiUnavailableError(
       key,
       finding.reason,
@@ -142,6 +158,64 @@ export async function aiCapabilityForJob(
     const inputs = await loadAiCapabilityInputs({
       recordId: userId,
       authority: providerWorkAuthorityForRecord(userId),
+      sections: null,
+      recordKind: "self",
+    });
+    return resolveAiCapability(key, inputs);
+  } catch {
+    return resolveAiCapability(key, null);
+  }
+}
+
+/**
+ * One capability for one record, from wherever the caller runs. Inside an
+ * authenticated request it is the request's view (masked to the active grant,
+ * memoised with every other capability read of the request); outside one it
+ * is the worker's view under the worker's own authority.
+ *
+ * For code that serves stored model text on both paths: a status note read on
+ * a page visit and the same read inside the nightly batch must answer the same
+ * question without the caller knowing which path it is on.
+ */
+export async function aiCapabilityForRecord(
+  recordId: string,
+  key: AiCapabilityKey,
+): Promise<AiCapabilityState> {
+  return getEvent()?.getAuth()?.user_id
+    ? getAiCapability(key, { recordId })
+    : aiCapabilityForJob(recordId, key);
+}
+
+/**
+ * Whether text a model already wrote for a record may be SHOWN, answered from
+ * the record's own state, whoever is reading.
+ *
+ * Serving stored text and starting model work are different questions. A
+ * delegate inside somebody else's record may not start model work there
+ * (`not_permitted_for_record`: no generation, no warm, no chat on the owner's
+ * key), but reads the owner's stored briefing, narrative, status notes and
+ * workout notes exactly when the owner would. So this resolves the record's
+ * operator switches, its modules and AI opt-outs, its provider and its
+ * consent, under the record's own authority (`system`, as a job would, which
+ * also answers a managed profile correctly), unmasked by the viewer's grant.
+ *
+ * Use it only to decide whether stored model text is served. Anything that
+ * generates, warms or enqueues asks `getAiCapability` / `requireAiCapability`
+ * (the viewer's view) instead. Never throws.
+ */
+export async function aiCapabilityToServe(
+  recordId: string,
+  key: AiCapabilityKey,
+): Promise<AiCapabilityState> {
+  try {
+    const inputs = await loadAiCapabilityInputs({
+      recordId,
+      authority: {
+        origin: "system",
+        recordUserId: recordId,
+        actorUserId: null,
+        grantId: null,
+      },
       sections: null,
       recordKind: "self",
     });

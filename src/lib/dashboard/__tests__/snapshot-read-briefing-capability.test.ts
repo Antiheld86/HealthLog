@@ -27,7 +27,7 @@ const briefingBody = {
   briefingAi: null,
 };
 const buildDashboardSnapshot = vi.fn(async () => briefingBody);
-const aiCapabilityForRecord = vi.fn();
+const aiCapabilityToServe = vi.fn();
 
 vi.mock("@/lib/db", () => ({ prisma: {} }));
 vi.mock("@/lib/dashboard/snapshot", async (importOriginal) => ({
@@ -37,8 +37,8 @@ vi.mock("@/lib/dashboard/snapshot", async (importOriginal) => ({
 vi.mock("@/lib/i18n/server-locale", () => ({
   resolveServerLocale: async () => "en",
 }));
-vi.mock("@/lib/ai/capabilities/record", () => ({
-  aiCapabilityForRecord: (...args: unknown[]) => aiCapabilityForRecord(...args),
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityToServe: (...args: unknown[]) => aiCapabilityToServe(...args),
 }));
 
 const { readDashboardSnapshotCached } = await import("../snapshot-read");
@@ -49,26 +49,26 @@ const USER = { id: "user-briefing-gate", locale: "en" } as unknown as User;
 beforeEach(() => {
   __resetAllCachesForTests();
   buildDashboardSnapshot.mockClear();
-  aiCapabilityForRecord.mockReset();
+  aiCapabilityToServe.mockReset();
 });
 
 describe("readDashboardSnapshotCached — briefing capability per read", () => {
   it("resolves the briefing capability for the record being read", async () => {
-    aiCapabilityForRecord.mockResolvedValue(AI_AVAILABLE);
+    aiCapabilityToServe.mockResolvedValue(AI_AVAILABLE);
     await readDashboardSnapshotCached(USER);
-    expect(aiCapabilityForRecord).toHaveBeenCalledWith(
+    expect(aiCapabilityToServe).toHaveBeenCalledWith(
       "user-briefing-gate",
       "briefing",
     );
   });
 
   it("hides the cached briefing on the next read once the capability goes away", async () => {
-    aiCapabilityForRecord.mockResolvedValue(AI_AVAILABLE);
+    aiCapabilityToServe.mockResolvedValue(AI_AVAILABLE);
     const first = await readDashboardSnapshotCached(USER);
     expect(first.body.briefing).not.toBeNull();
     expect(first.body.briefingAi).toEqual(AI_AVAILABLE);
 
-    aiCapabilityForRecord.mockResolvedValue(aiUnavailable("consent_required"));
+    aiCapabilityToServe.mockResolvedValue(aiUnavailable("consent_required"));
     const second = await readDashboardSnapshotCached(USER);
 
     // Served from the same cell: the builder ran once.
@@ -79,11 +79,11 @@ describe("readDashboardSnapshotCached — briefing capability per read", () => {
   });
 
   it("shows it again when the capability comes back, without a rebuild", async () => {
-    aiCapabilityForRecord.mockResolvedValue(aiUnavailable("operator_disabled"));
+    aiCapabilityToServe.mockResolvedValue(aiUnavailable("operator_disabled"));
     const hidden = await readDashboardSnapshotCached(USER);
     expect(hidden.body.briefing).toBeNull();
 
-    aiCapabilityForRecord.mockResolvedValue(AI_AVAILABLE);
+    aiCapabilityToServe.mockResolvedValue(AI_AVAILABLE);
     const shown = await readDashboardSnapshotCached(USER);
     expect(buildDashboardSnapshot).toHaveBeenCalledTimes(1);
     expect(shown.body.briefing).not.toBeNull();

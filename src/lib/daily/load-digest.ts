@@ -17,11 +17,14 @@ import type { User } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { annotate } from "@/lib/logging/context";
 import { resolveModuleMap } from "@/lib/modules/gate";
-import { aiCapabilityForRecord } from "@/lib/ai/capabilities/record";
 import { readDashboardSnapshotCached } from "@/lib/dashboard/snapshot-read";
 import { getServerTranslator } from "@/lib/i18n/server-translator";
 import type { Locale } from "@/lib/i18n/config";
 import { decryptFromBytes } from "@/lib/ai/coach/bytes-codec";
+import {
+  aiCapabilityForRecord,
+  aiCapabilityToServe,
+} from "@/lib/ai/capabilities/gate";
 import { userDayKey } from "@/lib/tz/format";
 import { getUserTodayBounds } from "@/lib/tz/local-day";
 import { cachedSwr, caches, type ServerCache } from "@/lib/cache/server-cache";
@@ -315,8 +318,8 @@ function toDigestArrival(
     lineEncrypted: Uint8Array | null;
     generatedAt: Date | null;
   },
-  /** The `reactionLines` capability: the line is model text. */
-  linesAvailable: boolean,
+  /** Whether the record's `reactionLines` text may be shown. */
+  linesServable: boolean,
 ): DailyDigestArrival | null {
   // A kind this build does not know about (a row written by a newer version)
   // is dropped rather than widened — the DTO's kind union is closed.
@@ -325,12 +328,9 @@ function toDigestArrival(
   let line: string | null = null;
   // The ciphertext rides only once the generation actually COMMITTED. A row
   // mid-generation carries no `generatedAt`, and its line must not surface.
-  // Nor while the capability is unavailable: it is not even decrypted.
-  if (
-    linesAvailable &&
-    row.generatedAt !== null &&
-    row.lineEncrypted !== null
-  ) {
+  // A model-written line is never served (nor decrypted) while
+  // `reactionLines` is unavailable for the record; the marker still is.
+  if (linesServable && row.generatedAt !== null && row.lineEncrypted !== null) {
     try {
       line = decryptFromBytes(row.lineEncrypted);
     } catch {
@@ -481,8 +481,11 @@ export async function loadDailyDigest(
         practitioner: { select: { name: true } },
       },
     }),
+    // The check-in opens the Coach, so it asks as the person in front of
+    // the screen; the reaction line is stored text, shown whenever the
+    // record's own state allows it, whoever is reading.
     aiCapabilityForRecord(user.id, "coach"),
-    aiCapabilityForRecord(user.id, "reactionLines"),
+    aiCapabilityToServe(user.id, "reactionLines"),
   ]);
 
   // The snapshot read has already applied the `briefing` capability and

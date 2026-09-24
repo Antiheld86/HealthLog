@@ -15,7 +15,15 @@ vi.mock("@/lib/feature-flags", () => ({
 vi.mock("@/lib/insights/narrative/period-narrative-generate", () => ({
   generatePeriodNarrative: vi.fn(),
 }));
-vi.mock("@/lib/logging/context", () => ({ annotate: vi.fn() }));
+const annotate = vi.fn();
+vi.mock("@/lib/logging/context", () => ({
+  annotate: (...a: unknown[]) => annotate(...a),
+}));
+const aiCapabilityForJob = vi.fn();
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForJob: (...a: unknown[]) => aiCapabilityForJob(...a),
+  aiCapabilityForRecord: vi.fn(),
+}));
 
 import {
   runPeriodNarrativeWarm,
@@ -28,8 +36,10 @@ import {
 function makePrisma(
   users: Array<{ id: string; locale: string | null }>,
   narrativeWrites: Array<{ userId: string; updatedAt: Date }> = [],
+  optedOut: string[] = [],
 ) {
   const findMany = vi.fn().mockResolvedValue(users);
+  const queryRaw = vi.fn().mockResolvedValue(optedOut.map((id) => ({ id })));
   const groupBy = vi.fn().mockResolvedValue(
     narrativeWrites.map((row) => ({
       userId: row.userId,
@@ -37,9 +47,14 @@ function makePrisma(
     })),
   );
   return {
-    prisma: { user: { findMany }, insightNarrative: { groupBy } },
+    prisma: {
+      user: { findMany },
+      insightNarrative: { groupBy },
+      $queryRaw: queryRaw,
+    },
     findMany,
     groupBy,
+    queryRaw,
   };
 }
 
@@ -58,6 +73,11 @@ beforeEach(() => {
     insightStatus: true,
   });
   checkRateLimit.mockResolvedValue({ allowed: true });
+  aiCapabilityForJob.mockResolvedValue({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  });
 });
 
 describe("periodsForDay — boundary gate", () => {
@@ -74,14 +94,18 @@ describe("periodsForDay — boundary gate", () => {
 });
 
 describe("findNarrativeCandidates", () => {
-  it("filters coach-enabled users", async () => {
-    const { prisma, findMany, groupBy } = makePrisma([
-      { id: "u1", locale: "de" },
-    ]);
+  it("drops the users who switched AI analysis off, not the Coach-hidden ones", async () => {
+    const { prisma, findMany, groupBy, queryRaw } = makePrisma(
+      [{ id: "u1", locale: "de" }],
+      [],
+      ["opted-out"],
+    );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const result = await findNarrativeCandidates(prisma as any, 50);
+    expect(queryRaw.mock.calls[0].slice(1)).toContain("insights");
     const arg = findMany.mock.calls[0][0];
-    expect(arg.where.disableCoach).toBe(false);
+    expect(arg.where).toEqual({ id: { notIn: ["opted-out"] } });
+    expect(arg.where.disableCoach).toBeUndefined();
     expect(result).toEqual([{ id: "u1", locale: "de" }]);
     // Below the cap the ordering aggregate never runs.
     expect(groupBy).not.toHaveBeenCalled();
@@ -154,6 +178,38 @@ describe("runPeriodNarrativeWarm", () => {
     );
     expect(result.budgetBlocked).toBe(1);
     expect(generate).not.toHaveBeenCalled();
+  });
+
+  it("skips a user whose periodNarrative capability is unavailable before the budget write", async () => {
+    const { prisma } = makePrisma([
+      { id: "off", locale: "de" },
+      { id: "on", locale: "de" },
+    ]);
+    aiCapabilityForJob.mockImplementation(async (userId: string) =>
+      userId === "off"
+        ? { available: false, reason: "no_provider", onDeviceAllowed: true }
+        : { available: true, reason: null, onDeviceAllowed: true },
+    );
+    const generate = vi
+      .fn()
+      .mockResolvedValue({ status: "generated", providerType: "openai" });
+    const result = await runPeriodNarrativeWarm(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      prisma as any,
+      { now: MON_MID, generate },
+    );
+    expect(aiCapabilityForJob).toHaveBeenCalledWith("off", "periodNarrative");
+    expect(result.skipped).toBe(1);
+    expect(result.budgetBlocked).toBe(0);
+    // Only the available user reaches the budget bucket and the generator.
+    expect(checkRateLimit).toHaveBeenCalledTimes(1);
+    expect(checkRateLimit.mock.calls[0][0]).toBe("period-narrative:on");
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(generate.mock.calls[0][0]).toBe("on");
+    expect(annotate).toHaveBeenCalledWith({
+      action: { name: "insights.narrative.warm.skipped" },
+      meta: { reason: "no_provider" },
+    });
   });
 
   it("short-circuits when the briefing surface is disabled", async () => {

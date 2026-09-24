@@ -22,9 +22,11 @@ vi.mock("@/lib/api-handler", async () => {
   };
 });
 
-vi.mock("@/lib/feature-flags", () => ({
-  requireAssistantSurface: vi.fn(async () => undefined),
-  AssistantDisabledError: class extends Error {},
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  requireAiCapability: vi.fn(),
+}));
+vi.mock("@/lib/ai/capabilities/egress", () => ({
+  assertAiEgress: vi.fn(),
 }));
 
 vi.mock("@/lib/rate-limit", () => ({
@@ -51,14 +53,6 @@ vi.mock("@/lib/ai/coach/budget", () => ({
 vi.mock("@/lib/ai/provider", () => ({
   resolveProvider: vi.fn(async () => ({ type: "none" })),
   resolveProviderChain: vi.fn(async () => []),
-}));
-
-// v1.12.1 — free-text medication extraction egresses PHI to the operator's
-// server-managed key, so it now passes through the consent gate. Mock it to a
-// no-op here; the gate's own fail-closed behaviour is covered by
-// `consent-guard.test.ts`.
-vi.mock("@/lib/ai/consent-guard", () => ({
-  assertConsentForChain: vi.fn(async () => undefined),
 }));
 
 vi.mock("@/lib/ai/provider-runner", async () => {
@@ -93,7 +87,9 @@ import {
   runRawCompletionWithFallback,
   AllProvidersFailedError,
 } from "@/lib/ai/provider-runner";
-import { assertConsentForChain } from "@/lib/ai/consent-guard";
+import { requireAiCapability } from "@/lib/ai/capabilities/gate";
+import { assertAiEgress } from "@/lib/ai/capabilities/egress";
+import { AiUnavailableError } from "@/lib/ai/capabilities/refusal";
 
 function postReq(body: unknown): NextRequest {
   return new NextRequest("http://localhost/api/medications/extract", {
@@ -110,6 +106,12 @@ const AUTH_OK = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(requireAiCapability).mockResolvedValue({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  });
+  vi.mocked(assertAiEgress).mockResolvedValue(undefined);
   vi.mocked(checkRateLimit).mockResolvedValue({
     allowed: true,
     limit: 60,
@@ -208,10 +210,15 @@ describe("POST /api/medications/extract — happy path", () => {
       doseUnit: "mg",
       cadenceKind: "everyNWeeks",
     });
-    // The PHI free-text egress is gated on an active consent receipt for the
-    // coach surface before the provider chain runs.
-    expect(assertConsentForChain).toHaveBeenCalledWith(
-      expect.objectContaining({ surface: "coach" }),
+    // The PHI free-text egress is re-checked against the capability for the
+    // whole chain the runner may cascade through, before it runs.
+    expect(assertAiEgress).toHaveBeenCalledWith(
+      "medicationExtract",
+      "user-1",
+      expect.any(Array),
+    );
+    expect(vi.mocked(assertAiEgress).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(runRawCompletionWithFallback).mock.invocationCallOrder[0]!,
     );
   });
 
@@ -300,6 +307,8 @@ describe("POST /api/medications/extract — daily budget", () => {
     expect(res.status).toBe(429);
     const body = await res.json();
     expect(body.error).toMatch(/budget/i);
+    // The code a client branches on, the same string the body always carried.
+    expect(body.meta).toEqual({ errorCode: "coach.budget.exceeded" });
     // The refusal happens BEFORE any upstream spend.
     expect(runRawCompletionWithFallback).not.toHaveBeenCalled();
   });
@@ -374,8 +383,19 @@ describe("POST /api/medications/extract — validation + provider errors", () =>
       type: "none",
     } as never);
 
-    const res = await POST(postReq({ text: "Mounjaro 5mg weekly" }) as never);
-    expect(res.status).toBe(503);
+    // The status stays 503 (a shipped client may branch on it) and gains the
+    // code that says what it means.
+    const error = await POST(
+      postReq({ text: "Mounjaro 5mg weekly" }) as never,
+    ).catch((e) => e);
+    expect(error).toBeInstanceOf(AiUnavailableError);
+    expect(error.status).toBe(503);
+    expect(error.meta).toEqual({
+      errorCode: "ai.provider.none",
+      capability: "medicationExtract",
+      reason: "no_provider",
+    });
+    expect(runRawCompletionWithFallback).not.toHaveBeenCalled();
   });
 
   it("returns 502 when the provider returns unparseable JSON", async () => {
@@ -393,5 +413,41 @@ describe("POST /api/medications/extract — validation + provider errors", () =>
 
     const res = await POST(postReq({ text: "Mounjaro 5mg weekly" }) as never);
     expect(res.status).toBe(502);
+  });
+});
+
+describe("POST /api/medications/extract — the medicationExtract capability", () => {
+  it("answers under medicationExtract, keeping 503 for no provider", async () => {
+    vi.mocked(requireAuth).mockResolvedValue(AUTH_OK as never);
+    await POST(postReq({ text: "5mg weekly" }) as never).catch(() => null);
+    expect(requireAiCapability).toHaveBeenCalledWith("medicationExtract", {
+      noProvider: { errorCode: "ai.provider.none", status: 503 },
+    });
+  });
+
+  it("refuses before the body is read when the operator turned it off", async () => {
+    vi.mocked(requireAuth).mockResolvedValue(AUTH_OK as never);
+    vi.mocked(requireAiCapability).mockRejectedValueOnce(
+      new AiUnavailableError("medicationExtract", "operator_disabled"),
+    );
+    const error = await POST(postReq({ text: "5mg weekly" }) as never).catch(
+      (e) => e,
+    );
+    expect(error.meta.errorCode).toBe("assistant.disabled.documentAi");
+    expect(checkRateLimit).not.toHaveBeenCalled();
+    expect(runRawCompletionWithFallback).not.toHaveBeenCalled();
+  });
+
+  it("stops at the wire without reserving budget or calling a provider", async () => {
+    vi.mocked(requireAuth).mockResolvedValue(AUTH_OK as never);
+    vi.mocked(assertAiEgress).mockRejectedValueOnce(
+      new AiUnavailableError("medicationExtract", "consent_required"),
+    );
+    const error = await POST(postReq({ text: "5mg weekly" }) as never).catch(
+      (e) => e,
+    );
+    expect(error.meta.errorCode).toBe("consent.ai.required");
+    expect(reserveBudget).not.toHaveBeenCalled();
+    expect(runRawCompletionWithFallback).not.toHaveBeenCalled();
   });
 });

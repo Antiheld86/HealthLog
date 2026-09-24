@@ -2,10 +2,10 @@
  * v1.4.40 SB-10 — AI consent receipts CRUD helper.
  *
  * Append-only audit trail. Every grant + revoke mints a fresh row;
- * no updates, no deletes outside of cascade-on-user-delete. The
- * `revokeLatest` helper writes the current row's `revokedAt` and
- * returns it — that single field flip is the only mutation the
- * helper performs. A subsequent re-grant inserts a new row, so the
+ * no updates, no deletes outside of cascade-on-user-delete. A
+ * revocation (`withdrawConsent` in `./withdrawal`) writes the current
+ * row's `revokedAt` — that single field flip is the only mutation a
+ * receipt ever sees. A subsequent re-grant inserts a new row, so the
  * historical chain stays intact for legal review.
  *
  * Source of truth for "is AI active right now?" is
@@ -18,6 +18,25 @@ import type { ConsentKind } from "@/lib/validations/consent";
 import { isP2002 } from "@/lib/prisma-errors";
 
 export type ConsentReceipt = ConsentReceiptModel;
+
+/**
+ * The consent kind for reading documents, lab report scans and typed
+ * medication text with an external model. Minted by switching the document
+ * auto-read on; required (or the master `ai_full`) by every extraction path.
+ * It does not satisfy the Coach or the analysis.
+ */
+export const AI_EXTRACTION_CONSENT_KIND = "ai_extraction" satisfies ConsentKind;
+
+/**
+ * The kinds whose active receipt authorises model-written analysis over the
+ * person's own readings (briefing, status notes, narratives, workout
+ * paragraphs, reaction lines). When none of these is left active, the
+ * regenerable text those surfaces stored is purged.
+ */
+export const INSIGHTS_CONSENT_KINDS: readonly ConsentKind[] = [
+  "ai_insights_only",
+  "ai_full",
+];
 
 /**
  * Insert a fresh consent receipt for (userId, kind). The caller has
@@ -118,37 +137,4 @@ export async function latestActiveReceiptsByKind(
     if (!(k in out)) out[k] = r;
   }
   return out;
-}
-
-/**
- * Mark the active receipt for (userId, kind) as revoked. Returns the
- * updated row, or `null` if no active receipt exists.
- *
- * v1.16.16 — the partial unique index guarantees at most one active row
- * per (user, kind), so a single atomic `updateMany` over the active
- * predicate revokes "the" active receipt without a separate read. Two
- * concurrent revokes converge: the first flips `revoked_at`, the second's
- * predicate no longer matches and writes nothing. The follow-up read
- * returns the row the caller (audit log) needs; it is `null` only when no
- * active receipt existed at all.
- */
-export async function revokeLatest(
-  userId: string,
-  kind: ConsentKind,
-  now: Date = new Date(),
-): Promise<ConsentReceipt | null> {
-  return prisma.$transaction(async (tx) => {
-    const updated = await tx.consentReceipt.updateMany({
-      where: { userId, kind, revokedAt: null },
-      data: { revokedAt: now },
-    });
-    if (updated.count === 0) return null;
-    // Re-read the just-revoked row (revoked at exactly `now`) so the audit
-    // trail keeps the receipt id. The active predicate guaranteed a single
-    // row, so this resolves it unambiguously.
-    return tx.consentReceipt.findFirst({
-      where: { userId, kind, revokedAt: now },
-      orderBy: { createdAt: "desc" },
-    });
-  });
 }

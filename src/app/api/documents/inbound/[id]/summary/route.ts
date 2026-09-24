@@ -31,7 +31,7 @@ import {
   sanitiseZodIssues,
 } from "@/lib/api-response";
 import { AI_BUDGETS } from "@/lib/ai/ai-budgets";
-import { assertDocumentEgressConsent } from "@/lib/ai/consent-guard";
+import { requireAiCapability } from "@/lib/ai/capabilities/gate";
 import {
   buildDateKey,
   reconcileSpend,
@@ -59,8 +59,8 @@ import {
 import { encryptDocumentSummary } from "@/lib/documents/store";
 import type { OutboundReason } from "@/lib/ai/safety/outbound-screen";
 import {
-  resolveDocumentTextProvider,
-  resolveDocumentVisionProvider,
+  requireDocumentTextProvider,
+  requireDocumentVisionProvider,
 } from "@/lib/documents/provider-order";
 import { annotate } from "@/lib/logging/context";
 import { requireModuleEnabled } from "@/lib/modules/gate";
@@ -203,6 +203,10 @@ export const POST = apiHandler(
     const gate = await requireModuleEnabled(user.id, "inboundDocuments");
     if (!gate.enabled) return gate.response;
 
+    // Reading a document is model work. The provider and the consent receipt
+    // are answered by the pick below, for the provider actually used.
+    await requireAiCapability("documentAi", { pickDecides: true });
+
     const { id } = await params;
     const document = await loadOwnedDocument(user.id, id);
     if (!document) {
@@ -321,19 +325,9 @@ async function handleTextSummary(
     return finishSummary(request, userId, document.id, "text", mode, result);
   }
 
-  const { pick } = await resolveDocumentTextProvider(userId);
-  if (!pick) {
-    await refundDocumentAiSlot(userId);
-    return apiError("No AI provider is configured", 422, {
-      errorCode: "documents.inbound.providerUnsupported",
-    });
-  }
+  let pick: Awaited<ReturnType<typeof requireDocumentTextProvider>>;
   try {
-    await assertDocumentEgressConsent({
-      userId,
-      providerType: pick.providerType,
-      surface: "insights",
-    });
+    pick = await requireDocumentTextProvider(userId);
   } catch (err) {
     // Refused before any dispatch — the slot goes back with the refusal.
     await refundDocumentAiSlot(userId);
@@ -394,17 +388,7 @@ async function handleVisionSummary(
   locale: Locale,
   persist: SummaryPersistenceTarget | null,
 ): Promise<Response> {
-  const { pick } = await resolveDocumentVisionProvider(userId);
-  if (!pick) {
-    return apiError("No vision-capable AI provider is configured", 422, {
-      errorCode: "documents.inbound.providerUnsupported",
-    });
-  }
-  await assertDocumentEgressConsent({
-    userId,
-    providerType: pick.providerType,
-    surface: "insights",
-  });
+  const pick = await requireDocumentVisionProvider(userId);
 
   const rl = await checkDocumentAiRateLimit(userId);
   if (!rl.allowed) return documentAiRateLimited(rl);

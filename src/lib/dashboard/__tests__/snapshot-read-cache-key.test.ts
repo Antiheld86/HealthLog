@@ -25,8 +25,8 @@ vi.mock("@/lib/dashboard/snapshot", () => ({
     buildDashboardSnapshot(...(args as [])),
   applyBriefingCapability: (body: unknown) => body,
 }));
-vi.mock("@/lib/ai/capabilities/record", () => ({
-  aiCapabilityForRecord: async () => ({
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityToServe: async () => ({
     available: true,
     reason: null,
     onDeviceAllowed: true,

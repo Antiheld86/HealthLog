@@ -278,21 +278,16 @@ describe("resolveRichMetric — localised metric names", () => {
   });
 
   // Body fat, fat mass, fat-free mass and lean body mass are four distinct
-  // measurements that the Romance and Polish bundles collapse into two words:
-  // "masse grasse" / "massa grassa" cover the first pair, "masse maigre" /
-  // "massa magra" / "masa beztłuszczowa" the second. The index drops a word
-  // two metrics claim rather than picking one — answering kilograms to
-  // someone who asked for a percentage is worse than saying the word was not
-  // recognised. Pinned, so a NEW collision fails here instead of silently
-  // resolving to whichever entry happened to be built first.
+  // measurements, and the French, Italian and Polish bundles used to collapse
+  // them into two words each. The index drops a word two metrics claim rather
+  // than picking one — answering kilograms to someone who asked for a
+  // percentage is worse than saying the word was not recognised. The labels
+  // now name four different things in every language (the manual entry form
+  // lists all four side by side, where two identical names were unusable), so
+  // the set is empty and pinned empty: a NEW collision fails here instead of
+  // silently resolving to whichever entry happened to be built first.
   it("refuses a word two different metrics claim, and only those words", () => {
-    expect([...LOCALISED_METRIC_NAME_COLLISIONS].sort()).toEqual([
-      "masa_beztluszczowa",
-      "massa_grassa",
-      "massa_magra",
-      "masse_grasse",
-      "masse_maigre",
-    ]);
+    expect([...LOCALISED_METRIC_NAME_COLLISIONS].sort()).toEqual([]);
   });
 
   // The property, not a sample: over every metric and every shipped locale,
@@ -331,15 +326,11 @@ describe("resolveRichMetric — localised metric names", () => {
         partial.push(`${type}: ${resolved.join(",")}`);
       }
     }
-    // The body-composition types whose bundles are genuinely ambiguous (see
-    // the collision guard above), plus the same three English-substring
-    // artefacts.
+    // Only the three English-substring artefacts: with no collisions left,
+    // every body-composition type is nameable in every language.
     expect(partial.sort()).toEqual([
       "BODY_TEMPERATURE_DEVIATION: en",
       "BREATHING_DISTURBANCE_EVENT: en",
-      "FAT_FREE_MASS: de,en,es,ko",
-      "FAT_MASS: de,en,es,pl,ko",
-      "LEAN_BODY_MASS: de,en,es,ko",
       "WALKING_STEADINESS_EVENT: en",
     ]);
   });

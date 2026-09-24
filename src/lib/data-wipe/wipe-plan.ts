@@ -157,6 +157,7 @@ export const WIPE_MODELS = [
   "CoachReminder",
   "CoachUsage",
   "InsightNarrative",
+  "InsightStatusCache",
   "ProviderHealth",
 
   // ── Sharing ─────────────────────────────────────────────────────────────

@@ -760,6 +760,7 @@
     "typeWaistToHeight": "Índice cintura-altura",
     "unitScore": "pts",
     "unitRatio": "ratio",
+    "unitRating": "nivel",
     "typeWho5Score": "Puntuación WHO-5",
     "typeSciScore": "Puntuación SCI"
   },
@@ -8256,6 +8257,7 @@
       "saving": "Guardando…",
       "cancel": "Cancelar",
       "saveError": "No se pudo guardar. Inténtalo de nuevo.",
+      "emptyHint": "Elige un flujo o un síntoma para guardar este día, o usa arriba el botón de inicio del periodo.",
       "intermenstrualBleeding": "Manchado entre periodos",
       "pregnancyTest": "Prueba de embarazo",
       "progesteroneTest": "Prueba de progesterona",

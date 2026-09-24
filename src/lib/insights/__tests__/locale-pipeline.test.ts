@@ -70,7 +70,11 @@ describe("status cache keys", () => {
 vi.mock("@/lib/db", () => ({
   prisma: {
     user: { findUnique: vi.fn() },
-    auditLog: { findFirst: vi.fn(), create: vi.fn() },
+    insightStatusCache: {
+      findUnique: vi.fn(),
+      upsert: vi.fn(),
+      updateMany: vi.fn(),
+    },
     measurement: { findMany: vi.fn() },
     medicationIntakeEvent: { findMany: vi.fn() },
     moodEntry: { findMany: vi.fn() },
@@ -79,7 +83,21 @@ vi.mock("@/lib/db", () => ({
 
 vi.mock("@/lib/insights/status-provider", () => ({
   runStatusCompletion: vi.fn(),
-  statusConsentBlocksGeneration: vi.fn(async () => false),
+}));
+
+vi.mock(
+  "@/lib/ai/coach/bytes-codec",
+  async () => (await import("./status-note-fixtures")).fakeBytesCodec,
+);
+
+// statusText is available in these fixtures — the capability read has its
+// own tests in status-cache.test.ts.
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForRecord: async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
 }));
 
 vi.mock("@/lib/insights/memory", () => ({
@@ -104,6 +122,7 @@ vi.mock("@/lib/ai/prompts/general-status", () => ({
 import { prisma } from "@/lib/db";
 import { runStatusCompletion } from "@/lib/insights/status-provider";
 import { generateGeneralStatusForUser } from "@/lib/insights/general-status";
+import { writtenNotes } from "./status-note-fixtures";
 
 const dayMs = 24 * 60 * 60 * 1000;
 
@@ -116,10 +135,6 @@ beforeEach(() => {
     gender: null,
     heightCm: null,
     insightsExcludeMetrics: [],
-  } as never);
-  vi.mocked(prisma.auditLog.findFirst).mockResolvedValue(null as never);
-  vi.mocked(prisma.auditLog.create).mockResolvedValue({
-    createdAt: new Date(),
   } as never);
   vi.mocked(prisma.medicationIntakeEvent.findMany).mockResolvedValue(
     [] as never,
@@ -166,12 +181,10 @@ describe("a fr locale survives from the generator entry point to the prompt", ()
   it("writes the fr assessment to the fr cache row, leaving the en row untouched", async () => {
     await generateGeneralStatusForUser("u-fr", { locale: "fr", force: true });
 
-    const actions = vi
-      .mocked(prisma.auditLog.create)
-      .mock.calls.map(
-        (call) => (call[0] as { data: { action: string } }).data.action,
-      );
-    expect(actions).toContain("insights.general-status.fr");
-    expect(actions).not.toContain("insights.general-status.en");
+    const keys = writtenNotes(prisma.insightStatusCache.upsert).map(
+      (note) => `${note.metric}.${note.locale}`,
+    );
+    expect(keys).toContain("general.fr");
+    expect(keys).not.toContain("general.en");
   });
 });

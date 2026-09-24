@@ -37,6 +37,11 @@ vi.mock("@/lib/jobs/workout-insight-generate-shared", () => ({
 vi.mock("@/lib/arrivals/reaction-line-shared", () => ({
   enqueueReactionLine: vi.fn(async () => undefined),
 }));
+// The provider-free prefilter the spine asks before enqueueing model work.
+// Not ruled out by default; the job itself resolves the full capability.
+vi.mock("@/lib/jobs/ai-job-candidates", () => ({
+  aiWorkNotRuledOut: vi.fn(async () => true),
+}));
 
 type ExistingReaction = {
   id: string;
@@ -83,6 +88,7 @@ const { enqueueWorkoutInsight } =
   await import("@/lib/jobs/workout-insight-generate-shared");
 const { enqueueReactionLine } =
   await import("@/lib/arrivals/reaction-line-shared");
+const { aiWorkNotRuledOut } = await import("@/lib/jobs/ai-job-candidates");
 
 type Runnable = Parameters<typeof runDataArrival>[1];
 
@@ -115,6 +121,7 @@ beforeEach(() => {
   transaction.mockClear();
   vi.mocked(enqueueReactionLine).mockClear();
   vi.mocked(enqueueWorkoutInsight).mockClear();
+  vi.mocked(aiWorkNotRuledOut).mockReset().mockResolvedValue(true);
 });
 
 describe("data-arrival worker", () => {
@@ -285,5 +292,43 @@ describe("data-arrival worker", () => {
     await expect(
       runDataArrival(fakePrisma as never, arrival()),
     ).rejects.toThrow("connection terminated");
+  });
+
+  it("stores the marker but enqueues no workout paragraph when the work is ruled out", async () => {
+    vi.mocked(aiWorkNotRuledOut).mockImplementation(
+      async (_userId, key) => key !== "workoutInsights",
+    );
+    const result = await runDataArrival(
+      fakePrisma as never,
+      arrival({ kind: "workout", refId: "w-1" }),
+    );
+    if (result.status !== "processed") throw new Error("unreachable");
+    expect(aiWorkNotRuledOut).toHaveBeenCalledWith("user-1", "workoutInsights");
+    expect(createMany).toHaveBeenCalledTimes(1);
+    expect(result.actions).toContain("workout_insight_unavailable");
+    expect(result.actions).not.toContain("workout_insight_enqueued");
+    expect(enqueueWorkoutInsight).not.toHaveBeenCalled();
+    // The reaction line is its own capability and still goes out.
+    expect(result.actions).toContain("line_pending");
+    expect(enqueueReactionLine).toHaveBeenCalledTimes(1);
+  });
+
+  it("claims the marker but enqueues no reaction line when the line is ruled out", async () => {
+    vi.mocked(aiWorkNotRuledOut).mockImplementation(
+      async (_userId, key) => key !== "reactionLines",
+    );
+    const result = await runDataArrival(fakePrisma as never, arrival());
+    if (result.status !== "processed") throw new Error("unreachable");
+    expect(aiWorkNotRuledOut).toHaveBeenCalledWith("user-1", "reactionLines");
+    expect(createMany).toHaveBeenCalledTimes(1);
+    expect(result.actions).toContain("line_unavailable");
+    expect(result.actions).not.toContain("line_pending");
+    expect(enqueueReactionLine).not.toHaveBeenCalled();
+  });
+
+  it("does not ask the prefilter for a line when the claim was a no-op", async () => {
+    createMany.mockResolvedValue({ count: 0 });
+    await runDataArrival(fakePrisma as never, arrival());
+    expect(aiWorkNotRuledOut).not.toHaveBeenCalled();
   });
 });

@@ -59,7 +59,8 @@ function routeFiles(tree: string): string[] {
 
 const ROUTES = AI_ROUTE_TREES.flatMap(routeFiles).sort();
 
-const ANY_GATE = /\b(?:requireAiCapability|getAiCapability)\s*\(/;
+const ANY_GATE =
+  /\b(?:requireAiCapability|getAiCapability|aiCapabilityToServe)\s*\(/;
 
 function code(path: string): string {
   return readFileSync(resolve(repoRoot, path), "utf8")

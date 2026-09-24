@@ -760,6 +760,7 @@
     "typeWaistToHeight": "허리-키 비율",
     "unitScore": "점",
     "unitRatio": "비율",
+    "unitRating": "단계",
     "typeWho5Score": "WHO-5 점수",
     "typeSciScore": "SCI 점수"
   },
@@ -8266,6 +8267,7 @@
       "saving": "저장 중…",
       "cancel": "취소",
       "saveError": "저장하지 못했어요. 다시 시도해 주세요.",
+      "emptyHint": "이 날을 저장하려면 생리량이나 증상을 고르거나, 위의 생리 시작 버튼을 눌러 주세요.",
       "temperatureSection": "체온 및 배란",
       "intimacySection": "성관계 및 피임",
       "testsSection": "검사",

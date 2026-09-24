@@ -16,6 +16,7 @@
  * The DTO types the routes return + the UI consumes are derived here so the
  * three layers agree on one shape.
  */
+import type { AiCapabilityState } from "@/lib/ai/capabilities/types";
 import { z } from "zod/v4";
 
 import type { WrittenOutcome } from "@/lib/outcome/written-outcome";
@@ -258,6 +259,12 @@ export interface OcrCapabilityDto {
   reason: "no-provider" | "enable-local-ocr" | null;
   /** Whether PDF uploads are accepted (Anthropic vision provider only). */
   pdfSupported: boolean;
+  /**
+   * The `labsOcr` capability for this record. When it is closed by anything
+   * other than a missing provider or a missing consent receipt, `available`
+   * is false with a null `reason`, and this says why.
+   */
+  ai: AiCapabilityState;
 }
 
 /**

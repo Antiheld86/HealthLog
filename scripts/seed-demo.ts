@@ -211,6 +211,7 @@ async function seed() {
     await client.query("DELETE FROM coach_conversations");
     await client.query("DELETE FROM consent_receipts");
     await client.query("DELETE FROM insight_narratives");
+    await client.query("DELETE FROM insight_status_caches");
     await client.query("DELETE FROM illness_symptom_links");
     await client.query("DELETE FROM illness_day_logs");
     await client.query("DELETE FROM illness_episodes");
@@ -1826,11 +1827,10 @@ async function seed() {
     console.log("Creating baked AI insight texts...");
 
     const todayKey = berlinDayKey();
-    // A real-looking provider/model pair so the read path treats the row as a
-    // genuine assessment (NOT a `model: "timeout-stub"`, which the cache-read
-    // rejects). The text is what renders; provider/model are provenance only.
+    // A real-looking provider tag for the rows that record one (the cached
+    // briefing, the narratives). The text is what renders; the tag is
+    // provenance only.
     const bakedProvider = "anthropic";
-    const bakedModel = "claude-3-5-sonnet";
 
     // ── Comprehensive insight + daily briefing ──
     // Stored on users.insights_cached_text (JSON). The GET read parses it and
@@ -2037,13 +2037,12 @@ async function seed() {
     );
 
     // ── Per-metric status cards ──
-    // Each card is an audit_logs row keyed `insights.<scope>-status.<locale>`
-    // whose details JSON is { dateKey, locale, text, providerType, model,
-    // tokensUsed, snapshotHash }. The read serves a row only when its dateKey
-    // equals today's Berlin key and the model is not the timeout-stub
-    // sentinel. We stamp today's key + a real model name so every card reads
-    // as a current assessment. `text` is the rendered field. 2-4 sentences
-    // each, grounded in the seeded data, in the base-system advisor voice.
+    // Each card is an insight_status_caches row keyed (user, metric, locale),
+    // the note encrypted with the app's codec. The read serves a note only
+    // when its date_key equals today's key, so every card is stamped with
+    // today's key and reads as a current assessment. The medication card also
+    // carries its (empty) per-medication list. 2-4 sentences each, grounded in
+    // the seeded data, in the base-system advisor voice.
     const statusCards: Array<{ scope: string; text: string }> = [
       {
         scope: "blood-pressure",
@@ -2108,23 +2107,30 @@ async function seed() {
     ];
 
     for (const card of statusCards) {
-      const action = `insights.${card.scope}-status.en`;
       await client.query(
-        `INSERT INTO audit_logs (id, user_id, action, details, created_at)
-         VALUES ($1, $2, $3, $4, NOW())`,
+        `INSERT INTO insight_status_caches
+           (id, user_id, metric, locale, text_encrypted, items_encrypted,
+            snapshot_hash, date_key, generated_at, created_at, updated_at)
+         VALUES ($1, $2, $3, 'en', $4, $5, $6, $7, NOW(), NOW(), NOW())
+         ON CONFLICT (user_id, metric, locale) DO UPDATE SET
+           text_encrypted = EXCLUDED.text_encrypted,
+           items_encrypted = EXCLUDED.items_encrypted,
+           snapshot_hash = EXCLUDED.snapshot_hash,
+           date_key = EXCLUDED.date_key,
+           generated_at = EXCLUDED.generated_at,
+           retry_at = NULL,
+           negative_reason = NULL,
+           updated_at = NOW()`,
         [
           cuid(),
           userId,
-          action,
-          JSON.stringify({
-            dateKey: todayKey,
-            locale: "en",
-            text: card.text,
-            providerType: bakedProvider,
-            model: bakedModel,
-            tokensUsed: null,
-            snapshotHash: `demo-baked-${card.scope}`,
-          }),
+          card.scope,
+          Buffer.from(encryptToBytes(card.text)),
+          card.scope === "medication-compliance"
+            ? Buffer.from(encryptToBytes("[]"))
+            : null,
+          `demo-baked-${card.scope}`,
+          todayKey,
         ],
       );
     }

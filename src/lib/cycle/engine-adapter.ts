@@ -20,7 +20,9 @@ import {
   resolveLuteal,
   clampLuteal,
   POPULATION_DEFAULT_CYCLE,
+  PERIOD_MAX,
 } from "@/lib/cycle";
+import { resolveCycleDay } from "./verdict";
 import type {
   CycleProfile,
   CycleDayLog,
@@ -41,6 +43,21 @@ export interface CalendarDayDTO {
    * wrong thing.
    */
   isCycleStart: boolean;
+  /**
+   * The 1-based day of the logged cycle this date belongs to, or null before
+   * the first logged start, after today, or past the point where an open
+   * cycle's count stops being an observed fact (the verdict's ceiling). For
+   * today it equals `verdict.dayOfCycle`. The log sheet labels a date with
+   * this, never with today's count.
+   */
+  cycleDay: number | null;
+  /**
+   * Whether the one-tap period end can land on this date: it sits inside the
+   * first `PERIOD_MAX` days of a logged cycle, which is where the end
+   * boundary stamps `periodEndDate`. Resolved per date so a back-dated period
+   * can be closed whatever phase today is in.
+   */
+  periodEndable: boolean;
   flow: string | null;
   hasSymptoms: boolean;
   confidence: number;
@@ -376,6 +393,12 @@ export function buildCalendar(
   for (const l of dayLogs) logByDate.set(l.date, l);
 
   const cycleStartDates = new Set(cycles.map((c) => c.startDate));
+  const sortedStarts = [...cycleStartDates].sort((a, b) => dayDiff(a, b));
+  const profileLengths = {
+    typicalCycleLength: profile.typicalCycleLength,
+    typicalPeriodLength: profile.typicalPeriodLength,
+    lutealPhaseLength: profile.lutealPhaseLength,
+  };
 
   const days: CalendarDayDTO[] = [];
   const span = dayDiff(to, from);
@@ -405,6 +428,8 @@ export function buildCalendar(
       prediction?.predictedOvulation != null &&
       prediction.predictedOvulation === date;
 
+    const cycleDay = resolveCycleDay(date, sortedStarts, today, profileLengths);
+
     days.push({
       date,
       // No asserted phase band while learning — a population-28 frame off a
@@ -415,6 +440,8 @@ export function buildCalendar(
       isPredictedOvulation,
       isPeriodLogged: log?.flow != null && log.flow !== "NONE",
       isCycleStart: cycleStartDates.has(date),
+      cycleDay,
+      periodEndable: cycleDay !== null && cycleDay <= PERIOD_MAX,
       flow: log?.flow ?? null,
       hasSymptoms: log?.hasSymptoms ?? false,
       confidence: prediction?.confidence ?? 0,

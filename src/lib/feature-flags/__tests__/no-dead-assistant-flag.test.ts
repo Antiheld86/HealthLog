@@ -1,6 +1,6 @@
 /**
  * Every assistant switch an operator can flip has to move something, a
- * switch that was retired stays retired, and the retired gate only shrinks.
+ * switch that was retired stays retired, and the retired gate stays gone.
  *
  * `healthScoreExplainer` did not move anything. It gated a caption beside the
  * Health-Score delta; the caption's component went when the health score was
@@ -21,19 +21,18 @@
  *      it. A switch whose reader lands with the routes it covers is named in
  *      `AWAITING_READER` with the reason, and the entry fails the moment a
  *      reader appears, so it cannot outlive its reason.
- *   3. `requireAssistantSurface` is the retired gate. It answers only the
- *      operator layer; `requireAiCapability` answers every layer. The routes
- *      that still call it are frozen below, in both directions: a new caller
- *      fails, and a caller that moved to the capability gate fails until its
- *      entry is removed. When the list is empty the function and
- *      `AssistantDisabledError` are deleted and this guard asserts zero.
+ *   3. `requireAssistantSurface` and `AssistantDisabledError` are gone. They
+ *      answered only the operator layer; `requireAiCapability` answers every
+ *      layer with the same `assistant.disabled.<switch>` code for the operator
+ *      case. Nothing may define or call them again.
  *   4. The matchers find what they are meant to judge (non-zero counts), so a
  *      matcher that stopped matching cannot agree with an empty world.
  *
  * Mutation checks: adding `await requireAssistantSurface("coach")` to any
- * route outside the frozen list turns guard 3 red by file name; removing the
- * `documentAi` entry from `AWAITING_READER` turns guard 2 red; putting
- * `assistantCorrelationsEnabled` back on the schema turns guard 1 red.
+ * route turns guard 3 red by file name; deleting the
+ * `requireAiCapability("documentAi"` calls from the document routes (the only
+ * reader of that switch's capabilities in the route tree) turns guard 2 red;
+ * putting `assistantCorrelationsEnabled` back on the schema turns guard 1 red.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
@@ -99,18 +98,7 @@ const PLUMBING = [
  * Switches with no reader yet, and why that is correct for now. An entry is
  * a claim with an expiry: the test below fails as soon as a reader appears.
  */
-const AWAITING_READER: Record<string, string> = {
-  documentAi:
-    "The capabilities it covers (documentAi, labsOcr, medicationExtract) are " +
-    "resolved and published, but the document, lab-scan and medication " +
-    "extraction routes move onto requireAiCapability in the same release; " +
-    "until then the master switch is what stops them.",
-};
-
-/**
- * Every file that still calls the retired gate. Only ever shrinks.
- */
-const RETIRED_GATE_CALLERS = ["src/app/api/medications/extract/route.ts"];
+const AWAITING_READER: Record<string, string> = {};
 
 function sourceFiles(dir: string, acc: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -223,7 +211,6 @@ describe("no assistant sub-switch is a dead switch", () => {
     .join("\n");
 
   function hasReader(toggle: string): boolean {
-    if (corpus.includes(`requireAssistantSurface("${toggle}")`)) return true;
     if (new RegExp(`flags\\.${toggle}\\b`).test(corpus)) return true;
     const capabilities = AI_CAPABILITY_KEYS.filter(
       (key) => AI_CAPABILITIES[key].operatorSwitch === toggle,
@@ -257,37 +244,28 @@ describe("no assistant sub-switch is a dead switch", () => {
   });
 });
 
-describe("the retired gate only shrinks", () => {
-  const CALL = /(?:await|return|=)\s*requireAssistantSurface\s*\(/;
-  const callers = SOURCES.filter(
-    (file) =>
-      rel(file) !== "src/lib/feature-flags/index.ts" && CALL.test(code(file)),
-  )
-    .map(rel)
-    .sort();
+describe("the retired gate stays gone", () => {
+  const NAMES = /\b(?:requireAssistantSurface|AssistantDisabledError)\b/;
 
-  it("finds the callers it is meant to judge", () => {
-    // A matcher that stopped matching would agree with an empty list.
-    expect(callers.length).toBe(RETIRED_GATE_CALLERS.length);
-  });
-
-  it("gains no new caller", () => {
-    const added = callers.filter(
-      (file) => !RETIRED_GATE_CALLERS.includes(file),
-    );
+  it("is neither defined nor called anywhere in the source tree", () => {
+    // The matcher is proven able to match before its empty answer counts.
+    expect(NAMES.test('await requireAssistantSurface("coach")')).toBe(true);
+    expect(NAMES.test("new AssistantDisabledError(s)")).toBe(true);
+    expect(SOURCES.length).toBeGreaterThan(100);
+    const offenders = SOURCES.filter((file) => NAMES.test(code(file))).map(rel);
     expect(
-      added,
-      "a new route calls requireAssistantSurface; use requireAiCapability",
+      offenders,
+      "the retired operator-only gate is back; use requireAiCapability",
     ).toEqual([]);
   });
 
-  it("forgets a caller once it has moved to the capability gate", () => {
-    const moved = RETIRED_GATE_CALLERS.filter(
-      (file) => !callers.includes(file),
+  it("keeps the operator code family on the capability refusal", async () => {
+    const { aiRefusal } = await import("@/lib/ai/capabilities/refusal");
+    expect(aiRefusal("coach", "operator_disabled").meta.errorCode).toBe(
+      "assistant.disabled.coach",
     );
-    expect(
-      moved,
-      "these no longer call requireAssistantSurface; remove them from the list",
-    ).toEqual([]);
+    expect(aiRefusal("statusText", "operator_disabled").meta.errorCode).toBe(
+      "assistant.disabled.insightStatus",
+    );
   });
 });

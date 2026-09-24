@@ -8,6 +8,7 @@ import { NextRequest } from "next/server";
 
 vi.mock("@/lib/modules/gate", () => ({
   requireModuleEnabled: vi.fn().mockResolvedValue({ enabled: true }),
+  MODULE_DISABLED_ERROR_CODE: "module.disabled",
 }));
 vi.mock("@/lib/rate-limit", () => ({
   checkRateLimit: vi.fn().mockResolvedValue({ allowed: true }),
@@ -28,6 +29,11 @@ vi.mock("@/lib/auth/audit", () => ({
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/logging/transports", () => ({ emitIfSampled: vi.fn() }));
 vi.mock("@/lib/db", () => ({ prisma: {} }));
+vi.mock("@/lib/ai/capabilities/gate", async () =>
+  (
+    await import("@/__tests__/helpers/provider-order-mock")
+  ).openCapabilityGateMock(),
+);
 vi.mock("@/lib/db-compat", () => ({
   ensureDbCompatibility: vi.fn().mockResolvedValue(undefined),
 }));
@@ -43,6 +49,8 @@ vi.mock("next/headers", () => ({
 import { POST } from "../route";
 import { DELETE } from "../[documentId]/route";
 import { getSession } from "@/lib/auth/session";
+import { requireAiCapability } from "@/lib/ai/capabilities/gate";
+import { AiUnavailableError } from "@/lib/ai/capabilities/refusal";
 import {
   attachDocument,
   detachDocument,
@@ -209,5 +217,52 @@ describe("DELETE detach", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.fenced).toBe(true);
+  });
+});
+
+describe("attachments — the coach and documentAi capabilities", () => {
+  it("refuses an attach when the Coach is off for the record", async () => {
+    vi.mocked(requireAiCapability).mockRejectedValueOnce(
+      new AiUnavailableError("coach", "user_disabled", "coach"),
+    );
+    const res = await POST(
+      postReq({ documentId: "doc-a" }) as never,
+      postCtx() as never,
+    );
+    expect(res.status).toBe(403);
+    expect(await code(res)).toBe("module.disabled");
+    expect(attachDocument).not.toHaveBeenCalled();
+  });
+
+  it("checks both capabilities on attach", async () => {
+    vi.mocked(fetchConversationAttachmentState).mockResolvedValue(null);
+    await POST(postReq({ documentId: "doc-a" }) as never, postCtx() as never);
+    expect(requireAiCapability).toHaveBeenCalledWith("coach", {
+      pickDecides: true,
+    });
+    expect(requireAiCapability).toHaveBeenCalledWith("documentAi", {
+      pickDecides: true,
+    });
+  });
+
+  it("lets a detach through with every capability closed: it removes the person's own data", async () => {
+    vi.mocked(requireAiCapability).mockRejectedValue(
+      new AiUnavailableError("coach", "operator_disabled"),
+    );
+    vi.mocked(fetchConversationAttachmentState).mockResolvedValue({
+      id: "conv-1",
+      documentScoped: true,
+      messageCount: 0,
+      attachmentIds: ["doc-a"],
+    });
+    const res = await DELETE(
+      new NextRequest(
+        new URL("http://localhost/api/insights/chat/conv-1/attachments/doc-a"),
+        { method: "DELETE" },
+      ) as never,
+      delCtx() as never,
+    );
+    expect(res.status).not.toBe(403);
+    expect(requireAiCapability).not.toHaveBeenCalled();
   });
 });

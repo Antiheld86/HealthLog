@@ -11,9 +11,11 @@
  *
  *   - `action` routes call `requireAiCapability(key)` and refuse with the
  *     capability envelope;
- *   - `mixed` reads call `getAiCapability(key)`, answer 200, null the model
- *     text and say why in `ai`. They never refuse for an AI reason, so they
- *     never call `requireAiCapability`.
+ *   - `mixed` reads call `getAiCapability(key)` (the viewer's view, for work
+ *     they would start) or `aiCapabilityToServe(recordId, key)` (the record's
+ *     own view, for stored model text they would show), answer 200, null the
+ *     model text and say why in `ai`. They never refuse for an AI reason, so
+ *     they never call `requireAiCapability`.
  *
  * Read by two guards: `ai-capability-route-inventory.test.ts` (the whole API
  * tree) and `insights/__tests__/coach-route-gate-inventory.test.ts` (every
@@ -29,6 +31,67 @@ export interface AiRouteEntry {
 }
 
 export const AI_ROUTES: Readonly<Record<string, AiRouteEntry>> = {
+  // Reading documents, lab scans and medication text.
+  "src/app/api/documents/inbound/[id]/chat/route.ts": {
+    kind: "action",
+    capabilities: ["documentAi"],
+    why: "POST asks a model about one document; the history GET asks nothing.",
+  },
+  "src/app/api/documents/inbound/[id]/extract/route.ts": {
+    kind: "action",
+    capabilities: ["documentAi"],
+    why: "Reads a document's text with a model.",
+  },
+  "src/app/api/documents/inbound/[id]/index/route.ts": {
+    kind: "action",
+    capabilities: ["documentAi"],
+    why: "Indexes a document's content through a provider.",
+  },
+  "src/app/api/documents/inbound/[id]/suggest/route.ts": {
+    kind: "action",
+    capabilities: ["documentAi"],
+    why: "Suggests a title and category from the document with a model.",
+  },
+  "src/app/api/documents/inbound/[id]/summary/route.ts": {
+    kind: "action",
+    capabilities: ["documentAi"],
+    why: "Summarises a document with a model.",
+  },
+  "src/app/api/documents/inbound/reindex/route.ts": {
+    kind: "action",
+    capabilities: ["documentAi"],
+    why: "Re-indexes the vault through a provider.",
+  },
+  "src/app/api/documents/inbound/route.ts": {
+    kind: "mixed",
+    capabilities: ["documentAi"],
+    why: "The upload is data and always accepted; only the AI work queued after it follows the capability.",
+  },
+  "src/app/api/auth/me/documents-auto-ai-read/route.ts": {
+    kind: "mixed",
+    capabilities: ["documentAi"],
+    why: "The preference is stored whatever AI says; the catch-up it queues follows the capability.",
+  },
+  "src/app/api/insights/chat/fenced/route.ts": {
+    kind: "action",
+    capabilities: ["coach", "documentAi"],
+    why: "Document chat inside a Coach conversation.",
+  },
+  "src/app/api/insights/chat/[id]/attachments/route.ts": {
+    kind: "action",
+    capabilities: ["coach", "documentAi"],
+    why: "Attaching a document to a Coach conversation for the model to read.",
+  },
+  "src/app/api/labs/ocr/extract/route.ts": {
+    kind: "action",
+    capabilities: ["labsOcr"],
+    why: "Reads a lab report image with a model.",
+  },
+  "src/app/api/medications/extract/route.ts": {
+    kind: "action",
+    capabilities: ["medicationExtract"],
+    why: "Turns typed medication text into a schedule with a model.",
+  },
   "src/app/api/insights/chat/route.ts": {
     kind: "action",
     capabilities: ["coach"],
@@ -189,23 +252,19 @@ export const DATA_ROUTES: Readonly<Record<string, string>> = {
   "src/app/api/coach/reminders/[id]/route.ts": "One stored Coach reminder.",
   "src/app/api/coach/reminder-suggestions/route.ts":
     "Deterministic reminder suggestions.",
+  "src/app/api/insights/chat/[id]/attachments/[documentId]/route.ts":
+    "Detaching a document: removal of one's own data.",
   "src/app/api/coach/suggested-actions/route.ts":
     "Confirms a proposed action from a closed allowlist; no model call.",
 };
 
 /**
- * Routes in the AI trees whose AI gating another change owns. Each still has
+ * Routes in the AI trees whose AI gating another change still owns. Each has
  * to be classified; the entry names who moves it. An entry that starts
  * calling a capability gate fails the guard until it moves to `AI_ROUTES`.
+ * Empty: every route in these trees is classified.
  */
-export const PENDING_ROUTES: Readonly<Record<string, string>> = {
-  "src/app/api/insights/chat/fenced/route.ts":
-    "Document chat inside a conversation: moves to `coach` and `documentAi` with the document-extraction routes.",
-  "src/app/api/insights/chat/[id]/attachments/route.ts":
-    "Attaching a document to a conversation: moves to `coach` and `documentAi` with the document-extraction routes.",
-  "src/app/api/insights/chat/[id]/attachments/[documentId]/route.ts":
-    "Detaching a document: removal of one's own data, stays ungated once the document routes move.",
-};
+export const PENDING_ROUTES: Readonly<Record<string, string>> = {};
 
 /** The trees in which every route has to be classified above. */
 export const AI_ROUTE_TREES = [

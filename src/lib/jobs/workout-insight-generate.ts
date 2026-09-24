@@ -52,7 +52,7 @@ import { runStatusCompletion } from "@/lib/insights/status-provider";
 import { jobDone, type JobOutcome } from "@/lib/jobs/job-outcome";
 import { annotate } from "@/lib/logging/context";
 import { withBackgroundEvent } from "@/lib/logging/background";
-import { resolveModuleMap } from "@/lib/modules/gate";
+import { aiCapabilityForJob } from "@/lib/ai/capabilities/gate";
 import { userDayKey } from "@/lib/tz/format";
 import { resolveUserTimezone } from "@/lib/tz/resolver";
 import { startOfLocalDayInTz } from "@/lib/tz/local-day";
@@ -215,13 +215,19 @@ export async function runWorkoutInsightGenerate(
   if (!userId || !workoutId)
     return { status: "skipped", reason: "bad_payload" };
 
-  // ── Gate 1: modules ──────────────────────────────────────────────────────
-  // Both, not either. `workouts` is the domain the surface lives in and
-  // `insights` is the AI surface family it belongs to; a user who turned either
-  // off has said no to this card.
-  const modules = await resolveModuleMap(userId);
-  if (modules.workouts === false || modules.insights === false) {
-    return { status: "skipped", reason: "module_off" };
+  // ── Gate 1: the `workoutInsights` capability ─────────────────────────────
+  // The operator's switches (the master included, which this job never read
+  // before), both owning modules (`workouts` is the domain, `insights` the
+  // person's AI analysis switch), provider presence and consent, in one
+  // answer, before any evidence is built. The chokepoint re-checks at the wire.
+  const capability = await aiCapabilityForJob(userId, "workoutInsights");
+  if (!capability.available) {
+    const reason = capability.reason ?? "check_failed";
+    annotate({
+      action: { name: "workouts.insight.skipped" },
+      meta: { workoutId, reason },
+    });
+    return { status: "skipped", reason };
   }
 
   const row = await prisma.workout.findFirst({
@@ -429,7 +435,7 @@ export async function runWorkoutInsightGenerate(
     outcome = await runStatusCompletion({
       userId,
       cacheAction: "insights.workout-insight",
-      consentSurface: "insights",
+      capability: "workoutInsights",
       systemPrompt: getWorkoutInsightSystemPrompt(prepared.locale),
       userPrompt: getWorkoutInsightUserPrompt(
         JSON.stringify(prepared.evidence),

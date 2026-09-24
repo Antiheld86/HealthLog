@@ -45,13 +45,18 @@ function code(path: string): string {
 }
 
 /** Whitespace-tolerant: a call split across lines still matches. */
-const GATE_CALL = /\b(requireAiCapability|getAiCapability)\s*\(\s*"(\w+)"/g;
-const ANY_GATE = /\b(?:requireAiCapability|getAiCapability)\s*\(/;
+const GATE_CALL =
+  /\b(?:(requireAiCapability|getAiCapability)\s*\(\s*"(\w+)"|(aiCapabilityToServe)\s*\([^,()]*,\s*"(\w+)")/g;
+const ANY_GATE =
+  /\b(?:requireAiCapability|getAiCapability|aiCapabilityToServe)\s*\(/;
 const REQUIRE_GATE = /\brequireAiCapability\s*\(/;
 const RETIRED_GATE = /\brequireAssistantSurface\s*\(/;
 
 function gateCalls(text: string): Array<{ fn: string; key: string }> {
-  return [...text.matchAll(GATE_CALL)].map((m) => ({ fn: m[1], key: m[2] }));
+  return [...text.matchAll(GATE_CALL)].map((m) => ({
+    fn: m[1] ?? m[3],
+    key: m[2] ?? m[4],
+  }));
 }
 
 function routeFiles(): string[] {
@@ -81,6 +86,9 @@ describe("AI capability route inventory", () => {
       { fn: "requireAiCapability", key: "coach" },
     ]);
     expect(ANY_GATE.test("getAiCapability (\n")).toBe(true);
+    expect(
+      gateCalls('aiCapabilityToServe(\n    user.id,\n    "statusText",\n  )'),
+    ).toEqual([{ fn: "aiCapabilityToServe", key: "statusText" }]);
   });
 
   it("finds the routes it is meant to judge", () => {

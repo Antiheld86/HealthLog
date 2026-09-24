@@ -60,6 +60,11 @@ import {
 } from "./shared";
 import { aiCheckFailedResponse, aiRefusal403Description } from "./ai-refusal";
 import { aiCapabilityState } from "./profile";
+import {
+  AI_EXTRACTION_UNAVAILABLE_DESCRIPTION,
+  aiExtractionRefusalDescription,
+  aiExtractionRefusals,
+} from "./ai-extraction-refusals";
 
 // The assigning form, deliberately: `schema.meta({...})` as a bare statement
 // returns a clone and registers nothing, so the component id would never
@@ -938,7 +943,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Send a FENCED multi-document coach turn (streaming reply)",
       description:
-        "v1.29.x (S7) — sends a user turn and streams a grounded prose reply about the documents attached to a coach conversation, as Server-Sent Events (`text/event-stream`: one `data: <json>\\n\\n` frame per event; `token` / `done` / `error`, HTTP 200 even for a provider/refusal outcome). FENCED by construction: NO tools, NO health snapshot; every attached document is fenced as untrusted DATA (per-document header fields marker-scrubbed); the single picked provider is egress-consent-checked once per attached document (403 `consent.ai.required` if any fails); the reply is numerically grounded against the LIVE attachments' figures only. `conversationId` continues an existing fenced thread; `attachmentIds` (first-turn ONLY, min 1, max 5) creates a fresh fenced thread — supplying BOTH is a 422. The body is `.strict()`: `scope` / `guidedQuestion` / `prefill` / `userId` are rejected. A plain tool conversation 404s here. Module-gated on `inboundDocuments`; rate-limited (shared `document-chat` bucket). Renders as plain text (no markdown). Auth via cookie or Bearer.",
+        "v1.29.x (S7) — sends a user turn and streams a grounded prose reply about the documents attached to a coach conversation, as Server-Sent Events (`text/event-stream`: one `data: <json>\\n\\n` frame per event; `token` / `done` / `error`, HTTP 200 even for a provider/refusal outcome). FENCED by construction: NO tools, NO health snapshot; every attached document is fenced as untrusted DATA (per-document header fields marker-scrubbed); answers under the `coach` and `documentAi` capabilities, both re-checked for the single picked provider immediately before anything is sent (403 with the capability envelope when either is closed; `consent.ai.required` when that provider leaves the machine without an `ai_extraction` / `ai_full` receipt; no provider is the `documents.chat.provider.none` error frame); the reply is numerically grounded against the LIVE attachments' figures only. `conversationId` continues an existing fenced thread; `attachmentIds` (first-turn ONLY, min 1, max 5) creates a fresh fenced thread — supplying BOTH is a 422. The body is `.strict()`: `scope` / `guidedQuestion` / `prefill` / `userId` are rejected. A plain tool conversation 404s here. Module-gated on `inboundDocuments`; rate-limited (shared `document-chat` bucket). Renders as plain text (no markdown). Auth via cookie or Bearer.",
       requestBody: {
         required: true,
         content: {
@@ -961,7 +966,12 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
         },
         "403": {
           description:
-            "AI consent required for an external provider (`errorCode: consent.ai.required`). A 422 (`stdResponses`) covers an un-indexed / unavailable attachment (`coach.fenced.attachmentUnavailable`), the attachment cap (`coach.fenced.attachmentLimit`), or `attachmentIds` sent with a `conversationId` (`coach.fenced.attachmentConflict`).",
+            aiExtractionRefusalDescription("documentAi", "coach") +
+            " A 422 (`stdResponses`) covers an un-indexed / unavailable attachment (`coach.fenced.attachmentUnavailable`), the attachment cap (`coach.fenced.attachmentLimit`), or `attachmentIds` sent with a `conversationId` (`coach.fenced.attachmentConflict`).",
+          content: { "application/json": { schema: errorEnvelope } },
+        },
+        "503": {
+          description: AI_EXTRACTION_UNAVAILABLE_DESCRIPTION,
           content: { "application/json": { schema: errorEnvelope } },
         },
         ...stdResponses,
@@ -973,7 +983,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
       tags: ["Insights"],
       summary: "Attach a document to a coach conversation",
       description:
-        "v1.29.x (S7) — attaches one already-stored, content-indexed document to an existing conversation and sets its sticky `documentScoped` flag TRUE (the one legal, privilege-reducing tool→fenced transition; audit-logged when a flip occurs). Validates the document is owned + live + indexed + within the 5-document cap. Idempotent: attaching an already-attached document is a 200. A foreign / unknown conversation or document maps to 404. Module-gated on `inboundDocuments`; rate-limited. Auth via cookie or Bearer.",
+        "v1.29.x (S7) — attaches one already-stored, content-indexed document to an existing conversation and sets its sticky `documentScoped` flag TRUE (the one legal, privilege-reducing tool→fenced transition; audit-logged when a flip occurs). Validates the document is owned + live + indexed + within the 5-document cap. Idempotent: attaching an already-attached document is a 200. A foreign / unknown conversation or document maps to 404. Module-gated on `inboundDocuments`; answers under the `coach` and `documentAi` capabilities (nothing is sent to a provider here, so a missing provider or consent receipt is left to the next turn); rate-limited. Detaching (DELETE) is never refused for AI reasons: it removes the person\'s own data. Auth via cookie or Bearer.",
       parameters: [
         {
           name: "id",
@@ -1005,6 +1015,7 @@ export const coachPaths: NonNullable<ZodOpenApiObject["paths"]> = {
           description: "Conversation or document not found / not owned.",
           content: { "application/json": { schema: errorEnvelope } },
         },
+        ...aiExtractionRefusals("documentAi", "coach"),
         ...stdResponses,
       },
     },

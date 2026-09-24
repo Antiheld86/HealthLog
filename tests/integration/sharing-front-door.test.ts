@@ -271,19 +271,13 @@ function cachedBriefing(marker: string): string {
   });
 }
 
-// The digest's marker is data: a checkup that is due, named per account. The
-// briefing lead is model text and follows the record's `briefing` capability,
-// which a delegate inside somebody else's record does not have
-// (`not_permitted_for_record`), so it cannot tell the two records apart; the
-// case below pins that separately.
 frontDoorRead("GET /api/daily/digest", {
   seed: async (userId, marker) => {
-    await getPrismaClient().measurementReminder.create({
+    await getPrismaClient().user.update({
+      where: { id: userId },
       data: {
-        userId,
-        label: `Checkup for the ${marker}`,
-        intervalDays: 365,
-        nextDueAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        insightsCachedText: cachedBriefing(marker),
+        insightsCachedAt: new Date(),
       },
     });
   },
@@ -291,48 +285,7 @@ frontDoorRead("GET /api/daily/digest", {
     const { GET } = await import("@/app/api/daily/digest/route");
     return drive(GET as Handler, "/api/daily/digest");
   },
-  read: (data: { worthALook: { kind: string; body?: string }[] }) =>
-    data.worthALook.find((item) => item.kind === "preventive_care")?.body ??
-    null,
-});
-
-describe("GET /api/daily/digest — model text inside somebody else's record", () => {
-  it("serves the owner's briefing lead to the owner and never to a delegate", async () => {
-    const owner = await makeUser("owner");
-    const delegate = await makeUser("delegate");
-    const prisma = getPrismaClient();
-    await prisma.user.update({
-      where: { id: owner.id },
-      data: {
-        insightsCachedText: cachedBriefing("owner"),
-        insightsCachedAt: new Date(),
-        aiProvider: "ANTHROPIC",
-        aiAnthropicKeyEncrypted: "v1:presence-only",
-        consentReceipts: {
-          create: { kind: "ai_full", artefact: "test", signedAt: new Date() },
-        },
-      },
-    });
-    const { GET } = await import("@/app/api/daily/digest/route");
-
-    await signIn(owner.id);
-    const own = (await ok(
-      await drive(GET as Handler, "/api/daily/digest"),
-    )) as {
-      briefingLead: string | null;
-    };
-    expect(own.briefingLead).toBe("Briefing for the owner.");
-
-    await switchInto(owner.id, delegate.id);
-    const switched = (await ok(
-      await drive(GET as Handler, "/api/daily/digest"),
-    )) as {
-      briefingLead: string | null;
-      ai: { briefing: { reason: string | null } };
-    };
-    expect(switched.briefingLead).toBeNull();
-    expect(switched.ai.briefing.reason).toBe("not_permitted_for_record");
-  });
+  read: (data: { briefingLead: string | null }) => data.briefingLead,
 });
 
 frontDoorRead("GET /api/gamification/achievements", {
@@ -387,48 +340,18 @@ async function seedAssistantMessage(userId: string, at: string) {
   });
 }
 
-// The Coach is not available to a delegate inside somebody else's record, so
-// the unread signal answers its quiet shape there rather than the owner's
-// thread. The owner's own read, and the refusals of the front door itself,
-// are unchanged.
-describe("GET /api/insights/coach/nudge-status", () => {
-  it("answers the owner's thread to the owner and the quiet shape to a delegate", async () => {
-    const owner = await makeUser("owner");
-    const delegate = await makeUser("delegate");
-    await getPrismaClient().user.update({
-      where: { id: owner.id },
-      data: {
-        aiProvider: "ANTHROPIC",
-        aiAnthropicKeyEncrypted: "v1:presence-only",
-      },
-    });
-    await seedAssistantMessage(owner.id, "2026-07-01T09:00:00Z");
-    const { GET } = await import("@/app/api/insights/coach/nudge-status/route");
-
-    await signIn(owner.id);
-    const own = (await ok(
-      await drive(GET as Handler, "/api/insights/coach/nudge-status"),
-    )) as { nudgedAt: string | null };
-    expect(own.nudgedAt).toBe("2026-07-01T09:00:00.000Z");
-
-    await switchInto(owner.id, delegate.id);
-    const switched = (await ok(
-      await drive(GET as Handler, "/api/insights/coach/nudge-status"),
-    )) as { nudgedAt: string | null; ai: { reason: string | null } };
-    expect(switched.nudgedAt).toBeNull();
-    expect(switched.ai.reason).toBe("not_permitted_for_record");
-  });
-
-  it("refuses a caller who names a record they were never granted", async () => {
-    const owner = await makeUser("owner");
-    const stranger = await makeUser("stranger");
-    const session = await signIn(stranger.id);
-    await switchSessionTo(session.id, owner.id);
-    const { GET } = await import("@/app/api/insights/coach/nudge-status/route");
-    await expectAccessDenied(
-      await drive(GET as Handler, "/api/insights/coach/nudge-status"),
+frontDoorRead("GET /api/insights/coach/nudge-status", {
+  seed: async (userId, marker) => {
+    await seedAssistantMessage(
+      userId,
+      marker === "owner" ? "2026-07-01T09:00:00Z" : "2026-07-02T09:00:00Z",
     );
-  });
+  },
+  call: async () => {
+    const { GET } = await import("@/app/api/insights/coach/nudge-status/route");
+    return drive(GET as Handler, "/api/insights/coach/nudge-status");
+  },
+  read: (data: { nudgedAt: string | null }) => data.nudgedAt,
 });
 
 frontDoorRead("GET /api/coach/reminders", {

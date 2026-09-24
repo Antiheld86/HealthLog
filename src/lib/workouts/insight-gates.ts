@@ -5,7 +5,8 @@
  * in this order for a reason — each one is cheaper than the one after it, so
  * the common refusals cost nothing:
  *
- *   1. modules  — `workouts` AND `insights` both on (one cached map lookup)
+ *   1. capability — `workoutInsights` (both owning modules, the operator
+ *      switches, provider presence and consent in one answer)
  *   2. duration — at least `MIN_DURATION_SEC` (a field already in hand)
  *   3. daily cap — at most `MAX_INSIGHTS_PER_DAY` generated today (one COUNT)
  *   4. input hash — the evidence is unchanged since the last paragraph (one

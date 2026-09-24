@@ -44,8 +44,9 @@ vi.mock("@/lib/analytics/intraday-pulse-io", () => ({
   loadIntradayPulse: vi.fn(),
 }));
 
-vi.mock("@/lib/ai/capabilities/record", () => ({
+vi.mock("@/lib/ai/capabilities/gate", () => ({
   aiCapabilityForRecord: vi.fn(),
+  aiCapabilityToServe: vi.fn(),
 }));
 
 vi.mock("@/lib/ai/coach/bytes-codec", () => ({
@@ -66,7 +67,10 @@ import { __resetAllCachesForTests } from "@/lib/cache/server-cache";
 import { invalidateUserMeasurements } from "@/lib/cache/invalidate";
 import { PRIORITY_ITEM_KINDS } from "@/lib/daily/priority-item";
 import { prisma } from "@/lib/db";
-import { aiCapabilityForRecord } from "@/lib/ai/capabilities/record";
+import {
+  aiCapabilityForRecord,
+  aiCapabilityToServe,
+} from "@/lib/ai/capabilities/gate";
 import { decryptFromBytes } from "@/lib/ai/coach/bytes-codec";
 import {
   AI_AVAILABLE,
@@ -111,6 +115,7 @@ beforeEach(() => {
   vi.mocked(probeRollupCoverage).mockResolvedValue(new Map());
   vi.mocked(loadIntradayPulse).mockResolvedValue({ tension: null } as never);
   vi.mocked(aiCapabilityForRecord).mockResolvedValue(AI_AVAILABLE);
+  vi.mocked(aiCapabilityToServe).mockResolvedValue(AI_AVAILABLE);
 });
 
 describe("loadDailyDigest — S11/S12 extras cache", () => {
@@ -222,10 +227,7 @@ describe("loadDailyDigest — AI parts", () => {
     const digest = await loadDailyDigest(USER, NOW);
 
     expect(aiCapabilityForRecord).toHaveBeenCalledWith("user-1", "coach");
-    expect(aiCapabilityForRecord).toHaveBeenCalledWith(
-      "user-1",
-      "reactionLines",
-    );
+    expect(aiCapabilityToServe).toHaveBeenCalledWith("user-1", "reactionLines");
     expect(digest.ai).toEqual({
       briefing: AI_AVAILABLE,
       coach: AI_AVAILABLE,
@@ -244,8 +246,8 @@ describe("loadDailyDigest — AI parts", () => {
   });
 
   it("neither decrypts nor serves a stored reaction line while the capability is unavailable", async () => {
-    vi.mocked(aiCapabilityForRecord).mockImplementation(async (_id, key) =>
-      key === "reactionLines" ? aiUnavailable("user_disabled") : AI_AVAILABLE,
+    vi.mocked(aiCapabilityToServe).mockResolvedValue(
+      aiUnavailable("user_disabled"),
     );
     vi.mocked(prisma.arrivalReaction.findMany).mockResolvedValueOnce([
       ARRIVAL,
@@ -260,8 +262,8 @@ describe("loadDailyDigest — AI parts", () => {
   });
 
   it("does not decrypt plan prose while the coach capability is unavailable", async () => {
-    vi.mocked(aiCapabilityForRecord).mockImplementation(async (_id, key) =>
-      key === "coach" ? aiUnavailable("operator_disabled") : AI_AVAILABLE,
+    vi.mocked(aiCapabilityForRecord).mockResolvedValue(
+      aiUnavailable("operator_disabled"),
     );
     vi.mocked(prisma.coachPlan.findMany).mockResolvedValueOnce([
       {
