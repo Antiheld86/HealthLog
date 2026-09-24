@@ -51,6 +51,19 @@ describe("tour-state", () => {
       expect(ids).toContain("wrapUp");
     });
 
+    it("keeps the Insights stop with AI analysis off", () => {
+      const stops = buildTourStops({ modules: { insights: false } });
+      expect(stops.map((s) => s.id)).toContain("insights");
+    });
+
+    it("drops the Coach and Medications stops with their modules off", () => {
+      const ids = buildTourStops({
+        modules: { coach: false, medications: false },
+      }).map((s) => s.id);
+      expect(ids).not.toContain("coach");
+      expect(ids).not.toContain("medications");
+    });
+
     it("keeps a module stop when its key is absent or true (fail-open)", () => {
       const stops = buildTourStops({ modules: { labs: true } });
       expect(stops.map((s) => s.id)).toContain("labs");

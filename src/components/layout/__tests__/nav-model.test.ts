@@ -102,15 +102,12 @@ describe("visibleNavDestinations module gate", () => {
     expect(on.indexOf("/cycle")).toBeLessThan(on.indexOf("/medications"));
   });
 
-  it("drops a module-gated entry (mood / labs / coach / achievements / insights / medications) when its module is disabled", () => {
+  it("drops a module-gated entry (mood / labs / coach / achievements / medications) when its module is disabled", () => {
     const disabled = visibleNavDestinations({
       mood: false,
       labs: false,
       coach: false,
       achievements: false,
-      // v1.18.0 — Insights is now `requiresModule: "insights"`, so the
-      // top-level /insights entry drops when the module is off.
-      insights: false,
       // v1.18.1 (D3) — medications graduated to a toggleable module.
       medications: false,
     }).map((d) => d.href);
@@ -118,8 +115,14 @@ describe("visibleNavDestinations module gate", () => {
     expect(disabled).not.toContain("/labs");
     expect(disabled).not.toContain("/coach");
     expect(disabled).not.toContain("/achievements");
-    expect(disabled).not.toContain("/insights");
     expect(disabled).not.toContain("/medications");
+  });
+
+  it("keeps Insights with AI analysis off: the insights key owns no destination", () => {
+    const hrefs = visibleNavDestinations({ insights: false }).map(
+      (d) => d.href,
+    );
+    expect(hrefs).toContain("/insights");
   });
 
   it("keeps every module-gated entry when its module is enabled", () => {

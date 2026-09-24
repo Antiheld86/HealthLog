@@ -48,16 +48,17 @@ import {
   NAV_DESTINATIONS,
   isDestinationInSharedRecord,
   mobileMoreHubDestinations,
+  navDestinationModule,
   visibleNavDestinations,
   visibleUtilityDestinations,
 } from "../nav-model";
 
 /** Everything enabled, so the module gate never masks the sharing gate. */
 const ALL_MODULES = Object.fromEntries(
-  NAV_DESTINATIONS.filter((d) => d.requiresModule).map((d) => [
-    d.requiresModule as string,
-    true,
-  ]),
+  NAV_DESTINATIONS.flatMap((d) => {
+    const owner = navDestinationModule(d);
+    return owner ? [[owner, true]] : [];
+  }),
 );
 
 function hrefsInSharedRecord(): string[] {

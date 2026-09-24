@@ -21,6 +21,7 @@
  */
 
 import type { ModuleKey } from "@/lib/modules/registry";
+import { isSurfaceVisible } from "@/lib/modules/surface";
 
 /** Stable IDs for every stop in the tour, in presentation order. */
 export type TourStopId =
@@ -69,12 +70,6 @@ export interface TourStop {
    * page.
    */
   route?: string;
-  /**
-   * v1.18.6 — module gate. When set, the stop is dropped unless the
-   * account's resolved module map has the key enabled (default-on:
-   * only an explicit `false` drops it, mirroring the nav gate).
-   */
-  requiresModule?: ModuleKey;
 }
 
 /**
@@ -111,7 +106,6 @@ const ALL_STOPS: readonly TourStop[] = [
     targetId: "medications-hero",
     placement: "bottom",
     route: "/medications",
-    requiresModule: "medications",
     titleKey: "onboarding.tour.steps.medications.title",
     bodyKey: "onboarding.tour.steps.medications.body",
   },
@@ -120,7 +114,6 @@ const ALL_STOPS: readonly TourStop[] = [
     targetId: "labs-hero",
     placement: "bottom",
     route: "/labs",
-    requiresModule: "labs",
     titleKey: "onboarding.tour.steps.labs.title",
     bodyKey: "onboarding.tour.steps.labs.body",
   },
@@ -129,7 +122,6 @@ const ALL_STOPS: readonly TourStop[] = [
     targetId: "illness-hero",
     placement: "bottom",
     route: "/illness",
-    requiresModule: "illness",
     titleKey: "onboarding.tour.steps.illness.title",
     bodyKey: "onboarding.tour.steps.illness.body",
   },
@@ -146,7 +138,6 @@ const ALL_STOPS: readonly TourStop[] = [
     targetId: "cycle-hero",
     placement: "bottom",
     route: "/cycle",
-    requiresModule: "cycle",
     titleKey: "onboarding.tour.steps.cycle.title",
     bodyKey: "onboarding.tour.steps.cycle.body",
   },
@@ -155,7 +146,6 @@ const ALL_STOPS: readonly TourStop[] = [
     targetId: "mood-hero",
     placement: "bottom",
     route: "/mood",
-    requiresModule: "mood",
     titleKey: "onboarding.tour.steps.mood.title",
     bodyKey: "onboarding.tour.steps.mood.body",
   },
@@ -164,7 +154,6 @@ const ALL_STOPS: readonly TourStop[] = [
     targetId: "insights-hero",
     placement: "bottom",
     route: "/insights",
-    requiresModule: "insights",
     titleKey: "onboarding.tour.steps.insights.title",
     bodyKey: "onboarding.tour.steps.insights.body",
   },
@@ -173,7 +162,6 @@ const ALL_STOPS: readonly TourStop[] = [
     targetId: "coach-hero",
     placement: "bottom",
     route: "/coach",
-    requiresModule: "coach",
     titleKey: "onboarding.tour.steps.coach.title",
     bodyKey: "onboarding.tour.steps.coach.body",
   },
@@ -198,7 +186,6 @@ const ALL_STOPS: readonly TourStop[] = [
     targetId: "achievements-hero",
     placement: "bottom",
     route: "/achievements",
-    requiresModule: "achievements",
     titleKey: "onboarding.tour.steps.achievements.title",
     bodyKey: "onboarding.tour.steps.achievements.body",
   },
@@ -220,7 +207,7 @@ export type TourModuleMap = Partial<Record<ModuleKey, boolean>>;
 
 /**
  * Build the resolved tour-step list for the given module map. Stops
- * whose `requiresModule` resolves to `false` are dropped without
+ * whose page belongs to a module that is `false` are dropped without
  * renumbering the rest.
  *
  * `filterToStop` narrows the list to a single stop — the per-module
@@ -233,8 +220,10 @@ export function buildTourStops(opts?: {
   filterToStop?: TourStopId;
 }): TourStop[] {
   const modules = opts?.modules;
+  // A stop follows the page it stands on, through the same surface map the
+  // nav reads (`nav:<route>`), so a stop and its nav entry cannot disagree.
   const gated = ALL_STOPS.filter(
-    (s) => !s.requiresModule || modules?.[s.requiresModule] !== false,
+    (s) => !s.route || isSurfaceVisible(`nav:${s.route}`, modules),
   );
   if (opts?.filterToStop) {
     return gated.filter((s) => s.id === opts.filterToStop);

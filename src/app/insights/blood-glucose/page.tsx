@@ -1,11 +1,10 @@
 "use client";
 
-import { Droplet, Loader2 } from "lucide-react";
+import { Droplet } from "lucide-react";
 
 import { HealthKitMetricPage } from "@/components/insights/healthkit-metric-page";
 import { GlucoseClinicalPanel } from "@/components/insights/glucose/glucose-clinical-panel";
 import { useAuth } from "@/hooks/use-auth";
-import { useModulePageGuard } from "@/hooks/use-module-page-guard";
 import { useTranslations } from "@/lib/i18n/context";
 import { MGDL_PER_MMOL, resolveGlucoseUnit } from "@/lib/glucose";
 
@@ -28,18 +27,8 @@ import { MGDL_PER_MMOL, resolveGlucoseUnit } from "@/lib/glucose";
 export default function InsightsBlutzuckerPage() {
   const { user } = useAuth();
   const { t } = useTranslations();
-  const { ready } = useModulePageGuard("glucose");
   const glucoseUnit = resolveGlucoseUnit(user?.glucoseUnit ?? null);
   const isMmol = glucoseUnit === "mmol/L";
-
-  // v1.18.0 B1 — bounce a direct URL hit on a disabled-glucose account.
-  if (!ready) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="text-primary h-8 w-8 animate-spin motion-reduce:animate-none" />
-      </div>
-    );
-  }
 
   return (
     <HealthKitMetricPage

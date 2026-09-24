@@ -3,11 +3,8 @@
 import { use, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-import { Loader2 } from "lucide-react";
-
 import { useTranslations } from "@/lib/i18n/context";
 import { useWorkoutDetail } from "@/hooks/use-workouts";
-import { useModulePageGuard } from "@/hooks/use-module-page-guard";
 import { BackLink } from "@/components/ui/back-link";
 import { SubPageShell } from "@/components/insights/sub-page-shell";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -54,22 +51,12 @@ export default function InsightsWorkoutDetailPage({
   const { t } = useTranslations();
   const { id } = use(params);
   const router = useRouter();
-  const { ready } = useModulePageGuard("workouts");
   const { data, isLoading, error, refetch } = useWorkoutDetail(id);
   const canonicalHref = canonicalWorkoutDetailHref(id, data?.canonicalId);
 
   useEffect(() => {
     if (canonicalHref) router.replace(canonicalHref);
   }, [canonicalHref, router]);
-
-  // v1.18.0 B1 — bounce a direct URL hit on a disabled-workouts account.
-  if (!ready) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="text-primary h-8 w-8 animate-spin motion-reduce:animate-none" />
-      </div>
-    );
-  }
 
   return (
     <SubPageShell
