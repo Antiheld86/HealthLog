@@ -48,7 +48,10 @@ const {
   probeProviderPresence: vi.fn(),
   enqueueStatusGeneration: vi.fn(),
 }));
-vi.mock("@/lib/ai/capabilities/gate", () => ({ aiCapabilityForRecord }));
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForRecord,
+  aiCapabilityToServe: aiCapabilityForRecord,
+}));
 vi.mock("@/lib/ai/provider", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/ai/provider")>()),
   probeProviderPresence,

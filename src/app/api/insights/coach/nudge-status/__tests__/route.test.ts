@@ -11,7 +11,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { requireRecordAuth, evaluateContext, readStatus, getAiCapability } =
+const { requireRecordAuth, evaluateContext, readStatus, aiCapabilityToServe } =
   vi.hoisted(() => ({
     requireRecordAuth: vi.fn(),
     evaluateContext: vi.fn(async () => ({ surfaced: 0, errored: 0 })),
@@ -21,7 +21,7 @@ const { requireRecordAuth, evaluateContext, readStatus, getAiCapability } =
         nudgedAt: null,
       }),
     ),
-    getAiCapability: vi.fn(),
+    aiCapabilityToServe: vi.fn(),
   }));
 
 const AVAILABLE = { available: true, reason: null, onDeviceAllowed: true };
@@ -30,7 +30,7 @@ vi.mock("@/lib/api-handler", () => ({
   apiHandler: <T extends (...args: unknown[]) => unknown>(fn: T) => fn,
   requireRecordAuth,
 }));
-vi.mock("@/lib/ai/capabilities/gate", () => ({ getAiCapability }));
+vi.mock("@/lib/ai/capabilities/gate", () => ({ aiCapabilityToServe }));
 vi.mock("@/lib/ai/coach/nudge-status", () => ({
   readCoachNudgeStatus: readStatus,
 }));
@@ -47,7 +47,7 @@ import { GET } from "../route";
 beforeEach(() => {
   vi.clearAllMocks();
   readStatus.mockResolvedValue({ unread: false, nudgedAt: null });
-  getAiCapability.mockResolvedValue(AVAILABLE);
+  aiCapabilityToServe.mockResolvedValue(AVAILABLE);
 });
 
 describe("nudge-status — NEXT_APP_OPEN hook", () => {
@@ -114,7 +114,7 @@ describe("nudge-status — the coach capability", () => {
       data: Record<string, unknown>;
     };
 
-    expect(getAiCapability).toHaveBeenCalledWith("coach");
+    expect(aiCapabilityToServe).toHaveBeenCalledWith("u1", "coach");
     expect(res.data).toEqual({
       unread: true,
       nudgedAt: "2026-07-18",
@@ -130,7 +130,7 @@ describe("nudge-status — the coach capability", () => {
         actor: { id: "u1" },
       });
       const ai = { available: false, reason, onDeviceAllowed: false };
-      getAiCapability.mockResolvedValue(ai);
+      aiCapabilityToServe.mockResolvedValue(ai);
 
       const res = (await (GET as unknown as () => Promise<unknown>)()) as {
         data: Record<string, unknown>;

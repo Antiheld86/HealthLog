@@ -7,7 +7,7 @@ import {
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
-import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 import { unavailableComplianceStatusBody } from "@/lib/insights/status-unavailable";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +27,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // record, which is not a section a scoped grant can name. The miss behind it
   // enqueues nothing while a delegate is holding the request.
   const { user } = await requireRecordAuth("manage", "record");
-  const ai = await getAiCapability("statusText");
+  const ai = await aiCapabilityToServe(user.id, "statusText");
   if (!ai.available) {
     annotate({
       action: { name: "insights.medication-compliance-status.unavailable" },

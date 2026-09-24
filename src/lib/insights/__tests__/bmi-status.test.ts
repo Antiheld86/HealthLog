@@ -39,6 +39,11 @@ vi.mock("@/lib/ai/capabilities/gate", () => ({
     reason: null,
     onDeviceAllowed: true,
   }),
+  aiCapabilityToServe: async () => ({
+    available: true,
+    reason: null,
+    onDeviceAllowed: true,
+  }),
 }));
 
 vi.mock("@/lib/insights/memory", () => ({

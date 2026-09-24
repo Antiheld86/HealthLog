@@ -35,7 +35,7 @@ import {
 import { DERIVED_MAX_WINDOW_DAYS } from "@/lib/insights/derived/types";
 import { resolveDerivedAssessment } from "@/lib/insights/derived/derived-assessment-ai";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
-import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 
 export const dynamic = "force-dynamic";
 
@@ -161,7 +161,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   // The model-written override is served, and warmed, only while
   // `statusText` is available. Otherwise the deterministic text stands and
   // `ai` says why there is no warmer prose.
-  const ai = await getAiCapability("statusText");
+  const ai = await aiCapabilityToServe(user.id, "statusText");
   const assessment = await resolveDerivedAssessment({
     metric,
     userId: user.id,

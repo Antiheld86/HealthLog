@@ -38,6 +38,8 @@ vi.mock("@/lib/ai/provider", () => ({
 vi.mock("@/lib/ai/capabilities/gate", () => ({
   aiCapabilityForRecord: (...args: unknown[]) =>
     aiCapabilityForRecord(...(args as [])),
+  aiCapabilityToServe: (...args: unknown[]) =>
+    (aiCapabilityForRecord as (...a: unknown[]) => unknown)(...args),
 }));
 
 vi.mock("@/lib/sharing/delegated-generation", () => ({

@@ -46,7 +46,7 @@ vi.mock("@/lib/insights/blood-pressure-status", () => ({
 
 // The `statusText` capability decides whether the note is served; the
 // unavailable body's provider-presence probe is stubbed.
-vi.mock("@/lib/ai/capabilities/gate", () => ({ getAiCapability: vi.fn() }));
+vi.mock("@/lib/ai/capabilities/gate", () => ({ aiCapabilityToServe: vi.fn() }));
 vi.mock("@/lib/ai/provider", () => ({
   probeProviderPresence: vi.fn(async () => true),
 }));
@@ -54,7 +54,7 @@ vi.mock("@/lib/ai/provider", () => ({
 import { GET } from "../route";
 import { getSession } from "@/lib/auth/session";
 import { requireModuleEnabled } from "@/lib/modules/gate";
-import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 import { probeProviderPresence } from "@/lib/ai/provider";
 import { generateBloodPressureStatusForUser } from "@/lib/insights/blood-pressure-status";
 import {
@@ -79,7 +79,7 @@ function makeReq(): NextRequest {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(getAiCapability).mockResolvedValue(AI_AVAILABLE);
+  vi.mocked(aiCapabilityToServe).mockResolvedValue(AI_AVAILABLE);
   vi.mocked(probeProviderPresence).mockResolvedValue(true);
   vi.mocked(generateBloodPressureStatusForUser).mockResolvedValue({
     hasProvider: true,
@@ -97,7 +97,7 @@ describe("GET /api/insights/blood-pressure-status", () => {
     const body = (await res.json()) as { data: Record<string, unknown> };
     expect(body.data.text).toBe("ok");
     expect(body.data.ai).toEqual(AI_AVAILABLE);
-    expect(getAiCapability).toHaveBeenCalledWith("statusText");
+    expect(aiCapabilityToServe).toHaveBeenCalledWith("user-1", "statusText");
     expect(requireModuleEnabled).not.toHaveBeenCalled();
   });
 
@@ -110,7 +110,7 @@ describe("GET /api/insights/blood-pressure-status", () => {
     "answers 200 with no note for %s, reading and warming nothing",
     async (reason) => {
       vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
-      vi.mocked(getAiCapability).mockResolvedValue(aiUnavailable(reason));
+      vi.mocked(aiCapabilityToServe).mockResolvedValue(aiUnavailable(reason));
       const res = await callGet(makeReq());
       expect(res.status).toBe(200);
       const body = (await res.json()) as { data: Record<string, unknown> };
@@ -128,7 +128,9 @@ describe("GET /api/insights/blood-pressure-status", () => {
 
   it("reports hasProvider as presence only: false for a missing provider", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
-    vi.mocked(getAiCapability).mockResolvedValue(aiUnavailable("no_provider"));
+    vi.mocked(aiCapabilityToServe).mockResolvedValue(
+      aiUnavailable("no_provider"),
+    );
     vi.mocked(probeProviderPresence).mockResolvedValue(false);
     const res = await callGet(makeReq());
     const body = (await res.json()) as { data: Record<string, unknown> };

@@ -30,7 +30,7 @@ import { apiError, apiSuccess } from "@/lib/api-response";
 import { annotate } from "@/lib/logging/context";
 import { pickCanonicalWorkoutRows } from "@/lib/measurements/pick-canonical-workout-rows";
 import { requireModuleEnabled } from "@/lib/modules/gate";
-import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 import { getAgeFromDateOfBirth } from "@/lib/analytics/pulse-targets";
 import { decryptFromBytes } from "@/lib/ai/coach/bytes-codec";
 import { buildWorkoutHrSeries } from "@/lib/workouts/hr-series";
@@ -65,7 +65,7 @@ export const GET = apiHandler(
     // served only while `workoutInsights` is available (operator switch, the
     // AI analysis opt-out, provider presence, consent). Otherwise the row is
     // not even loaded, `aiInsight` is null, and `ai` says why.
-    const ai = await getAiCapability("workoutInsights");
+    const ai = await aiCapabilityToServe(user.id, "workoutInsights");
 
     const row = await prisma.workout.findUnique({
       where: { id },

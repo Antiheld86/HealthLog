@@ -22,15 +22,16 @@
  * local seen-stamp keys on a stable value (kept for the existing client
  * contract).
  *
- * A mixed read: while the `coach` capability is unavailable (operator switch,
- * opt-out, no provider, no consent) the route still answers 200, with the
+ * A mixed read: while the record's `coach` capability is unavailable
+ * (operator switch, opt-out, no provider, no consent) the route still answers
+ * 200, with the
  * quiet shape `{ unread: false, nudgedAt: null, conversationId: null }` and
  * an `ai` state saying why. There is no Coach to open, so there is nothing
  * unread, and no app-open reminder is evaluated.
  */
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { apiSuccess } from "@/lib/api-response";
-import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 import { readCoachNudgeStatus } from "@/lib/ai/coach/nudge-status";
 import { evaluateCoachContextReminders } from "@/lib/ai/coach/context-reminders";
 import { prisma } from "@/lib/db";
@@ -52,7 +53,7 @@ export const GET = apiHandler(async () => {
   // budget and writes into their conversation, and reading whether the thread
   // has something unopened does neither.
   const { user, actor } = await requireRecordAuth("read", "record");
-  const ai = await getAiCapability("coach");
+  const ai = await aiCapabilityToServe(user.id, "coach");
   if (!ai.available) {
     return apiSuccess({
       nudgedAt: null,

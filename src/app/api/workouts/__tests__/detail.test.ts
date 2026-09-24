@@ -64,13 +64,13 @@ vi.mock("@/lib/modules/gate", async (importOriginal) => {
 });
 
 // The Activity Insight paragraph follows the `workoutInsights` capability.
-vi.mock("@/lib/ai/capabilities/gate", () => ({ getAiCapability: vi.fn() }));
+vi.mock("@/lib/ai/capabilities/gate", () => ({ aiCapabilityToServe: vi.fn() }));
 
 import { GET } from "../[id]/route";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth/session";
 import { requireModuleEnabled } from "@/lib/modules/gate";
-import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 import {
   AI_AVAILABLE,
   aiUnavailable,
@@ -146,7 +146,7 @@ describe("GET /api/workouts/{id}", () => {
     vi.mocked(requireModuleEnabled).mockResolvedValue({
       enabled: true,
     } as never);
-    vi.mocked(getAiCapability).mockResolvedValue(AI_AVAILABLE);
+    vi.mocked(aiCapabilityToServe).mockResolvedValue(AI_AVAILABLE);
     // The timezone resolver caches per user for 60 s in process; drop the
     // entry so a test that pins a zone is not served the previous one.
     invalidateUserTimezone(SESSION_OK.user.id);
@@ -572,7 +572,7 @@ describe("GET /api/workouts/{id} — aiInsight", () => {
     vi.clearAllMocks();
     vi.stubEnv("ENCRYPTION_KEY", TEST_KEY);
     _resetCryptoCacheForTests();
-    vi.mocked(getAiCapability).mockResolvedValue(AI_AVAILABLE);
+    vi.mocked(aiCapabilityToServe).mockResolvedValue(AI_AVAILABLE);
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       sourcePriorityJson: null,
@@ -624,7 +624,10 @@ describe("GET /api/workouts/{id} — aiInsight", () => {
       paragraph: "A steady, aerobic-leaning run.",
       generatedAt: generatedAt.toISOString(),
     });
-    expect(getAiCapability).toHaveBeenCalledWith("workoutInsights");
+    expect(aiCapabilityToServe).toHaveBeenCalledWith(
+      "user-1",
+      "workoutInsights",
+    );
     expect(body.data.ai).toEqual(AI_AVAILABLE);
   });
 
@@ -637,7 +640,7 @@ describe("GET /api/workouts/{id} — aiInsight", () => {
   ] as const)(
     "does not read or expose the stored paragraph while workoutInsights is %s",
     async (reason) => {
-      vi.mocked(getAiCapability).mockResolvedValue(aiUnavailable(reason));
+      vi.mocked(aiCapabilityToServe).mockResolvedValue(aiUnavailable(reason));
       vi.mocked(prisma.workout.findUnique).mockResolvedValue({
         ...BASE_ROW,
         insight: {

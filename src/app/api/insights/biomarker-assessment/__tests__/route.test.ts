@@ -8,7 +8,7 @@ vi.mock("@/lib/db", () => ({
 }));
 // The `statusText` capability decides whether the note is served; the
 // unavailable body's provider-presence probe is stubbed.
-vi.mock("@/lib/ai/capabilities/gate", () => ({ getAiCapability: vi.fn() }));
+vi.mock("@/lib/ai/capabilities/gate", () => ({ aiCapabilityToServe: vi.fn() }));
 vi.mock("@/lib/ai/provider", () => ({
   probeProviderPresence: vi.fn(async () => true),
 }));
@@ -63,7 +63,7 @@ import { getSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { requireModuleEnabled } from "@/lib/modules/gate";
 import { generateBiomarkerStatus } from "@/lib/insights/biomarker-status";
-import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -87,7 +87,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(prisma.appSettings.findUnique).mockResolvedValue(null as never);
   vi.mocked(requireModuleEnabled).mockResolvedValue({ enabled: true });
-  vi.mocked(getAiCapability).mockResolvedValue({
+  vi.mocked(aiCapabilityToServe).mockResolvedValue({
     available: true,
     reason: null,
     onDeviceAllowed: true,
@@ -135,7 +135,7 @@ describe("GET /api/insights/biomarker-assessment", () => {
 
   it("answers 200 with no note while statusText is unavailable, calling no generator", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
-    vi.mocked(getAiCapability).mockResolvedValue({
+    vi.mocked(aiCapabilityToServe).mockResolvedValue({
       available: false,
       reason: "user_disabled",
       onDeviceAllowed: false,

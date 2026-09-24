@@ -30,7 +30,7 @@ import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
 import { requireModuleEnabled, type ModuleKey } from "@/lib/modules/gate";
-import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 import { unavailableStatusBody } from "@/lib/insights/status-unavailable";
 import { prisma } from "@/lib/db";
 import {
@@ -104,7 +104,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     if (!gate.enabled) return gate.response;
   }
 
-  const ai = await getAiCapability("statusText");
+  const ai = await aiCapabilityToServe(user.id, "statusText");
   if (!ai.available) {
     // The note is not served, but whether there is anything to assess is
     // data: the card keeps its insufficient-data state.

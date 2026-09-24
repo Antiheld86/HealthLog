@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { probeProviderPresence } from "@/lib/ai/provider";
-import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 import { apiError, apiSuccess } from "@/lib/api-response";
 import type { DataPoint, DataSummary } from "@/lib/analytics/trends";
 import { summarize } from "@/lib/analytics/trends";
@@ -95,8 +95,8 @@ export const GET = apiHandler(async () => {
   );
 
   const [briefing, statusText] = await Promise.all([
-    getAiCapability("briefing"),
-    getAiCapability("statusText"),
+    aiCapabilityToServe(user.id, "briefing"),
+    aiCapabilityToServe(user.id, "statusText"),
   ]);
 
   return apiSuccess({

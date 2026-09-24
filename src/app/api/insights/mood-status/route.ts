@@ -8,7 +8,7 @@ import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
 import { requireModuleEnabled } from "@/lib/modules/gate";
-import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 import { unavailableStatusBody } from "@/lib/insights/status-unavailable";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +34,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
   const gate = await requireModuleEnabled(user.id, "mood");
   if (!gate.enabled) return gate.response;
 
-  const ai = await getAiCapability("statusText");
+  const ai = await aiCapabilityToServe(user.id, "statusText");
   if (!ai.available) {
     annotate({
       action: { name: "insights.mood-status.unavailable" },

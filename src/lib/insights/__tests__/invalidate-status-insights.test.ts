@@ -44,6 +44,8 @@ vi.mock("@/lib/jobs/insight-status-generate-shared", () => ({
 
 vi.mock("@/lib/ai/capabilities/gate", () => ({
   aiCapabilityForRecord: (...a: unknown[]) => aiCapabilityForRecord(...a),
+  aiCapabilityToServe: (...args: unknown[]) =>
+    (aiCapabilityForRecord as (...a: unknown[]) => unknown)(...args),
   aiCapabilityForJob: vi.fn(async () => ({
     available: true,
     reason: null,

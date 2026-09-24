@@ -25,7 +25,7 @@ import { apiSuccess, returnAllZodIssues } from "@/lib/api-response";
 import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
-import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 import { unavailableStatusBody } from "@/lib/insights/status-unavailable";
 import { generateBiomarkerStatus } from "@/lib/insights/biomarker-status";
 import { resolveMetricStatusLocale } from "@/lib/insights/metric-status";
@@ -52,7 +52,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
     return returnAllZodIssues(parsed.error, 422);
   }
 
-  const ai = await getAiCapability("statusText");
+  const ai = await aiCapabilityToServe(user.id, "statusText");
   if (!ai.available) {
     annotate({
       action: { name: "insights.biomarker-status.unavailable" },

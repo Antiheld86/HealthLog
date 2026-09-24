@@ -57,6 +57,8 @@ vi.mock("@/lib/ai/capabilities/egress", () => ({
 }));
 vi.mock("@/lib/ai/capabilities/gate", () => ({
   aiCapabilityForRecord: (...a: unknown[]) => aiCapabilityForRecord(...a),
+  aiCapabilityToServe: (...args: unknown[]) =>
+    (aiCapabilityForRecord as (...a: unknown[]) => unknown)(...args),
 }));
 vi.mock("@/lib/ai/provider", () => ({
   resolveProviderChain: (...a: unknown[]) => resolveProviderChain(...a),

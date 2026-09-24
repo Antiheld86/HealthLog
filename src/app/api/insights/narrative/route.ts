@@ -13,10 +13,12 @@
  *
  * A mixed read. The narrative is data when the deterministic composer wrote
  * it and model output when a provider did. Model-written text is served only
- * while the `periodNarrative` capability is available; otherwise `narrative`
- * is null and `ai` says why. The warm is enqueued only when the capability is
- * available, or when there is no servable text at all (the worker then writes
- * the deterministic narrative). The `insights` module is the AI analysis
+ * while the record's `periodNarrative` capability is available (answered from
+ * the record's own state, so a delegate reads the owner's narrative exactly
+ * when the owner would); otherwise `narrative` is null and `ai` says why. The
+ * warm is enqueued only when the capability is available, or when no row
+ * exists at all (the worker then writes the deterministic narrative); never
+ * for a delegate. The `insights` module is the AI analysis
  * opt-out and is folded into the capability, so it no longer refuses the
  * route.
  */
@@ -27,9 +29,9 @@ import { apiHandler, requireRecordAuth } from "@/lib/api-handler";
 import { annotate } from "@/lib/logging/context";
 import { resolveServerLocale } from "@/lib/i18n/server-locale";
 import { locales, defaultLocale, type Locale } from "@/lib/i18n/config";
-import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
+import { prisma } from "@/lib/db";
 import { readPeriodNarrative } from "@/lib/insights/narrative/period-narrative-generate";
-import { DETERMINISTIC_PROVIDER_TYPE } from "@/lib/insights/narrative/period-narrative-deterministic";
 import {
   PERIOD_DAYS,
   type NarrativePeriod,
@@ -86,21 +88,26 @@ export const GET = apiHandler(async (request: NextRequest) => {
   });
   const locale = narrowLocale(resolved);
 
-  const ai = await getAiCapability("periodNarrative");
-  const stored = await readPeriodNarrative(user.id, period, locale);
-  // A row without a recorded provider is treated as model text: failing
-  // closed hides at most a deterministic line the next warm rewrites.
-  const modelWritten =
-    stored !== null && stored.providerType !== DETERMINISTIC_PROVIDER_TYPE;
-  const existing =
-    stored !== null && (!modelWritten || ai.available) ? stored : null;
+  // Whether model-written text may be shown is the record's own answer,
+  // whoever is reading; the reader already applies it (a model-written row
+  // reads as absent while it may not be shown). Starting a warm for a
+  // delegate stays suppressed below.
+  const ai = await aiCapabilityToServe(user.id, "periodNarrative");
+  const existing = await readPeriodNarrative(user.id, period, locale);
   const isFresh =
     existing !== null &&
     Date.now() - new Date(existing.updatedAt).getTime() < NARRATIVE_FRESH_MS;
-  // With AI unavailable a warm is still useful when nothing servable exists:
-  // it produces the deterministic narrative. A stale deterministic row is
-  // served as it is rather than re-warmed.
-  const mayWarm = ai.available || existing === null;
+  // With AI unavailable a warm only helps when no row exists at all: the
+  // worker then writes the deterministic narrative. A hidden model-written
+  // row must not be overwritten by one (turning AI back on brings it back),
+  // and a stale deterministic row is served as it is.
+  const mayWarm =
+    ai.available ||
+    (existing === null &&
+      (await prisma.insightNarrative.findUnique({
+        where: { userId_period_locale: { userId: user.id, period, locale } },
+        select: { id: true },
+      })) === null);
 
   // Read-only: never block on the provider. Warm out of band whenever the row
   // is stale / missing. The generator produces AI prose when a provider is
@@ -127,7 +134,7 @@ export const GET = apiHandler(async (request: NextRequest) => {
       has_narrative: existing !== null,
       revalidating,
       generation_suppressed: generationSuppressed,
-      model_text_hidden: modelWritten && !ai.available,
+      ai_reason: ai.reason,
     },
   });
 

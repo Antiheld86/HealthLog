@@ -12,7 +12,7 @@ vi.mock("@/lib/db", () => ({
 vi.mock("@/lib/auth/session", () => ({ getSession: vi.fn() }));
 // The `statusText` capability decides whether the note is served; the
 // unavailable body's provider-presence probe is stubbed.
-vi.mock("@/lib/ai/capabilities/gate", () => ({ getAiCapability: vi.fn() }));
+vi.mock("@/lib/ai/capabilities/gate", () => ({ aiCapabilityToServe: vi.fn() }));
 vi.mock("@/lib/ai/provider", () => ({
   probeProviderPresence: vi.fn(async () => true),
 }));
@@ -51,7 +51,7 @@ import { GET } from "../route";
 import { getSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { generateMoodStatusForUser } from "@/lib/insights/mood-status";
-import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 
 const SESSION_OK = {
   session: { id: "sess-1", expiresAt: new Date(Date.now() + 3_600_000) },
@@ -81,7 +81,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(prisma.appSettings.findUnique).mockResolvedValue(null as never);
   vi.mocked(prisma.cycleProfile.findUnique).mockResolvedValue(null as never);
-  vi.mocked(getAiCapability).mockResolvedValue({
+  vi.mocked(aiCapabilityToServe).mockResolvedValue({
     available: true,
     reason: null,
     onDeviceAllowed: true,
@@ -120,13 +120,13 @@ describe("GET /api/insights/mood-status — module gate", () => {
       userRow({ mood: false }) as never,
     );
     await callGet(makeReq());
-    expect(getAiCapability).not.toHaveBeenCalled();
+    expect(aiCapabilityToServe).not.toHaveBeenCalled();
   });
 
   it("answers 200 with no note while statusText is unavailable", async () => {
     vi.mocked(getSession).mockResolvedValue(SESSION_OK as never);
     vi.mocked(prisma.user.findUnique).mockResolvedValue(userRow(null) as never);
-    vi.mocked(getAiCapability).mockResolvedValue({
+    vi.mocked(aiCapabilityToServe).mockResolvedValue({
       available: false,
       reason: "no_provider",
       onDeviceAllowed: true,

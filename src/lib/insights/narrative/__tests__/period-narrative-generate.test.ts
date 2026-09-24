@@ -20,7 +20,10 @@ vi.mock("@/lib/db", () => ({ prisma: {} }));
 const { aiCapabilityForRecord } = vi.hoisted(() => ({
   aiCapabilityForRecord: vi.fn(),
 }));
-vi.mock("@/lib/ai/capabilities/gate", () => ({ aiCapabilityForRecord }));
+vi.mock("@/lib/ai/capabilities/gate", () => ({
+  aiCapabilityForRecord,
+  aiCapabilityToServe: aiCapabilityForRecord,
+}));
 
 const UNAVAILABLE = {
   available: false,

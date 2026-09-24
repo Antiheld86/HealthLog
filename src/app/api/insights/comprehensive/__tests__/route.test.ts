@@ -87,7 +87,7 @@ vi.mock("@/lib/ai/provider", () => ({
 // The per-request `ai` block beside the body. Pinned here so the envelope
 // assertions do not depend on the capability loader's own reads.
 vi.mock("@/lib/ai/capabilities/gate", () => ({
-  getAiCapability: vi.fn(),
+  aiCapabilityToServe: vi.fn(),
 }));
 
 vi.mock("@/lib/medication-category", () => ({
@@ -105,7 +105,7 @@ vi.mock("@/lib/modules/gate", async (importOriginal) => ({
 import { GET } from "../route";
 import { getSession } from "@/lib/auth/session";
 import { requireModuleEnabled } from "@/lib/modules/gate";
-import { getAiCapability } from "@/lib/ai/capabilities/gate";
+import { aiCapabilityToServe } from "@/lib/ai/capabilities/gate";
 import { probeProviderPresence } from "@/lib/ai/provider";
 import { prisma } from "@/lib/db";
 import { buildComprehensiveAggregate } from "@/lib/insights/comprehensive-aggregator";
@@ -132,7 +132,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   // resetAllMocks drops the module gate's default; restore it.
   vi.mocked(requireModuleEnabled).mockResolvedValue({ enabled: true } as never);
-  vi.mocked(getAiCapability).mockResolvedValue({
+  vi.mocked(aiCapabilityToServe).mockResolvedValue({
     available: true,
     reason: null,
     onDeviceAllowed: true,
@@ -268,7 +268,7 @@ describe("GET /api/insights/comprehensive — envelope shape", () => {
       enabled: false,
       response: new Response(null, { status: 403 }),
     } as never);
-    vi.mocked(getAiCapability).mockResolvedValue({
+    vi.mocked(aiCapabilityToServe).mockResolvedValue({
       available: false,
       reason: "user_disabled",
       onDeviceAllowed: false,
@@ -295,8 +295,8 @@ describe("GET /api/insights/comprehensive — envelope shape", () => {
     expect(body.data.ai.statusText.reason).toBe("user_disabled");
     expect(
       vi
-        .mocked(getAiCapability)
-        .mock.calls.map((c) => c[0])
+        .mocked(aiCapabilityToServe)
+        .mock.calls.map((c) => c[1])
         .sort(),
     ).toEqual(["briefing", "statusText"]);
   });

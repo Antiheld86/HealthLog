@@ -419,3 +419,72 @@ describe("the status family", () => {
     },
   );
 });
+
+describe("inside somebody else's record (S8, a MANAGE delegate)", () => {
+  async function seedOwnerText(recordId: string): Promise<void> {
+    await seed(recordId);
+    const prisma = getPrismaClient();
+    // The narrative is stale, so an owner's read would warm it.
+    await prisma.insightNarrative.updateMany({
+      where: { userId: recordId },
+      data: { updatedAt: new Date(Date.now() - 48 * 60 * 60 * 1000) },
+    });
+    const { writeStatusNote, statusCacheAction } =
+      await import("@/lib/insights/status-cache");
+    const { userDayKey } = await import("@/lib/tz/format");
+    await writeStatusNote({
+      userId: recordId,
+      cacheAction: statusCacheAction("weight", "en"),
+      todayKey: userDayKey(new Date(), "UTC"),
+      text: "The owner's weight note.",
+    });
+  }
+
+  it("reads the owner's stored model text exactly as the owner would", async () => {
+    await enterState("S8", seedOwnerText);
+
+    const narrative = await readNarrative();
+    expect(narrative.data.narrative?.text).toBe(
+      "A model wrote this retrospective.",
+    );
+    expect(narrative.data.ai.available).toBe(true);
+
+    const snapshot = await readSnapshot();
+    expect(snapshot.data.briefing).not.toBeNull();
+
+    const digest = await readDigest();
+    expect(digest.data.briefingLead).toBe("Model prose about your week.");
+
+    const { GET } = await import("@/app/api/insights/weight-status/route");
+    const status = await json<{ text: string | null }>(
+      await GET(new NextRequest("http://localhost/api/insights/weight-status")),
+    );
+    expect(status.status).toBe(200);
+    expect(status.data.text).toBe("The owner's weight note.");
+  });
+
+  it("starts no model work on the owner's record", async () => {
+    await enterState("S8", seedOwnerText);
+
+    // A stale narrative the owner's read would warm: the delegate's does not.
+    const narrative = await readNarrative();
+    expect(narrative.data.revalidating).toBe(false);
+    expect(enqueueNarrativeWarm).not.toHaveBeenCalled();
+
+    // Every generating route refuses a delegate before any work.
+    const { POST: chat } = await import("@/app/api/insights/chat/route");
+    const chatRes = await chat(
+      new NextRequest("http://localhost/api/insights/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "How was my week?" }),
+      }),
+    );
+    expect(chatRes.status).toBe(403);
+
+    const warm = await pregenerate();
+    expect(warm.status).toBe(403);
+    expect(enqueueForceWarm).not.toHaveBeenCalled();
+    expect(await getPrismaClient().coachConversation.count()).toBe(1);
+  });
+});
