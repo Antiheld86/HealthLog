@@ -2947,7 +2947,7 @@
         "note": "이 답변은 끝나기 전에 중단됐어요.",
         "retry": "다시 물어보기"
       },
-      "historyReadOnlyNote": "지금은 코치를 사용할 수 없습니다. 대화는 계속 읽고 삭제할 수 있습니다.",
+      "historyReadOnlyNote": "지금은 코치를 사용할 수 없지만 대화는 계속 읽고 삭제할 수 있습니다.",
       "transcriptYou": "나",
       "transcriptCoach": "코치",
       "errorConsent": "코치가 답변하려면 AI 동의가 필요합니다. 설정의 AI에서 동의할 수 있습니다.",

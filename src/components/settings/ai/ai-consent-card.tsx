@@ -35,6 +35,7 @@ import { Loader2, ShieldCheck, ShieldOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { QueryErrorRow } from "@/components/ui/query-error-row";
 import { apiFetchRaw } from "@/lib/api/api-fetch";
 import { formatDateTime } from "@/lib/format";
 import { useTranslations } from "@/lib/i18n/context";
@@ -56,11 +57,13 @@ export function AiConsentCard({
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.aiConsentReceipt("ai_full"),
     queryFn: async () => {
       const res = await apiFetchRaw("/api/consent/ai/latest?kind=ai_full");
-      if (!res.ok) return null;
+      // A failed read is not a withdrawal: throw so the card says it could
+      // not load instead of reporting the person's decision wrongly.
+      if (!res.ok) throw new Error("consent read failed");
       const json = await res.json();
       return (json.data?.receipt ?? null) as ConsentReceiptWire;
     },
@@ -129,6 +132,17 @@ export function AiConsentCard({
           <Skeleton className="h-4 w-56" />
         </div>
         <Skeleton className="h-8 w-32" />
+      </section>
+    );
+  }
+
+  if (isError) {
+    return (
+      <section className="space-y-3" data-slot="ai-consent">
+        <QueryErrorRow
+          slot="ai-consent-load-error"
+          onRetry={() => void refetch()}
+        />
       </section>
     );
   }

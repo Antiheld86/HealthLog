@@ -2947,7 +2947,7 @@
         "note": "Ta odpowiedź została przerwana przed ukończeniem.",
         "retry": "Zapytaj ponownie"
       },
-      "historyReadOnlyNote": "Coach jest teraz niedostępny. Nadal możesz czytać i usuwać swoje rozmowy.",
+      "historyReadOnlyNote": "Coach jest teraz niedostępny, ale nadal możesz czytać i usuwać swoje rozmowy.",
       "transcriptYou": "Ty",
       "transcriptCoach": "Coach",
       "errorConsent": "Coach potrzebuje Twojej zgody na AI, zanim odpowie. Możesz ją wyrazić w Ustawieniach, AI.",

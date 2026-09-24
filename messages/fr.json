@@ -2947,7 +2947,7 @@
         "note": "Cette réponse a été interrompue avant la fin.",
         "retry": "Reposer la question"
       },
-      "historyReadOnlyNote": "Le Coach n'est pas disponible pour le moment. Vous pouvez toujours lire et supprimer vos conversations.",
+      "historyReadOnlyNote": "Le Coach n'est pas disponible pour le moment, mais vous pouvez toujours lire et supprimer vos conversations.",
       "transcriptYou": "Vous",
       "transcriptCoach": "Coach",
       "errorConsent": "Le Coach a besoin de votre consentement à l'IA avant de pouvoir répondre. Vous pouvez le donner dans Réglages, IA.",

@@ -2947,7 +2947,7 @@
         "note": "Diese Antwort wurde unterbrochen, bevor sie fertig war.",
         "retry": "Erneut fragen"
       },
-      "historyReadOnlyNote": "Der Coach ist gerade nicht verfügbar. Deine Gespräche kannst du trotzdem lesen und löschen.",
+      "historyReadOnlyNote": "Der Coach ist gerade nicht verfügbar, deine Gespräche kannst du aber weiter lesen und löschen.",
       "transcriptYou": "Du",
       "transcriptCoach": "Coach",
       "errorConsent": "Der Coach braucht deine KI-Einwilligung, bevor er antworten kann. Du kannst sie unter Einstellungen, KI geben.",

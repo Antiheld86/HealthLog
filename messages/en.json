@@ -2947,7 +2947,7 @@
         "note": "This answer was interrupted before it finished.",
         "retry": "Ask again"
       },
-      "historyReadOnlyNote": "The Coach is not available right now. You can still read and delete your conversations.",
+      "historyReadOnlyNote": "The Coach is not available right now, but you can still read and delete your conversations.",
       "transcriptYou": "You",
       "transcriptCoach": "Coach",
       "errorConsent": "The Coach needs your AI consent before it can answer. You can give it in Settings, AI.",

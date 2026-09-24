@@ -75,6 +75,35 @@ describe("AiConsentCard", () => {
     expect(html).toContain('data-slot="ai-consent-grant"');
   });
 
+  it("never reports a failed read as a withdrawal", () => {
+    // A refused or failed read (the consent bucket's rate limit, a network
+    // drop) says nothing about the decision. Reporting it as "Withdrawn" and
+    // offering a grant would misstate the person's own choice.
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, retryOnMount: false } },
+    });
+    client
+      .getQueryCache()
+      .build(client, { queryKey: receiptKey })
+      .setState({
+        status: "error",
+        error: new Error("read failed"),
+        data: undefined,
+        fetchStatus: "idle",
+      });
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <I18nProvider initialLocale="en">
+          <AiConsentCard isAuthenticated />
+        </I18nProvider>
+      </QueryClientProvider>,
+    );
+    expect(html).not.toContain("Withdrawn.");
+    expect(html).not.toContain('data-slot="ai-consent-grant"');
+    expect(html).not.toContain('data-slot="ai-consent-withdraw"');
+    expect(html).toContain('data-slot="ai-consent-load-error"');
+  });
+
   it("never shows the grant control while consent stands", () => {
     const html = renderWith({
       id: "rcpt-1",
