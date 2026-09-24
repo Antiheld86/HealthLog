@@ -39,9 +39,11 @@ import {
   type HealthProfileAiSection,
 } from "@/lib/validations/health-profile-facts";
 
-vi.mock("@/lib/feature-flags", () => ({
-  getAssistantFlags: vi.fn(async () => ({ coach: true })),
-}));
+vi.mock("@/lib/feature-flags", async () =>
+  (
+    await import("@/__tests__/helpers/assistant-switches-mock")
+  ).mockAssistantSwitches(vi.fn(async () => ({ coach: true }))),
+);
 // Gate 3 resolves the `coach` capability per user; never the real resolver.
 vi.mock("@/lib/ai/capabilities/gate", () => ({
   aiCapabilityForJob: vi.fn(),
