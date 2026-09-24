@@ -16,7 +16,7 @@ vi.mock("@/lib/db", () => ({
 // pre-v1.4.33 assertion semantics.
 let mockEvent: object | null = null;
 vi.mock("@/lib/logging/context", () => ({
-  getEvent: () => mockEvent ?? { addWarning: vi.fn() },
+  getEvent: () => mockEvent ?? { getKind: () => "http", addWarning: vi.fn() },
 }));
 
 import { prisma } from "@/lib/db";
@@ -154,7 +154,7 @@ describe("per-request memoisation", () => {
     // Pin a stable stub object so every `getEvent()` inside this test
     // returns the same reference — the memo keys on identity, so a
     // shared reference == shared cache.
-    mockEvent = { addWarning: vi.fn() };
+    mockEvent = { getKind: () => "http", addWarning: vi.fn() };
 
     const a = await getAssistantFlags();
     const b = await getAssistantFlags();
@@ -174,9 +174,9 @@ describe("per-request memoisation", () => {
       assistantDocumentAiEnabled: true,
     });
 
-    mockEvent = { addWarning: vi.fn(), id: "req-1" };
+    mockEvent = { getKind: () => "http", addWarning: vi.fn(), id: "req-1" };
     await getAssistantFlags();
-    mockEvent = { addWarning: vi.fn(), id: "req-2" };
+    mockEvent = { getKind: () => "http", addWarning: vi.fn(), id: "req-2" };
     await getAssistantFlags();
 
     expect(FIND).toHaveBeenCalledTimes(2);

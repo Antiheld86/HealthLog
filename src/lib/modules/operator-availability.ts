@@ -104,13 +104,17 @@ async function loadAvailabilityBlob(): Promise<unknown> {
  * all-available so the modules stay visible on first boot.
  */
 export async function getOperatorModuleAvailability(): Promise<OperatorModuleAvailability> {
-  return memoizePerRequest("operator-module-availability", async () => {
-    const [blob, switches] = await Promise.all([
-      loadAvailabilityBlob(),
-      getAssistantFlags(),
-    ]);
-    return resolveOperatorAvailability(blob, switches.coach);
-  });
+  return memoizePerRequest(
+    "operator-module-availability",
+    async () => {
+      const [blob, switches] = await Promise.all([
+        loadAvailabilityBlob(),
+        getAssistantFlags(),
+      ]);
+      return resolveOperatorAvailability(blob, switches.coach);
+    },
+    { freshInBackground: true },
+  );
 }
 
 /** A module key whose operator layer the blob owns (every key but the Coach). */

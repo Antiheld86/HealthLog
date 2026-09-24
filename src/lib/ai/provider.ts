@@ -985,6 +985,7 @@ export function probeProviderChain(
         managedBy: entries.length > 0 ? managedBy : null,
       };
     },
+    { freshInBackground: true },
   );
 }
 
