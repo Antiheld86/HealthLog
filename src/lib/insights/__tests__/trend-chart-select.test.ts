@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import type { DailyBriefing, DailyBriefingKeyFinding } from "@/lib/ai/schema";
+import { isSurfaceVisible, surfaceModule } from "@/lib/modules/surface";
 import {
   selectTrendCharts,
   DEFAULT_TREND_CHART_CAP,
@@ -158,23 +159,58 @@ describe("selectTrendCharts", () => {
   });
 });
 
-describe("selectTrendCharts — hidden metrics", () => {
-  it("drops mood from the fallback triple when the mood module is off", () => {
-    const charts = selectTrendCharts(null, { hiddenMetrics: ["mood"] });
-    expect(charts.map((c) => c.metric)).not.toContain("mood");
-    expect(charts).toHaveLength(2);
+describe("selectTrendCharts — switched-off modules", () => {
+  it("fills the fallback row from the next metric when mood is off", () => {
+    const charts = selectTrendCharts(null, { modules: { mood: false } });
+    expect(charts.map((c) => c.metric)).toEqual(["bp", "weight", "pulse"]);
   });
 
-  it("skips a hidden metric the briefing flags", () => {
+  it("keeps the familiar blood pressure, weight, mood row with every module on", () => {
+    const charts = selectTrendCharts(null, { modules: {} });
+    expect(charts.map((c) => c.metric)).toEqual(["bp", "weight", "mood"]);
+  });
+
+  it("skips a flagged metric whose module is off and lets the next finding take the slot", () => {
+    const charts = selectTrendCharts(briefing(["sleep", "mood", "weight"]), {
+      modules: { sleep: false, mood: false },
+    });
+    expect(charts.map((c) => c.metric)).toEqual(["weight"]);
+  });
+
+  it("still honours an explicit hide list", () => {
     const charts = selectTrendCharts(briefing(["mood", "weight"]), {
       hiddenMetrics: ["mood"],
     });
-    expect(charts.map((c) => c.metric)).not.toContain("mood");
-    expect(charts).toHaveLength(1);
+    expect(charts.map((c) => c.metric)).toEqual(["weight"]);
   });
 
-  it("keeps mood when nothing is hidden", () => {
-    const charts = selectTrendCharts(null, { hiddenMetrics: [] });
-    expect(charts.map((c) => c.metric)).toContain("mood");
+  it("never returns a slot whose module is off, for any module map and briefing", () => {
+    // Exhaustive over every on/off combination of the owning modules, with
+    // every finding a briefing can carry, in both directions.
+    const owners = [
+      ...new Set(
+        Object.keys(TREND_CHART_CONFIG)
+          .map((m) => surfaceModule(`trend:${m}`))
+          .filter((k): k is NonNullable<typeof k> => k !== undefined),
+      ),
+    ];
+    expect(owners.length).toBeGreaterThan(0);
+    const all = Object.keys(TREND_CHART_CONFIG) as Array<
+      keyof typeof TREND_CHART_CONFIG
+    >;
+    const briefings = [null, briefing(all), briefing([...all].reverse())];
+    for (let mask = 0; mask < 1 << owners.length; mask += 1) {
+      const modules = Object.fromEntries(
+        owners.map((key, i) => [key, (mask & (1 << i)) === 0]),
+      );
+      for (const b of briefings) {
+        for (const chart of selectTrendCharts(b, { modules })) {
+          expect(
+            isSurfaceVisible(`trend:${chart.metric}`, modules),
+            `${chart.metric} under ${JSON.stringify(modules)}`,
+          ).toBe(true);
+        }
+      }
+    }
   });
 });

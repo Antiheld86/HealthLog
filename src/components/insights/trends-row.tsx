@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { ArrowRight, TrendingUp } from "lucide-react";
 import { useTranslations } from "@/lib/i18n/context";
-import { useAuth } from "@/hooks/use-auth";
+import { useAccountOnceMounted, useAuth } from "@/hooks/use-auth";
 import { ChartSkeleton } from "@/components/charts/chart-skeleton";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { HealthChartDynamicMini } from "@/components/charts/health-chart-dynamic";
@@ -67,8 +67,8 @@ const MoodChart = dynamic(
 
 interface TrendsRowProps {
   /**
-   * Metrics to leave out because their module is switched off (for
-   * example `mood`). Passed straight to `selectTrendCharts`.
+   * Further metrics to leave out. Switched-off modules need no entry here:
+   * the row reads the record's module map itself.
    */
   hiddenMetrics?: SelectTrendChartsOptions["hiddenMetrics"];
   /**
@@ -145,7 +145,15 @@ export function TrendsRow({
   // v1.8.5 — derive the chart set from the briefing. No new fetch: the
   // briefing payload is already on the page (advisor cache), so this is
   // a pure read that respects the v1.8.3 anti-freeze contract.
-  const charts = selectTrendCharts(briefing, { hiddenMetrics });
+  //
+  // A slot whose module is off is left out and the next eligible metric fills
+  // it (`trend:*` in the surface map). The mount-pinned account keeps the
+  // hydration render identical to the server's, which had no account.
+  const account = useAccountOnceMounted();
+  const charts = selectTrendCharts(briefing, {
+    modules: account?.modules,
+    hiddenMetrics,
+  });
 
   // v1.4.36 W2 T3 — derive the tri-state status per metric from the
   // advisor's loading flag + the annotation presence. Pending wins
