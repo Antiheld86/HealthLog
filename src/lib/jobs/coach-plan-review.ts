@@ -24,6 +24,7 @@
  */
 import type { MeasurementType, PrismaClient } from "@/generated/prisma/client";
 import { encryptToBytes } from "@/lib/ai/coach/bytes-codec";
+import { readDayAggregates } from "@/lib/measurements/day-aggregates";
 
 export const COACH_PLAN_REVIEW_QUEUE = "coach-plan-review";
 // Daily at 05:25 Europe/Berlin — just after the 05:20 reminder sweep, so the
@@ -49,7 +50,7 @@ export interface CoachPlanReviewSummary {
 
 type ReviewPrisma = Pick<
   PrismaClient,
-  "coachReminder" | "coachPlan" | "measurement"
+  "coachReminder" | "coachPlan" | "$queryRaw"
 >;
 
 /** Metric valence — whether a higher reading is the better outcome. */
@@ -282,31 +283,22 @@ export async function runCoachPlanReviewTick(
         const since = new Date(
           plan.createdAt.getTime() - BEFORE_WINDOW_DAYS * MS_PER_DAY,
         );
-        const rows = await prisma.measurement.findMany({
-          where: {
-            userId: plan.userId,
-            type: resolved.type,
-            deletedAt: null,
-            measuredAt: { gte: since, lte: now },
-          },
-          orderBy: { measuredAt: "asc" },
-          select: { value: true, measuredAt: true },
+        // Day means folded in SQL (UTC days), one row per day however
+        // densely the metric is sampled (#1023).
+        const byDay = await readDayAggregates({
+          userId: plan.userId,
+          type: resolved.type,
+          since,
+          until: now,
+          timeZone: "UTC",
+          db: prisma,
         });
-        // Day-mean the raw rows, then split at the experiment start.
-        const byDay = new Map<string, { sum: number; count: number }>();
-        for (const row of rows) {
-          const day = row.measuredAt.toISOString().slice(0, 10);
-          const agg = byDay.get(day) ?? { sum: 0, count: 0 };
-          agg.sum += row.value;
-          agg.count += 1;
-          byDay.set(day, agg);
-        }
         const startKey = plan.createdAt.toISOString().slice(0, 10);
         const before: number[] = [];
         const after: number[] = [];
         const all: number[] = [];
-        for (const [day, agg] of byDay) {
-          const dayMean = agg.sum / agg.count;
+        for (const { day, sum, n } of byDay) {
+          const dayMean = sum / n;
           all.push(dayMean);
           if (day < startKey) before.push(dayMean);
           else after.push(dayMean);

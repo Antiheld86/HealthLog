@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const findMany = vi.fn();
-const queryRaw = vi.fn();
 vi.mock("@/lib/db", () => ({
   prisma: {
     measurement: {
@@ -10,10 +9,12 @@ vi.mock("@/lib/db", () => ({
     // loadUserSourcePriority lazy-loads the source-priority blob; null
     // (default findUnique) falls back to the default ladders.
     user: { findUnique: vi.fn() },
-    // v1.28.25 — dense types (BLOOD_GLUCOSE / PULSE) day-bucket the
-    // cold-tier fallback in SQL.
-    $queryRaw: (...args: unknown[]) => queryRaw(...args),
   },
+}));
+
+const readDayAggregates = vi.fn();
+vi.mock("@/lib/measurements/day-aggregates", () => ({
+  readDayAggregates: (...args: unknown[]) => readDayAggregates(...args),
 }));
 
 const readBestGranularityRollups = vi.fn();
@@ -31,147 +32,160 @@ const rollupRow = (bucketStart: Date, mean: number) => ({
 vi.mock("@/lib/rollups/measurement-read-wmy", () => ({
   readBestGranularityRollups: (...args: unknown[]) =>
     readBestGranularityRollups(...args),
-  // aggregateWmyBuckets is no longer imported by graded-series, but keep the
-  // module shape intact for any transitive consumer.
   aggregateWmyBuckets: vi.fn(),
 }));
 
-import { buildGradedSeriesWithRollups } from "../graded-series";
+import {
+  buildGradedSeriesFromDayAggregates,
+  buildGradedSeriesFromPoints,
+  buildGradedSeriesWithRollups,
+} from "../graded-series";
+import { foldDayAggregates } from "@/lib/measurements/__tests__/fake-day-aggregates";
+import type { ReadDayAggregatesOptions } from "@/lib/measurements/day-aggregates";
 
 const dayMs = 24 * 60 * 60 * 1000;
 
-/** Daily readings spanning `days` back from `now`. */
-function dailyRows(days: number, now: Date) {
+/** Readings spanning `days` back from `now`, `perDay` per day. */
+function points(days: number, now: Date, perDay = 1) {
   const rows: Array<{ measuredAt: Date; value: number }> = [];
   for (let i = 0; i < days; i++) {
-    rows.push({ measuredAt: new Date(now.getTime() - i * dayMs), value: 80 });
+    for (let k = 0; k < perDay; k++) {
+      rows.push({
+        measuredAt: new Date(now.getTime() - i * dayMs - k * 3_600_000),
+        value: 60 + ((i * 7 + k * 3) % 41),
+      });
+    }
   }
-  return rows;
+  return rows.reverse();
+}
+
+/** Serve `readDayAggregates` from an in-memory row set. */
+function serveFrom(rows: Array<{ measuredAt: Date; value: number }>) {
+  readDayAggregates.mockImplementation(async (opts: ReadDayAggregatesOptions) =>
+    foldDayAggregates(rows, opts),
+  );
 }
 
 afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("buildGradedSeriesWithRollups — rollup-miss fallback", () => {
+describe("buildGradedSeriesWithRollups — bounded reads (#1023)", () => {
   const now = new Date("2026-05-31T12:00:00Z");
 
+  it("never materialises raw rows: the recent read is a per-day aggregate", async () => {
+    serveFrom(points(80, now, 24));
+    readBestGranularityRollups.mockResolvedValue({
+      granularity: "MONTH",
+      rows: [rollupRow(new Date("2025-09-01T00:00:00Z"), 79)],
+    });
+
+    await buildGradedSeriesWithRollups("u1", "PULSE", now);
+
+    expect(findMany).not.toHaveBeenCalled();
+    const opts = readDayAggregates.mock.calls[0][0] as ReadDayAggregatesOptions;
+    expect(opts).toMatchObject({ userId: "u1", type: "PULSE" });
+    expect(opts.until).toEqual(now);
+    expect(opts.timeZone).toBe("Europe/Berlin");
+    expect(now.getTime() - opts.since.getTime()).toBe(91 * dayMs);
+    // The same age partition the parity test below proves exact: a reading
+    // exactly 21 / 91 / 451 days old belongs to the older slice.
+    expect(opts.segmentStarts).toEqual(
+      [21, 91, 451].map((d) => new Date(now.getTime() - d * dayMs + 1)),
+    );
+  });
+
   it("folds monthly/yearly from the bounded fallback when the tier has no coverage", async () => {
-    // The bounded recent read (~90 d) returns only recent points; the
-    // fallback read returns 2+ years so the fold has monthly/yearly.
-    findMany
-      // 1st call — bounded recent read (gte: since)
-      .mockResolvedValueOnce(dailyRows(80, now))
-      // 2nd call — bounded fallback read (gte: 1095-day horizon)
-      .mockResolvedValueOnce(dailyRows(800, now));
-
-    // Tier miss: no MONTH / YEAR coverage at all.
+    serveFrom(points(800, now));
     readBestGranularityRollups.mockResolvedValue(null);
 
     const series = await buildGradedSeriesWithRollups("u1", "WEIGHT", now);
 
-    // The bug: before the fix monthly/yearly were derived from the
-    // bounded ~90-day read and so were always empty even when years of
-    // raw history existed. After the fix they fold from the fallback.
-    expect(series.monthly.length).toBeGreaterThan(0);
-    // 800 days of history puts at least one year into the yearly tail.
-    expect(series.yearly.length).toBeGreaterThan(0);
-    // The fallback read must have been issued...
-    expect(findMany).toHaveBeenCalledTimes(2);
-    // ...and bounded (v1.28.25): it must carry a `measuredAt.gte` floor
-    // ~1095 days back, never an unwindowed full-history walk.
-    const fallbackArgs = findMany.mock.calls[1][0] as {
-      where: { measuredAt?: { gte?: Date } };
-    };
-    const gte = fallbackArgs.where.measuredAt?.gte;
-    expect(gte).toBeInstanceOf(Date);
-    expect(gte!.getTime()).toBe(now.getTime() - 1095 * dayMs);
-  });
-
-  it("day-buckets the dense-type fallback in SQL instead of a raw walk (v1.28.25)", async () => {
-    // BLOOD_GLUCOSE on a cold tier (heavy import before the rollup
-    // backfill warms) used to findMany the entire CGM history. The
-    // fallback now runs a single day-bucket aggregate; only the bounded
-    // recent read touches findMany.
-    findMany.mockResolvedValueOnce(dailyRows(80, now)); // bounded recent
-    const bucketRows: Array<{ bucket_start: Date; mean: number }> = [];
-    for (let i = 0; i < 800; i++) {
-      bucketRows.push({
-        bucket_start: new Date(now.getTime() - i * dayMs),
-        mean: 100,
-      });
-    }
-    queryRaw.mockResolvedValueOnce(bucketRows.reverse());
-
-    readBestGranularityRollups.mockResolvedValue(null);
-
-    const series = await buildGradedSeriesWithRollups(
-      "u1",
-      "BLOOD_GLUCOSE",
-      now,
-    );
-
     expect(series.monthly.length).toBeGreaterThan(0);
     expect(series.yearly.length).toBeGreaterThan(0);
-    // Raw findMany ran once (the bounded recent read) — the fallback
-    // itself went through the SQL aggregate.
-    expect(findMany).toHaveBeenCalledTimes(1);
-    expect(queryRaw).toHaveBeenCalledTimes(1);
+    expect(readDayAggregates).toHaveBeenCalledTimes(2);
+    const fallback = readDayAggregates.mock
+      .calls[1][0] as ReadDayAggregatesOptions;
+    // Bounded to the yearly router's horizon, never an unwindowed walk.
+    expect(fallback.since.getTime()).toBe(now.getTime() - 1095 * dayMs);
+    expect(findMany).not.toHaveBeenCalled();
   });
 
-  it("reads monthly/yearly from the tier when it has coverage and skips the full read", async () => {
-    findMany.mockResolvedValueOnce(dailyRows(80, now));
-
-    // MONTH coverage for the 1-year window, YEAR coverage for the 3-year.
+  it("reads monthly/yearly from the tier when it has coverage and skips the fallback", async () => {
+    serveFrom(points(80, now));
     readBestGranularityRollups.mockImplementation(
-      async (_u: string, _t: string, windowDays: number) => {
-        if (windowDays === 365) {
-          return {
-            granularity: "MONTH",
-            rows: [
-              rollupRow(new Date("2025-09-01T00:00:00Z"), 79),
-              rollupRow(new Date("2025-10-01T00:00:00Z"), 80),
-            ],
-          };
-        }
-        return {
-          granularity: "YEAR",
-          rows: [rollupRow(new Date("2023-01-01T00:00:00Z"), 82)],
-        };
-      },
+      async (_u: string, _t: string, windowDays: number) =>
+        windowDays === 365
+          ? {
+              granularity: "MONTH",
+              rows: [
+                rollupRow(new Date("2025-09-01T00:00:00Z"), 79),
+                rollupRow(new Date("2025-10-01T00:00:00Z"), 80),
+              ],
+            }
+          : {
+              granularity: "YEAR",
+              rows: [rollupRow(new Date("2023-01-01T00:00:00Z"), 82)],
+            },
     );
 
     const series = await buildGradedSeriesWithRollups("u1", "WEIGHT", now);
 
     expect(series.monthly.length).toBeGreaterThan(0);
     expect(series.yearly.length).toBeGreaterThan(0);
-    // Only the bounded recent read — no full-history fallback when the
-    // tier covers both coarse slices.
-    expect(findMany).toHaveBeenCalledTimes(1);
+    expect(readDayAggregates).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to a full read for only the slice the tier misses", async () => {
-    findMany
-      .mockResolvedValueOnce(dailyRows(80, now)) // bounded recent
-      .mockResolvedValueOnce(dailyRows(800, now)); // full-history fallback
-
-    // MONTH covered, YEAR missing.
+  it("falls back only for the slice the tier misses", async () => {
+    serveFrom(points(800, now));
     readBestGranularityRollups.mockImplementation(
-      async (_u: string, _t: string, windowDays: number) => {
-        if (windowDays === 365) {
-          return {
-            granularity: "MONTH",
-            rows: [rollupRow(new Date("2025-10-01T00:00:00Z"), 80)],
-          };
-        }
-        return null;
-      },
+      async (_u: string, _t: string, windowDays: number) =>
+        windowDays === 365
+          ? {
+              granularity: "MONTH",
+              rows: [rollupRow(new Date("2025-10-01T00:00:00Z"), 80)],
+            }
+          : null,
     );
 
     const series = await buildGradedSeriesWithRollups("u1", "WEIGHT", now);
 
-    expect(series.monthly.length).toBeGreaterThan(0);
+    expect(series.monthly).toHaveLength(1);
     expect(series.yearly.length).toBeGreaterThan(0);
-    expect(findMany).toHaveBeenCalledTimes(2);
+    expect(readDayAggregates).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("buildGradedSeriesFromDayAggregates — parity with the raw fold", () => {
+  const now = new Date("2026-05-31T12:00:00Z");
+  const segmentStarts = [21, 91, 451].map(
+    (d) => new Date(now.getTime() - d * dayMs + 1),
+  );
+
+  it("matches the raw-row fold for recent / weekly / monthly and yearly stats", () => {
+    // Several readings per day, including readings exactly on the segment
+    // edges, so the partition itself is under test.
+    const rows = [
+      ...points(900, now, 5),
+      { measuredAt: new Date(now.getTime() - 21 * dayMs), value: 99 },
+      { measuredAt: new Date(now.getTime() - 91 * dayMs), value: 41 },
+    ];
+    const raw = buildGradedSeriesFromPoints(rows, now);
+    const agg = buildGradedSeriesFromDayAggregates(
+      foldDayAggregates(rows, {
+        since: new Date(0),
+        until: now,
+        timeZone: "Europe/Berlin",
+        segmentStarts,
+      }),
+    );
+    expect(agg.recent).toEqual(raw.recent);
+    expect(agg.weekly).toEqual(raw.weekly);
+    expect(agg.monthly).toEqual(raw.monthly);
+    // The yearly slope runs over day means rather than single readings;
+    // every other yearly figure is exact.
+    expect(agg.yearly.map(({ slope: _s, ...b }) => b)).toEqual(
+      raw.yearly.map(({ slope: _s, ...b }) => b),
+    );
   });
 });
